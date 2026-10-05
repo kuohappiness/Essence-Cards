@@ -28,3 +28,7 @@
 - 點子：[I-001](../ideas.md)。
 - 任務：[T-001、T-004](../tasks.md)。
 - 研究：[RemNote、Memory Toast](../references/software.md)。
+
+## 後續釐清（2026-10-06）
+
+使用者明確指出 `index.html` 是設計知識學習工具的討論平台。上文「專區是否也要成為軟體內的功能」是助理多延伸的問題，現已移出待決事項；參考軟體專區確認屬於討論平台的研究資料。詳見[討論平台定位釐清](2026-10-06-discussion-platform-scope.md)。

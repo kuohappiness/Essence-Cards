@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#224f47">
-<meta name="description" content="Essence Cards 專案看板：收集點子、掌握任務與最新共識。">
-<title>Essence Cards · 專案看板</title>
+<meta name="description" content="Essence Cards 設計討論平台：共同規劃知識學習工具，收集點子、研究參考軟體、整理任務與共識。">
+<title>Essence Cards · 設計討論平台</title>
 <style>
 :root{--ink:#243c36;--muted:#64736c;--paper:#f7f7f0;--line:#dce2d7;--green:#28594e;--amber:#8b6125;--blue:#446281;--shadow:0 5px 20px #223a3210}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif}button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;color:inherit;cursor:pointer}a{color:var(--green);text-underline-offset:3px}button:focus-visible,a:focus-visible{outline:3px solid #bd842e;outline-offset:4px}button{touch-action:manipulation}.skip{position:absolute;left:16px;top:-80px;z-index:9;background:white;padding:8px}.skip:focus{top:10px}
@@ -20,8 +20,8 @@ footer{padding:17px 4vw 25px;border-top:1px solid var(--line);font-size:11px;col
 <body>
 <a class="skip" href="#main">跳至看板內容</a>
 <header>
- <div class="topline"><div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="wordmark">Essence Cards</div><div class="submark">IDEAS INTO UNDERSTANDING</div></div></div><a class="repo" href="https://github.com/kuohappiness/Essence-Cards" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
- <div class="intro"><div><h1>讓想法，慢慢成形。</h1><p>先收集靈感，再一起釐清知識萃取與複習的可能。</p></div><p class="meta" id="meta"></p></div>
+ <div class="topline"><div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="wordmark">Essence Cards</div><div class="submark">DESIGN WORKSPACE</div></div></div><a class="repo" href="https://github.com/kuohappiness/Essence-Cards" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
+ <div class="intro"><div><h1>設計討論平台</h1><p>共同規劃知識學習工具：收集點子、研究參考軟體、整理任務與共識。</p></div><p class="meta" id="meta"></p></div>
 </header>
 <nav class="toolbar" aria-label="看板檢視">
  <div class="tabs"><button data-view="board" aria-pressed="true">看板</button><button data-view="canvas" aria-pressed="false">自由畫板</button><button data-view="outline" aria-pressed="false">文字綱要</button><button data-view="references" aria-pressed="false">參考軟體</button></div>
@@ -29,7 +29,7 @@ footer{padding:17px 4vw 25px;border-top:1px solid var(--line);font-size:11px;col
  <div class="zoom" id="zoom" hidden><button id="zoom-out" aria-label="縮小">−</button><output id="scale" aria-live="polite">100%</output><button id="zoom-in" aria-label="放大">＋</button><button id="fit">全覽</button></div>
 </nav>
 <main id="main" tabindex="-1"><div class="stage" id="stage"><div class="board" id="board"></div></div></main>
-<footer><p>把零散的點子留在這裡，暫時不必有答案。</p><p>知識萃取 · 閃卡複習 · 記憶鞏固</p></footer>
+<footer><p>這裡的卡片記錄討論事項；學習工具的操作介面另行設計。</p><p>討論點子 · 研究參考 · 設計共識</p></footer>
 <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-top"><span class="ident" id="detail-id"></span><button class="close" id="close-dialog" autofocus>關閉 ×</button></div><h2 id="detail-title"></h2><div class="detail" id="detail-body"></div><a class="source" id="detail-source" target="_blank" rel="noopener noreferrer">查看來源文件 ↗</a></dialog>
 <noscript>請啟用 JavaScript 查看互動看板，或到 <a href="https://github.com/kuohappiness/Essence-Cards">GitHub 閱讀 Markdown 文件</a>。</noscript>
 <script id="board-data" type="application/json">__BOARD_DATA__</script>
@@ -52,7 +52,7 @@ function render(){
  board.replaceChildren();board.className=view==='references'?'reference-grid':'board';stage.className='stage'+(view==='canvas'?' canvas':view==='outline'?' outline':'');board.style.transform='';document.querySelector('.reference-intro')?.remove();
  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));document.getElementById('zoom').hidden=view!=='canvas';document.getElementById('hint').hidden=view==='canvas';document.getElementById('hint').textContent=view==='references'?'參考收錄 ≠ 決定採用':'點開卡片，查看原意與下一步';
  if(view==='references'){
-  const intro=document.createElement('p');intro.className='reference-intro';intro.textContent='先從閃卡開始，累積值得研究的功能與使用體驗。每項參考保留來源與查核狀態。';stage.prepend(intro);
+  const intro=document.createElement('p');intro.className='reference-intro';intro.textContent='設計討論的研究資料：先比較其他軟體的閃卡功能與使用體驗，再討論可借鑑之處。每項參考保留來源與查核狀態。';stage.prepend(intro);
   data.references.forEach(card=>{const el=document.createElement('article');el.className='card';el.innerHTML=`<div class="card-top"><span class="ident">${esc(card.id)}</span><span class="badge">${esc(card.status)}</span></div><h2>${esc(card.title)}</h2><div class="detail">${markdown(card.body,card.source)}</div>`;board.append(el)});
  }else groups.forEach(([key,title,note])=>{const lane=document.createElement('section');lane.className='lane '+key;lane.innerHTML=`<div class="lanehead"><span class="dot" aria-hidden="true"></span><h2>${title}</h2><span class="count">${data[key].length}</span></div><p class="lane-description">${note}</p><div class="cards"></div>`;const holder=lane.querySelector('.cards');data[key].forEach(card=>{const el=document.createElement(view==='outline'?'article':'button');el.className='card';el.dataset.id=card.id;el.innerHTML=cardHTML(card,view==='outline');if(view!=='outline')el.addEventListener('click',()=>openCard(card));holder.append(el)});if(!data[key].length)holder.innerHTML='<p class="empty">目前沒有項目</p>';board.append(lane)});
  if(view==='canvas')requestAnimationFrame(fit);
