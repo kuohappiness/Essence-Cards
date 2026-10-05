@@ -1,0 +1,80 @@
+name: Sync and publish board
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'web/**'
+      - 'scripts/build_board.py'
+      - 'tests/**'
+      - 'index.html'
+      - '.github/workflows/board.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: board-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Validate Markdown selection
+        run: python3 -m unittest discover -s tests -v
+      - name: Generate board
+        run: |
+          python3 scripts/build_board.py
+          python3 scripts/build_board.py --check
+      - name: Check desktop and mobile interactions
+        run: python3 tests/browser_smoke.py
+      - name: Keep generated HTML in sync
+        run: |
+          if ! git diff --quiet -- index.html; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add index.html
+            git commit -m 'docs: regenerate board from Markdown'
+            git push origin HEAD:main
+          fi
+      - name: Prepare only the public board
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check Pages configuration
+        id: pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+      - name: Publish board
+        if: steps.pages.outcome == 'success'
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Explain one-time Pages setup
+        if: steps.pages.outcome != 'success'
+        run: |
+          echo '### Board built; publication needs attention' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The board artifact was built, but Pages configuration could not be read. Review the configuration step error. For first-time setup, open Settings → Pages, select GitHub Actions, then run this workflow again.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'https://github.com/kuohappiness/Essence-Cards/settings/pages' >> "$GITHUB_STEP_SUMMARY"
