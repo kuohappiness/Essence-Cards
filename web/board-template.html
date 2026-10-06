@@ -15,6 +15,7 @@ header{padding:28px 4vw 20px;border-bottom:1px solid var(--line);background:#fbf
 footer{padding:17px 4vw 25px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:20px}dialog{width:min(640px,calc(100% - 32px));max-height:85vh;overflow:auto;border:1px solid var(--line);border-radius:15px;padding:30px;background:#fffefa;color:var(--ink);box-shadow:0 24px 80px #1e322530}dialog::backdrop{background:#253b3670;backdrop-filter:blur(3px)}.dialog-top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:12px}.close{border:1px solid var(--line);border-radius:6px;background:transparent;padding:3px 10px;font-size:13px}dialog h2{font-size:23px;line-height:1.5;margin:0 0 20px}.static-references{margin-top:35px}.static-references h2{font-size:14px;margin:0}.static-references .reference-grid{max-width:none}.static-references .reference-intro{max-width:none}
 @media(max-width:850px){.board{gap:14px}.card{padding:15px}.intro{display:block}.meta{text-align:left;margin-top:14px}.toolbar{flex-wrap:wrap;gap:10px}.hint{display:none}.board{grid-template-columns:1fr 1fr}.consensus{grid-column:1/-1}.consensus .cards{display:grid;grid-template-columns:1fr 1fr;gap:13px}.consensus .card{margin:0}.outline .consensus .cards,.canvas .consensus .cards{display:block}.canvas .board{grid-template-columns:1fr 1fr 1.1fr}.canvas .consensus{grid-column:auto}}@media(max-width:540px){header{padding:23px 20px 17px}.wordmark{font-size:25px}.repo{font-size:11px;padding:5px 10px}.intro{margin-top:26px}h1{font-size:24px}.intro p{font-size:13px}.toolbar{padding:14px 16px}.tabs{gap:1px}.tabs button{padding:7px 11px}.stage{padding:5px 20px 24px}.board{grid-template-columns:1fr;gap:28px}.consensus .cards{display:block}.consensus .card{margin-bottom:13px}.card{padding:20px}.reference-grid{grid-template-columns:1fr}.reference-grid .card{padding:22px}.reference-intro{font-size:13px}.lanehead{margin-bottom:16px}footer{padding:16px 20px;display:block}footer p+p{margin-top:5px}dialog{padding:22px}.outline .card{padding:20px}.stage.canvas{height:60vh}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}@media print{header{padding:10px}.toolbar,.repo,.card-foot,footer{display:none}.stage{padding:0!important;height:auto!important;overflow:visible!important}.board,.canvas .board{position:static!important;transform:none!important;width:auto!important;display:block}.card{break-inside:avoid;box-shadow:none}.consensus .cards{display:block}}
+[hidden]{display:none!important}.blueprint-gallery{padding:10px 4vw 35px;max-width:1450px;margin:auto}.blueprint-gallery h2{font-size:24px}.blueprint-intro{color:var(--muted);margin-bottom:22px}.blueprint{margin:0 0 30px;padding:24px;background:#fffefa;border:1px solid var(--line);border-radius:14px}.blueprint h3{font-size:21px;margin:0 0 5px}.blueprint .note{font-size:13px;color:var(--muted)}.blueprint-image{overflow-x:auto;margin:20px 0}.blueprint-image img{display:block;width:100%;height:auto;min-width:640px}.blueprint .detail{max-width:980px}.blueprint p{margin-bottom:12px}@media(max-width:540px){.blueprint-gallery{padding:5px 16px 24px}.blueprint{padding:16px}.blueprint-image img{min-width:760px}.blueprint .detail{font-size:14px}}
 </style>
 </head>
 <body>
@@ -24,11 +25,11 @@ footer{padding:17px 4vw 25px;border-top:1px solid var(--line);font-size:11px;col
  <div class="intro"><div><h1>設計討論平台</h1><p>共同規劃知識學習工具：收集點子、研究參考軟體、整理任務與共識。</p></div><p class="meta" id="meta">__BOARD_META__</p></div>
 </header>
 <nav class="toolbar" id="toolbar" aria-label="看板檢視" hidden>
- <div class="tabs"><button data-view="board" aria-pressed="true">看板</button><button data-view="canvas" aria-pressed="false">自由畫板</button><button data-view="outline" aria-pressed="false">文字綱要</button><button data-view="references" aria-pressed="false">參考軟體</button></div>
+ <div class="tabs"><button data-view="board" aria-pressed="true">看板</button><button data-view="canvas" aria-pressed="false">自由畫板</button><button data-view="outline" aria-pressed="false">文字綱要</button><button data-view="references" aria-pressed="false">參考軟體</button><button data-view="blueprints" aria-pressed="false">架構藍圖</button></div>
  <span class="hint" id="hint">點開卡片，查看原意與下一步</span>
  <div class="zoom" id="zoom" hidden><button id="zoom-out" aria-label="縮小">−</button><output id="scale" aria-live="polite">100%</output><button id="zoom-in" aria-label="放大">＋</button><button id="fit">全覽</button></div>
 </nav>
-<main id="main" tabindex="-1"><div class="stage" id="static-content">__STATIC_CONTENT__</div><div class="stage" id="stage" hidden><div class="board" id="board"></div></div></main>
+<main id="main" tabindex="-1"><div class="stage" id="static-content">__STATIC_CONTENT__</div><div class="stage" id="stage" hidden><div class="board" id="board"></div></div><section class="blueprint-gallery" id="blueprint-gallery" aria-label="架構藍圖">__BLUEPRINT_CONTENT__</section></main>
 <footer><p>這裡的卡片記錄討論事項；學習工具的操作介面另行設計。</p><p>討論點子 · 研究參考 · 設計共識</p></footer>
 <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-top"><span class="ident" id="detail-id"></span><button class="close" id="close-dialog" autofocus>關閉 ×</button></div><h2 id="detail-title"></h2><div class="detail" id="detail-body"></div><a class="source" id="detail-source" target="_blank" rel="noopener noreferrer">查看來源文件 ↗</a></dialog>
 <script id="board-data" type="application/json">__BOARD_DATA__</script>
@@ -52,8 +53,10 @@ function markdown(text,source){return text.split(/\n\s*\n/).map(block=>{const li
 function cardHTML(card,full=false){return `<div class="card-top"><span class="ident">${esc(card.id)}</span><span class="badge">${esc(card.status)}</span></div><h3>${esc(card.title)}</h3>`+(full?`<div class="detail">${markdown(card.body,card.source)}</div><a class="source" href="${esc(card.source)}" target="_blank" rel="noopener noreferrer">查看來源文件 ↗</a>`:`<p class="summary">${esc(card.summary)}</p><div class="card-foot"><span>查看細節</span><span aria-hidden="true">↗</span></div>`)}
 function openCard(card){document.getElementById('detail-id').textContent=card.id+' / '+card.status;document.getElementById('detail-title').textContent=card.title;document.getElementById('detail-body').innerHTML=markdown(card.body,card.source);document.getElementById('detail-source').href=card.source;dialog.showModal()}
 function render(){
+ document.getElementById('blueprint-gallery').hidden=view!=='blueprints';stage.hidden=view==='blueprints';
  board.replaceChildren();board.className=view==='references'?'reference-grid':'board';stage.className='stage'+(view==='canvas'?' canvas':view==='outline'?' outline':'');board.style.transform='';document.querySelector('.reference-intro')?.remove();
  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===view)));document.getElementById('zoom').hidden=view!=='canvas';document.getElementById('hint').hidden=view==='canvas';document.getElementById('hint').textContent=view==='references'?'參考收錄 ≠ 決定採用':'點開卡片，查看原意與下一步';
+ if(view==='blueprints'){document.getElementById('hint').textContent='檢視圖檔與設計重點';return;}
  if(view==='references'){
   const intro=document.createElement('p');intro.className='reference-intro';intro.textContent='設計討論的研究資料：先比較其他軟體的閃卡功能與使用體驗，再討論可借鑑之處。每項參考保留來源與查核狀態。';stage.prepend(intro);
   data.references.forEach(card=>{const el=document.createElement('article');el.className='card';el.innerHTML=`<div class="card-top"><span class="ident">${esc(card.id)}</span><span class="badge">${esc(card.status)}</span></div><h2>${esc(card.title)}</h2><div class="detail">${markdown(card.body,card.source)}</div>`;board.append(el)});
@@ -79,6 +82,7 @@ document.getElementById('toolbar').hidden=false;
  document.getElementById('static-content').hidden=false;
  document.getElementById('stage').hidden=true;
  document.getElementById('toolbar').hidden=true;
+ document.getElementById('blueprint-gallery').hidden=false;
  console.error('Interactive board initialization failed; static content remains available.', error);
 }
 })();

@@ -35,6 +35,13 @@ setTimeout(() => {
   check(document.querySelectorAll('#board.reference-grid article').length===2,'two reference records');
   check(!!document.querySelector('a[href="https://www.memory-toast.com/zh-TW"]'),'Memory Toast source is preserved');
   check(document.documentElement.scrollWidth<=innerWidth,'responsive reference view');
+  click('[data-view="blueprints"]');
+  const gallery=document.querySelector('#blueprint-gallery');
+  check(!gallery.hidden&&document.querySelector('#stage').hidden,'blueprint view opens');
+  check(gallery.querySelectorAll('figure').length===3,'three current blueprints');
+  check([...gallery.querySelectorAll('img')].every(img=>img.complete&&img.naturalWidth>0),'embedded SVG images load');
+  check(gallery.textContent.includes('未 commit')&&gallery.textContent.includes('.gitignore'),'Git design remains readable');
+  check(document.documentElement.scrollWidth<=innerWidth,'responsive blueprint view');
   click('[data-view="outline"]');
   check(document.querySelectorAll('#board .detail').length>6,'outline exposes full content');
   check(!document.querySelector('[data-id="T-003"]'),'deferred task excluded');
@@ -229,3 +236,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate the standalone board from a deliberately limited Markdown subset."""
 import argparse
+import base64
 from html import escape
 import json
 from pathlib import Path
@@ -86,6 +87,34 @@ def static_content(data):
             f'<div class="reference-grid">{references}</div></section>')
 
 
+def blueprint_content(root=ROOT):
+    """Embed the current diagrams so downloaded board files remain standalone."""
+    records = cards((root / "docs/blueprints.md").read_text(encoding="utf-8"),
+                    "B", "docs/blueprints.md")
+    figures = []
+    for record in records:
+        body = record["body"]
+        match = re.search(r"^圖檔：(.+)$", body, re.M)
+        if not match:
+            raise ValueError(f'Missing diagram path for {record["id"]}')
+        path = (root / match[1].strip()).resolve()
+        if not path.is_relative_to((root / "docs/diagrams").resolve()) or path.suffix != ".svg":
+            raise ValueError("Diagram must be an SVG in docs/diagrams")
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        body = re.sub(r"^圖檔：.+\n?", "", body, flags=re.M).strip()
+        figures.append(f'<figure class="blueprint" id="{escape(record["id"])}">'
+                       f'<figcaption><h3>{escape(record["title"])}</h3>'
+                       f'<p class="note">{escape(record["status"])}</p></figcaption>'
+                       f'<div class="blueprint-image"><img src="data:image/svg+xml;base64,{encoded}" '
+                       f'alt="{escape(record["title"])}"></div>'
+                       f'<div class="detail">{markdown(body, record["source"])}</div>'
+                       f'<p><a href="{REPO}/blob/main/{escape(match[1].strip())}" '
+                       'target="_blank" rel="noopener noreferrer">可編輯 SVG ↗</a></p></figure>')
+    return ('<h2>架構藍圖</h2><p class="blueprint-intro">學習架構、技術架構與開發順序。'
+            '技術提案與驗證狀態保留於圖中及下方說明；尚未實作的能力不當成已完成。</p>'
+            + "".join(figures))
+
+
 def sections(text):
     matches = list(re.finditer(r"^## (.+)$", text, re.M))
     return [(m[1].strip(), text[m.end():matches[i+1].start() if i+1 < len(matches) else len(text)].strip())
@@ -159,7 +188,7 @@ def collect(root=ROOT):
 
 def render(root=ROOT):
     template = (root / "web/board-template.html").read_text(encoding="utf-8")
-    for placeholder in ("__BOARD_DATA__", "__STATIC_CONTENT__", "__BOARD_META__"):
+    for placeholder in ("__BOARD_DATA__", "__STATIC_CONTENT__", "__BOARD_META__", "__BLUEPRINT_CONTENT__"):
         if template.count(placeholder) != 1:
             raise ValueError(f"Expected exactly one {placeholder} placeholder")
     data = collect(root)
@@ -169,6 +198,7 @@ def render(root=ROOT):
     # Replace placeholders in one pass so literal placeholder text in a document
     # cannot be mistaken for a template instruction.
     replacements = {"__BOARD_DATA__": payload, "__STATIC_CONTENT__": static_content(data),
+                    "__BLUEPRINT_CONTENT__": blueprint_content(root),
                     "__BOARD_META__": escape(f'共識 v{data["version"]} · {data["updated"]}')}
     return re.sub("|".join(replacements), lambda match: replacements[match[0]], template)
 
@@ -182,7 +212,7 @@ def render_mobile(root=ROOT):
     data = collect(root)
     groups = (GROUPS[1], GROUPS[2], GROUPS[0],
               ("references", "參考軟體", "設計討論的研究資料；參考收錄不代表決定採用"))
-    content = []
+    content = ['<div class="group" id="blueprints">' + blueprint_content(root) + '</div>']
     for key, title, note in groups:
         records = "\n".join(static_card(card) for card in data[key]) or '<p>目前沒有項目</p>'
         content.append(f'<div class="group" id="{key}">\n'

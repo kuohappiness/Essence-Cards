@@ -39,3 +39,23 @@ python3 scripts/draw_architecture.py --output /tmp/essence-cards-diagram
 ```
 
 尺寸與比例依美觀、架構分組及文字內容安排，不固定為產品要求。目前程式同時輸出 3300 × 2550 PNG、向量 PDF 與 SVG。更新文件時將 SVG 保存為本目錄的 `essence-cards-architecture.svg`，再檢查文字、箭頭及版面。
+
+## 技術架構與開發路線圖
+
+設計版 v1.0（2026-10-06）。第一版平台為 Obsidian 外掛，沿用既有 iCloud 為跨裝置驗證基線；資料、AI、Git 策略與開發順序均保留設計提案／待驗證狀態，尚未實作。
+
+![技術架構與 Git 設計](essence-cards-technical-architecture.svg)
+
+![開發路線圖與驗證門檻](essence-cards-development-roadmap.svg)
+
+- [技術架構可編輯 SVG](essence-cards-technical-architecture.svg)
+- [開發路線圖可編輯 SVG](essence-cards-development-roadmap.svg)
+- [完整技術設計與 Git 重點](../technical-roadmap.md)
+
+Git 設計保留：電腦限定、iCloud 同步／Git 歷史／GitHub 私人備份的分工、外部 .git、拉取策略、修改檢查點、個別回復與保護邊界。公開專案 repo 與個人私人筆記備份分開。
+
+新圖產生程式：[scripts/draw_technical_blueprints.py](../../scripts/draw_technical_blueprints.py)。沿用既有圖檔工具與內嵌字型，輸出 SVG、PNG 及 PDF；SVG 保存於本目錄並嵌入畫板。
+
+```sh
+python3 scripts/draw_technical_blueprints.py --output /tmp/essence-cards-technical
+```

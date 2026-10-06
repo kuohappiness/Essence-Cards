@@ -1,4 +1,5 @@
 import importlib.util
+import base64
 from html.parser import HTMLParser
 import json
 from pathlib import Path
@@ -77,6 +78,21 @@ class BoardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Move closed task"):
             board.collect(self.root)
 
+    def test_blueprints_embed_current_svg_bytes_and_git_boundaries(self):
+        for rendered in (board.render(self.root), board.render_mobile(self.root)):
+            parser = StaticParser()
+            parser.feed(rendered)
+            images = [attrs for tag, attrs in zip(parser.tags, parser.attrs) if tag == 'img']
+            self.assertEqual(len(images), 3)
+            expected = ['essence-cards-architecture.svg', 'essence-cards-technical-architecture.svg',
+                        'essence-cards-development-roadmap.svg']
+            for attrs, filename in zip(images, expected):
+                self.assertEqual(base64.b64decode(attrs['src'].split(',', 1)[1]),
+                                 (self.root / 'docs/diagrams' / filename).read_bytes())
+            text = ''.join(parser.text)
+            for boundary in ['未到電腦', '未 commit', '未 push', '.gitignore', '個別檔案', '私人儲存庫']:
+                self.assertIn(boundary, text)
+
     def test_generation_is_deterministic(self):
         self.assertEqual(board.render(self.root), board.render(self.root))
         self.assertEqual(board.render_mobile(self.root), board.render_mobile(self.root))
@@ -121,7 +137,10 @@ class BoardTests(unittest.TestCase):
         parser = StaticParser()
         parser.feed(rendered)
         self.assertNotIn("script", parser.tags)
-        self.assertNotIn("img", parser.tags)
+        images = [attrs for tag, attrs in zip(parser.tags, parser.attrs) if tag == "img"]
+        self.assertEqual(len(images), 3)
+        self.assertTrue(all(attrs.get("src", "").startswith("data:image/svg+xml;base64,")
+                            and "onerror" not in attrs for attrs in images))
         self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt; &amp;', rendered)
         self.assertIn('<strong>重點</strong>', rendered)
         self.assertIn('<code>程式</code>', rendered)

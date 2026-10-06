@@ -12,13 +12,16 @@
 - 已確認的產品形式：以概念筆記為核心的學習工作區，依閱讀、整理理解、記憶練習及回顧情境提供不同 UI，共用知識來源，確認的修訂可回寫筆記（C-011）。
 - 資料保存與同步候選：主要考慮雲端服務與各裝置本機；NAS 保留為選配自架方式，具體機制與第一版支援範圍待定（C-012）。
 - 討論架構：以「輸入 → 整理 → 學習 → 回饋」的整體學習循環規劃，串接來源、概念筆記、教材、練習與回饋；具體功能仍待釐清。
-- 目前階段：需求探索與設計；軟體平台、技術選型與第一版範圍尚未確定。
+- 第一版平台：Obsidian 外掛；電腦整理管理、iPhone 複習，沿用既有 iCloud 為同步驗證基線（C-014）。
+- 目前階段：技術架構與第一版驗證設計；Git 備份、AI 轉接、資料細節與完整功能範圍仍待驗證／確認。
 
 ## 文件
 
 - [最新專案共識](docs/consensus.md)：目前有效的結論，以及清楚標示的待決事項。
 - [學習循環與功能藍圖](docs/learning-blueprint.md)：已確認的討論架構、功能草案、整合設計、困難與分階段候選範圍。
 - [知識學習架構藍圖](docs/diagrams/README.md)：依使用者手繪圖重繪，呈現共用概念筆記、學習紀錄與回饋循環。
+- [技術架構與開發路線圖](docs/technical-roadmap.md)：裝置、資料、AI、同步、Git 備份／回復設計與分階段驗證門檻。
+- [畫板藍圖索引](docs/blueprints.md)：三張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。
 - [目前任務](docs/tasks.md)：任務狀態、下一步及暫緩事項。
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
@@ -33,17 +36,17 @@
 
 [下載／開啟 index.html](index.html)，即可在支援 JavaScript 的瀏覽器使用互動討論平台。文件也直接包含點子、任務、共識與參考軟體的完整內容及版本日期，不需要安裝套件。
 
-提供看板、可拖曳縮放的自由畫板、文字綱要及參考軟體四種互動檢視。完整互動以 Safari 等瀏覽器開啟已發布的網站為準。GitHub Pages 的首次設定見下方「公開網址」。
+提供看板、可拖曳縮放的自由畫板、文字綱要、參考軟體及架構藍圖五種互動檢視。完整互動以 Safari 等瀏覽器開啟已發布的網站為準。GitHub Pages 的首次設定見下方「公開網址」。
 
-[手機閱讀版 mobile.html](mobile.html) 使用相同 Markdown 來源生成，完全不含腳本、隱藏區塊與互動控制。先呈現目前任務與共識，再呈現點子及參考軟體，並提供文字連結跳到各區。使用者回報 index.html 在 ChatGPT 手機預覽仍只見外框，因此提供新的檔名以協助排查附件版本與預覽相容性；實機結果由 T-007 追蹤。
+[手機閱讀版 mobile.html](mobile.html) 使用相同 Markdown 來源生成，完全不含腳本、隱藏區塊與互動控制。先呈現三張架構藍圖，再呈現目前任務、共識、點子及參考軟體，並提供文字連結跳到各區。使用者回報 index.html 在 ChatGPT 手機預覽仍只見外框，因此提供新的檔名以協助排查附件版本與預覽相容性；實機結果由 T-007 追蹤。
 
 看板顯示**待釐清點子、目前任務及最新已確認共識**，分區區別狀態。參考軟體專區是討論平台中的設計研究資料。討論紀錄、歷史提案、已排除項目與完成任務另存文件，不嵌入 HTML。
 
 ### 更新方式
 
-內容的唯一來源是 Markdown；不用分別修改 HTML 與綱要：
+文字內容來源是 Markdown；藍圖來源是 docs/diagrams 中的可編輯 SVG。不用分別修改 HTML 與綱要：
 
-1. 更新 `docs/ideas.md`、`docs/tasks.md`、`docs/consensus.md` 或 `docs/references/software.md`。
+1. 更新 `docs/ideas.md`、`docs/tasks.md`、`docs/consensus.md` 、`docs/references/software.md` 或技術文件；有視覺變更時更新 SVG。
 2. 執行 `python3 scripts/build_board.py` 同時產生 `index.html` 與 `mobile.html`。
 3. 執行 `python3 -m unittest discover -s tests -v` 與 `python3 scripts/build_board.py --check`。
 4. 將文件與生成的 HTML 一起提交。
@@ -75,3 +78,4 @@ GitHub Pages 工作流程已備妥，首次啟用與線上發布仍待確認。�
 ## 授權
 
 程式碼與文件授權尚未選定。
+
