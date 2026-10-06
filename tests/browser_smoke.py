@@ -25,6 +25,12 @@ setTimeout(() => {
   check(document.querySelector('#static-content').hidden,'static content hidden after enhancement');
   check(!document.querySelector('#toolbar').hidden&&!document.querySelector('#stage').hidden,'interactive controls ready');
   check(document.querySelectorAll('#board .lane').length===3,'three distinct lanes');
+  check(document.querySelectorAll('#board .blueprint-preview img').length===3,'diagrams appear on default board');
+  check([...document.querySelectorAll('#board .blueprint-preview img')].every(img=>img.complete&&img.naturalWidth>0),'default board diagram images load');
+  click('#board [data-blueprint-id="B-002"]');
+  check(!document.querySelector('#blueprint-gallery').hidden&&document.querySelector('#stage').hidden,'preview opens full diagram');
+  check(document.activeElement.id==='B-002','selected diagram receives focus');
+  click('[data-view="board"]');
   check(document.querySelector('#board [data-id="I-001"]')?.textContent.includes('參考軟體'),'idea is visible');
   check(document.documentElement.scrollWidth<=innerWidth,'responsive board has no horizontal overflow');
   click('#board [data-id="I-001"]');
@@ -46,6 +52,7 @@ setTimeout(() => {
   check(document.querySelectorAll('#board .detail').length>6,'outline exposes full content');
   check(!document.querySelector('[data-id="T-003"]'),'deferred task excluded');
   click('[data-view="canvas"]');click('#fit');
+  check(document.querySelectorAll('#board .blueprint-preview img').length===3,'diagrams appear on free canvas');
   const oldTransform=document.querySelector('#board').style.transform;
   click('#zoom-in');
   check(document.querySelector('#board').style.transform!==oldTransform,'zoom changes viewport');
@@ -236,4 +243,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
