@@ -16,6 +16,7 @@
 
 - [最新專案共識](docs/consensus.md)：目前有效的結論，以及清楚標示的待決事項。
 - [六大流程與功能藍圖](docs/learning-blueprint.md)：已確認的討論架構、功能草案、整合設計、困難與分階段候選範圍。
+- [知識學習架構藍圖](docs/diagrams/README.md)：依使用者手繪圖重繪，呈現共用概念筆記、學習紀錄與回饋循環。
 - [目前任務](docs/tasks.md)：任務狀態、下一步及暫緩事項。
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
