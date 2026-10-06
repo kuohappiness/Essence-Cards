@@ -1,14 +1,89 @@
 #!/usr/bin/env python3
 """Generate the standalone board from a deliberately limited Markdown subset."""
 import argparse
+from html import escape
 import json
 from pathlib import Path
 import re
 import sys
+from urllib.parse import urljoin, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "https://github.com/kuohappiness/Essence-Cards"
 OPEN_IDEAS = {"待釐清", "待研究", "提案中", "待驗證"}
+GROUPS = (("ideas", "待釐清點子", "先留下原意，之後逐項討論"),
+          ("tasks", "目前任務", "掌握進度與下一步"),
+          ("consensus", "最新共識", "已確認、目前有效的方向"))
+
+
+def safe_url(raw, source):
+    """Resolve document-relative links without permitting active URL schemes."""
+    try:
+        url = urljoin(source, raw)
+        parsed = urlsplit(url)
+        return url if parsed.scheme in {"https", "http"} and parsed.netloc else None
+    except ValueError:
+        return None
+
+
+def inline(text, source):
+    pattern = r"\[([^\]]+)\]\(([^\s)]+)\)|<(https?://[^>]+)>|\*\*([^*]+)\*\*|`([^`]+)`"
+    result, end = [], 0
+    for match in re.finditer(pattern, text):
+        result.append(escape(text[end:match.start()]))
+        label, raw, auto, bold, code = match.groups()
+        if label is not None or auto is not None:
+            href = safe_url(raw or auto, source)
+            label = escape(label or auto)
+            result.append(f'<a href="{escape(href)}" target="_blank" rel="noopener noreferrer">{label}</a>'
+                          if href else label)
+        elif bold is not None:
+            result.append(f"<strong>{escape(bold)}</strong>")
+        else:
+            result.append(f"<code>{escape(code)}</code>")
+        end = match.end()
+    result.append(escape(text[end:]))
+    return "".join(result)
+
+
+def markdown(text, source):
+    result = []
+    for block in re.split(r"\n\s*\n", text):
+        lines = block.split("\n")
+        if all(line.startswith("- ") for line in lines):
+            result.append("<ul>" + "".join(f"<li>{inline(line[2:], source)}</li>" for line in lines) + "</ul>")
+        elif all(line.startswith("> ") for line in lines):
+            result.append("<blockquote>" + inline("\n".join(line[2:] for line in lines), source) + "</blockquote>")
+        else:
+            result.append("<p>" + "<br>".join(inline(line, source) for line in lines) + "</p>")
+    return "".join(result)
+
+
+def static_card(card):
+    return (f'<article class="card" data-id="{escape(card["id"])}">'
+            f'<div class="card-top"><span class="ident">{escape(card["id"])}</span>'
+            f'<span class="badge">{escape(card["status"])}</span></div>'
+            f'<h3>{escape(card["title"])}</h3><div class="detail">'
+            f'{markdown(card["body"], card["source"])}</div>'
+            f'<a class="source" href="{escape(card["source"])}" target="_blank" '
+            'rel="noopener noreferrer">查看來源文件 ↗</a></article>')
+
+
+def static_content(data):
+    lanes = []
+    for key, title, note in GROUPS:
+        content = "".join(static_card(card) for card in data[key]) or '<p class="empty">目前沒有項目</p>'
+        lanes.append(f'<section class="lane {key}"><div class="lanehead">'
+                     f'<span class="dot" aria-hidden="true"></span><h2>{title}</h2>'
+                     f'<span class="count">{len(data[key])}</span></div>'
+                     f'<p class="lane-description">{note}</p><div class="cards">{content}</div></section>')
+    references = "".join(static_card(card) for card in data["references"]) or '<p class="empty">目前沒有項目</p>'
+    return ('<div class="board">' + "".join(lanes) + '</div>'
+            '<section class="static-references" aria-labelledby="static-reference-title">'
+            '<div class="lanehead"><h2 id="static-reference-title">參考軟體</h2>'
+            f'<span class="count">{len(data["references"])}</span></div>'
+            '<p class="reference-intro">設計討論的研究資料；參考收錄不代表決定採用。</p>'
+            f'<div class="reference-grid">{references}</div></section>')
 
 
 def sections(text):
@@ -84,12 +159,18 @@ def collect(root=ROOT):
 
 def render(root=ROOT):
     template = (root / "web/board-template.html").read_text(encoding="utf-8")
-    if template.count("__BOARD_DATA__") != 1:
-        raise ValueError("Expected exactly one board data placeholder")
+    for placeholder in ("__BOARD_DATA__", "__STATIC_CONTENT__", "__BOARD_META__"):
+        if template.count(placeholder) != 1:
+            raise ValueError(f"Expected exactly one {placeholder} placeholder")
+    data = collect(root)
     # Do not embed excluded document sections, even as hidden HTML or raw JSON.
-    payload = json.dumps(collect(root), ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     payload = payload.replace("<", "\\u003c").replace("&", "\\u0026")
-    return template.replace("__BOARD_DATA__", payload)
+    # Replace placeholders in one pass so literal placeholder text in a document
+    # cannot be mistaken for a template instruction.
+    replacements = {"__BOARD_DATA__": payload, "__STATIC_CONTENT__": static_content(data),
+                    "__BOARD_META__": escape(f'共識 v{data["version"]} · {data["updated"]}')}
+    return re.sub("|".join(replacements), lambda match: replacements[match[0]], template)
 
 
 def main():
