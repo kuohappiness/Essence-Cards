@@ -40,7 +40,8 @@ setTimeout(() => {
   click('[data-view="references"]');
   const referenceData=JSON.parse(document.getElementById('board-data').textContent).references;
   check(document.querySelectorAll('#board.reference-grid article').length===referenceData.length,'all reference records rendered');
-  check(referenceData.every(record=>document.querySelector(`#board.reference-grid [data-id="${record.id}"]`)),'each reference ID is present');
+  const referenceIds=[...document.querySelectorAll('#board.reference-grid .ident')].map(node=>node.textContent);
+  check(referenceData.every(record=>referenceIds.includes(record.id)),'each reference ID is present');
   check(!!document.querySelector('a[href="https://www.memory-toast.com/zh-TW"]'),'Memory Toast source is preserved');
   check(document.documentElement.scrollWidth<=innerWidth,'responsive reference view');
   click('[data-view="blueprints"]');
