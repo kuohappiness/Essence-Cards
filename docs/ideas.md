@@ -6,7 +6,7 @@
 
 ## I-001 參考軟體功能蒐集專區｜待研究
 
-摘要：在設計討論平台蒐集參考軟體功能，先研究 RemNote 與 Memory Toast 的閃卡體驗。
+摘要：已完成 12 項參考軟體的官方資料初查，涵蓋閱讀整理、製卡、練習、回饋及資料可攜性；實際體驗與功能採用仍待討論。
 
 來源：使用者提出。
 
@@ -26,7 +26,9 @@
 - 複習安排、作答回饋與記憶進度。
 - 資料匯入、匯出及可攜性。
 
-下一步：之後挑選一個實際使用情境，逐項記錄觀察、值得借鑑的地方及不適合的地方；目前不要求先完成研究。
+研究進度：2026-10-06 依使用者要求擴充並補齊官方資料。保留 RemNote／Memory Toast，新增 Anki、Quizlet、Brainscape、Mochi、SuperMemo、Readwise Reader、NotebookLM、Recall、Knowt、StudySmarter；每項記錄定位、功能、成本、平台／離線／同步、匯出限制、借鑑方向與待實測事項。官網查核不等於實際試用，沒有證據的欄位仍標未確認。
+
+下一步（助理提案）：以同份繁體中文生物教材優先比較 RemNote、Anki、Mochi、Readwise Reader、NotebookLM、Recall，另測 Memory Toast 的手機輸入與複習；優先順序及具體功能尚未決定採用。
 
 待釐清：比較的深度與優先順序為何？哪些觀察值得轉成 Essence Cards 的功能提案？
 

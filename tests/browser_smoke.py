@@ -38,7 +38,9 @@ setTimeout(() => {
   check(document.querySelector('#detail-body').textContent.includes('使用者原意'),'original idea is readable');
   click('#close-dialog');check(!document.querySelector('dialog').open,'dialog closes');
   click('[data-view="references"]');
-  check(document.querySelectorAll('#board.reference-grid article').length===2,'two reference records');
+  const referenceData=JSON.parse(document.getElementById('board-data').textContent).references;
+  check(document.querySelectorAll('#board.reference-grid article').length===referenceData.length,'all reference records rendered');
+  check(referenceData.every(record=>document.querySelector(`#board.reference-grid [data-id="${record.id}"]`)),'each reference ID is present');
   check(!!document.querySelector('a[href="https://www.memory-toast.com/zh-TW"]'),'Memory Toast source is preserved');
   check(document.documentElement.scrollWidth<=innerWidth,'responsive reference view');
   click('[data-view="blueprints"]');
