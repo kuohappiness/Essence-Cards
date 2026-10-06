@@ -1,5 +1,6 @@
 """Exercise the generated file in an installed Chrome/Chromium (no npm required)."""
 import html
+from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
@@ -81,6 +82,100 @@ setTimeout(() => {
 """
 
 
+class DOMParser(HTMLParser):
+    """Inspect browser DOM output without depending on attribute serialization."""
+    VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+                 "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self, document):
+        super().__init__(convert_charrefs=True)
+        self.nodes = []
+        self.stack = []
+        self.feed(document)
+
+    def handle_starttag(self, tag, attrs):
+        node = dict(tag=tag, attrs=dict(attrs), text=[], parents=list(self.stack))
+        self.nodes.append(node)
+        if tag not in self.VOID_TAGS:
+            self.stack.append(node)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in self.VOID_TAGS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index]["tag"] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, text):
+        for node in self.stack:
+            node["text"].append(text)
+
+    def by_id(self, ident):
+        return next((node for node in self.nodes if node["attrs"].get("id") == ident), None)
+
+    def within(self, root):
+        return [node for node in self.nodes if any(parent is root for parent in node["parents"])]
+
+
+def no_script_page(source):
+    # The policy appears before every application script. The canary would
+    # execute immediately if Chrome ignored it, independently of board success.
+    policy = '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'">'
+    canary = ('<script id="execution-canary">'
+              'document.documentElement.setAttribute("data-script-canary", "executed");'
+              '</script>')
+    return source.replace("<head>", "<head>\n" + policy + "\n" + canary, 1)
+
+
+def inspect_no_script_dom(document, expected_document):
+    dom, expected = DOMParser(document), DOMParser(expected_document)
+    root = dom.by_id("static-content")
+    toolbar, stage = dom.by_id("toolbar"), dom.by_id("stage")
+    html_node = next((node for node in dom.nodes if node["tag"] == "html"), None)
+    children = dom.within(root) if root else []
+    cards = {node["attrs"].get("data-id"): node for node in children if node["tag"] == "article"}
+    expected_root = expected.by_id("static-content")
+    expected_cards = {node["attrs"].get("data-id"): node for node in expected.within(expected_root)
+                      if node["tag"] == "article"}
+
+    def body_text(parser, card):
+        detail = next((node for node in parser.within(card)
+                       if "detail" in node["attrs"].get("class", "").split()), None)
+        return "".join(detail["text"]) if detail else None
+
+    missing = sorted(set(expected_cards) - set(cards))
+    altered = [ident for ident in expected_cards if ident in cards
+               and body_text(dom, cards[ident]) != body_text(expected, expected_cards[ident])]
+    altered_cards = [ident for ident in expected_cards if ident in cards
+                     and "".join(cards[ident]["text"]) != "".join(expected_cards[ident]["text"])]
+    meta, expected_meta = dom.by_id("meta"), expected.by_id("meta")
+    hidden = [node["attrs"].get("data-id") or node["attrs"].get("id") or node["tag"]
+              for node in children if "hidden" in node["attrs"] or node["tag"] == "details"]
+    policies = [node["attrs"].get("content") for node in dom.nodes if node["tag"] == "meta"
+                and node["attrs"].get("http-equiv", "").lower() == "content-security-policy"]
+    state = dict(static_present=root is not None,
+                 static_hidden=root is None or "hidden" in root["attrs"],
+                 toolbar_hidden=toolbar is not None and "hidden" in toolbar["attrs"],
+                 stage_hidden=stage is not None and "hidden" in stage["attrs"],
+                 canary_executed=html_node is not None and "data-script-canary" in html_node["attrs"],
+                 canary_present=dom.by_id("execution-canary") is not None,
+                 csp_present="script-src 'none'" in policies,
+                 metadata_intact=meta is not None and meta["text"] == expected_meta["text"],
+                 records=len(cards), expected_records=len(expected_cards), missing=missing,
+                 altered_bodies=altered, altered_cards=altered_cards, hidden_or_collapsed=hidden)
+    state["ok"] = (state["static_present"] and not state["static_hidden"]
+                   and state["toolbar_hidden"] and state["stage_hidden"]
+                   and not state["canary_executed"] and state["canary_present"]
+                   and state["csp_present"] and len(cards) == len(expected_cards)
+                   and state["metadata_intact"] and not missing and not altered
+                   and not altered_cards and not hidden)
+    return state
+
+
 def main():
     browser = next((shutil.which(name) for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser") if shutil.which(name)), None)
     if not browser:
@@ -115,19 +210,21 @@ def main():
                 print(json.dumps(report, ensure_ascii=False))
                 if not report["ok"]:
                     raise SystemExit(1)
-            # Also exercise genuinely disabled browser scripting. There is no JS
-            # observation harness here; inspect the dumped DOM for static records.
-            path.write_text(source, encoding="utf-8")
+            # Browser-enforced script blocking, with no executable observer.
+            # Parse the dumped DOM and confirm the execution canary was blocked.
+            path.write_text(no_script_page(source), encoding="utf-8")
             command = [browser, "--headless", "--no-sandbox", "--disable-dev-shm-usage",
                        "--disable-gpu", "--no-first-run", "--no-default-browser-check",
                        f"--user-data-dir={temporary}/profile-{width}-disabled",
-                       f"--window-size={width},{height}", "--blink-settings=scriptEnabled=false",
+                       f"--window-size={width},{height}", "--virtual-time-budget=3000",
                        "--dump-dom", path.as_uri()]
             result = subprocess.run(command, capture_output=True, text=True, timeout=45)
-            static = re.search(r'<div class="stage" id="static-content">(.*?)<div class="stage" id="stage" hidden', result.stdout, re.S)
-            if result.returncode or not static or any(f'data-id="{ident}"' not in static[1] for ident in ids):
-                raise SystemExit(f"Disabled-script browser failed for {width}: {result.stderr[-2000:]}")
-            print(json.dumps(dict(ok=True, mode='scripts-disabled', width=width, records=len(ids))))
+            report = inspect_no_script_dom(result.stdout, source)
+            report.update(mode='scripts-blocked-csp', width=width, returncode=result.returncode)
+            if result.returncode or not report["ok"]:
+                raise SystemExit(f"Script-blocked browser failed: {json.dumps(report)}; "
+                                 f"DOM bytes={len(result.stdout)}; stderr tail={result.stderr[-500:]}")
+            print(json.dumps(report))
 
 
 if __name__ == "__main__":
