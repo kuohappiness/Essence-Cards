@@ -17,7 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 
-W, H = 2400, 1780
+W, H = 2200, 1700
 P = dict(bg='#F5F6F1', paper='#FFFFFF', ink='#243D37', muted='#687A72',
          green='#286C59', green_soft='#E7F0E8', line='#D8E2DB', amber='#AA6B2E',
          amber_soft='#FAF0DE', blue='#497B97', blue_soft='#EAF2F8', slate='#899B91')
@@ -151,144 +151,120 @@ class Diagram:
 def draw(out):
     d = Diagram(out)
     d.rect(0, 0, W, H, P['bg'], radius=0)
-    # Header and restrained wordmark.
-    d.rect(92, 49, 27, 37, P['green_soft'], P['green'], radius=5)
-    d.rect(101, 54, 27, 37, P['paper'], P['green'], radius=5)
-    d.text(148, 89, 'Essence Cards', 48, weight=700, en=True)
-    d.text(90, 161, '知識學習架構藍圖', 48, weight=600)
-    d.text(611, 158, '從來源資料到理解、記憶與應用', 25, P['muted'])
-    d.rect(1950, 66, 360, 53, '#E7EEE7', radius=26)
-    d.text(2130, 100, '概念架構 v1.2', 23, anchor='middle')
-    d.text(2310, 161, '2026.10.06', 20, P['muted'], en=True, anchor='end')
+    d.rect(82, 48, 27, 37, P['green_soft'], P['green'], radius=5)
+    d.rect(91, 53, 27, 37, P['paper'], P['green'], radius=5)
+    d.text(138, 88, 'Essence Cards', 48, weight=700, en=True)
+    d.text(80, 160, '知識學習架構藍圖', 48, weight=600)
+    d.text(80, 212, '輸入、整理、學習、回饋，形成持續改善的學習循環。', 26, P['muted'])
+    d.rect(1760, 58, 350, 53, '#E7EEE7', radius=26)
+    d.text(1935, 92, '概念架構 v2.0', 23, anchor='middle')
+    d.text(2110, 157, '2026.10.06', 20, P['muted'], en=True, anchor='end')
 
-    # Learning loop overview; feedback can revisit organizing or learning.
-    d.rect(90,198,2220,163,'#E8EEE6',radius=20)
-    centers=[245,770,1400,2025]
-    for i,(x,title) in enumerate(zip(centers,['輸入','整理','學習','回饋'])):
-        color=P['blue'] if title=='回饋' else P['green']
-        d.rect(x-130,216,260,60,P['paper'],radius=20)
-        d.text(x,257,title,34,color,weight=600,anchor='middle')
-        if i:
-            d.line([(centers[i-1]+130,246),(x-130,246)],P['green'],3,arrow=True)
-    d.line([(2025,276),(2025,319),(770,319),(770,276)],P['blue'],2.5,arrow=True)
-    d.line([(1400,319),(1400,276)],P['blue'],2.5,arrow=True)
-    d.rect(965,297,375,43,'#E8EEE6',radius=8)
-    d.text(1152.5,325,'依需要回到整理或學習',23,P['blue'],anchor='middle')
-    d.y_offset = 180
+    # Three top-level areas share a baseline. All connectors are straight.
+    d.card(80,270,330,700)
+    d.card(550,270,570,700)
+    d.card(1260,270,850,700)
+    d.line([(410,625),(550,625)],width=4,arrow=True)
+    d.line([(1120,625),(1260,625)],width=4,arrow=True)
+    d.text(480,596,'整理來源',21,P['muted'],anchor='middle')
+    d.text(1190,596,'依需要製作',21,P['muted'],anchor='middle')
 
-    # Forward flow, with space reserved for feedback routes.
-    for left, right in ((400,480),(1060,1140),(1660,1740)):
-        d.line([(left,587),(right,587)], width=4, arrow=True)
-    d.text(1100, 558, '依需求', 20, P['muted'], anchor='middle')
-    d.text(1700, 558, '作答', 20, P['muted'], anchor='middle')
-
-    # Source inputs.
-    d.card(90,280,310,600)
-    d.label(122,336,'來源輸入',size=30)
-    d.text(122,377,'貼上・截取・匯入',23,P['muted'])
+    # Input: retain source types and traceability.
+    d.label(114,334,'輸入',size=40)
+    d.text(114,390,'來源資料',29,weight=600)
+    d.text(114,430,'貼上・截取・匯入',23,P['muted'])
     source_rows=[('T','文字'),('I','圖片'),('P','PDF'),('A','影音檔'),('W','網頁'),('Y','YouTube'),('C','Podcast')]
     for i,(symbol,title) in enumerate(source_rows):
-        y=430+i*57
-        d.rect(121,y-28,35,35,P['green_soft'],radius=9)
-        d.text(138.5,y-4,symbol,17,P['green'],weight=700,en=True,anchor='middle')
-        d.text(175,y,title,27,en=title in {'PDF','YouTube','Podcast'},max_width=192)
-    d.text(122,852,'保留原文與來源定位',20,P['muted'])
+        y=482+i*51
+        d.rect(113,y-28,35,35,P['green_soft'],radius=9)
+        d.text(130.5,y-4,symbol,17,P['green'],weight=700,en=True,anchor='middle')
+        d.text(168,y,title,27,en=title in {'PDF','YouTube','Podcast'},max_width=205)
+    d.rect(113,834,264,91,'#F1F5EF',radius=14)
+    d.text(131,870,'保留原文與來源定位',22,P['green'],max_width=228)
+    d.text(131,904,'網址、頁碼或時間點',20,P['muted'],max_width=228)
 
-    # Process choices and shared conceptual base.
-    d.card(480,280,580,600)
-    d.label(516,336,'整理與知識基礎',size=30)
-    d.rect(516,370,508,121,P['green_soft'],radius=15)
-    d.text(540,412,'資料整理',28,weight=600)
-    d.text(540,451,'辨識內容・選取重點・萃取概念',24,max_width=462)
-    d.line([(770,491),(770,533)],width=3,arrow=True)
-    d.text(516,582,'概念筆記',40,weight=600)
+    # Organize: one knowledge base connects sources and learning activities.
+    d.label(586,334,'整理',size=40)
+    d.rect(586,375,498,116,P['green_soft'],radius=15)
+    d.text(610,416,'理解與選取內容',29,weight=600)
+    d.text(610,459,'辨識重點・萃取概念・整理關係',23,max_width=450)
+    d.line([(835,491),(835,542)],width=3,arrow=True)
+    d.text(586,597,'概念筆記',40,weight=600)
     for i,value in enumerate(['有架構的筆記','相似概念關聯','比較表與概念差異']):
-        d.circle(524,627+i*45,4,P['green'])
-        d.text(544,635+i*45,value,27)
-    d.rect(516,758,508,54,'#F1F5EF',radius=12)
-    d.text(770,792,'來源可核對・內容可修訂',24,P['green'],anchor='middle')
-    d.text(516,851,'依需要選擇整理與產出哪些材料',23,P['muted'])
+        d.circle(594,644+i*48,4,P['green'])
+        d.text(614,653+i*48,value,28)
+    d.rect(586,814,498,57,'#F1F5EF',radius=12)
+    d.text(835,850,'來源可核對・內容可修訂',25,P['green'],anchor='middle')
+    d.text(586,917,'依需要選擇整理內容與產出材料',24,P['muted'],max_width=498)
 
-    # Materials and practice are related, not mandatory outputs.
-    d.card(1140,280,520,600)
-    d.label(1176,336,'學習材料',size=30)
-    d.rect(1176,370,448,136,'#EDF3EB',radius=15)
-    d.text(1201,414,'互動式教材',30,weight=600)
-    d.text(1201,454,'操作與探索，理解複雜概念',24,max_width=399)
-    d.text(1201,486,'可在初學或補強時使用',21,P['muted'])
-    d.rect(1176,523,448,108,'#EDF2F8',radius=15)
-    d.text(1201,565,'記憶卡',30,weight=600)
-    d.text(1201,606,'主動回想需要熟記的內容',24,max_width=399)
-    d.rect(1176,648,448,168,'#FAF2E6',radius=15)
-    d.text(1201,692,'試題／考題閃卡',29,weight=600)
-    d.text(1201,737,'根據真題、筆記與歷次錯題',23,max_width=398)
-    d.text(1201,778,'情境與變式，檢驗理解及應用',23,max_width=398)
-    d.text(1176,852,'材料與題目連回相關概念',23,P['muted'])
+    # Learn: material creation, practice, evaluation and records are grouped.
+    d.label(1296,334,'學習',size=40)
+    d.rect(1296,365,778,280,'#F2F5F0',radius=16)
+    d.text(1320,408,'依需要選擇學習材料',26,weight=600)
+    materials=[
+        (1320,230,'互動教材',['操作與探索','理解複雜概念','初學或補強時使用'],'#EDF3EB'),
+        (1566,230,'記憶卡',['主動回想','熟記關鍵內容','記憶與背誦練習'],'#EDF2F8'),
+        (1812,238,'試題／考題閃卡',['依真題、筆記與錯題','情境與變式問題','檢驗理解及應用'],'#FAF2E6')
+    ]
+    for x,w,title,rows,fill in materials:
+        d.rect(x,431,w,185,fill,radius=13)
+        d.text(x+17,471,title,25,weight=600,max_width=w-34)
+        for i,value in enumerate(rows):
+            d.text(x+17,512+i*35,value,22,max_width=w-34)
+    d.line([(1458,645),(1458,696)],width=3,arrow=True)
+    d.text(1482,678,'練習',21,P['muted'])
+    d.rect(1296,696,324,170,P['blue_soft'],radius=16)
+    d.text(1319,743,'作答與評量',30,weight=600)
+    d.text(1319,791,'回答、查看解析',23,max_width=278)
+    d.text(1319,828,'核對評分與修正處',23,max_width=278)
+    d.line([(1620,781),(1690,781)],width=3,arrow=True)
+    d.rect(1690,696,384,170,'#F0F5F7',radius=16)
+    d.text(1713,743,'學習紀錄',30,weight=600)
+    for i,value in enumerate(['作答與正誤・提示使用','練習時間・歷次表現','反覆錯因・相關概念']):
+        d.text(1713,782+i*31,value,22,max_width=338)
+    d.text(1296,917,'材料、題目與紀錄都連回相關概念',24,P['muted'],max_width=778)
 
-    # Evidence, rather than a single mastery percentage.
-    d.card(1740,280,570,600)
-    d.text(1776,334,'作答・評量・紀錄',30,weight=600)
-    d.rect(1776,370,498,126,P['blue_soft'],radius=15)
-    d.text(1800,415,'評分與回饋',30,weight=600)
-    d.text(1800,456,'指出本次回答的正確與待修正處',24,max_width=450)
-    d.line([(2025,496),(2025,536)],P['slate'],width=3,arrow=True)
-    d.text(1776,581,'學習紀錄',40,weight=600)
-    rows=['作答內容・正確與錯誤','提示使用・反覆錯因','練習時間・歷次表現']
-    for i,value in enumerate(rows):
-        d.circle(1784,627+i*45,4,P['blue'])
-        d.text(1804,635+i*45,value,27)
-    d.rect(1776,758,498,54,'#F0F5F7',radius=12)
-    d.text(2025,792,'每筆紀錄連回題目與概念',24,P['blue'],anchor='middle')
-    d.text(1776,851,'保存證據，支持下一輪學習判斷',23,P['muted'])
-
-    # Fork from evidence into two feedback functions.
-    d.line([(2025,880),(2025,973),(1030,973),(1030,1050)],P['slate'],3.5,arrow=True)
-    d.line([(2025,973),(2025,1050)],P['slate'],3.5,arrow=True)
-    d.circle(2025,973,5,P['slate'])
-    d.text(1635,1008,'依學習紀錄分析',23,P['muted'],anchor='middle')
-
-    # Diagnosis and proposed edits.
-    d.card(480,1050,1100,330,fill='#FFFDF8')
-    d.label(516,1108,'錯因診斷與補強',size=32,color=P['amber'])
+    # Feedback is a shared area immediately below its return destinations.
+    d.card(550,1135,1560,380,fill='#FCFDFA')
+    d.label(586,1194,'回饋',size=40,color=P['blue'])
+    d.text(755,1190,'依學習紀錄補強、修訂，並安排下一輪學習。',25,P['muted'])
+    d.rect(586,1223,930,252,'#FFF8ED',radius=16)
+    d.text(610,1266,'錯因診斷與補強',30,weight=600)
     categories=[('單純忘記','調整複習'),('觀念混淆','補充筆記／教材'),('不會應用','變式練習'),('題目有誤','修正題目／解析')]
     for i,(title,action) in enumerate(categories):
-        x=516+i*260
-        d.rect(x,1143,244,113,P['amber_soft'],radius=14)
-        d.text(x+122,1185,title,27,weight=600,anchor='middle')
-        d.text(x+122,1227,action,23,P['amber'],anchor='middle',max_width=227)
-    d.line([(516,1290),(1544,1290)],P['line'],width=1.5)
-    d.text(1030,1338,'提出修訂建議 → 核對後更新 → 保留版本',27,P['amber'],anchor='middle')
-    # Explicit returns to the two editable outputs.
-    d.line([(700,1050),(700,913),(770,913),(770,880)],P['amber'],3.5,arrow=True)
-    d.text(497,947,'回寫筆記與比較表',22,P['amber'])
-    d.line([(1430,1050),(1430,913),(1400,913),(1400,880)],P['amber'],3.5,arrow=True)
-    d.text(1190,947,'更新教材與重新出題',22,P['amber'])
+        x=610+i*222
+        d.rect(x,1291,206,96,P['amber_soft'],radius=13)
+        d.text(x+103,1328,title,25,weight=600,anchor='middle')
+        d.text(x+103,1364,action,21,P['amber'],anchor='middle',max_width=190)
+    d.text(610,1435,'提出修訂建議 → 核對後更新 → 保留版本',25,P['amber'],max_width=882)
+    d.rect(1540,1223,534,252,'#F0F6FA',radius=16)
+    d.text(1564,1266,'復盤與學習安排',30,weight=600)
+    d.text(1564,1320,'間隔複習',25,weight=600)
+    d.text(2050,1320,'下次何時再練？',23,P['blue'],anchor='end')
+    d.text(1564,1370,'主題復盤',25,weight=600)
+    d.text(2050,1370,'下週優先學什麼？',23,P['blue'],anchor='end')
+    d.text(1564,1435,'依可用時間調整份量與計畫',24,P['muted'],max_width=486)
 
-    # Review and scheduling.
-    d.card(1660,1050,650,330,fill='#FAFCFE')
-    d.label(1696,1108,'復盤與學習安排',size=32,color=P['blue'])
-    d.rect(1696,1143,578,75,P['blue_soft'],radius=14)
-    d.text(1720,1188,'間隔複習',27,weight=600)
-    d.text(2250,1188,'下次何時再練？',25,P['blue'],anchor='end')
-    d.rect(1696,1232,578,75,P['blue_soft'],radius=14)
-    d.text(1720,1277,'主題復盤',27,weight=600)
-    d.text(2250,1277,'下週優先學什麼？',25,P['blue'],anchor='end')
-    d.text(1696,1349,'依可用時間調整份量與計畫',25,P['muted'])
-    # Planning loop routes outside the cards to avoid crossing the learning flow.
-    d.line([(2310,1226),(2350,1226),(2350,220),(1400,220),(1400,280)],P['blue'],3.5,arrow=True)
-    d.rect(1640,193,403,50,P['bg'],radius=10)
-    d.text(1841.5,227,'安排下一輪學習與複習',26,P['blue'],anchor='middle')
+    # Separate straight channels carry evidence and the three kinds of return.
+    d.line([(835,1135),(835,970)],P['amber'],3.5,arrow=True)
+    d.text(859,1054,'回寫筆記／比較表',22,P['amber'])
+    d.line([(1360,1135),(1360,970)],P['amber'],3.5,arrow=True)
+    d.text(1384,1054,'更新教材／重新出題',22,P['amber'])
+    d.line([(1882,970),(1882,1135)],P['slate'],3.5,arrow=True)
+    d.text(1858,1090,'依學習紀錄診斷',22,P['muted'],anchor='end')
+    d.line([(2070,1135),(2070,970)],P['blue'],3.5,arrow=True)
+    d.text(2046,1021,'安排後續學習與複習',22,P['blue'],anchor='end')
 
-    # Shared-link foundation and arrow legend.
-    d.rect(90,1447,2220,80,'#E8EEE6',radius=18)
-    d.text(122,1496,'共用關聯',25,weight=600)
-    d.text(275,1496,'來源・概念・教材・題目・作答紀錄',25,P['green'])
-    legend=[(1340,P['green'],'資料／學習流'),(1710,P['amber'],'補強與修訂'),(2040,P['blue'],'複習安排')]
+    # Shared relations are architecture, without an additional decorative loop.
+    d.rect(80,1560,2030,65,'#E8EEE6',radius=17)
+    d.text(104,1602,'共用關聯',24,weight=600)
+    d.text(255,1602,'來源・概念・教材・題目・作答紀錄',24,P['green'])
+    legend=[(1260,P['green'],'學習流'),(1510,P['amber'],'修訂'),(1740,P['blue'],'學習安排')]
     for x,color,title in legend:
-        d.line([(x,1487),(x+48,1487)],color,3,arrow=True)
-        d.text(x+63,1496,title,23,P['muted'])
-    d.text(90,1570,'依手繪藍圖重繪｜已確認架構方向，欄位、算法、介面與自動化細節待討論。',21,P['muted'])
-    d.text(2310,1570,'ESSENCE CARDS / CONCEPT ARCHITECTURE',16,P['muted'],en=True,anchor='end')
+        d.line([(x,1595),(x+44,1595)],color,3,arrow=True)
+        d.text(x+59,1603,title,23,P['muted'])
+    d.text(80,1667,'架構方向已確認；欄位、算法、介面與自動化細節待討論。',21,P['muted'])
+    d.text(2110,1667,'ESSENCE CARDS / LEARNING LOOP',16,P['muted'],en=True,anchor='end')
     d.save()
 
 
