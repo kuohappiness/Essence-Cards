@@ -26,6 +26,7 @@
 - [目前任務](docs/tasks.md)：任務狀態、下一步及暫緩事項。
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
+- [參考研究的設計優化提案](docs/references/design-opportunities.md)：統整架構細化、特色功能及第一版優先順序，全部維持提案狀態。
 - [討論紀錄](docs/discussions/README.md)：按日期與主題保存想法、取捨及決策的演變。
 - [協作規則](AGENTS.md)：模型與任務分工，以及後續協作者維護共識與文件的方式。
 
@@ -81,4 +82,3 @@ GitHub Pages 工作流程已備妥，首次啟用與線上發布仍待確認。�
 ## 授權
 
 程式碼與文件授權尚未選定。
-
