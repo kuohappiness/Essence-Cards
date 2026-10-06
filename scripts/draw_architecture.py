@@ -17,7 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 
-W, H = 2400, 1600
+W, H = 2400, 1780
 P = dict(bg='#F5F6F1', paper='#FFFFFF', ink='#243D37', muted='#687A72',
          green='#286C59', green_soft='#E7F0E8', line='#D8E2DB', amber='#AA6B2E',
          amber_soft='#FAF0DE', blue='#497B97', blue_soft='#EAF2F8', slate='#899B91')
@@ -41,8 +41,10 @@ class Diagram:
         self.pdf.scale(.5, .5)
         self.parts = []
         self.used = set()
+        self.y_offset = 0
 
     def rect(self, x, y, w, h, fill, stroke=None, radius=16, sw=1.4):
+        y += self.y_offset
         self.parts.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{radius}" fill="{fill}" stroke="{stroke or "none"}" stroke-width="{sw}"/>')
         c = self.pdf
         c.setFillColor(HexColor(fill))
@@ -52,6 +54,7 @@ class Diagram:
         c.roundRect(x, H-y-h, w, h, radius, fill=1, stroke=bool(stroke))
 
     def circle(self, x, y, r, fill, stroke=None, sw=1.5):
+        y += self.y_offset
         self.parts.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="{fill}" stroke="{stroke or "none"}" stroke-width="{sw}"/>')
         c = self.pdf
         c.setFillColor(HexColor(fill))
@@ -60,6 +63,7 @@ class Diagram:
         c.circle(x, H-y, r, fill=1, stroke=bool(stroke))
 
     def text(self, x, y, value, size=26, color=None, weight=400, en=False, anchor='start', max_width=None):
+        y += self.y_offset
         color = color or P['ink']
         font = 'ENB' if en and weight >= 600 else 'EN' if en else 'CJK'
         width = pdfmetrics.stringWidth(value, font, size)
@@ -83,6 +87,7 @@ class Diagram:
         c.restoreState()
 
     def line(self, pts, color=None, width=3, arrow=False, dash=False):
+        pts = [(x, y+self.y_offset) for x, y in pts]
         color = color or P['green']
         points = ' '.join(f'{x},{y}' for x, y in pts)
         dashed = ' stroke-dasharray="9 7"' if dash else ''
@@ -105,11 +110,10 @@ class Diagram:
             for a, b in triangle[1:]: p.lineTo(a, H-b)
             p.close(); c.setFillColor(HexColor(color)); c.drawPath(p, fill=1, stroke=0)
 
-    def label(self, x, y, number, title, color=None, size=29):
+    def label(self, x, y, title, color=None, size=29):
         color = color or P['green']
-        self.circle(x+20, y-10, 20, color)
-        self.text(x+20, y-4, number, 16, '#FFFFFF', weight=700, en=True, anchor='middle')
-        self.text(x+53, y, title, size, weight=600)
+        self.rect(x, y-29, 5, 33, color, radius=2)
+        self.text(x+18, y, title, size, weight=600)
 
     def card(self, x, y, w, h, fill=None, stripe=None):
         self.rect(x, y+5, w, h, '#EAF0E9', radius=24)
@@ -133,7 +137,7 @@ class Diagram:
                  '@font-face{font-family:DiagramLatin;src:url(data:font/woff;base64,'+encoded_latin+') format("woff");}</style>')
         svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="title desc">'
         svg += '<title id="title">Essence Cards 知識學習架構藍圖</title>'
-        svg += '<desc id="desc">來源資料經整理成概念筆記，連接互動教材、記憶卡與考題；作答與學習紀錄支持錯因診斷、補強修訂、主題復盤與間隔複習，形成持續回饋循環。</desc>'
+        svg += '<desc id="desc">以輸入、整理、學習、回饋為主軸：來源資料經整理成概念筆記，連接互動教材、記憶卡與考題；作答與學習紀錄支持錯因診斷、補強修訂、主題復盤與間隔複習。回饋依需要帶回整理或學習，形成持續循環。</desc>'
         svg += style + ''.join(self.parts) + '</svg>'
         (self.out / 'Essence-Cards_架構藍圖.svg').write_text(svg, encoding='utf-8')
         doc = fitz.open(self.out / 'Essence-Cards_架構藍圖.pdf')
@@ -141,7 +145,7 @@ class Diagram:
         pix.save(self.out / 'Essence-Cards_架構藍圖.png')
         doc.close()
         (self.out / '.diagram-cjk.ttf').unlink()
-        print('Created SVG, PDF and 3600 × 2400 PNG.')
+        print(f'Created SVG, PDF and {int(W*1.5)} × {int(H*1.5)} PNG.')
 
 
 def draw(out):
@@ -154,8 +158,23 @@ def draw(out):
     d.text(90, 161, '知識學習架構藍圖', 48, weight=600)
     d.text(611, 158, '從來源資料到理解、記憶與應用', 25, P['muted'])
     d.rect(1950, 66, 360, 53, '#E7EEE7', radius=26)
-    d.text(2130, 100, '概念架構 v1.0', 23, anchor='middle')
+    d.text(2130, 100, '概念架構 v1.2', 23, anchor='middle')
     d.text(2310, 161, '2026.10.06', 20, P['muted'], en=True, anchor='end')
+
+    # Learning loop overview; feedback can revisit organizing or learning.
+    d.rect(90,198,2220,163,'#E8EEE6',radius=20)
+    centers=[245,770,1400,2025]
+    for i,(x,title) in enumerate(zip(centers,['輸入','整理','學習','回饋'])):
+        color=P['blue'] if title=='回饋' else P['green']
+        d.rect(x-130,216,260,60,P['paper'],radius=20)
+        d.text(x,257,title,34,color,weight=600,anchor='middle')
+        if i:
+            d.line([(centers[i-1]+130,246),(x-130,246)],P['green'],3,arrow=True)
+    d.line([(2025,276),(2025,319),(770,319),(770,276)],P['blue'],2.5,arrow=True)
+    d.line([(1400,319),(1400,276)],P['blue'],2.5,arrow=True)
+    d.rect(965,297,375,43,'#E8EEE6',radius=8)
+    d.text(1152.5,325,'依需要回到整理或學習',23,P['blue'],anchor='middle')
+    d.y_offset = 180
 
     # Forward flow, with space reserved for feedback routes.
     for left, right in ((400,480),(1060,1140),(1660,1740)):
@@ -163,9 +182,9 @@ def draw(out):
     d.text(1100, 558, '依需求', 20, P['muted'], anchor='middle')
     d.text(1700, 558, '作答', 20, P['muted'], anchor='middle')
 
-    # 01: source inputs.
+    # Source inputs.
     d.card(90,280,310,600)
-    d.label(122,336,'01','來源輸入',size=30)
+    d.label(122,336,'來源輸入',size=30)
     d.text(122,377,'貼上・截取・匯入',23,P['muted'])
     source_rows=[('T','文字'),('I','圖片'),('P','PDF'),('A','影音檔'),('W','網頁'),('Y','YouTube'),('C','Podcast')]
     for i,(symbol,title) in enumerate(source_rows):
@@ -175,9 +194,9 @@ def draw(out):
         d.text(175,y,title,27,en=title in {'PDF','YouTube','Podcast'},max_width=192)
     d.text(122,852,'保留原文與來源定位',20,P['muted'])
 
-    # 02: process choices and shared conceptual base.
+    # Process choices and shared conceptual base.
     d.card(480,280,580,600)
-    d.label(516,336,'02','整理與知識基礎',size=30)
+    d.label(516,336,'整理與知識基礎',size=30)
     d.rect(516,370,508,121,P['green_soft'],radius=15)
     d.text(540,412,'資料整理',28,weight=600)
     d.text(540,451,'辨識內容・選取重點・萃取概念',24,max_width=462)
@@ -190,9 +209,9 @@ def draw(out):
     d.text(770,792,'來源可核對・內容可修訂',24,P['green'],anchor='middle')
     d.text(516,851,'依需要選擇整理與產出哪些材料',23,P['muted'])
 
-    # 03 and 04: materials and practice are related, not mandatory outputs.
+    # Materials and practice are related, not mandatory outputs.
     d.card(1140,280,520,600)
-    d.label(1176,336,'03','學習材料',size=30)
+    d.label(1176,336,'學習材料',size=30)
     d.rect(1176,370,448,136,'#EDF3EB',radius=15)
     d.text(1201,414,'互動式教材',30,weight=600)
     d.text(1201,454,'操作與探索，理解複雜概念',24,max_width=399)
@@ -201,7 +220,7 @@ def draw(out):
     d.text(1201,565,'記憶卡',30,weight=600)
     d.text(1201,606,'主動回想需要熟記的內容',24,max_width=399)
     d.rect(1176,648,448,168,'#FAF2E6',radius=15)
-    d.label(1196,692,'04','試題／考題閃卡',size=29)
+    d.text(1201,692,'試題／考題閃卡',29,weight=600)
     d.text(1201,737,'根據真題、筆記與歷次錯題',23,max_width=398)
     d.text(1201,778,'情境與變式，檢驗理解及應用',23,max_width=398)
     d.text(1176,852,'材料與題目連回相關概念',23,P['muted'])
@@ -228,9 +247,9 @@ def draw(out):
     d.circle(2025,973,5,P['slate'])
     d.text(1635,1008,'依學習紀錄分析',23,P['muted'],anchor='middle')
 
-    # 05: diagnosis and proposed edits.
+    # Diagnosis and proposed edits.
     d.card(480,1050,1100,330,fill='#FFFDF8')
-    d.label(516,1108,'05','錯因診斷與補強',size=32,color=P['amber'])
+    d.label(516,1108,'錯因診斷與補強',size=32,color=P['amber'])
     categories=[('單純忘記','調整複習'),('觀念混淆','補充筆記／教材'),('不會應用','變式練習'),('題目有誤','修正題目／解析')]
     for i,(title,action) in enumerate(categories):
         x=516+i*260
@@ -245,9 +264,9 @@ def draw(out):
     d.line([(1430,1050),(1430,913),(1400,913),(1400,880)],P['amber'],3.5,arrow=True)
     d.text(1190,947,'更新教材與重新出題',22,P['amber'])
 
-    # 06: review and scheduling.
+    # Review and scheduling.
     d.card(1660,1050,650,330,fill='#FAFCFE')
-    d.label(1696,1108,'06','復盤與學習安排',size=32,color=P['blue'])
+    d.label(1696,1108,'復盤與學習安排',size=32,color=P['blue'])
     d.rect(1696,1143,578,75,P['blue_soft'],radius=14)
     d.text(1720,1188,'間隔複習',27,weight=600)
     d.text(2250,1188,'下次何時再練？',25,P['blue'],anchor='end')
