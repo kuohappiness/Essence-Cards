@@ -1,6 +1,6 @@
 # Essence Cards｜學習循環與功能藍圖
 
-更新日期：2026-10-06（Asia/Taipei）
+更新日期：2026-10-07（Asia/Taipei）
 
 目前狀態：共用知識基礎、學習紀錄與回饋方向（C-008）、整體學習循環的呈現方式（C-009），以及多情境介面共用概念筆記的產品形式（C-011）已確認；其餘具體功能、版面、資料欄位與開發順序仍為候選提案，收錄不表示採用。
 
@@ -122,9 +122,11 @@
 
 ## 下一步與索引
 
+- 已確認：[C-016 逐項功能討論](consensus.md)；[功能討論目錄](function-discussions.md)保存拆分草案與相依關係，從 [F-001 來源資料匯入與管理](functions/source-input.md)開始。目錄中的優先級與第一版範圍仍未確認。
+
 - 已確認：[C-009 整體學習循環](consensus.md#c-009-以整體學習循環呈現架構已確認)。
 - 已確認：[C-011 多情境介面共用概念筆記](consensus.md)；[產品形式與回寫邊界討論](discussions/2026-10-06-shared-knowledge-workspace.md)。
 - 已確認：[C-008 共用知識基礎與學習回饋循環](consensus.md#c-008-共用知識基礎與學習回饋循環已確認)；[視覺藍圖](diagrams/README.md)。
 - 待釐清：點子 [I-002 至 I-010](ideas.md)。
-- 任務：[T-005 與 T-006](tasks.md)；助理建議從概念筆記內容與關聯切入，討論順序未確認。
+- 任務：[T-010、T-005 與 T-006](tasks.md)；本輪先釐清主要來源優先順序，再討論匯入操作與保存方式。P0 技術驗證另行保留。
 - [整體學習循環呈現方式的討論摘要](discussions/2026-10-06-integrated-learning-cycle.md)；[早期功能討論](discussions/2026-10-06-learning-workflow.md)。
