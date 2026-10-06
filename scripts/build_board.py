@@ -173,21 +173,45 @@ def render(root=ROOT):
     return re.sub("|".join(replacements), lambda match: replacements[match[0]], template)
 
 
+def render_mobile(root=ROOT):
+    """Render the discussion platform as an intrinsically visible linear page."""
+    template = (root / "web/mobile-template.html").read_text(encoding="utf-8")
+    for placeholder in ("__MOBILE_CONTENT__", "__MOBILE_META__"):
+        if template.count(placeholder) != 1:
+            raise ValueError(f"Expected exactly one {placeholder} placeholder")
+    data = collect(root)
+    groups = (GROUPS[1], GROUPS[2], GROUPS[0],
+              ("references", "參考軟體", "設計討論的研究資料；參考收錄不代表決定採用"))
+    content = []
+    for key, title, note in groups:
+        records = "\n".join(static_card(card) for card in data[key]) or '<p>目前沒有項目</p>'
+        content.append(f'<div class="group" id="{key}">\n'
+                       f'<h2>{title} · {len(data[key])}</h2><p class="note">{note}</p>\n'
+                       f'{records}\n<p class="back"><a href="#top">回到頁首 ↑</a></p>\n</div>')
+    replacements = {"__MOBILE_CONTENT__": "\n".join(content),
+                    "__MOBILE_META__": escape(f'手機閱讀版 · 共識 v{data["version"]} · {data["updated"]}')}
+    return re.sub("|".join(replacements), lambda match: replacements[match[0]], template)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Fail if output is stale")
     parser.add_argument("--output", type=Path, default=ROOT / "index.html")
+    parser.add_argument("--mobile-output", type=Path, default=ROOT / "mobile.html")
     args = parser.parse_args()
-    html = render()
+    outputs = ((args.output, render()), (args.mobile_output, render_mobile()))
     if args.check:
-        if not args.output.exists() or args.output.read_text(encoding="utf-8") != html:
-            print("Board is stale. Run python3 scripts/build_board.py", file=sys.stderr)
+        stale = [path.name for path, html in outputs
+                 if not path.exists() or path.read_text(encoding="utf-8") != html]
+        if stale:
+            print(f"Output is stale: {', '.join(stale)}. Run python3 scripts/build_board.py", file=sys.stderr)
             return 1
-        print("Board matches Markdown sources.")
+        print("Board and mobile reader match Markdown sources.")
     else:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(html, encoding="utf-8")
-        print(f"Generated {args.output.name}")
+        for path, html in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(html, encoding="utf-8")
+            print(f"Generated {path.name}")
     return 0
 
 

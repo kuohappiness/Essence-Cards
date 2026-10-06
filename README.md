@@ -31,9 +31,11 @@
 
 `index.html` 是我們共同討論「如何做出 Essence Cards」的規劃平台。它收集點子、研究參考軟體並整理任務與共識；學習工具本身的功能、架構與操作介面另行討論。畫板上的卡片表示討論事項，不是學習用的閃卡。
 
-[下載／開啟 index.html](index.html)，即可閱讀單檔討論平台，不需要安裝套件。文件直接包含點子、任務、共識與參考軟體的完整內容和版本日期；即使檔案預覽器沒有執行 JavaScript，也有可閱讀的內容。
+[下載／開啟 index.html](index.html)，即可在支援 JavaScript 的瀏覽器使用互動討論平台。文件也直接包含點子、任務、共識與參考軟體的完整內容及版本日期，不需要安裝套件。
 
-支援 JavaScript 的瀏覽器會啟用看板、可拖曳縮放的自由畫板、文字綱要及參考軟體四種互動檢視。手機若在 ChatGPT 的檔案預覽中無法操作，仍可先閱讀全文；完整互動以 Safari 等瀏覽器開啟已發布的網站為準。GitHub Pages 的首次設定見下方「公開網址」。
+提供看板、可拖曳縮放的自由畫板、文字綱要及參考軟體四種互動檢視。完整互動以 Safari 等瀏覽器開啟已發布的網站為準。GitHub Pages 的首次設定見下方「公開網址」。
+
+[手機閱讀版 mobile.html](mobile.html) 使用相同 Markdown 來源生成，完全不含腳本、隱藏區塊與互動控制。先呈現目前任務與共識，再呈現點子及參考軟體，並提供文字連結跳到各區。使用者回報 index.html 在 ChatGPT 手機預覽仍只見外框，因此提供新的檔名以協助排查附件版本與預覽相容性；實機結果由 T-007 追蹤。
 
 看板顯示**待釐清點子、目前任務及最新已確認共識**，分區區別狀態。參考軟體專區是討論平台中的設計研究資料。討論紀錄、歷史提案、已排除項目與完成任務另存文件，不嵌入 HTML。
 
@@ -42,13 +44,13 @@
 內容的唯一來源是 Markdown；不用分別修改 HTML 與綱要：
 
 1. 更新 `docs/ideas.md`、`docs/tasks.md`、`docs/consensus.md` 或 `docs/references/software.md`。
-2. 執行 `python3 scripts/build_board.py` 產生 `index.html`。
+2. 執行 `python3 scripts/build_board.py` 同時產生 `index.html` 與 `mobile.html`。
 3. 執行 `python3 -m unittest discover -s tests -v` 與 `python3 scripts/build_board.py --check`。
 4. 將文件與生成的 HTML 一起提交。
 
 有 Chrome／Chromium 的環境可另執行 `python3 tests/browser_smoke.py`，檢查桌面與手機尺寸的卡片、綱要、來源連結與縮放互動；GitHub 工作流程也會執行此檢查。
 
-直接在 GitHub 修改來源時，[同步工作流程](.github/workflows/board.yml)會生成 HTML；若 HTML 改變，會用一般提交更新 `main`。遇到分支保護或併發推送衝突時會停止，保留其他人的修改。看板本身不提供內容編輯；可在對話中提出點子，或編輯來源文件。
+直接在 GitHub 修改來源時，[同步工作流程](.github/workflows/board.yml)會生成兩份 HTML；若 HTML 改變，會用一般提交更新 `main`。遇到分支保護或併發推送衝突時會停止，保留其他人的修改。看板本身不提供內容編輯；可在對話中提出點子，或編輯來源文件。
 
 產生程式使用 Python 3 標準函式庫；樣式與互動放在 [HTML 範本](web/board-template.html)。新增卡片使用 `## I-002 標題｜待釐清` 等同樣格式，ID 不重用。只有未結案點子與已確認共識會進入看板。
 

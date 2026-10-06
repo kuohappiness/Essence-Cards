@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -16,11 +18,12 @@ spec.loader.exec_module(board)
 class StaticParser(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.cards, self.links, self.text, self.tags = [], [], [], []
+        self.cards, self.links, self.text, self.tags, self.attrs = [], [], [], [], []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         self.tags.append(tag)
+        self.attrs.append(attrs)
         if tag == "article":
             self.cards.append(attrs)
         if tag == "a":
@@ -76,6 +79,80 @@ class BoardTests(unittest.TestCase):
 
     def test_generation_is_deterministic(self):
         self.assertEqual(board.render(self.root), board.render(self.root))
+        self.assertEqual(board.render_mobile(self.root), board.render_mobile(self.root))
+
+    def test_mobile_reader_all_content_is_visible_without_css_or_scripts(self):
+        rendered = board.render_mobile(self.root)
+        # Removing styling leaves the same linear, complete discussion content.
+        unstyled = re.sub(r"<style\b[^>]*>.*?</style>", "", rendered, flags=re.S)
+        parser = StaticParser()
+        parser.feed(unstyled)
+        self.assertTrue(set(parser.tags).isdisjoint({"script", "noscript", "dialog", "details", "button"}))
+        self.assertTrue(all("hidden" not in attrs for attrs in parser.attrs))
+        self.assertNotRegex(rendered, r"display\s*:\s*(?:none|grid)|line-clamp")
+        data = board.collect(self.root)
+        cards = [card for key in ("tasks", "consensus", "ideas", "references") for card in data[key]]
+        self.assertEqual([card["data-id"] for card in parser.cards], [card["id"] for card in cards])
+        text = "".join(parser.text)
+        self.assertIn(f'手機閱讀版 · 共識 v{data["version"]} · {data["updated"]}', text)
+        self.assertIn("設計討論平台", text)
+        for card in cards:
+            self.assertIn(card["title"], text)
+            body = StaticParser()
+            body.feed(board.markdown(card["body"], card["source"]))
+            self.assertIn("".join(body.text), text)
+            self.assertIn(card["source"], parser.links)
+        for key in ("tasks", "consensus", "ideas", "references"):
+            self.assertIn(f"#{key}", parser.links)
+            self.assertTrue(any(attrs.get("id") == key for attrs in parser.attrs))
+
+    def test_mobile_reader_excludes_history_and_escapes_untrusted_content(self):
+        self.append("docs/consensus.md", "\n## C-999 已排除｜已排除\nSECRET_REJECTED\n")
+        self.append("docs/ideas.md", "\n## I-999 已處理｜已採用\nSECRET_CLOSED\n")
+        self.append("docs/tasks.md", "\n## 完成紀錄\nSECRET_COMPLETED\n")
+        self.append("docs/discussions/README.md", "\nSECRET_DISCUSSION\n")
+        self.append("docs/ideas.md", '\n## I-998 <img src=x>｜待釐清\n'
+                    '<script>alert(1)</script> & **重點** `程式`\n\n'
+                    '[共識](consensus.md#c-001) [危險](javascript:alert) '
+                    '__MOBILE_CONTENT__ __MOBILE_META__\n')
+        rendered = board.render_mobile(self.root)
+        for marker in ("SECRET_REJECTED", "SECRET_CLOSED", "SECRET_COMPLETED", "SECRET_DISCUSSION", 'data-id="T-003"'):
+            self.assertNotIn(marker, rendered)
+        parser = StaticParser()
+        parser.feed(rendered)
+        self.assertNotIn("script", parser.tags)
+        self.assertNotIn("img", parser.tags)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt; &amp;', rendered)
+        self.assertIn('<strong>重點</strong>', rendered)
+        self.assertIn('<code>程式</code>', rendered)
+        self.assertIn(board.REPO + '/blob/main/docs/consensus.md#c-001', parser.links)
+        self.assertTrue(all(link.startswith(('https://', 'http://', '#')) for link in parser.links))
+        self.assertIn('__MOBILE_CONTENT__ __MOBILE_META__', rendered)
+
+    def test_cli_generates_and_checks_both_outputs(self):
+        scripts = self.root / "scripts"
+        scripts.mkdir()
+        shutil.copy(ROOT / "scripts/build_board.py", scripts / "build_board.py")
+        command = [sys.executable, str(scripts / "build_board.py")]
+        generated = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        self.assertEqual((self.root / "index.html").read_text(encoding="utf-8"), board.render(self.root))
+        self.assertEqual((self.root / "mobile.html").read_text(encoding="utf-8"), board.render_mobile(self.root))
+        checked = subprocess.run(command + ["--check"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        (self.root / "mobile.html").write_text("STALE", encoding="utf-8")
+        checked = subprocess.run(command + ["--check"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 1)
+        self.assertIn("mobile.html", checked.stderr)
+        self.assertNotIn("index.html", checked.stderr)
+        custom_board, custom_mobile = self.root / "custom/board.html", self.root / "custom/reader.html"
+        custom = command + ["--output", str(custom_board), "--mobile-output", str(custom_mobile)]
+        generated = subprocess.run(custom, capture_output=True, text=True)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        self.assertEqual(custom_board.read_text(encoding="utf-8"), board.render(self.root))
+        self.assertEqual(custom_mobile.read_text(encoding="utf-8"), board.render_mobile(self.root))
+        checked = subprocess.run(custom + ["--check"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
 
     def test_full_current_content_exists_without_scripts(self):
         rendered = board.render(self.root)
