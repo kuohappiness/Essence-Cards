@@ -37,6 +37,8 @@
 - `mobile.html` 為相同 Markdown 來源生成的手機閱讀版，內容直接可見，不含腳本、隱藏切換或互動控制；更新來源後與 `index.html` 一起產生及提交。ChatGPT 手機預覽的實機結果與一般瀏覽器檢查分開記錄。
 - 討論紀錄、歷史提案、已排除項目、過期結論、暫緩事項與完成紀錄不進入畫板內容；不要先全部嵌入 HTML 再隱藏。
 - 實作產生流程後，Markdown 有變更時須重新產生畫板並檢查版本與內容一致。
+- 所有架構圖登錄於 `docs/diagrams/registry.json`，新圖須加入來源、產物與藍圖索引；功能 ID／名稱取自目錄。設計或開發方向改變時，核對所有受影響圖；更新來源、重新產生後才對明列的 B-ID 執行 `scripts/check_diagrams.py --record`。不得僅更新雜湊以消除錯誤。
+- 提交及看板建置前執行 `python3 scripts/build_function_diagram.py --check` 與 `python3 scripts/check_diagrams.py --check`；圖表變更另檢查渲染版面。語意一致需要人工核對，檢查工具只驗證來源與產物快照。
 - 尚未完成的生成、發布或同步功能應標為規劃中，不宣稱已可使用。
 
 ## 點子與參考研究

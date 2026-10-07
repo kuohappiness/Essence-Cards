@@ -1,0 +1,51 @@
+{
+  "diagrams": {
+    "B-001": {
+      "sources": {
+        "docs/learning-blueprint.md": "fa1bc32e08454d11a6fd0dece236de14d73aa15ac5e16c0140ae5fe8a1ddc78f",
+        "docs/function-discussions.md": "096059f6029b69b3c883ea1ae7513a02e3c994eff46d8e050c3fc0f14ffca9b5",
+        "docs/functions/issue-queue.md": "be01a13394dbf4f8c7087afd4d408093b8674afd16f60271bf53ddc4e9d0dfeb",
+        "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0"
+      },
+      "artifacts": {
+        "docs/diagrams/essence-cards-architecture.svg": "f3c205ea6ff3bc9ea2708352dcb5755c4c3f87fe8fa61eba56d605d3554abeb9"
+      }
+    },
+    "B-002": {
+      "sources": {
+        "docs/technical-roadmap.md": "68ead58ff451faabd746ab36253520df5e53f0873307b9d341c77b077ac1393b",
+        "docs/obsidian-ui-probe.md": "b06f5bfd71513996e38a31d6607589efee3da69d4eabe1083340a3a8502fd12c",
+        "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0",
+        "scripts/draw_technical_blueprints.py": "7c53c297d67056e3dbb971cafed7ab680cb454180bf17a25e6c4a4aa7767a728"
+      },
+      "artifacts": {
+        "docs/diagrams/essence-cards-technical-architecture.svg": "21053d56de1116426e217112c4efeda95d3ea7842f8edf10f0ac749d12e63557"
+      }
+    },
+    "B-003": {
+      "sources": {
+        "docs/technical-roadmap.md": "68ead58ff451faabd746ab36253520df5e53f0873307b9d341c77b077ac1393b",
+        "docs/obsidian-ui-probe.md": "b06f5bfd71513996e38a31d6607589efee3da69d4eabe1083340a3a8502fd12c",
+        "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0",
+        "scripts/draw_technical_blueprints.py": "7c53c297d67056e3dbb971cafed7ab680cb454180bf17a25e6c4a4aa7767a728"
+      },
+      "artifacts": {
+        "docs/diagrams/essence-cards-development-roadmap.svg": "147ad473e565748be391a900fa8bbd874500a723151c384e49faea4164a8324a"
+      }
+    },
+    "B-004": {
+      "sources": {
+        "docs/function-discussions.md": "096059f6029b69b3c883ea1ae7513a02e3c994eff46d8e050c3fc0f14ffca9b5",
+        "scripts/build_function_diagram.py": "67b18c1114cbc8294a0cd1ef9aad3110ee56d2254bf3d16af3f44782826a8432",
+        "scripts/render_function_diagram.py": "d03ea374f62baa52d0df0f37d8d42f04a7b85dedf153e6306be14b61066f9888",
+        "scripts/mermaid-config.json": "e43b49096945ec55844435f21e155fc885847a986eff5e3f241f2ca661ca3bc0",
+        "scripts/puppeteer-config.json": "9cbbd3304282ad4cca47c88ae586a601f49c11f48c0738916da7542e7cb6e574"
+      },
+      "artifacts": {
+        "docs/diagrams/essence-cards-functions.svg": "d126f315061e989111ad62eb5adbe056032b50154e58d589b4d84a7027339851",
+        "docs/diagrams/functions.md": "fffc6a9e91f9068bdc29416536bae46df021a6b3822e8de91fa3cd779666e97b",
+        "docs/diagrams/essence-cards-functions.mmd": "80e710fafa2080ba052cd15ded58c03fd601ede85a93a1de74b082733cda750c"
+      }
+    }
+  }
+}

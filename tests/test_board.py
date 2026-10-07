@@ -83,9 +83,9 @@ class BoardTests(unittest.TestCase):
             parser = StaticParser()
             parser.feed(rendered)
             images = [attrs for tag, attrs in zip(parser.tags, parser.attrs) if tag == 'img']
-            self.assertEqual(len(images), 3)
-            expected = ['essence-cards-architecture.svg', 'essence-cards-technical-architecture.svg',
-                        'essence-cards-development-roadmap.svg']
+            expected = [Path(name).name for name in re.findall(r'^圖檔：(.+)$',
+                        (self.root / 'docs/blueprints.md').read_text(encoding='utf-8'), re.M)]
+            self.assertEqual(len(images), len(expected))
             for attrs, filename in zip(images, expected):
                 self.assertEqual(base64.b64decode(attrs['src'].split(',', 1)[1]),
                                  (self.root / 'docs/diagrams' / filename).read_bytes())
@@ -138,7 +138,7 @@ class BoardTests(unittest.TestCase):
         parser.feed(rendered)
         self.assertNotIn("script", parser.tags)
         images = [attrs for tag, attrs in zip(parser.tags, parser.attrs) if tag == "img"]
-        self.assertEqual(len(images), 3)
+        self.assertEqual(len(images), len(board.cards((self.root / "docs/blueprints.md").read_text(encoding="utf-8"), "B", "docs/blueprints.md")))
         self.assertTrue(all(attrs.get("src", "").startswith("data:image/svg+xml;base64,")
                             and "onerror" not in attrs for attrs in images))
         self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt; &amp;', rendered)

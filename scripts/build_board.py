@@ -110,7 +110,7 @@ def blueprint_content(root=ROOT):
                        f'<div class="detail">{markdown(body, record["source"])}</div>'
                        f'<p><a href="{REPO}/blob/main/{escape(match[1].strip())}" '
                        'target="_blank" rel="noopener noreferrer">可編輯 SVG ↗</a></p></figure>')
-    return ('<h2>架構藍圖</h2><p class="blueprint-intro">學習架構、技術架構與開發順序。'
+    return ('<h2>架構藍圖</h2><p class="blueprint-intro">學習架構、功能總覽、技術架構與開發順序。'
             '技術提案與驗證狀態保留於圖中及下方說明；尚未實作的能力不當成已完成。</p>'
             + "".join(figures))
 

@@ -157,8 +157,8 @@ def draw(out):
     d.text(80, 160, '知識學習架構藍圖', 48, weight=600)
     d.text(80, 212, '輸入、整理、學習、回饋，形成持續改善的學習循環。', 26, P['muted'])
     d.rect(1760, 58, 350, 53, '#E7EEE7', radius=26)
-    d.text(1935, 92, '概念架構 v2.0', 23, anchor='middle')
-    d.text(2110, 157, '2026.10.06', 20, P['muted'], en=True, anchor='end')
+    d.text(1935, 92, '概念架構 v2.1', 23, anchor='middle')
+    d.text(2110, 157, '2026.10.07', 20, P['muted'], en=True, anchor='end')
 
     # Three top-level areas share a baseline. All connectors are straight.
     d.card(80,270,330,700)
@@ -236,7 +236,7 @@ def draw(out):
         d.rect(x,1291,206,96,P['amber_soft'],radius=13)
         d.text(x+103,1328,title,25,weight=600,anchor='middle')
         d.text(x+103,1364,action,21,P['amber'],anchor='middle',max_width=190)
-    d.text(610,1435,'提出修訂建議 → 核對後更新 → 保留版本',25,P['amber'],max_width=882)
+    d.text(610,1435,'手機標記疑問 → 電腦核對／補強 → 修訂並結案',25,P['amber'],max_width=882)
     d.rect(1540,1223,534,252,'#F0F6FA',radius=16)
     d.text(1564,1266,'復盤與學習安排',30,weight=600)
     d.text(1564,1320,'間隔複習',25,weight=600)

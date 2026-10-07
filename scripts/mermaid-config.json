@@ -1,0 +1,20 @@
+{
+  "theme": "base",
+  "securityLevel": "strict",
+  "htmlLabels": false,
+  "markdownAutoWrap": true,
+  "fontFamily": "Droid Sans Fallback, sans-serif",
+  "themeVariables": {
+    "fontSize": "20px",
+    "lineColor": "#64736c",
+    "primaryTextColor": "#243c36"
+  },
+  "flowchart": {
+    "htmlLabels": false,
+    "curve": "linear",
+    "nodeSpacing": 50,
+    "rankSpacing": 50,
+    "padding": 20,
+    "wrappingWidth": 460
+  }
+}

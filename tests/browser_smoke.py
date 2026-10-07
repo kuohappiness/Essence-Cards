@@ -16,16 +16,18 @@ import build_board
 CHECK = r"""
 <script>
 window.addEventListener('error', event => { window.smokeError = event.message; });
-setTimeout(() => {
+setTimeout(async () => {
  const passed=[];
+ const blueprintCount=document.querySelectorAll('#blueprint-gallery figure').length;
  const check=(value,name)=>{if(!value)throw Error(name);passed.push(name)};
  const click=selector=>{const node=document.querySelector(selector);check(!!node,'control '+selector);node.click()};
  try {
+  await Promise.all([...document.querySelectorAll('#board .blueprint-preview img')].map(img=>img.decode()));
   check(!window.smokeError,'no runtime errors');
   check(document.querySelector('#static-content').hidden,'static content hidden after enhancement');
   check(!document.querySelector('#toolbar').hidden&&!document.querySelector('#stage').hidden,'interactive controls ready');
   check(document.querySelectorAll('#board .lane').length===3,'three distinct lanes');
-  check(document.querySelectorAll('#board .blueprint-preview img').length===3,'diagrams appear on default board');
+  check(document.querySelectorAll('#board .blueprint-preview img').length===blueprintCount,'diagrams appear on default board');
   check([...document.querySelectorAll('#board .blueprint-preview img')].every(img=>img.complete&&img.naturalWidth>0),'default board diagram images load');
   click('#board [data-blueprint-id="B-002"]');
   check(!document.querySelector('#blueprint-gallery').hidden&&document.querySelector('#stage').hidden,'preview opens full diagram');
@@ -47,7 +49,7 @@ setTimeout(() => {
   click('[data-view="blueprints"]');
   const gallery=document.querySelector('#blueprint-gallery');
   check(!gallery.hidden&&document.querySelector('#stage').hidden,'blueprint view opens');
-  check(gallery.querySelectorAll('figure').length===3,'three current blueprints');
+  check(gallery.querySelectorAll('figure').length===blueprintCount&&blueprintCount>0,'all current blueprints');
   check([...gallery.querySelectorAll('img')].every(img=>img.complete&&img.naturalWidth>0),'embedded SVG images load');
   check(gallery.textContent.includes('未 commit')&&gallery.textContent.includes('.gitignore'),'Git design remains readable');
   check(document.documentElement.scrollWidth<=innerWidth,'responsive blueprint view');
@@ -55,7 +57,7 @@ setTimeout(() => {
   check(document.querySelectorAll('#board .detail').length>6,'outline exposes full content');
   check(!document.querySelector('[data-id="T-003"]'),'deferred task excluded');
   click('[data-view="canvas"]');click('#fit');
-  check(document.querySelectorAll('#board .blueprint-preview img').length===3,'diagrams appear on free canvas');
+  check(document.querySelectorAll('#board .blueprint-preview img').length===blueprintCount,'diagrams appear on free canvas');
   const oldTransform=document.querySelector('#board').style.transform;
   click('#zoom-in');
   check(document.querySelector('#board').style.transform!==oldTransform,'zoom changes viewport');

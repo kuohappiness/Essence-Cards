@@ -6,6 +6,8 @@
 
 依據：[C-008、C-009、C-011、C-014、C-016、C-017](consensus.md)、[知識學習架構藍圖](diagrams/README.md)、[學習循環與功能藍圖](learning-blueprint.md)、[設計優化研究](references/design-opportunities.md)。
 
+[功能 Mermaid 總覽與對照表](diagrams/functions.md)將本目錄的 F-ID 放回大架構；[共用藍圖入口](diagrams/README.md)可與學習、技術及開發路線圖互相參照。圖表保持規劃草案狀態，維護方式見 C-019。
+
 ## 使用方式與確認邊界
 
 使用者已同意以知識學習架構藍圖為參考，逐項從功能切入，先建立目錄，再從來源資料匯入與管理開始。每輪聚焦一個核心問題，功能討論仍須檢查前後資料與完整使用情境。

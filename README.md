@@ -21,9 +21,9 @@
 - [最新專案共識](docs/consensus.md)：目前有效的結論，以及清楚標示的待決事項。
 - [學習循環與功能藍圖](docs/learning-blueprint.md)：已確認的討論架構、功能草案、整合設計、困難與分階段候選範圍。
 - [功能討論目錄](docs/function-discussions.md)：v0.2 對照藍圖與研究，逐項釐清功能、關聯、人工流程及驗收；目前從[來源資料匯入與管理](docs/functions/source-input.md)開始，新增[學習疑問與待處理佇列](docs/functions/issue-queue.md)。
-- [知識學習架構藍圖](docs/diagrams/README.md)：依使用者手繪圖重繪，呈現共用概念筆記、學習紀錄與回饋循環。
+- [架構圖總入口](docs/diagrams/README.md)：學習、技術、開發路線圖與[功能 Mermaid 總覽](docs/diagrams/functions.md)，透過 B-ID／F-ID 互相參照。
 - [技術架構與開發路線圖](docs/technical-roadmap.md)：裝置、資料、AI、同步、Git 備份／回復設計與分階段驗證門檻。
-- [畫板藍圖索引](docs/blueprints.md)：三張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。
+- [畫板藍圖索引](docs/blueprints.md)：四張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。
 - [目前任務](docs/tasks.md)：任務狀態、下一步及暫緩事項。
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
@@ -39,26 +39,26 @@
 
 [下載／開啟 index.html](index.html)，即可在支援 JavaScript 的瀏覽器使用互動討論平台。文件也直接包含點子、任務、共識與參考軟體的完整內容及版本日期，不需要安裝套件。
 
-看板與自由畫板直接呈現 diagrams 的三張目前藍圖，點圖可查看大圖與設計重點。
+看板與自由畫板直接呈現 diagrams 的四張目前藍圖，點圖可查看大圖與設計重點。
 
 提供看板、可拖曳縮放的自由畫板、文字綱要、參考軟體及架構藍圖五種互動檢視。完整互動以 Safari 等瀏覽器開啟已發布的網站為準。GitHub Pages 的首次設定見下方「公開網址」。
 
-[手機閱讀版 mobile.html](mobile.html) 使用相同 Markdown 來源生成，完全不含腳本、隱藏區塊與互動控制。先呈現三張架構藍圖，再呈現目前任務、共識、點子及參考軟體，並提供文字連結跳到各區。使用者回報 index.html 在 ChatGPT 手機預覽仍只見外框，因此提供新的檔名以協助排查附件版本與預覽相容性；實機結果由 T-007 追蹤。
+[手機閱讀版 mobile.html](mobile.html) 使用相同 Markdown 來源生成，完全不含腳本、隱藏區塊與互動控制。先呈現四張架構藍圖，再呈現目前任務、共識、點子及參考軟體，並提供文字連結跳到各區。使用者回報 index.html 在 ChatGPT 手機預覽仍只見外框，因此提供新的檔名以協助排查附件版本與預覽相容性；實機結果由 T-007 追蹤。
 
 看板顯示**待釐清點子、目前任務及最新已確認共識**，分區區別狀態。參考軟體專區是討論平台中的設計研究資料。討論紀錄、歷史提案、已排除項目與完成任務另存文件，不嵌入 HTML。
 
 ### 更新方式
 
-文字內容來源是 Markdown；藍圖來源是 docs/diagrams 中的可編輯 SVG。不用分別修改 HTML 與綱要：
+文字內容來源是 Markdown；功能圖從目錄產生 Mermaid，再渲染為內嵌字型 SVG；既有圖保留 Python 繪圖來源。所有圖都登錄來源及核對快照，詳見[圖表維護與同步](docs/diagrams/README.md#圖表維護與同步)。不用分別修改 HTML 與綱要：
 
-1. 更新 `docs/ideas.md`、`docs/tasks.md`、`docs/consensus.md` 、`docs/references/software.md` 或技術文件；有視覺變更時更新 SVG。
-2. 執行 `python3 scripts/build_board.py` 同時產生 `index.html` 與 `mobile.html`。
+1. 更新 `docs/ideas.md`、`docs/tasks.md`、`docs/consensus.md` 、`docs/references/software.md` 或技術文件；核對所有受影響藍圖，更新圖表來源並重新產生。
+2. 執行 `python3 scripts/build_function_diagram.py --check` 及 `python3 scripts/check_diagrams.py --check`；來源變動先依維護規則核對，通過後執行 `python3 scripts/build_board.py` 同時產生 `index.html` 與 `mobile.html`。
 3. 執行 `python3 -m unittest discover -s tests -v` 與 `python3 scripts/build_board.py --check`。
 4. 將文件與生成的 HTML 一起提交。
 
 有 Chrome／Chromium 的環境可另執行 `python3 tests/browser_smoke.py`，檢查桌面與手機尺寸的卡片、綱要、來源連結與縮放互動；GitHub 工作流程也會執行此檢查。
 
-直接在 GitHub 修改來源時，[同步工作流程](.github/workflows/board.yml)會生成兩份 HTML；若 HTML 改變，會用一般提交更新 `main`。遇到分支保護或併發推送衝突時會停止，保留其他人的修改。看板本身不提供內容編輯；可在對話中提出點子，或編輯來源文件。
+圖表來源變動而未核對快照時，工作流程會停止並指出受影響圖，避免直接發布舊圖。直接在 GitHub 修改其他文字來源時，[同步工作流程](.github/workflows/board.yml)會生成兩份 HTML；若 HTML 改變，會用一般提交更新 `main`。遇到分支保護或併發推送衝突時會停止，保留其他人的修改。看板本身不提供內容編輯；可在對話中提出點子，或編輯來源文件。
 
 產生程式使用 Python 3 標準函式庫；樣式與互動放在 [HTML 範本](web/board-template.html)。新增卡片使用 `## I-002 標題｜待釐清` 等同樣格式，ID 不重用。只有未結案點子與已確認共識會進入看板。
 
