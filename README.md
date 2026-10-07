@@ -27,6 +27,7 @@
 - [架構圖總入口](docs/diagrams/README.md)：學習、技術、開發路線圖與[功能 Mermaid 總覽](docs/diagrams/functions.md)，透過 B-ID／F-ID 互相參照。
 - [技術架構與開發路線圖](docs/technical-roadmap.md)：裝置、資料、AI、同步、Git 備份／回復設計與分階段驗證門檻。
 - [畫板藍圖索引](docs/blueprints.md)：四張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。
+- [開發原則與品質目標](docs/development-principles.md)：集中保存開發期待、主動建議的協作方式，以及待釐清的驗收標準。
 - [目前任務](docs/tasks.md)：任務狀態、下一步及暫緩事項。
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
