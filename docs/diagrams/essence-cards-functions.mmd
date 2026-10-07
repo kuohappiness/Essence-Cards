@@ -1,51 +1,50 @@
 flowchart TD
-  %% 自動產生；名稱來自功能目錄，分區與箭頭由設計者核對。
-  source["`**輸入與選段**
+  %% 自動產生；名稱來自功能目錄，責任候選映射與箭頭由設計者核對。
+  input["`**M-001 輸入**
 F-001 來源資料匯入與管理
-F-002 閱讀、摘錄與選取範圍`"]
-  concept["`**共用概念筆記**
-F-003 概念筆記建立與編輯
+F-002 閱讀、摘錄與選取範圍
+F-003 概念筆記建立與編輯`"]
+  output["`**M-002 輸出**
 F-004 概念關聯、比較表與差異
-F-005 主題架構與層級筆記`"]
-  material["`**材料候選與核對採用**
+F-005 主題架構與層級筆記
 F-006 記憶卡製作與維護
 F-007 真題整理、出題與解析
-F-008 互動教材製作與使用`"]
-  study["`**學習操作與事件**
+F-008 互動教材製作與使用
 F-009 學習操作、作答與評量
-F-010 學習紀錄與錯題保存`"]
-  feedback["`**疑問、補強與修訂**
+基本自評／複習可獨立使用`"]
+  check["`**M-003 檢核**
 F-011 錯因判斷與學習缺口
-F-019 學習疑問與待處理佇列
-F-012 補強、訂正與核對後回寫`"]
-  plan["`**後續學習安排**
+F-012 補強、訂正與核對後回寫
 F-013 間隔複習與份量調整
-F-014 主題復盤與後續學習計畫`"]
-  source --> concept
-  source -->|真題或卡片可直接核對| material
-  concept --> material
-  material -->|採用後練習| study
-  study -->|需追蹤的疑問或補強| feedback
-  study -->|作答紀錄| plan
-  feedback -->|核對後回寫| concept
-  feedback -->|核對後更新| material
-  plan -->|再練習| study
-  subgraph shared["跨功能共用能力"]
-    direction TB
-    workspace["`**情境入口**
-F-015 主題工作區、搜尋與情境切換`"]
-    trace["`**資料與保護**
+F-014 主題復盤與後續學習計畫
+F-019 學習疑問與待處理佇列
+檢核對象與入口待細化`"]
+  shared["`**共用基礎（非第四大模組）**
+F-010 學習紀錄與錯題保存
+F-015 主題工作區、搜尋與情境切換
 F-016 內容關聯、版本與變更影響
+F-017 AI 任務、結果核對與模型替換
 F-018 資料保存、同步、匯出與回復`"]
-    ai["`**可選 AI 協助**
-F-017 AI 任務、結果核對與模型替換`"]
-  end
-  shared -.->|支援整個學習循環| concept
+  sources["外部來源（如 YouTube）"]
+  notes["可讀筆記：可獨立結束"]
+  cards["既有／手動卡片"]
+  review["直接複習：可獨立結束"]
+  sources --> input
+  input --> notes
+  cards --> output
+  output --> review
+  input -->|可選：交接筆記或素材| output
+  output -->|可選：紀錄／材料核對| check
+  check -->|核對後建議修訂| input
+  check -->|核對後建議修訂| output
+  shared -.->|支援| input
+  shared -.->|支援| output
+  shared -.->|支援| check
   classDef knowledge fill:#eaf2e8,stroke:#446957,color:#243c36
   classDef learning fill:#edf3fa,stroke:#597b9a,color:#243c36
   classDef revision fill:#fff3dc,stroke:#ad8140,color:#243c36
   classDef support fill:#f1f0eb,stroke:#898e84,color:#243c36
-  class source,concept knowledge
-  class material,study,plan learning
-  class feedback revision
-  class workspace,trace,ai support
+  class input,notes knowledge
+  class output,review learning
+  class check revision
+  class shared,sources,cards support

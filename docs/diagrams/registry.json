@@ -4,6 +4,7 @@
       "id": "B-001",
       "image": "docs/diagrams/essence-cards-architecture.svg",
       "sources": [
+        "docs/module-architecture.md",
         "docs/learning-blueprint.md",
         "docs/function-discussions.md",
         "docs/functions/issue-queue.md",
@@ -17,6 +18,7 @@
       "id": "B-002",
       "image": "docs/diagrams/essence-cards-technical-architecture.svg",
       "sources": [
+        "docs/module-architecture.md",
         "docs/technical-roadmap.md",
         "docs/obsidian-ui-probe.md",
         "scripts/draw_architecture.py",
@@ -30,6 +32,7 @@
       "id": "B-003",
       "image": "docs/diagrams/essence-cards-development-roadmap.svg",
       "sources": [
+        "docs/module-architecture.md",
         "docs/technical-roadmap.md",
         "docs/obsidian-ui-probe.md",
         "scripts/draw_architecture.py",
@@ -43,6 +46,7 @@
       "id": "B-004",
       "image": "docs/diagrams/essence-cards-functions.svg",
       "sources": [
+        "docs/module-architecture.md",
         "docs/function-discussions.md",
         "scripts/build_function_diagram.py",
         "scripts/render_function_diagram.py",

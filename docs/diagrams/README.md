@@ -1,21 +1,21 @@
 # Essence Cards｜架構圖總入口
 
-更新日期：2026-10-07。學習圖 v2.1、技術／路線圖 v1.2；功能 Mermaid 圖依目錄 v0.2 產生。
+更新日期：2026-10-07。學習圖 v2.1、技術／路線圖 v1.3；功能 Mermaid 圖依目錄 v0.3 產生。
 
 | B-ID | 藍圖 | 適合用來討論 | 主要依據 |
 |---|---|---|---|
 | B-001 | [知識學習架構](essence-cards-architecture.svg) | 輸入、整理、學習與回饋的整體循環 | [學習藍圖](../learning-blueprint.md) |
 | B-002 | [技術架構與 Git](essence-cards-technical-architecture.svg) | 裝置、資料、AI、同步與回復分工 | [技術文件](../technical-roadmap.md) |
 | B-003 | [開發路線圖](essence-cards-development-roadmap.svg) | 驗證門檻、開發順序及轉向條件 | [技術文件](../technical-roadmap.md)、[UI 原型狀態](../obsidian-ui-probe.md) |
-| B-004 | [功能架構總覽（Mermaid）](functions.md) | 19 個 F-ID 的分區、關係及共用能力 | [功能目錄](../function-discussions.md) |
+| B-004 | [三模組功能架構（Mermaid）](functions.md) | 三模組、獨立入口、可選交接與 19 個 F-ID | [三模組架構](../module-architecture.md)、[功能目錄](../function-discussions.md) |
 
 四張圖與目前狀態也放在[畫板藍圖索引](../blueprints.md)，同時生成到桌面／手機看板。圖中草案與待驗證項目不當成已實作功能。
 
-## 功能架構總覽
+## 三模組功能架構
 
-![功能架構總覽](essence-cards-functions.svg)
+![三模組功能架構](essence-cards-functions.svg)
 
-[查看 Mermaid、功能對照表及其他圖的映射](functions.md)。分區總覽與既有三圖互補；後續狀態／資料或操作細圖使用新 B-ID 登錄，不將全部細節塞入主圖。
+[查看 Mermaid、功能對照表及其他圖的映射](functions.md)。三模組為產品／工程視角，B-001 為學習循環視角；輸入可只生成筆記，輸出可只用閃卡，交接可選。共用基礎不是第四大模組。四圖互補；後續狀態／資料或操作細圖使用新 B-ID 登錄，不將全部細節塞入主圖。
 
 ## 知識學習架構藍圖
 
@@ -59,7 +59,7 @@ python3 scripts/draw_architecture.py --output /tmp/essence-cards-diagram
 
 ## 技術架構與開發路線圖
 
-設計版 v1.2（2026-10-07）。第一版平台為 Obsidian 外掛，沿用既有 iCloud 為跨裝置驗證基線；資料、AI、Git 策略與開發順序均保留設計提案／待驗證狀態，正式功能尚未實作；可丟棄 UI 原型已依使用者回報通過 Windows／iPhone 最小實機驗收。
+設計版 v1.3（2026-10-07）。第一版平台為 Obsidian 外掛，沿用既有 iCloud 為跨裝置驗證基線；資料、AI、Git 策略與開發順序均保留設計提案／待驗證狀態，正式功能尚未實作；可丟棄 UI 原型已依使用者回報通過 Windows／iPhone 最小實機驗收。
 
 ![技術架構與 Git 設計](essence-cards-technical-architecture.svg)
 
@@ -87,7 +87,7 @@ python3 scripts/draw_technical_blueprints.py --output /tmp/essence-cards-technic
 
 維護順序：
 
-1. 更新功能／學習／技術文件與共識；先看檢查指出的受影響圖，另以設計判斷確認跨圖關係。
+1. 更新三模組／功能／學習／技術文件與共識；先看檢查指出的受影響圖，另以設計判斷確認跨圖關係。
 2. 更新各圖的可編輯來源；功能名稱來自目錄，功能新增或拆分時也須調整分區。關係變動更新產生程式中的箭頭，不單獨修生成的 SVG。
 3. 重新產生圖；檢查實際渲染、ID、方向、狀態與相互參照。若文字變動不影響圖，核對後可以保留圖檔。
 4. 只對已核對的圖明列 ID 記錄快照，例如 `python3 scripts/check_diagrams.py --record B-004`；不要為了通過檢查直接重記全部圖。

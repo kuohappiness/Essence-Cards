@@ -176,7 +176,7 @@ class FunctionDiagramTests(unittest.TestCase):
         document = rendered["docs/diagrams/functions.md"]
         self.assertIn("F-001 測試改名後的來源管理", mmd)
         self.assertNotIn("F-001 " + previous, mmd)
-        self.assertRegex(document, r"(?m)^\| F-001 \| 測試改名後的來源管理 \| 輸入與選段 \|")
+        self.assertRegex(document, r"(?m)^\| F-001 \| 測試改名後的來源管理 \| M-001 輸入 \|")
 
     def test_all_nineteen_unique_ids_covered_once_in_each_generated_mapping(self):
         expected = {f"F-{number:03}" for number in range(1, 20)}
@@ -188,6 +188,49 @@ class FunctionDiagramTests(unittest.TestCase):
         for identifiers in (mmd_ids, table_ids):
             self.assertEqual(len(identifiers), 19)
             self.assertEqual(set(identifiers), expected)
+
+    def test_three_modules_and_shared_foundation_responsibility_mapping(self):
+        mmd = functions.render(self.root)["docs/diagrams/essence-cards-functions.mmd"]
+        expected = {
+            "input": ("M-001 輸入", {"F-001", "F-002", "F-003"}),
+            "output": ("M-002 輸出", {f"F-{number:03}" for number in range(4, 10)}),
+            "check": ("M-003 檢核", {"F-011", "F-012", "F-013", "F-014", "F-019"}),
+            "shared": ("共用基礎（非第四大模組）", {"F-010", "F-015", "F-016", "F-017", "F-018"}),
+        }
+        for node, (label, identifiers) in expected.items():
+            with self.subTest(node=node):
+                match = re.search(rf'(?ms)^  {node}\["`(.*?)`"\]', mmd)
+                self.assertIsNotNone(match)
+                self.assertIn(label, match[1])
+                self.assertEqual(set(re.findall(r"F-\d{3}", match[1])), identifiers)
+        self.assertTrue(mmd.startswith("flowchart TD\n"))
+        self.assertEqual(len(re.findall(r'(?m)^  \w+\[', mmd)), 8)
+        for node in ("input", "output", "check"):
+            self.assertIn(f"shared -.->|支援| {node}", mmd)
+
+    def test_input_and_output_have_independent_entries_and_endpoints(self):
+        mmd = functions.render(self.root)["docs/diagrams/essence-cards-functions.mmd"]
+        for edge in ("sources --> input", "input --> notes", "cards --> output", "output --> review"):
+            self.assertIn(edge, mmd)
+        self.assertIn('sources["外部來源（如 YouTube）"]', mmd)
+        self.assertIn('cards["既有／手動卡片"]', mmd)
+        self.assertIn('notes["可讀筆記：可獨立結束"]', mmd)
+        self.assertIn('review["直接複習：可獨立結束"]', mmd)
+        self.assertNotRegex(mmd, r"(?m)^  (notes|review) (?:-->|-\.->)")
+
+    def test_module_handoffs_are_optional_and_revision_requires_verification(self):
+        rendered = functions.render(self.root)
+        mmd = rendered["docs/diagrams/essence-cards-functions.mmd"]
+        for source, target in (("input", "output"), ("output", "check")):
+            self.assertRegex(mmd, rf"(?m)^  {source} -->\|可選：[^|]+\| {target}$")
+        for target in ("input", "output"):
+            self.assertIn(f"check -->|核對後建議修訂| {target}", mmd)
+        document = rendered["docs/diagrams/functions.md"]
+        for statement in ("責任候選映射", "不代表唯一歸屬", "不把 M-003 當作啟用閃卡的先決條件",
+                          "AI 可選", "各獨立操作保留人工核對",
+                          "完整 YouTube API 或轉錄已實作", "../module-architecture.md",
+                          "已依使用者回報通過 Windows／iPhone 最小實機驗證", "完整 P0 仍未通過"):
+            self.assertIn(statement, document)
 
     def test_unknown_function_requires_manual_group_review(self):
         text = self.catalog.read_text(encoding="utf-8")

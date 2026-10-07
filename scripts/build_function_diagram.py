@@ -7,15 +7,10 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS = (
-    ('source', '輸入與選段', ('F-001', 'F-002')),
-    ('concept', '共用概念筆記', ('F-003', 'F-004', 'F-005')),
-    ('material', '材料候選與核對採用', ('F-006', 'F-007', 'F-008')),
-    ('study', '學習操作與事件', ('F-009', 'F-010')),
-    ('feedback', '疑問、補強與修訂', ('F-011', 'F-019', 'F-012')),
-    ('plan', '後續學習安排', ('F-013', 'F-014')),
-    ('workspace', '情境入口', ('F-015',)),
-    ('trace', '資料與保護', ('F-016', 'F-018')),
-    ('ai', '可選 AI 協助', ('F-017',)),
+    ('input', 'M-001 輸入', ('F-001', 'F-002', 'F-003')),
+    ('output', 'M-002 輸出', ('F-004', 'F-005', 'F-006', 'F-007', 'F-008', 'F-009')),
+    ('check', 'M-003 檢核', ('F-011', 'F-012', 'F-013', 'F-014', 'F-019')),
+    ('shared', '共用基礎（非第四大模組）', ('F-010', 'F-015', 'F-016', 'F-017', 'F-018')),
 )
 
 
@@ -44,50 +39,60 @@ def collect(root=ROOT):
 
 def render(root=ROOT):
     rows, version, date = collect(root)
-    lines = ['flowchart TD', '  %% 自動產生；名稱來自功能目錄，分區與箭頭由設計者核對。']
-    for key, title, ids in GROUPS[:6]:
+    lines = ['flowchart TD', '  %% 自動產生；名稱來自功能目錄，責任候選映射與箭頭由設計者核對。']
+    for key, title, ids in GROUPS:
         label = '\n'.join([f'**{title}**'] + [f'{i} {rows[i][2]}' for i in ids])
+        if key == 'output':
+            label += '\n基本自評／複習可獨立使用'
+        elif key == 'check':
+            label += '\n檢核對象與入口待細化'
         lines.append(f'  {key}["`{label}`"]')
     lines += [
-        '  source --> concept',
-        '  source -->|真題或卡片可直接核對| material',
-        '  concept --> material',
-        '  material -->|採用後練習| study',
-        '  study -->|需追蹤的疑問或補強| feedback',
-        '  study -->|作答紀錄| plan',
-        '  feedback -->|核對後回寫| concept',
-        '  feedback -->|核對後更新| material',
-        '  plan -->|再練習| study',
-        '  subgraph shared["跨功能共用能力"]',
-        '    direction TB',
+        '  sources["外部來源（如 YouTube）"]',
+        '  notes["可讀筆記：可獨立結束"]',
+        '  cards["既有／手動卡片"]',
+        '  review["直接複習：可獨立結束"]',
+        '  sources --> input',
+        '  input --> notes',
+        '  cards --> output',
+        '  output --> review',
+        '  input -->|可選：交接筆記或素材| output',
+        '  output -->|可選：紀錄／材料核對| check',
+        '  check -->|核對後建議修訂| input',
+        '  check -->|核對後建議修訂| output',
+        '  shared -.->|支援| input',
+        '  shared -.->|支援| output',
+        '  shared -.->|支援| check',
+        '  classDef knowledge fill:#eaf2e8,stroke:#446957,color:#243c36',
+        '  classDef learning fill:#edf3fa,stroke:#597b9a,color:#243c36',
+        '  classDef revision fill:#fff3dc,stroke:#ad8140,color:#243c36',
+        '  classDef support fill:#f1f0eb,stroke:#898e84,color:#243c36',
+        '  class input,notes knowledge',
+        '  class output,review learning',
+        '  class check revision',
+        '  class shared,sources,cards support',
     ]
-    for key, title, ids in GROUPS[6:]:
-        label = '\n'.join([f'**{title}**'] + [f'{i} {rows[i][2]}' for i in ids])
-        lines.append(f'    {key}["`{label}`"]')
-    lines += ['  end', '  shared -.->|支援整個學習循環| concept',
-              '  classDef knowledge fill:#eaf2e8,stroke:#446957,color:#243c36',
-              '  classDef learning fill:#edf3fa,stroke:#597b9a,color:#243c36',
-              '  classDef revision fill:#fff3dc,stroke:#ad8140,color:#243c36',
-              '  classDef support fill:#f1f0eb,stroke:#898e84,color:#243c36',
-              '  class source,concept knowledge', '  class material,study,plan learning',
-              '  class feedback revision', '  class workspace,trace,ai support']
     mmd = '\n'.join(lines) + '\n'
     doc = f'''# Essence Cards｜功能架構總覽
 
 圖表 ID：B-004｜依功能目錄 v{version} 產生｜更新日期：{date}
 
-狀態：目前規劃草案。學習循環、共用概念及 C-017 的細化方向已確認；功能邊界、箭頭細節、算法與第一版範圍仍待逐項確認。圖中功能不是完成清單。
+狀態：三大模組的產品／工程方向與輸入、輸出可獨立使用已確認（C-020）；19 項功能的責任候選映射、程式邊界、交接細節、算法與第一版範圍仍為提案。圖中功能不是完成清單。
 
-這張圖回答「整個專案有哪些功能、如何連接」。以功能分區呈現 19 項討論單位，保留 F-ID，方便回到[功能目錄](../function-discussions.md)；完整名稱由目錄自動帶入。實線表示主要資料／學習與回饋關係，虛線表示共用支援，不表示 API 呼叫或固定操作順序。顏色只區分用途，不表示完成或採用狀態。
+這張圖回答「專案的三大模組有哪些責任、如何選擇性連接」。M-001 輸入、M-002 輸出（教材、心智圖、閃卡製作與使用）、M-003 檢核是產品／工程視角；[三大模組架構](../module-architecture.md)保存方向與使用情境。既有「輸入、整理、學習、回饋」仍是學習循環視角，兩者並存，不要求使用者依序走完。
+
+每個 F-ID 在主要節點標籤出現一次，完整功能名稱由[功能目錄](../function-discussions.md)自動帶入。這是討論用的責任候選映射，有跨界能力，不代表唯一歸屬或已定案的程式邊界。實線表示操作入口、產出或可選交接；虛線表示共用基礎支援，不表示 API 呼叫或強制流程。顏色只區分用途，不表示完成或採用狀態。
 
 ```mermaid
 {mmd}```
 
-每個方塊包含多項功能，不要求全部依序執行。既有真題／卡片可直接核對採用，再補概念關聯；一般忘記可進複習安排，需追蹤的補強或內容疑義才進 F-019。回寫須核對，舊作答事件保留。F-015、F-016、F-018 橫跨整個循環；F-017 接入可獨立使用的人工流程，AI 結果仍須核對。
+輸入可單獨把 YouTube 等來源整理為可讀筆記，完成後即可結束；圖示為需求情境，不表示完整 YouTube API 或轉錄已實作。輸出可從既有／手動卡片直接製作或複習，不須先匯入新來源或啟用完整檢核。輸入到輸出、輸出到檢核都是可選交接；檢核依核對結果提出修訂建議，再回到輸入或輸出。
+
+F-009 的操作與基本自評在輸出使用，較深評量可與檢核協作；F-013 的基本複習規則可供輸出使用，不把 M-003 當作啟用閃卡的先決條件。學習事件、情境存取、ID／關聯、資料保存與可選 AI 轉接屬共用基礎，不新增第四大模組。各獨立操作保留人工核對；AI 可選，AI 結果仍須核對。正式紀錄、保存失敗處理及排程細節待討論，修訂保留可核對的版本與原事件。
 
 ## 功能與圖中分區對照
 
-| F-ID | 功能討論單位 | 圖中分區 | 第一版候選／確認邊界 |
+| F-ID | 功能討論單位 | 圖中責任候選映射（可跨界） | 第一版候選／確認邊界 |
 |---|---|---|---|
 '''
     for _, title, ids in GROUPS:
@@ -98,11 +103,11 @@ def render(root=ROOT):
 
 | 藍圖 | 回答的問題 | 本圖的對應 |
 |---|---|---|
-| [B-001 知識學習架構](essence-cards-architecture.svg) | 學習循環與共用知識基礎如何運作？ | 輸入、整理、材料、作答與回饋分區 |
-| [B-002 技術架構](essence-cards-technical-architecture.svg) | 裝置、資料、AI、同步與 Git 如何分工？ | F-015 至 F-018；電腦處理及手機學習／疑問 |
-| [B-003 開發路線圖](essence-cards-development-roadmap.svg) | 先驗證什麼，再開發什麼？ | P0／P1 驗資料基礎，P2 接通人工循環，P3 接 AI；不從 F 編號推導開發順序 |
+| [B-001 知識學習架構](essence-cards-architecture.svg) | 學習循環與共用知識基礎如何運作？ | 學習循環視角與三大模組互相對照；不強制依序操作 |
+| [B-002 技術架構](essence-cards-technical-architecture.svg) | 裝置、資料、AI、同步與 Git 如何分工？ | 三大模組共用資料、事件、存取、AI 與保護基礎；電腦處理及手機複習／疑問 |
+| [B-003 開發路線圖](essence-cards-development-roadmap.svg) | 先驗證什麼，再開發什麼？ | P0／P1 驗最小資料基礎，P2 先交付獨立閃卡再增量接模組，P3 深化 AI；不從 F 編號推導順序 |
 
-[共用藍圖索引](../blueprints.md)保存每張圖的目前狀態；[圖表維護方式](README.md#圖表維護與同步)說明如何隨決策更新。T-011 的可丟棄 UI 原型仍待實機，不能視為正式功能已完成，也不能取代 P0。
+[共用藍圖索引](../blueprints.md)保存每張圖的目前狀態；[圖表維護方式](README.md#圖表維護與同步)說明如何隨決策更新。T-011 的可丟棄 UI 原型已依使用者回報通過 Windows／iPhone 最小實機驗證；正式功能與完整 P0 仍未通過，原型結果不能取代離線事件、併發、附件及 Git 回復驗證。
 
 ## 原始碼與生成
 
