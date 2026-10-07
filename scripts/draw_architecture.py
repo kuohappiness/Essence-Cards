@@ -137,7 +137,7 @@ class Diagram:
                  '@font-face{font-family:DiagramLatin;src:url(data:font/woff;base64,'+encoded_latin+') format("woff");}</style>')
         svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-labelledby="title desc">'
         svg += '<title id="title">Essence Cards 知識學習架構藍圖</title>'
-        svg += '<desc id="desc">以輸入、整理、學習、回饋為主軸：來源資料經整理成概念筆記，連接互動教材、記憶卡與考題；作答與學習紀錄支持錯因診斷、補強修訂、主題復盤與間隔複習。回饋依需要帶回整理或學習，形成持續循環。</desc>'
+        svg += '<desc id="desc">保留輸入、整理、學習、回饋的完整循環。Essence Cards 本 repo 專注輸出、檢核與選用 AI 學習輔助；來源輸入由未來獨立 Obsidian 外掛 Essence Capture 開發，repo 尚未建立。兩者透過可讀筆記銜接，一般筆記也可直接用於學習。</desc>'
         svg += style + ''.join(self.parts) + '</svg>'
         (self.out / 'Essence-Cards_架構藍圖.svg').write_text(svg, encoding='utf-8')
         doc = fitz.open(self.out / 'Essence-Cards_架構藍圖.pdf')
@@ -155,9 +155,9 @@ def draw(out):
     d.rect(91, 53, 27, 37, P['paper'], P['green'], radius=5)
     d.text(138, 88, 'Essence Cards', 48, weight=700, en=True)
     d.text(80, 160, '知識學習架構藍圖', 48, weight=600)
-    d.text(80, 212, '完整學習循環；先做輸出／檢核，獨立來源工具於第二階段接入。', 26, P['muted'])
+    d.text(80, 212, '完整循環保留｜Cards 專注輸出、檢核與選用 AI；Capture 的輸入另 repo 後續開發。', 26, P['muted'], max_width=2030)
     d.rect(1760, 58, 350, 53, '#E7EEE7', radius=26)
-    d.text(1935, 92, '概念架構 v2.2', 23, anchor='middle')
+    d.text(1935, 92, '概念架構 v2.3', 23, anchor='middle')
     d.text(2110, 157, '2026.10.07', 20, P['muted'], en=True, anchor='end')
 
     # Three top-level areas share a baseline. All connectors are straight.
@@ -171,6 +171,7 @@ def draw(out):
 
     # Input: retain source types and traceability.
     d.label(114,334,'輸入',size=40)
+    d.text(114,363,'Essence Capture｜後續 repo',18,P['blue'],max_width=264)
     d.text(114,390,'來源資料',29,weight=600)
     d.text(114,430,'貼上・截取・匯入',23,P['muted'])
     source_rows=[('T','文字'),('I','圖片'),('P','PDF'),('A','影音檔'),('W','網頁'),('Y','YouTube'),('C','Podcast')]
@@ -185,6 +186,7 @@ def draw(out):
 
     # Organize: one knowledge base connects sources and learning activities.
     d.label(586,334,'整理',size=40)
+    d.text(586,363,'Capture 形成筆記；Cards 延伸關聯與比較',21,P['muted'],max_width=498)
     d.rect(586,375,498,116,P['green_soft'],radius=15)
     d.text(610,416,'理解與選取內容',29,weight=600)
     d.text(610,459,'辨識重點・萃取概念・整理關係',23,max_width=450)
@@ -199,6 +201,7 @@ def draw(out):
 
     # Learn: material creation, practice, evaluation and records are grouped.
     d.label(1296,334,'學習',size=40)
+    d.text(1455,331,'Essence Cards｜輸出・檢核・選用 AI',22,P['blue'],max_width=619)
     d.rect(1296,365,778,280,'#F2F5F0',radius=16)
     d.text(1320,408,'依需要選擇學習材料',26,weight=600)
     materials=[
@@ -227,7 +230,7 @@ def draw(out):
     # Feedback is a shared area immediately below its return destinations.
     d.card(550,1135,1560,380,fill='#FCFDFA')
     d.label(586,1194,'回饋',size=40,color=P['blue'])
-    d.text(755,1190,'依學習紀錄補強、修訂，並安排下一輪學習。',25,P['muted'])
+    d.text(755,1190,'Essence Cards：自評與規則可獨立；AI 補強依需要啟用。',25,P['muted'],max_width=1319)
     d.rect(586,1223,930,252,'#FFF8ED',radius=16)
     d.text(610,1266,'錯因診斷與補強',30,weight=600)
     categories=[('單純忘記','調整複習'),('觀念混淆','補充筆記／教材'),('不會應用','變式練習'),('題目有誤','修正題目／解析')]

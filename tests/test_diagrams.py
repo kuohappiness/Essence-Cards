@@ -204,7 +204,7 @@ class FunctionDiagramTests(unittest.TestCase):
                 self.assertIn(label, match[1])
                 self.assertEqual(set(re.findall(r"F-\d{3}", match[1])), identifiers)
         self.assertTrue(mmd.startswith("flowchart TD\n"))
-        self.assertEqual(len(re.findall(r'(?m)^ +\w+\[', mmd)), 8)
+        self.assertEqual(len(re.findall(r'(?m)^ +\w+\[', mmd)), 9)
         for node in ("output", "check"):
             self.assertIn(f"shared -.->|支援| {node}", mmd)
         self.assertIn("shared -.->|格式約定| input", mmd)
@@ -229,7 +229,7 @@ class FunctionDiagramTests(unittest.TestCase):
         for source, target in (("notes", "output"), ("output", "check")):
             self.assertRegex(mmd, rf"(?m)^ +{source} -->\|可選：[^|]+\| {target}$")
         self.assertIn("check -->|核對後建議修訂| output", mmd)
-        self.assertIn("check -->|可選：文件修訂建議| input", mmd)
+        self.assertIn("check -->|可選：核對後修訂筆記| notes", mmd)
         self.assertNotRegex(mmd, r"(?m)^ +input -->[^\n]*output$")
         document = rendered["docs/diagrams/functions.md"]
         for statement in ("責任候選映射", "不代表唯一歸屬", "不把 M-003 當作啟用閃卡的先決條件",
@@ -269,8 +269,8 @@ class FunctionDiagramTests(unittest.TestCase):
             self.assertIsNotNone(match)
             phases[phase] = match[1], match[2]
         self.assertEqual(len(re.findall(r"(?m)^  subgraph ", mmd)), 2)
-        self.assertIn("第一階段：Essence Cards 輸出＋檢核", phases["phase1"][0])
-        self.assertIn("第二階段：獨立來源／文件工具", phases["phase2"][0])
+        self.assertIn("本 repo：Essence Cards 輸出＋檢核＋選用 AI", phases["phase1"][0])
+        self.assertIn("後續另 repo：Essence Capture（預計）", phases["phase2"][0])
         for node in ("cards", "output", "review", "check"):
             self.assertRegex(phases["phase1"][1], rf"(?m)^    {node}\[")
         for node in ("sources", "input", "notes"):
@@ -281,11 +281,11 @@ class FunctionDiagramTests(unittest.TestCase):
         document = rendered["docs/diagrams/functions.md"]
         for statement in (
                 "C-022 取代 C-020 的同一外掛內整合三模組安排",
-                "第一階段先做 Essence Cards 的輸出＋檢核",
-                "第二階段再獨立交付來源／文件工具",
+                "本 repo 專注 Essence Cards 的輸出＋檢核＋選用 AI",
+                "來源輸入由後續獨立 Obsidian 外掛 Essence Capture 開發",
                 "不承諾首期包含全部 19 項", "首期功能與卡型、檢核範圍",
                 "來源取得與輸入工具不是第一階段使用的必要條件",
-                "來源工具的部署方式待定，不預設為 Obsidian 外掛",
+                "Capture repo 尚未建立",
                 "檔案交接與人工選取", "API 可選", "不要求兩產品共享可變狀態或同時執行",
                 "../integration-contract.md", "schema、欄位、協定或連接器已定案",
                 "學習循環視角", "F-013 的基本複習規則可供輸出使用"):

@@ -55,8 +55,8 @@ def main():
         tree = ET.fromstring(value)
         if tree.findall('.//{' + NS + '}foreignObject'):
             raise ValueError('靜態 SVG 不應依賴 HTML 標籤')
-        title = 'B-004 功能與兩階段交付'
-        note = '先輸出／檢核，後獨立輸入；整合格式與功能細節待定'
+        title = 'B-004 兩個外掛與筆記交接'
+        note = 'Cards：輸出／檢核／選用 AI；Capture：後續另 repo 輸入'
         chars = title + note + ''.join(''.join(node.itertext()) for node in tree.iter() if node.tag == '{'+NS+'}text')
         font = TTFont(BytesIO(font_bytes))
         sub = subset.Subsetter(options=subset.Options())

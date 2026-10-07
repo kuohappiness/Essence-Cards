@@ -2,57 +2,57 @@
   "diagrams": {
     "B-001": {
       "sources": {
-        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
-        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
-        "docs/learning-blueprint.md": "f127dced3439a1ac35d077dcea73e4cacc280e04f7c6c263ed503d0fcbb47598",
-        "docs/function-discussions.md": "a95ad498b5eab919e639c7e99d50127631373c664fe7662d54e85070c860edec",
+        "docs/module-architecture.md": "050991bf72f5332136378a530cce41ee1758a7132f2dc4b28627c02ffabc059c",
+        "docs/integration-contract.md": "90e7fd7a79b4990b015012d14d447c6867a7df65ab4244fca7666524a19d97ce",
+        "docs/learning-blueprint.md": "c86c5f37b47f5d415f6f398d4c5cc81c80ecfa23c0ef9bdfa0d2e42d51a7b7e8",
+        "docs/function-discussions.md": "15b961799bffc384618299431a1fe3b5743fadd59a66bc65f67e36aff0beae83",
         "docs/functions/issue-queue.md": "be01a13394dbf4f8c7087afd4d408093b8674afd16f60271bf53ddc4e9d0dfeb",
-        "scripts/draw_architecture.py": "f8a74baf31c605e5a57239e0ac0b5bbd8f5c41c77d8946ec6495cf390cbd5a80"
+        "scripts/draw_architecture.py": "6336365e9a4ff50e83d05e4d2a769b74d7bc7509c45e157d37d6baa3ed7de548"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-architecture.svg": "d1d1e352e0fd4f21acb760703c80f45d93286b01940f8913676bd13b0715103e"
+        "docs/diagrams/essence-cards-architecture.svg": "6eebdc40f18a22f17144ce021ce6f949d8a5a16078c1cfcb29ebada555aae061"
       }
     },
     "B-002": {
       "sources": {
-        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
-        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
-        "docs/technical-roadmap.md": "c008c1d5f2bc29a5e62bea3f6effd8778b6145d417fa6e57f63e92a7b516601f",
+        "docs/module-architecture.md": "050991bf72f5332136378a530cce41ee1758a7132f2dc4b28627c02ffabc059c",
+        "docs/integration-contract.md": "90e7fd7a79b4990b015012d14d447c6867a7df65ab4244fca7666524a19d97ce",
+        "docs/technical-roadmap.md": "dbcf4d090caca4dff72d4ccd0887d56cc53759753f4c9599619991597cb39940",
         "docs/obsidian-ui-probe.md": "d4be5c6025f4617da8fcd58bfeb526eba5eddf704d39a95354de8c9cd7df2afd",
-        "scripts/draw_architecture.py": "f8a74baf31c605e5a57239e0ac0b5bbd8f5c41c77d8946ec6495cf390cbd5a80",
-        "scripts/draw_technical_blueprints.py": "c154d857705dc62c7f4064dc787913f22cb2c131de0738ebc8a2017bbbd91ab2"
+        "scripts/draw_architecture.py": "6336365e9a4ff50e83d05e4d2a769b74d7bc7509c45e157d37d6baa3ed7de548",
+        "scripts/draw_technical_blueprints.py": "47ad1ae69ee2dde44050dac75ab852be18fcd788ce3d05c3c3640469ca1c0e45"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-technical-architecture.svg": "4ac42d94f476d883db6f9a7cc57c601a8b21c6779c5e7fd3daa19d7d94f2be59"
+        "docs/diagrams/essence-cards-technical-architecture.svg": "d7a27a8377f1e09238380baba7cec6622b0b42a6c4a2fdbf09225c7c346eee71"
       }
     },
     "B-003": {
       "sources": {
-        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
-        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
-        "docs/technical-roadmap.md": "c008c1d5f2bc29a5e62bea3f6effd8778b6145d417fa6e57f63e92a7b516601f",
+        "docs/module-architecture.md": "050991bf72f5332136378a530cce41ee1758a7132f2dc4b28627c02ffabc059c",
+        "docs/integration-contract.md": "90e7fd7a79b4990b015012d14d447c6867a7df65ab4244fca7666524a19d97ce",
+        "docs/technical-roadmap.md": "dbcf4d090caca4dff72d4ccd0887d56cc53759753f4c9599619991597cb39940",
         "docs/obsidian-ui-probe.md": "d4be5c6025f4617da8fcd58bfeb526eba5eddf704d39a95354de8c9cd7df2afd",
-        "scripts/draw_architecture.py": "f8a74baf31c605e5a57239e0ac0b5bbd8f5c41c77d8946ec6495cf390cbd5a80",
-        "scripts/draw_technical_blueprints.py": "c154d857705dc62c7f4064dc787913f22cb2c131de0738ebc8a2017bbbd91ab2"
+        "scripts/draw_architecture.py": "6336365e9a4ff50e83d05e4d2a769b74d7bc7509c45e157d37d6baa3ed7de548",
+        "scripts/draw_technical_blueprints.py": "47ad1ae69ee2dde44050dac75ab852be18fcd788ce3d05c3c3640469ca1c0e45"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-development-roadmap.svg": "46ee5c88354467f10ead78479a9c144b0d493b96db90e8436e4a7f69322ec0b6"
+        "docs/diagrams/essence-cards-development-roadmap.svg": "02cb3c50ff99bb462e2d17c2c887b90d80878c430e661e38491d153bbf493ce0"
       }
     },
     "B-004": {
       "sources": {
-        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
-        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
-        "docs/function-discussions.md": "a95ad498b5eab919e639c7e99d50127631373c664fe7662d54e85070c860edec",
-        "scripts/build_function_diagram.py": "5adfb8ce6f7cbbbcab538d370fa56e49f2979876b55740eebff775306d766ad3",
-        "scripts/render_function_diagram.py": "4a3c662a1082405046a6b25bd99f65d2d1fc31fc024af624a4e2812c0224cf82",
+        "docs/module-architecture.md": "050991bf72f5332136378a530cce41ee1758a7132f2dc4b28627c02ffabc059c",
+        "docs/integration-contract.md": "90e7fd7a79b4990b015012d14d447c6867a7df65ab4244fca7666524a19d97ce",
+        "docs/function-discussions.md": "15b961799bffc384618299431a1fe3b5743fadd59a66bc65f67e36aff0beae83",
+        "scripts/build_function_diagram.py": "3acfa536a28405e245f5eb1f8f6da4e9de32f18ba7e3e847961bd31e1d2c2ef4",
+        "scripts/render_function_diagram.py": "d6868a29997adb34fd171bc1a9b25f110a226941040c078121eba81274ce4e47",
         "scripts/mermaid-config.json": "e43b49096945ec55844435f21e155fc885847a986eff5e3f241f2ca661ca3bc0",
         "scripts/puppeteer-config.json": "9cbbd3304282ad4cca47c88ae586a601f49c11f48c0738916da7542e7cb6e574"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-functions.svg": "f1034f3ff3d4745ceca66ad7cc6a8bf15d83517f3e8d8778a4658b0fdc7ce0c8",
-        "docs/diagrams/functions.md": "18cd1e1117ab5d755865600af607b26ff10849023e6bbffcf15c5ff82e1e48a8",
-        "docs/diagrams/essence-cards-functions.mmd": "b7c76324632b8546ce6bf203b6af0cfed418f2d3a53b8b1e02fa2a33dc092a57"
+        "docs/diagrams/essence-cards-functions.svg": "2b308c2faef90168b215e93c01220613381dd747afabb9b9c69d4d5e16ff8b28",
+        "docs/diagrams/functions.md": "ec5f33c9c8664739b1bbb5a93f2b317bc83bc3df401d6ea4413de3da2f48d514",
+        "docs/diagrams/essence-cards-functions.mmd": "9a327473dfebc1bec337e731d09bfdeb24bcde6a9bd2756d8da1970172018c7e"
       }
     }
   }

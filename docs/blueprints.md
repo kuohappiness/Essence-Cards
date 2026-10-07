@@ -4,7 +4,7 @@
 
 ## B-001 知識學習架構藍圖｜方向已確認，細節待討論
 
-摘要：以輸入、整理、學習、回饋呈現學習循環，與 B-004 的三模組產品／工程視角互相參照。
+摘要：完整保留輸入、整理、學習、回饋；輸入註記 Essence Capture 後續另 repo，Cards 聚焦輸出、檢核與選用 AI。
 
 圖檔：docs/diagrams/essence-cards-architecture.svg
 
@@ -15,7 +15,7 @@
 
 ## B-002 技術架構與 Git 設計｜平台已選，技術細節待驗證
 
-摘要：第一階段的輸出／檢核使用 Obsidian 與既有 iCloud；第二階段來源工具獨立，透過文件／版本整合，AI／Git 細節待驗證。
+摘要：兩個獨立 Obsidian 外掛以可讀筆記交接；Cards 的 AI 學習輔助可選，一般筆記無 YAML 也能使用，模型／資料／Git 細節待驗證。
 
 圖檔：docs/diagrams/essence-cards-technical-architecture.svg
 
@@ -34,7 +34,7 @@ Git 設計必須保留：
 
 ## B-003 兩階段開發路線圖｜先後已確認，細部待議
 
-摘要：第一階段 P0–P4 驗資料、定交接、交付輸出／檢核並試用；第二階段 P5 開發獨立來源工具與驗整合。
+摘要：本 repo P0–P4 驗資料、交付基礎輸出／檢核，再補強 AI 並試用；後續 P5 在另 repo 開發 Essence Capture。
 
 圖檔：docs/diagrams/essence-cards-development-roadmap.svg
 
@@ -47,11 +47,11 @@ Git 設計必須保留：
 
 ## B-004 功能與兩階段交付｜拆分與順序已確認，細節待議
 
-摘要：以功能目錄 v0.4 的 19 個 F-ID 對照三種責任、兩工具與兩階段；第一階段既有資料直接複習／檢核，第二階段獨立轉筆記。
+摘要：以功能目錄 v0.5 的 19 個 F-ID 對照兩個獨立外掛；Cards 本 repo 輸出／檢核／選用 AI，Capture 後續另 repo 來源轉筆記。
 
 圖檔：docs/diagrams/essence-cards-functions.svg
 
-C-022 確認輸入獨立與先輸出／檢核後輸入；功能分工、交接格式與第一階段精確範圍仍待議。Essence Cards 從既有筆記／手動卡片開始，不依賴來源工具；第二階段整理成果依文件／來源／附件／版本約定接入。跨工具修訂交接建議，由接收端核對採用；基礎不是第四大模組，基本複習不依賴完整檢核。尚未實作正式模組，YouTube 方法仍未選定。
+C-022／C-023 確認 repo 分工、非 AI 基礎與選用 AI；Capture repo 尚未建立；功能分工、交接格式與第一階段精確範圍仍待議。Essence Cards 從既有筆記／手動卡片開始，不依賴來源工具；第二階段整理成果依文件／來源／附件／版本約定接入。跨工具修訂交接建議，由接收端核對採用；基礎不是第四大模組，基本複習不依賴完整檢核。尚未實作正式模組，YouTube 方法仍未選定。
 
 - [三模組與兩階段交付](module-architecture.md)
 - [文件交接與整合約定](integration-contract.md)

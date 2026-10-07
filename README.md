@@ -1,6 +1,6 @@
 # Essence Cards
 
-知識萃取、閃卡複習與記憶鞏固工具，目前處於需求探索與設計階段。
+閃卡製作、複習、檢核與記憶鞏固工具，提供選用 AI 學習輔助，目前處於需求探索與設計階段。
 
 本專案源於既有的 Obsidian 間隔重複閃卡外掛。新軟體的目標是在有限時間內，更有效率、更深入地學習知識，並對考試表現有所幫助。實際成效仍需驗證。
 
@@ -8,23 +8,25 @@
 
 - 正式英文名稱：**Essence Cards**。
 - 中文名稱：暫緩，之後再決定。
-- 功能責任：**輸入、輸出、檢核**；輸入獨立為來源整理工具，第一階段先做 Essence Cards 的輸出與檢核，第二階段再做輸入，從初期保留整合約定（C-022）。
+- 本 repo 範圍：**M-002 輸出、M-003 檢核與選用 AI 學習輔助**。基礎製卡、筆記語法解析、自評、規則與排程不依賴 AI；先接通基礎學習循環，精確 MVP 逐項討論（C-023）。
+- 輸入的後續規劃：M-001 來源擷取、AI 整理與萃取另開 repo，預計名為 **Essence Capture**（尚未建立），之後開發為獨立 Obsidian 外掛，以可讀、可編輯的來源筆記為終點（C-022）。
+- 獨立使用與交接：兩個外掛各自安裝使用，不要求同時運作；Cards 支援一般手寫或其他工具筆記，YAML 非門檻。少量平面可選 metadata 的精確欄位與路徑未定；來源更新只提示材料影響，不自動改卡或重設進度。
 - 已確認的設計方向：知識萃取、利用閃卡複習、加強記憶。
 - 已確認的產品形式：以概念筆記為核心的學習工作區，依閱讀、整理理解、記憶練習及回顧情境提供不同 UI，共用知識來源，確認的修訂可回寫筆記（C-011）。
 - 資料保存與同步候選：主要考慮雲端服務與各裝置本機；NAS 保留為選配自架方式，具體機制與第一版支援範圍待定（C-012）。
-- 討論架構：以「輸入 → 整理 → 學習 → 回饋」的整體學習循環規劃，串接來源、概念筆記、教材、練習與回饋；具體功能仍待釐清。
+- 討論架構：完整保留「輸入 → 整理 → 學習 → 回饋」，串接來源、概念筆記、教材、練習與回饋；輸入註記為另一 repo 與未來階段，具體功能仍待釐清。
 - 第一版平台：Obsidian 外掛；電腦整理管理、iPhone 複習，沿用既有 iCloud 為同步驗證基線（C-014）。
 - 目前階段：可丟棄原型已依使用者回報通過 Windows／iPhone 最小實機驗證，恢復逐項功能討論；Git 備份、併發、AI 轉接、資料細節與完整功能範圍仍待驗證／確認。
 
 ## 文件
 
-- [三模組與兩階段交付](docs/module-architecture.md)：第一階段輸出與檢核、第二階段獨立來源工具；保留各自入口與可選交接。
+- [三模組與兩階段交付](docs/module-architecture.md)：本 repo 的輸出／檢核與選用 AI、未來 Capture 的輸入；兩個獨立 Obsidian 外掛及可選交接。
 - [文件交接與整合約定](docs/integration-contract.md)：從第一階段保留文件、來源、附件、識別與版本邊界；實作格式仍為草案。
 
 - [最小 UI 與跨裝置驗證](docs/obsidian-ui-probe.md)：可丟棄原型與證據狀態；[安裝及驗收](experiments/obsidian-ui-probe/README.md)。
 - [最新專案共識](docs/consensus.md)：目前有效的結論，以及清楚標示的待決事項。
 - [學習循環與功能藍圖](docs/learning-blueprint.md)：已確認的討論架構、功能草案、整合設計、困難與分階段候選範圍。
-- [功能討論目錄](docs/function-discussions.md)：v0.4 對照三模組與兩階段，優先細化閃卡／材料、學習操作與檢核；[來源匯入](docs/functions/source-input.md)安排第二階段，[學習疑問](docs/functions/issue-queue.md)連接檢核與修訂。
+- [功能討論目錄](docs/function-discussions.md)：v0.5 對照三模組與兩階段，優先細化閃卡／材料、學習操作與檢核；[來源匯入](docs/functions/source-input.md)安排第二階段，[學習疑問](docs/functions/issue-queue.md)連接檢核與修訂。
 - [架構圖總入口](docs/diagrams/README.md)：學習、技術、開發路線圖與[功能 Mermaid 總覽](docs/diagrams/functions.md)，透過 B-ID／F-ID 互相參照。
 - [技術架構與開發路線圖](docs/technical-roadmap.md)：裝置、資料、AI、同步、Git 備份／回復設計與分階段驗證門檻。
 - [畫板藍圖索引](docs/blueprints.md)：四張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。
@@ -33,6 +35,7 @@
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
 - [參考研究的設計優化提案](docs/references/design-opportunities.md)：統整架構細化、特色功能及第一版候選；部分討論方向依 C-017 採用，其餘提案與第一版細節待確認。
+- [Cards／Capture 範圍確認](docs/discussions/2026-10-07-cards-capture-scope.md)：repo 分工、非 AI 基礎、模型插拔與筆記交接邊界。
 - [討論紀錄](docs/discussions/README.md)：按日期與主題保存想法、取捨及決策的演變。
 - [協作規則](AGENTS.md)：模型與任務分工，以及後續協作者維護共識與文件的方式。
 
