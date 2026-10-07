@@ -155,9 +155,9 @@ def draw(out):
     d.rect(91, 53, 27, 37, P['paper'], P['green'], radius=5)
     d.text(138, 88, 'Essence Cards', 48, weight=700, en=True)
     d.text(80, 160, '知識學習架構藍圖', 48, weight=600)
-    d.text(80, 212, '輸入、整理、學習、回饋，形成持續改善的學習循環。', 26, P['muted'])
+    d.text(80, 212, '完整學習循環；先做輸出／檢核，獨立來源工具於第二階段接入。', 26, P['muted'])
     d.rect(1760, 58, 350, 53, '#E7EEE7', radius=26)
-    d.text(1935, 92, '概念架構 v2.1', 23, anchor='middle')
+    d.text(1935, 92, '概念架構 v2.2', 23, anchor='middle')
     d.text(2110, 157, '2026.10.07', 20, P['muted'], en=True, anchor='end')
 
     # Three top-level areas share a baseline. All connectors are straight.

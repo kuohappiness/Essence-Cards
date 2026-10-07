@@ -199,37 +199,96 @@ class FunctionDiagramTests(unittest.TestCase):
         }
         for node, (label, identifiers) in expected.items():
             with self.subTest(node=node):
-                match = re.search(rf'(?ms)^  {node}\["`(.*?)`"\]', mmd)
+                match = re.search(rf'(?ms)^ +{node}\["`(.*?)`"\]', mmd)
                 self.assertIsNotNone(match)
                 self.assertIn(label, match[1])
                 self.assertEqual(set(re.findall(r"F-\d{3}", match[1])), identifiers)
         self.assertTrue(mmd.startswith("flowchart TD\n"))
-        self.assertEqual(len(re.findall(r'(?m)^  \w+\[', mmd)), 8)
-        for node in ("input", "output", "check"):
+        self.assertEqual(len(re.findall(r'(?m)^ +\w+\[', mmd)), 8)
+        for node in ("output", "check"):
             self.assertIn(f"shared -.->|支援| {node}", mmd)
+        self.assertIn("shared -.->|格式約定| input", mmd)
+        self.assertNotIn("shared -.->|支援| input", mmd)
 
     def test_input_and_output_have_independent_entries_and_endpoints(self):
         mmd = functions.render(self.root)["docs/diagrams/essence-cards-functions.mmd"]
         for edge in ("sources --> input", "input --> notes", "cards --> output", "output --> review"):
             self.assertIn(edge, mmd)
         self.assertIn('sources["外部來源（如 YouTube）"]', mmd)
-        self.assertIn('cards["既有／手動卡片"]', mmd)
+        self.assertIn('cards["既有筆記／手動卡片"]', mmd)
         self.assertIn('notes["可讀筆記：可獨立結束"]', mmd)
         self.assertIn('review["直接複習：可獨立結束"]', mmd)
-        self.assertNotRegex(mmd, r"(?m)^  (notes|review) (?:-->|-\.->)")
+        self.assertNotRegex(mmd, r"(?m)^ +review (?:-->|-\.->)")
+        # 筆記可交接，但沒有必須繼續製卡的出口。
+        outgoing_notes = re.findall(r"(?m)^ +notes (.+)$", mmd)
+        self.assertEqual(outgoing_notes, ["-->|可選：文件交接| output"])
 
     def test_module_handoffs_are_optional_and_revision_requires_verification(self):
         rendered = functions.render(self.root)
         mmd = rendered["docs/diagrams/essence-cards-functions.mmd"]
-        for source, target in (("input", "output"), ("output", "check")):
-            self.assertRegex(mmd, rf"(?m)^  {source} -->\|可選：[^|]+\| {target}$")
-        for target in ("input", "output"):
-            self.assertIn(f"check -->|核對後建議修訂| {target}", mmd)
+        for source, target in (("notes", "output"), ("output", "check")):
+            self.assertRegex(mmd, rf"(?m)^ +{source} -->\|可選：[^|]+\| {target}$")
+        self.assertIn("check -->|核對後建議修訂| output", mmd)
+        self.assertIn("check -->|可選：文件修訂建議| input", mmd)
+        self.assertNotRegex(mmd, r"(?m)^ +input -->[^\n]*output$")
         document = rendered["docs/diagrams/functions.md"]
         for statement in ("責任候選映射", "不代表唯一歸屬", "不把 M-003 當作啟用閃卡的先決條件",
                           "AI 可選", "各獨立操作保留人工核對",
                           "完整 YouTube API 或轉錄已實作", "../module-architecture.md",
                           "已依使用者回報通過 Windows／iPhone 最小實機驗證", "完整 P0 仍未通過"):
+            self.assertIn(statement, document)
+
+    def test_mandatory_routes_do_not_cross_product_boundary(self):
+        mmd = functions.render(self.root)["docs/diagrams/essence-cards-functions.mmd"]
+        # 只追蹤非「可選」實線；格式約定不是執行相依。
+        edges = re.findall(r"(?m)^ +([a-z]+) -->(?:\|([^|]+)\|)? ([a-z]+)$", mmd)
+        mandatory = {}
+        for source, label, target in edges:
+            if not label.startswith("可選："):
+                mandatory.setdefault(source, set()).add(target)
+
+        def reachable(start):
+            seen, pending = set(), [start]
+            while pending:
+                node = pending.pop()
+                if node not in seen:
+                    seen.add(node)
+                    pending.extend(mandatory.get(node, ()))
+            return seen
+
+        self.assertEqual(reachable("cards"), {"cards", "output", "review"})
+        self.assertEqual(reachable("sources"), {"sources", "input", "notes"})
+        self.assertEqual(reachable("check"), {"check", "output", "review"})
+
+    def test_two_product_phases_keep_modules_without_mandatory_runtime_dependency(self):
+        rendered = functions.render(self.root)
+        mmd = rendered["docs/diagrams/essence-cards-functions.mmd"]
+        phases = {}
+        for phase in ("phase1", "phase2"):
+            match = re.search(rf'(?ms)^  subgraph {phase}\["([^"\n]+)"\]\n(.*?)^  end$', mmd)
+            self.assertIsNotNone(match)
+            phases[phase] = match[1], match[2]
+        self.assertEqual(len(re.findall(r"(?m)^  subgraph ", mmd)), 2)
+        self.assertIn("第一階段：Essence Cards 輸出＋檢核", phases["phase1"][0])
+        self.assertIn("第二階段：獨立來源／文件工具", phases["phase2"][0])
+        for node in ("cards", "output", "review", "check"):
+            self.assertRegex(phases["phase1"][1], rf"(?m)^    {node}\[")
+        for node in ("sources", "input", "notes"):
+            self.assertRegex(phases["phase2"][1], rf"(?m)^    {node}\[")
+        self.assertNotRegex(phases["phase1"][1], r"(?m)^    (input|sources)\[")
+        self.assertNotRegex(phases["phase2"][1], r"(?m)^    (output|check)\[")
+        self.assertNotRegex(phases["phase1"][1] + phases["phase2"][1], r"(?m)^ +shared\[")
+        document = rendered["docs/diagrams/functions.md"]
+        for statement in (
+                "C-022 取代 C-020 的同一外掛內整合三模組安排",
+                "第一階段先做 Essence Cards 的輸出＋檢核",
+                "第二階段再獨立交付來源／文件工具",
+                "不承諾首期包含全部 19 項", "首期功能與卡型、檢核範圍",
+                "來源取得與輸入工具不是第一階段使用的必要條件",
+                "來源工具的部署方式待定，不預設為 Obsidian 外掛",
+                "檔案交接與人工選取", "API 可選", "不要求兩產品共享可變狀態或同時執行",
+                "../integration-contract.md", "schema、欄位、協定或連接器已定案",
+                "學習循環視角", "F-013 的基本複習規則可供輸出使用"):
             self.assertIn(statement, document)
 
     def test_unknown_function_requires_manual_group_review(self):

@@ -8,7 +8,7 @@
 
 - 正式英文名稱：**Essence Cards**。
 - 中文名稱：暫緩，之後再決定。
-- 主要模組：**輸入、輸出、檢核**；輸入可只轉筆記，輸出可只複習閃卡，共用小核心並逐步整合（C-020）。
+- 功能責任：**輸入、輸出、檢核**；輸入獨立為來源整理工具，第一階段先做 Essence Cards 的輸出與檢核，第二階段再做輸入，從初期保留整合約定（C-022）。
 - 已確認的設計方向：知識萃取、利用閃卡複習、加強記憶。
 - 已確認的產品形式：以概念筆記為核心的學習工作區，依閱讀、整理理解、記憶練習及回顧情境提供不同 UI，共用知識來源，確認的修訂可回寫筆記（C-011）。
 - 資料保存與同步候選：主要考慮雲端服務與各裝置本機；NAS 保留為選配自架方式，具體機制與第一版支援範圍待定（C-012）。
@@ -18,12 +18,13 @@
 
 ## 文件
 
-- [三模組架構與逐步交付](docs/module-architecture.md)：輸入／輸出獨立使用、候選功能邊界與可選交接；先釐清可用的最小閃卡。
+- [三模組與兩階段交付](docs/module-architecture.md)：第一階段輸出與檢核、第二階段獨立來源工具；保留各自入口與可選交接。
+- [文件交接與整合約定](docs/integration-contract.md)：從第一階段保留文件、來源、附件、識別與版本邊界；實作格式仍為草案。
 
 - [最小 UI 與跨裝置驗證](docs/obsidian-ui-probe.md)：可丟棄原型與證據狀態；[安裝及驗收](experiments/obsidian-ui-probe/README.md)。
 - [最新專案共識](docs/consensus.md)：目前有效的結論，以及清楚標示的待決事項。
 - [學習循環與功能藍圖](docs/learning-blueprint.md)：已確認的討論架構、功能草案、整合設計、困難與分階段候選範圍。
-- [功能討論目錄](docs/function-discussions.md)：v0.3 對照三模組、藍圖與研究，逐項釐清功能、關聯、人工流程及驗收；目前從[來源資料匯入與管理](docs/functions/source-input.md)開始，新增[學習疑問與待處理佇列](docs/functions/issue-queue.md)。
+- [功能討論目錄](docs/function-discussions.md)：v0.4 對照三模組與兩階段，優先細化閃卡／材料、學習操作與檢核；[來源匯入](docs/functions/source-input.md)安排第二階段，[學習疑問](docs/functions/issue-queue.md)連接檢核與修訂。
 - [架構圖總入口](docs/diagrams/README.md)：學習、技術、開發路線圖與[功能 Mermaid 總覽](docs/diagrams/functions.md)，透過 B-ID／F-ID 互相參照。
 - [技術架構與開發路線圖](docs/technical-roadmap.md)：裝置、資料、AI、同步、Git 備份／回復設計與分階段驗證門檻。
 - [畫板藍圖索引](docs/blueprints.md)：四張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。

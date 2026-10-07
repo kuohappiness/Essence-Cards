@@ -93,15 +93,15 @@ def technical(svg_out, previews):
     d = Blueprint(svg_out, previews, 'essence-cards-technical-architecture',
                   'Essence Cards｜技術架構提案',
                   '第一版已選 Obsidian 外掛，沿用既有 iCloud 作為唯一日常同步。AI、資料設計與獨立 Git 備份方案為待驗證提案，尚未實作。',
-                  2200, 1880)
-    heading(d, '技術架構提案', '已選：Obsidian 外掛・既有 iCloud 日常同步｜以下技術與 Git 細節為提案，待驗證、未實作。')
+                  2200, 2030)
+    heading(d, '技術架構｜兩工具整合', '第一階段：輸出與檢核；第二階段：獨立來源工具｜Essence Cards 使用 Obsidian，技術細節待驗證。')
     d.card(80, 280, 610, 390, stripe=P['green'])
     d.label(120, 343, '電腦｜Obsidian 外掛', size=33)
-    d.rows(120, 401, ['輸入來源・筆記管理', '概念整理・教材製作', 'AI 任務啟動・確認修訂'], 530, size=28, gap=47)
+    d.rows(120, 401, ['既有筆記・手動卡片', '材料製作・檢核與修訂', '可選 AI 任務・備份管理'], 530, size=28, gap=47)
     d.rect(116, 563, 538, 65, P['green_soft'], radius=12)
     d.text(385, 605, '重任務優先在電腦執行', 26, P['green'], anchor='middle')
     d.card(790, 280, 620, 390, fill='#F9FCFE', stripe=P['blue'])
-    d.label(830, 343, 'AI 任務層｜待驗證提案', size=31, color=P['blue'])
+    d.label(830, 343, '學習 AI｜可選提案', size=31, color=P['blue'])
     d.rows(830, 401, ['統一任務脈絡・模型轉接', '輸出檢查・版本核對', '提出修訂草稿 → 人工核對回寫'], 540, size=27, gap=47)
     d.rows(830, 583, ['重任務在電腦；手動流程可獨立運作', '不承諾所有模型都能無痛替換'], 540, size=23, gap=35, color=P['blue'])
     d.line([(690, 431), (790, 431)], P['blue'], 3, arrow=True)
@@ -126,11 +126,19 @@ def technical(svg_out, previews):
     for start, end in [(690, 850), (1350, 1510)]:
         d.line([(start, 809), (end, 809)], P['blue'], 3, arrow=True)
         d.line([(end, 882), (start, 882)], P['blue'], 3, arrow=True)
-    d.card(80, 1000, 2040, 204, fill='#F8FBF6')
-    d.label(116, 1057, '三模組共用資料規則｜細節待驗證', size=29)
-    d.rows(116, 1104, ['共用穩定概念 ID、來源定位與題材版本；學習事件獨立追加、去重，索引可重建。',
-                      '同一外掛內分輸入、輸出、檢核；各自入口、可選交接，共用核心隨交付擴充。',
-                      'Windows iCloud 衝突風險仍須實測；Git 幫助救回，並不改善同步可靠性。'], 1960, size=26, gap=37)
+    d.card(80, 1000, 610, 350, fill='#F8FBF6', stripe=P['green'])
+    d.label(116, 1057, '獨立來源整理工具', size=29)
+    d.rows(116, 1110, ['第二階段開發', 'AI 整理・人工核對', '只保存可讀文件也能結束', '宿主、來源取得與模型待議'], 538, size=26, gap=50)
+    d.card(790, 1000, 1330, 350, fill='#F8FBF6')
+    d.label(826, 1057, '文件與版本交接｜第一階段即設計', size=29)
+    d.rows(826, 1110, ['正文／來源／附件／文件 ID／版本；選擇核對後接入。',
+                      'Essence Cards 保存材料及事件，已有資料可獨立複習與檢核。',
+                      '共用必要格式；兩工具不必同時執行或共用全部內部狀態。',
+                      '事件獨立追加、去重，索引可重建；iCloud／Git 細節待驗證。'], 1258, size=26, gap=50)
+    d.line([(690, 1160), (790, 1160)], P['green'], 3, arrow=True)
+    d.text(740, 1132, '交接', 23, P['green'], anchor='middle')
+    d.line([(1815, 1000), (1815, 958)], P['green'], 3, arrow=True)
+    d.y_offset = 150
     d.card(80, 1250, 2040, 520, fill='#FFFCF5', stripe=P['amber'])
     d.label(116, 1310, 'Git 獨立備份層｜提案，不作第二套日常同步', size=32, color=P['amber'])
     boxes = [(116, 420, '電腦已收到的 vault'), (620, 330, 'commit'), (1034, 280, 'push'), (1398, 686, 'GitHub 私人儲存庫')]
@@ -153,9 +161,9 @@ def technical(svg_out, previews):
 def roadmap(svg_out, previews):
     d = Blueprint(svg_out, previews, 'essence-cards-development-roadmap',
                   'Essence Cards｜開發路線圖提案',
-                  '建議順序 P0 至 P4，正式功能待執行，沒有工期承諾。驗證同步及回復、建立最小資料骨架後，先交付獨立閃卡，再逐步接入輸入與檢核；保留 AI 轉接與教材試用。',
-                  1680, 2010)
-    heading(d, '開發路線圖提案', '可丟棄 UI 原型最小實機已通過；正式 P0–P4 仍待驗收。')
+                  '第一階段 P0 至 P4 專注輸出與檢核，從初期設計文件交接；第二階段 P5 開發獨立來源工具並驗整合。正式功能尚未完成，詳細範圍與驗收待定，沒有工期承諾。',
+                  1680, 2290)
+    heading(d, '開發路線圖｜兩階段', '第一階段 P0–P4：輸出／檢核；第二階段 P5：獨立輸入。正式功能待驗收。')
     stages = [
         ('P0', '跨裝置與回復驗證', P['amber'], P['amber_soft'],
          ['UI／讀寫原型已通過；續測正式事件、附件完整性與離線保存。',
@@ -165,14 +173,14 @@ def roadmap(svg_out, previews):
         ('P1', '最小共用資料骨架', P['green'], P['green_soft'],
          ['先建立閃卡所需 ID、schema 與版本；隨模組交付擴充。',
           '學習事件獨立追加與去重；查詢索引可從資料重建。',
-          '共用概念可跨主題引用；避免兩端競爭覆寫同一檔。'],
+          '初期定文件／來源／附件／版本交接，用手動樣本驗接收端。'],
          '驗收：資料關聯能核對，手機事件與概念修訂可共存。'),
-        ('P2', '可獨立使用的模組交付', P['green'], P['green_soft'],
+        ('P2', '輸出與檢核的可用交付', P['green'], P['green_soft'],
          ['先交付既有／手動閃卡：建立、編輯、複習、保存進度。',
-          '再接入輸入與可選檢核；輸入可只產生筆記後結束。',
-          '每個可用單位立即整合，逐步串接完整學習循環。'],
-         '驗收：新增能力可用，原有獨立入口、卡片與紀錄仍保留。'),
-        ('P3', 'AI 可替換設計', P['blue'], P['blue_soft'],
+          '接上已選檢核、回饋及核對修訂；範圍逐項確認。',
+          '使用既有筆記與材料，不以來源取得／AI 轉錄為先決。'],
+         '驗收：來源工具未開發，也能完成複習、檢核及必要保存。'),
+        ('P3', '學習 AI 與模型替換｜範圍待選', P['blue'], P['blue_soft'],
          ['定義共通任務，接通至少一種 API 轉接；重任務優先電腦。',
           '支援重試、任務保存、修訂預覽與版本核對。',
           'AI 批次前後建立 Git checkpoint；手動流程不依賴 AI。'],
@@ -182,12 +190,17 @@ def roadmap(svg_out, previews):
           '以延後回想觀察學習效果，不把使用頻率當作成效。',
           '重跑離線、同步衝突與救回測試，回饋至前面各階段。'],
          '驗收：依教材與實機結果決定補強，學習成效仍需證據。'),
+        ('P5', '第二階段｜獨立來源工具', P['green'], P['green_soft'],
+         ['選定來源與 AI 整理方法，可只保存筆記後結束。',
+          '真實文件沿用第一階段約定，核對後交給 Essence Cards。',
+          '重複交接、新版與附件可核對，保留舊卡片與學習事件。'],
+         '驗收：兩邊能各自使用；接入或停止來源工具不破壞學習端。'),
     ]
     for i, (code, title, color, fill, rows, criterion) in enumerate(stages):
         y=280+i*278
         d.circle(108, y+59, 44, color)
         d.text(108, y+69, code, 29, '#FFFFFF', en=True, weight=700, anchor='middle')
-        if i<4:
+        if i<len(stages)-1:
             d.line([(108, y+103), (108, y+278+15)], P['slate'], 3, arrow=True)
         d.card(200, y, 1400, 248)
         d.rect(228, y+25, 5, 196, color, radius=2)
@@ -197,13 +210,13 @@ def roadmap(svg_out, previews):
         d.rows(252, y+102, rows, 1308, size=26, gap=38)
         d.rect(248, y+192, 1320, 40, fill, radius=9)
         d.text(265, y+221, criterion, 24, color, max_width=1286)
-    d.card(80, 1710, 1520, 204, fill='#FFFCF5')
-    d.label(116, 1767, '延伸範圍｜暫緩', size=31, color=P['amber'])
-    d.rows(116, 1816, ['Dropbox／其他雲／NAS、獨立 app 或 web、複雜互動教材、多模型批次。',
-                      '重啟前先看 P0–P4 結果；不與 iCloud 對同一 vault 同時啟用雙向同步。'],
+    d.card(80, 1990, 1520, 204, fill='#FFFCF5')
+    d.label(116, 2047, '延伸範圍｜暫緩', size=31, color=P['amber'])
+    d.rows(116, 2096, ['其他雲／NAS、獨立學習 app 或 web、複雜互動教材、多模型批次。',
+                      '來源工具宿主另議；不與 iCloud 對同一 vault 疊加其他雙向同步。'],
            1448, size=26, gap=42)
-    d.text(80, 1970, '這是開發提案；各階段的範圍與驗收條件將隨實機、教材及使用回饋調整。', 24, P['muted'])
-    d.text(1600, 1970, '2026.10.07', 21, P['muted'], en=True, anchor='end')
+    d.text(80, 2250, '兩階段順序已確認；P0–P5 的細部範圍與驗收條件隨實機及功能討論調整。', 24, P['muted'])
+    d.text(1600, 2250, '2026.10.07', 21, P['muted'], en=True, anchor='end')
     d.save()
 
 

@@ -2,53 +2,57 @@
   "diagrams": {
     "B-001": {
       "sources": {
-        "docs/module-architecture.md": "f1d726a1e69ee1b7b19ecf21fff591ede5fab23b48931c6d28b381ba29905d5a",
-        "docs/learning-blueprint.md": "13a84f6c8811eb9b67c4fd692c30b337424c87e67226087f366bdd15c76f3fbc",
-        "docs/function-discussions.md": "764596507222a1e73c9bb94f59f2334c12156561932194aa57c99cef69e1e090",
+        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
+        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
+        "docs/learning-blueprint.md": "f127dced3439a1ac35d077dcea73e4cacc280e04f7c6c263ed503d0fcbb47598",
+        "docs/function-discussions.md": "a95ad498b5eab919e639c7e99d50127631373c664fe7662d54e85070c860edec",
         "docs/functions/issue-queue.md": "be01a13394dbf4f8c7087afd4d408093b8674afd16f60271bf53ddc4e9d0dfeb",
-        "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0"
+        "scripts/draw_architecture.py": "f8a74baf31c605e5a57239e0ac0b5bbd8f5c41c77d8946ec6495cf390cbd5a80"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-architecture.svg": "f3c205ea6ff3bc9ea2708352dcb5755c4c3f87fe8fa61eba56d605d3554abeb9"
+        "docs/diagrams/essence-cards-architecture.svg": "d1d1e352e0fd4f21acb760703c80f45d93286b01940f8913676bd13b0715103e"
       }
     },
     "B-002": {
       "sources": {
-        "docs/module-architecture.md": "f1d726a1e69ee1b7b19ecf21fff591ede5fab23b48931c6d28b381ba29905d5a",
-        "docs/technical-roadmap.md": "f2f89e2b3a3e3098d877aa39e62c4752b0102761b063bd2179a6f11563261ee1",
+        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
+        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
+        "docs/technical-roadmap.md": "c008c1d5f2bc29a5e62bea3f6effd8778b6145d417fa6e57f63e92a7b516601f",
         "docs/obsidian-ui-probe.md": "d4be5c6025f4617da8fcd58bfeb526eba5eddf704d39a95354de8c9cd7df2afd",
-        "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0",
-        "scripts/draw_technical_blueprints.py": "15f48da0af70bc41f6b9af0ec37f154c63c3b4e0512b72526f74f7c668b21f53"
+        "scripts/draw_architecture.py": "f8a74baf31c605e5a57239e0ac0b5bbd8f5c41c77d8946ec6495cf390cbd5a80",
+        "scripts/draw_technical_blueprints.py": "c154d857705dc62c7f4064dc787913f22cb2c131de0738ebc8a2017bbbd91ab2"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-technical-architecture.svg": "4cb659d2af57efbb6dbf62f81fba8d14ff4006b0ac1f61c137d765435d781c6e"
+        "docs/diagrams/essence-cards-technical-architecture.svg": "4ac42d94f476d883db6f9a7cc57c601a8b21c6779c5e7fd3daa19d7d94f2be59"
       }
     },
     "B-003": {
       "sources": {
-        "docs/module-architecture.md": "f1d726a1e69ee1b7b19ecf21fff591ede5fab23b48931c6d28b381ba29905d5a",
-        "docs/technical-roadmap.md": "f2f89e2b3a3e3098d877aa39e62c4752b0102761b063bd2179a6f11563261ee1",
+        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
+        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
+        "docs/technical-roadmap.md": "c008c1d5f2bc29a5e62bea3f6effd8778b6145d417fa6e57f63e92a7b516601f",
         "docs/obsidian-ui-probe.md": "d4be5c6025f4617da8fcd58bfeb526eba5eddf704d39a95354de8c9cd7df2afd",
-        "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0",
-        "scripts/draw_technical_blueprints.py": "15f48da0af70bc41f6b9af0ec37f154c63c3b4e0512b72526f74f7c668b21f53"
+        "scripts/draw_architecture.py": "f8a74baf31c605e5a57239e0ac0b5bbd8f5c41c77d8946ec6495cf390cbd5a80",
+        "scripts/draw_technical_blueprints.py": "c154d857705dc62c7f4064dc787913f22cb2c131de0738ebc8a2017bbbd91ab2"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-development-roadmap.svg": "81d9ccafe3f53a37ac108dce06386b1756347d5b7332047d6e8d44cc74fd5b16"
+        "docs/diagrams/essence-cards-development-roadmap.svg": "46ee5c88354467f10ead78479a9c144b0d493b96db90e8436e4a7f69322ec0b6"
       }
     },
     "B-004": {
       "sources": {
-        "docs/module-architecture.md": "f1d726a1e69ee1b7b19ecf21fff591ede5fab23b48931c6d28b381ba29905d5a",
-        "docs/function-discussions.md": "764596507222a1e73c9bb94f59f2334c12156561932194aa57c99cef69e1e090",
-        "scripts/build_function_diagram.py": "8dc49260e22b412047bfdc4f0da17c27ed9b68c524933ef0bf95e757b9dcfdfe",
-        "scripts/render_function_diagram.py": "146dcc361dc802ca3fbb92320ea426589f4240821ecaa6eb661411f00081d882",
+        "docs/module-architecture.md": "e04151e5ce7c69a1f1a5f7a27cfc5cb701d415852f9b33d23215fe224797523a",
+        "docs/integration-contract.md": "d96a852a0a59dc25e588adf55ff1900688ae11745b84b62b267a315212779055",
+        "docs/function-discussions.md": "a95ad498b5eab919e639c7e99d50127631373c664fe7662d54e85070c860edec",
+        "scripts/build_function_diagram.py": "5adfb8ce6f7cbbbcab538d370fa56e49f2979876b55740eebff775306d766ad3",
+        "scripts/render_function_diagram.py": "4a3c662a1082405046a6b25bd99f65d2d1fc31fc024af624a4e2812c0224cf82",
         "scripts/mermaid-config.json": "e43b49096945ec55844435f21e155fc885847a986eff5e3f241f2ca661ca3bc0",
         "scripts/puppeteer-config.json": "9cbbd3304282ad4cca47c88ae586a601f49c11f48c0738916da7542e7cb6e574"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-functions.svg": "815b8559fd44387ab4e83ab3a11c6c2769c24187477cc4b261da4412527c3b1a",
-        "docs/diagrams/functions.md": "d8d549421cf73d42a09a72e486da3eaab206d040883c61764494746c1c15a70d",
-        "docs/diagrams/essence-cards-functions.mmd": "4461df992925555f18c0560edc6891a5b2cf9b84f6e64c00fcdf77af01ff2afa"
+        "docs/diagrams/essence-cards-functions.svg": "f1034f3ff3d4745ceca66ad7cc6a8bf15d83517f3e8d8778a4658b0fdc7ce0c8",
+        "docs/diagrams/functions.md": "18cd1e1117ab5d755865600af607b26ff10849023e6bbffcf15c5ff82e1e48a8",
+        "docs/diagrams/essence-cards-functions.mmd": "b7c76324632b8546ce6bf203b6af0cfed418f2d3a53b8b1e02fa2a33dc092a57"
       }
     }
   }
