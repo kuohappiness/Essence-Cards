@@ -145,7 +145,7 @@ def technical(svg_out, previews):
                       '• 回復先比對，再選擇個別檔案；保留較新的學習紀錄。',
                       '• 保護邊界：尚未到電腦、尚未 commit、尚未 push 的資料，分別不在對應備份內。'],
            1968, size=26, gap=48)
-    d.text(80, 1830, 'UI 原型已建立、待實機；正式資料、AI、Git 與同步可靠性仍待設計及驗證。', 25, P['muted'])
+    d.text(80, 1830, 'UI 原型最小實機已通過；正式資料、AI、Git 與併發同步仍待設計及驗證。', 25, P['muted'])
     d.text(2120, 1830, '2026.10.07', 22, P['muted'], en=True, anchor='end')
     d.save()
 
@@ -155,10 +155,10 @@ def roadmap(svg_out, previews):
                   'Essence Cards｜開發路線圖提案',
                   '建議順序 P0 至 P4，各階段待執行，沒有工期承諾。先以真實 Windows 與 iPhone 驗證同步及回復，再建立資料骨架、最小學習循環、AI 轉接與真實教材試用。',
                   1680, 2010)
-    heading(d, '開發路線圖提案', '先測可丟棄 UI 原型（已建、待實機）；正式 P0–P4 仍待驗收。')
+    heading(d, '開發路線圖提案', '可丟棄 UI 原型最小實機已通過；正式 P0–P4 仍待驗收。')
     stages = [
         ('P0', '跨裝置與回復驗證', P['amber'], P['amber_soft'],
-         ['先測 UI／讀寫原型；再驗證真實雙端筆記、附件與離線重開。',
+         ['UI／讀寫原型已通過；續測正式事件、附件完整性與離線保存。',
           '電腦修改概念 ＋ 手機離線作答：同步後兩邊資料都保留。',
           '演練 Git 比對與個別檔案回復，保留較新的學習紀錄。'],
          '通過驗證才進入 P1；若失敗，先調整資料與同步設計。'),
@@ -193,7 +193,7 @@ def roadmap(svg_out, previews):
         d.rect(228, y+25, 5, 196, color, radius=2)
         d.text(252, y+57, title, 33, weight=600)
         d.rect(1444, y+24, 124, 45, fill, radius=12)
-        d.text(1506, y+55, '待執行', 23, color, anchor='middle')
+        d.text(1506, y+55, '待驗收' if i == 0 else '待執行', 23, color, anchor='middle')
         d.rows(252, y+102, rows, 1308, size=26, gap=38)
         d.rect(248, y+192, 1320, 40, fill, radius=9)
         d.text(265, y+221, criterion, 24, color, max_width=1286)

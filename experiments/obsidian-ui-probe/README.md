@@ -37,7 +37,7 @@
 
 ## 驗證狀態
 
-可執行 `node check.cjs` 重跑無依賴的模擬 DOM／Vault 邏輯檢查；它不測真實版面、解碼或同步。自動檢查結果見 [驗證紀錄](../../docs/obsidian-ui-probe.md)。一般瀏覽器和模擬 Vault 測試不是 Obsidian 實機驗證；**Windows Obsidian、iPhone Obsidian 與 iCloud 真實往返仍待使用者操作**。
+可執行 `node check.cjs` 重跑無依賴的模擬 DOM／Vault 邏輯檢查；它不測真實版面、解碼或同步。自動檢查與實機結果見 [驗證紀錄](../../docs/obsidian-ui-probe.md)。**2026-10-07，使用者回報手機與電腦測試全部正常，最小實機驗收通過。**一般瀏覽器和模擬 Vault 測試仍不等於 Obsidian 實機驗證；此結果限於本原型的驗收範圍。
 
 回報只需：`Windows：通過／失敗；iPhone：通過／失敗；雙向：通過／失敗；離線重開：通過／失敗`。若失敗，附畫面狀態文字與兩端 Obsidian 版本即可。
 

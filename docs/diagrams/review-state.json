@@ -13,24 +13,24 @@
     },
     "B-002": {
       "sources": {
-        "docs/technical-roadmap.md": "68ead58ff451faabd746ab36253520df5e53f0873307b9d341c77b077ac1393b",
-        "docs/obsidian-ui-probe.md": "b06f5bfd71513996e38a31d6607589efee3da69d4eabe1083340a3a8502fd12c",
+        "docs/technical-roadmap.md": "62a01edfd02a52b62895f7532202df10c313479c993e3986d1f40ca7f96bf400",
+        "docs/obsidian-ui-probe.md": "d4be5c6025f4617da8fcd58bfeb526eba5eddf704d39a95354de8c9cd7df2afd",
         "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0",
-        "scripts/draw_technical_blueprints.py": "7c53c297d67056e3dbb971cafed7ab680cb454180bf17a25e6c4a4aa7767a728"
+        "scripts/draw_technical_blueprints.py": "e519e1691bf384d72aaa99e7701bbc921f1d250ed254cde0c804cfa6f7332156"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-technical-architecture.svg": "21053d56de1116426e217112c4efeda95d3ea7842f8edf10f0ac749d12e63557"
+        "docs/diagrams/essence-cards-technical-architecture.svg": "f345d19480bfdce593eec66d8d53a4d15082f23d6a1bd8fbe4a838dc3d2f5c58"
       }
     },
     "B-003": {
       "sources": {
-        "docs/technical-roadmap.md": "68ead58ff451faabd746ab36253520df5e53f0873307b9d341c77b077ac1393b",
-        "docs/obsidian-ui-probe.md": "b06f5bfd71513996e38a31d6607589efee3da69d4eabe1083340a3a8502fd12c",
+        "docs/technical-roadmap.md": "62a01edfd02a52b62895f7532202df10c313479c993e3986d1f40ca7f96bf400",
+        "docs/obsidian-ui-probe.md": "d4be5c6025f4617da8fcd58bfeb526eba5eddf704d39a95354de8c9cd7df2afd",
         "scripts/draw_architecture.py": "7bbfb8eecf48cc12116c225981a3595d8308f6bc24ce554351056c2b56effcf0",
-        "scripts/draw_technical_blueprints.py": "7c53c297d67056e3dbb971cafed7ab680cb454180bf17a25e6c4a4aa7767a728"
+        "scripts/draw_technical_blueprints.py": "e519e1691bf384d72aaa99e7701bbc921f1d250ed254cde0c804cfa6f7332156"
       },
       "artifacts": {
-        "docs/diagrams/essence-cards-development-roadmap.svg": "147ad473e565748be391a900fa8bbd874500a723151c384e49faea4164a8324a"
+        "docs/diagrams/essence-cards-development-roadmap.svg": "95ab5f4bf51ff0239abe8514ac0f306a95fcd1ef4bf77eb111e8848bb5e50514"
       }
     },
     "B-004": {

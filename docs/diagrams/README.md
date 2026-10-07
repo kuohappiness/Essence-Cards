@@ -1,6 +1,6 @@
 # Essence Cards｜架構圖總入口
 
-更新日期：2026-10-07。學習圖 v2.1、技術／路線圖 v1.1；功能 Mermaid 圖依目錄 v0.2 產生。
+更新日期：2026-10-07。學習圖 v2.1、技術／路線圖 v1.2；功能 Mermaid 圖依目錄 v0.2 產生。
 
 | B-ID | 藍圖 | 適合用來討論 | 主要依據 |
 |---|---|---|---|
@@ -59,7 +59,7 @@ python3 scripts/draw_architecture.py --output /tmp/essence-cards-diagram
 
 ## 技術架構與開發路線圖
 
-設計版 v1.1（2026-10-07）。第一版平台為 Obsidian 外掛，沿用既有 iCloud 為跨裝置驗證基線；資料、AI、Git 策略與開發順序均保留設計提案／待驗證狀態，正式功能尚未實作；可丟棄 UI 原型已建立，真實裝置結果待確認。
+設計版 v1.2（2026-10-07）。第一版平台為 Obsidian 外掛，沿用既有 iCloud 為跨裝置驗證基線；資料、AI、Git 策略與開發順序均保留設計提案／待驗證狀態，正式功能尚未實作；可丟棄 UI 原型已依使用者回報通過 Windows／iPhone 最小實機驗收。
 
 ![技術架構與 Git 設計](essence-cards-technical-architecture.svg)
 
