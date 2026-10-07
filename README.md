@@ -19,14 +19,14 @@
 
 - [最新專案共識](docs/consensus.md)：目前有效的結論，以及清楚標示的待決事項。
 - [學習循環與功能藍圖](docs/learning-blueprint.md)：已確認的討論架構、功能草案、整合設計、困難與分階段候選範圍。
-- [功能討論目錄](docs/function-discussions.md)：對照藍圖逐項釐清功能、資料關係與第一版候選範圍；目前從[來源資料匯入與管理](docs/functions/source-input.md)開始。
+- [功能討論目錄](docs/function-discussions.md)：v0.2 對照藍圖與研究，逐項釐清功能、關聯、人工流程及驗收；目前從[來源資料匯入與管理](docs/functions/source-input.md)開始，新增[學習疑問與待處理佇列](docs/functions/issue-queue.md)。
 - [知識學習架構藍圖](docs/diagrams/README.md)：依使用者手繪圖重繪，呈現共用概念筆記、學習紀錄與回饋循環。
 - [技術架構與開發路線圖](docs/technical-roadmap.md)：裝置、資料、AI、同步、Git 備份／回復設計與分階段驗證門檻。
 - [畫板藍圖索引](docs/blueprints.md)：三張當前藍圖的說明與狀態，生成至桌面畫板與手機閱讀版。
 - [目前任務](docs/tasks.md)：任務狀態、下一步及暫緩事項。
 - [點子收集箱](docs/ideas.md)：先記下原意，再逐項釐清；收錄不等於採用。
 - [參考軟體](docs/references/software.md)：類似產品的來源、功能研究與待查核事項。
-- [參考研究的設計優化提案](docs/references/design-opportunities.md)：統整架構細化、特色功能及第一版優先順序，全部維持提案狀態。
+- [參考研究的設計優化提案](docs/references/design-opportunities.md)：統整架構細化、特色功能及第一版候選；部分討論方向依 C-017 採用，其餘提案與第一版細節待確認。
 - [討論紀錄](docs/discussions/README.md)：按日期與主題保存想法、取捨及決策的演變。
 - [協作規則](AGENTS.md)：模型與任務分工，以及後續協作者維護共識與文件的方式。
 
