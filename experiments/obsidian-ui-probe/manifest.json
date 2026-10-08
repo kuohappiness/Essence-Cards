@@ -1,9 +1,0 @@
-{
-  "id": "essence-ui-probe",
-  "name": "Essence UI Probe",
-  "version": "0.0.1",
-  "minAppVersion": "1.7.2",
-  "description": "可丟棄的桌面與手機自訂介面、Vault 讀寫及附件相容性測試。",
-  "author": "Essence Cards",
-  "isDesktopOnly": false
-}
