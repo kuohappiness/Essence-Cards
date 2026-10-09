@@ -17,10 +17,9 @@
 
 ```mermaid
 flowchart LR
-  A["0 規劃<br/>架構釐清"]:::now --> B["1 v1<br/>最小複習閉環"]
+  A["0 規劃<br/>架構釐清"]:::now --> B["1 v1<br/>最小複習閉環 + AI 製卡"]
   B --> C["2 真實驗證<br/>一位學生 × 一次考試"]
-  C --> D["3 AI 製卡<br/>候選卡勾選"]
-  D --> E["4 Essence Capture<br/>來源 → 筆記"]
+  C --> E["3 Essence Capture<br/>來源 → 筆記"]
   E --> F["之後<br/>願景功能"]
   classDef now fill:#ffd54f,stroke:#f57f17,color:#000
 ```
@@ -28,10 +27,9 @@ flowchart LR
 | 階段 | 內容 | 完成條件 |
 |---|---|---|
 | 0 規劃 | 架構釐清七步（見下方） | product.md 與 architecture.md 沒有 💬 項目；v1 範圍確定 |
-| 1 v1 | 依[產品定義 §5](product.md#5-範圍-第-7-步)選定的最小閉環 | 能在 iPhone 完成一次段考範圍的每日複習 |
+| 1 v1 | 依[產品定義 §5](product.md#5-範圍-第-7-步)選定的最小閉環；AI 製卡也在 v1（[D-037](decisions.md#d-037-v1-已確認的範圍)） | 能在 iPhone 完成一次段考範圍的每日複習 |
 | 2 真實驗證 | 一位學生、一次考試 | 依[成功標準](product.md#2-成功標準-第-1-步)記錄結果，決定下一步優先順序 |
-| 3 AI 製卡 | AI 從筆記產生候選卡，學生勾選 | 待定 |
-| 4 Essence Capture | 另一個 repo | 待定 |
+| 3 Essence Capture | 另一個 repo；不提前（D-037） | 待定 |
 | 之後 | [backlog](backlog.md) 中的願景功能 | — |
 
 ## 目前任務：架構釐清七步
@@ -46,7 +44,7 @@ flowchart LR
 | 4 | 概念模型：v1 實際需要哪些實體 | [architecture §2](architecture.md#2-概念模型-第-4-步) | ✅ 2026-10-10 |
 | 5 | 模組邊界：Cards 與 Capture 的分工和約定 | [architecture §3](architecture.md#3-模組邊界-第-5-步) | ✅ 2026-10-10（v1 材料來源在第 6 步確認） |
 | 6 | 資料存放：教材目錄、學習目標 ID、複習紀錄格式 | [architecture §5](architecture.md#5-資料存放-第-6-步) | ✅ 2026-10-10（出題語法在寫程式前定稿） |
-| 7 | v1 範圍：要做、之後、不做 | [product §5](product.md#5-範圍-第-7-步) | ⏳ 下一個 |
+| 7 | v1 範圍：要做、之後、不做 | [product §5](product.md#5-範圍-第-7-步) | ⏳ 進行中（AI 製卡、審核方式、Capture、發音已確認：D-036、D-037） |
 
 並行任務：**製卡規則試用** ✅ 第一輪通過（2026-10-10）。規則已更新為 v0.1；之後每做一個新科目或新題型，再用同樣方式試用（[試用方式與紀錄](card-rules/README.md)）。
 
@@ -56,6 +54,7 @@ flowchart LR
 |---|---|
 | 出題語法定稿 | 使用者提供舊 Obsidian 閃卡外掛的完整 repo；助理檢視語法，以及其他可以參考的地方，再和使用者做最後確認（[D-030](decisions.md#d-030-出題語法規範)）。定稿後同步更新製卡規則的輸出格式 |
 | 實機驗證（舊 T-008） | 用真實的 Windows／iPhone 小型 vault，測試離線作答、兩端同時修改、附件與單一檔案救回；也要確認 `紀錄/` 裡的 `.jsonl` 檔能正常同步，iPhone 不會因為 iCloud 移除本機檔案而讀不到（[D-035](decisions.md#d-035-複習紀錄格式)） |
+| 發音朗讀實測 | 在 iPhone 與 Windows 的 Obsidian 試做英文朗讀。網頁內建的語音功能在 iOS 上不一定可靠，有些 Obsidian 外掛改用系統原生語音；先確認可行的做法（[D-037](decisions.md#d-037-v1-已確認的範圍)） |
 
 ## 已完成
 
