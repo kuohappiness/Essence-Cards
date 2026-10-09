@@ -16,7 +16,7 @@
 | ~~Learning Target 預先建立還是動態產生~~ → 已決：預先建立（D-025） | 2026-10-09 | 4 ✅ |
 | ~~Capture 只做到「PDF → 可讀筆記（甚至逐字稿）」加共同約定（例如 YAML），把 Knowledge Item 的拆解與維護交給 Cards 的 AI？~~ → 已決：拆解與出題屬於 Cards，交接約定只有四項（D-031） | 2026-10-09 使用者提議 | 5 ✅ |
 | ~~有了 AI，還需要使用者輸入所有教材 PDF 嗎？~~ → 已決：自然需要課本頁面，英文只需要單字表（D-021）；材料可以是筆記或 PDF（D-032） | 2026-10-09 使用者 | 5 ✅ |
-| ~~Capture 的開發順序：v1 的材料包含 Capture 產生的筆記（D-032），Capture 要不要提前？~~ → 已決：不提前，v1 期間 Capture 筆記就當一般筆記（D-037） | 2026-10-10 第 6 步 | 7 ✅ |
+| ~~Capture 的開發順序：v1 的材料包含 Capture 產生的筆記（D-032），Capture 要不要提前？~~ → 已決：不提前，v1 期間 Capture 筆記就當一般筆記（D-039） | 2026-10-10 第 6 步 | 7 ✅ |
 | API 直連在 v1 先支援哪些模型？模型要能插拔（D-007） | 2026-10-10 第 7 步 | 寫程式前 |
 | 單元編號排不出正確順序時怎麼辦？例如英文課本的 Starter、Review 1。教材目錄依編號自動排序（D-033），遇到時再考慮讓卡組加一個排序欄位 | 2026-10-10 第 6 步 | 遇到時 |
 
@@ -27,9 +27,26 @@
 3. 是否允許只在腦中回答就翻面？（助理傾向：一定要允許，對速度很重要）
 4. 什麼時候才要求真正輸入文字？例如 AI 評估、拼字、語言學習。
 5. 「理解」如何避免變成看到答案後的理解錯覺？
-6. 每日複習佇列怎麼組成：到期卡、新卡、答錯的卡、優先順序怎麼混合？新卡上限、積欠處理、時間預算？
+6. 每日複習佇列怎麼組成：到期卡、新卡、答錯的卡、優先順序怎麼混合？新卡上限、積欠處理、時間預算？學業和其他領域（D-038）的卡怎麼分配？
 7. 中斷與恢復：App 關掉、切到其他程式、隔幾小時回來，如何無感接續？
 8. 作答條件要不要區分：獨立答對、看提示後答對、看過答案？（舊 C-017）
+
+### 增強版待討論
+
+v1 之後的增強版要加強什麼，到時候再討論（D-039）。目前記下的題目：
+
+| 題目 | 目前資訊 | 來源 |
+|---|---|---|
+| 發音朗讀用什麼做法 | 使用者問到能否用 iOS 的 Apple Intelligence 語音。初步查詢（待查證）：沒找到 Apple Intelligence 開放給其他 App 的語音 API；iPhone 的朗讀走系統語音框架（AVSpeechSynthesizer），系統語音的授權限個人、非商業使用。各種 Obsidian 做法的參考見下方 | 2026-10-10 使用者 |
+| 記憶錨點的素材 | 圖片、字根字首、聯想、易混淆字等要加強什麼（D-019 預留擴充） | 2026-10-10 使用者 |
+
+發音朗讀的參考（2026-10-10 搜尋，到時候說明比較）：
+
+- [Obsidian TTS 外掛](https://community.obsidian.md/plugins/obsidian-tts)：用作業系統的原生語音，支援 iOS；Android 因 WebView 的問題不能用。
+- [Spoken Word](https://www.npmjs.com/package/spoken-word)：網頁內建語音（speechSynthesis）在 iOS、Android 的行動瀏覽器上不可靠。
+- [iOS TTS 外掛](https://community.obsidian.md/plugins/ios-tts)：讓 iOS 的 Accessibility Reader 讀整份文件；需要 Obsidian 1.13+、iOS 26+。
+- [Otoha TTS 外掛](https://community.obsidian.md/plugins/otoha-tts)：預設改用系統內建語音，可離線、可在手機使用。
+- Apple 開發者論壇：[iOS 26 的語音選擇問題](https://developer.apple.com/forums/thread/804648)、[系統語音的授權問題](https://developer.apple.com/forums/thread/812285)。
 
 ### 其他待決
 
