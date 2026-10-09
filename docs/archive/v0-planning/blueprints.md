@@ -1,3 +1,5 @@
+> **⚠️ 已取代，僅供追溯。** 本文件屬於 2026-10-10 重整前的 v0 規劃，不再是有效依據；目前內容見 `README.md` 與 `docs/` 下的 product、architecture、decisions、roadmap、backlog。重整前的原貌（文件內連結可正常運作）：<https://github.com/kuohappiness/Essence-Cards/tree/0df2ba4>
+
 # Essence Cards｜畫板藍圖索引
 
 更新日期：2026-10-07（Asia/Taipei）。只保存目前有效的藍圖與狀態；歷史討論另存。四張圖直接顯示於看板與自由畫板，點圖可查看完整設計；手機閱讀版直接呈現大圖。

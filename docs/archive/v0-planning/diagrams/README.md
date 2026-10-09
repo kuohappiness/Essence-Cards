@@ -1,3 +1,5 @@
+> **⚠️ 已取代，僅供追溯。** 本文件屬於 2026-10-10 重整前的 v0 規劃，不再是有效依據；目前內容見 `README.md` 與 `docs/` 下的 product、architecture、decisions、roadmap、backlog。重整前的原貌（文件內連結可正常運作）：<https://github.com/kuohappiness/Essence-Cards/tree/0df2ba4>
+
 # Essence Cards｜架構圖總入口
 
 更新日期：2026-10-07。學習圖 v2.3、技術／路線圖 v1.5；功能 Mermaid 圖依目錄 v0.5 產生。
