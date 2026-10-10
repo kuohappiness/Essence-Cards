@@ -18,7 +18,7 @@ Essence Cards 是一個 Obsidian 外掛：把筆記變成閃卡，讓學生用�
 | 現在進行到哪裡、下一步 | [開發現況與路線圖](docs/roadmap.md) |
 | 還沒決定的問題、點子 | [待決問題與點子](docs/backlog.md) |
 | AI 怎麼製卡、怎麼試用 | [製卡規則](docs/card-rules/README.md) |
-| 參考過哪些軟體 | [參考軟體研究](docs/research/software.md) |
+| 參考過哪些軟體 | [參考軟體研究](docs/research/software.md)、[舊外掛分析](docs/research/old-flashcard-plugin.md) |
 | 過去的討論與舊規劃 | [封存區](docs/archive/README.md) |
 | AI 協作者的工作規則 | [AGENTS.md](AGENTS.md) |
 
@@ -34,7 +34,7 @@ docs/
 ├─ roadmap.md        開發現況與路線圖
 ├─ backlog.md        待決問題與點子
 ├─ card-rules/       交給 AI 的製卡規則
-├─ research/         參考軟體研究
+├─ research/         參考軟體研究、舊外掛分析
 └─ archive/          歷史討論與 v0 規劃
 ```
 
