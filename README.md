@@ -44,6 +44,8 @@ docs/
 
 **Essence Capture**（預計名稱，尚未建立）：把 PDF、影片等來源整理成可讀筆記的獨立 Obsidian 外掛，之後另開 repo。
 
+**心智圖外掛**（未來，尚未建立）：使用者想開發的 Obsidian 心智圖外掛；Essence Cards 保留和它對接的彈性（[D-056](docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)）。
+
 ## 授權
 
 程式碼與文件的授權條款尚未選定。
