@@ -15,6 +15,7 @@
 
 | 日期 | 主題 | 內容 |
 |---|---|---|
+| 2026-10-10 | [資料存放、v1 範圍與舊外掛分析](2026-10-10-data-scope-and-old-plugin.md) | 架構釐清第 6、7 步完成；卡組位置與分類、AI 製卡快照；舊外掛分析與實測；清單縮排與題目指紋（D-031～D-046） |
 | 2026-10-10 | [北極星、獨立審查與文件重整](2026-10-10-north-star-and-restructure.md) | 北極星入文件；Claude 審查可行性與失焦原因；文件重整為五份核心文件，看板封存，架構釐清分七步（D-001、D-014、D-016） |
 | 2026-10-09 | [學習目標架構對話紀錄](2026-10-09-learning-target-architecture-dialogue.md) | 逐輪對話：產品原則、Atomic Review、三層模型（Knowledge Item／Learning Target／Prompt）、複習債務、漸進結構、螺旋式教材與 Capture 定位（D-010～D-013） |
 | 2026-10-07 | [Cards／Capture repo 範圍與選用 AI](2026-10-07-cards-capture-scope.md) | 確認 Cards 的非 AI 基礎與選用 AI；輸入另 repo、之後開發獨立 Obsidian 外掛，可選筆記 metadata 與修改保護（C-020／C-022／C-023） |
