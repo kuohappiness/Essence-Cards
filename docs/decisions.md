@@ -622,3 +622,29 @@
 - 舊外掛最後改用 inline style 繞過 Tailwind。
 
 純 CSS 的缺點（數值不一致、要取名、樣式累積、不能直接複製 Tailwind 寫的元件外觀）都有對策，主要靠設計規範與每個元件一個 CSS 檔。
+
+## D-053 開發流程
+
+✅ 2026-10-11｜[舊外掛分析 §7-14](research/old-flashcard-plugin.md#7-14-開發節奏)
+
+**決定**：
+
+- **沿用**：
+  - 試驗 → 以穩定版重寫 → 發版的三段式節奏；試驗程式可以丟掉，不直接併進正式程式。
+  - Retrospective：開始寫程式才建立。只記花了很久或重複發生的問題，寫下根因、走錯的方向，以及為此新增的測試。
+  - 測試分快慢兩層：解析與範本測試每次都跑；整學期模擬只在 CI 跑（§7-13）。
+  - 文件編碼檢查：所有文字檔都要是 UTF-8。
+  - 手機相容檢查清單：併進原型與實機驗證的清單。
+- **改良**：
+  - 推送前的完整測試改成 GitHub 自動跑（CI），本機 git hook 選用。
+  - 一鍵發版改成一鍵安裝：建置後直接複製到 vault 的外掛資料夾，iCloud 同步到 iPhone，並打 git tag 記版本。GitHub Release 等有其他使用者再做。
+  - 新增：用檢查規則守住程式分層。核心資料夾不能 import `obsidian`，外掛程式不能用 Node.js／Electron 的模組；違反就過不了 CI。
+- **不沿用**：Instruction、SKILL、dev_log 三份文件；只改文件也要升版；多套平行的路線圖編號。
+- **給 AI 的規範只寫真正需要的**：AGENTS.md 只寫現在的模型從程式和文件看不出來、又容易出錯的事；能用工具檢查的交給工具，不寫成文字規範。開始寫程式時在 AGENTS.md 加一小段：建置、測試、安裝指令，資料夾分層，Windows 中文編碼的注意事項。`.gitattributes`、`.editorconfig` 直接建立設定檔（統一 UTF-8 與換行）。
+
+**理由**：
+
+- 舊外掛的 Instruction 與 SKILL 是為舊模型寫的。其中的角色設定、通用的工程習慣（分層、先驗證再修改、漸進交付）、規定閱讀順序與每次更新 dev_log 的程序，現在的模型不需要；產品規格已有 product、architecture、decisions。
+- 仍然需要的是專案特有、看不出來的陷阱：Windows PowerShell 預設編碼會弄壞中文、手機不能用 Node.js、核心不能依賴 Obsidian、多個 AI session 共用同一個資料夾。前三項交給檢查工具，最後一項寫進 AGENTS.md。
+- git hook 只在裝了它的電腦生效；使用者同時用好幾個 Claude session 和 ChatGPT 協作，誰推上來的程式都要經過檢查。2026-10-11 就發生過一個 session 誤把另一個 session 的修改一起 commit。
+- v1 只有使用者一家在用；2026-10-07 的原型就是直接複製到 vault 安裝到 iPhone。
