@@ -604,3 +604,21 @@
 - Preact：助理原本的建議，因為體積小，同類外掛 Dataview、Kanban 也用它；改為 React 的退路。
 - Svelte 5：生態系較小，AI 容易混用新舊語法。
 - 不用框架：畫面一多，狀態不好管理。
+
+## D-052 樣式用純 CSS
+
+✅ 2026-10-11｜[舊外掛分析 §7-12](research/old-flashcard-plugin.md#7-12-介面技術)
+
+**決定**：
+
+- 樣式用純 CSS，不用 Tailwind。class 加自訂前綴（例如 `ec-`）；每個元件配一個同名的 CSS 檔，建置時合併成 `styles.css`。
+- 建立 Essence 自己的設計規範：色彩、字級、間距、圓角、陰影、動畫節奏都定成 CSS 變數，只跟著 Obsidian 切換亮色與暗色。卡片內容仍由 Obsidian 渲染，外觀由我們重新設計。
+- 不用 Shadow DOM，否則 Obsidian 渲染的卡片內容（圖片、公式）套不到它的樣式。
+
+**理由**：Tailwind 最後也是產生 CSS，質感的上限相同，差別在開發方式。在 Obsidian 裡，Tailwind 有三個直接衝突：
+
+- 卡片內容是 Obsidian 渲染的 HTML，沒有我們的 class，只能從外層選取來調整外觀，這是 CSS 的強項。
+- Tailwind 的重設樣式會清掉 Obsidian 的樣式；短的 class 名稱可能撞名，必須加前綴（舊外掛 Case 001、002 就出在這裡）；新版把樣式放在 CSS 圖層裡，會被 Obsidian 與佈景主題的樣式蓋過。
+- 舊外掛最後改用 inline style 繞過 Tailwind。
+
+純 CSS 的缺點（數值不一致、要取名、樣式累積、不能直接複製 Tailwind 寫的元件外觀）都有對策，主要靠設計規範與每個元件一個 CSS 檔。

@@ -121,7 +121,7 @@ flowchart TB
   - 手機外掛不能使用 Node.js／Electron。
   - Vault 不是資料庫，跨裝置同時寫入沒有保證。
   - Obsidian 官方指出 Windows 上的 iCloud 可能造成檔案重複或損壞。
-- 介面技術：複習相關的畫面用 React 加 Motion；卡組筆記的樣式、設定頁用 Obsidian 內建的方式（[D-051](decisions.md#d-051-複習畫面用-react)）。
+- 介面技術：複習相關的畫面用 React 加 Motion；卡組筆記的樣式、設定頁用 Obsidian 內建的方式（[D-051](decisions.md#d-051-複習畫面用-react)）。樣式用純 CSS，建立 Essence 自己的設計規範（[D-052](decisions.md#d-052-樣式用純-css)）。
 
 ## 5. 資料存放 ✅（第 6 步）
 
