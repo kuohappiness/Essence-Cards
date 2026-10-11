@@ -125,7 +125,7 @@
 - 非卡片的呈現方式：圖文排序、圖片標示、心智圖
 - 計算與應用題的練習形式：閃卡不適合（[架構 §7](architecture.md#7-製卡規則-)）
 - Essence Capture：來源 → 可讀筆記（另一個 repo）；不提前
-- AI 模型評測集（benchmark）
+- AI 模型評測集（benchmark）：v1 先用快照與錯題本算採用率、漏掉率，不做評測工具（[D-042](decisions.md#d-042-ai-製卡快照) 補充）
 - FSRS 參數個人化：用學習者自己的複習紀錄調整（[D-043](decisions.md#d-043-排程採用-fsrs)）
 - Concept 層、Learner Model、Target Selector、跨年級螺旋知識庫、AI 維護知識庫
 
