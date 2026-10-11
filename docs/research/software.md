@@ -253,12 +253,23 @@
 
 待實測：繁體中文生物題、引用精度、CSV 欄位／圖片、來源更新後舊題提示、手機離線。相關點子：I-002、I-004、I-005、I-006、I-009、I-012。
 
+2026-10-11 補充（第三方資料，未經官方確認）：
+- 第三方文章說 2026 年 7 月正式改名 Gemini Notebook；閃卡可以從介面直接下載 CSV，但各來源說法不一致。
+- 閃卡仍只有 Got it／Missed it，沒有跨日的間隔排程；常見做法是匯出 CSV 到 Anki，用 FSRS 排程。
+- 程式存取：2025 年 9 月推出的 Enterprise API 需要 Google Cloud 專案和企業／教育授權，個人用不到，也沒看到能匯出閃卡。另有非官方工具（[notebooklm-py](https://github.com/teng-lin/notebooklm-py)）用逆向工程操作，需要 Google 登入狀態，隨時可能失效。
+- 對本專案的影響見[待決問題的「AI 規劃」](../backlog.md#ai-規劃2026-10-11-起的專題討論)。
+
 官方來源：
 - [閃卡、測驗及引用解析公告](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-student-features/)
 - [手機閃卡／測驗](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-app-quizzes-flashcards/)
 - [現行進度及 CSV 說明](https://support.google.com/gemininotebook/answer/16958963?hl=en)
 - [來源範圍及報告匯出](https://support.google.com/notebooklm/answer/16206563)
 - [免費／付費方案](https://support.google.com/notebooklm/answer/16213268)
+
+2026-10-11 第三方來源：
+- [NotebookLM 閃卡轉成間隔重複](https://flashcards-open-source-app.com/blog/notebooklm-flashcards-to-spaced-repetition/)
+- [NotebookLM 匯出指南](https://www.sourclip.com/guides/notebooklm-export-guide)
+- [Gemini Notebook API 現況](https://web-clipper-for-notebooklm.com/blog/notebooklm-api)
 
 ## R-010 Recall｜官網初查完成
 
