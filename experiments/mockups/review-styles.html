@@ -1,39 +1,27 @@
 <title>Essence Cards 複習畫面樣式</title>
 <style>
-/* Layout: a slim bar for switching style, theme and language, then the review screen at phone size (full screen on phones, framed on desktop). */
+/* Layout: a slim bar for theme and button language, then the review screen at phone size (full screen on phones, framed on desktop). */
 :root {
   --mk-bg: #E6E7EA; --mk-fg: #1B1D21; --mk-muted: #636872; --mk-line: #CBCED5; --mk-sel: #1B1D21; --mk-sel-fg: #FFFFFF; --mk-frame: #1B1D21;
-  /* 記憶配色（D-060、D-062）：沒印象紅、差一點橙、記住了綠、太簡單藍 */
-  --ec-miss: #B3261E; --ec-near: #8F4C00; --ec-good: #17693A; --ec-easy: #2862B9;
-  /* A 紙卡 */
-  --a-page: #ECEBE7; --a-card: #FFFFFF; --a-ink: #24221E; --a-muted: #6B665F; --a-line: #E1DED7; --a-cta: #2A2824; --a-cta-fg: #FFFFFF; --a-hl: #FFEDAA;
-  /* B 安靜 */
-  --b-page: #FAFAF9; --b-ink: #1D1F23; --b-muted: #6A6F77; --b-line: #E5E5E2; --b-hl: #ECEFF4;
-  /* C 明亮 */
-  --c-page: #E2EBFF; --c-card: #FFFFFF; --c-ink: #17203A; --c-muted: #55607E; --c-edge: #17203A; --c-on: #17203A;
-  --c-miss: #FF7B73; --c-near: #FFBA4A; --c-good: #52D68A; --c-easy: #72ACFF; --c-hl: #FFE27A; --c-blank: #E2EBFF;
-  /* 細胞圖 */
+  /* 記憶配色（D-060、D-062）：沒印象紅、差一點橙、記住了綠、太簡單藍；新卡灰（D-069） */
+  --ec-miss: #B3261E; --ec-near: #8F4C00; --ec-good: #17693A; --ec-easy: #2862B9; --ec-new: #575C64;
+  /* 安靜樣式（D-070）：沒有卡片外框，只靠字和留白；顏色只用在自評的圓點和要想起來的重點 */
+  --page: #FAFAF9; --ink: #1D1F23; --muted: #6A6F77; --line: #E5E5E2; --press: #ECEFF4; --mark: #FFE36E;
   --svg-wall: #3D8B57; --svg-cyto: #EAF5EA; --svg-vac: #CFE4F6; --svg-nuc: #B49AD6; --svg-chl: #55B066;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
-    --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF;
-    --a-page: #161514; --a-card: #242320; --a-ink: #EDEAE4; --a-muted: #A29D95; --a-line: #3A3833; --a-cta: #EDEAE4; --a-cta-fg: #1A1917; --a-hl: #574813;
-    --b-page: #121314; --b-ink: #E6E7E9; --b-muted: #959AA2; --b-line: #2A2C30; --b-hl: #263043;
-    --c-page: #121A2C; --c-card: #1E2841; --c-ink: #EEF2FF; --c-muted: #A3AECB; --c-edge: #03060D; --c-on: #0F1629;
-    --c-miss: #F2665E; --c-near: #F2A93B; --c-good: #3DC474; --c-easy: #5B98F2; --c-hl: #5C4C10; --c-blank: #2C3858;
+    --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
+    --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --mark: #7A6616;
     --svg-wall: #63B57E; --svg-cyto: #1B271E; --svg-vac: #223749; --svg-nuc: #6A549A; --svg-chl: #4A9E5A;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
-  --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF;
-  --a-page: #161514; --a-card: #242320; --a-ink: #EDEAE4; --a-muted: #A29D95; --a-line: #3A3833; --a-cta: #EDEAE4; --a-cta-fg: #1A1917; --a-hl: #574813;
-  --b-page: #121314; --b-ink: #E6E7E9; --b-muted: #959AA2; --b-line: #2A2C30; --b-hl: #263043;
-  --c-page: #121A2C; --c-card: #1E2841; --c-ink: #EEF2FF; --c-muted: #A3AECB; --c-edge: #03060D; --c-on: #0F1629;
-  --c-miss: #F2665E; --c-near: #F2A93B; --c-good: #3DC474; --c-easy: #5B98F2; --c-hl: #5C4C10; --c-blank: #2C3858;
+  --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
+  --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --mark: #7A6616;
   --svg-wall: #63B57E; --svg-cyto: #1B271E; --svg-vac: #223749; --svg-nuc: #6A549A; --svg-chl: #4A9E5A;
   color-scheme: dark;
 }
@@ -43,7 +31,7 @@
 html, body { height: 100%; }
 body { margin: 0; background: var(--mk-bg); color: var(--mk-fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
 button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: -2px; }
 
 /* 樣式稿的控制列 */
 .mk { height: 100%; display: flex; flex-direction: column; }
@@ -51,131 +39,91 @@ button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: 2px; }
 .mk-title { display: none; margin-right: 6px; font-weight: 600; }
 .mk-hint { display: none; width: 100%; margin: 0; text-align: center; font-size: 13px; color: var(--mk-muted); }
 .seg { display: inline-flex; padding: 2px; border: 1px solid var(--mk-line); border-radius: 999px; }
-.seg button { border: 0; background: none; color: var(--mk-muted); font-size: 13px; line-height: 1; padding: 7px 11px; border-radius: 999px; }
+.seg button { border: 0; background: none; color: var(--mk-muted); font-size: 13px; line-height: 1; padding: 7px 12px; border-radius: 999px; }
 .seg button[aria-pressed="true"] { background: var(--mk-sel); color: var(--mk-sel-fg); }
 .mk-stage { flex: 1; min-height: 0; display: flex; justify-content: center; }
 
-/* 複習畫面：共用結構 */
-.ec-app {
-  --page: var(--a-page); --ink: var(--a-ink); --muted: var(--a-muted); --line: var(--a-line); --hl: var(--a-hl); --blank: var(--a-line);
-  width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--page); color: var(--ink);
-}
-.ec-app[data-style="b"] { --page: var(--b-page); --ink: var(--b-ink); --muted: var(--b-muted); --line: var(--b-line); --hl: var(--b-hl); --blank: var(--b-line); }
-.ec-app[data-style="c"] { --page: var(--c-page); --ink: var(--c-ink); --muted: var(--c-muted); --line: var(--c-edge); --hl: var(--c-hl); --blank: var(--c-blank); }
+/* 複習畫面 */
+.ec-app { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--page); color: var(--ink); }
 @media (min-width: 640px) {
   .mk-bar { padding-block: 18px 14px; }
-  .mk-title, .mk-hint { display: block; }
   .mk-title { display: inline; }
+  .mk-hint { display: block; }
   .mk-stage { padding: 0 16px 28px; }
   .ec-app { width: 390px; max-width: 100%; height: min(820px, 100%); border: 10px solid var(--mk-frame); border-radius: 46px; }
 }
-
 .ec-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; padding: 6px 10px 0; }
 .ec-x { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px; background: none; color: var(--muted); }
 .ec-count { text-align: center; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.ec-prog { height: 4px; margin: 4px 20px 0; border-radius: 99px; background: var(--blank); overflow: hidden; }
-.ec-prog i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--ink); transition: width .35s ease; }
+.ec-prog { height: 2px; margin-top: 6px; background: var(--line); }
+.ec-prog i { display: block; width: 0; height: 100%; background: var(--muted); transition: width .35s ease; }
 
-.ec-stage { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 16px 12px; }
-.ec-card:not(.is-revealed) { cursor: pointer; }
-.ec-crumb { font-size: 13px; color: var(--muted); }
-.ec-q { margin-top: 14px; font-size: 22px; line-height: 1.5; font-weight: 600; text-wrap: pretty; }
+.ec-stage { flex: 1; min-height: 0; overflow-y: auto; padding: 30px 26px 16px; }
+.ec-card:not(.is-revealed):not(.is-spell) { cursor: pointer; }
+.ec-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.ec-new { padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--ec-new) 16%, var(--page)); color: var(--ec-new); font-size: 12px; font-weight: 600; }
+.ec-q { margin-top: 18px; font-size: 24px; line-height: 1.5; font-weight: 500; text-wrap: pretty; }
 .ec-q p { margin: 0; }
 .ec-fig { display: block; width: 100%; max-width: 280px; height: auto; margin: 2px 0 14px; color: var(--ink); }
 .ec-fig .wall { fill: var(--svg-cyto); stroke: var(--svg-wall); }
 .ec-fig .vac { fill: var(--svg-vac); }
 .ec-fig .nuc { fill: var(--svg-nuc); }
 .ec-fig .chl { fill: var(--svg-chl); }
-.ec-word { display: block; font-size: 32px; font-weight: 650; }
+.ec-word { display: block; font-size: 32px; font-weight: 600; }
 .ec-pron { display: block; margin-top: 4px; font-size: 15px; font-weight: 400; color: var(--muted); }
-.ec-ans { display: none; }
+.ec-blank { display: inline-block; width: 4.5em; height: 1.2em; vertical-align: -.18em; border-radius: 6px; background: var(--line); }
+/* 要想起來的東西都用螢光筆標：粗體重點（D-068）、填空的答案、拼錯的字母 */
+.ec-a strong, .ec-fill, .ec-mk { padding: 0 2px; background: linear-gradient(transparent 58%, var(--mark) 58%); color: inherit; font-weight: 700; }
+.ec-mk { padding: 0 1px; background: linear-gradient(transparent 30%, var(--mark) 30%); }
+.ec-ans { display: none; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
 .is-revealed .ec-ans { display: block; }
-.ec-a { font-size: 19px; line-height: 1.7; }
+.ec-ans.bare { margin-top: 4px; padding-top: 0; border-top: 0; }
+.ec-a { font-size: 19px; line-height: 1.75; }
 .ec-a p { margin: 0 0 8px; }
 .ec-ex { font-size: 16px; line-height: 1.6; color: var(--muted); }
-.ec-blank { display: inline-block; width: 4.5em; height: 1.2em; vertical-align: -.18em; border-radius: 6px; background: var(--blank); }
-.ec-fill { padding: 1px 6px; border-radius: 6px; background: var(--hl); color: inherit; }
 .ec-src { margin-top: 12px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
-.ec-app .ec-card .ec-ans.bare { margin-top: 4px; padding-top: 0; border-top: 0; }
 
-.ec-actions { padding: 10px 16px 16px; }
-.ec-show { width: 100%; height: 60px; border: 0; font-size: 17px; font-weight: 600; }
-.ec-rates { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.ec-rate { height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 2px; border: 0; }
-.ec-rate b { font-size: 16px; font-weight: 600; white-space: nowrap; }
-.ec-app[lang="en"] .ec-rate b { font-size: 15px; }
-.ec-rate small { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-[data-k="miss"] { --k: var(--ec-miss); --kc: var(--c-miss); }
-[data-k="near"] { --k: var(--ec-near); --kc: var(--c-near); }
-[data-k="good"] { --k: var(--ec-good); --kc: var(--c-good); }
-[data-k="easy"] { --k: var(--ec-easy); --kc: var(--c-easy); }
+/* 中→英拼字（D-066） */
+.ec-input { display: block; width: 100%; margin-top: 24px; padding: 8px 2px; border: 0; border-bottom: 2px solid var(--line); border-radius: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: 24px; font-weight: 500; }
+.ec-input:focus { outline: none; border-bottom-color: var(--ink); }
+.ec-input::placeholder { color: var(--muted); font-size: 17px; font-weight: 400; }
+.ec-spell { display: grid; gap: 8px; }
+.ec-spell .row { display: flex; align-items: center; gap: 12px; }
+.ec-spell .lab { flex: none; min-width: 4.5em; font-size: 13px; color: var(--muted); }
+.ec-spell .w { min-width: 0; font-size: 24px; font-weight: 500; letter-spacing: .03em; overflow-wrap: anywhere; }
+.ec-spell s { color: var(--muted); text-decoration-thickness: 2px; }
+.ec-ok { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--press); color: var(--ink); }
 
-.ec-done { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 40px 8px 0; text-align: center; }
-.ec-done-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
-.ec-done h2 { margin: 12px 0 0; font-size: 22px; }
+.ec-actions { border-top: 1px solid var(--line); }
+.ec-show { width: 100%; height: 64px; border: 0; background: none; color: var(--ink); font-size: 17px; font-weight: 500; }
+.ec-rates { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.ec-rate { height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 4px; border: 0; background: none; color: var(--ink); font-size: 16px; font-weight: 600; white-space: nowrap; }
+.ec-app[lang="en"] .ec-rate { font-size: 15px; gap: 6px; }
+.ec-rate + .ec-rate { border-left: 1px solid var(--line); }
+.ec-rate::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+.ec-rate:active, .ec-show:active { background: var(--press); }
+[data-k="miss"] { --k: var(--ec-miss); }
+[data-k="near"] { --k: var(--ec-near); }
+[data-k="good"] { --k: var(--ec-good); }
+[data-k="easy"] { --k: var(--ec-easy); }
+
+.ec-done { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 56px 8px 0; text-align: center; }
+.ec-done-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--press); color: var(--ink); }
+.ec-done h2 { margin: 14px 0 0; font-size: 22px; font-weight: 600; }
 .ec-done-sub { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
-.ec-tally { list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 300px; }
-.ec-tally li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--k) 13%, transparent); font-size: 15px; }
-.ec-tally i { width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
-.ec-tally b { margin-left: auto; font-variant-numeric: tabular-nums; }
 
-/* A 紙卡：桌面上的一張卡，柔和的立體感 */
-.ec-app[data-style="a"] .ec-card { padding: 20px 20px 22px; border-radius: 20px; background: var(--a-card); box-shadow: 0 1px 2px rgb(0 0 0 / .05), 0 12px 32px -8px rgb(0 0 0 / .14); }
-.ec-app[data-style="a"] .ec-ans { margin-top: 18px; padding-top: 16px; border-top: 1.5px dashed var(--line); }
-.ec-app[data-style="a"] .ec-show { border-radius: 16px; background: var(--a-cta); color: var(--a-cta-fg); }
-.ec-app[data-style="a"] .ec-rate { border-radius: 14px; background: color-mix(in srgb, var(--k) 14%, var(--a-card)); color: var(--k); }
-.ec-app[data-style="a"] .ec-rate:active { background: color-mix(in srgb, var(--k) 26%, var(--a-card)); }
-
-/* B 安靜：沒有卡片外框，只靠字和留白；顏色只留給自評 */
-.ec-app[data-style="b"] .ec-prog { height: 2px; margin: 6px 0 0; border-radius: 0; }
-.ec-app[data-style="b"] .ec-prog i { background: var(--muted); }
-.ec-app[data-style="b"] .ec-stage { padding: 30px 26px 16px; }
-.ec-app[data-style="b"] .ec-q { margin-top: 18px; font-size: 24px; font-weight: 500; }
-.ec-app[data-style="b"] .ec-ans { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
-.ec-app[data-style="b"] .ec-actions { padding: 0; border-top: 1px solid var(--line); }
-.ec-app[data-style="b"] .ec-show { height: 68px; background: none; color: var(--ink); font-weight: 500; }
-.ec-app[data-style="b"] .ec-rates { gap: 0; }
-.ec-app[data-style="b"] .ec-rate { height: 72px; background: none; color: var(--ink); }
-.ec-app[data-style="b"] .ec-rate + .ec-rate { border-left: 1px solid var(--line); }
-.ec-app[data-style="b"] .ec-rate b::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--k); vertical-align: .12em; }
-.ec-app[data-style="b"] .ec-rate small { color: var(--muted); opacity: 1; }
-.ec-app[data-style="b"] .ec-rate:active, .ec-app[data-style="b"] .ec-show:active { background: var(--hl); }
-
-/* C 明亮：粗框、實色按鈕、按下會陷進去；翻面是真的翻卡 */
-.ec-app[data-style="c"] .ec-count { font-weight: 700; color: var(--ink); }
-.ec-app[data-style="c"] .ec-prog { height: 12px; margin: 6px 20px 0; border: 2px solid var(--c-edge); background: var(--c-card); }
-.ec-app[data-style="c"] .ec-prog i { border-radius: 0; background: var(--c-ink); }
-.ec-app[data-style="c"] .ec-stage { padding: 18px 20px 12px 18px; perspective: 1200px; }
-.ec-app[data-style="c"] .ec-card { padding: 20px 20px 24px; border: 2.5px solid var(--c-edge); border-radius: 26px; background: var(--c-card); box-shadow: 5px 5px 0 var(--c-edge); text-align: center; }
-.ec-app[data-style="c"] .ec-crumb { display: inline-block; padding: 3px 10px; border-radius: 99px; background: var(--c-page); color: var(--c-muted); font-weight: 600; }
-.ec-app[data-style="c"] .ec-q { font-size: 24px; font-weight: 700; }
-.ec-app[data-style="c"] .ec-fig { margin-inline: auto; }
-.ec-app[data-style="c"] .ec-ans { margin-top: 18px; padding-top: 16px; border-top: 2.5px dashed var(--c-blank); }
-.ec-app[data-style="c"] .ec-actions { padding: 10px 22px 20px 18px; }
-.ec-app[data-style="c"] .ec-show, .ec-app[data-style="c"] .ec-rate { border: 2.5px solid var(--c-edge); box-shadow: 4px 4px 0 var(--c-edge); color: var(--c-on); transition: transform .08s, box-shadow .08s; }
-.ec-app[data-style="c"] .ec-show { border-radius: 18px; background: var(--c-card); color: var(--c-ink); font-size: 18px; font-weight: 800; }
-.ec-app[data-style="c"] .ec-rates { gap: 9px; }
-.ec-app[data-style="c"] .ec-rate { border-radius: 16px; background: var(--kc); }
-.ec-app[data-style="c"] .ec-rate b { font-weight: 800; }
-.ec-app[data-style="c"] .ec-rate small { font-weight: 600; }
-.ec-app[data-style="c"] .ec-show:active, .ec-app[data-style="c"] .ec-rate:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--c-edge); }
-.ec-app[data-style="c"] .ec-done-mark { border: 2.5px solid var(--c-edge); background: var(--c-card); color: var(--c-ink); box-shadow: 4px 4px 0 var(--c-edge); }
-.ec-app[data-style="c"] .ec-tally li { border: 2px solid var(--c-edge); background: var(--kc); color: var(--c-on); font-weight: 700; }
-.ec-app[data-style="c"] .ec-tally i { background: var(--c-on); }
-
-@media (prefers-reduced-motion: reduce) { .ec-prog i, .ec-app[data-style="c"] .ec-rate, .ec-app[data-style="c"] .ec-show { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ec-prog i { transition: none; } }
 </style>
 
 <div class="mk">
   <header class="mk-bar">
     <span class="mk-title">複習畫面樣式稿</span>
-    <div class="seg" role="group" aria-label="樣式" id="seg-style"><button type="button" data-v="a">紙卡</button><button type="button" data-v="b">安靜</button><button type="button" data-v="c">明亮</button></div>
-    <div class="seg" role="group" aria-label="深淺色" id="seg-theme"><button type="button" data-v="light" aria-label="淺色">淺</button><button type="button" data-v="dark" aria-label="深色">深</button></div>
-    <div class="seg" role="group" aria-label="按鈕文字" id="seg-lang"><button type="button" data-v="zh">中</button><button type="button" data-v="en">EN</button></div>
-    <p class="mk-hint">點卡片或「顯示答案」翻面。電腦可按空白鍵翻面、按 1～4 自評。</p>
+    <div class="seg" role="group" aria-label="深淺色" id="seg-theme"><button type="button" data-v="light">淺色</button><button type="button" data-v="dark">深色</button></div>
+    <div class="seg" role="group" aria-label="按鈕文字" id="seg-lang"><button type="button" data-v="zh">中文按鈕</button><button type="button" data-v="en">English</button></div>
+    <p class="mk-hint">點卡片或「顯示答案」翻面。電腦可按空白鍵翻面、按 1～4 自評；拼字卡按 Enter 確認。</p>
   </header>
   <main class="mk-stage">
-    <section class="ec-app" id="app" data-style="a" aria-label="複習畫面">
+    <section class="ec-app" id="app" aria-label="複習畫面">
       <div class="ec-top">
         <button type="button" class="ec-x" id="exit" aria-label="結束複習"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
         <span class="ec-count" id="count" aria-live="polite"></span>
@@ -192,63 +140,87 @@ button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: 2px; }
 (() => {
   // 範例卡片：自己編的內容，不是課本原文
   const CARDS = [
-    { crumb: '國二上自然 › 2-1 質量與重量', q: '質量和重量有什麼不同？',
-      a: '<p><strong>質量</strong>：物體所含物質的多少，不隨地點改變。</p><p><strong>重量</strong>：物體受到的重力大小，會隨地點改變。</p>', src: '自然 2-1 筆記' },
+    { crumb: '國二上自然 › 2-1 質量與重量', isNew: true, q: '質量和重量有什麼不同？',
+      a: '<p>質量是物質的多少，<strong>不隨地點改變</strong>；重量是物體受到的<strong>重力</strong>，<strong>隨地點改變</strong>。</p>', src: '自然 2-1 筆記' },
     { crumb: '國二上自然 › 2-2 密度', q: '密度的公式是 [[ρ = m ÷ V]]，常用單位是 [[g/cm³]]。', src: '自然 2-2 筆記' },
     { crumb: '國一上自然 › 2-2 細胞的構造', fig: true, q: '箭頭指的構造叫什麼？它負責什麼？',
-      a: '<p><strong>葉綠體</strong>：進行光合作用，把光能轉換成養分。</p>', src: '自然 2-2 筆記' },
+      a: '<p><strong>葉綠體</strong>：進行<strong>光合作用</strong>，把光能轉換成養分。</p>', src: '自然 2-2 筆記' },
     { crumb: '英文 › Unit 3 單字', word: 'abundant', pron: '/əˈbʌndənt/ adj.',
-      a: '<p>豐富的；大量的</p><p class="ec-ex">Fresh water is <strong>abundant</strong> here.<br>這裡的淡水很豐富。</p>', src: 'Unit 3 單字表' }
+      a: '<p>豐富的；大量的</p><p class="ec-ex">Fresh water is <strong>abundant</strong> here.<br>這裡的淡水很豐富。</p>', src: 'Unit 3 單字表' },
+    { crumb: '英文 › Unit 3 單字', isNew: true, spell: 'borrow', q: 'We {{}}（借）books from the library every week.', src: 'Unit 3 單字表' }
   ];
   const T = {
-    zh: { show: '顯示答案', left: n => `還剩 ${n} 張`, rates: ['沒印象', '差一點', '記住了', '太簡單'], iv: ['1 分鐘', '10 分鐘', '3 天', '8 天'],
-          src: '出處', done: '今天的複習完成了', took: (n, m) => `${n} 張・${m < 1 ? '不到 1 分鐘' : `約 ${m} 分鐘`}`, again: '再看一次', exit: '結束複習' },
-    en: { show: 'Show answer', left: n => `${n} left`, rates: ['No idea', 'Almost', 'Got it', 'Too easy'], iv: ['1 min', '10 min', '3 days', '8 days'],
-          src: 'Source', done: 'All done for today', took: (n, m) => `${n} cards · ${m < 1 ? 'under a minute' : `about ${m} min`}`, again: 'Start over', exit: 'End review' }
+    zh: { show: '顯示答案', check: '確認', type: '輸入英文單字', typed: '你打的', spelling: '拼法', fresh: '新', blank: '空格', src: '出處',
+          left: n => `還剩 ${n} 張`, rates: { miss: '沒印象', near: '差一點', good: '記住了', easy: '太簡單' },
+          done: '今天的複習完成了', took: (n, m) => `今天複習了 ${n} 張・${m < 1 ? '不到 1 分鐘' : `約 ${m} 分鐘`}`, again: '再看一次', exit: '結束複習' },
+    en: { show: 'Show answer', check: 'Check', type: 'Type the English word', typed: 'You typed', spelling: 'Spelling', fresh: 'New', blank: 'blank', src: 'Source',
+          left: n => `${n} left`, rates: { miss: 'No idea', near: 'Almost', good: 'Got it', easy: 'Too easy' },
+          done: 'All done for today', took: (n, m) => `Reviewed ${n} cards today · ${m < 1 ? 'under a minute' : `about ${m} min`}`, again: 'Start over', exit: 'End review' }
   };
   const KEYS = ['miss', 'near', 'good', 'easy'];
+  const CHECK = s => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const FIG = '<svg class="ec-fig" viewBox="0 0 240 150" role="img" aria-label="植物細胞示意圖，箭頭指向一個綠色的橢圓構造">'
     + '<rect class="wall" x="8" y="8" width="224" height="134" rx="28" stroke-width="5"/>'
     + '<rect class="vac" x="96" y="30" width="116" height="86" rx="32"/><circle class="nuc" cx="58" cy="58" r="19"/>'
     + '<ellipse class="chl" cx="44" cy="112" rx="15" ry="8.5"/><ellipse class="chl" cx="150" cy="128" rx="13" ry="7.5"/><ellipse class="chl" cx="214" cy="80" rx="8" ry="13"/>'
     + '<path d="M104 136L66 118M71.7 126.2L66 118L76 117.2" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const MOTION = {
-    a: { out: [{ transform: 'none', opacity: 1 }, { transform: 'translateX(-28px) rotate(-2deg)', opacity: 0 }], outMs: 170,
-         in: [{ transform: 'translateX(28px) rotate(1.5deg)', opacity: 0 }, { transform: 'none', opacity: 1 }], inMs: 240, ease: 'cubic-bezier(.2,.8,.2,1)' },
-    b: { out: [{ opacity: 1 }, { opacity: 0 }], outMs: 110, in: [{ opacity: 0 }, { opacity: 1 }], inMs: 160, ease: 'ease-out' },
-    c: { out: [{ transform: 'none', opacity: 1 }, { transform: 'translateY(-14px) scale(.96)', opacity: 0 }], outMs: 140,
-         in: [{ transform: 'scale(.94)', opacity: 0 }, { transform: 'scale(1.015)', opacity: 1, offset: .7 }, { transform: 'none', opacity: 1 }], inMs: 300, ease: 'ease-out' }
-  };
 
   const $ = id => document.getElementById(id);
   const app = $('app'), stage = $('stage'), actions = $('actions'), count = $('count'), prog = $('prog'), exit = $('exit'), root = document.documentElement;
   const RM = matchMedia('(prefers-reduced-motion: reduce)'), DARK = matchMedia('(prefers-color-scheme: dark)');
   const KEY = 'ec-review-mock';
-  let i = 0, revealed = false, ended = false, busy = false, lang = 'zh', tally, t0;
+  let i = 0, revealed = false, ended = false, busy = false, lang = 'zh', spell = null, t0;
 
   // 畫面在背景時動畫可能暫停；加上逾時，避免按鈕永遠按不動
   const anim = (el, frames, opts) => (!el || RM.matches || !el.animate) ? Promise.resolve()
     : Promise.race([el.animate(frames, opts).finished.catch(() => {}), new Promise(r => setTimeout(r, opts.duration + 80))]);
+  const esc = s => s.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+
+  // 逐字比對（D-066）：ta 標出打錯、多打的字母，tb 標出漏掉或打錯的正確字母
+  function diff(a, b) {
+    const d = Array.from({ length: a.length + 1 }, (_, x) => Array.from({ length: b.length + 1 }, (_, y) => x ? (y ? 0 : x) : y));
+    for (let x = 1; x <= a.length; x++) for (let y = 1; y <= b.length; y++)
+      d[x][y] = Math.min(d[x - 1][y] + 1, d[x][y - 1] + 1, d[x - 1][y - 1] + (a[x - 1] === b[y - 1] ? 0 : 1));
+    const ta = [], tb = [];
+    for (let x = a.length, y = b.length; x > 0 || y > 0;) {
+      if (x > 0 && y > 0 && d[x][y] === d[x - 1][y - 1] + (a[x - 1] === b[y - 1] ? 0 : 1)) { const bad = a[x - 1] !== b[y - 1]; ta.unshift([a[x - 1], bad]); tb.unshift([b[y - 1], bad]); x--; y--; }
+      else if (y > 0 && d[x][y] === d[x][y - 1] + 1) { tb.unshift([b[y - 1], true]); y--; }
+      else { ta.unshift([a[x - 1], true]); x--; }
+    }
+    return { ta, tb };
+  }
+  const allowed = () => spell ? (spell.ok ? ['good', 'easy'] : ['miss', 'near']) : KEYS;
 
   function cardHTML(c) {
-    const t = T[lang];
-    let q = c.word
-      ? `<span class="ec-word" lang="en">${c.word}</span><span class="ec-pron">${c.pron}</span>`
-      : c.q.replace(/\[\[(.+?)\]\]/g, (_, x) => revealed ? `<mark class="ec-fill">${x}</mark>` : '<span class="ec-blank" role="img" aria-label="空格"></span>');
+    const t = T[lang], blank = `<span class="ec-blank" role="img" aria-label="${t.blank}"></span>`;
+    let q;
+    if (c.word) q = `<span class="ec-word" lang="en">${c.word}</span><span class="ec-pron">${c.pron}</span>`;
+    else if (c.spell) q = `<span lang="en">${c.q.replace('{{}}', revealed ? `<strong>${c.spell}</strong>` : blank)}</span>`;
+    else q = c.q.replace(/\[\[(.+?)\]\]/g, (_, x) => revealed ? `<mark class="ec-fill">${x}</mark>` : blank);
     if (c.fig) q = FIG + `<p>${q}</p>`;
-    return `<article class="ec-card${revealed ? ' is-revealed' : ''}"><div class="ec-crumb">${c.crumb}</div><div class="ec-q">${q}</div>`
-      + `<div class="ec-ans${c.a ? '' : ' bare'}">${c.a ? `<div class="ec-a">${c.a}</div>` : ''}<button type="button" class="ec-src">${t.src}：${c.src} ↗</button></div></article>`;
+    const input = c.spell && !revealed
+      ? `<input class="ec-input" id="spell-input" type="text" lang="en" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="${t.type}" aria-label="${t.type}">` : '';
+    const ans = c.spell ? (spell ? spellHTML(c) : '') : (c.a ? `<div class="ec-a">${c.a}</div>` : '');
+    return `<article class="ec-card${revealed ? ' is-revealed' : ''}${c.spell ? ' is-spell' : ''}">`
+      + `<div class="ec-meta">${c.isNew ? `<span class="ec-new">${t.fresh}</span>` : ''}<span class="ec-crumb">${c.crumb}</span></div>`
+      + `<div class="ec-q">${q}</div>${input}`
+      + `<div class="ec-ans${ans ? '' : ' bare'}">${ans}<button type="button" class="ec-src">${t.src}${lang === 'en' ? ': ' : '：'}${c.src} ↗</button></div></article>`;
   }
-  function ratesHTML() {
+  function spellHTML(c) {
     const t = T[lang];
-    return '<div class="ec-rates">' + KEYS.map((k, n) =>
-      `<button type="button" class="ec-rate" data-k="${k}" aria-label="${t.rates[n]}（${t.iv[n]}）"><b>${t.rates[n]}</b><small>${t.iv[n]}</small></button>`).join('') + '</div>';
+    if (spell.ok) return `<div class="ec-spell"><div class="row"><span class="ec-ok">${CHECK(20)}</span><span class="w" lang="en">${c.spell}</span></div></div>`;
+    const typed = spell.ta.map(([ch, bad]) => bad ? `<s>${esc(ch)}</s>` : esc(ch)).join('') || '—';
+    const right = spell.tb.map(([ch, bad]) => bad ? `<mark class="ec-mk">${ch}</mark>` : ch).join('');
+    return `<div class="ec-spell"><div class="row"><span class="lab">${t.typed}</span><span class="w" lang="en">${typed}</span></div>`
+      + `<div class="row"><span class="lab">${t.spelling}</span><span class="w" lang="en">${right}</span></div></div>`;
   }
   function doneHTML() {
     const t = T[lang], m = Math.floor((Date.now() - t0) / 60000);
-    return '<div class="ec-done"><div class="ec-done-mark"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'
-      + `<h2>${t.done}</h2><p class="ec-done-sub">${t.took(i, m)}</p><ul class="ec-tally">`
-      + KEYS.map((k, n) => `<li data-k="${k}"><i></i><span>${t.rates[n]}</span><b>${tally[k]}</b></li>`).join('') + '</ul></div>';
+    return `<div class="ec-done"><div class="ec-done-mark">${CHECK(30)}</div><h2>${t.done}</h2><p class="ec-done-sub">${t.took(i, m)}</p></div>`;
+  }
+  function syncShow() {
+    const b = actions.querySelector('[data-act="show"]'), inp = $('spell-input');
+    if (b) b.textContent = inp && inp.value.trim() ? T[lang].check : T[lang].show;
   }
   function render() {
     const t = T[lang], n = CARDS.length, done = ended || i >= n;
@@ -262,81 +234,81 @@ button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: 2px; }
       actions.innerHTML = `<button type="button" class="ec-show" data-act="restart">${t.again}</button>`;
       return;
     }
+    const typedNow = $('spell-input')?.value || '';
     stage.innerHTML = cardHTML(CARDS[i]);
-    actions.innerHTML = revealed ? ratesHTML() : `<button type="button" class="ec-show" data-act="show">${t.show}</button>`;
+    const inp = $('spell-input');
+    if (inp) { inp.value = typedNow; inp.addEventListener('input', syncShow); }
+    actions.innerHTML = revealed
+      ? '<div class="ec-rates">' + allowed().map(k => `<button type="button" class="ec-rate" data-k="${k}">${t.rates[k]}</button>`).join('') + '</div>'
+      : `<button type="button" class="ec-show" data-act="show">${t.show}</button>`;
+    syncShow();
   }
 
   async function reveal() {
     if (busy || revealed || ended || i >= CARDS.length) return;
     busy = true;
-    const s = app.dataset.style;
-    if (s === 'c') {
-      await anim(stage.firstElementChild, [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }], { duration: 150, easing: 'ease-in', fill: 'forwards' });
-      revealed = true; render();
-      await anim(stage.firstElementChild, [{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }], { duration: 220, easing: 'ease-out' });
-    } else {
-      revealed = true; render();
-      const frames = s === 'a' ? [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }];
-      await Promise.all([...stage.querySelectorAll('.ec-ans, .ec-fill')].map(el => anim(el, frames, { duration: s === 'a' ? 240 : 160, easing: 'ease-out' })));
+    const c = CARDS[i];
+    if (c.spell) {
+      const typed = ($('spell-input')?.value || '').trim().toLowerCase(), word = c.spell.toLowerCase();
+      spell = { ok: typed === word, ...diff(typed, word) };
+      $('spell-input')?.blur();
     }
+    revealed = true; render();
+    await Promise.all([...stage.querySelectorAll('.ec-ans, .ec-fill')].map(el => anim(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' })));
     busy = false;
   }
   async function rate(k) {
-    if (busy || !revealed) return;
-    busy = true; tally[k]++;
-    const M = MOTION[app.dataset.style];
-    await anim(stage.firstElementChild, M.out, { duration: M.outMs, easing: 'ease-in', fill: 'forwards' });
-    i++; revealed = false; render();
-    await anim(stage.firstElementChild, M.in, { duration: M.inMs, easing: M.ease });
+    if (busy || !revealed || !allowed().includes(k)) return;
+    busy = true;
+    await anim(stage.firstElementChild, [{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
+    i++; revealed = false; spell = null; render();
+    await anim(stage.firstElementChild, [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
     busy = false;
   }
   function restart() {
-    i = 0; revealed = false; ended = false; busy = false; t0 = Date.now();
-    tally = { miss: 0, near: 0, good: 0, easy: 0 };
+    i = 0; revealed = false; ended = false; busy = false; spell = null; t0 = Date.now();
     render();
   }
 
   app.addEventListener('click', e => {
+    if (e.target.closest('input')) return;
     const b = e.target.closest('button, .ec-card');
     if (!b) return;
     if (b.dataset.k) rate(b.dataset.k);
     else if (b.dataset.act === 'show') reveal();
     else if (b.dataset.act === 'restart') restart();
-    else if (b === exit) { ended = true; revealed = false; render(); }
-    else if (b.classList.contains('ec-card')) reveal();
+    else if (b === exit) { ended = true; revealed = false; spell = null; render(); }
+    else if (b.classList.contains('ec-card') && !b.classList.contains('is-spell')) reveal();
   });
   addEventListener('keydown', e => {
-    if (e.target.closest && e.target.closest('.seg')) return;
+    const tg = e.target;
+    if (tg.closest && tg.closest('.seg')) return;
+    if (tg.id === 'spell-input') { if (e.key === 'Enter') { e.preventDefault(); reveal(); } return; }
     if ((e.key === ' ' || e.key === 'Enter') && !revealed && !ended && i < CARDS.length) { e.preventDefault(); reveal(); }
     else if (revealed && /^[1-4]$/.test(e.key)) rate(KEYS[e.key - 1]);
   });
 
   function sync() {
-    const on = { 'seg-style': app.dataset.style, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': lang };
+    const on = { 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': lang };
     for (const id in on) document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === on[id])));
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ style: app.dataset.style, theme: root.dataset.theme || '', lang })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ theme: root.dataset.theme || '', lang })); } catch (e) {}
   }
   document.querySelector('.mk-bar').addEventListener('click', e => {
     const b = e.target.closest('.seg button');
     if (!b) return;
-    const g = b.parentElement.id, v = b.dataset.v;
-    if (g === 'seg-style') app.dataset.style = v;
-    else if (g === 'seg-theme') root.dataset.theme = v;
-    else lang = v;
+    if (b.parentElement.id === 'seg-theme') root.dataset.theme = b.dataset.v;
+    else lang = b.dataset.v;
     sync(); render(); save();
   });
   if (DARK.addEventListener) DARK.addEventListener('change', sync);
 
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
-    if (['a', 'b', 'c'].includes(s.style)) app.dataset.style = s.style;
     if (s.theme === 'light' || s.theme === 'dark') root.dataset.theme = s.theme;
     if (s.lang === 'en') lang = 'en';
   } catch (e) {}
-  const h = location.hash.slice(1);
-  if (['a', 'b', 'c'].includes(h)) app.dataset.style = h;
   restart(); sync();
 })();
 </script>
