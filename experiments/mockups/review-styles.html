@@ -6,14 +6,14 @@
   /* 記憶配色（D-060、D-062）：沒印象紅、差一點橙、記住了綠、太簡單藍；新卡灰（D-069） */
   --ec-miss: #B3261E; --ec-near: #8F4C00; --ec-good: #17693A; --ec-easy: #2862B9; --ec-new: #575C64;
   /* 安靜樣式（D-070）：沒有卡片外框，只靠字和留白；顏色只用在自評的圓點和要想起來的重點 */
-  --page: #FAFAF9; --ink: #1D1F23; --muted: #6A6F77; --line: #E5E5E2; --press: #ECEFF4; --mark: #FFE36E;
+  --page: #FAFAF9; --ink: #1D1F23; --muted: #6A6F77; --line: #E5E5E2; --press: #ECEFF4; --key: #7A5BC7;
   --svg-wall: #3D8B57; --svg-cyto: #EAF5EA; --svg-vac: #CFE4F6; --svg-nuc: #B49AD6; --svg-chl: #55B066;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
     --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
-    --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --mark: #7A6616;
+    --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5;
     --svg-wall: #63B57E; --svg-cyto: #1B271E; --svg-vac: #223749; --svg-nuc: #6A549A; --svg-chl: #4A9E5A;
     color-scheme: dark;
   }
@@ -21,7 +21,7 @@
 :root[data-theme="dark"] {
   --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
   --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
-  --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --mark: #7A6616;
+  --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5;
   --svg-wall: #63B57E; --svg-cyto: #1B271E; --svg-vac: #223749; --svg-nuc: #6A549A; --svg-chl: #4A9E5A;
   color-scheme: dark;
 }
@@ -72,9 +72,9 @@ button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: -2px; }
 .ec-word { display: block; font-size: 32px; font-weight: 600; }
 .ec-pron { display: block; margin-top: 4px; font-size: 15px; font-weight: 400; color: var(--muted); }
 .ec-blank { display: inline-block; width: 4.5em; height: 1.2em; vertical-align: -.18em; border-radius: 6px; background: var(--line); }
-/* 要想起來的東西都用螢光筆標：粗體重點（D-068）、填空的答案、拼錯的字母 */
-.ec-a strong, .ec-fill, .ec-mk { padding: 0 2px; background: linear-gradient(transparent 58%, var(--mark) 58%); color: inherit; font-weight: 700; }
-.ec-mk { padding: 0 1px; background: linear-gradient(transparent 30%, var(--mark) 30%); }
+/* 要想起來的東西：粗體加一條細的紫色底線（D-068 的重點、填空的答案、拼錯的字母）；紫色不屬於記憶配色 */
+.ec-a strong, .ec-fill, .ec-mk { background: none; color: inherit; font-weight: 700; text-decoration-line: underline; text-decoration-color: var(--key); text-decoration-thickness: 2px; text-underline-offset: .32em; text-decoration-skip-ink: none; }
+.ec-mk { color: var(--key); }
 .ec-ans { display: none; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
 .is-revealed .ec-ans { display: block; }
 .ec-ans.bare { margin-top: 4px; padding-top: 0; border-top: 0; }
@@ -140,14 +140,14 @@ button:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: -2px; }
 (() => {
   // 範例卡片：自己編的內容，不是課本原文
   const CARDS = [
-    { crumb: '國二上自然 › 2-1 質量與重量', isNew: true, q: '質量和重量有什麼不同？',
+    { crumb: '自然 › 國二上 › 2-1 質量與重量', isNew: true, q: '質量和重量有什麼不同？',
       a: '<p>質量是物質的多少，<strong>不隨地點改變</strong>；重量是物體受到的<strong>重力</strong>，<strong>隨地點改變</strong>。</p>', src: '自然 2-1 筆記' },
-    { crumb: '國二上自然 › 2-2 密度', q: '密度的公式是 [[ρ = m ÷ V]]，常用單位是 [[g/cm³]]。', src: '自然 2-2 筆記' },
-    { crumb: '國一上自然 › 2-2 細胞的構造', fig: true, q: '箭頭指的構造叫什麼？它負責什麼？',
+    { crumb: '自然 › 國二上 › 2-2 密度', q: '密度的公式是 [[ρ = m ÷ V]]，常用單位是 [[g/cm³]]。', src: '自然 2-2 筆記' },
+    { crumb: '自然 › 國一上 › 2-2 細胞的構造', fig: true, q: '箭頭指的構造叫什麼？它負責什麼？',
       a: '<p><strong>葉綠體</strong>：進行<strong>光合作用</strong>，把光能轉換成養分。</p>', src: '自然 2-2 筆記' },
-    { crumb: '英文 › Unit 3 單字', word: 'abundant', pron: '/əˈbʌndənt/ adj.',
+    { crumb: '英文 › 國二上 › Unit 3 單字', word: 'abundant', pron: '/əˈbʌndənt/ adj.',
       a: '<p>豐富的；大量的</p><p class="ec-ex">Fresh water is <strong>abundant</strong> here.<br>這裡的淡水很豐富。</p>', src: 'Unit 3 單字表' },
-    { crumb: '英文 › Unit 3 單字', isNew: true, spell: 'borrow', q: 'We {{}}（借）books from the library every week.', src: 'Unit 3 單字表' }
+    { crumb: '英文 › 國二上 › Unit 3 單字', isNew: true, spell: 'borrow', q: 'We {{}}（借）books from the library every week.', src: 'Unit 3 單字表' }
   ];
   const T = {
     zh: { show: '顯示答案', check: '確認', type: '輸入英文單字', typed: '你打的', spelling: '拼法', fresh: '新', blank: '空格', src: '出處',
