@@ -139,6 +139,7 @@ flowchart TB
   - Vault 不是資料庫，跨裝置同時寫入沒有保證。
   - Obsidian 官方指出 Windows 上的 iCloud 可能造成檔案重複或損壞。
 - 介面技術：複習相關的畫面用 React 加 Motion；卡組筆記的樣式、設定頁用 Obsidian 內建的方式（[D-051](decisions.md#d-051-複習畫面用-react)）。樣式用純 CSS，建立 Essence 自己的設計規範（[D-052](decisions.md#d-052-樣式用純-css)）。
+- 畫面：複習、目錄（含範圍選擇與練習）、總覽。不做卡片庫，但核心的索引能跨卡組查詢，寫回卡組筆記的操作集中在核心，之後的卡片庫只是多一個畫面（[D-057](decisions.md#d-057-目錄畫面與卡片管理)）。
 
 ## 5. 資料存放 ✅（第 6 步）
 
