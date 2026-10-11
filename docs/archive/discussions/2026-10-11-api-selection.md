@@ -54,7 +54,21 @@
   - Google 的額度每個模型分開算：Cards 和 Capture 預設用不同模型，就不會互相用掉額度（Capture 開發時再定）。
 - 實測先只測免費的：Gemini 3.8 Flash、Gemini 3.5 Flash-Lite、OpenRouter 的一個免費模型；免費的品質不夠，再加付費的對照。
 
-## 5. 其他 session 的相關變動
+## 5. 使用者追問：Claude Haiku 5.5、DeepSeek、三種語音
+
+**使用者問**：Claude Haiku 5.5、Edge TTS、Gemini TTS、ElevenLabs、DeepSeek 查過了嗎？
+
+**助理說明**：Claude Haiku 5.5 查過；DeepSeek 只看過 OpenRouter 的標價；語音因為屬於增強版，原本沒查。語音也會影響「同一個帳號」的方向，所以一起補查（[調查 §4、§5](../../research/api-providers.md#5-語音增強版的發音朗讀)）：
+
+- Claude Haiku 5.5：付費裡最便宜的一級，Cards 一學期約 0.2 美元；沒有免費方案，不能聽音檔、看影片。
+- DeepSeek：能看圖的 Flash 一學期約 0.3～0.5 美元；沒有免費方案，不能聽音檔、看影片。
+- Gemini TTS：有免費方案，支援繁體中文，可以和製卡共用同一個 Google 帳號。
+- Edge TTS：免費、不用帳號，有台灣華語的聲音；但是非官方，隨時可能失效。
+- ElevenLabs：品質好，但免費每月只有約 10 分鐘，付費是訂閱制，要另開帳號。
+
+**助理看法（💡）**：方向不變。Haiku 5.5 是付費對照組的好人選；DeepSeek 不推薦直接申請，要用時透過 OpenRouter。語音在增強版討論時，先比較 Gemini TTS 與 Edge TTS 的台灣口音與英文發音。
+
+## 6. 其他 session 的相關變動
 
 - 「AI planning」session：使用者沒時間做 NotebookLM 對照實驗，先延後；挑模型改成完全依賴這邊的試作場實測（D-059 補充）。增強版「外接模型與語音模型的選擇」、教材轉成頁面圖片的確認，都交給這條討論。
 - 「細節確認」session：AI 批改學生打字的答案暫時取消（D-066），v1 複習時不會呼叫 API。

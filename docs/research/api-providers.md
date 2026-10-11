@@ -33,6 +33,7 @@
 | OpenRouter | 有，免費模型每天 50 次 | ✅ | ✅ 透過 Gemini 等模型，影片也能送 | 備案候選 |
 | Mistral | 有，要驗證手機號碼 | ✅ | ❌ 沒有影片 | 能用，但家長要為 Capture 多開一個帳號 |
 | Anthropic（Claude） | 沒有 | ✅ 付費 | ❌ 沒有音檔、影片 | 要用就透過 OpenRouter |
+| DeepSeek | 沒有，要先儲值 | ✅ 付費 | ❌ 沒有音檔、影片 | 要用就透過 OpenRouter |
 | Groq | 有 | ❌ 免費方案沒有能看圖的模型，每分鐘只能送 8 千 token | ❌ | 淘汰（條件 2、3） |
 | GitHub Models | — | — | — | 淘汰：2026-07-30 已停止服務 |
 
@@ -76,6 +77,16 @@ OpenAI 和中國大陸的平台沒有逐一查官方頁面；它們的模型大�
 
 Claude 的價格已對照 Anthropic 的官方價目（Haiku 5.5 的價格限 10 萬 token 以下的提示）。
 
+### Anthropic（Claude Haiku 5.5）
+
+- 沒有免費方案。Haiku 5.5 每百萬 token 輸入 0.10、輸出 0.50 美元（提示在 10 萬 token 以下），Cards 一學期約 0.2 美元，是付費選項裡最便宜的一級。
+- 能看圖、讀 PDF；不能聽音檔、看影片，Capture 不夠用。直接申請要另開帳號儲值；透過 OpenRouter 就能和其他模型共用一把金鑰。
+
+### DeepSeek
+
+- 官方 API 是 OpenAI 相容（`https://api.deepseek.com`）。能看圖的是 `deepseek-flash`（V4.1 Flash），每百萬 token 輸入 0.15～0.30、輸出 0.60～1.20 美元，平日尖峰時段是兩倍；Cards 一學期約 0.3～0.5 美元。`deepseek-v4-pro` 只收文字。
+- 官方頁面沒有免費方案，要先儲值。不能聽音檔、看影片，Capture 不夠用。
+
 ### Mistral
 
 - 免費的 Experiment 方案：要驗證手機號碼，不用綁卡；資料可能拿去訓練。額度不公布，第三方說約每秒 1 次。
@@ -86,7 +97,20 @@ Claude 的價格已對照 Anthropic 的官方價目（Haiku 5.5 的價格限 10 
 - Groq：官方額度表裡沒有能看圖的模型；每分鐘只能送 8 千 token，一次製卡就超過。
 - GitHub Models：2026-07-30 停止服務。
 
-## 5. 一學期花費的算法
+## 5. 語音（增強版的發音朗讀）
+
+發音朗讀在增強版（[backlog](../backlog.md#增強版待討論)）；做法是在電腦上產生音檔、存進 vault。這裡先記初步調查，選擇在增強版討論時再定。
+
+| 服務 | 費用 | 帳號 | 中文 | 風險 |
+|---|---|---|---|---|
+| Gemini TTS | 有免費方案（額度未公布）；付費的 3.8 Flash TTS 每百萬 token 輸入 0.50、音訊輸出 9 美元，粗估一課 40 個單字加例句約 0.05 美元 | 和製卡同一個 Google 帳號 | 支援繁體中文，台灣口音要實測 | 只能用 Gemini 自己的介面，不走 OpenAI 相容介面 |
+| Edge TTS | 免費 | 不用帳號、不用金鑰 | 有台灣華語的聲音 | 非官方：用的是 Edge 瀏覽器「朗讀」的服務，靠開源程式（edge-tts）接上；微軟隨時可能改掉或擋掉 |
+| ElevenLabs | 免費每月 1 萬點，約 10 分鐘；付費每月 6 美元起，是訂閱制 | 要另開帳號 | 官方價目頁沒寫，待查 | 免費方案不含商用授權；訂閱制不符合「不需每月訂閱」的偏好（D-004） |
+
+- Gemini TTS：3.8 Flash TTS 與 Flash-Lite TTS 有 30 種內建聲音，可以用文字指定語速，例如「慢慢念」；輸出 24 kHz WAV。
+- Edge TTS：完全不用設定，對家長摩擦最低；但公開的外掛依賴非官方服務，壞掉時無法保證修好。
+
+## 6. 一學期花費的算法
 
 一學期約 100 萬 token 送出、18 萬 token 收回（60 次 × 3 千），所以：
 
@@ -94,7 +118,7 @@ Claude 的價格已對照 Anthropic 的官方價目（Haiku 5.5 的價格限 10 
 
 會「思考」的模型，思考用的 token 算在輸出，實際花費會比表上多一些。Gemini 3 以後的模型不能關掉思考。
 
-## 6. 還要實測的
+## 7. 還要實測的
 
 這些在試作場實測（[D-059](../decisions.md#d-059-ai-的接法一種介面模型不包進外掛) 補充）：
 
@@ -109,4 +133,6 @@ Claude 的價格已對照 Anthropic 的官方價目（Haiku 5.5 的價格限 10 
 - OpenRouter：[額度](https://openrouter.ai/docs/api-reference/limits)、[常見問題](https://openrouter.ai/docs/faq)、[影片輸入](https://openrouter.ai/docs/guides/overview/multimodal/videos)、模型清單（`https://openrouter.ai/api/v1/models`，2026-10-11 取得）
 - Mistral：[Experiment 方案說明](https://help.mistral.ai/en/articles/450104-how-can-i-try-the-api-for-free-with-the-experiment-plan)
 - Groq：[額度](https://console.groq.com/docs/rate-limits)
+- DeepSeek：[價格](https://api-docs.deepseek.com/quick_start/pricing)
+- 語音：[Gemini TTS](https://ai.google.dev/gemini-api/docs/speech-generation)、[ElevenLabs 價格](https://elevenlabs.io/pricing)、[edge-tts](https://gittrend.io/repo/rany2/edge-tts)
 - GitHub Models：[停止服務公告](https://docs.github.com/en/github-models/use-github-models/prototyping-with-ai-models)
