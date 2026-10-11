@@ -11,6 +11,7 @@
 ## 開始工作前
 
 - 先讀 `README.md`、`docs/product.md`、`docs/architecture.md`、`docs/roadmap.md`；需要決定的理由時再看 `docs/decisions.md`。
+- 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 就好，不必先讀上面四份文件（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/` 已被取代，只在追溯歷史時閱讀，不當作有效依據。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
 
@@ -26,6 +27,7 @@
 | `docs/card-rules/` | 交給 AI 的製卡規則（未來外掛的內建預設） |
 | `docs/research/` | 參考軟體研究 |
 | `docs/archive/` | 歷史討論與 v0 規劃 |
+| `experiments/` | 試作場：樣式稿、試作外掛與測試結果 |
 
 - 一件事只寫在一個地方，其他地方用連結引用。
 - 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。只有使用者明確同意才標 ✅；沒有反對不等於同意。
@@ -52,5 +54,6 @@
 
 - 不提交 API 金鑰、登入憑證、私人學習資料或未獲授權的教材（例如出版社課本 PDF）。
 - 尚未完成的功能標示為規劃中，不宣稱已可使用；學習效果是待驗證的目標。
+- AI 能測的由 AI 測；要請使用者測之前，先說明 AI 為什麼測不了。需要 iPhone 實機的測試集中成一次（D-065）。
 - 規劃階段的文件修改直接 commit 到 `main` 並 push；開始寫程式後，較大的程式改動再開分支。commit 訊息要清楚，並保留其他協作者的修改；不使用 force push。
 - 可能有多個 AI session 同時在同一個資料夾工作：commit 前先看 `git status`，只 stage 自己改過的檔案，不用 `git add -A`；別人未提交的修改不要動。
