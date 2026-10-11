@@ -25,6 +25,7 @@
 | `docs/roadmap.md` | 開發現況、路線圖、目前任務 |
 | `docs/backlog.md` | 待決問題、待重新確認的舊共識、點子 |
 | `docs/card-rules/` | 交給 AI 的製卡規則（未來外掛的內建預設） |
+| `docs/ai-models.md` | 現在推薦的 AI 服務與模型；新模型推出時更新 |
 | `docs/research/` | 參考軟體研究 |
 | `docs/archive/` | 歷史討論與 v0 規劃 |
 | `experiments/` | 試作場：樣式稿、試作外掛與測試結果 |

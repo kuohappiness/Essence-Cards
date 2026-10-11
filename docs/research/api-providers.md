@@ -1,6 +1,6 @@
 # AI API 供應商調查
 
-查核：2026-10-11｜價格與額度常變，寫說明書前要重新查核（[D-048](../decisions.md#d-048-使用說明書) 補充）。討論經過見[討論紀錄](../archive/discussions/2026-10-11-api-selection.md)。
+查核：2026-10-11｜價格與額度常變，寫說明書前要重新查核（[D-048](../decisions.md#d-048-使用說明書) 補充）。討論經過見[討論紀錄](../archive/discussions/2026-10-11-api-selection.md)；現在推薦的方案見 [AI 模型推薦](../ai-models.md)。
 
 這份文件回答「哪些 API 符合兩個外掛的需求」。挑選原則見 [D-055](../decisions.md#d-055-ai-模型的選擇原則)、介面見 [D-059](../decisions.md#d-059-ai-的接法一種介面模型不包進外掛)。
 

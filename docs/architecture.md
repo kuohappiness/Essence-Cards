@@ -303,7 +303,7 @@ Essence Cards 的卡組與卡片都不用 Obsidian 標籤；Essence Capture 產�
 - ✅ API 金鑰只存在電腦本機：不寫進 vault 的檔案，所以不經 iCloud 同步到手機，也不會進 Git（[D-003](decisions.md#d-003-公開範圍)）。
 - ✅ 模型的選擇原則（[D-055](decisions.md#d-055-ai-模型的選擇原則)）：免費或開源優先，其次是 CP 值高、成本低的模型；不限定任何一家；可以接受免費方案把資料拿去訓練。
 - API 直連的做法（[D-059](decisions.md#d-059-ai-的接法一種介面模型不包進外掛)）：
-  - ✅ **只做一種介面**：OpenAI 相容的 Chat Completions，家長填網址、金鑰、模型名稱。Gemini、OpenRouter（含免費的開源模型）、DeepSeek、Groq、Mistral，以及電腦本機跑的 Ollama、LM Studio 都支援這種介面。v1 不為個別廠商寫轉接器，程式碼最少，也符合 D-007。
+  - ✅ **只做一種介面**：OpenAI 相容的 Chat Completions。家長從預設選單選一個、貼上金鑰，網址與模型由外掛填好，也可以自訂（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）；推薦的服務與模型見 [AI 模型推薦](ai-models.md)。Gemini、OpenRouter（含免費的開源模型）、DeepSeek、Groq、Mistral，以及電腦本機跑的 Ollama、LM Studio 都支援這種介面。v1 不為個別廠商寫轉接器，程式碼最少，也符合 D-007。
   - 💡 **教材轉成頁面圖片加文字送出**（助理提案，待確認）：外掛把選定的 PDF 頁面轉成圖片，有文字層就一起附上，不依賴各家不同的 PDF 上傳方式。自然需要能看圖的模型，英文單字表只需要文字。Obsidian 內建的 PDF 元件能不能讓外掛轉圖片，寫程式前確認。
   - **用量估計**：一次製卡約 1.5～2 萬 token 輸入、3 千 token 輸出；一學期約 60 次，約 100 萬 token 輸入。便宜的模型一學期不到 1 美元，免費額度也夠用（OpenRouter 免費模型每天約 50 次）。價格與額度常變，寫程式前查官方頁面。
   - ✅ **真正的成本是審核時間**：模型差一點，家長要多刪改，學生要多複習不好的卡。預設模型依卡片品質挑，比較 2～3 個候選模型（由 API 規劃在 `experiments/` 實測；NotebookLM 對照實驗暫緩）。開源模型要特別檢查是否用台灣用語。

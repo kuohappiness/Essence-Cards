@@ -61,6 +61,7 @@ flowchart LR
 | 實機驗證（舊 T-008） | 在[試作場](../experiments/README.md)做（T3），和複習畫面原型的 iPhone 測試集中成一次（[D-065](decisions.md#d-065-試作場)） |
 | 複習畫面樣式與入口畫面 | 複習畫面已選定安靜樣式，自評按鈕不顯示間隔（[D-070](decisions.md#d-070-複習畫面採用安靜樣式)，[試作場](../experiments/README.md) T1）。還剩：自評按鈕的英文版本（提案見 D-070，「差一點」不用 Hard）；外掛的入口畫面（開始複習、目錄、總覽怎麼安排），開始複習的按鈕一定要明顯（[D-057](decisions.md#d-057-目錄畫面與卡片管理)） |
 | 複習畫面原型 | 在[試作場](../experiments/README.md)做（T2，[D-065](decisions.md#d-065-試作場)） |
+| API 模型實測 | 在[試作場](../experiments/README.md)做（T4）：同一份教材比較 Gemini 3.8 Flash、Gemini 3.5 Flash-Lite 與 OpenRouter 的一個免費模型，確認 [AI 模型推薦](ai-models.md)（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）。使用者只要申請金鑰、提供一節自然課本與幾題錯題照片 |
 
 ## 下一次對話從這裡開始
 
@@ -72,10 +73,13 @@ flowchart LR
 
 另一條專題討論：**AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 
+另一條專題討論：**API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：下一步是試作場 T4 實測；增強版的語音模型之後再談。
+
 ## 已完成
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-12 | AI 模型推薦：兩個外掛推薦同一個帳號，首選 Google AI Studio、備案 OpenRouter；設定頁提供預設選單；新增 [AI 模型推薦](ai-models.md) 文件；產品原則第 5 條擴大到家長，前提是不影響學習品質（D-072、D-023 補充） |
 | 2026-10-12 | 複習畫面選定安靜樣式，自評按鈕不顯示間隔；樣式稿加上拼字卡、重點螢光筆與「新」標籤（D-070） |
 | 2026-10-11 | 設立試作場：repo 的 `experiments/` 與 iCloud 測試 vault「Essence Cards Test」；AI 能測的由 AI 測（D-065） |
 | 2026-10-11 | 自評四級：沒印象／差一點／記住了／太簡單；答錯的卡依時間再出；記憶配色改為灰、橙、綠、藍（D-062） |
