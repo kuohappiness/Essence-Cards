@@ -44,9 +44,9 @@ docs/
 
 ## 相關專案
 
-**Essence Capture**（預計名稱，尚未建立）：把 PDF、影片等來源整理成可讀筆記的獨立 Obsidian 外掛，之後另開 repo。
+**Essence Capture**（預計名稱，尚未建立）：可靠的知識入口：想保存任何資料進知識庫就用它，也能獨立產出閱讀筆記。v1 先做 PDF 與圖片的忠實轉錄，成為教材庫；另開 repo（[D-076](docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。
 
-**心智圖外掛**（未來，尚未建立）：使用者想開發的 Obsidian 心智圖外掛；Essence Cards 保留和它對接的彈性（[D-056](docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)）。
+**Essence Mindmap**（暫定名，未來，尚未建立）：把知識架構視覺化；Essence Cards 保留和它對接的彈性（[D-056](docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)）。
 
 ## 授權
 

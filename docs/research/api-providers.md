@@ -6,7 +6,7 @@
 
 ## 1. 兩個外掛的需求
 
-| | Essence Cards（v1） | Essence Capture（之後，另一個 repo） |
+| | Essence Cards（v1） | Essence Capture（v1 先做 PDF 與圖片，另一個 repo） |
 |---|---|---|
 | 工作 | 製卡（筆記或 PDF 頁面）、錯題分析（照片） | PDF、影片（含 YouTube）、音檔、網頁 → 筆記 |
 | 一次的量 | 約 2 萬 token 送出、3 千收回，大部分是製卡規則（[架構 §6](../architecture.md#6-ai-的位置-細節之後專門討論)） | 大很多，例如一部影片可能數十萬 token |

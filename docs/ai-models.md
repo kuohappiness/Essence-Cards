@@ -15,6 +15,7 @@
 | 用途 | 免費 | 付費 |
 |---|---|---|
 | 製卡與錯題分析（Cards，v1） | Google AI Studio：Gemini 3.8 Flash | 同一個 Google 帳號開通付費，模型不變 |
+| 轉錄（Capture，v1） | Google AI Studio：Gemini 3.8 Flash 或 3.5 Flash-Lite，T4 實測後決定 | 同一個 Google 帳號開通付費 |
 | 語音：發音朗讀（增強版） | Google AI Studio：Gemini 3.8 Flash TTS | 同一個 Google 帳號開通付費，模型不變 |
 | 備案（以上全部） | OpenRouter 的免費模型 | OpenRouter 預付儲值 |
 
@@ -57,10 +58,11 @@
 - **免費**：名稱以 `:free` 結尾的模型，每天 50 次。要用哪一個，等 T4 實測後選定；候選是 Gemma 4 31B。
 - **付費**：預付儲值，先儲值才扣，不會被多扣。一把金鑰可以用幾百個模型，包括 Gemini、Claude、GPT；累計儲值 10 美元以上，免費模型提高到每天 1000 次。
 
-### Essence Capture（之後）
+### Essence Capture（v1 先做 PDF 與圖片的轉錄）
 
 - 同一個 Google 帳號：圖片、PDF、音檔、影片、YouTube 網址都能處理。
-- 用哪個模型，開發 Capture 時再挑。預設用跟 Cards 不同的模型：Google 的免費額度每個模型分開算，兩個外掛就不會互相用掉。
+- v1 只做 PDF 與圖片的忠實轉錄（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。轉錄的準確度是整個教材庫的根本，用哪個模型由 T4 比較 Gemini 3.8 Flash 與 3.5 Flash-Lite 後決定；Flash-Lite 每天約 500 次，學期初整本轉錄比較不會用完額度。
+- 預設用跟 Cards 不同的模型：Google 的免費額度每個模型分開算，兩個外掛就不會互相用掉。
 
 ## 外掛的預設選單
 
