@@ -11,7 +11,7 @@
 - 金鑰：讀 `%USERPROFILE%\.essence-api-keys.env`（每行 `名稱=值`）；同名的環境變數優先。金鑰不能出現在程式碼、畫面輸出、紀錄檔或任何結果檔裡。
 - 結果只寫到 `--out` 指定的資料夾，那個資料夾在 repo 外面。不要把課本內容、頁面圖片或結果寫進 repo。
 - 在新分支 `t4-model-test` 上 commit。如果在本機的 repo 資料夾工作，請用 `git worktree add ../Essence-Cards-t4 t4-model-test` 開在旁邊的資料夾，**不要在原資料夾切換分支**：同一個資料夾裡還有其他 AI 正在 main 上改文件。
-- 不要執行會呼叫 API 的指令；只跑下面的 `selftest`。真正的測試由 Claude 執行。
+- 先跑 `selftest`，通過後再依「執行」一節跑完整測試。
 
 ## 指令
 
@@ -22,6 +22,7 @@ node t4.mjs transcribe --out <資料夾>
 node t4.mjs verify --out <資料夾>
 node t4.mjs cards --out <資料夾> [--transcript <轉錄稿檔名>]
 node t4.mjs all --pdf <檔案> --pages <起-迄> --out <資料夾>
+node t4.mjs report --out <資料夾>
 node t4.mjs selftest
 ```
 
@@ -54,7 +55,16 @@ node t4.mjs selftest
 
 system 是 repo 裡的 `docs/card-rules/common.md`、`docs/card-rules/science.md` 與 `prompts/cards.md` 依序接在一起。結果存成 `<out>/卡片/<模型>-<只用轉錄稿|轉錄稿加原頁>.md`。
 
-**all**：依序執行 render、transcribe、verify、cards。
+**all**：依序執行 render、transcribe、verify、cards、report。
+
+**report**：不連網，讀取 `<out>` 裡的結果，產生 `<out>/報告.md`。全部是機械統計，不做品質判斷：
+
+- 每份轉錄稿：字數；`[?]` 的數量；頁碼標記數與實際頁數是否相符；圖的數量、裁切成功與失敗的數量；`[!教師註記]` 的數量。
+- 每份檢查結果：問題數，分「把握：高」與「把握：低」。
+- 每份卡片：學習目標數、題目數、有寫出處的比例，以及不符合 `docs/card-rules/common.md`「輸出格式」的地方（列出行號）。
+- 用語：每份轉錄稿與卡片裡的簡體字數量（用一份常見簡體字清單比對），以及這些大陸用語出現的次數：視頻、信息、軟件、網絡、數據、默認、菜單、程序。
+- 從 `紀錄.json` 整理每個步驟、每個模型的 token 用量與秒數，並用 `models.json` 的 `pricesUsdPerMillion` 換算費用；另外換算成「一學期 60 次」的費用。
+- 報告最上面放一張總表，每個模型一列。
 
 **selftest**：不連網，檢查金鑰檔的解析（用暫存的假檔案）、`<figure>` 標記的解析與座標換算、用程式產生的小圖測試裁切。
 
@@ -66,6 +76,14 @@ system 是 repo 裡的 `docs/card-rules/common.md`、`docs/card-rules/science.md
 - 每次請求在 `<out>/紀錄.json` 追加一筆：時間、步驟、供應商、模型、HTTP 狀態、秒數、回覆裡的 token 用量（`usage`）。不記錄提示或回覆的內容，也不記錄圖片。
 - 在 `experiments/t4/README.md` 寫怎麼安裝與執行（幾行就好）；`node_modules/` 加進 `experiments/t4/.gitignore`。
 
+## 執行
+
+使用者會在給你的訊息裡提供 PDF 的位置、要測的小節與結果資料夾（這些個人路徑不寫進 repo）。
+
+1. 用 `find` 找出那一節在 PDF 的起訖頁，挑 2～4 頁。
+2. 執行 `all`。
+3. 有步驟因為額度用完被跳過時，等額度恢復後只重跑那一步，再重跑 `report`。
+
 ## 完成後
 
-回報分支名稱、最後一個 commit，以及 `selftest` 的輸出。
+回報：分支名稱、最後一個 commit、`selftest` 的輸出、實際測的頁數，以及 `報告.md` 的總表。另外附一份自我檢查，逐條對照上面「限制」一節，每條寫「符合」或「不符合（原因）」。

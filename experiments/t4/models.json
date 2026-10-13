@@ -12,15 +12,48 @@
     }
   },
   "transcribe": [
-    { "provider": "gemini", "model": "gemini-3.8-flash" },
-    { "provider": "gemini", "model": "gemini-3.5-flash-lite" }
+    {
+      "provider": "gemini",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite"
+    }
   ],
   "verify": [
-    { "provider": "gemini", "model": "gemini-3.8-flash" }
+    {
+      "provider": "gemini",
+      "model": "gemini-3.8-flash"
+    }
   ],
   "cards": [
-    { "provider": "gemini", "model": "gemini-3.8-flash" },
-    { "provider": "gemini", "model": "gemini-3.5-flash-lite" },
-    { "provider": "openrouter", "model": "google/gemma-4-31b-it:free" }
-  ]
+    {
+      "provider": "gemini",
+      "model": "gemini-3.8-flash"
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite"
+    },
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-31b-it:free"
+    }
+  ],
+  "pricesUsdPerMillion": {
+    "gemini-3.8-flash": {
+      "input": 0.75,
+      "output": 3.75
+    },
+    "gemini-3.5-flash-lite": {
+      "input": 0.3,
+      "output": 2.5
+    },
+    "google/gemma-4-31b-it:free": {
+      "input": 0,
+      "output": 0
+    }
+  },
+  "pricesNote": "付費方案的標價（2026-10-12 查核，見 docs/ai-models.md），用來換算一學期的費用；免費方案實際不收費。"
 }
