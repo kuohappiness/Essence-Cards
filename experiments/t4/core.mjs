@@ -86,7 +86,7 @@ export function parseFigures(text) {
   return [...text.matchAll(/<figure\b([^>]*)>([\s\S]*?)<\/figure>/g)].map(match => {
     const attrs = Object.fromEntries([...match[1].matchAll(/([a-z]+)\s*=\s*["']([^"']*)["']/g)].map(m => [m[1], m[2]]));
     const pageText = (attrs.page || '').trim(), pageMatch = pageText.match(/^(?:PDF\s*第\s*)?(\d+)(?:\s*頁)?$/);
-    return { raw: match[0], index: match.index, page: pageMatch ? Number(pageMatch[1]) : NaN,
+    return { raw: match[0], index: match.index, id: (attrs.id || '').trim(), page: pageMatch ? Number(pageMatch[1]) : NaN,
       // 用具名的 left／top／right／bottom，避免不同模型對 box 的座標順序理解不同（T4 第二輪 GPT 截錯）；舊的 box="ymin,xmin,ymax,xmax" 仍可讀。
       box: ['top', 'left', 'bottom', 'right'].every(k => k in attrs)
         ? ['top', 'left', 'bottom', 'right'].map(k => attrs[k].trim() === '' ? NaN : Number(attrs[k]))
@@ -125,7 +125,9 @@ export async function processFigures(text, model, pages, out, warn = console.war
       await cropImage(path.join(out, '頁面', page.image), path.join(out, slug(model), '圖', name), figure.box);
       const lineStart = text.lastIndexOf('\n', figure.index - 1) + 1;
       const quote = text.slice(lineStart, figure.index).match(/^(?:>\s*)+$/) ? '> ' : '';
-      result += `![[${name}]]\n${quote}*${figure.description.replace(/\s+/g, ' ')}* ^fig-p${figure.page}-${ordinal}`;
+      // ID 照 D-080：有課本圖號用 fig2-14，沒有就用頁碼加第幾張，例如 p43-fig1。
+      const id = /^(fig\d+-\d+[a-z]?|p\d+-fig\d+)$/i.test(figure.id) ? figure.id : `p${figure.page}-fig${ordinal}`;
+      result += `![[${name}]]\n${quote}*${figure.description.replace(/\s+/g, ' ')}* ^${id}`;
       stats.success++;
     } catch (error) {
       result += figure.raw;

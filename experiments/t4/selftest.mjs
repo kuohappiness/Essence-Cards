@@ -72,10 +72,10 @@ export async function selftest() {
       const invalid = '<figure page="99" box="0,0,500,500">錯頁</figure>';
       const warnings = [];
       const result = await processFigures('<figure page="3" box="0,0,500,500">說明</figure>\n' + invalid, 'test/model:free', [{ page: 3, image: 'p3.png' }], temp, text => warnings.push(text));
-      assert.ok(result.text.includes('![[test-model-free-p3-1.png]]\n*說明* ^fig-p3-1'));
+      assert.ok(result.text.includes('![[test-model-free-p3-1.png]]\n*說明* ^p3-fig1'));
       assert.ok(result.text.includes(invalid)); assert.deepEqual(result.stats, { total: 2, success: 1, failed: 1 }); assert.equal(warnings.length, 1);
       const quoted = await processFigures('> <figure page="3" box="0,0,500,500">說明</figure>', 'quoted', [{ page: 3, image: 'p3.png' }], temp, () => {});
-      assert.ok(quoted.text.includes('\n> *說明* ^fig-p3-1'));
+      assert.ok(quoted.text.includes('\n> *說明* ^p3-fig1'));
       const labeled = await processFigures('<figure page="PDF 第 3 頁" box="0,0,500,500">說明</figure>', 'labeled', [{ page: 3, image: 'p3.png' }], temp, () => {});
       assert.equal(labeled.stats.failed, 1); assert.ok(labeled.text.includes('<figure'));
     });
