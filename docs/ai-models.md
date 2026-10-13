@@ -14,12 +14,14 @@
 
 | 用途 | 首選 | 完全免費的入門 | 備案 |
 |---|---|---|---|
-| 轉錄（Capture）、製卡與錯題分析（Cards），v1 | OpenAI：GPT-5.6 Terra，開啟資料分享 | Google AI Studio：Gemini 3.8 Flash | OpenRouter 預付儲值 |
+| 轉錄（Capture），v1 | OpenAI：GPT-6 Sol，開啟資料分享 | Google AI Studio：Gemini 3.8 Flash | OpenRouter 預付儲值 |
+| 製卡與錯題分析（Cards），v1 | OpenAI：GPT-5.6 Terra，開啟資料分享（和轉錄同一把金鑰） | Google AI Studio：Gemini 3.8 Flash | OpenRouter 預付儲值 |
 | 語音：發音朗讀（增強版） | 到時候再測 | Google AI Studio：Gemini 3.8 Flash TTS | — |
 
-### 首選：OpenAI 的 GPT-5.6 Terra（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)）
+### 首選：OpenAI，轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)）
 
-- T4 第二輪最好：轉錄 27 秒、圖全部裁好、自動檢查只挑出 1 處；製卡約 20 秒，9 個學習目標涵蓋所有重點，圖直接附在答案下方。只用轉錄稿製卡就夠（D-076）。
+- **轉錄用 GPT-6 Sol**：T4 第三輪截的 9 張圖全部正確；Terra 的文字轉得好，但截圖大多截錯，所以不用來轉錄。Sol 屬第一組額度，每天約 12 次轉錄。
+- **製卡用 GPT-5.6 Terra**：製卡約 20 秒，9 個學習目標涵蓋所有重點，圖直接附在答案下方。只用轉錄稿製卡就夠（D-076）。
 - 開啟「資料分享」後，GPT-5.6 Terra 屬於第二組額度：每天 250 萬 token，約 100 次（Build 等級，使用者 2026-10-14 查官方說明）。
 - 代價：要先付款開通帳號，不是「完全免費、不用綁卡」；送出的內容會拿去訓練（D-055 可以接受），錯題照片要避開姓名。
 - 額度用完或想付費時，同一把金鑰照價計費：GPT-5.6 Terra 每百萬 token 輸入 2、輸出 12 美元（OpenRouter 標價），Cards 一學期約 4 美元。
@@ -89,7 +91,7 @@
 
 | 選單上的名稱 | 網址 | 製卡的模型 |
 |---|---|---|
-| OpenAI（推薦） | `https://api.openai.com/v1` | `gpt-5.6-terra` |
+| OpenAI（推薦） | `https://api.openai.com/v1` | 製卡 `gpt-5.6-terra`；Capture 轉錄 `gpt-6-sol` |
 | Google Gemini（免費） | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-3.8-flash` |
 | OpenRouter | `https://openrouter.ai/api/v1` | 家長自選 |
 | 自訂 | 家長自己填 | 家長自己填 |
@@ -117,6 +119,7 @@
 
 | 日期 | 變動 | 依據 |
 |---|---|---|
+| 2026-10-14 | 轉錄改用 GPT-6 Sol：Terra 截圖大多截錯（使用者發現，T4 第三輪確認） | T4 第三輪 |
 | 2026-10-14 | 首選改為 OpenAI GPT-5.6 Terra（資料分享額度），Gemini 3.8 Flash 改成完全免費的入門（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)） | T4 第二輪 |
 | 2026-10-13 | 刪除 OpenRouter 免費模型；免費備案改找 Mistral、OpenAI 的資料分享額度 | 使用者決定 |
 | 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/README.md) |

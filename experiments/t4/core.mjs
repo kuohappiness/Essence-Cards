@@ -85,8 +85,13 @@ export async function validateOut(value) {
 export function parseFigures(text) {
   return [...text.matchAll(/<figure\b([^>]*)>([\s\S]*?)<\/figure>/g)].map(match => {
     const attrs = Object.fromEntries([...match[1].matchAll(/([a-z]+)\s*=\s*["']([^"']*)["']/g)].map(m => [m[1], m[2]]));
-    return { raw: match[0], index: match.index, page: /^\d+$/.test(attrs.page || '') ? Number(attrs.page) : NaN,
-      box: (attrs.box || '').split(',').map(n => n.trim() === '' ? NaN : Number(n)), description: match[2].trim() };
+    const pageText = (attrs.page || '').trim(), pageMatch = pageText.match(/^(?:PDF\s*第\s*)?(\d+)(?:\s*頁)?$/);
+    return { raw: match[0], index: match.index, page: pageMatch ? Number(pageMatch[1]) : NaN,
+      // 用具名的 left／top／right／bottom，避免不同模型對 box 的座標順序理解不同（T4 第二輪 GPT 截錯）；舊的 box="ymin,xmin,ymax,xmax" 仍可讀。
+      box: ['top', 'left', 'bottom', 'right'].every(k => k in attrs)
+        ? ['top', 'left', 'bottom', 'right'].map(k => attrs[k].trim() === '' ? NaN : Number(attrs[k]))
+        : (attrs.box || '').split(',').map(n => n.trim() === '' ? NaN : Number(n)),
+      description: match[2].trim() };
   });
 }
 export function pixelBox(box, width, height) {
