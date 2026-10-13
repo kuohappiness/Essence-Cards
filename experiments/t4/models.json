@@ -1,0 +1,26 @@
+{
+  "providers": {
+    "gemini": {
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "keyName": "GEMINI_API_KEY",
+      "minSecondsBetweenCalls": 13
+    },
+    "openrouter": {
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "keyName": "OPENROUTER_API_KEY",
+      "minSecondsBetweenCalls": 4
+    }
+  },
+  "transcribe": [
+    { "provider": "gemini", "model": "gemini-3.8-flash" },
+    { "provider": "gemini", "model": "gemini-3.5-flash-lite" }
+  ],
+  "verify": [
+    { "provider": "gemini", "model": "gemini-3.8-flash" }
+  ],
+  "cards": [
+    { "provider": "gemini", "model": "gemini-3.8-flash" },
+    { "provider": "gemini", "model": "gemini-3.5-flash-lite" },
+    { "provider": "openrouter", "model": "google/gemma-4-31b-it:free" }
+  ]
+}
