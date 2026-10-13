@@ -9,6 +9,16 @@
       "baseUrl": "https://openrouter.ai/api/v1",
       "keyName": "OPENROUTER_API_KEY",
       "minSecondsBetweenCalls": 4
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "keyName": "OPENAI_API_KEY",
+      "minSecondsBetweenCalls": 2
+    },
+    "mistral": {
+      "baseUrl": "https://api.mistral.ai/v1",
+      "keyName": "MISTRAL_API_KEY",
+      "minSecondsBetweenCalls": 2
     }
   },
   "transcribe": [
@@ -17,14 +27,22 @@
       "model": "gemini-3.8-flash"
     },
     {
-      "provider": "gemini",
-      "model": "gemini-3.5-flash-lite"
+      "provider": "openai",
+      "model": "gpt-6-sol"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna"
+    },
+    {
+      "provider": "mistral",
+      "model": "mistral-large-latest"
     }
   ],
   "verify": [
     {
-      "provider": "gemini",
-      "model": "gemini-3.8-flash"
+      "provider": "openai",
+      "model": "gpt-6-sol"
     }
   ],
   "cards": [
@@ -33,12 +51,16 @@
       "model": "gemini-3.8-flash"
     },
     {
-      "provider": "gemini",
-      "model": "gemini-3.5-flash-lite"
+      "provider": "openai",
+      "model": "gpt-6-sol"
     },
     {
-      "provider": "openrouter",
-      "model": "thinkingmachines/inkling:free"
+      "provider": "openai",
+      "model": "gpt-6-luna"
+    },
+    {
+      "provider": "mistral",
+      "model": "mistral-large-latest"
     }
   ],
   "pricesUsdPerMillion": {
@@ -46,14 +68,18 @@
       "input": 0.75,
       "output": 3.75
     },
-    "gemini-3.5-flash-lite": {
-      "input": 0.3,
-      "output": 2.5
+    "gpt-6-sol": {
+      "input": 2,
+      "output": 10
     },
-    "thinkingmachines/inkling:free": {
-      "input": 0,
-      "output": 0
+    "gpt-6-luna": {
+      "input": 0.1,
+      "output": 0.5
+    },
+    "mistral-large-latest": {
+      "input": 0.68,
+      "output": 2.09
     }
   },
-  "pricesNote": "付費方案的標價（2026-10-12 查核，見 docs/ai-models.md），用來換算一學期的費用；免費方案實際不收費。"
+  "pricesNote": "付費標價（Gemini 依官方 2026-10-12；OpenAI、Mistral 依 OpenRouter 2026-10-11 標價），用來換算一學期的費用；免費方案與 OpenAI 資料分享額度實際不收費。"
 }
