@@ -38,7 +38,7 @@
     },
     {
       "provider": "openrouter",
-      "model": "google/gemma-4-31b-it:free"
+      "model": "thinkingmachines/inkling:free"
     }
   ],
   "pricesUsdPerMillion": {
@@ -50,7 +50,7 @@
       "input": 0.3,
       "output": 2.5
     },
-    "google/gemma-4-31b-it:free": {
+    "thinkingmachines/inkling:free": {
       "input": 0,
       "output": 0
     }

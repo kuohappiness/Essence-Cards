@@ -10,11 +10,22 @@ export const REPO = path.resolve(ROOT, '../..');
 export const slug = model => model.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+$/, '');
 export const exists = async file => { try { await fs.access(file); return true; } catch { return false; } };
 export const readJson = async file => JSON.parse((await fs.readFile(file, 'utf8')).replace(/^\uFEFF/, ''));
+// iCloud 同步時會暫時鎖住檔案：遇到 EBUSY／EPERM／EACCES 就等一下再試。
+export async function retryFs(action, tries = 6) {
+  for (let i = 1; ; i++) {
+    try { return await action(); }
+    catch (error) {
+      if (i >= tries || !['EBUSY', 'EPERM', 'EACCES'].includes(error.code)) throw error;
+      await new Promise(r => setTimeout(r, 500 * i));
+    }
+  }
+}
+export const writeFileRetry = (file, data) => retryFs(() => fs.writeFile(file, data));
 export async function writeJson(file, value) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
-  await fs.writeFile(temp, JSON.stringify(value, null, 2) + '\n');
-  await fs.rename(temp, file);
+  await writeFileRetry(temp, JSON.stringify(value, null, 2) + '\n');
+  await retryFs(() => fs.rename(temp, file));
 }
 export function parseEnv(text) {
   const result = {};
@@ -90,7 +101,7 @@ export async function cropImage(source, target, box) {
   const canvas = createCanvas(crop.width, crop.height);
   canvas.getContext('2d').drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
   await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, await canvas.encode('png'));
+  await writeFileRetry(target, await canvas.encode('png'));
   return crop;
 }
 export async function processFigures(text, model, pages, out, warn = console.warn) {
@@ -108,7 +119,7 @@ export async function processFigures(text, model, pages, out, warn = console.war
       if (!page) throw new Error('圖的 PDF 頁序不在本次頁面內');
       await cropImage(path.join(out, '頁面', page.image), path.join(out, slug(model), '圖', name), figure.box);
       const lineStart = text.lastIndexOf('\n', figure.index - 1) + 1;
-      const quote = text.slice(lineStart, figure.index).match(/^(?:> ?)+$/)?.[0] || '';
+      const quote = text.slice(lineStart, figure.index).match(/^(?:>\s*)+$/) ? '> ' : '';
       result += `![[${name}]]\n${quote}*${figure.description.replace(/\s+/g, ' ')}* ^fig-p${figure.page}-${ordinal}`;
       stats.success++;
     } catch (error) {

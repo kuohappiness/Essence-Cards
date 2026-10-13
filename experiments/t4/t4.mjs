@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseArgs } from 'node:util';
-import { ROOT, exists, readJson, writeJson, slug, loadKeys, redact, parsePages, validateOut, processFigures, textPart, imagePart } from './core.mjs';
+import { ROOT, exists, readJson, writeJson, writeFileRetry, slug, loadKeys, redact, parsePages, validateOut, processFigures, textPart, imagePart } from './core.mjs';
 import { ApiClient } from './api.mjs';
 import { find, render } from './pdf.mjs';
 import { report } from './report.mjs';
