@@ -17,7 +17,7 @@
 | 製卡與錯題分析（Cards，v1） | Google AI Studio：Gemini 3.8 Flash | 同一個 Google 帳號開通付費，模型不變 |
 | 轉錄（Capture，v1） | Google AI Studio：Gemini 3.8 Flash（T4 第一輪確認；Flash-Lite 漏太多，不適合） | 同一個 Google 帳號開通付費 |
 | 語音：發音朗讀（增強版） | Google AI Studio：Gemini 3.8 Flash TTS | 同一個 Google 帳號開通付費，模型不變 |
-| 備案（以上全部） | 目前沒有可靠的免費備案（T4：OpenRouter 免費模型都用不了） | OpenRouter 預付儲值 |
+| 備案（以上全部） | 候選：Mistral 的免費方案，待 T4 第二輪 | OpenRouter 預付儲值；候選：OpenAI 的資料分享額度 |
 
 ### 製卡與錯題分析
 
@@ -55,14 +55,19 @@
 
 什麼時候用：Google 改了免費方案、額度不夠，或想改用其他家的模型。
 
-- **免費**：名稱以 `:free` 結尾的模型，每天 50 次。T4 第一輪全部用不了（Gemma 4 滿載、Inkling 只開放給特定工具、Nemotron 回覆空白），目前不推薦。
-- **付費**：預付儲值，先儲值才扣，不會被多扣。一把金鑰可以用幾百個模型，包括 Gemini、Claude、GPT；累計儲值 10 美元以上，免費模型提高到每天 1000 次。
+- 只推薦付費。免費模型在 T4 第一輪全部用不了，已經不列入推薦（2026-10-13）。
+- **付費**：預付儲值，先儲值才扣，不會被多扣。一把金鑰可以用幾百個模型，包括 Gemini、Claude、GPT。
 
 ### Essence Capture（v1 先做 PDF 與圖片的轉錄）
 
 - 同一個 Google 帳號：圖片、PDF、音檔、影片、YouTube 網址都能處理。
 - v1 只做 PDF 與圖片的忠實轉錄（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。轉錄的準確度是整個教材庫的根本，用哪個模型由 T4 比較 Gemini 3.8 Flash 與 3.5 Flash-Lite 後決定；Flash-Lite 每天約 500 次，學期初整本轉錄比較不會用完額度。
 - 預設用跟 Cards 不同的模型：Google 的免費額度每個模型分開算，兩個外掛就不會互相用掉。
+
+### 免費備案的候選（待 T4 第二輪）
+
+- **Mistral**：免費的 Experiment 方案，要驗證手機號碼、不用綁卡；有能看圖的模型。沒有影片，但 Capture 的 v1 只轉錄 PDF 與圖片，不受影響。
+- **OpenAI**：開啟「資料分享」後，每天送免費額度（Usage Tier 1～2：大模型每天 25 萬 token、mini／nano 模型每天 250 萬 token，第三方 2026-09 整理）。一次製卡約 2 萬 token，mini 模型每天約 100 次。但要先付款開通帳號，嚴格說不是「免費、不用綁卡」，比較像「付一次小錢，之後幾乎免費」。
 
 ## 外掛的預設選單
 
@@ -97,5 +102,6 @@
 
 | 日期 | 變動 | 依據 |
 |---|---|---|
+| 2026-10-13 | 刪除 OpenRouter 免費模型；免費備案改找 Mistral、OpenAI 的資料分享額度 | 使用者決定 |
 | 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/README.md) |
 | 2026-10-12 | 第一版：依桌面調查暫定，等 T4 實測 | [供應商調查](research/api-providers.md)、[討論紀錄](archive/discussions/2026-10-11-api-selection.md) |

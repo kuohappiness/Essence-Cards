@@ -37,7 +37,7 @@
 | Groq | 有 | ❌ 免費方案沒有能看圖的模型，每分鐘只能送 8 千 token | ❌ | 淘汰（條件 2、3） |
 | GitHub Models | — | — | — | 淘汰：2026-07-30 已停止服務 |
 
-OpenAI 和中國大陸的平台沒有逐一查官方頁面；它們的模型大多能透過 OpenRouter 使用。
+OpenAI：2026-10-13 補查。開啟資料分享後每天送免費額度（Usage Tier 1～2：大模型 25 萬、mini／nano 250 萬 token），要先付款開通帳號；官方說明頁無法讀取，數字來自第三方整理（[pricepertoken](https://pricepertoken.com/endpoints/openai/free)、[zenn](https://zenn.dev/taku_sid/articles/20250420_openai_tokens?locale=en)），用之前要在自己的後台確認。中國大陸的平台沒有逐一查；它們的模型大多能透過 OpenRouter 使用。
 
 ## 4. 各家重點
 
