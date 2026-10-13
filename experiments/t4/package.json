@@ -1,0 +1,15 @@
+{
+  "name": "essence-cards-t4",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "selftest": "node t4.mjs selftest"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.11",
+    "pdfjs-dist": "6.4.299"
+  }
+}
