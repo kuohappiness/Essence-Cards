@@ -77,7 +77,12 @@ export async function selftest() {
       const quoted = await processFigures('> <figure page="3" box="0,0,500,500">說明</figure>', 'quoted', [{ page: 3, image: 'p3.png' }], temp, () => {});
       assert.ok(quoted.text.includes('\n> *說明* ^p3-fig1'));
       const labeled = await processFigures('<figure page="PDF 第 3 頁" box="0,0,500,500">說明</figure>', 'labeled', [{ page: 3, image: 'p3.png' }], temp, () => {});
-      assert.equal(labeled.stats.failed, 1); assert.ok(labeled.text.includes('<figure'));
+      // 「PDF 第 3 頁」這種寫法也接受（T4 第三輪 GPT 這樣寫）；不是頁序的文字仍然失敗。
+      assert.equal(labeled.stats.success, 1);
+      const named = await processFigures('<figure page="3" id="fig2-14" left="0" top="0" right="500" bottom="500">說明</figure>', 'named', [{ page: 3, image: 'p3.png' }], temp, () => {});
+      assert.ok(named.text.includes('^fig2-14'));
+      const bad = await processFigures('<figure page="p.43" box="0,0,500,500">說明</figure>', 'bad', [{ page: 3, image: 'p3.png' }], temp, () => {});
+      assert.equal(bad.stats.failed, 1); assert.ok(bad.text.includes('<figure'));
     });
     await test('頁序與 repo／worktree 輸出保護', async () => {
       assert.deepEqual(parsePages('2-4'), [2, 3, 4]);
