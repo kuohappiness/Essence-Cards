@@ -1,6 +1,6 @@
 # Essence Cards｜AI 模型推薦
 
-更新：2026-10-12｜狀態：💡 依桌面調查的暫定推薦，要等試作場實測（[T4](../experiments/README.md)）後才確認
+更新：2026-10-14｜狀態：依試作場 T4 兩輪實測（[結果](../experiments/README.md)）；語音與 Mistral 還沒測
 
 這份文件回答「現在推薦用哪個 AI 服務與模型」。外掛設定頁的預設選單、[使用說明書](decisions.md#d-048-使用說明書)的「申請免費金鑰」都以這份為準（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）。調查細節見[AI API 供應商調查](research/api-providers.md)。
 
@@ -12,14 +12,19 @@
 
 ## 推薦總表
 
-| 用途 | 免費 | 付費 |
-|---|---|---|
-| 製卡與錯題分析（Cards，v1） | Google AI Studio：Gemini 3.8 Flash | 同一個 Google 帳號開通付費，模型不變 |
-| 轉錄（Capture，v1） | Google AI Studio：Gemini 3.8 Flash（T4 第一輪確認；Flash-Lite 漏太多，不適合） | 同一個 Google 帳號開通付費 |
-| 語音：發音朗讀（增強版） | Google AI Studio：Gemini 3.8 Flash TTS | 同一個 Google 帳號開通付費，模型不變 |
-| 備案（以上全部） | 候選：Mistral 的免費方案，待 T4 第二輪 | OpenRouter 預付儲值；候選：OpenAI 的資料分享額度 |
+| 用途 | 首選 | 完全免費的入門 | 備案 |
+|---|---|---|---|
+| 轉錄（Capture）、製卡與錯題分析（Cards），v1 | OpenAI：GPT-5.6 Terra，開啟資料分享 | Google AI Studio：Gemini 3.8 Flash | OpenRouter 預付儲值 |
+| 語音：發音朗讀（增強版） | 到時候再測 | Google AI Studio：Gemini 3.8 Flash TTS | — |
 
-### 製卡與錯題分析
+### 首選：OpenAI 的 GPT-5.6 Terra（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)）
+
+- T4 第二輪最好：轉錄 27 秒、圖全部裁好、自動檢查只挑出 1 處；製卡約 20 秒，9 個學習目標涵蓋所有重點，圖直接附在答案下方。只用轉錄稿製卡就夠（D-076）。
+- 開啟「資料分享」後，GPT-5.6 Terra 屬於第二組額度：每天 250 萬 token，約 100 次（Build 等級，使用者 2026-10-14 查官方說明）。
+- 代價：要先付款開通帳號，不是「完全免費、不用綁卡」；送出的內容會拿去訓練（D-055 可以接受），錯題照片要避開姓名。
+- 額度用完或想付費時，同一把金鑰照價計費：GPT-5.6 Terra 每百萬 token 輸入 2、輸出 12 美元（OpenRouter 標價），Cards 一學期約 4 美元。
+
+### 完全免費的入門：Google AI Studio（製卡與錯題分析）
 
 **免費**：Google AI Studio 的 Gemini 3.8 Flash
 
@@ -84,8 +89,9 @@
 
 | 選單上的名稱 | 網址 | 製卡的模型 |
 |---|---|---|
+| OpenAI（推薦） | `https://api.openai.com/v1` | `gpt-5.6-terra` |
 | Google Gemini（免費） | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-3.8-flash` |
-| OpenRouter | `https://openrouter.ai/api/v1` | 待 T4 實測後選定 |
+| OpenRouter | `https://openrouter.ai/api/v1` | 家長自選 |
 | 自訂 | 家長自己填 | 家長自己填 |
 
 額度用完時，外掛要告訴家長什麼時候恢復：Google 的免費額度在太平洋時間午夜重置，也就是台灣時間下午 3 點（冬令時間 4 點）。
@@ -111,6 +117,7 @@
 
 | 日期 | 變動 | 依據 |
 |---|---|---|
+| 2026-10-14 | 首選改為 OpenAI GPT-5.6 Terra（資料分享額度），Gemini 3.8 Flash 改成完全免費的入門（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)） | T4 第二輪 |
 | 2026-10-13 | 刪除 OpenRouter 免費模型；免費備案改找 Mistral、OpenAI 的資料分享額度 | 使用者決定 |
 | 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/README.md) |
 | 2026-10-12 | 第一版：依桌面調查暫定，等 T4 實測 | [供應商調查](research/api-providers.md)、[討論紀錄](archive/discussions/2026-10-11-api-selection.md) |

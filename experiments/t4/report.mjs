@@ -63,13 +63,16 @@ export function inspectCards(text) {
         awaitingAnswer = false; return;
       }
       if (/^    \S/.test(line) && !awaitingAnswer) return; // 答案換行。
+      if (/^\s*$/.test(line)) return; // 只有空白的行。
+      if (/^\s{2,}!\[\[[^\]\n]+\]\]\s*$/.test(line) && !awaitingAnswer) return; // 答案下方直接附圖（使用者 2026-10-13）。
       add(n, '不符合學習目標、欄位、Q 或 A 格式'); return;
     }
     if (['候選但未採用', '給家長的備註'].includes(section) && /^- .+/.test(line)) return;
     add(n, '不符合輸出格式或位於不允許的段落');
   });
   close(lines.length);
-  if (sections.join('|') !== requiredSections.join('|')) add(1, '應依序且各一次列出三個必要段落');
+  // 必要段落只有「學習目標」；「候選但未採用」「給家長的備註」可有可無，但出現時要照順序、各一次。
+  if (sections[0] !== '學習目標' || new Set(sections).size !== sections.length || sections.some(x => !requiredSections.includes(x)) || sections.map(x => requiredSections.indexOf(x)).some((v, i, a) => i && v < a[i - 1])) add(1, '段落：第一段要是「學習目標」，其餘可省略，但不能重複或顛倒');
   const sourced = goals.filter(g => g.fields.出處 && !/^(無|不明|未知|未提供)$/.test(g.fields.出處)).length;
   return { goals: goals.length, questions: count(text, /^\s*-\s*Q\d+/gm), sourced, sourceRatio: goals.length ? `${(sourced / goals.length * 100).toFixed(1)}%` : '—', errors };
 }
