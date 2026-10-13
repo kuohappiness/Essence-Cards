@@ -73,7 +73,7 @@ flowchart LR
 
 另一條專題討論：**AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 
-另一條專題討論：**API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：下一步是試作場 T4 實測；增強版的語音模型之後再談。
+另一條專題討論：**API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
 
 ## 已完成
 
