@@ -32,7 +32,11 @@
     },
     {
       "provider": "openai",
-      "model": "gpt-6-luna"
+      "model": "gpt-5.6-terra"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-5.6-luna"
     },
     {
       "provider": "mistral",
@@ -42,7 +46,7 @@
   "verify": [
     {
       "provider": "openai",
-      "model": "gpt-6-sol"
+      "model": "gpt-5.6-terra"
     }
   ],
   "cards": [
@@ -56,7 +60,11 @@
     },
     {
       "provider": "openai",
-      "model": "gpt-6-luna"
+      "model": "gpt-5.6-terra"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-5.6-luna"
     },
     {
       "provider": "mistral",
@@ -72,14 +80,19 @@
       "input": 2,
       "output": 10
     },
-    "gpt-6-luna": {
-      "input": 0.1,
-      "output": 0.5
+    "gpt-5.6-terra": {
+      "input": 2,
+      "output": 12
+    },
+    "gpt-5.6-luna": {
+      "input": 0.2,
+      "output": 1.2
     },
     "mistral-large-latest": {
       "input": 0.68,
       "output": 2.09
     }
   },
-  "pricesNote": "付費標價（Gemini 依官方 2026-10-12；OpenAI、Mistral 依 OpenRouter 2026-10-11 標價），用來換算一學期的費用；免費方案與 OpenAI 資料分享額度實際不收費。"
+  "pricesNote": "付費標價（Gemini 依官方 2026-10-12；OpenAI、Mistral 依 OpenRouter 2026-10-11 標價），用來換算一學期的費用；免費方案與 OpenAI 資料分享額度實際不收費。",
+  "openaiDataSharingNote": "使用者的帳號開了資料分享：GPT-6 Sol 屬第一組（每天 25 萬 token），GPT-5.6 Terra、GPT-5.6 Luna 屬第二組（每天 250 萬 token），兩組各自計算。"
 }
