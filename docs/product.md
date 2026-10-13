@@ -132,6 +132,7 @@
 - 計算與應用題的練習形式：閃卡不適合（[架構 §7](architecture.md#7-製卡規則-)）
 - Essence Capture 的其他來源：影片、網頁、整理成好讀的筆記（另一個 repo）。PDF 與圖片的轉錄已提前進 v1（D-076）
 - AI 模型評測集（benchmark）：v1 先用快照與錯題本算採用率、漏掉率，不做評測工具（[D-042](decisions.md#d-042-ai-製卡快照) 補充）
+- 模型自動更新：推薦清單做成資料、新模型先過試作場的測試才換、用快照的採用率驗證（[backlog](backlog.md#增強版待討論)）
 - FSRS 參數個人化：用學習者自己的複習紀錄調整（[D-043](decisions.md#d-043-排程採用-fsrs)）
 - 循序漸進加深：基礎熟了，AI 再往深處出下一層；做法已定（熟了才產生下一層），要不要放進 v1 等製卡規則試用後決定（[D-077](decisions.md#d-077-循序漸進加深)）
 - Concept 層、Learner Model、Target Selector、跨年級螺旋知識庫、AI 維護知識庫
