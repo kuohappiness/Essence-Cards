@@ -15,9 +15,9 @@
 | 用途 | 免費 | 付費 |
 |---|---|---|
 | 製卡與錯題分析（Cards，v1） | Google AI Studio：Gemini 3.8 Flash | 同一個 Google 帳號開通付費，模型不變 |
-| 轉錄（Capture，v1） | Google AI Studio：Gemini 3.8 Flash 或 3.5 Flash-Lite，T4 實測後決定 | 同一個 Google 帳號開通付費 |
+| 轉錄（Capture，v1） | Google AI Studio：Gemini 3.8 Flash（T4 第一輪確認；Flash-Lite 漏太多，不適合） | 同一個 Google 帳號開通付費 |
 | 語音：發音朗讀（增強版） | Google AI Studio：Gemini 3.8 Flash TTS | 同一個 Google 帳號開通付費，模型不變 |
-| 備案（以上全部） | OpenRouter 的免費模型 | OpenRouter 預付儲值 |
+| 備案（以上全部） | 目前沒有可靠的免費備案（T4：OpenRouter 免費模型都用不了） | OpenRouter 預付儲值 |
 
 ### 製卡與錯題分析
 
@@ -55,7 +55,7 @@
 
 什麼時候用：Google 改了免費方案、額度不夠，或想改用其他家的模型。
 
-- **免費**：名稱以 `:free` 結尾的模型，每天 50 次。要用哪一個，等 T4 實測後選定；候選是 Gemma 4 31B。
+- **免費**：名稱以 `:free` 結尾的模型，每天 50 次。T4 第一輪全部用不了（Gemma 4 滿載、Inkling 只開放給特定工具、Nemotron 回覆空白），目前不推薦。
 - **付費**：預付儲值，先儲值才扣，不會被多扣。一把金鑰可以用幾百個模型，包括 Gemini、Claude、GPT；累計儲值 10 美元以上，免費模型提高到每天 1000 次。
 
 ### Essence Capture（v1 先做 PDF 與圖片的轉錄）
@@ -97,4 +97,5 @@
 
 | 日期 | 變動 | 依據 |
 |---|---|---|
+| 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/README.md) |
 | 2026-10-12 | 第一版：依桌面調查暫定，等 T4 實測 | [供應商調查](research/api-providers.md)、[討論紀錄](archive/discussions/2026-10-11-api-selection.md) |
