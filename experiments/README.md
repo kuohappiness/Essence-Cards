@@ -48,7 +48,7 @@
 
 ### T2 複習畫面原型｜待做
 
-- 問題：React 與 Preact 的啟動時間、翻卡與滑動手勢的動畫、能否藏起 Obsidian 的上下欄、卡片裡的圖片、公式與音檔（[D-051](../docs/decisions.md#d-051-複習畫面用-react)）。
+- 問題：React 與 Preact 的啟動時間、翻卡與滑動手勢的動畫、能否藏起 Obsidian 的上下欄、卡片裡的圖片、公式與音檔（[D-051](../docs/decisions.md#d-051-複習畫面用-react)）。另測回看上一張的左右滑動會不會打開 Obsidian 側欄、會不會和長答案的上下捲動混淆（[D-084](../docs/decisions.md#d-084-回看上一張與滑動手勢)）。
 - 誰測：AI 測 Windows；iPhone 由使用者最後確認，和 T3 一起做。
 - 結果：
 
