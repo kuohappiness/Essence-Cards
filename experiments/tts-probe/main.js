@@ -114,7 +114,8 @@ class ProbeView extends ItemView {
       for (const v of en) {
         const o = document.createElement('option');
         o.value = v.voiceURI;
-        o.textContent = `${v.name}（${v.lang}）`;
+        const q = /premium/i.test(v.voiceURI) ? '・高品質' : /enhanced/i.test(v.voiceURI) ? '・加強版' : /compact/i.test(v.voiceURI) ? '・標準' : '';
+        o.textContent = `${v.name}（${v.lang}${q}）`;
         sel.appendChild(o);
       }
       if (!en.length) { const o = document.createElement('option'); o.textContent = '沒有英文語音'; sel.appendChild(o); }
@@ -136,6 +137,7 @@ class ProbeView extends ItemView {
     const uri = this.root.querySelector('#voice').value;
     const v = (this.voices || []).find(x => x.voiceURI === uri);
     if (v) { u.voice = v; u.lang = v.lang; }
+    this.root.querySelector('#diag').textContent = this.root.querySelector('#diag').textContent.split('\n正在用：')[0] + `\n正在用：${v ? v.voiceURI : '系統預設'}`;
     if (btn) btn.classList.add('on');
     u.onend = () => { if (btn) btn.classList.remove('on'); };
     u.onerror = e => {

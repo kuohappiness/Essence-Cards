@@ -1,7 +1,7 @@
 {
   "id": "essence-tts-probe",
   "name": "Essence TTS Probe",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "minAppVersion": "1.7.2",
   "description": "試作場：用系統語音朗讀兩張英文卡，聽 iPhone 與電腦的發音品質。可以整個刪掉。",
   "author": "Essence Cards",
