@@ -118,8 +118,8 @@ class ProbeView extends ItemView {
         o.textContent = `${v.name}（${v.lang}${q}）`;
         sel.appendChild(o);
       }
-      if (!en.length) { const o = document.createElement('option'); o.textContent = '沒有英文語音'; sel.appendChild(o); }
-      if (keep && en.some(v => v.voiceURI === keep)) sel.value = keep;
+      const d = document.createElement('option'); d.value = ''; d.textContent = '系統預設（不指定語音）'; sel.prepend(d);
+      sel.value = keep && en.some(v => v.voiceURI === keep) ? keep : (en.length ? en[0].voiceURI : '');
       this.voices = en;
       diag.textContent = `語音共 ${all.length} 個，英文 ${en.length} 個。` + (en.length ? '' : '\n這台裝置沒有英文語音：會由系統自己挑，可能用中文口音念。');
     };
