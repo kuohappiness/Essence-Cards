@@ -61,6 +61,7 @@ flowchart LR
 | 實機驗證（舊 T-008） | 在[試作場](../experiments/README.md)做（T3），和複習畫面原型的 iPhone 測試集中成一次（[D-065](decisions.md#d-065-試作場)）。另加：在 iPhone 上連續複習 15 分鐘，每次作答立刻寫入紀錄，檢查畫面順不順、iCloud 同步正不正常（[D-074](decisions.md#d-074-中斷與恢復)） |
 | 複習畫面樣式與入口畫面 | 複習畫面已選定安靜樣式，自評按鈕不顯示間隔（[D-070](decisions.md#d-070-複習畫面採用安靜樣式)，[試作場](../experiments/README.md) T1）。還剩：自評按鈕的英文版本（提案見 D-070，「差一點」不用 Hard）；外掛的入口畫面（開始複習、目錄、總覽怎麼安排），開始複習的按鈕一定要明顯（[D-057](decisions.md#d-057-目錄畫面與卡片管理)）；入口只顯示今天的份、分科按鈕、濾網提示，考試範圍最多三步（[D-071](decisions.md#d-071-每天的複習怎麼排)）；目錄的管理模式（[D-073](decisions.md#d-073-目錄擴充成卡片管理)）；顯示答案的方式（試作場 T5：文字按鈕、眼睛圖示、霧化真答案、霧化同長度假文字）。**AI 開始做試作場的工作時，要主動提醒使用者 T5 還沒做**，使用者不會記得要自己提 |
 | 複習畫面原型 | 在[試作場](../experiments/README.md)做（T2，[D-065](decisions.md#d-065-試作場)） |
+| 開始寫程式時：建立 Capture repo | 照 [D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫) 的補充（2026-10-14）設定：兩個資料夾並排、Capture 的 AGENTS.md 指向本 repo、複製通用的 Claude 記憶、進度只寫在本 repo 的路線圖。**AI 開始寫程式或建立 Capture repo 時，要主動提醒使用者照這份清單設定**，使用者不會記得要自己提 |
 | API 模型實測 | 在[試作場](../experiments/README.md)做（T4）：同一份教材比較 Gemini 3.8 Flash、Gemini 3.5 Flash-Lite 與 OpenRouter 的一個免費模型，確認 [AI 模型推薦](ai-models.md)（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）。使用者只要申請金鑰、提供一節自然課本與幾題錯題照片 |
 
 ## 下一次對話從這裡開始

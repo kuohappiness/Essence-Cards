@@ -1218,6 +1218,17 @@
 
 **補充（2026-10-13，使用者同意）**：兩個 repo 的推進順序：先把出題語法與轉錄格式定稿（轉錄格式是兩個外掛唯一的接點，只寫在一個地方）；試作場 T4 的轉錄小程式當作 Capture 的雛形；開始寫程式時才建立 Capture repo，先做規模小的 PDF 轉錄，Cards 同時用 T4 的轉錄結果開發。這個 repo 的路線圖當作三個外掛的總覽。
 
+**補充（2026-10-14，使用者同意）**：使用者問 Capture 要不要和 Cards 放在同一個專案。維持分開，並定下兩邊怎麼互相看到（[討論紀錄](archive/discussions/2026-10-14-agora-and-question-bank.md#essence-capture-的專案與-repo)）：
+
+- **分開的理由**：Obsidian 從 repo 最上層讀 `manifest.json`、下載這個 repo 的 GitHub Release，上架社群外掛或用 BRAT 安裝都是一個 repo 一個外掛；Capture 給一般使用者，不是 Cards 的附屬品；兩邊的版本與 commit 紀錄各自獨立。
+- **整體進度**：只寫在本 repo 的路線圖。Capture repo 放程式與簡短的 README，不另外寫路線圖。
+- **接點**：轉錄格式只寫在本 repo 的文件，Capture 用連結引用。
+- **本機位置**：兩個資料夾並排，`D:\程式開發\Essence Cards` 與 `D:\程式開發\Essence Capture`。在 Capture 的對話裡把 Essence Cards 的資料夾加進來，讀規劃文件、更新總覽的路線圖。
+- **協作規則**：Capture 的 AGENTS.md 開頭寫「規劃與決定看 Essence Cards」，附 GitHub 連結；兩個 repo 都公開，Codex 與雲端的對話也看得到。
+- **Claude 的記憶**：記憶跟著專案資料夾，新專案是空的；建立 Capture 專案時，把通用的記憶（北極星、額度、引用研究、AI 能測的由 AI 測等）複製過去。
+- **改轉錄格式時兩邊一起改**：同一個對話加入兩個資料夾，各自 commit。
+- 建立的時機不變：開始寫程式時。AI 做到這一步時要主動提醒使用者照這份清單設定（[路線圖](roadmap.md#v1-開發前要做的事)）。
+
 ## D-077 循序漸進加深
 
 ✅ 2026-10-13｜[出題語法定稿討論](archive/discussions/2026-10-13-syntax-finalization.md)
