@@ -103,9 +103,9 @@ export function check(text, options = {}) {
       else if (/^\[\[[^\]]+\]\]/.test(rest) || /^先備\s*[：:]/.test(rest)) continue;
       else if (source && !source.headings.some(h => h === rest || h.endsWith(' ' + rest))) { issue(line, '不符', 'source-unknown', `出處認不得，程式只會照文字顯示：${item}`); continue; }
       if (!anchor || !source || source.anchors.has(anchor)) continue;
-      if ([...source.anchors].some(a => a.startsWith(anchor) && /^[a-z]$/.test(a.slice(anchor.length))))
-        issue(line, '不符', 'source-subfigure', `轉錄稿的這張圖分成 A、B 子圖，出處「${item}」找不到 ^${anchor}（語法沒有規定子圖的寫法）`);
-      else issue(line, '不符', 'source-unresolved', `出處找不到錨點 ^${anchor}：${item}`);
+      // 只寫「圖 2-13」、轉錄稿卻分成子圖時，連到第一張子圖（§2-5、D-094）。
+      if (anchor.startsWith('fig') && [...source.anchors].some(a => a.startsWith(anchor) && /^[a-z]$/.test(a.slice(anchor.length)))) continue;
+      issue(line, '不符', 'source-unresolved', `出處找不到錨點 ^${anchor}：${item}`);
     }
   }
 
@@ -168,6 +168,9 @@ export function check(text, options = {}) {
       checkImageLines(node, 'support');
     }
     if (/嗎[？?]\s*$|對不對|是不是|是否/.test(q.front)) issue(node.line, '提醒', 'yes-no', '可能是是非題（通用規則 10）');
+    if (/哪一[^，,？?]*[，,][^？?]*就[^？?]*[？?]/.test(q.front)) issue(node.line, '提醒', 'leak-pattern', '「哪一個……，……就比較……？」常把答案寫進題目（通用規則 10）');
+    // 「……？為什麼？」是一題理解題；其他一行問兩個問題的，要拆開（通用規則 8）。
+    if ((q.front.match(/[？?]/g) ?? []).length >= 2 && !/[？?]\s*為什麼[？?]\s*$/.test(q.front)) issue(node.line, '提醒', 'two-questions', '一題問了兩件事（通用規則 8）');
     if (/下列/.test(q.front)) issue(node.line, '提醒', 'which-of', '「下列何者」題需要選項才能作答（通用規則 10）');
     if (/如上|上述|上圖|下圖/.test(q.front) && !images(q.front).length) issue(node.line, '提醒', 'context', '題目依賴上下文（通用規則 9）');
     return q;
@@ -254,7 +257,7 @@ export function check(text, options = {}) {
     } else if (block.kind === 'heading') {
       order.push({ kind: 'body', line: block.line });
       result.headings.push(block.text);
-      if (block.level !== 2) issue(block.line, '提醒', 'heading-level', `標題用了 ${'#'.repeat(block.level)}；格式是用 ## 分組`);
+      if (block.level !== 2 && block.level !== 3) issue(block.line, '提醒', 'heading-level', `標題用了 ${'#'.repeat(block.level)}；照課本的層級，最上層用 ##（D-094）`);
       if (source && !source.headings.some(h => h === block.text || h.includes(block.text) || block.text.includes(h))) issue(block.line, '提醒', 'heading-unknown', `轉錄稿沒有這個小標題：${block.text}`);
     } else if (block.kind === 'item') order.push({ kind: 'body', line: block.line });
     else if (block.kind === 'para') { order.push({ kind: 'para', line: block.line }); issue(block.line, '不符', 'para', `多出的段落（開場白、結語或說明）：${block.text.slice(0, 30)}`); }
@@ -361,6 +364,7 @@ async function selftest() {
 > - 能說明 A
 >     - 出處：p.45｜類型：定義
 >     - A 是什麼？ :: B
+>     - 哪一杯糖較多，濃度就比較大？ :: 糖較多的那杯
 
 ## 2 擴散現象
 
@@ -370,7 +374,7 @@ async function selftest() {
     - 黑糖為什麼會散開？::粒子不停運動，從濃度高的地方散到濃度低的地方
     - 擴散是什麼？ ::
     - 這是是非題嗎？ :: 是
-    - 第四題？ :: 太多
+    - 第四題？第五題？ :: 太多
         - ![[不存在.png]]
         - *圖 2-14 黑糖在水中慢慢散開*
 - 黑糖 :: 糖
@@ -388,7 +392,7 @@ async function selftest() {
   if (g.stats.targets !== 2 || g.stats.questions !== 2 || g.stats.candidates !== 1 || g.stats.images !== 1) failures.push('範例的統計不對：' + JSON.stringify(g.stats));
   const b = check(bad, { transcript, unit: '2-2' }), codes = new Set(b.issues.map(i => i.code));
   const expected = ['yaml', 'para', 'candidate-position', 'candidate-reason', 'target-id', 'field-unknown', 'default-written', 'data-position', 'source-paragraph',
-    'colon-space', 'no-bold', 'no-answer', 'yes-no', 'too-many-questions', 'image-missing', 'caption', 'top-question', 'type-unknown', 'no-front', 'note-position', 'note-kind', 'note-image', 'source-unresolved'];
+    'colon-space', 'no-bold', 'no-answer', 'yes-no', 'too-many-questions', 'image-missing', 'caption', 'top-question', 'type-unknown', 'no-front', 'note-position', 'note-kind', 'note-image', 'source-unresolved', 'leak-pattern', 'two-questions'];
   const missed = expected.filter(c => !codes.has(c));
   if (missed.length) failures.push('沒抓到：' + missed.join('、'));
   console.log(failures.length ? 'FAIL\n' + failures.join('\n') : `selftest：範例 0 個不符；錯誤範例抓到 ${expected.length}/${expected.length} 種`);
