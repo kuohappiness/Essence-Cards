@@ -7,12 +7,13 @@ import { ApiClient } from './api.mjs';
 import { find, render } from './pdf.mjs';
 import { report } from './report.mjs';
 
-const HELP = `T4：Node 24，結果必須在 repo 外\nnode t4.mjs find --pdf <檔案> --text <文字>\nnode t4.mjs render --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs <transcribe|verify|cards|report> --out <資料夾>\nnode t4.mjs cards --out <資料夾> --transcript <轉錄稿路徑>\nnode t4.mjs all --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs selftest`;
+const HELP = `T4：Node 24，結果必須在 repo 外\nnode t4.mjs find --pdf <檔案> --text <文字>\nnode t4.mjs render --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs <transcribe|verify|cards|report> --out <資料夾>\nnode t4.mjs cards --out <資料夾> --transcript <轉錄稿路徑> [--model <模型>] [--variant <只用轉錄稿|轉錄稿加原頁>] [--runs <次數>] [--prompt <取代 prompts/cards.md 的檔案>]\nnode t4.mjs all --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs selftest`;
 let secrets = [];
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     pdf: { type: 'string' }, pages: { type: 'string' }, out: { type: 'string' },
-    text: { type: 'string' }, transcript: { type: 'string' }, help: { type: 'boolean' }
+    text: { type: 'string' }, transcript: { type: 'string' }, help: { type: 'boolean' },
+    model: { type: 'string' }, variant: { type: 'string' }, runs: { type: 'string' }, prompt: { type: 'string' }
   } });
   if (values.help || !positionals.length) { console.log(HELP); return; }
   const [command] = positionals;
@@ -86,21 +87,28 @@ async function main() {
     const source = values.transcript ? path.resolve(out, values.transcript) : path.join(out, slug(config.transcribe[0].model), '轉錄稿.md');
     if (!(await exists(source))) { console.log('cards：缺少指定轉錄稿，跳過；轉錄成功後再重跑 cards'); return false; }
     const transcript = await fs.readFile(source, 'utf8');
-    const system = (await Promise.all(['../../docs/card-rules/common.md', '../../docs/card-rules/science.md', 'prompts/cards.md']
+    // --prompt 換掉 prompts/cards.md，例如試不同的家長調整。
+    const system = (await Promise.all(['../../docs/card-rules/common.md', '../../docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
       .map(file => fs.readFile(path.resolve(ROOT, file), 'utf8')))).join('\n\n');
     const content = [textPart('轉錄稿全文：\n' + transcript)];
     const references = [...new Set([...transcript.matchAll(/!\[\[([^\]\n]+)\]\]/g)].map(m => m[1].split('|')[0]))];
     for (const reference of references) {
-      if (!/^[a-zA-Z0-9._-]+\.png$/.test(reference)) throw new Error('轉錄稿的圖片名稱無效，只接受圖資料夾內的 PNG 檔名');
+      // 正式的圖檔名含中文與空格（docs/syntax.md §1），只擋路徑與 Windows 不允許的字元。
+      if (!/^[^\\/:*?"<>|]+\.png$/.test(reference) || reference.includes('..')) throw new Error('轉錄稿的圖片名稱無效，只接受圖資料夾內的 PNG 檔名');
       const file = path.join(path.dirname(source), '圖', reference);
       if (!(await exists(file))) throw new Error(`缺少轉錄稿引用的圖片 ${reference}`);
       content.push(textPart(`轉錄稿的圖：${reference}`), await imagePart(file));
     }
-    const original = await pageParts();
+    const models = config.cards.filter(m => !values.model || m.model === values.model);
+    const variants = ['只用轉錄稿', '轉錄稿加原頁'].filter(v => !values.variant || v === values.variant);
+    const runs = Number(values.runs ?? 1);
+    if (!models.length || !variants.length || !Number.isInteger(runs) || runs < 1) throw new Error('--model、--variant 或 --runs 無效');
+    const original = variants.includes('轉錄稿加原頁') ? await pageParts() : [];
     let ok = true;
-    for (const model of config.cards) for (const variant of ['只用轉錄稿', '轉錄稿加原頁']) {
+    for (const model of models) for (const variant of variants) for (let run = 1; run <= runs; run++) {
       const parts = variant === '只用轉錄稿' ? content : [...content, ...original];
-      if (!await produce('cards', model, system, parts, path.join(out, '卡片', `${slug(model.model)}-${variant}.md`), variant)) ok = false;
+      const suffix = runs > 1 ? `-${run}` : '';
+      if (!await produce('cards', model, system, parts, path.join(out, '卡片', `${slug(model.model)}-${variant}${suffix}.md`), variant)) ok = false;
     }
     return ok;
   }

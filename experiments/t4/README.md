@@ -18,3 +18,14 @@ node t4.mjs all --pdf <PDF路徑> --pages <起-迄> --out <repo外結果資料�
 因額度失敗時，等額度恢復後重跑 `transcribe`、`verify` 或 `cards --out <結果資料夾>`，最後跑 `report --out <結果資料夾>`。既有成功檔案及相同輸入會沿用，不再付費請求；輸入或提示變更請使用新資料夾。缺少前置轉錄稿的步驟會提示並跳過；未全部完成時程序結束碼為 2。`cards --transcript` 可指定絕對路徑，或相對 `--out` 的路徑；引用圖片須放在該轉錄稿旁的 `圖/`。
 
 `report` 與 `selftest` 完全離線。報告是機械統計：格式檢查依通用輸出範本列行號，出處比例以目標為單位（同目標的題目共用出處），簡體字只比對常見字形清單。費用依設定標價估算，不能當成實際帳單。
+
+照正式出題語法試製卡（第四輪起，Claude 寫的）：
+
+```powershell
+node to-formal.mjs <轉錄稿.md> <repo外資料夾> "國二上自然 2-2" "國二上自然 2-2 水溶液"
+node t4.mjs cards --out <結果資料夾> --transcript <正式格式的轉錄稿> --model gpt-5.6-terra --variant 只用轉錄稿 [--runs 3] [--prompt <其他提示檔>]
+node check-syntax.mjs <卡片.md>… --transcript <轉錄稿.md> --unit 2-2 [--tree]
+```
+
+- `to-formal.mjs`：把這裡轉錄出來的暫定格式（`模型-p13-3.png`、`^fig-p13-3`）機械轉成 [syntax.md §1](../../docs/syntax.md#1-轉錄稿) 的圖檔名與錨點，內容不變。`report` 的格式檢查是第二輪的舊規則，新格式改用 `check-syntax.mjs`。
+- `check-syntax.mjs`：照 syntax.md 解析 AI 交回的草稿，分「錯誤」（程式會跳過那個學習目標或連結壞掉）、「不符」（違反語法或製卡規則）、「提醒」（啟發式，要人看）列出行號；`--tree` 印出程式看到的正面與背面。`--selftest` 用自己編的範例檢查它本身。
