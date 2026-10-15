@@ -11,6 +11,7 @@
 ## 開始工作前
 
 - 先讀 `README.md`、`docs/product.md`、`docs/architecture.md`、`docs/roadmap.md`；需要決定的理由時再看 `docs/decisions.md`。
+- 做製卡規則、語法解析、資料格式相關的工作時，再讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
 - 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 就好，不必先讀上面四份文件（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/` 已被取代，只在追溯歷史時閱讀，不當作有效依據。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
@@ -21,6 +22,7 @@
 |---|---|
 | `docs/product.md` | 為什麼做、為誰做、原則、範圍（v1／之後／不做） |
 | `docs/architecture.md` | 術語、概念模型、模組邊界、平台、資料存放、AI 的位置 |
+| `docs/syntax.md` | 出題語法與資料格式：卡組筆記、轉錄稿、錯題本、考試範圍、複習紀錄、AI 輸出快照怎麼寫 |
 | `docs/decisions.md` | 已確認的決定與理由（D-ID） |
 | `docs/roadmap.md` | 開發現況、路線圖、目前任務 |
 | `docs/backlog.md` | 待決問題、待重新確認的舊共識、點子 |

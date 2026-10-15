@@ -14,6 +14,7 @@ Essence Cards 是一個 Obsidian 外掛：把筆記變成閃卡，讓學生用�
 |---|---|
 | 為什麼做、為誰做、做到哪裡 | [產品定義](docs/product.md) |
 | 技術上怎麼組成 | [架構](docs/architecture.md) |
+| 卡片、轉錄稿、錯題本怎麼寫 | [出題語法與資料格式](docs/syntax.md) |
 | 已經決定了什麼、為什麼 | [決策紀錄](docs/decisions.md) |
 | 現在進行到哪裡、下一步 | [開發現況與路線圖](docs/roadmap.md) |
 | 還沒決定的問題、點子 | [待決問題與點子](docs/backlog.md) |
@@ -31,6 +32,7 @@ AGENTS.md        協作規則（CLAUDE.md 引用它）
 docs/
 ├─ product.md        產品定義
 ├─ architecture.md   架構
+├─ syntax.md         出題語法與資料格式
 ├─ decisions.md      決策紀錄
 ├─ roadmap.md        開發現況與路線圖
 ├─ backlog.md        待決問題與點子
