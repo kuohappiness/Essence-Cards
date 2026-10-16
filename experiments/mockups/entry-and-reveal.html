@@ -8,20 +8,21 @@
   --ec-miss: #B3261E; --ec-near: #8F4C00; --ec-good: #17693A; --ec-easy: #2862B9; --ec-new: #575C64;
   /* 安靜樣式（D-070）：沒有卡片外框，只靠字和留白；顏色只用在自評的圓點和要想起來的重點 */
   --page: #FAFAF9; --ink: #1D1F23; --muted: #6A6F77; --line: #E5E5E2; --press: #ECEFF4; --key: #7A5BC7;
+  --done: #3F6B52; /* 做完今天的份：沉穩的灰綠，和記憶配色的「記得」同一個方向 */
   --gl: env(safe-area-inset-left, 0px); --gr: env(safe-area-inset-right, 0px);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
     --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
-    --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5;
+    --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5; --done: #8DBFA2;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
   --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
-  --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5;
+  --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5; --done: #8DBFA2;
   color-scheme: dark;
 }
 
@@ -173,8 +174,8 @@ button:disabled { cursor: default; }
 .en-start.is-soft { border-color: var(--line); background: none; color: var(--ink); }
 .en-dock { flex: none; padding: 12px max(20px, var(--gr)) 16px max(20px, var(--gl)); border-top: 1px solid var(--line); }
 .en-filter { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
-.en-today { margin: 0; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.en-today b { margin-left: 8px; color: var(--ink); font-size: 17px; font-weight: 600; }
+.en-today { margin: 0; }
+.is-done .sb-n { color: var(--done); font-weight: 600; }
 
 /* 入口：一科一列，按鈕是 ▶ 加上還要花的時間；做完的樣子 A 是分隔線填滿，B 是按鈕外圈填滿 */
 .sb-list { margin-top: 14px; border-top: 1px solid var(--line); }
@@ -187,6 +188,7 @@ button:disabled { cursor: default; }
 .sb-ex { font-size: 13px; color: var(--muted); }
 .sb-ex b, .tr-ex b { margin: 0 2px; color: var(--ink); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sb.is-done .sb-name { font-weight: 500; color: var(--muted); }
+.sb.is-done .sb-bar i { background: var(--done); }
 .sb-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--line); }
 .sb-bar i { display: block; height: 100%; background: var(--ink); }
 .sb-btn { position: relative; flex: none; width: 108px; height: 40px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 20px; background: none; color: var(--ink); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -372,7 +374,7 @@ label.tr-t { cursor: pointer; }
       scope: '考試範圍', scopeNone: '還沒設定', scopeDate: (d, n) => `${d}・還有 ${n} 天`, scopeNoDate: '沒有填日期',
       dir: '目錄', settings: '設定', settingsToast: '設定頁不在這次的樣式稿裡', onlyDemo: '樣式稿只有 2-2 與 Unit 3 有示範卡',
       startSubj: s => `只做${s}`, subjDone: '今天完成',
-      todayLbl: '今天', minBtn: m => `${m} 分鐘`, doneLbl: '完成', examLeft: n => `距離考試：<b>${n}</b> 天`, examFull: (d, n) => `距離考試：<b>${n}</b> 天（${d}）`, scopeRowT: '考試範圍與日期',
+      todayLbl: '今日複習', minBtn: m => `${m} 分鐘`, doneLbl: '完成', examLeft: n => `距離考試：<b>${n}</b> 天`, examFull: (d, n) => `距離考試：<b>${n}</b> 天（${d}）`, scopeRowT: '考試範圍與日期',
       manage: '管理', finish: '完成', practice: '全部練習', pall: '全部練習這個單元', draft: '草稿', paused: '暫停', filtered2: '已濾掉', inScope: '範圍', expand: '展開',
       selN: n => `已選 ${n} 項`, noSel: '勾選單元或學習目標，再選要做的事',
       b: { pause: '暫停／恢復', imp: '重要性', scope: '考試範圍', prac: '全部練習' },
@@ -396,7 +398,7 @@ label.tr-t { cursor: pointer; }
       scope: 'Exam scope', scopeNone: 'Not set', scopeDate: (d, n) => `${d} · ${n} days left`, scopeNoDate: 'No date',
       dir: 'Contents', settings: 'Settings', settingsToast: 'Settings are not part of this mockup', onlyDemo: 'Only 2-2 and Unit 3 have sample cards here',
       startSubj: s => `${s} only`, subjDone: 'Done today',
-      todayLbl: 'Today', minBtn: m => `${m} min`, doneLbl: 'Done', examLeft: n => `Exam in <b>${n}</b> days`, examFull: (d, n) => `Exam in <b>${n}</b> days (${d})`, scopeRowT: 'Exam scope & dates',
+      todayLbl: "Today's review", minBtn: m => `${m} min`, doneLbl: 'Done', examLeft: n => `Exam in <b>${n}</b> days`, examFull: (d, n) => `Exam in <b>${n}</b> days (${d})`, scopeRowT: 'Exam scope & dates',
       manage: 'Manage', finish: 'Done', practice: 'Practice all', pall: 'Practice this whole unit', draft: 'Draft', paused: 'Paused', filtered2: 'Filtered', inScope: 'Exam', expand: 'Expand',
       selN: n => `${n} selected`, noSel: 'Check units or learning goals, then pick an action',
       b: { pause: 'Pause / resume', imp: 'Importance', scope: 'Exam scope', prac: 'Practice all' },
@@ -661,7 +663,7 @@ label.tr-t { cursor: pointer; }
       const bar = S.dv === 'A' ? `<i class="sb-bar" aria-hidden="true"><i style="width:${dn1 / tot1 * 100}%"></i></i>` : '';
       return `<div class="sb${done ? ' is-done' : ''}"><div class="sb-main"><span class="sb-l1"><span class="sb-name">${nm(subjById(id))}</span><span class="sb-n">${dn1}/${tot1}</span></span>${ex}</div>${subjBtn(id)}${bar}</div>`;
     }).join('');
-    return `<div class="en"><div class="en-top"><p class="en-today">${t().todayLbl}<b>${dn}/${tot}</b></p>${settingsBtn()}</div>
+    return `<div class="en"><div class="en-top"><p class="sb-l1 en-today${dn >= tot ? ' is-done' : ''}"><span class="sb-name">${t().todayLbl}</span><span class="sb-n">${dn}/${tot}</span></p>${settingsBtn()}</div>
       <div class="en-scroll" data-scroll="entry"><div class="sb-list sb-${S.dv}">${rows}</div><p class="en-filter">${t().filtered}</p>
       ${dn >= tot ? `<button type="button" class="en-start is-soft sb-more" data-act="more">${t().more}</button>` : ''}
       <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div></div>`;
