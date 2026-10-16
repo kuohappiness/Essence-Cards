@@ -1,5 +1,7 @@
 <title>Essence Cards 入口與顯示答案</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&display=swap">
 <style>
 /* Layout: a slim mockup bar (screen, theme, language, variant), then the plugin at phone size: full screen on phones, framed on desktop. Tokens follow the quiet review style (D-070). */
 :root {
@@ -175,6 +177,9 @@ button:disabled { cursor: default; }
 .en-dock { flex: none; padding: 12px max(20px, var(--gr)) 16px max(20px, var(--gl)); border-top: 1px solid var(--line); }
 .en-filter { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
 .en-today { margin: 0; }
+.en-today .sb-name { font-size: 22px; }
+/* 入口右下角的字標：細的斜體襯線字，只放在入口 */
+.en-mark { flex: none; margin: 0; padding: 6px max(22px, var(--gr)) 14px 0; text-align: right; font: italic 500 15px/1 "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; letter-spacing: .06em; color: var(--muted); }
 .is-done .sb-n { color: var(--done); font-weight: 600; }
 
 /* 入口：一科一列，按鈕是 ▶ 加上還要花的時間；做完的樣子 A 是分隔線填滿，B 是按鈕外圈填滿 */
@@ -187,7 +192,6 @@ button:disabled { cursor: default; }
 .sb-n { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sb-ex { font-size: 13px; color: var(--muted); }
 .sb-ex b, .tr-ex b { margin: 0 2px; color: var(--ink); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.sb.is-done .sb-name { font-weight: 500; color: var(--muted); }
 .sb.is-done .sb-bar i { background: var(--done); }
 .sb-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--line); }
 .sb-bar i { display: block; height: 100%; background: var(--ink); }
@@ -666,7 +670,7 @@ label.tr-t { cursor: pointer; }
     return `<div class="en"><div class="en-top"><p class="sb-l1 en-today${dn >= tot ? ' is-done' : ''}"><span class="sb-name">${t().todayLbl}</span><span class="sb-n">${dn}/${tot}</span></p>${settingsBtn()}</div>
       <div class="en-scroll" data-scroll="entry"><div class="sb-list sb-${S.dv}">${rows}</div><p class="en-filter">${t().filtered}</p>
       ${dn >= tot ? `<button type="button" class="en-start is-soft sb-more" data-act="more">${t().more}</button>` : ''}
-      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div></div>`;
+      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div><p class="en-mark" lang="en">Essence Cards</p></div>`;
   }
 
   /* ---------- 目錄與管理（D-057、D-073） ---------- */
