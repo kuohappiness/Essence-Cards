@@ -191,7 +191,7 @@ button:disabled { cursor: default; }
 .sb-bar i { display: block; height: 100%; background: var(--ink); }
 .sb-btn { position: relative; flex: none; width: 108px; height: 40px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 20px; background: none; color: var(--ink); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sb-btn.sm { width: 96px; height: 36px; font-size: 14px; }
-.sb-btn:not(:disabled):active { background: var(--press); }
+.sb-btn:not(:disabled):active { background: color-mix(in srgb, var(--press) 45%, transparent); }
 .sb-btn:disabled { border-color: transparent; color: var(--muted); font-weight: 500; }
 .sb-lbl { position: relative; display: inline-flex; align-items: center; gap: 6px; }
 .sb-B .sb-btn:not(.sm) { border-color: transparent; }
