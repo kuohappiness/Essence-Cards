@@ -94,6 +94,9 @@ button:disabled { cursor: default; }
 .ec-a { font-size: 19px; line-height: 1.75; }
 .ec-a p { margin: 0 0 8px; }
 .ec-ex { font-size: 16px; line-height: 1.6; color: var(--muted); }
+/* 詳解和答案分開：拉開距離，中間一條短細線，像書頁註解上方的線 */
+.ec-a p + .ec-ex { position: relative; margin-top: 20px; padding-top: 16px; }
+.ec-a p + .ec-ex::before { content: ""; position: absolute; top: 0; left: 0; width: 24px; border-top: 1px solid color-mix(in srgb, var(--muted) 55%, transparent); }
 
 /* 答案的位置先留好（B、C1、C2），眼睛圖示放在中間；觸控範圍是整個畫面 */
 .ec-stack { display: grid; }
