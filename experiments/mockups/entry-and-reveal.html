@@ -79,7 +79,8 @@ button:disabled { cursor: default; }
 .ec-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .ec-new { padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--ec-new) 16%, var(--page)); color: var(--ec-new); font-size: 12px; font-weight: 600; }
 .ec-q { margin-top: 18px; font-size: 24px; line-height: 1.55; font-weight: 500; text-wrap: pretty; }
-.ec-blank { display: inline-block; width: 4.5em; height: 1.2em; vertical-align: -.18em; border-radius: 6px; background: var(--line); }
+/* 填空：一條和題目文字同色的底線；翻面後答案浮現在同一條線上，線變成紫色 */
+.ec-blank { display: inline-block; width: 4em; height: 1em; margin: 0 .15em; vertical-align: -.32em; border-bottom: 2px solid var(--ink); }
 /* 霧化的空格：C1 是真的答案，C2 是同樣字數的假字加上字數 */
 .ec-blank.is-fog { position: relative; width: auto; height: 1.32em; padding: 0 .2em; overflow: hidden; vertical-align: -.26em; line-height: 1.32em; background: color-mix(in srgb, var(--line) 70%, transparent); }
 .ec-fog-t { display: inline-block; filter: blur(5px); opacity: .75; font-weight: 600; user-select: none; -webkit-user-select: none; }
@@ -211,7 +212,7 @@ button:disabled { cursor: default; }
 .sc-row > svg { margin-top: 3px; }
 .sc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .sc-lines { display: grid; gap: 2px; margin-top: 6px; padding-left: 14px; }
-.sc-line { display: grid; grid-template-columns: 3.6em 1fr auto; gap: 8px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-line { display: grid; grid-template-columns: 3.6em 1fr; gap: 8px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sc-line b { font-weight: 500; color: var(--ink); }
 .tr-ex { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
 
@@ -271,7 +272,26 @@ button:disabled { cursor: default; }
 .tr-lab { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer; }
 .tr-tag { padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; line-height: 18px; white-space: nowrap; }
 .tr-tag.is-scope { border-color: var(--muted); color: var(--ink); }
-.tr-due { flex: none; min-width: 2em; text-align: right; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.tr-due { flex: none; min-width: 2em; text-align: right; color: var(--k, var(--muted)); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tr-u { flex-wrap: wrap; }
+.tr-ub { display: flex; gap: 8px; flex-basis: 100%; padding: 0 0 12px 28px; } /* 點開時按鈕放在名稱下一行，名稱不被擠斷 */
+.u-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 16px; background: none; color: var(--ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.u-btn:not(:disabled):active { background: color-mix(in srgb, var(--press) 45%, transparent); }
+.u-btn:disabled { color: var(--muted); font-weight: 500; opacity: .6; }
+.tr-g { margin-top: 18px; }
+.tr-sem { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink); font-size: 17px; font-weight: 600; text-align: left; }
+.tr-sem svg { color: var(--muted); transition: transform .2s ease; }
+.tr-sem.is-open svg { transform: rotate(90deg); }
+.tr-sh { margin-top: 10px; }
+.tr-bar { display: flex; margin-top: 14px; }
+.mini-seg { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
+.mini-seg button { min-height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 13px; }
+.mini-seg button[aria-pressed="true"] { background: var(--press); color: var(--ink); font-weight: 600; }
+.tr-none { margin: 28px 0 0; color: var(--muted); font-size: 14px; }
+.sc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sc-per { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.sc-dates { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.sc-dates input { width: 8.4em; }
 .tr-ts { margin: 0; padding: 0 0 10px 28px; list-style: none; }
 .tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
 label.tr-t { cursor: pointer; }
@@ -344,22 +364,29 @@ label.tr-t { cursor: pointer; }
     { id: 'c3', subj: 'eng', unit: 'e3', crumb: '英文 › 國二上 › Unit 3 單字', isNew: true, spell: 'borrow',
       q: 'We {{}}（借）books from the library every week.', say: 'We borrow books from the library every week.' }
   ];
-  const SUBJ = [
-    { id: 'sci', zh: '自然', en: 'Science', grade: '國二上', units: [
-      { id: 's1', short: '2-1', name: '2-1 質量與重量', due: 6, targets: [['質量與重量的不同', 'good'], ['重量的單位', 'easy'], ['彈簧秤怎麼量重量', 'near']] },
-      { id: 's2', short: '2-2', name: '2-2 水溶液', due: 9, recent: true, targets: [['溶質與溶劑', 'good'], ['水溶液與非水溶液', 'near'], ['擴散', 'easy'], ['溶解度', 'new'], ['飽和與未飽和溶液', 'near']] },
-      { id: 's3', short: '2-3', name: '2-3 溶液的濃度', due: 5, recent: true, targets: [['濃度的意義', 'new'], ['重量百分率濃度', 'new']] },
-      { id: 's4', short: '2-4', name: '2-4 酸與鹼', due: 0, status: 'draft', targets: [] }] },
-    { id: 'eng', zh: '英文', en: 'English', grade: '國二上', units: [
-      { id: 'e1', short: 'Unit 1', name: 'Unit 1 單字', due: 8, targets: [['bring 英翻中', 'good'], ['carry 英翻中', 'easy'], ['bring 中翻英', 'near']] },
-      { id: 'e2', short: 'Unit 2', name: 'Unit 2 單字', due: 12, recent: true, targets: [['visit 英翻中', 'good'], ['museum 英翻中', 'near'], ['visit 中翻英', 'new']] },
-      { id: 'e3', short: 'Unit 3', name: 'Unit 3 單字', due: 10, recent: true, targets: [['borrow 英翻中', 'good'], ['borrow 中翻英', 'new'], ['abundant 英翻中', 'near'], ['library 英翻中', 'easy']] },
-      { id: 'e4', short: 'Unit 4', name: 'Unit 4 單字', due: 0, status: 'draft', targets: [] }] },
-    { id: 'ext', zh: '延伸', en: 'Extra', grade: '', units: [
-      { id: 'x1', short: '攝影', name: '攝影入門', due: 4, status: 'filtered', targets: [['光圈與景深', 'near'], ['快門速度', 'good']] },
-      { id: 'x2', short: '睡眠', name: '睡眠的科學', due: 0, status: 'paused', targets: [['睡眠的階段', 'good']] }] }
+  const SUBJ = [{ id: 'sci', zh: '自然', en: 'Science' }, { id: 'eng', zh: '英文', en: 'English' }, { id: 'ext', zh: '延伸', en: 'Extra' }];
+  const SEMS = [{ id: 'g8a', name: '國二上' }, { id: 'g7b', name: '國一下' }, { id: 'ext', name: '' }];
+  // 單元：n 是卡片總數，due 是今天到期的張數；學習目標的狀態用記憶配色（D-062）
+  const UNITS = [
+    { id: 's1', sem: 'g8a', subj: 'sci', short: '2-1', name: '2-1 質量與重量', n: 14, due: 3, targets: [['質量與重量的不同', 'good'], ['重量的單位', 'easy'], ['彈簧秤怎麼量重量', 'near']] },
+    { id: 's2', sem: 'g8a', subj: 'sci', short: '2-2', name: '2-2 水溶液', n: 25, due: 9, targets: [['溶質與溶劑', 'good'], ['水溶液與非水溶液', 'near'], ['擴散', 'easy'], ['溶解度', 'new'], ['飽和與未飽和溶液', 'near']] },
+    { id: 's3', sem: 'g8a', subj: 'sci', short: '2-3', name: '2-3 溶液的濃度', n: 8, due: 5, targets: [['濃度的意義', 'new'], ['重量百分率濃度', 'new']] },
+    { id: 's4', sem: 'g8a', subj: 'sci', short: '2-4', name: '2-4 酸與鹼', n: 0, due: 0, status: 'draft', targets: [] },
+    { id: 'e1', sem: 'g8a', subj: 'eng', short: 'Unit 1', name: 'Unit 1 單字', n: 20, due: 8, targets: [['bring 英翻中', 'good'], ['carry 英翻中', 'easy'], ['bring 中翻英', 'good'], ['carry 中翻英', 'good'], ['heavy 英翻中', 'near']] },
+    { id: 'e2', sem: 'g8a', subj: 'eng', short: 'Unit 2', name: 'Unit 2 單字', n: 16, due: 12, targets: [['visit 英翻中', 'good'], ['museum 英翻中', 'near'], ['visit 中翻英', 'new']] },
+    { id: 'e3', sem: 'g8a', subj: 'eng', short: 'Unit 3', name: 'Unit 3 單字', n: 18, due: 10, targets: [['borrow 英翻中', 'good'], ['borrow 中翻英', 'new'], ['abundant 英翻中', 'near'], ['library 英翻中', 'easy']] },
+    { id: 'e4', sem: 'g8a', subj: 'eng', short: 'Unit 4', name: 'Unit 4 單字', n: 0, due: 0, status: 'draft', targets: [] },
+    { id: 'p1', sem: 'g7b', subj: 'sci', short: '5-1', name: '5-1 生物的演化', n: 12, due: 3, targets: [['演化的證據', 'good'], ['天擇', 'good'], ['化石的形成', 'near']] },
+    { id: 'p2', sem: 'g7b', subj: 'sci', short: '5-2', name: '5-2 生物的分類', n: 9, due: 0, targets: [['界門綱目科屬種', 'easy'], ['學名', 'good'], ['二名法', 'easy']] },
+    { id: 'q1', sem: 'g7b', subj: 'eng', short: 'Unit 5', name: 'Unit 5 單字', n: 22, due: 0, targets: [['travel 英翻中', 'good'], ['ticket 英翻中', 'good'], ['travel 中翻英', 'good'], ['station 英翻中', 'good'], ['station 中翻英', 'near']] },
+    { id: 'q2', sem: 'g7b', subj: 'eng', short: 'Unit 6', name: 'Unit 6 單字', n: 12, due: 0, targets: [['weather 英翻中', 'easy'], ['cloudy 英翻中', 'easy'], ['weather 中翻英', 'good']] },
+    { id: 'x1', sem: 'ext', subj: 'ext', short: '攝影', name: '攝影入門', n: 10, due: 4, status: 'filtered', targets: [['光圈與景深', 'near'], ['快門速度', 'good']] },
+    { id: 'x2', sem: 'ext', subj: 'ext', short: '睡眠', name: '睡眠的科學', n: 4, due: 0, status: 'paused', targets: [['睡眠的階段', 'good']] }
   ];
-  const TODAY = { eng: 30, sci: 20 }; // 今天的份，依每日時間上限排出（D-071）
+  const ACTIVE = u => !u.status;
+  // 今天的份，依每日時間上限排出（D-071）；樣式稿直接加總到期張數
+  const TODAY = { eng: 0, sci: 0 };
+  UNITS.forEach(u => { if (ACTIVE(u) && u.subj in TODAY) TODAY[u.subj] += u.due; });
   const ORDER = ['eng', 'sci'];
   const KEYS = ['miss', 'near', 'good', 'easy'];
 
@@ -378,14 +405,15 @@ label.tr-t { cursor: pointer; }
       scope: '考試範圍', scopeNone: '還沒設定', scopeDate: (d, n) => `${d}・還有 ${n} 天`, scopeNoDate: '沒有填日期',
       dir: '目錄', settings: '設定', settingsToast: '設定頁不在這次的樣式稿裡', onlyDemo: '樣式稿只有 2-2 與 Unit 3 有示範卡',
       startSubj: s => `只做${s}`, subjDone: '今天完成',
-      todayLbl: '今日複習', minBtn: m => `${m} 分鐘`, doneLbl: '完成', examLeft: n => `距離考試：<b>${n}</b> 天`, examFull: (d, n) => `距離考試：<b>${n}</b> 天（${d}）`, scopeRowT: '考試範圍與日期',
+      todayLbl: '今日複習', segToday: '今天', segAll: '全部', uToday: n => `今日卡 ${n}`, uAll: n => `全部卡 ${n}`, examToday: '今天考試',
+      period: '考試期間', pStart: '開始日期', pEnd: '結束日期', draftNote: '這裡會打開卡組筆記，讓家長審核（樣式稿不做）', noneToday: '今天沒有要複習的單元', uDone: '這個單元今天的卡完成了', minBtn: m => `${m} 分鐘`, doneLbl: '完成', examLeft: n => `距離考試：<b>${n}</b> 天`, examFull: (d, n) => `距離考試：<b>${n}</b> 天（${d}）`, scopeRowT: '考試範圍與日期',
       manage: '管理', finish: '完成', practice: '全部練習', pall: '全部練習這個單元', draft: '草稿', paused: '暫停', filtered2: '已濾掉', inScope: '考試', expand: '展開',
       selN: n => `已選 ${n} 項`, noSel: '勾選單元或學習目標，再選要做的事',
       b: { pause: '暫停／恢復', imp: '重要性', scope: '考試範圍', prac: '全部練習' },
       updated: (n, m) => `已更新 ${n} 張卡（${m} 篇卡組）`, undo: '復原', undone: '已復原',
       legend: { new: '未複習', near: '快忘了', good: '記得', easy: '很熟' },
       scopeTitle: '考試範圍', scopeLead: '勾選這次要考的單元；最近學的已經先勾好了。', date: '考試日期', optional: '選填',
-      dateNote: '填了日期，考前會自動多複習範圍內的卡，考完自動恢復。', ok: '確定', scopeSaved: '考試範圍已設定', navBack: '返回',
+      dateNote: '填了考試期間，考前會自動多複習範圍內的卡，考完自動取消。', ok: '確定', scopeSaved: '考試範圍已設定', navBack: '返回',
       sep: '、', join: '・'
     },
     en: {
@@ -402,14 +430,15 @@ label.tr-t { cursor: pointer; }
       scope: 'Exam scope', scopeNone: 'Not set', scopeDate: (d, n) => `${d} · ${n} days left`, scopeNoDate: 'No date',
       dir: 'Contents', settings: 'Settings', settingsToast: 'Settings are not part of this mockup', onlyDemo: 'Only 2-2 and Unit 3 have sample cards here',
       startSubj: s => `${s} only`, subjDone: 'Done today',
-      todayLbl: "Today's review", minBtn: m => `${m} min`, doneLbl: 'Done', examLeft: n => `Exam in <b>${n}</b> days`, examFull: (d, n) => `Exam in <b>${n}</b> days (${d})`, scopeRowT: 'Exam scope & dates',
+      todayLbl: "Today's review", segToday: 'Today', segAll: 'All', uToday: n => `Today ${n}`, uAll: n => `All ${n}`, examToday: 'Exam today',
+      period: 'Exam period', pStart: 'Start date', pEnd: 'End date', draftNote: 'This opens the deck note for review (not in this mockup)', noneToday: 'Nothing due today', uDone: "This unit's cards for today are done", minBtn: m => `${m} min`, doneLbl: 'Done', examLeft: n => `Exam in <b>${n}</b> days`, examFull: (d, n) => `Exam in <b>${n}</b> days (${d})`, scopeRowT: 'Exam scope & dates',
       manage: 'Manage', finish: 'Done', practice: 'Practice all', pall: 'Practice this whole unit', draft: 'Draft', paused: 'Paused', filtered2: 'Filtered', inScope: 'Exam', expand: 'Expand',
       selN: n => `${n} selected`, noSel: 'Check units or learning goals, then pick an action',
       b: { pause: 'Pause / resume', imp: 'Importance', scope: 'Exam scope', prac: 'Practice all' },
       updated: (n, m) => `Updated ${n} cards (${m} decks)`, undo: 'Undo', undone: 'Undone',
       legend: { new: 'New', near: 'Fading', good: 'Remembered', easy: 'Solid' },
       scopeTitle: 'Exam scope', scopeLead: 'Check the units on this exam. Recent units are already checked.', date: 'Exam date', optional: 'optional',
-      dateNote: 'With a date, cards in scope get extra review before the exam and go back to normal after it.', ok: 'Save', scopeSaved: 'Exam scope saved', navBack: 'Back',
+      dateNote: 'With an exam period, cards in scope get extra review before the exam; the scope ends after the last day.', ok: 'Save', scopeSaved: 'Exam scope saved', navBack: 'Back',
       sep: ', ', join: ' · '
     }
   };
@@ -442,17 +471,18 @@ label.tr-t { cursor: pointer; }
   const RM = matchMedia('(prefers-reduced-motion: reduce)'), DARK = matchMedia('(prefers-color-scheme: dark)');
   const KEY = 'ec-entry-reveal-mock';
   const RECENT = ['s2', 's3', 'e2', 'e3'];
+  const CURRENT_SEM = 'g8a'; // 設定頁的「目前學期」
   const S = {
     screen: 'review', rv: 'A', dv: 'A', ex: true, lang: 'zh', fold: false,
     deck: [], i: 0, mode: 'today', subj: null, from: 'entry', revealed: false, spell: null, typed: '', hist: [], view: null,
     busy: false, just: false, revealedAt: 0, t0: Date.now(), reviewed: 0,
     done: { eng: false, sci: false }, cnt: { eng: 10, sci: 0 }, scope: null, scopeDraft: new Set(), scopeDate: '', scopeFrom: 'entry',
-    manage: false, open: new Set(['s2']), sel: new Set()
+    manage: false, open: new Set(['s2']), sel: new Set(), dirView: 'all', semOpen: new Set([CURRENT_SEM, 'ext']), udone: new Set(), unit: null, udue: 0, scopeStart: '', scopeEnd: ''
   };
   const t = () => T[S.lang];
   const nm = s => S.lang === 'en' ? s.en : s.zh;
   const subjById = id => SUBJ.find(s => s.id === id);
-  const unitById = id => SUBJ.flatMap(s => s.units).find(u => u.id === id);
+  const unitById = id => UNITS.find(u => u.id === id);
   const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
   const anim = (el, frames, opts) => (!el || RM.matches || !el.animate) ? Promise.resolve()
     : Promise.race([el.animate(frames, opts).finished.catch(() => {}), new Promise(r => setTimeout(r, opts.duration + 80))]);
@@ -569,6 +599,7 @@ label.tr-t { cursor: pointer; }
   function doneInfo() {
     const m = Math.floor((Date.now() - S.t0) / 60000);
     const btn = (act, label, extra = '', soft = false) => `<button type="button" class="en-start${soft ? ' is-soft' : ''}" data-act="${act}"${extra}>${label}</button>`;
+    if (S.mode === 'utoday') return { h: t().uDone, sub: t().took(S.reviewed, m), btn: '' };
     if (S.mode === 'prac') return { h: t().pracDone, sub: t().took(S.reviewed, m), btn: btn('prac-again', t().pracAgain, '', true) };
     const rest = ORDER.filter(id => !S.done[id]);
     if (S.mode === 'today' && S.subj && rest.length) {
@@ -587,6 +618,7 @@ label.tr-t { cursor: pointer; }
       deck = CARDS.filter(c => rest.includes(c.subj));
     } else deck = CARDS.slice();
     if (unit && !cards) deck = CARDS.filter(c => c.unit === unit);
+    S.unit = unit; S.udue = unit ? dueOf(unitById(unit)) : 0;
     if (!deck.length) { deck = CARDS.slice(); toast(t().onlyDemo); }
     if (S.screen !== 'review') S.from = S.screen === 'dir' ? 'dir' : 'entry';
     Object.assign(S, { screen: 'review', deck, i: 0, mode, subj, revealed: false, spell: null, typed: '', hist: [], view: null, busy: false, t0: Date.now() });
@@ -614,6 +646,7 @@ label.tr-t { cursor: pointer; }
     S.hist.push({ idx: S.i, k, spell: S.spell });
     await anim(scr.querySelector('.ec-card'), [{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
     S.i++; S.reviewed++; S.revealed = false; S.spell = null; S.typed = '';
+    if (S.i >= S.deck.length && S.mode === 'utoday') { const u = unitById(S.unit); S.udone.add(u.id); S.cnt[u.subj] = Math.min(TODAY[u.subj], S.cnt[u.subj] + S.udue); }
     if (S.i >= S.deck.length && S.mode === 'today') (S.subj ? [S.subj] : ORDER).forEach(id => { S.done[id] = true; S.cnt[id] = TODAY[id]; });
     render();
     await anim(scr.querySelector('.ec-card, .ec-done'), [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
@@ -630,21 +663,23 @@ label.tr-t { cursor: pointer; }
   const restCount = () => ORDER.reduce((n, id) => n + TODAY[id] - S.cnt[id], 0);
   const anyDone = () => ORDER.some(id => S.done[id]);
   const settingsBtn = () => `<button type="button" class="ec-ico" data-act="settings" aria-label="${t().settings}">${ICON.sliders}</button>`;
-  function scopeSummary(sc) {
-    return SUBJ.filter(s => s.id !== 'ext').map(s => {
-      const us = s.units.filter(u => sc.units.has(u.id));
-      return us.length ? `${nm(s)} ${us.map(u => u.short).join(t().sep)}` : '';
-    }).filter(Boolean).join(t().join);
-  }
-  const subjInScope = id => !!S.scope && subjById(id).units.some(u => S.scope.units.has(u.id));
-  const examDate = id => subjInScope(id) ? S.scope.dates[id] || '' : '';
+  const subjInScope = id => !!S.scope && UNITS.some(u => u.subj === id && S.scope.units.has(u.id));
+  const examDate = id => subjInScope(id) ? S.scope.start || '' : '';
+  // 倒數算到考試開始那天；考試期間內顯示「今天考試」
+  const examText = (d, full) => {
+    const n = daysLeft(d);
+    if (n <= 0) return t().examToday;
+    const per = S.scope.end && S.scope.end !== S.scope.start ? `${md(S.scope.start)}～${md(S.scope.end)}` : md(S.scope.start);
+    return full ? t().examFull(per, n) : t().examLeft(n);
+  };
   function scopeRow(inset) {
     const sc = S.scope;
     const lines = sc ? SUBJ.filter(s => s.id !== 'ext').map(s => {
-      const us = s.units.filter(u => sc.units.has(u.id));
-      return us.length ? `<span class="sc-line"><b>${nm(s)}</b><span>${us.map(u => u.short).join(t().sep)}</span><span>${sc.dates[s.id] ? md(sc.dates[s.id]) : ''}</span></span>` : '';
+      const us = UNITS.filter(u => u.subj === s.id && sc.units.has(u.id));
+      return us.length ? `<span class="sc-line"><b>${nm(s)}</b><span>${us.map(u => u.short).join(t().sep)}</span></span>` : '';
     }).join('') : '';
-    return `<button type="button" class="en-row${inset ? ' in' : ''} sc-row" data-act="scope"><span class="sc-body"><span class="en-row-t">${t().scopeRowT}</span>${lines ? `<span class="sc-lines">${lines}</span>` : ''}</span>`
+    const per = sc && sc.start ? `<span class="sc-per">${md(sc.start)}${sc.end && sc.end !== sc.start ? `～${md(sc.end)}` : ''}</span>` : '';
+    return `<button type="button" class="en-row${inset ? ' in' : ''} sc-row" data-act="scope"><span class="sc-body"><span class="sc-head"><span class="en-row-t">${t().scopeRowT}</span>${per}</span>${lines ? `<span class="sc-lines">${lines}</span>` : ''}</span>`
       + `${lines ? '' : `<span class="en-row-v">${t().scopeNone}</span>`}${ICON.chevR}</button>`;
   }
   const dirRow = inset => `<button type="button" class="en-row${inset ? ' in' : ''}" data-act="dir"><span class="en-row-t">${t().dir}</span><span class="en-row-v"></span>${ICON.chevR}</button>`;
@@ -663,7 +698,7 @@ label.tr-t { cursor: pointer; }
     const order = ORDER.slice().sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
     const rows = order.map(id => {
       const tot1 = TODAY[id], dn1 = S.cnt[id], done = dn1 >= tot1, d = examDate(id);
-      const ex = S.ex && d ? `<span class="sb-ex">${t().examLeft(daysLeft(d))}</span>` : '';
+      const ex = S.ex && d ? `<span class="sb-ex">${examText(d)}</span>` : '';
       const bar = S.dv === 'A' ? `<i class="sb-bar" aria-hidden="true"><i style="width:${dn1 / tot1 * 100}%"></i></i>` : '';
       return `<div class="sb${done ? ' is-done' : ''}"><div class="sb-main"><span class="sb-l1"><span class="sb-name">${nm(subjById(id))}</span><span class="sb-n">${dn1}/${tot1}</span></span>${ex}</div>${subjBtn(id)}${bar}</div>`;
     }).join('');
@@ -675,57 +710,83 @@ label.tr-t { cursor: pointer; }
 
   /* ---------- 目錄與管理（D-057、D-073） ---------- */
   const inScope = u => S.scope && S.scope.units.has(u.id);
+  const dueOf = u => !ACTIVE(u) || S.udone.has(u.id) || S.done[u.subj] ? 0 : u.due;
+  // 單元的狀態：灰＝一半以上還沒複習；藍＝全部記得以上；綠＝記得加很熟 80% 以上；橙＝其他（規則寫在說明書，畫面不解釋）
+  function unitState(u) {
+    const ts = u.targets, k = m => ts.filter(x => x[1] === m).length, ok = k('good') + k('easy');
+    if (!ts.length) return 'new';
+    if (k('new') > ts.length / 2) return 'new';
+    if (ok === ts.length) return 'easy';
+    return ok / ts.length >= 0.8 ? 'good' : 'near';
+  }
   function unitHTML(u, mode) {
+    const draft = u.status === 'draft';
     const open = mode !== 'scope' && S.open.has(u.id) && u.targets.length > 0;
-    const tags = (u.status ? `<span class="tr-tag">${t()[u.status === 'filtered' ? 'filtered2' : u.status]}</span>` : '')
-      + (mode !== 'scope' && inScope(u) ? `<span class="tr-tag is-scope">${t().inScope}</span>` : '');
+    const state = u.status ? `<span class="tr-tag">${t()[u.status === 'filtered' ? 'filtered2' : u.status]}</span>` : '';
+    const tags = (mode !== 'scope' && inScope(u) ? `<span class="tr-tag is-scope">${t().inScope}</span>` : '') + state;
     const exp = mode === 'scope' ? '' : `<button type="button" class="tr-exp${open ? ' is-open' : ''}" data-act="exp" data-u="${u.id}" aria-expanded="${open}" aria-label="${t().expand}"${u.targets.length ? '' : ' disabled'}>${ICON.chevR}</button>`;
-    const due = u.due && u.status !== 'filtered' ? `<span class="tr-due">${u.due}</span>` : '';
+    const num = draft ? '' : `<span class="tr-due" data-m="${unitState(u)}">${u.n}</span>`;
     let main, right = '';
     if (mode === 'browse') {
-      main = `<button type="button" class="tr-name" data-act="exp" data-u="${u.id}"${u.targets.length ? '' : ' disabled'}>${u.name}${tags}</button>`;
-      right = due;
+      main = draft ? `<button type="button" class="tr-name" data-act="note" data-u="${u.id}">${u.name}${tags}</button>`
+        : `<button type="button" class="tr-name" data-act="exp" data-u="${u.id}">${u.name}${tags}</button>`;
+      const d = dueOf(u);
+      right = open ? `<span class="tr-ub"><button type="button" class="u-btn" data-act="utoday" data-u="${u.id}"${d ? '' : ' disabled'}>${ICON.play}${t().uToday(d)}</button>`
+        + `<button type="button" class="u-btn" data-act="prac" data-u="${u.id}">${ICON.play}${t().uAll(u.n)}</button></span>` : num;
     } else {
       const on = mode === 'scope' ? S.scopeDraft.has(u.id) : S.sel.has(u.id);
       main = `<label class="tr-lab"><input type="checkbox" class="cb" data-u="${u.id}"${on ? ' checked' : ''}><span class="tr-name">${u.name}${tags}</span></label>`;
-      if (mode === 'manage') right = due;
+      if (mode === 'manage') right = num;
     }
-    const pall = mode === 'browse' && u.status !== 'draft' ? `<li><button type="button" class="tr-pall" data-act="prac" data-u="${u.id}">${t().pall}${ICON.chevR}</button></li>` : '';
-    const ts = open ? `<ul class="tr-ts">${pall}${u.targets.map(([name, m], j) => mode === 'manage'
+    const ts = open ? `<ul class="tr-ts">${u.targets.map(([name, m], j) => mode === 'manage'
       ? `<li><label class="tr-t"><input type="checkbox" class="cb sm" data-t="${u.id}:${j}"${S.sel.has(`${u.id}:${j}`) ? ' checked' : ''}><i class="tr-dot" data-m="${m}"></i>${name}</label></li>`
       : `<li class="tr-t"><i class="tr-dot" data-m="${m}"></i>${name}</li>`).join('')}</ul>` : '';
-    return `<div class="tr-u">${exp}${main}${right}</div>${ts}`;
+    return `<div class="tr-u${open ? ' is-open' : ''}">${exp}${main}${right}</div>${ts}`;
   }
+  // 學期 → 科目 → 單元；每個學期各自收合，預設只展開「目前學期」（設定頁）
   function treeHTML(mode) {
-    return SUBJ.filter(s => mode !== 'scope' || s.id !== 'ext').map(s => {
-      let go = '';
-      if (mode === 'browse' && TODAY[s.id]) go = subjBtn(s.id, true);
-      const d = mode === 'browse' ? examDate(s.id) : '';
-      const ex = d ? `<span class="tr-ex">${t().examFull(md(d), daysLeft(d))}</span>` : '';
-      return `<section><div class="tr-sh"><div><h2>${nm(s)}${s.grade ? `<span>${s.grade}</span>` : ''}</h2>${ex}</div>${go}</div>${s.units.map(u => unitHTML(u, mode)).join('')}</section>`;
+    const onlyToday = mode === 'browse' && S.dirView === 'today';
+    const out = SEMS.filter(g => mode !== 'scope' || g.id !== 'ext').map(g => {
+      const subs = SUBJ.map(s => {
+        let us = UNITS.filter(u => u.sem === g.id && u.subj === s.id);
+        if (onlyToday) us = us.filter(u => dueOf(u) > 0);
+        if (!us.length) return '';
+        const d = mode !== 'scope' && us.some(inScope) ? examDate(s.id) : '';
+        const ex = d ? `<span class="tr-ex">${examText(d, true)}</span>` : '';
+        const head = g.id === 'ext' ? '' : `<div class="tr-sh"><h2>${nm(s)}</h2>${ex}</div>`;
+        return `<section>${head}${us.map(u => unitHTML(u, mode)).join('')}</section>`;
+      }).join('');
+      if (!subs) return '';
+      const label = g.id === 'ext' ? nm(subjById('ext')) : g.name, on = onlyToday || S.semOpen.has(g.id);
+      return `<div class="tr-g"><button type="button" class="tr-sem${on ? ' is-open' : ''}" data-act="sem" data-g="${g.id}" aria-expanded="${on}">${label}${ICON.chevR}</button>${on ? subs : ''}</div>`;
     }).join('');
+    return out || `<p class="tr-none">${t().noneToday}</p>`;
   }
-  const legendHTML = () => `<p class="tr-legend">${['new', 'near', 'good', 'easy'].map(m => `<span><i class="tr-dot" data-m="${m}"></i>${t().legend[m]}</span>`).join('')}</p>`;
   function batchDock() {
     const n = S.sel.size;
     return `<div class="en-dock"><p class="tr-sel">${n ? t().selN(n) : t().noSel}</p><div class="tr-bb">`
       + Object.keys(t().b).map(b => `<button type="button" class="tr-b" data-act="batch" data-b="${b}"${n ? '' : ' disabled'}>${t().b[b]}</button>`).join('') + '</div></div>';
   }
   function dirHTML() {
+    const seg = S.manage ? '' : `<div class="tr-bar"><div class="mini-seg" role="group" aria-label="${t().dir}">`
+      + ['today', 'all'].map(v => `<button type="button" data-act="dview" data-v="${v}" aria-pressed="${S.dirView === v}">${t()[v === 'today' ? 'segToday' : 'segAll']}</button>`).join('') + '</div></div>';
     return `<div class="en"><div class="en-top nav"><button type="button" class="ec-ico" data-act="nav-back" aria-label="${t().navBack}">${ICON.back}</button>`
       + `<h1 class="en-title">${t().dir}</h1><button type="button" class="en-tbtn" data-act="manage">${S.manage ? t().finish : t().manage}</button></div>`
-      + `<div class="en-scroll" data-scroll="dir">${S.manage ? '' : `<div class="en-group">${scopeRow(true)}</div>`}${treeHTML(S.manage ? 'manage' : 'browse')}${legendHTML()}</div>${S.manage ? batchDock() : ''}</div>`;
+      + `<div class="en-scroll" data-scroll="dir">${S.manage ? '' : `<div class="en-group">${scopeRow(true)}</div>`}${seg}${treeHTML(S.manage ? 'manage' : 'browse')}</div>${S.manage ? batchDock() : ''}</div>`;
   }
   function scopeHTML() {
     return `<div class="en"><div class="en-top nav"><button type="button" class="ec-ico" data-act="nav-back" aria-label="${t().navBack}">${ICON.back}</button><h1 class="en-title">${t().scopeTitle}</h1><span></span></div>`
       + `<div class="en-scroll" data-scroll="scope"><p class="sc-lead">${t().scopeLead}</p>${treeHTML('scope')}</div>`
-      + `<div class="en-dock"><label class="sc-date"><span>${t().date}<small>${t().optional}</small></span><input type="date" id="scope-date" value="${S.scopeDate}" min="${todayISO}"></label>`
+      + `<div class="en-dock"><div class="sc-date"><span>${t().period}<small>${t().optional}</small></span><span class="sc-dates">`
+      + `<input type="date" id="scope-start" aria-label="${t().pStart}" value="${S.scopeStart}" min="${todayISO}"><span>～</span>`
+      + `<input type="date" id="scope-end" aria-label="${t().pEnd}" value="${S.scopeEnd}" min="${S.scopeStart || todayISO}"></span></div>`
       + `<p class="sc-note">${t().dateNote}</p><button type="button" class="en-start" data-act="scope-ok">${t().ok}</button></div></div>`;
   }
   function openScope(from, preset) {
     S.scopeFrom = from;
     S.scopeDraft = new Set(preset || (S.scope ? S.scope.units : RECENT));
-    S.scopeDate = S.scope ? S.scope.dates.sci || S.scope.dates.eng || '' : '';
+    S.scopeStart = S.scope ? S.scope.start : ''; S.scopeEnd = S.scope ? S.scope.end : '';
+    S.semOpen.add(CURRENT_SEM);
     S.screen = 'scope'; render();
   }
   function batch(b) {
@@ -774,14 +835,18 @@ label.tr-t { cursor: pointer; }
       case 'dir': S.screen = 'dir'; S.manage = false; S.sel.clear(); return render();
       case 'scope': return openScope(S.screen === 'dir' ? 'dir' : 'entry');
       case 'scope-ok': {
-        const d = $('scope-date'); if (d) S.scopeDate = d.value;
-        // 範圍裡每一科可以有自己的日期（D-078）；這裡改了日期就套用到每一科
-        const prev = S.scope && S.scope.dates, same = prev && S.scopeDate === (prev.sci || prev.eng || '');
-        S.scope = S.scopeDraft.size ? { units: new Set(S.scopeDraft), dates: same ? prev : { sci: S.scopeDate, eng: S.scopeDate } } : null;
+        const a = $('scope-start'), z = $('scope-end'); if (a) S.scopeStart = a.value; if (z) S.scopeEnd = z.value;
+        // 一次只有一份範圍（下一次大考）；只填開始日的話，結束日就是同一天
+        const end = S.scopeStart && S.scopeEnd >= S.scopeStart ? S.scopeEnd : S.scopeStart;
+        S.scope = S.scopeDraft.size ? { units: new Set(S.scopeDraft), start: S.scopeStart, end } : null;
         S.screen = S.scopeFrom; render(); return toast(t().scopeSaved);
       }
       case 'nav-back': S.screen = S.screen === 'scope' ? S.scopeFrom : 'entry'; S.manage = false; S.sel.clear(); return render();
       case 'manage': S.manage = !S.manage; S.sel.clear(); return render();
+      case 'utoday': return startReview({ unit: b.dataset.u, mode: 'utoday' });
+      case 'dview': S.dirView = b.dataset.v; return render();
+      case 'sem': { const g = b.dataset.g; S.semOpen.has(g) ? S.semOpen.delete(g) : S.semOpen.add(g); return render(); }
+      case 'note': return toast(t().draftNote);
       case 'exp': { const id = b.dataset.u; S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }
       case 'batch': return batch(b.dataset.b);
       case 'undo': return toast(t().undone);
@@ -804,7 +869,8 @@ label.tr-t { cursor: pointer; }
   });
   app.addEventListener('change', e => {
     const el = e.target;
-    if (el.id === 'scope-date') { S.scopeDate = el.value; return; }
+    if (el.id === 'scope-start') { S.scopeStart = el.value; const z = $('scope-end'); if (z) { z.min = el.value; if (!z.value || z.value < el.value) z.value = el.value; S.scopeEnd = z.value; } return; }
+    if (el.id === 'scope-end') { S.scopeEnd = el.value; return; }
     if (!el.classList.contains('cb')) return;
     const id = el.dataset.u || el.dataset.t, set = S.screen === 'scope' ? S.scopeDraft : S.sel;
     el.checked ? set.add(id) : set.delete(id);
@@ -880,7 +946,7 @@ label.tr-t { cursor: pointer; }
     S.fold = s.fold === true;
   } catch (e) {}
   const addDays = n => { const d = new Date(todayISO + 'T00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-  S.scope = { units: new Set(RECENT), dates: { sci: addDays(12), eng: addDays(13) } }; // 範例：段考分兩天考
+  S.scope = { units: new Set(RECENT), start: addDays(12), end: addDays(13) }; // 範例：段考分兩天考
   if (S.screen === 'review') startReview({ mode: 'demo' }); else render();
 })();
 </script>
