@@ -315,8 +315,7 @@ label.tr-t { cursor: pointer; }
     </div>
     <div class="mk-row">
       <span class="mk-lab" id="var-lab">顯示答案</span>
-      <div class="seg" role="group" aria-label="顯示答案的方式" id="seg-rv"><button type="button" data-v="A">A 文字</button><button type="button" data-v="B">B 眼睛</button><button type="button" data-v="C1">C1 霧化</button><button type="button" data-v="C2">C2 假字</button></div>
-      <div class="seg" role="group" aria-label="做完一科的樣子" id="seg-dv"><button type="button" data-v="A">A 分隔線</button><button type="button" data-v="B">B 外圈</button></div><div class="seg" role="group" aria-label="考試倒數" id="seg-ex"><button type="button" data-v="on">顯示倒數</button><button type="button" data-v="off">不顯示</button></div>
+      <div class="seg" role="group" aria-label="考試倒數" id="seg-ex"><button type="button" data-v="on">顯示倒數</button><button type="button" data-v="off">不顯示</button></div>
     </div>
     <p class="mk-hint" id="hint" aria-live="polite"></p>
   </header>
@@ -409,11 +408,11 @@ label.tr-t { cursor: pointer; }
     }
   };
   const HINT = {
-    A: 'A：底部的「顯示答案」文字按鈕（目前的樣式）；點題目也能翻面。',
+    A: '顯示答案：底部的「顯示答案」文字按鈕（2026-10-16 選定）；點題目也能翻面。',
     B: 'B：答案的位置先留白，中間放眼睛圖示，點畫面任何地方都能顯示。打字題的按鈕在輸入框旁，鍵盤打開時也按得到。',
     C1: 'C1：把真正的答案霧化，點了變清楚。看看英文單字霧化後是不是還認得出字形。',
     C2: 'C2：霧化同樣字數的假文字，看不出字形；附上字數或重點數當提示。',
-    eA: '入口 A：每一科底下的細線就是進度條，做完整條填滿、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
+    eA: '入口（2026-10-16 選定 A）：每一科底下的細線就是進度條，做完整條填滿、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
     eB: '入口 B：按鈕外圈就是進度環，做完合成完整的一圈、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
     dir: '目錄：▶ 是今天的份；點開單元才有「全部練習這個單元」。按「管理」出現勾選與批次按鈕（D-073 的簡單版）。',
     scope: '考試範圍：入口 → 勾選單元（已先勾好最近學的）→ 日期、確定，最多三步。'
@@ -836,10 +835,10 @@ label.tr-t { cursor: pointer; }
   /* ---------- 控制列 ---------- */
   function syncBar() {
     const scrKey = S.screen === 'review' ? 'review' : 'entry';
-    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-rv': S.rv, 'seg-dv': S.dv, 'seg-ex': S.ex ? 'on' : 'off' };
+    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-ex': S.ex ? 'on' : 'off' };
     for (const id in on) document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === on[id])));
-    $('seg-rv').hidden = scrKey !== 'review'; $('seg-dv').hidden = $('seg-ex').hidden = scrKey === 'review';
-    $('var-lab').textContent = scrKey === 'review' ? '顯示答案' : '入口';
+    $('seg-ex').hidden = $('var-lab').hidden = scrKey === 'review';
+    $('var-lab').textContent = '入口';
     $('hint').textContent = S.screen === 'review' ? HINT[S.rv] : S.screen === 'scope' ? HINT.scope
       : S.screen === 'dir' ? HINT.dir : HINT['e' + S.dv];
     mk.classList.toggle('is-folded', S.fold);
@@ -870,8 +869,6 @@ label.tr-t { cursor: pointer; }
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     if (s.theme === 'light' || s.theme === 'dark') root.dataset.theme = s.theme;
     if (s.lang === 'en') S.lang = 'en';
-    if (['A', 'B', 'C1', 'C2'].includes(s.rv)) S.rv = s.rv;
-    if (['A', 'B'].includes(s.dv)) S.dv = s.dv;
     if (s.ex === false) S.ex = false;
     if (s.screen === 'entry') S.screen = 'entry';
     S.fold = s.fold === true;
