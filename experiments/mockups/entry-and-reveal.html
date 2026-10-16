@@ -663,7 +663,7 @@ label.tr-t { cursor: pointer; }
     const order = ORDER.slice().sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
     const rows = order.map(id => {
       const tot1 = TODAY[id], dn1 = S.cnt[id], done = dn1 >= tot1, d = examDate(id);
-      const ex = S.ex && d && !done ? `<span class="sb-ex">${t().examLeft(daysLeft(d))}</span>` : '';
+      const ex = S.ex && d ? `<span class="sb-ex">${t().examLeft(daysLeft(d))}</span>` : '';
       const bar = S.dv === 'A' ? `<i class="sb-bar" aria-hidden="true"><i style="width:${dn1 / tot1 * 100}%"></i></i>` : '';
       return `<div class="sb${done ? ' is-done' : ''}"><div class="sb-main"><span class="sb-l1"><span class="sb-name">${nm(subjById(id))}</span><span class="sb-n">${dn1}/${tot1}</span></span>${ex}</div>${subjBtn(id)}${bar}</div>`;
     }).join('');
