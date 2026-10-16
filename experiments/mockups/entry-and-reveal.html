@@ -173,6 +173,40 @@ button:disabled { cursor: default; }
 .en-start.is-soft { border-color: var(--line); background: none; color: var(--ink); }
 .en-dock { flex: none; padding: 12px max(20px, var(--gr)) 16px max(20px, var(--gl)); border-top: 1px solid var(--line); }
 .en-filter { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+.en-today { margin: 0; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.en-today b { margin-left: 8px; color: var(--ink); font-size: 17px; font-weight: 600; }
+
+/* 入口：一科一列，按鈕是 ▶ 加上還要花的時間；做完的樣子 A 是分隔線填滿，B 是按鈕外圈填滿 */
+.sb-list { margin-top: 14px; border-top: 1px solid var(--line); }
+.sb { position: relative; display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sb-A .sb { border-bottom-color: transparent; }
+.sb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sb-l1 { display: flex; align-items: baseline; gap: 10px; }
+.sb-name { font-size: 18px; font-weight: 600; }
+.sb-n { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sb-ex { font-size: 13px; color: var(--muted); }
+.sb.is-done .sb-name { font-weight: 500; color: var(--muted); }
+.sb-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--line); }
+.sb-bar i { display: block; height: 100%; background: var(--ink); }
+.sb-btn { position: relative; flex: none; width: 108px; height: 40px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 20px; background: var(--ink); color: var(--page); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-btn.sm { width: 96px; height: 36px; font-size: 14px; }
+.sb-btn:not(:disabled):active { opacity: .86; }
+.sb-btn:disabled { background: none; color: var(--muted); font-weight: 500; }
+.sb-lbl { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.sb-B .sb-btn { background: none; color: var(--ink); }
+.sb-B .sb-btn:disabled { color: var(--muted); }
+.sb-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.sb-ring rect { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.sb-ring .tk { stroke: var(--line); }
+.sb-ring .pg { stroke: var(--ink); }
+.sb-more { margin-top: 18px; height: 50px; font-size: 16px; }
+.sc-row { align-items: flex-start; }
+.sc-row > svg { margin-top: 3px; }
+.sc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sc-lines { display: grid; gap: 2px; margin-top: 6px; }
+.sc-line { display: grid; grid-template-columns: 3.6em 1fr auto; gap: 8px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-line b { font-weight: 500; color: var(--ink); }
+.tr-ex { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
 
 .en-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px max(16px, var(--gr)) 10px max(26px, var(--gl)); border: 0; background: none; color: var(--ink); font-size: 16px; text-align: left; }
 .en-row.in { padding-left: 0; padding-right: 0; }
@@ -281,7 +315,7 @@ label.tr-t { cursor: pointer; }
     <div class="mk-row">
       <span class="mk-lab" id="var-lab">顯示答案</span>
       <div class="seg" role="group" aria-label="顯示答案的方式" id="seg-rv"><button type="button" data-v="A">A 文字</button><button type="button" data-v="B">B 眼睛</button><button type="button" data-v="C1">C1 霧化</button><button type="button" data-v="C2">C2 假字</button></div>
-      <div class="seg" role="group" aria-label="入口版面" id="seg-ev"><button type="button" data-v="1">1 一鍵</button><button type="button" data-v="2">2 分科</button><button type="button" data-v="3">3 目錄</button></div>
+      <div class="seg" role="group" aria-label="做完一科的樣子" id="seg-dv"><button type="button" data-v="A">A 分隔線</button><button type="button" data-v="B">B 外圈</button></div><div class="seg" role="group" aria-label="考試倒數" id="seg-ex"><button type="button" data-v="on">顯示倒數</button><button type="button" data-v="off">不顯示</button></div>
     </div>
     <p class="mk-hint" id="hint" aria-live="polite"></p>
   </header>
@@ -338,6 +372,7 @@ label.tr-t { cursor: pointer; }
       scope: '考試範圍', scopeNone: '還沒設定', scopeDate: (d, n) => `${d}・還有 ${n} 天`, scopeNoDate: '沒有填日期',
       dir: '目錄', settings: '設定', settingsToast: '設定頁不在這次的樣式稿裡', onlyDemo: '樣式稿只有 2-2 與 Unit 3 有示範卡',
       startSubj: s => `只做${s}`, subjDone: '今天完成',
+      todayLbl: '今天', minBtn: m => `${m} 分鐘`, doneLbl: '完成', examLeft: n => `段考還有 ${n} 天`, examFull: (d, n) => `段考 ${d}・還有 ${n} 天`,
       manage: '管理', finish: '完成', practice: '全部練習', pall: '全部練習這個單元', draft: '草稿', paused: '暫停', filtered2: '已濾掉', inScope: '範圍', expand: '展開',
       selN: n => `已選 ${n} 項`, noSel: '勾選單元或學習目標，再選要做的事',
       b: { pause: '暫停／恢復', imp: '重要性', scope: '考試範圍', prac: '全部練習' },
@@ -361,6 +396,7 @@ label.tr-t { cursor: pointer; }
       scope: 'Exam scope', scopeNone: 'Not set', scopeDate: (d, n) => `${d} · ${n} days left`, scopeNoDate: 'No date',
       dir: 'Contents', settings: 'Settings', settingsToast: 'Settings are not part of this mockup', onlyDemo: 'Only 2-2 and Unit 3 have sample cards here',
       startSubj: s => `${s} only`, subjDone: 'Done today',
+      todayLbl: 'Today', minBtn: m => `${m} min`, doneLbl: 'Done', examLeft: n => `Exam in ${n} days`, examFull: (d, n) => `Exam ${d} · ${n} days left`,
       manage: 'Manage', finish: 'Done', practice: 'Practice all', pall: 'Practice this whole unit', draft: 'Draft', paused: 'Paused', filtered2: 'Filtered', inScope: 'Exam', expand: 'Expand',
       selN: n => `${n} selected`, noSel: 'Check units or learning goals, then pick an action',
       b: { pause: 'Pause / resume', imp: 'Importance', scope: 'Exam scope', prac: 'Practice all' },
@@ -376,9 +412,8 @@ label.tr-t { cursor: pointer; }
     B: 'B：答案的位置先留白，中間放眼睛圖示，點畫面任何地方都能顯示。打字題的按鈕在輸入框旁，鍵盤打開時也按得到。',
     C1: 'C1：把真正的答案霧化，點了變清楚。看看英文單字霧化後是不是還認得出字形。',
     C2: 'C2：霧化同樣字數的假文字，看不出字形；附上字數或重點數當提示。',
-    e1: '入口 1：只有一個大按鈕，最安靜；分科按鈕在它下面，考試範圍與目錄放在底部。',
-    e2: '入口 2：今天的份按科目列出，點一科就只做那一科；開始按鈕在拇指按得到的底部。',
-    e3: '入口 3：首頁就是目錄，家長改範圍、管理卡片最快；▶ 是今天的份，點開單元才有「全部練習這個單元」。',
+    eA: '入口 A：每一科底下的細線就是進度條，做完整條填滿、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
+    eB: '入口 B：按鈕外圈就是進度環，做完合成完整的一圈、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
     dir: '目錄：▶ 是今天的份；點開單元才有「全部練習這個單元」。按「管理」出現勾選與批次按鈕（D-073 的簡單版）。',
     scope: '考試範圍：入口 → 勾選單元（已先勾好最近學的）→ 日期、確定，最多三步。'
   };
@@ -402,10 +437,10 @@ label.tr-t { cursor: pointer; }
   const KEY = 'ec-entry-reveal-mock';
   const RECENT = ['s2', 's3', 'e2', 'e3'];
   const S = {
-    screen: 'review', rv: 'A', ev: '1', lang: 'zh', fold: false,
+    screen: 'review', rv: 'A', dv: 'A', ex: true, lang: 'zh', fold: false,
     deck: [], i: 0, mode: 'today', subj: null, from: 'entry', revealed: false, spell: null, typed: '', hist: [], view: null,
     busy: false, just: false, revealedAt: 0, t0: Date.now(), reviewed: 0,
-    done: { eng: false, sci: false }, scope: null, scopeDraft: new Set(), scopeDate: '', scopeFrom: 'entry',
+    done: { eng: false, sci: false }, cnt: { eng: 10, sci: 0 }, scope: null, scopeDraft: new Set(), scopeDate: '', scopeFrom: 'entry',
     manage: false, open: new Set(['s2']), sel: new Set()
   };
   const t = () => T[S.lang];
@@ -532,7 +567,7 @@ label.tr-t { cursor: pointer; }
     const rest = ORDER.filter(id => !S.done[id]);
     if (S.mode === 'today' && S.subj && rest.length) {
       const s = subjById(rest[0]);
-      return { h: t().doneSubj(nm(subjById(S.subj))), sub: t().restLeft(nm(s), TODAY[s.id]), btn: btn('subj', t().next(nm(s)), ` data-s="${s.id}"`) };
+      return { h: t().doneSubj(nm(subjById(S.subj))), sub: t().restLeft(nm(s), TODAY[s.id] - S.cnt[s.id]), btn: btn('subj', t().next(nm(s)), ` data-s="${s.id}"`) };
     }
     return { h: S.mode === 'more' ? t().moreDone : t().doneAll, sub: t().took(S.reviewed, m), btn: btn('more', t().more, '', true) };
   }
@@ -573,7 +608,7 @@ label.tr-t { cursor: pointer; }
     S.hist.push({ idx: S.i, k, spell: S.spell });
     await anim(scr.querySelector('.ec-card'), [{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
     S.i++; S.reviewed++; S.revealed = false; S.spell = null; S.typed = '';
-    if (S.i >= S.deck.length && S.mode === 'today') (S.subj ? [S.subj] : ORDER).forEach(id => { S.done[id] = true; });
+    if (S.i >= S.deck.length && S.mode === 'today') (S.subj ? [S.subj] : ORDER).forEach(id => { S.done[id] = true; S.cnt[id] = TODAY[id]; });
     render();
     await anim(scr.querySelector('.ec-card, .ec-done'), [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
     S.busy = false;
@@ -586,7 +621,7 @@ label.tr-t { cursor: pointer; }
   }
 
   /* ---------- 入口 ---------- */
-  const restCount = () => ORDER.reduce((n, id) => n + (S.done[id] ? 0 : TODAY[id]), 0);
+  const restCount = () => ORDER.reduce((n, id) => n + TODAY[id] - S.cnt[id], 0);
   const anyDone = () => ORDER.some(id => S.done[id]);
   const settingsBtn = () => `<button type="button" class="ec-ico" data-act="settings" aria-label="${t().settings}">${ICON.sliders}</button>`;
   function scopeSummary(sc) {
@@ -595,49 +630,41 @@ label.tr-t { cursor: pointer; }
       return us.length ? `${nm(s)} ${us.map(u => u.short).join(t().sep)}` : '';
     }).filter(Boolean).join(t().join);
   }
+  const subjInScope = id => !!S.scope && subjById(id).units.some(u => S.scope.units.has(u.id));
+  const examDate = id => subjInScope(id) ? S.scope.dates[id] || '' : '';
   function scopeRow(inset) {
     const sc = S.scope;
-    const v = sc ? `<span class="en-row-v"><span>${sc.date ? t().scopeDate(md(sc.date), daysLeft(sc.date)) : t().scopeNoDate}</span><small>${scopeSummary(sc)}</small></span>`
-      : `<span class="en-row-v">${t().scopeNone}</span>`;
-    return `<button type="button" class="en-row${inset ? ' in' : ''}" data-act="scope"><span class="en-row-t">${t().scope}</span>${v}${ICON.chevR}</button>`;
+    const lines = sc ? SUBJ.filter(s => s.id !== 'ext').map(s => {
+      const us = s.units.filter(u => sc.units.has(u.id));
+      return us.length ? `<span class="sc-line"><b>${nm(s)}</b><span>${us.map(u => u.short).join(t().sep)}</span><span>${sc.dates[s.id] ? md(sc.dates[s.id]) : ''}</span></span>` : '';
+    }).join('') : '';
+    return `<button type="button" class="en-row${inset ? ' in' : ''} sc-row" data-act="scope"><span class="sc-body"><span class="en-row-t">${t().scope}</span>${lines ? `<span class="sc-lines">${lines}</span>` : ''}</span>`
+      + `${lines ? '' : `<span class="en-row-v">${t().scopeNone}</span>`}${ICON.chevR}</button>`;
   }
   const dirRow = inset => `<button type="button" class="en-row${inset ? ' in' : ''}" data-act="dir"><span class="en-row-t">${t().dir}</span><span class="en-row-v"></span>${ICON.chevR}</button>`;
-  function headline() {
-    const rest = restCount();
-    return rest ? { big: anyDone() ? t().todayLeft(rest) : t().today(rest), sub: t().mins(mins(rest)), act: 'start', label: t().start, soft: false }
-      : { big: t().entryDone, sub: t().entryDoneSub, act: 'more', label: t().more, soft: true };
+  // 一科一顆按鈕：▶ 加上這科還要花的時間；做完換成「完成」
+  function subjBtn(id, small) {
+    const tot = TODAY[id], dn = S.cnt[id], done = dn >= tot, pct = Math.round(dn / tot * 100);
+    const ring = S.dv === 'B' && !small ? `<svg class="sb-ring" viewBox="0 0 108 40" preserveAspectRatio="none" aria-hidden="true"><rect class="tk" x="1" y="1" width="106" height="38" rx="19" pathLength="100"/>`
+      + (pct ? `<rect class="pg" x="1" y="1" width="106" height="38" rx="19" pathLength="100" stroke-dasharray="${pct} 100"/>` : '') + '</svg>' : '';
+    const label = done ? t().doneLbl : `${ICON.play}<span>${t().minBtn(mins(tot - dn))}</span>`;
+    return `<button type="button" class="sb-btn${small ? ' sm' : ''}"${done ? ' disabled' : ` data-act="subj" data-s="${id}" aria-label="${t().startSubj(nm(subjById(id)))}"`}>${ring}<span class="sb-lbl">${label}</span></button>`;
   }
-  function entry1() {
-    const h = headline();
-    const chips = ORDER.map(id => S.done[id]
-      ? `<button type="button" class="en-subj" disabled>${ICON.check(16)}${nm(subjById(id))}</button>`
-      : `<button type="button" class="en-subj" data-act="subj" data-s="${id}">${nm(subjById(id))} <b>${TODAY[id]}</b></button>`).join('');
-    return `<div class="en"><div class="en-top"><span></span>${settingsBtn()}</div>
-      <div class="en1-main"><div class="en1-in"><p class="en-date">${dateStr()}</p><p class="en-big">${h.big}</p><p class="en-sub">${h.sub}</p>
-      <button type="button" class="en-start${h.soft ? ' is-soft' : ''}" data-act="${h.act}">${h.label}</button>
-      <div class="en-subjs">${chips}</div><p class="en-filter">${t().filtered}</p></div></div>
-      <nav class="en-links">${scopeRow()}${dirRow()}</nav></div>`;
-  }
-  function entry2() {
-    const h = headline(), rest = restCount();
-    const rows = ORDER.map(id => S.done[id]
-      ? `<button type="button" class="en-row in" disabled><span class="en-row-t">${nm(subjById(id))}</span><span class="en-row-v">${t().subjDone}</span><span class="en-play">${ICON.check(16)}</span></button>`
-      : `<button type="button" class="en-row in" data-act="subj" data-s="${id}"><span class="en-row-t">${nm(subjById(id))}</span><span class="en-row-v">${t().cards(TODAY[id])}</span><span class="en-play">${ICON.play}</span></button>`).join('');
-    return `<div class="en"><div class="en-top"><p class="en-date">${dateStr()}</p>${settingsBtn()}</div>
-      <div class="en-scroll" data-scroll="e2">${rest ? `<p class="en-k">${t().todaySet}</p><p class="en-big2">${t().cards(rest)}<span>${t().mins(mins(rest))}</span></p>`
-        : `<p class="en-big2 is-done">${t().entryDone}</p><p class="en-k">${t().entryDoneSub}</p>`}
-      <div class="en-group first">${rows}</div><p class="en-filter">${t().filtered}</p>
-      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div>
-      <div class="en-dock"><button type="button" class="en-start${h.soft ? ' is-soft' : ''}" data-act="${h.act}">${h.label}</button></div></div>`;
-  }
-  function entry3() {
-    const h = headline(), rest = restCount();
-    const dock = S.manage ? batchDock()
-      : `<div class="en-dock en3-dock"><div class="en3-info"><b>${rest ? (anyDone() ? t().todayLeft(rest) : t().today(rest)) : t().entryDone}</b><span>${rest ? t().mins(mins(rest)) + (S.lang === 'en' ? ' · ' : '・') : ''}${t().filtered}</span></div>`
-        + `<button type="button" class="en-start${h.soft ? ' is-soft' : ''}" data-act="${h.act}">${h.label}</button></div>`;
-    return `<div class="en"><div class="en-top"><h1 class="en-h1">${t().dir}</h1><span style="display:flex">`
-      + `<button type="button" class="en-tbtn" data-act="manage">${S.manage ? t().finish : t().manage}</button>${settingsBtn()}</span></div>`
-      + `<div class="en-scroll" data-scroll="dir">${S.manage ? '' : `<div class="en-group">${scopeRow(true)}</div>`}${treeHTML(S.manage ? 'manage' : 'browse')}${legendHTML()}</div>${dock}</div>`;
+  function entryHTML() {
+    const tot = ORDER.reduce((n, id) => n + TODAY[id], 0), dn = ORDER.reduce((n, id) => n + S.cnt[id], 0);
+    // 建議先做的排第一：沒做完的在前，考試最近的先，同一天就剩比較多的先
+    const key = id => { const d = examDate(id); return [S.cnt[id] >= TODAY[id] ? 1 : 0, d ? daysLeft(d) : 1e9, -(TODAY[id] - S.cnt[id])]; };
+    const order = ORDER.slice().sort((a, b) => { const x = key(a), y = key(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; });
+    const rows = order.map(id => {
+      const tot1 = TODAY[id], dn1 = S.cnt[id], done = dn1 >= tot1, d = examDate(id);
+      const ex = S.ex && d && !done ? `<span class="sb-ex">${t().examLeft(daysLeft(d))}</span>` : '';
+      const bar = S.dv === 'A' ? `<i class="sb-bar" aria-hidden="true"><i style="width:${dn1 / tot1 * 100}%"></i></i>` : '';
+      return `<div class="sb${done ? ' is-done' : ''}"><div class="sb-main"><span class="sb-l1"><span class="sb-name">${nm(subjById(id))}</span><span class="sb-n">${dn1}/${tot1}</span></span>${ex}</div>${subjBtn(id)}${bar}</div>`;
+    }).join('');
+    return `<div class="en"><div class="en-top"><p class="en-today">${t().todayLbl}<b>${dn}/${tot}</b></p>${settingsBtn()}</div>
+      <div class="en-scroll" data-scroll="entry"><div class="sb-list sb-${S.dv}">${rows}</div><p class="en-filter">${t().filtered}</p>
+      ${dn >= tot ? `<button type="button" class="en-start is-soft sb-more" data-act="more">${t().more}</button>` : ''}
+      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div></div>`;
   }
 
   /* ---------- 目錄與管理（D-057、D-073） ---------- */
@@ -666,9 +693,10 @@ label.tr-t { cursor: pointer; }
   function treeHTML(mode) {
     return SUBJ.filter(s => mode !== 'scope' || s.id !== 'ext').map(s => {
       let go = '';
-      if (mode === 'browse' && TODAY[s.id]) go = S.done[s.id] ? `<span class="tr-ok">${ICON.check(14)}${t().subjDone}</span>`
-        : `<button type="button" class="tr-go" data-act="subj" data-s="${s.id}" aria-label="${t().startSubj(nm(s))}"><span>${t().cards(TODAY[s.id])}</span><span class="en-play">${ICON.play}</span></button>`;
-      return `<section><div class="tr-sh"><h2>${nm(s)}${s.grade ? `<span>${s.grade}</span>` : ''}</h2>${go}</div>${s.units.map(u => unitHTML(u, mode)).join('')}</section>`;
+      if (mode === 'browse' && TODAY[s.id]) go = subjBtn(s.id, true);
+      const d = mode === 'browse' ? examDate(s.id) : '';
+      const ex = d ? `<span class="tr-ex">${t().examFull(md(d), daysLeft(d))}</span>` : '';
+      return `<section><div class="tr-sh"><div><h2>${nm(s)}${s.grade ? `<span>${s.grade}</span>` : ''}</h2>${ex}</div>${go}</div>${s.units.map(u => unitHTML(u, mode)).join('')}</section>`;
     }).join('');
   }
   const legendHTML = () => `<p class="tr-legend">${['new', 'near', 'good', 'easy'].map(m => `<span><i class="tr-dot" data-m="${m}"></i>${t().legend[m]}</span>`).join('')}</p>`;
@@ -691,7 +719,7 @@ label.tr-t { cursor: pointer; }
   function openScope(from, preset) {
     S.scopeFrom = from;
     S.scopeDraft = new Set(preset || (S.scope ? S.scope.units : RECENT));
-    S.scopeDate = S.scope ? S.scope.date : '';
+    S.scopeDate = S.scope ? S.scope.dates.sci || S.scope.dates.eng || '' : '';
     S.screen = 'scope'; render();
   }
   function batch(b) {
@@ -713,8 +741,7 @@ label.tr-t { cursor: pointer; }
   function render() {
     const old = scr.querySelector('[data-scroll]'), key = old && old.dataset.scroll, top = old ? old.scrollTop : 0;
     app.lang = S.lang === 'en' ? 'en' : 'zh-Hant';
-    const home = { 1: entry1, 2: entry2, 3: entry3 }[S.ev];
-    scr.innerHTML = S.screen === 'review' ? reviewHTML() : S.screen === 'dir' ? dirHTML() : S.screen === 'scope' ? scopeHTML() : home();
+    scr.innerHTML = S.screen === 'review' ? reviewHTML() : S.screen === 'dir' ? dirHTML() : S.screen === 'scope' ? scopeHTML() : entryHTML();
     const nw = scr.querySelector('[data-scroll]');
     if (nw && nw.dataset.scroll === key) nw.scrollTop = top;
     syncBar();
@@ -742,7 +769,9 @@ label.tr-t { cursor: pointer; }
       case 'scope': return openScope(S.screen === 'dir' ? 'dir' : 'entry');
       case 'scope-ok': {
         const d = $('scope-date'); if (d) S.scopeDate = d.value;
-        S.scope = S.scopeDraft.size ? { units: new Set(S.scopeDraft), date: S.scopeDate } : null;
+        // 範圍裡每一科可以有自己的日期（D-078）；這裡改了日期就套用到每一科
+        const prev = S.scope && S.scope.dates, same = prev && S.scopeDate === (prev.sci || prev.eng || '');
+        S.scope = S.scopeDraft.size ? { units: new Set(S.scopeDraft), dates: same ? prev : { sci: S.scopeDate, eng: S.scopeDate } } : null;
         S.screen = S.scopeFrom; render(); return toast(t().scopeSaved);
       }
       case 'nav-back': S.screen = S.screen === 'scope' ? S.scopeFrom : 'entry'; S.manage = false; S.sel.clear(); return render();
@@ -806,16 +835,16 @@ label.tr-t { cursor: pointer; }
   /* ---------- 控制列 ---------- */
   function syncBar() {
     const scrKey = S.screen === 'review' ? 'review' : 'entry';
-    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-rv': S.rv, 'seg-ev': S.ev };
+    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-rv': S.rv, 'seg-dv': S.dv, 'seg-ex': S.ex ? 'on' : 'off' };
     for (const id in on) document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === on[id])));
-    $('seg-rv').hidden = scrKey !== 'review'; $('seg-ev').hidden = scrKey === 'review';
-    $('var-lab').textContent = scrKey === 'review' ? '顯示答案' : '入口版面';
+    $('seg-rv').hidden = scrKey !== 'review'; $('seg-dv').hidden = $('seg-ex').hidden = scrKey === 'review';
+    $('var-lab').textContent = scrKey === 'review' ? '顯示答案' : '入口';
     $('hint').textContent = S.screen === 'review' ? HINT[S.rv] : S.screen === 'scope' ? HINT.scope
-      : S.screen === 'dir' ? HINT.dir : HINT['e' + S.ev];
+      : S.screen === 'dir' ? HINT.dir : HINT['e' + S.dv];
     mk.classList.toggle('is-folded', S.fold);
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ theme: root.dataset.theme || '', lang: S.lang, rv: S.rv, ev: S.ev, screen: S.screen === 'review' ? 'review' : 'entry', fold: S.fold })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ theme: root.dataset.theme || '', lang: S.lang, rv: S.rv, dv: S.dv, ex: S.ex, screen: S.screen === 'review' ? 'review' : 'entry', fold: S.fold })); } catch (e) {}
   }
   document.querySelector('.mk-bar').addEventListener('click', e => {
     const b = e.target.closest('.seg button');
@@ -824,10 +853,11 @@ label.tr-t { cursor: pointer; }
     const g = b.parentElement.id, v = b.dataset.v;
     if (g === 'seg-theme') root.dataset.theme = v;
     else if (g === 'seg-lang') S.lang = v;
-    else if (g === 'seg-ev') S.ev = v;
+    else if (g === 'seg-dv') S.dv = v;
+    else if (g === 'seg-ex') S.ex = v === 'on';
     else if (g === 'seg-rv') { S.rv = v; if (S.screen === 'review' && S.view == null) { S.revealed = false; S.spell = null; } }
     else if (g === 'seg-screen') {
-      if (v === 'review') return (startReview(), save());
+      if (v === 'review') return (startReview({ mode: 'demo' }), save());
       S.screen = 'entry'; S.manage = false; S.sel.clear();
     }
     render(); save();
@@ -840,10 +870,13 @@ label.tr-t { cursor: pointer; }
     if (s.theme === 'light' || s.theme === 'dark') root.dataset.theme = s.theme;
     if (s.lang === 'en') S.lang = 'en';
     if (['A', 'B', 'C1', 'C2'].includes(s.rv)) S.rv = s.rv;
-    if (['1', '2', '3'].includes(s.ev)) S.ev = s.ev;
+    if (['A', 'B'].includes(s.dv)) S.dv = s.dv;
+    if (s.ex === false) S.ex = false;
     if (s.screen === 'entry') S.screen = 'entry';
     S.fold = s.fold === true;
   } catch (e) {}
-  if (S.screen === 'review') startReview(); else render();
+  const addDays = n => { const d = new Date(todayISO + 'T00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  S.scope = { units: new Set(RECENT), dates: { sci: addDays(12), eng: addDays(13) } }; // 範例：段考分兩天考
+  if (S.screen === 'review') startReview({ mode: 'demo' }); else render();
 })();
 </script>
