@@ -217,9 +217,9 @@ button:disabled { cursor: default; }
 .tr-sh { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; margin-top: 22px; }
 .tr-sh h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; }
 .tr-sh h2 span { margin-left: 8px; font-weight: 400; letter-spacing: 0; }
-.tr-go { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--ink); font-size: 13px; white-space: nowrap; }
-.tr-go b { font-variant-numeric: tabular-nums; }
-.tr-go:active { background: var(--press); }
+.tr-go { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; margin-right: -2px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tr-go:active .en-play { background: var(--line); }
+.tr-pall { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; margin-left: -2px; padding: 0; border: 0; background: none; color: var(--ink); font-size: 14px; font-weight: 600; }
 .tr-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
 .tr-u { display: flex; align-items: center; gap: 4px; min-height: 52px; border-top: 1px solid var(--line); }
 .tr-exp { flex: none; width: 32px; height: 44px; display: grid; place-items: center; margin-left: -8px; padding: 0; border: 0; background: none; color: var(--muted); }
@@ -231,8 +231,6 @@ button:disabled { cursor: default; }
 .tr-tag { padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; line-height: 18px; white-space: nowrap; }
 .tr-tag.is-scope { border-color: var(--muted); color: var(--ink); }
 .tr-due { flex: none; min-width: 2em; text-align: right; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-.tr-prac { flex: none; margin-left: 8px; min-height: 34px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--press); color: var(--ink); font-size: 13px; white-space: nowrap; }
-.tr-prac:disabled { opacity: .4; }
 .tr-ts { margin: 0; padding: 0 0 10px 28px; list-style: none; }
 .tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
 label.tr-t { cursor: pointer; }
@@ -340,7 +338,7 @@ label.tr-t { cursor: pointer; }
       scope: '考試範圍', scopeNone: '還沒設定', scopeDate: (d, n) => `${d}・還有 ${n} 天`, scopeNoDate: '沒有填日期',
       dir: '目錄', settings: '設定', settingsToast: '設定頁不在這次的樣式稿裡', onlyDemo: '樣式稿只有 2-2 與 Unit 3 有示範卡',
       startSubj: s => `只做${s}`, subjDone: '今天完成',
-      manage: '管理', finish: '完成', practice: '全部練習', draft: '草稿', paused: '暫停', filtered2: '已濾掉', inScope: '範圍', expand: '展開',
+      manage: '管理', finish: '完成', practice: '全部練習', pall: '全部練習這個單元', draft: '草稿', paused: '暫停', filtered2: '已濾掉', inScope: '範圍', expand: '展開',
       selN: n => `已選 ${n} 項`, noSel: '勾選單元或學習目標，再選要做的事',
       b: { pause: '暫停／恢復', imp: '重要性', scope: '考試範圍', prac: '全部練習' },
       updated: (n, m) => `已更新 ${n} 張卡（${m} 篇卡組）`, undo: '復原', undone: '已復原',
@@ -363,7 +361,7 @@ label.tr-t { cursor: pointer; }
       scope: 'Exam scope', scopeNone: 'Not set', scopeDate: (d, n) => `${d} · ${n} days left`, scopeNoDate: 'No date',
       dir: 'Contents', settings: 'Settings', settingsToast: 'Settings are not part of this mockup', onlyDemo: 'Only 2-2 and Unit 3 have sample cards here',
       startSubj: s => `${s} only`, subjDone: 'Done today',
-      manage: 'Manage', finish: 'Done', practice: 'Practice all', draft: 'Draft', paused: 'Paused', filtered2: 'Filtered', inScope: 'Exam', expand: 'Expand',
+      manage: 'Manage', finish: 'Done', practice: 'Practice all', pall: 'Practice this whole unit', draft: 'Draft', paused: 'Paused', filtered2: 'Filtered', inScope: 'Exam', expand: 'Expand',
       selN: n => `${n} selected`, noSel: 'Check units or learning goals, then pick an action',
       b: { pause: 'Pause / resume', imp: 'Importance', scope: 'Exam scope', prac: 'Practice all' },
       updated: (n, m) => `Updated ${n} cards (${m} decks)`, undo: 'Undo', undone: 'Undone',
@@ -380,8 +378,8 @@ label.tr-t { cursor: pointer; }
     C2: 'C2：霧化同樣字數的假文字，看不出字形；附上字數或重點數當提示。',
     e1: '入口 1：只有一個大按鈕，最安靜；分科按鈕在它下面，考試範圍與目錄放在底部。',
     e2: '入口 2：今天的份按科目列出，點一科就只做那一科；開始按鈕在拇指按得到的底部。',
-    e3: '入口 3：首頁就是目錄，家長改範圍、管理卡片最快；開始按鈕固定在底部。',
-    dir: '目錄：點單元展開學習目標；按「管理」出現勾選與批次按鈕（D-073 的簡單版）。',
+    e3: '入口 3：首頁就是目錄，家長改範圍、管理卡片最快；▶ 是今天的份，點開單元才有「全部練習這個單元」。',
+    dir: '目錄：▶ 是今天的份；點開單元才有「全部練習這個單元」。按「管理」出現勾選與批次按鈕（D-073 的簡單版）。',
     scope: '考試範圍：入口 → 勾選單元（已先勾好最近學的）→ 日期、確定，最多三步。'
   };
 
@@ -653,13 +651,14 @@ label.tr-t { cursor: pointer; }
     let main, right = '';
     if (mode === 'browse') {
       main = `<button type="button" class="tr-name" data-act="exp" data-u="${u.id}"${u.targets.length ? '' : ' disabled'}>${u.name}${tags}</button>`;
-      right = `${due}<button type="button" class="tr-prac" data-act="prac" data-u="${u.id}"${u.status === 'draft' ? ' disabled' : ''}>${t().practice}</button>`;
+      right = due;
     } else {
       const on = mode === 'scope' ? S.scopeDraft.has(u.id) : S.sel.has(u.id);
       main = `<label class="tr-lab"><input type="checkbox" class="cb" data-u="${u.id}"${on ? ' checked' : ''}><span class="tr-name">${u.name}${tags}</span></label>`;
       if (mode === 'manage') right = due;
     }
-    const ts = open ? `<ul class="tr-ts">${u.targets.map(([name, m], j) => mode === 'manage'
+    const pall = mode === 'browse' && u.status !== 'draft' ? `<li><button type="button" class="tr-pall" data-act="prac" data-u="${u.id}">${t().pall}${ICON.chevR}</button></li>` : '';
+    const ts = open ? `<ul class="tr-ts">${pall}${u.targets.map(([name, m], j) => mode === 'manage'
       ? `<li><label class="tr-t"><input type="checkbox" class="cb sm" data-t="${u.id}:${j}"${S.sel.has(`${u.id}:${j}`) ? ' checked' : ''}><i class="tr-dot" data-m="${m}"></i>${name}</label></li>`
       : `<li class="tr-t"><i class="tr-dot" data-m="${m}"></i>${name}</li>`).join('')}</ul>` : '';
     return `<div class="tr-u">${exp}${main}${right}</div>${ts}`;
@@ -668,7 +667,7 @@ label.tr-t { cursor: pointer; }
     return SUBJ.filter(s => mode !== 'scope' || s.id !== 'ext').map(s => {
       let go = '';
       if (mode === 'browse' && TODAY[s.id]) go = S.done[s.id] ? `<span class="tr-ok">${ICON.check(14)}${t().subjDone}</span>`
-        : `<button type="button" class="tr-go" data-act="subj" data-s="${s.id}">${t().startSubj(nm(s))} <b>${TODAY[s.id]}</b>${ICON.play}</button>`;
+        : `<button type="button" class="tr-go" data-act="subj" data-s="${s.id}" aria-label="${t().startSubj(nm(s))}"><span>${t().cards(TODAY[s.id])}</span><span class="en-play">${ICON.play}</span></button>`;
       return `<section><div class="tr-sh"><h2>${nm(s)}${s.grade ? `<span>${s.grade}</span>` : ''}</h2>${go}</div>${s.units.map(u => unitHTML(u, mode)).join('')}</section>`;
     }).join('');
   }
