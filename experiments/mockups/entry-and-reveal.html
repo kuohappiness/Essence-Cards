@@ -1,0 +1,850 @@
+<title>Essence Cards 入口與顯示答案</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a slim mockup bar (screen, theme, language, variant), then the plugin at phone size: full screen on phones, framed on desktop. Tokens follow the quiet review style (D-070). */
+:root {
+  --mk-bg: #E6E7EA; --mk-fg: #1B1D21; --mk-muted: #636872; --mk-line: #CBCED5; --mk-sel: #1B1D21; --mk-sel-fg: #FFFFFF; --mk-frame: #1B1D21;
+  /* 記憶配色（D-060、D-062）：沒印象紅、差一點橙、記住了綠、太簡單藍；新卡灰（D-069） */
+  --ec-miss: #B3261E; --ec-near: #8F4C00; --ec-good: #17693A; --ec-easy: #2862B9; --ec-new: #575C64;
+  /* 安靜樣式（D-070）：沒有卡片外框，只靠字和留白；顏色只用在自評的圓點和要想起來的重點 */
+  --page: #FAFAF9; --ink: #1D1F23; --muted: #6A6F77; --line: #E5E5E2; --press: #ECEFF4; --key: #7A5BC7;
+  --gl: env(safe-area-inset-left, 0px); --gr: env(safe-area-inset-right, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
+    --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
+    --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --mk-bg: #0E0F11; --mk-fg: #E8E9EC; --mk-muted: #969BA4; --mk-line: #2D3036; --mk-sel: #E8E9EC; --mk-sel-fg: #111214; --mk-frame: #2A2D33;
+  --ec-miss: #FF8A80; --ec-near: #FFB25E; --ec-good: #68D398; --ec-easy: #8DB7FF; --ec-new: #A0A5AD;
+  --page: #121314; --ink: #E6E7E9; --muted: #959AA2; --line: #2A2C30; --press: #263043; --key: #B69CF5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--mk-bg); color: var(--mk-fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 2px solid var(--mk-fg); outline-offset: -2px; }
+.ec-app :focus-visible { outline-color: var(--ink); }
+
+/* 樣式稿的控制列 */
+.mk { height: 100%; display: flex; flex-direction: column; }
+.mk-bar { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-block: 8px; padding-left: max(16px, var(--gl)); padding-right: max(16px, var(--gr)); }
+.mk-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.mk-title { display: none; margin-right: 6px; font-weight: 600; }
+.mk-lab { font-size: 12px; color: var(--mk-muted); }
+.mk-hint { margin: 0; max-width: 36em; min-height: 2.9em; text-align: center; font-size: 12px; line-height: 1.45; color: var(--mk-muted); text-wrap: pretty; }
+.seg { display: inline-flex; padding: 2px; border: 1px solid var(--mk-line); border-radius: 999px; }
+.seg button { border: 0; background: none; color: var(--mk-muted); font-size: 13px; line-height: 1; padding: 7px 10px; border-radius: 999px; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--mk-sel); color: var(--mk-sel-fg); }
+.mk-fold { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid var(--mk-line); border-radius: 50%; background: none; color: var(--mk-muted); }
+.mk-unfold { display: none; align-self: center; border: 0; background: none; color: var(--mk-muted); font-size: 12px; padding: 4px 14px; }
+.mk.is-folded .mk-bar { display: none; }
+.mk.is-folded .mk-unfold { display: block; }
+.mk-stage { flex: 1; min-height: 0; display: flex; justify-content: center; }
+
+/* 外掛畫面 */
+.ec-app { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--page); color: var(--ink); }
+@media (min-width: 640px) {
+  .mk-bar { padding-block: 16px 12px; }
+  .mk-title { display: inline; }
+  .mk-stage { padding: 0 16px 24px; }
+  .ec-app { width: 390px; max-width: 100%; height: min(820px, 100%); border: 10px solid var(--mk-frame); border-radius: 46px; }
+}
+.scr, .rv, .en { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ec-ico { flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 12px; background: none; color: var(--muted); }
+.ec-ico:disabled { opacity: .3; }
+.ec-ico:not(:disabled):active { background: var(--press); }
+.ec-ico.sm { width: 40px; height: 40px; }
+
+/* 複習畫面 */
+.ec-top { flex: none; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; padding: 6px max(10px, var(--gr)) 0 max(10px, var(--gl)); }
+.ec-count { text-align: center; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ec-return { justify-self: center; display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 4px 0 10px; border: 0; background: none; color: var(--ink); font-size: 14px; font-weight: 500; }
+.ec-prog { flex: none; height: 2px; margin-top: 6px; background: var(--line); }
+.ec-prog i { display: block; height: 100%; background: var(--muted); transition: width .35s ease; }
+
+.ec-stage { flex: 1; min-height: 0; overflow-y: auto; padding: 30px max(26px, var(--gr)) 16px max(26px, var(--gl)); }
+.rv.can-tap .ec-stage { cursor: pointer; }
+.ec-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.ec-new { padding: 1px 7px; border-radius: 6px; background: color-mix(in srgb, var(--ec-new) 16%, var(--page)); color: var(--ec-new); font-size: 12px; font-weight: 600; }
+.ec-q { margin-top: 18px; font-size: 24px; line-height: 1.55; font-weight: 500; text-wrap: pretty; }
+.ec-blank { display: inline-block; width: 4.5em; height: 1.2em; vertical-align: -.18em; border-radius: 6px; background: var(--line); }
+/* 霧化的空格：C1 是真的答案，C2 是同樣字數的假字加上字數 */
+.ec-blank.is-fog { position: relative; width: auto; height: 1.32em; padding: 0 .2em; overflow: hidden; vertical-align: -.26em; line-height: 1.32em; background: color-mix(in srgb, var(--line) 70%, transparent); }
+.ec-fog-t { display: inline-block; filter: blur(5px); opacity: .75; font-weight: 600; user-select: none; -webkit-user-select: none; }
+.v-C2 .ec-fog-t { opacity: .38; }
+.ec-cnt { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 600; line-height: 1; color: var(--ink); white-space: nowrap; }
+/* 要想起來的東西：粗體加一條細的紫色底線（D-068、D-070）；紫色不屬於記憶配色 */
+.ec-a strong, .ec-fill, .ec-mk { background: none; color: inherit; font-weight: 700; text-decoration-line: underline; text-decoration-color: var(--key); text-decoration-thickness: 2px; text-underline-offset: .32em; text-decoration-skip-ink: none; }
+.ec-mk { color: var(--key); }
+.ec-ans { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+.ec-ans.bare { margin-top: 6px; padding-top: 0; border-top: 0; }
+.ec-a { font-size: 19px; line-height: 1.75; }
+.ec-a p { margin: 0 0 8px; }
+.ec-ex { font-size: 16px; line-height: 1.6; color: var(--muted); }
+
+/* 答案的位置先留好（B、C1、C2），眼睛圖示放在中間；觸控範圍是整個畫面 */
+.ec-stack { display: grid; }
+.ec-stack > * { grid-area: 1 / 1; min-width: 0; }
+.slot:not(.is-open) .ec-stack { min-height: 96px; }
+.slot.bare .ec-stack { margin-top: 20px; }
+.slot.bare:not(.is-open) .ec-stack { min-height: 72px; }
+.slot:not(.is-open) .ec-a.real { visibility: hidden; }
+.ec-fog { align-self: start; filter: blur(5.5px); opacity: .6; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.ec-eye-wrap { place-self: center; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.ec-eye { pointer-events: auto; width: 56px; height: 56px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--page); color: var(--ink); box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 10%, transparent); }
+.ec-eye:active { background: var(--press); }
+.ec-eye-cap { padding: 1px 8px; border-radius: 6px; background: var(--page); color: var(--muted); font-size: 12px; font-weight: 600; }
+.out, .out * { pointer-events: none !important; }
+
+/* 出處與朗讀：同一套細線圖示（D-079、D-082） */
+.ec-tools { display: flex; align-items: center; margin: 8px 0 0 -10px; }
+.ec-srcw { display: inline-flex; align-items: center; gap: 2px; }
+.ec-tip { display: none; align-items: center; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--press); color: var(--ink); font-size: 13px; }
+.ec-srcw.is-tip .ec-tip { display: inline-flex; }
+@media (hover: hover) { .ec-srcw:hover .ec-tip { display: inline-flex; } }
+.ec-say { display: inline-grid; place-items: center; width: 38px; height: 38px; margin: -8px -8px -8px 0; padding: 0; vertical-align: middle; border: 0; border-radius: 10px; background: none; color: var(--muted); }
+.ec-say:active { background: var(--press); }
+
+/* 中→英打字（D-066） */
+.ec-inrow { display: flex; align-items: center; gap: 8px; margin-top: 24px; border-bottom: 2px solid var(--line); }
+.ec-inrow:focus-within { border-bottom-color: var(--ink); }
+.ec-input { flex: 1; min-width: 0; padding: 8px 2px; border: 0; border-radius: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: 24px; font-weight: 500; }
+.ec-input:focus { outline: none; }
+.ec-input::placeholder { color: var(--muted); font-size: 17px; font-weight: 400; }
+.ec-inbtn { flex: none; width: 44px; height: 44px; display: grid; place-items: center; margin-right: -6px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); }
+.ec-inbtn.is-check { width: 40px; height: 40px; margin: 2px -2px 2px 0; background: var(--ink); color: var(--page); }
+.ec-spell { display: grid; gap: 8px; }
+.ec-spell .row { display: flex; align-items: center; gap: 12px; }
+.ec-spell .lab { flex: none; min-width: 4.5em; font-size: 13px; color: var(--muted); }
+.ec-spell .w { min-width: 0; font-size: 24px; font-weight: 500; letter-spacing: .03em; overflow-wrap: anywhere; }
+.ec-spell s { color: var(--muted); text-decoration-thickness: 2px; }
+.ec-ok { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--press); color: var(--ink); }
+
+/* 自評四鍵（D-062、D-070）：不顯示間隔 */
+.ec-actions { flex: none; border-top: 1px solid var(--line); padding-left: var(--gl); padding-right: var(--gr); }
+.ec-actions.is-blank { height: 64px; border-top-color: transparent; }
+.ec-show { width: 100%; height: 64px; border: 0; background: none; color: var(--ink); font-size: 17px; font-weight: 500; }
+.ec-rates { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.ec-rate { height: 64px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 4px; border: 0; background: none; color: var(--ink); font-size: 16px; font-weight: 600; white-space: nowrap; }
+.ec-app[lang="en"] .ec-rate { font-size: 15px; gap: 6px; }
+.ec-rate + .ec-rate { border-left: 1px solid var(--line); }
+.ec-rate::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+.ec-rate:active, .ec-show:active { background: var(--press); }
+.ec-rate[aria-pressed="true"] { background: var(--press); }
+.ec-rate[aria-pressed="true"]::before { box-shadow: 0 0 0 3px color-mix(in srgb, var(--k) 30%, transparent); }
+[data-k="miss"] { --k: var(--ec-miss); }
+[data-k="near"] { --k: var(--ec-near); }
+[data-k="good"] { --k: var(--ec-good); }
+[data-k="easy"] { --k: var(--ec-easy); }
+
+.ec-done { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 56px 8px 0; text-align: center; }
+.ec-done-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--press); color: var(--ink); }
+.ec-done h2 { margin: 14px 0 0; font-size: 22px; font-weight: 600; text-wrap: balance; }
+.ec-done-sub { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ec-done .en-start { width: auto; min-width: 200px; height: 50px; margin-top: 22px; font-size: 16px; }
+
+/* 翻面：只做透明度淡入淡出，不做模糊半徑的動畫 */
+@keyframes fin { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fout { from { opacity: var(--o, 1); } to { opacity: 0; } }
+.just .ec-ans:not(.slot), .just .slot .ec-a.real, .just .ec-tools, .just .ec-fill, .just .ec-rates, .just .ec-say { animation: fin .18s ease-out both; }
+.just .ec-fog.out { --o: .6; animation: fout .18s ease-in both; }
+.just .ec-eye-wrap.out { animation: fout .12s ease-in both; }
+
+/* 入口、目錄、考試範圍 */
+.en-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 50px; padding: 6px max(10px, var(--gr)) 0 max(26px, var(--gl)); }
+.en-top.nav { display: grid; grid-template-columns: 76px 1fr 76px; padding-left: max(10px, var(--gl)); }
+.en-title { margin: 0; font-size: 17px; font-weight: 600; text-align: center; }
+.en-h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.en-tbtn { justify-self: end; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); font-size: 15px; font-weight: 500; white-space: nowrap; }
+.en-tbtn:active { background: var(--press); }
+.en-date { margin: 0; font-size: 13px; color: var(--muted); }
+.en-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 max(26px, var(--gr)) 24px max(26px, var(--gl)); }
+.en-start { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 58px; padding: 0 20px; border: 1px solid var(--ink); border-radius: 16px; background: var(--ink); color: var(--page); font-size: 18px; font-weight: 600; letter-spacing: .04em; }
+.en-start:active { opacity: .86; }
+.en-start.is-soft { border-color: var(--line); background: none; color: var(--ink); }
+.en-dock { flex: none; padding: 12px max(20px, var(--gr)) 16px max(20px, var(--gl)); border-top: 1px solid var(--line); }
+.en-filter { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+
+.en-row { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px max(16px, var(--gr)) 10px max(26px, var(--gl)); border: 0; background: none; color: var(--ink); font-size: 16px; text-align: left; }
+.en-row.in { padding-left: 0; padding-right: 0; }
+.en-row + .en-row { border-top: 1px solid var(--line); }
+.en-row:not(:disabled):active { background: var(--press); }
+.en-row-t { flex: none; }
+.en-row-v { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; text-align: right; color: var(--muted); font-size: 14px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.en-row-v small { font-size: 12px; }
+.en-row > svg { flex: none; color: var(--muted); }
+
+/* 入口 1：一個大按鈕 */
+.en1-main { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 0 max(28px, var(--gr)) 16px max(28px, var(--gl)); }
+.en1-in { margin-block: auto; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.en-big { margin: 8px 0 0; font-size: 36px; line-height: 1.15; font-weight: 600; font-variant-numeric: tabular-nums; text-wrap: balance; }
+.en-sub { margin: 8px 0 0; font-size: 16px; color: var(--muted); }
+.en1-main .en-start { max-width: 320px; margin-top: 30px; }
+.en-subjs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
+.en-subj { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--ink); font-size: 15px; }
+.en-subj b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.en-subj:disabled { color: var(--muted); }
+.en-subj:not(:disabled):active { background: var(--press); }
+.en-links { flex: none; border-top: 1px solid var(--line); padding-bottom: 6px; }
+
+/* 入口 2：分科清單，開始按鈕在底部 */
+.en-k { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.en-big2 { margin: 2px 0 0; font-size: 36px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.en-big2 span { margin-left: 10px; font-size: 17px; font-weight: 400; color: var(--muted); }
+.en-big2.is-done { margin-top: 12px; font-size: 26px; text-wrap: balance; }
+.en-group { margin-top: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.en-group.first { margin-top: 18px; }
+.en-play { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--press); color: var(--ink); }
+.en-sec { margin: 28px 0 0; font-size: 13px; color: var(--muted); }
+
+/* 入口 3：首頁就是目錄 */
+.en3-dock { display: flex; align-items: center; gap: 14px; }
+.en3-info { flex: 1; min-width: 0; }
+.en3-info b { display: block; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.en3-info span { display: block; font-size: 12px; color: var(--muted); }
+.en3-dock .en-start { width: auto; flex: none; height: 52px; padding: 0 22px; font-size: 17px; }
+
+/* 目錄（D-057、D-073） */
+.tr-sh { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; margin-top: 22px; }
+.tr-sh h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; }
+.tr-sh h2 span { margin-left: 8px; font-weight: 400; letter-spacing: 0; }
+.tr-go { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--ink); font-size: 13px; white-space: nowrap; }
+.tr-go b { font-variant-numeric: tabular-nums; }
+.tr-go:active { background: var(--press); }
+.tr-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
+.tr-u { display: flex; align-items: center; gap: 4px; min-height: 52px; border-top: 1px solid var(--line); }
+.tr-exp { flex: none; width: 32px; height: 44px; display: grid; place-items: center; margin-left: -8px; padding: 0; border: 0; background: none; color: var(--muted); }
+.tr-exp svg { transition: transform .2s ease; }
+.tr-exp.is-open svg { transform: rotate(90deg); }
+.tr-exp:disabled { visibility: hidden; }
+.tr-name { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 12px 0; border: 0; background: none; color: var(--ink); font-size: 16px; text-align: left; }
+.tr-lab { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.tr-tag { padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; line-height: 18px; white-space: nowrap; }
+.tr-tag.is-scope { border-color: var(--muted); color: var(--ink); }
+.tr-due { flex: none; min-width: 2em; text-align: right; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.tr-prac { flex: none; margin-left: 8px; min-height: 34px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--press); color: var(--ink); font-size: 13px; white-space: nowrap; }
+.tr-prac:disabled { opacity: .4; }
+.tr-ts { margin: 0; padding: 0 0 10px 28px; list-style: none; }
+.tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
+label.tr-t { cursor: pointer; }
+.tr-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+[data-m="new"] { --k: var(--ec-new); }
+[data-m="near"] { --k: var(--ec-near); }
+[data-m="good"] { --k: var(--ec-good); }
+[data-m="easy"] { --k: var(--ec-easy); }
+.tr-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 24px 0 0; font-size: 12px; color: var(--muted); }
+.tr-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cb { flex: none; appearance: none; -webkit-appearance: none; width: 22px; height: 22px; margin: 0; display: grid; place-items: center; border: 1.5px solid var(--muted); border-radius: 6px; background: var(--page); cursor: pointer; }
+.cb.sm { width: 20px; height: 20px; }
+.cb:checked { border-color: var(--ink); background: var(--ink); }
+.cb:checked::after { content: ""; width: 10px; height: 5px; border: solid var(--page); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+.tr-sel { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.tr-bb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tr-b { min-height: 46px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: none; color: var(--ink); font-size: 13px; line-height: 1.25; }
+.tr-b:disabled { opacity: .4; }
+.tr-b:not(:disabled):active { background: var(--press); }
+
+/* 設定考試範圍（D-071、D-078） */
+.sc-lead { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
+.sc-date { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.sc-date span { font-size: 16px; }
+.sc-date small { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.sc-date input { min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--page); color: var(--ink); font: inherit; font-size: 15px; }
+.sc-note { margin: 4px 0 12px; font-size: 12px; color: var(--muted); }
+
+.ec-toast { position: absolute; left: max(16px, var(--gl)); right: max(16px, var(--gr)); bottom: 92px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 12px; background: var(--ink); color: var(--page); font-size: 14px; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
+.ec-toast button { flex: none; border: 0; background: none; color: inherit; font-weight: 600; padding: 6px 8px; text-decoration: underline; text-underline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .just * { animation: none !important; }
+  .out { display: none !important; }
+  .ec-prog i, .tr-exp svg { transition: none; }
+}
+</style>
+
+<div class="mk" id="mk">
+  <header class="mk-bar">
+    <div class="mk-row">
+      <span class="mk-title">入口與顯示答案樣式稿</span>
+      <div class="seg" role="group" aria-label="畫面" id="seg-screen"><button type="button" data-v="entry">入口</button><button type="button" data-v="review">複習</button></div>
+      <div class="seg" role="group" aria-label="深淺色" id="seg-theme"><button type="button" data-v="light">淺色</button><button type="button" data-v="dark">深色</button></div>
+      <div class="seg" role="group" aria-label="按鈕文字" id="seg-lang"><button type="button" data-v="zh">中文</button><button type="button" data-v="en">EN</button></div>
+      <button type="button" class="mk-fold" id="mk-fold" aria-label="收起選項"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button>
+    </div>
+    <div class="mk-row">
+      <span class="mk-lab" id="var-lab">顯示答案</span>
+      <div class="seg" role="group" aria-label="顯示答案的方式" id="seg-rv"><button type="button" data-v="A">A 文字</button><button type="button" data-v="B">B 眼睛</button><button type="button" data-v="C1">C1 霧化</button><button type="button" data-v="C2">C2 假字</button></div>
+      <div class="seg" role="group" aria-label="入口版面" id="seg-ev"><button type="button" data-v="1">1 一鍵</button><button type="button" data-v="2">2 分科</button><button type="button" data-v="3">3 目錄</button></div>
+    </div>
+    <p class="mk-hint" id="hint" aria-live="polite"></p>
+  </header>
+  <button type="button" class="mk-unfold" id="mk-unfold">樣式稿選項 ▾</button>
+  <main class="mk-stage">
+    <section class="ec-app" id="app" aria-label="Essence Cards">
+      <div class="scr" id="scr"></div>
+      <div class="ec-toast" id="toast" role="status" hidden></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  // 範例內容：自己編的，不是課本原文
+  const CARDS = [
+    { id: 'c1', subj: 'sci', unit: 's2', crumb: '自然 › 國二上 › 2-2 水溶液', q: '飽和溶液和未飽和溶液有什麼不同？', points: 2,
+      a: '<p>在一定的溫度下，飽和溶液<strong>不能再溶解</strong>更多溶質；未飽和溶液<strong>還能再溶解</strong>。</p><p class="ec-ex">杯底留著溶不掉的糖，表示這杯糖水已經飽和。</p>' },
+    { id: 'c2', subj: 'sci', unit: 's2', crumb: '自然 › 國二上 › 2-2 水溶液', q: '糖水裡，糖是[[溶質]]，水是[[溶劑]]。' },
+    { id: 'c3', subj: 'eng', unit: 'e3', crumb: '英文 › 國二上 › Unit 3 單字', isNew: true, spell: 'borrow',
+      q: 'We {{}}（借）books from the library every week.', say: 'We borrow books from the library every week.' }
+  ];
+  const SUBJ = [
+    { id: 'sci', zh: '自然', en: 'Science', grade: '國二上', units: [
+      { id: 's1', short: '2-1', name: '2-1 質量與重量', due: 6, targets: [['質量與重量的不同', 'good'], ['重量的單位', 'easy'], ['彈簧秤怎麼量重量', 'near']] },
+      { id: 's2', short: '2-2', name: '2-2 水溶液', due: 9, recent: true, targets: [['溶質與溶劑', 'good'], ['水溶液與非水溶液', 'near'], ['擴散', 'easy'], ['溶解度', 'new'], ['飽和與未飽和溶液', 'near']] },
+      { id: 's3', short: '2-3', name: '2-3 溶液的濃度', due: 5, recent: true, targets: [['濃度的意義', 'new'], ['重量百分率濃度', 'new']] },
+      { id: 's4', short: '2-4', name: '2-4 酸與鹼', due: 0, status: 'draft', targets: [] }] },
+    { id: 'eng', zh: '英文', en: 'English', grade: '國二上', units: [
+      { id: 'e1', short: 'Unit 1', name: 'Unit 1 單字', due: 8, targets: [['bring 英翻中', 'good'], ['carry 英翻中', 'easy'], ['bring 中翻英', 'near']] },
+      { id: 'e2', short: 'Unit 2', name: 'Unit 2 單字', due: 12, recent: true, targets: [['visit 英翻中', 'good'], ['museum 英翻中', 'near'], ['visit 中翻英', 'new']] },
+      { id: 'e3', short: 'Unit 3', name: 'Unit 3 單字', due: 10, recent: true, targets: [['borrow 英翻中', 'good'], ['borrow 中翻英', 'new'], ['abundant 英翻中', 'near'], ['library 英翻中', 'easy']] },
+      { id: 'e4', short: 'Unit 4', name: 'Unit 4 單字', due: 0, status: 'draft', targets: [] }] },
+    { id: 'ext', zh: '延伸', en: 'Extra', grade: '', units: [
+      { id: 'x1', short: '攝影', name: '攝影入門', due: 4, status: 'filtered', targets: [['光圈與景深', 'near'], ['快門速度', 'good']] },
+      { id: 'x2', short: '睡眠', name: '睡眠的科學', due: 0, status: 'paused', targets: [['睡眠的階段', 'good']] }] }
+  ];
+  const TODAY = { eng: 30, sci: 20 }; // 今天的份，依每日時間上限排出（D-071）
+  const ORDER = ['eng', 'sci'];
+  const KEYS = ['miss', 'near', 'good', 'easy'];
+
+  const T = {
+    zh: {
+      show: '顯示答案', check: '確認', type: '輸入英文單字', typed: '你打的', spelling: '拼法', fresh: '新', blank: '空格',
+      src: '出處', srcOpen: '這裡會打開教材轉錄稿的那一段（樣式稿不做）', say: '朗讀', noSpeech: '這個瀏覽器不能朗讀',
+      back: '上一張', ret: '回到目前這張', exit: '結束複習', left: n => `還剩 ${n} 張`, prac: '練習',
+      rates: { miss: '沒印象', near: '差一點', good: '記住了', easy: '太簡單' },
+      chars: n => `${n} 個字`, letters: n => `${n} 個字母`, points: n => `${n} 個重點`,
+      doneAll: '今天的份完成了！', doneSubj: s => `${s}的份完成了！`, restLeft: (s, n) => `還有${s} ${n} 張`, next: s => `接著做${s}`,
+      took: (n, m) => `今天複習了 ${n} 張・${m < 1 ? '不到 1 分鐘' : `約 ${m} 分鐘`}`, more: '再複習一些', home: '回到首頁',
+      pracDone: '練習完成', pracAgain: '再練一輪', moreDone: '又多複習了一些',
+      today: n => `今天 ${n} 張`, todayLeft: n => `今天還剩 ${n} 張`, mins: m => `約 ${m} 分鐘`, start: '開始複習', filtered: '已濾掉：攝影',
+      todaySet: '今天的份', cards: n => `${n} 張`, entryDone: '今天的份完成了', entryDoneSub: '想多記一點，可以再複習一些。',
+      scope: '考試範圍', scopeNone: '還沒設定', scopeDate: (d, n) => `${d}・還有 ${n} 天`, scopeNoDate: '沒有填日期',
+      dir: '目錄', settings: '設定', settingsToast: '設定頁不在這次的樣式稿裡', onlyDemo: '樣式稿只有 2-2 與 Unit 3 有示範卡',
+      startSubj: s => `只做${s}`, subjDone: '今天完成',
+      manage: '管理', finish: '完成', practice: '練習', draft: '草稿', paused: '暫停', filtered2: '已濾掉', inScope: '範圍', expand: '展開',
+      selN: n => `已選 ${n} 項`, noSel: '勾選單元或學習目標，再選要做的事',
+      b: { pause: '暫停／恢復', imp: '重要性', scope: '考試範圍', prac: '練習' },
+      updated: (n, m) => `已更新 ${n} 張卡（${m} 篇卡組）`, undo: '復原', undone: '已復原',
+      legend: { new: '未複習', near: '快忘了', good: '記得', easy: '很熟' },
+      scopeTitle: '考試範圍', scopeLead: '勾選這次要考的單元；最近學的已經先勾好了。', date: '考試日期', optional: '選填',
+      dateNote: '填了日期，考前會自動多複習範圍內的卡，考完自動恢復。', ok: '確定', scopeSaved: '考試範圍已設定', navBack: '返回',
+      sep: '、', join: '・'
+    },
+    en: {
+      show: 'Show answer', check: 'Check', type: 'Type the English word', typed: 'You typed', spelling: 'Spelling', fresh: 'New', blank: 'blank',
+      src: 'Source', srcOpen: 'This opens the matching part of the textbook transcript (not in this mockup)', say: 'Read aloud', noSpeech: 'This browser cannot read aloud',
+      back: 'Previous card', ret: 'Back to current card', exit: 'End review', left: n => `${n} left`, prac: 'Practice',
+      rates: { miss: 'No idea', near: 'Almost', good: 'Got it', easy: 'Too easy' },
+      chars: n => `${n} chars`, letters: n => `${n} letters`, points: n => `${n} key points`,
+      doneAll: "Today's set is done!", doneSubj: s => `${s} is done for today!`, restLeft: (s, n) => `${s}: ${n} cards left`, next: s => `Continue with ${s}`,
+      took: (n, m) => `Reviewed ${n} cards today · ${m < 1 ? 'under a minute' : `about ${m} min`}`, more: 'Review a few more', home: 'Home',
+      pracDone: 'Practice done', pracAgain: 'Practice again', moreDone: 'Extra review done',
+      today: n => `${n} cards today`, todayLeft: n => `${n} cards left today`, mins: m => `About ${m} min`, start: 'Start review', filtered: 'Filtered out: 攝影',
+      todaySet: "Today's set", cards: n => `${n} cards`, entryDone: "Today's set is done", entryDoneSub: 'Want to remember more? Review a few more.',
+      scope: 'Exam scope', scopeNone: 'Not set', scopeDate: (d, n) => `${d} · ${n} days left`, scopeNoDate: 'No date',
+      dir: 'Contents', settings: 'Settings', settingsToast: 'Settings are not part of this mockup', onlyDemo: 'Only 2-2 and Unit 3 have sample cards here',
+      startSubj: s => `${s} only`, subjDone: 'Done today',
+      manage: 'Manage', finish: 'Done', practice: 'Practice', draft: 'Draft', paused: 'Paused', filtered2: 'Filtered', inScope: 'Exam', expand: 'Expand',
+      selN: n => `${n} selected`, noSel: 'Check units or learning goals, then pick an action',
+      b: { pause: 'Pause / resume', imp: 'Importance', scope: 'Exam scope', prac: 'Practice' },
+      updated: (n, m) => `Updated ${n} cards (${m} decks)`, undo: 'Undo', undone: 'Undone',
+      legend: { new: 'New', near: 'Fading', good: 'Remembered', easy: 'Solid' },
+      scopeTitle: 'Exam scope', scopeLead: 'Check the units on this exam. Recent units are already checked.', date: 'Exam date', optional: 'optional',
+      dateNote: 'With a date, cards in scope get extra review before the exam and go back to normal after it.', ok: 'Save', scopeSaved: 'Exam scope saved', navBack: 'Back',
+      sep: ', ', join: ' · '
+    }
+  };
+  const HINT = {
+    A: 'A：底部的「顯示答案」文字按鈕（目前的樣式）；點題目也能翻面。',
+    B: 'B：答案的位置先留白，中間放眼睛圖示，點畫面任何地方都能顯示。打字題的按鈕在輸入框旁，鍵盤打開時也按得到。',
+    C1: 'C1：把真正的答案霧化，點了變清楚。看看英文單字霧化後是不是還認得出字形。',
+    C2: 'C2：霧化同樣字數的假文字，看不出字形；附上字數或重點數當提示。',
+    e1: '入口 1：只有一個大按鈕，最安靜；分科按鈕在它下面，考試範圍與目錄放在底部。',
+    e2: '入口 2：今天的份按科目列出，點一科就只做那一科；開始按鈕在拇指按得到的底部。',
+    e3: '入口 3：首頁就是目錄，家長改範圍、管理卡片最快；開始按鈕固定在底部。',
+    dir: '目錄：點單元展開學習目標；按「管理」出現勾選與批次按鈕（D-073 的簡單版）。',
+    scope: '考試範圍：入口 → 勾選單元（已先勾好最近學的）→ 日期、確定，最多三步。'
+  };
+
+  const I = (d, s = 22, w = 1.8) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICON = {
+    x: I('<path d="M6 6l12 12M18 6L6 18"/>', 22, 2),
+    back: I('<path d="M14.5 5.5L8 12l6.5 6.5"/>', 24, 2),
+    chevR: I('<path d="M9.5 6l6 6-6 6"/>', 18, 2),
+    eye: I('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>', 24, 1.7),
+    check: s => I('<path d="M5 12.5l4.5 4.5L19 7.5"/>', s, 2.6),
+    book: I('<path d="M12 7C10.2 5.6 7.7 5 4 5.2v12.6c3.7-.2 6.2.4 8 1.8 1.8-1.4 4.3-2 8-1.8V5.2C16.3 5 13.8 5.6 12 7zM12 7v12.6"/>', 19, 1.6),
+    speaker: I('<path d="M4 9.5h3.2L11.5 6v12l-4.3-3.5H4z"/><path d="M15 9.2a4 4 0 0 1 0 5.6M17.6 6.8a7.5 7.5 0 0 1 0 10.4"/>', 20, 1.6),
+    sliders: I('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>', 22, 1.7),
+    play: '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>'
+  };
+
+  const $ = id => document.getElementById(id);
+  const app = $('app'), scr = $('scr'), toastEl = $('toast'), mk = $('mk'), root = document.documentElement;
+  const RM = matchMedia('(prefers-reduced-motion: reduce)'), DARK = matchMedia('(prefers-color-scheme: dark)');
+  const KEY = 'ec-entry-reveal-mock';
+  const RECENT = ['s2', 's3', 'e2', 'e3'];
+  const S = {
+    screen: 'review', rv: 'A', ev: '1', lang: 'zh', fold: false,
+    deck: [], i: 0, mode: 'today', subj: null, from: 'entry', revealed: false, spell: null, typed: '', hist: [], view: null,
+    busy: false, just: false, revealedAt: 0, t0: Date.now(), reviewed: 0,
+    done: { eng: false, sci: false }, scope: null, scopeDraft: new Set(), scopeDate: '', scopeFrom: 'entry',
+    manage: false, open: new Set(['s2']), sel: new Set()
+  };
+  const t = () => T[S.lang];
+  const nm = s => S.lang === 'en' ? s.en : s.zh;
+  const subjById = id => SUBJ.find(s => s.id === id);
+  const unitById = id => SUBJ.flatMap(s => s.units).find(u => u.id === id);
+  const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+  const anim = (el, frames, opts) => (!el || RM.matches || !el.animate) ? Promise.resolve()
+    : Promise.race([el.animate(frames, opts).finished.catch(() => {}), new Promise(r => setTimeout(r, opts.duration + 80))]);
+
+  // 日期：一天從清晨 4 點開始算（D-071）
+  const now = new Date(); if (now.getHours() < 4) now.setDate(now.getDate() - 1);
+  const pad = n => String(n).padStart(2, '0');
+  const todayISO = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const dateStr = () => S.lang === 'en' ? now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : `${now.getMonth() + 1}月${now.getDate()}日 星期${'日一二三四五六'[now.getDay()]}`;
+  const md = iso => { const d = new Date(iso + 'T00:00'); return S.lang === 'en' ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : `${d.getMonth() + 1}/${d.getDate()}`; };
+  const daysLeft = iso => Math.round((new Date(iso + 'T00:00') - new Date(todayISO + 'T00:00')) / 864e5);
+  const mins = n => Math.max(1, Math.floor(n / 4));
+
+  // 霧化用的假字：中文換成別的字，英文只用沒有上下凸出的字母，模糊後只看得出長度
+  const ZH = '的一是在有和人中大上個我以要時來用們生到作地出就分對成會可主發年動同工也能下過子說產種面而方後多定行學法所民得經進著等部度家電力如化高自理起小物現實加量都兩體機當使點從業本去把性好應開它合還因由其些然前外天日那社事平形相全表間樣與關各重新線內數正心反你明看原又麼利比或但質氣第向道命此變條只沒結解問意建月公無系很情者最立代想已通提直題程展果料象員位入常文總次品式活設及管特件長求老頭基資邊流路級少圖山統接知較將組見計別手角期根論運指幾區強放決西被做必先回則任取據處給色光門即保治北造百規熱領海口東導器壓志世金增爭濟階油思術極交受聯什認共權收證改清己美再採轉更單風切打白教速花帶安場身車例真務具萬每目至達走積示議聲報完類離華名確才科張信馬節話米整空元況今集溫傳土許步群廣石記需段研界拉林律叫且究觀越織裝影算低持音眾書布容兒須際商非驗連斷深難近千週委素技備半辦青省列習響約支般史感勞便團往酸歷市克何除消構府稱太準精值號率族維劃選標寫存候毛親快效斯院查江型眼王按格養易置派層片始卻專狀育廠京識適屬圓包火住調滿縣局照參紅細引聽該鐵價嚴龍飛';
+  const LO = 'acemnorsuvwxz', UP = 'ACEMNORSUVWXZ';
+  function rng(seed) { let h = 2166136261; for (const ch of seed) h = Math.imul(h ^ ch.codePointAt(0), 16777619); return () => { h += 0x6D2B79F5; let x = h; x = Math.imul(x ^ x >>> 15, x | 1); x ^= x + Math.imul(x ^ x >>> 7, x | 61); return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+  const pick = (pool, r) => pool[Math.floor(r() * pool.length)];
+  const fake = (s, r) => [...s].map(ch => /[一-鿿]/.test(ch) ? pick(ZH, r) : /[a-z]/.test(ch) ? pick(LO, r) : /[A-Z]/.test(ch) ? pick(UP, r) : ch).join('');
+  function fakeHTML(html, seed) {
+    const tp = document.createElement('template'); tp.innerHTML = html;
+    const r = rng(seed), w = document.createTreeWalker(tp.content, NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode());) n.nodeValue = fake(n.nodeValue, r);
+    return tp.innerHTML;
+  }
+
+  // 逐字比對（D-066）：ta 標出打錯、多打的字母，tb 標出漏掉或打錯的正確字母
+  function diff(a, b) {
+    const d = Array.from({ length: a.length + 1 }, (_, x) => Array.from({ length: b.length + 1 }, (_, y) => x ? (y ? 0 : x) : y));
+    for (let x = 1; x <= a.length; x++) for (let y = 1; y <= b.length; y++)
+      d[x][y] = Math.min(d[x - 1][y] + 1, d[x][y - 1] + 1, d[x - 1][y - 1] + (a[x - 1] === b[y - 1] ? 0 : 1));
+    const ta = [], tb = [];
+    for (let x = a.length, y = b.length; x > 0 || y > 0;) {
+      if (x > 0 && y > 0 && d[x][y] === d[x - 1][y - 1] + (a[x - 1] === b[y - 1] ? 0 : 1)) { const bad = a[x - 1] !== b[y - 1]; ta.unshift([a[x - 1], bad]); tb.unshift([b[y - 1], bad]); x--; y--; }
+      else if (y > 0 && d[x][y] === d[x][y - 1] + 1) { tb.unshift([b[y - 1], true]); y--; }
+      else { ta.unshift([a[x - 1], true]); x--; }
+    }
+    return { ta, tb };
+  }
+  const allowedFor = sp => sp ? (sp.ok ? ['good', 'easy'] : ['miss', 'near']) : KEYS;
+
+  /* ---------- 複習畫面 ---------- */
+  function blankHTML(x, revealed, isEn, seed) {
+    if (revealed) return `<mark class="ec-fill">${x}</mark>`;
+    if (S.rv === 'A' || S.rv === 'B') return `<span class="ec-blank" role="img" aria-label="${t().blank}"></span>`;
+    const n = [...x].length, cnt = isEn ? t().letters(n) : t().chars(n);
+    const txt = S.rv === 'C1' ? x : fake(x, rng(seed));
+    return `<span class="ec-blank is-fog" role="img" aria-label="${t().blank}${S.rv === 'C2' ? `, ${cnt}` : ''}"><span class="ec-fog-t" aria-hidden="true">${esc(txt)}</span>`
+      + (S.rv === 'C2' ? `<span class="ec-cnt" aria-hidden="true">${cnt}</span>` : '') + '</span>';
+  }
+  const toolsHTML = () => `<div class="ec-tools"><span class="ec-srcw"><button type="button" class="ec-ico sm" data-act="src" aria-label="${t().src}">${ICON.book}</button>`
+    + `<button type="button" class="ec-tip" data-act="src-open" tabindex="-1">${t().src} ↗</button></span></div>`;
+  function spellHTML(c, sp) {
+    if (sp.ok) return `<div class="ec-spell"><div class="row"><span class="ec-ok">${ICON.check(20)}</span><span class="w" lang="en">${c.spell}</span></div></div>`;
+    const typed = sp.ta.map(([ch, bad]) => bad ? `<s>${esc(ch)}</s>` : esc(ch)).join('') || '—';
+    const right = sp.tb.map(([ch, bad]) => bad ? `<mark class="ec-mk">${ch}</mark>` : ch).join('');
+    return `<div class="ec-spell"><div class="row"><span class="lab">${t().typed}</span><span class="w" lang="en">${typed}</span></div>`
+      + `<div class="row"><span class="lab">${t().spelling}</span><span class="w" lang="en">${right}</span></div></div>`;
+  }
+  function slotHTML(c, revealed) {
+    const v = S.rv, bare = !c.a;
+    if (v === 'A') return revealed ? `<div class="ec-ans${bare ? ' bare' : ''}">${c.a ? `<div class="ec-a">${c.a}</div>` : ''}${toolsHTML()}</div>` : '';
+    const leaving = revealed && S.just, showCover = !revealed || leaving;
+    const real = c.a ? `<div class="ec-a real"${revealed ? '' : ' aria-hidden="true"'}>${c.a}</div>` : '';
+    const fog = c.a && showCover && v !== 'B' ? `<div class="ec-a ec-fog${leaving ? ' out' : ''}" aria-hidden="true">${v === 'C1' ? c.a : fakeHTML(c.a, c.id)}</div>` : '';
+    const cap = v === 'C2' && c.points ? `<span class="ec-eye-cap">${t().points(c.points)}</span>` : '';
+    const eye = showCover ? `<div class="ec-eye-wrap${leaving ? ' out' : ''}"><button type="button" class="ec-eye" data-act="show" aria-label="${t().show}">${ICON.eye}</button>${cap}</div>` : '';
+    return `<div class="ec-ans slot${bare ? ' bare' : ''}${revealed ? ' is-open' : ''}"><div class="ec-stack">${real}${fog}${eye}</div>${revealed ? toolsHTML() : ''}</div>`;
+  }
+  function inbtnHTML() {
+    const typed = S.typed.trim();
+    return `<button type="button" class="ec-inbtn${typed ? ' is-check' : ''}" data-act="show" id="spell-btn" aria-label="${typed ? t().check : t().show}">${typed ? ICON.check(20) : ICON.eye}</button>`;
+  }
+  function cardHTML(c, revealed, sp) {
+    let q;
+    if (c.spell) q = `<span lang="en">${c.q.replace('{{}}', blankHTML(c.spell, revealed, true, c.id))}</span>`
+      + (revealed ? ` <button type="button" class="ec-say" data-act="say" aria-label="${t().say}">${ICON.speaker}</button>` : '');
+    else q = c.q.replace(/\[\[(.+?)\]\]/g, (_, x) => blankHTML(x, revealed, false, c.id + x));
+    const meta = `<div class="ec-meta">${c.isNew ? `<span class="ec-new">${t().fresh}</span>` : ''}<span>${c.crumb}</span></div>`;
+    const input = c.spell && !revealed
+      ? `<div class="ec-inrow"><input class="ec-input" id="spell-input" type="text" lang="en" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="${t().type}" aria-label="${t().type}" value="${esc(S.typed)}">${S.rv === 'A' ? '' : inbtnHTML()}</div>` : '';
+    const slot = c.spell ? (revealed ? `<div class="ec-ans">${spellHTML(c, sp)}${toolsHTML()}</div>` : '') : slotHTML(c, revealed);
+    return `<article class="ec-card">${meta}<div class="ec-q">${q}</div>${input}${slot}</article>`;
+  }
+  function reviewHTML() {
+    const n = S.deck.length, viewing = S.view != null, done = !viewing && S.i >= n;
+    const canBack = S.hist.length > 0 && S.view !== 0;
+    const center = viewing ? `<button type="button" class="ec-return" data-act="fwd">${t().ret}${ICON.chevR}</button>`
+      : done ? '<span></span>' : `<span class="ec-count" aria-live="polite">${S.mode === 'prac' ? t().prac + (S.lang === 'en' ? ' · ' : '・') : ''}${t().left(n - S.i)}</span>`;
+    const top = `<div class="ec-top"><button type="button" class="ec-ico" data-act="back" aria-label="${t().back}"${canBack ? '' : ' disabled'}>${ICON.back}</button>${center}`
+      + `<button type="button" class="ec-ico" data-act="exit" aria-label="${t().exit}"${done ? ' hidden' : ''}>${ICON.x}</button></div>`
+      + `<div class="ec-prog" aria-hidden="true"><i style="width:${Math.min(1, S.i / n) * 100}%"></i></div>`;
+    let body, acts, canTap = false, blankAct = '';
+    if (done) {
+      const d = doneInfo();
+      body = `<div class="ec-done"><div class="ec-done-mark">${ICON.check(30)}</div><h2>${d.h}</h2><p class="ec-done-sub">${d.sub}</p>${d.btn}</div>`;
+      acts = `<button type="button" class="ec-show" data-act="home">${S.from === 'dir' ? t().dir : t().home}</button>`;
+    } else {
+      const h = viewing ? S.hist[S.view] : null, c = S.deck[viewing ? h.idx : S.i];
+      const revealed = viewing || S.revealed, sp = viewing ? h.spell : S.spell;
+      body = cardHTML(c, revealed, sp);
+      canTap = !revealed && !c.spell;
+      if (!revealed) {
+        acts = S.rv === 'A' ? `<button type="button" class="ec-show" data-act="show" id="show-btn">${c.spell && S.typed.trim() ? t().check : t().show}</button>` : '';
+        if (!acts && !c.spell) blankAct = ' data-act="show"';
+      } else {
+        acts = '<div class="ec-rates">' + allowedFor(sp).map(k => `<button type="button" class="ec-rate" data-act="rate" data-k="${k}"${viewing ? ` aria-pressed="${h.k === k}"` : ''}>${t().rates[k]}</button>`).join('') + '</div>';
+      }
+    }
+    return `<div class="rv v-${S.rv}${S.just ? ' just' : ''}${canTap ? ' can-tap' : ''}">${top}<div class="ec-stage" data-scroll="stage">${body}</div>`
+      + `<div class="ec-actions${acts ? '' : ' is-blank'}"${blankAct}>${acts}</div></div>`;
+  }
+  function doneInfo() {
+    const m = Math.floor((Date.now() - S.t0) / 60000);
+    const btn = (act, label, extra = '', soft = false) => `<button type="button" class="en-start${soft ? ' is-soft' : ''}" data-act="${act}"${extra}>${label}</button>`;
+    if (S.mode === 'prac') return { h: t().pracDone, sub: t().took(S.reviewed, m), btn: btn('prac-again', t().pracAgain, '', true) };
+    const rest = ORDER.filter(id => !S.done[id]);
+    if (S.mode === 'today' && S.subj && rest.length) {
+      const s = subjById(rest[0]);
+      return { h: t().doneSubj(nm(subjById(S.subj))), sub: t().restLeft(nm(s), TODAY[s.id]), btn: btn('subj', t().next(nm(s)), ` data-s="${s.id}"`) };
+    }
+    return { h: S.mode === 'more' ? t().moreDone : t().doneAll, sub: t().took(S.reviewed, m), btn: btn('more', t().more, '', true) };
+  }
+
+  function startReview({ subj = null, unit = null, mode = 'today', cards = null } = {}) {
+    let deck;
+    if (cards) deck = cards;
+    else if (mode === 'today') {
+      const rest = subj ? [subj] : ORDER.filter(id => !S.done[id]);
+      if (!rest.length) return startReview({ mode: 'more' });
+      deck = CARDS.filter(c => rest.includes(c.subj));
+    } else deck = CARDS.slice();
+    if (unit && !cards) deck = CARDS.filter(c => c.unit === unit);
+    if (!deck.length) { deck = CARDS.slice(); toast(t().onlyDemo); }
+    if (S.screen !== 'review') S.from = S.screen === 'dir' ? 'dir' : 'entry';
+    Object.assign(S, { screen: 'review', deck, i: 0, mode, subj, revealed: false, spell: null, typed: '', hist: [], view: null, busy: false, t0: Date.now() });
+    render();
+  }
+  function reveal() {
+    if (S.busy || S.revealed || S.view != null || S.screen !== 'review' || S.i >= S.deck.length) return;
+    const c = S.deck[S.i];
+    if (c.spell) {
+      const typed = S.typed.trim().toLowerCase(), word = c.spell.toLowerCase();
+      S.spell = { ok: typed === word, ...diff(typed, word) };
+    }
+    S.revealed = true; S.revealedAt = performance.now(); S.just = true;
+    render(); S.just = false;
+  }
+  async function rate(k) {
+    if (S.view != null) {
+      const h = S.hist[S.view];
+      if (allowedFor(h.spell).includes(k)) { h.k = k; render(); } // 回看時直接改評分（D-084）
+      return;
+    }
+    // 翻面後 0.3 秒內的點擊不算，避免連點「顯示答案」時誤按自評
+    if (S.busy || !S.revealed || performance.now() - S.revealedAt < 300 || !allowedFor(S.spell).includes(k)) return;
+    S.busy = true;
+    S.hist.push({ idx: S.i, k, spell: S.spell });
+    await anim(scr.querySelector('.ec-card'), [{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
+    S.i++; S.reviewed++; S.revealed = false; S.spell = null; S.typed = '';
+    if (S.i >= S.deck.length && S.mode === 'today') (S.subj ? [S.subj] : ORDER).forEach(id => { S.done[id] = true; });
+    render();
+    await anim(scr.querySelector('.ec-card, .ec-done'), [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+    S.busy = false;
+  }
+  function back() { if (S.screen !== 'review' || !S.hist.length || S.view === 0) return; S.view = S.view == null ? S.hist.length - 1 : S.view - 1; render(); }
+  function fwd() { if (S.screen !== 'review' || S.view == null) return; S.view = S.view < S.hist.length - 1 ? S.view + 1 : null; render(); }
+  function say(text) {
+    try { const u = new SpeechSynthesisUtterance(text); u.lang = 'en-US'; speechSynthesis.cancel(); speechSynthesis.speak(u); }
+    catch (e) { toast(t().noSpeech); }
+  }
+
+  /* ---------- 入口 ---------- */
+  const restCount = () => ORDER.reduce((n, id) => n + (S.done[id] ? 0 : TODAY[id]), 0);
+  const anyDone = () => ORDER.some(id => S.done[id]);
+  const settingsBtn = () => `<button type="button" class="ec-ico" data-act="settings" aria-label="${t().settings}">${ICON.sliders}</button>`;
+  function scopeSummary(sc) {
+    return SUBJ.filter(s => s.id !== 'ext').map(s => {
+      const us = s.units.filter(u => sc.units.has(u.id));
+      return us.length ? `${nm(s)} ${us.map(u => u.short).join(t().sep)}` : '';
+    }).filter(Boolean).join(t().join);
+  }
+  function scopeRow(inset) {
+    const sc = S.scope;
+    const v = sc ? `<span class="en-row-v"><span>${sc.date ? t().scopeDate(md(sc.date), daysLeft(sc.date)) : t().scopeNoDate}</span><small>${scopeSummary(sc)}</small></span>`
+      : `<span class="en-row-v">${t().scopeNone}</span>`;
+    return `<button type="button" class="en-row${inset ? ' in' : ''}" data-act="scope"><span class="en-row-t">${t().scope}</span>${v}${ICON.chevR}</button>`;
+  }
+  const dirRow = inset => `<button type="button" class="en-row${inset ? ' in' : ''}" data-act="dir"><span class="en-row-t">${t().dir}</span><span class="en-row-v"></span>${ICON.chevR}</button>`;
+  function headline() {
+    const rest = restCount();
+    return rest ? { big: anyDone() ? t().todayLeft(rest) : t().today(rest), sub: t().mins(mins(rest)), act: 'start', label: t().start, soft: false }
+      : { big: t().entryDone, sub: t().entryDoneSub, act: 'more', label: t().more, soft: true };
+  }
+  function entry1() {
+    const h = headline();
+    const chips = ORDER.map(id => S.done[id]
+      ? `<button type="button" class="en-subj" disabled>${ICON.check(16)}${nm(subjById(id))}</button>`
+      : `<button type="button" class="en-subj" data-act="subj" data-s="${id}">${nm(subjById(id))} <b>${TODAY[id]}</b></button>`).join('');
+    return `<div class="en"><div class="en-top"><span></span>${settingsBtn()}</div>
+      <div class="en1-main"><div class="en1-in"><p class="en-date">${dateStr()}</p><p class="en-big">${h.big}</p><p class="en-sub">${h.sub}</p>
+      <button type="button" class="en-start${h.soft ? ' is-soft' : ''}" data-act="${h.act}">${h.label}</button>
+      <div class="en-subjs">${chips}</div><p class="en-filter">${t().filtered}</p></div></div>
+      <nav class="en-links">${scopeRow()}${dirRow()}</nav></div>`;
+  }
+  function entry2() {
+    const h = headline(), rest = restCount();
+    const rows = ORDER.map(id => S.done[id]
+      ? `<button type="button" class="en-row in" disabled><span class="en-row-t">${nm(subjById(id))}</span><span class="en-row-v">${t().subjDone}</span><span class="en-play">${ICON.check(16)}</span></button>`
+      : `<button type="button" class="en-row in" data-act="subj" data-s="${id}"><span class="en-row-t">${nm(subjById(id))}</span><span class="en-row-v">${t().cards(TODAY[id])}</span><span class="en-play">${ICON.play}</span></button>`).join('');
+    return `<div class="en"><div class="en-top"><p class="en-date">${dateStr()}</p>${settingsBtn()}</div>
+      <div class="en-scroll" data-scroll="e2">${rest ? `<p class="en-k">${t().todaySet}</p><p class="en-big2">${t().cards(rest)}<span>${t().mins(mins(rest))}</span></p>`
+        : `<p class="en-big2 is-done">${t().entryDone}</p><p class="en-k">${t().entryDoneSub}</p>`}
+      <div class="en-group first">${rows}</div><p class="en-filter">${t().filtered}</p>
+      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div>
+      <div class="en-dock"><button type="button" class="en-start${h.soft ? ' is-soft' : ''}" data-act="${h.act}">${h.label}</button></div></div>`;
+  }
+  function entry3() {
+    const h = headline(), rest = restCount();
+    const dock = S.manage ? batchDock()
+      : `<div class="en-dock en3-dock"><div class="en3-info"><b>${rest ? (anyDone() ? t().todayLeft(rest) : t().today(rest)) : t().entryDone}</b><span>${rest ? t().mins(mins(rest)) + (S.lang === 'en' ? ' · ' : '・') : ''}${t().filtered}</span></div>`
+        + `<button type="button" class="en-start${h.soft ? ' is-soft' : ''}" data-act="${h.act}">${h.label}</button></div>`;
+    return `<div class="en"><div class="en-top"><h1 class="en-h1">${t().dir}</h1><span style="display:flex">`
+      + `<button type="button" class="en-tbtn" data-act="manage">${S.manage ? t().finish : t().manage}</button>${settingsBtn()}</span></div>`
+      + `<div class="en-scroll" data-scroll="dir">${S.manage ? '' : `<div class="en-group">${scopeRow(true)}</div>`}${treeHTML(S.manage ? 'manage' : 'browse')}${legendHTML()}</div>${dock}</div>`;
+  }
+
+  /* ---------- 目錄與管理（D-057、D-073） ---------- */
+  const inScope = u => S.scope && S.scope.units.has(u.id);
+  function unitHTML(u, mode) {
+    const open = mode !== 'scope' && S.open.has(u.id) && u.targets.length > 0;
+    const tags = (u.status ? `<span class="tr-tag">${t()[u.status === 'filtered' ? 'filtered2' : u.status]}</span>` : '')
+      + (mode !== 'scope' && inScope(u) ? `<span class="tr-tag is-scope">${t().inScope}</span>` : '');
+    const exp = mode === 'scope' ? '' : `<button type="button" class="tr-exp${open ? ' is-open' : ''}" data-act="exp" data-u="${u.id}" aria-expanded="${open}" aria-label="${t().expand}"${u.targets.length ? '' : ' disabled'}>${ICON.chevR}</button>`;
+    const due = u.due && u.status !== 'filtered' ? `<span class="tr-due">${u.due}</span>` : '';
+    let main, right = '';
+    if (mode === 'browse') {
+      main = `<button type="button" class="tr-name" data-act="exp" data-u="${u.id}"${u.targets.length ? '' : ' disabled'}>${u.name}${tags}</button>`;
+      right = `${due}<button type="button" class="tr-prac" data-act="prac" data-u="${u.id}"${u.status === 'draft' ? ' disabled' : ''}>${t().practice}</button>`;
+    } else {
+      const on = mode === 'scope' ? S.scopeDraft.has(u.id) : S.sel.has(u.id);
+      main = `<label class="tr-lab"><input type="checkbox" class="cb" data-u="${u.id}"${on ? ' checked' : ''}><span class="tr-name">${u.name}${tags}</span></label>`;
+      if (mode === 'manage') right = due;
+    }
+    const ts = open ? `<ul class="tr-ts">${u.targets.map(([name, m], j) => mode === 'manage'
+      ? `<li><label class="tr-t"><input type="checkbox" class="cb sm" data-t="${u.id}:${j}"${S.sel.has(`${u.id}:${j}`) ? ' checked' : ''}><i class="tr-dot" data-m="${m}"></i>${name}</label></li>`
+      : `<li class="tr-t"><i class="tr-dot" data-m="${m}"></i>${name}</li>`).join('')}</ul>` : '';
+    return `<div class="tr-u">${exp}${main}${right}</div>${ts}`;
+  }
+  function treeHTML(mode) {
+    return SUBJ.filter(s => mode !== 'scope' || s.id !== 'ext').map(s => {
+      let go = '';
+      if (mode === 'browse' && TODAY[s.id]) go = S.done[s.id] ? `<span class="tr-ok">${ICON.check(14)}${t().subjDone}</span>`
+        : `<button type="button" class="tr-go" data-act="subj" data-s="${s.id}">${t().startSubj(nm(s))} <b>${TODAY[s.id]}</b>${ICON.play}</button>`;
+      return `<section><div class="tr-sh"><h2>${nm(s)}${s.grade ? `<span>${s.grade}</span>` : ''}</h2>${go}</div>${s.units.map(u => unitHTML(u, mode)).join('')}</section>`;
+    }).join('');
+  }
+  const legendHTML = () => `<p class="tr-legend">${['new', 'near', 'good', 'easy'].map(m => `<span><i class="tr-dot" data-m="${m}"></i>${t().legend[m]}</span>`).join('')}</p>`;
+  function batchDock() {
+    const n = S.sel.size;
+    return `<div class="en-dock"><p class="tr-sel">${n ? t().selN(n) : t().noSel}</p><div class="tr-bb">`
+      + Object.keys(t().b).map(b => `<button type="button" class="tr-b" data-act="batch" data-b="${b}"${n ? '' : ' disabled'}>${t().b[b]}</button>`).join('') + '</div></div>';
+  }
+  function dirHTML() {
+    return `<div class="en"><div class="en-top nav"><button type="button" class="ec-ico" data-act="nav-back" aria-label="${t().navBack}">${ICON.back}</button>`
+      + `<h1 class="en-title">${t().dir}</h1><button type="button" class="en-tbtn" data-act="manage">${S.manage ? t().finish : t().manage}</button></div>`
+      + `<div class="en-scroll" data-scroll="dir">${S.manage ? '' : `<div class="en-group">${scopeRow(true)}</div>`}${treeHTML(S.manage ? 'manage' : 'browse')}${legendHTML()}</div>${S.manage ? batchDock() : ''}</div>`;
+  }
+  function scopeHTML() {
+    return `<div class="en"><div class="en-top nav"><button type="button" class="ec-ico" data-act="nav-back" aria-label="${t().navBack}">${ICON.back}</button><h1 class="en-title">${t().scopeTitle}</h1><span></span></div>`
+      + `<div class="en-scroll" data-scroll="scope"><p class="sc-lead">${t().scopeLead}</p>${treeHTML('scope')}</div>`
+      + `<div class="en-dock"><label class="sc-date"><span>${t().date}<small>${t().optional}</small></span><input type="date" id="scope-date" value="${S.scopeDate}" min="${todayISO}"></label>`
+      + `<p class="sc-note">${t().dateNote}</p><button type="button" class="en-start" data-act="scope-ok">${t().ok}</button></div></div>`;
+  }
+  function openScope(from, preset) {
+    S.scopeFrom = from;
+    S.scopeDraft = new Set(preset || (S.scope ? S.scope.units : RECENT));
+    S.scopeDate = S.scope ? S.scope.date : '';
+    S.screen = 'scope'; render();
+  }
+  function batch(b) {
+    const units = [...S.sel].filter(k => !k.includes(':')), targets = [...S.sel].filter(k => k.includes(':'));
+    if (b === 'scope') { S.manage = false; const pre = units.filter(id => !id.startsWith('x')); S.sel.clear(); return openScope(S.screen === 'dir' ? 'dir' : 'entry', pre.length ? pre : null); }
+    if (b === 'prac') {
+      const keys = new Set([...units, ...targets.map(k => k.split(':')[0])]);
+      const cards = CARDS.filter(c => keys.has(c.unit));
+      S.manage = false; S.sel.clear();
+      if (!cards.length) toast(t().onlyDemo);
+      return startReview({ mode: 'prac', cards: cards.length ? cards : CARDS.slice() });
+    }
+    const decks = new Set([...units, ...targets.map(k => k.split(':')[0])]);
+    const cards = units.reduce((n, id) => n + Math.max(1, unitById(id).targets.length) * 2, 0) + targets.filter(k => !units.includes(k.split(':')[0])).length * 2;
+    toast(t().updated(cards, decks.size), true);
+  }
+
+  /* ---------- 繪製 ---------- */
+  function render() {
+    const old = scr.querySelector('[data-scroll]'), key = old && old.dataset.scroll, top = old ? old.scrollTop : 0;
+    app.lang = S.lang === 'en' ? 'en' : 'zh-Hant';
+    const home = { 1: entry1, 2: entry2, 3: entry3 }[S.ev];
+    scr.innerHTML = S.screen === 'review' ? reviewHTML() : S.screen === 'dir' ? dirHTML() : S.screen === 'scope' ? scopeHTML() : home();
+    const nw = scr.querySelector('[data-scroll]');
+    if (nw && nw.dataset.scroll === key) nw.scrollTop = top;
+    syncBar();
+  }
+  let toastTimer;
+  function toast(msg, undo = false) {
+    toastEl.innerHTML = `<span>${esc(msg)}</span>${undo ? `<button type="button" data-act="undo">${t().undo}</button>` : ''}`;
+    toastEl.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastEl.hidden = true; }, undo ? 4000 : 2600);
+  }
+
+  function act(a, b) {
+    switch (a) {
+      case 'show': return reveal();
+      case 'rate': return rate(b.dataset.k);
+      case 'back': return back();
+      case 'fwd': return fwd();
+      case 'exit': case 'home': S.screen = S.from; S.view = null; return render();
+      case 'more': return startReview({ mode: 'more' });
+      case 'start': return startReview();
+      case 'subj': return startReview({ subj: b.dataset.s });
+      case 'prac': return startReview({ unit: b.dataset.u, mode: 'prac' });
+      case 'prac-again': return startReview({ mode: 'prac', cards: S.deck });
+      case 'dir': S.screen = 'dir'; S.manage = false; S.sel.clear(); return render();
+      case 'scope': return openScope(S.screen === 'dir' ? 'dir' : 'entry');
+      case 'scope-ok': {
+        const d = $('scope-date'); if (d) S.scopeDate = d.value;
+        S.scope = S.scopeDraft.size ? { units: new Set(S.scopeDraft), date: S.scopeDate } : null;
+        S.screen = S.scopeFrom; render(); return toast(t().scopeSaved);
+      }
+      case 'nav-back': S.screen = S.screen === 'scope' ? S.scopeFrom : 'entry'; S.manage = false; S.sel.clear(); return render();
+      case 'manage': S.manage = !S.manage; S.sel.clear(); return render();
+      case 'exp': { const id = b.dataset.u; S.open.has(id) ? S.open.delete(id) : S.open.add(id); return render(); }
+      case 'batch': return batch(b.dataset.b);
+      case 'undo': return toast(t().undone);
+      case 'settings': return toast(t().settingsToast);
+      case 'src': { const w = b.closest('.ec-srcw'); if (w.classList.contains('is-tip')) return toast(t().srcOpen); w.classList.add('is-tip'); return; }
+      case 'src-open': return toast(t().srcOpen);
+      case 'say': { const c = S.deck[S.view != null ? S.hist[S.view].idx : S.i]; return say(c.say); }
+    }
+  }
+
+  let sx = null, sy = 0, swipedAt = 0;
+  app.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (b && app.contains(b)) { if (!b.disabled) act(b.dataset.act, b); return; }
+    // 點畫面任何地方都能翻面（打字題除外，免得點輸入框附近就看到答案）
+    if (S.screen === 'review' && e.target.closest('.ec-stage') && !e.target.closest('input, label') && Date.now() - swipedAt > 400) {
+      const c = S.deck[S.i];
+      if (c && !c.spell && S.view == null) reveal();
+    }
+  });
+  app.addEventListener('change', e => {
+    const el = e.target;
+    if (el.id === 'scope-date') { S.scopeDate = el.value; return; }
+    if (!el.classList.contains('cb')) return;
+    const id = el.dataset.u || el.dataset.t, set = S.screen === 'scope' ? S.scopeDraft : S.sel;
+    el.checked ? set.add(id) : set.delete(id);
+    if (S.screen !== 'scope') render();
+  });
+  app.addEventListener('input', e => {
+    if (e.target.id !== 'spell-input') return;
+    S.typed = e.target.value;
+    const sb = $('show-btn'); if (sb) sb.textContent = S.typed.trim() ? t().check : t().show;
+    const ib = $('spell-btn'); if (ib) ib.outerHTML = inbtnHTML();
+  });
+  // 回看上一張：手指往右滑是上一張，往左滑回到目前這張；上下捲動不算（D-084）
+  app.addEventListener('touchstart', e => {
+    if (S.screen !== 'review' || !e.target.closest('.ec-stage')) { sx = null; return; }
+    const p = e.touches[0]; sx = p.clientX; sy = p.clientY;
+  }, { passive: true });
+  app.addEventListener('touchend', e => {
+    if (sx == null) return;
+    const p = e.changedTouches[0], dx = p.clientX - sx, dy = p.clientY - sy; sx = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 1.6 * Math.abs(dy)) { swipedAt = Date.now(); dx > 0 ? back() : fwd(); }
+  }, { passive: true });
+  addEventListener('keydown', e => {
+    if (S.screen !== 'review') return;
+    const tg = e.target;
+    if (tg.closest && tg.closest('.mk-bar')) return;
+    if (tg.id === 'spell-input') { if (e.key === 'Enter') { e.preventDefault(); reveal(); } return; }
+    if (e.key === 'ArrowLeft') return back();
+    if (e.key === 'ArrowRight') return fwd();
+    if (tg.closest && tg.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    if ((e.key === ' ' || e.key === 'Enter') && !S.revealed && S.view == null) { e.preventDefault(); reveal(); }
+    else if (/^[1-4]$/.test(e.key)) rate(KEYS[e.key - 1]);
+  });
+
+  /* ---------- 控制列 ---------- */
+  function syncBar() {
+    const scrKey = S.screen === 'review' ? 'review' : 'entry';
+    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-rv': S.rv, 'seg-ev': S.ev };
+    for (const id in on) document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === on[id])));
+    $('seg-rv').hidden = scrKey !== 'review'; $('seg-ev').hidden = scrKey === 'review';
+    $('var-lab').textContent = scrKey === 'review' ? '顯示答案' : '入口版面';
+    $('hint').textContent = S.screen === 'review' ? HINT[S.rv] : S.screen === 'scope' ? HINT.scope
+      : S.screen === 'dir' ? HINT.dir : HINT['e' + S.ev];
+    mk.classList.toggle('is-folded', S.fold);
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ theme: root.dataset.theme || '', lang: S.lang, rv: S.rv, ev: S.ev, screen: S.screen === 'review' ? 'review' : 'entry', fold: S.fold })); } catch (e) {}
+  }
+  document.querySelector('.mk-bar').addEventListener('click', e => {
+    const b = e.target.closest('.seg button');
+    if (e.target.closest('#mk-fold')) { S.fold = true; syncBar(); save(); return; }
+    if (!b) return;
+    const g = b.parentElement.id, v = b.dataset.v;
+    if (g === 'seg-theme') root.dataset.theme = v;
+    else if (g === 'seg-lang') S.lang = v;
+    else if (g === 'seg-ev') S.ev = v;
+    else if (g === 'seg-rv') { S.rv = v; if (S.screen === 'review' && S.view == null) { S.revealed = false; S.spell = null; } }
+    else if (g === 'seg-screen') {
+      if (v === 'review') return (startReview(), save());
+      S.screen = 'entry'; S.manage = false; S.sel.clear();
+    }
+    render(); save();
+  });
+  $('mk-unfold').addEventListener('click', () => { S.fold = false; syncBar(); save(); });
+  if (DARK.addEventListener) DARK.addEventListener('change', syncBar);
+
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (s.theme === 'light' || s.theme === 'dark') root.dataset.theme = s.theme;
+    if (s.lang === 'en') S.lang = 'en';
+    if (['A', 'B', 'C1', 'C2'].includes(s.rv)) S.rv = s.rv;
+    if (['1', '2', '3'].includes(s.ev)) S.ev = s.ev;
+    if (s.screen === 'entry') S.screen = 'entry';
+    S.fold = s.fold === true;
+  } catch (e) {}
+  if (S.screen === 'review') startReview(); else render();
+})();
+</script>
