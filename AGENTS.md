@@ -10,9 +10,10 @@
 
 ## 開始工作前
 
-- 先讀 `README.md`、`docs/product.md`、`docs/architecture.md`、`docs/roadmap.md`；需要決定的理由時再看 `docs/decisions.md`。
-- 做製卡規則、語法解析、資料格式相關的工作時，再讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
-- 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 就好，不必先讀上面四份文件（[D-065](docs/decisions.md#d-065-試作場)）。
+- 先讀 `docs/roadmap.md` 的「現在在哪裡」：現況、下一步與進行中的專題討論（[D-099](docs/decisions.md#d-099-文件精簡)）。其他文件看任務需要再讀，用下面的「文件分工」找。
+- 要知道某個決定或它的理由，先看 `docs/decisions.md` 開頭的索引，再讀那幾條；提出新決定前，也先用索引查有沒有相關的舊決定。
+- 做製卡規則、語法解析、資料格式相關的工作時，讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
+- 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 就好（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/` 已被取代，只在追溯歷史時閱讀，不當作有效依據。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
 
@@ -23,21 +24,21 @@
 | `docs/product.md` | 為什麼做、為誰做、原則、範圍（v1／之後／不做） |
 | `docs/architecture.md` | 術語、概念模型、模組邊界、平台、資料存放、AI 的位置 |
 | `docs/syntax.md` | 出題語法與資料格式：卡組筆記、轉錄稿、錯題本、考試範圍、複習紀錄、AI 輸出快照怎麼寫 |
-| `docs/decisions.md` | 已確認的決定與理由（D-ID） |
-| `docs/roadmap.md` | 開發現況、路線圖、目前任務 |
+| `docs/decisions.md` | 已確認的決定與理由（D-ID）；開頭有索引 |
+| `docs/roadmap.md` | 開發現況、下一步、路線圖、最近完成的事 |
 | `docs/backlog.md` | 待決問題、待重新確認的舊共識、點子 |
 | `docs/card-rules/` | 交給 AI 的製卡規則（未來外掛的內建預設） |
 | `docs/ai-models.md` | 現在推薦的 AI 服務與模型；新模型推出時更新 |
 | `docs/research/` | 參考軟體研究 |
-| `docs/archive/` | 歷史討論與 v0 規劃 |
+| `docs/archive/` | 歷史討論、v0 規劃、路線圖較舊的已完成紀錄 |
 | `experiments/` | 試作場：樣式稿、試作外掛與測試結果 |
 
 - 一件事只寫在一個地方，其他地方用連結引用。
 - 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。只有使用者明確同意才標 ✅；沒有反對不等於同意。
-- 有新決定時，在 `decisions.md` 新增條目（D-ID 不重用），再更新受影響的 product、architecture、roadmap。被取代的決定標「已取代 → D-xxx」，不刪除。
-- 新點子先記進 `backlog.md`，保留原意與來源，不要求先整理完整。
+- 有新決定時，在 `decisions.md` 新增條目（D-ID 不重用），再更新受影響的 product、architecture、roadmap。被取代的決定標「已取代 → D-xxx」，不刪除；被修改的舊決定，在標題下第一行寫「……見 D-xxx」。改完執行 `node experiments/tools/decisions-index.mjs` 更新索引，再補上新決定的一句話。
+- 新點子先記進 `backlog.md`，保留原意與來源，不要求先整理完整；談定後那一項只留一行，連到 D-ID。
 - 重要討論在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`，記錄決定、理由與未解問題，並更新該目錄的 README 索引。內容採摘要，不冒充逐字紀錄。
-- 階段或任務有變動時，更新 `roadmap.md` 的「現在在哪裡」。
+- 階段或任務有變動時，更新 `roadmap.md` 的「現在在哪裡」。做完一件事時在「已完成」最上面加一行；超過 10 條就把最舊的搬到 `docs/archive/roadmap-completed.md` 的最上面。
 - 文件以繁體中文撰寫；英文名稱、程式識別字與必要引用保留原文。
 
 ## 討論方式
