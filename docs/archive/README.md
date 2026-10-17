@@ -7,6 +7,7 @@
 | 位置 | 內容 |
 |---|---|
 | [discussions/](discussions/README.md) | 全部歷史討論紀錄，原樣保留；之後的新討論摘要也放在這裡 |
+| [roadmap-completed.md](roadmap-completed.md) | 路線圖「已完成」裡較舊的紀錄；路線圖只留最近 10 條（D-099） |
 | [v0-planning/](v0-planning/consensus.md) | 2026-10-06～09 的 v0 規劃：共識 C-001～C-023、任務、點子、學習藍圖、功能目錄、模組與整合約定、技術路線圖、藍圖 SVG |
 | [v0-planning/board/](v0-planning/board/) | 已退役的討論看板：`index.html`、`mobile.html`、產生器腳本、範本與 GitHub Actions 工作流程 |
 
