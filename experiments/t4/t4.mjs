@@ -7,13 +7,14 @@ import { ApiClient } from './api.mjs';
 import { find, render } from './pdf.mjs';
 import { report } from './report.mjs';
 
-const HELP = `T4：Node 24，結果必須在 repo 外\nnode t4.mjs find --pdf <檔案> --text <文字>\nnode t4.mjs render --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs <transcribe|verify|cards|report> --out <資料夾>\nnode t4.mjs cards --out <資料夾> --transcript <轉錄稿路徑> [--model <模型>] [--variant <只用轉錄稿|轉錄稿加原頁>] [--runs <次數>] [--prompt <取代 prompts/cards.md 的檔案>]\nnode t4.mjs all --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs selftest`;
+const HELP = `T4：Node 24，結果必須在 repo 外\nnode t4.mjs find --pdf <檔案> --text <文字>\nnode t4.mjs render --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs <transcribe|verify|cards|report> --out <資料夾>\nnode t4.mjs cards --out <資料夾> --transcript <轉錄稿路徑> [--model <模型>] [--variant <只用轉錄稿|轉錄稿加原頁>] [--runs <次數>] [--prompt <取代 prompts/cards.md 的檔案>] [--rules <取代 science.md 的規則檔>] [--source <來源筆記>]…\nnode t4.mjs all --pdf <檔案> --pages <起-迄> --out <資料夾>\nnode t4.mjs selftest`;
 let secrets = [];
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     pdf: { type: 'string' }, pages: { type: 'string' }, out: { type: 'string' },
     text: { type: 'string' }, transcript: { type: 'string' }, help: { type: 'boolean' },
-    model: { type: 'string' }, variant: { type: 'string' }, runs: { type: 'string' }, prompt: { type: 'string' }
+    model: { type: 'string' }, variant: { type: 'string' }, runs: { type: 'string' }, prompt: { type: 'string' },
+    rules: { type: 'string' }, source: { type: 'string', multiple: true }
   } });
   if (values.help || !positionals.length) { console.log(HELP); return; }
   const [command] = positionals;
@@ -39,7 +40,8 @@ async function main() {
     await render(values.pdf, parsePages(values.pages), out);
     if (command === 'render') return;
   }
-  const { pages } = await readJson(path.join(out, '頁面/文字層.json'));
+  // 只用來源筆記製卡（一般知識）時沒有 PDF 頁面。
+  const { pages } = values.source?.length ? { pages: [] } : await readJson(path.join(out, '頁面/文字層.json'));
   const keys = await loadKeys(config.providers); secrets = Object.values(keys).filter(Boolean);
   const client = new ApiClient(config, keys, out);
   async function pageParts() {
@@ -84,20 +86,26 @@ async function main() {
     return ok;
   }
   async function cards() {
-    const source = values.transcript ? path.resolve(out, values.transcript) : path.join(out, slug(config.transcribe[0].model), '轉錄稿.md');
-    if (!(await exists(source))) { console.log('cards：缺少指定轉錄稿，跳過；轉錄成功後再重跑 cards'); return false; }
-    const transcript = await fs.readFile(source, 'utf8');
-    // --prompt 換掉 prompts/cards.md，例如試不同的家長調整。
-    const system = (await Promise.all(['../../docs/card-rules/common.md', '../../docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
+    // --source 可以給好幾份來源筆記（一般知識），每份標出筆記名稱；沒給時用 --transcript 的課本轉錄稿。
+    const notes = values.source?.length > 0;
+    const sources = notes ? values.source.map(file => path.resolve(out, file))
+      : [values.transcript ? path.resolve(out, values.transcript) : path.join(out, slug(config.transcribe[0].model), '轉錄稿.md')];
+    for (const source of sources) if (!(await exists(source))) { console.log(`cards：缺少 ${source}，跳過；轉錄成功後再重跑 cards`); return false; }
+    // --prompt 換掉 prompts/cards.md，例如試不同的家長調整；--rules 換掉 science.md，例如一般知識的 general.md。
+    const system = (await Promise.all(['../../docs/card-rules/common.md', values.rules ? path.resolve(values.rules) : '../../docs/card-rules/science.md', values.prompt ? path.resolve(values.prompt) : 'prompts/cards.md']
       .map(file => fs.readFile(path.resolve(ROOT, file), 'utf8')))).join('\n\n');
-    const content = [textPart('轉錄稿全文：\n' + transcript)];
-    const references = [...new Set([...transcript.matchAll(/!\[\[([^\]\n]+)\]\]/g)].map(m => m[1].split('|')[0]))];
-    for (const reference of references) {
-      // 正式的圖檔名含中文與空格（docs/syntax.md §1），只擋路徑與 Windows 不允許的字元。
-      if (!/^[^\\/:*?"<>|]+\.png$/.test(reference) || reference.includes('..')) throw new Error('轉錄稿的圖片名稱無效，只接受圖資料夾內的 PNG 檔名');
-      const file = path.join(path.dirname(source), '圖', reference);
-      if (!(await exists(file))) throw new Error(`缺少轉錄稿引用的圖片 ${reference}`);
-      content.push(textPart(`轉錄稿的圖：${reference}`), await imagePart(file));
+    const content = [];
+    for (const source of sources) {
+      const transcript = await fs.readFile(source, 'utf8');
+      content.push(textPart(notes ? `來源筆記「${path.basename(source, '.md')}」全文：\n${transcript}` : '轉錄稿全文：\n' + transcript));
+      const references = [...new Set([...transcript.matchAll(/!\[\[([^\]\n]+)\]\]/g)].map(m => m[1].split('|')[0]))];
+      for (const reference of references) {
+        // 正式的圖檔名含中文與空格（docs/syntax.md §1），只擋路徑與 Windows 不允許的字元。
+        if (!/^[^\\/:*?"<>|]+\.png$/.test(reference) || reference.includes('..')) throw new Error('轉錄稿的圖片名稱無效，只接受圖資料夾內的 PNG 檔名');
+        const file = path.join(path.dirname(source), '圖', reference);
+        if (!(await exists(file))) throw new Error(`缺少轉錄稿引用的圖片 ${reference}`);
+        content.push(textPart(`轉錄稿的圖：${reference}`), await imagePart(file));
+      }
     }
     const models = config.cards.filter(m => !values.model || m.model === values.model);
     const variants = ['只用轉錄稿', '轉錄稿加原頁'].filter(v => !values.variant || v === values.variant);

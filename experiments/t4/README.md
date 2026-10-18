@@ -29,3 +29,4 @@ node check-syntax.mjs <卡片.md>… --transcript <轉錄稿.md> --unit 2-2 [--t
 
 - `to-formal.mjs`：把這裡轉錄出來的暫定格式（`模型-p13-3.png`、`^fig-p13-3`）機械轉成 [syntax.md §1](../../docs/syntax.md#1-轉錄稿) 的圖檔名與錨點，內容不變。`report` 的格式檢查是第二輪的舊規則，新格式改用 `check-syntax.mjs`。
 - `check-syntax.mjs`：照 syntax.md 解析 AI 交回的草稿，分「錯誤」（程式會跳過那個學習目標或連結壞掉）、「不符」（違反語法或製卡規則）、「提醒」（啟發式，要人看）列出行號；`--tree` 印出程式看到的正面與背面。`--selftest` 用自己編的範例檢查它本身。
+- 一般知識（2026-10-18 起）：`cards` 加 `--rules ../../docs/card-rules/general.md` 換掉 science.md，用 `--source <來源筆記.md>` 代替 `--transcript`，可以重複給好幾份，每份會標出筆記名稱，不需要 PDF 頁面；檢查時加 `--subject 一般知識`。
