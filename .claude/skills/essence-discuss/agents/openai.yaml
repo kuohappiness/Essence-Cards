@@ -1,0 +1,5 @@
+interface:
+  display_name: "Essence 討論"
+  short_description: "一次討論一個設計問題，談定再寫成決定"
+policy:
+  allow_implicit_invocation: false

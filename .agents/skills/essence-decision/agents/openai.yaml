@@ -1,0 +1,3 @@
+interface:
+  display_name: "寫入決定"
+  short_description: "把談定的事寫成 D-ID 並同步文件"
