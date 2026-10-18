@@ -3,7 +3,8 @@
 // 用法：node judge.mjs <卡片.md>… --out <repo外資料夾> [--purpose <學習目的>] [--grade 國二] [--lang zh|en]
 //         [--model jev-latest] [--threshold 0.5] [--expect <標準答案.json>] [--subject 自然] [--dry-run]
 //       node judge.mjs --selftest
-// 金鑰讀 %USERPROFILE%\.essence-api-keys.env 的 TYPESAFE_API_KEY；TYPESAFE_BASE_URL 可換成其他閘道。
+// 金鑰讀 %USERPROFILE%\.essence-api-keys.env：有 TYPESAFE_API_KEY 就直接連 TypeSafe，沒有就用 OPENROUTER_API_KEY 走 OpenRouter
+// （同一個 /systemone 格式）；TYPESAFE_BASE_URL 可換成其他閘道。
 // --dry-run 不送出，只把請求寫進 --out，用來確認送出的內容。
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -64,6 +65,13 @@ export function buildRequests(cards, { lang = 'zh', grade = '', purpose = '', mo
     }
   }
   return requests;
+}
+
+export function endpoint(keys, override) {
+  const key = keys.typesafe || keys.openrouter;
+  if (!key) throw new Error('找不到 TYPESAFE_API_KEY 或 OPENROUTER_API_KEY：請放進 %USERPROFILE%\\.essence-api-keys.env');
+  const base = override || (keys.typesafe ? 'https://api.typesafe.ai/v1' : 'https://openrouter.ai/api/v1');
+  return { key, base: base.replace(/\/$/, '') };
 }
 
 export async function send(request, { key, base, fetchImpl = fetch, wait = sleep, tries = 4 }) {
@@ -134,9 +142,8 @@ export async function run(files, options, deps = {}) {
   const requests = buildRequests(cards, options);
   await fs.mkdir(options.out, { recursive: true });
   if (options.dryRun) { await writeJson(path.join(options.out, 'Jev 請求.json'), requests.map(r => r.body)); return { requests, results: [] }; }
-  const key = deps.key ?? (await loadKeys({ typesafe: { keyName: 'TYPESAFE_API_KEY' } })).typesafe;
-  if (!key) throw new Error('找不到 TYPESAFE_API_KEY：請放進 %USERPROFILE%\\.essence-api-keys.env');
-  const base = (process.env.TYPESAFE_BASE_URL || 'https://api.typesafe.ai/v1').replace(/\/$/, '');
+  const keys = deps.keys ?? await loadKeys({ typesafe: { keyName: 'TYPESAFE_API_KEY' }, openrouter: { keyName: 'OPENROUTER_API_KEY' } });
+  const { key, base } = endpoint(keys, process.env.TYPESAFE_BASE_URL);
   const results = [];
   let next = 0;
   const worker = async () => {
@@ -184,7 +191,7 @@ async function selftest() {
     return { ok: true, json: async () => ({ model: 'jev-1.13.0', answers, usage: { input_tokens: 300, output_tokens: 0 } }) };
   };
   const options = { out: dir, purpose: '段考自然', grade: '國二', lang: 'zh', model: 'jev-latest', threshold: 0.5, expect: path.join(dir, '標準答案.json') };
-  const { requests, results, expectResult } = await run([path.join(dir, '卡片.md')], options, { key: 'sk-test', fetch: fake, wait: async () => {} });
+  const { requests, results, expectResult } = await run([path.join(dir, '卡片.md')], options, { keys: { typesafe: 'sk-test' }, fetch: fake, wait: async () => {} });
   const failures = [];
   if (requests.length !== 5) failures.push(`請求數 ${requests.length}，應為 5（3 題＋2 個排序）`);
   const q = sent.find(s => s.body.questions.leak)?.body;
@@ -196,10 +203,12 @@ async function selftest() {
   const report = await fs.readFile(path.join(dir, 'Jev 報告.md'), 'utf8');
   if (!/3\.60.*溫度/.test(report.split('學習目標排序')[1]?.split('\n').find(l => l.startsWith('- ')) ?? '')) failures.push('排序沒有把分數高的排第一');
   if (report.includes('sk-test')) failures.push('報告裡出現金鑰');
+  const viaRouter = endpoint({ typesafe: '', openrouter: 'sk-or' });
+  if (viaRouter.base !== 'https://openrouter.ai/api/v1' || viaRouter.key !== 'sk-or') failures.push('只有 OpenRouter 金鑰時沒有改走 OpenRouter');
   await run([path.join(dir, '卡片.md')], { ...options, dryRun: true, out: path.join(dir, 'dry') });
   if (JSON.parse(await fs.readFile(path.join(dir, 'dry', 'Jev 請求.json'), 'utf8')).length !== 5) failures.push('--dry-run 沒寫出 5 個請求');
   await fs.rm(dir, { recursive: true, force: true });
-  console.log(failures.length ? 'FAIL\n' + failures.join('\n') : 'selftest：請求格式、重試、排序、標準答案比較、--dry-run 都正常');
+  console.log(failures.length ? 'FAIL\n' + failures.join('\n') : 'selftest：請求格式、重試、排序、標準答案比較、OpenRouter 備援、--dry-run 都正常');
   if (failures.length) process.exitCode = 1;
 }
 

@@ -136,5 +136,5 @@
   ```
 - 第一輪：用第四～九輪已經評好分的卡片（測試 vault 的 `檢查結果.md`），由 Claude 整理成標準答案 JSON（`[{ "題目": "題目開頭幾個字", "標記": ["leak", "two"] }]`），中文、英文檢查題各跑一次。
 - 通過門檻（💡 助理提案）：洩漏答案與一題兩問的召回率 ≥ 80%，而且精確率不比正規表示式差，就接進 T4 流程；其他檢查只當提醒。
-- 誰測：使用者申請 TypeSafe 金鑰（`TYPESAFE_API_KEY`，放進 `%USERPROFILE%\.essence-api-keys.env`；直接註冊暫停時改用閘道，網址設在 `TYPESAFE_BASE_URL`），其他由 AI 做。真實卡片與結果只放測試 vault。
+- 誰測：使用者準備金鑰，放進 `%USERPROFILE%\.essence-api-keys.env`：OpenRouter 的 `OPENROUTER_API_KEY`（2026-10-18 使用者從 OpenRouter 申請，模型 `typesafe/jev-1.13`，網址 `https://openrouter.ai/api/v1/systemone`），或 TypeSafe 的 `TYPESAFE_API_KEY`（兩把都有時優先用 TypeSafe）。其他由 AI 做。真實卡片與結果只放測試 vault。
 - 結果：
