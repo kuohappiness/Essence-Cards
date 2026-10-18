@@ -7,6 +7,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { languageStats } from './report.mjs';
 
 const FIELDS = ['出處', '類型', '重要性', '狀態', '備註', '錯題補強'];
@@ -415,4 +416,5 @@ async function main() {
   }
   if (errors) process.exitCode = 1;
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+// 被 judge.mjs 匯入時不執行。
+if (import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(error => { console.error(error.message); process.exitCode = 1; });
