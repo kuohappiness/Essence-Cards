@@ -19,16 +19,16 @@ const PRICE = 0.042 / 1e6; // 每個輸入 token 的美元標價；輸出免費�
 // 檢查題：code 對到 check-syntax.mjs 的提醒代碼時，報告會並列兩邊的結果。
 export const CHECKS = {
   zh: {
-    leak: { hint: 'leak-pattern', instructions: '只看「題目」，學生不用回想所學就能推出答案嗎？', criteria: { true: '題目裡已經寫出答案、答案的關鍵字，或用比較句型暗示了答案', false: '一定要回想學過的內容才答得出來' } },
-    two: { hint: 'two-questions', instructions: '這一題是不是同時要學生回答兩件以上不同的事？', criteria: { true: '要回答兩個以上獨立的問題或知識點', false: '只問一件事；「是什麼、為什麼」當成一個完整的解釋也算一件事' } },
+    leak: { hint: 'leak-pattern', instructions: '只看「題目」，學生不用回想所學就能推出答案嗎？', criteria: { true: '題目裡已經寫出答案、答案的關鍵字，或用比較句型暗示了答案', false: '一定要回想學過的內容才答得出來；題目只點出情境或主詞，沒有寫出答案本身或它的關鍵字，不算' } },
+    two: { hint: 'two-questions', instructions: '這一題是不是同時要學生回答兩件以上不同的事？', criteria: { true: '要回答兩個以上獨立的問題或知識點', false: '只問一件事；「是什麼、為什麼」當成一個完整的解釋、同一種問題一次問幾個並列項目（「A、B、C 分別是什麼？」）、「在什麼條件下的什麼量」都算一件事' } },
     yesno: { hint: 'yes-no', instructions: '這一題是不是是非題，或只能在兩個選項之間猜？', criteria: { true: '回答「是／否」「對／錯」或兩者擇一就能過關，用猜的也有一半機會', false: '要說出具體的內容' } },
     options: { hint: 'which-of', instructions: '這一題是不是一定要看到選項才能作答？', criteria: { true: '例如「下列何者」，但沒有給選項', false: '不需要選項就能回答' } },
     context: { hint: 'context', instructions: '這一題單獨拿出來看，看得懂在問什麼嗎？', criteria: { true: '看不懂：依賴上文、前一題或沒有附上的圖', false: '單獨看就懂' } },
     vague: { hint: null, instructions: '學生在腦中回答後，能根據「答案」清楚判斷自己對不對嗎？', criteria: { true: '不能：答案太長、太散，或可以有很多種說法', false: '能：答案短而明確，理解題有清楚的重點' } }
   },
   en: {
-    leak: { hint: 'leak-pattern', instructions: 'Looking only at the question (題目), could a student infer the answer without recalling anything they learned?', criteria: { true: 'The question already contains the answer, its key words, or hints it through a comparison phrasing', false: 'The student must recall learned content to answer' } },
-    two: { hint: 'two-questions', instructions: 'Does this question ask the student to answer two or more different things?', criteria: { true: 'Two or more independent questions or facts must be answered', false: 'It asks one thing; "what and why" as one complete explanation counts as one thing' } },
+    leak: { hint: 'leak-pattern', instructions: 'Looking only at the question (題目), could a student infer the answer without recalling anything they learned?', criteria: { true: 'The question already contains the answer, its key words, or hints it through a comparison phrasing', false: 'The student must recall learned content to answer; naming only the situation or subject, without the answer itself or its key words, does not count' } },
+    two: { hint: 'two-questions', instructions: 'Does this question ask the student to answer two or more different things?', criteria: { true: 'Two or more independent questions or facts must be answered', false: 'It asks one thing; "what and why" as one complete explanation, the same question asked for several parallel items ("what are A, B and C?"), or "what quantity under what conditions" each count as one thing' } },
     yesno: { hint: 'yes-no', instructions: 'Is this a yes/no question, or one where the student can only guess between two options?', criteria: { true: 'Answering yes/no, true/false or picking one of two passes; guessing has a 50% chance', false: 'The student must state specific content' } },
     options: { hint: 'which-of', instructions: 'Does this question require seeing answer options to be answerable?', criteria: { true: 'e.g. "which of the following" with no options given', false: 'It can be answered without options' } },
     context: { hint: 'context', instructions: 'Read on its own, is it clear what this question asks?', criteria: { true: 'Not clear: it depends on earlier text, a previous question, or a missing figure', false: 'Clear on its own' } },
