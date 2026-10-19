@@ -18,8 +18,8 @@
 | 內容 | 位置 |
 |---|---|
 | 樣式稿：單一 HTML，不用建置 | `mockups/` |
-| 各任務的操作說明與結果紀錄 | 該資料夾的 `README.md`（`mockups/`、`t4/`、`tts-probe/`、`load-sim/`） |
-| 試作外掛 | `plugin/`（還沒建立；從 2026-10-07 的原型改起：`git show a5b7c5f^:experiments/obsidian-ui-probe/main.js`） |
+| 各任務的操作說明與結果紀錄 | 該資料夾的 `README.md`（`mockups/`、`plugin/`、`t4/`、`tts-probe/`、`load-sim/`） |
+| 試作外掛 | [`plugin/`](plugin/README.md)：T2 複習畫面原型與 T3 的自動量測，React／Preact 兩個建置 |
 | 自己編的範例卡 | `samples/`（還沒建立） |
 | 測試 vault | iCloud 的 Obsidian 資料夾（`iCloud~md~obsidian`）裡的 `Essence Cards Test`，電腦和手機共用；不進 repo |
 
@@ -44,7 +44,7 @@
 | 任務 | 狀態 | 一句話 |
 |---|---|---|
 | [T1 複習畫面樣式](#t1-複習畫面樣式完成) | 完成 | 安靜樣式（D-070） |
-| [T2 複習畫面原型](#t2-複習畫面原型待做) | 待做 | 下一個要做；iPhone 部分和 T3 一起 |
+| [T2 複習畫面原型](#t2-複習畫面原型進行中) | 進行中 | 規格已交給 Codex；iPhone 部分和 T3 一起 |
 | [T3 實機驗證](#t3-實機驗證待做) | 待做 | 需要使用者的 iPhone，和 T2 集中成一次 |
 | [T4 API 模型實測](#t4-api-模型實測待做) | 待做 | 模型已選定（D-085），剩錯題照片、Mistral 其他模型 |
 | [T5 顯示答案、入口與目錄](#t5-顯示答案的方式入口與目錄完成) | 完成 | 樣式稿第 16 版（D-095～D-098、D-103、D-107） |
@@ -58,11 +58,12 @@
 - 結論：安靜樣式，自評按鈕不顯示間隔（[D-070](../docs/decisions.md#d-070-複習畫面採用安靜樣式)）。之後的修改都接到 T5 的樣式稿，目前應參照哪份見[樣式稿說明](mockups/README.md#目前應參照)。
 - 過程與 AI 測試結果：[樣式稿說明的 T1](mockups/README.md#t1-複習畫面樣式)。
 
-### T2 複習畫面原型｜待做
+### T2 複習畫面原型｜進行中
 
 - 問題：React 與 Preact 的啟動時間、翻卡與滑動手勢的動畫、能否藏起 Obsidian 的上下欄、卡片裡的圖片、公式與音檔（[D-051](../docs/decisions.md#d-051-複習畫面用-react)）。另測回看上一張的左右滑動會不會打開 Obsidian 側欄、會不會和長答案的上下捲動混淆（[D-084](../docs/decisions.md#d-084-回看上一張與滑動手勢)）。顯示答案的模糊效果沒有採用（D-096），不必量。
 - 照 T5 選定的畫面做：[入口與顯示答案樣式稿](mockups/entry-and-reveal.html)第 16 版（[樣式稿說明](mockups/README.md#目前應參照)）。
 - 誰測：AI 測 Windows；iPhone 由使用者最後確認，和 T3 一起做。
+- 現況（2026-10-19）：[試作外掛](plugin/README.md)的規格寫好了（[任務說明](plugin/TASK.md)），等 Codex 實作；T3 的連續複習 15 分鐘與三年份紀錄也做在同一個外掛裡。要量什麼、💡 通過門檻見試作外掛說明。
 - 結果：
 
 ### T3 實機驗證｜待做
@@ -71,7 +72,7 @@
 - 做法：可沿用 2026-10-07 原型的「五分鐘驗收」清單（`git show a5b7c5f^:experiments/obsidian-ui-probe/README.md`）。
 - 加測（使用者同意，D-074）：在 iPhone 連續複習 15 分鐘，約每 10 秒自評一次，每次自評立刻在背景寫進當月的 `.jsonl`；看畫面是否一直順暢，iCloud 同步是否正常。外掛可以自動按，量測結果寫進測試 vault。
 - 加測（使用者同意，[D-105](../docs/decisions.md#d-105-回測要用的紀錄先收好)）：AI 產生三年份的假紀錄（每天約 150 次作答，約 16 萬行、72 個月檔，含少量變更行），放進測試 vault，量 iPhone 第一次讀全部紀錄（沒有快取）要等多久，以及之後只讀當月的時間；電腦上 AI 自己量。
-- 誰測：iPhone 與兩端同步需要使用者；和 T2 的 iPhone 部分集中成一次。
+- 誰測：iPhone 與兩端同步需要使用者；和 T2 的 iPhone 部分集中成一次。兩項加測由[試作外掛](plugin/README.md)自動量測。
 - 結果：
 
 ### T4 API 模型實測｜待做
