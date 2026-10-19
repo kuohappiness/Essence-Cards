@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"], "jsx": "react-jsx",
+    "strict": true, "skipLibCheck": true, "allowImportingTsExtensions": true,
+    "noEmit": true, "baseUrl": ".",
+    "paths": {
+      "react": ["node_modules/preact/compat"],
+      "react/jsx-runtime": ["node_modules/preact/jsx-runtime"],
+      "react-dom/client": ["node_modules/preact/compat/client"]
+    }
+  },
+  "include": ["src", "preview"]
+}
