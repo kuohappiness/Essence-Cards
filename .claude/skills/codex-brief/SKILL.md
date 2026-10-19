@@ -40,4 +40,4 @@ description: 把規格清楚的程式或機械式工作寫成給 Codex 的任務
 2. 如果有 `code-review` skill，用 Skill tool 載入 "code-review"，以 TASK.md 當規格審查；沒有的話，逐條對照 TASK.md 的「限制」與「要做什麼」。
 3. 自己跑一次自我測試，不只看 Codex 貼的輸出。
 4. 結果記在試作場說明的測試清單（一行）；能定案的，用 Skill tool 載入 "essence-decision" 寫成 D-ID。
-5. 要修的地方寫成一段可以貼回給 Codex 的訊息，不要自己在 Codex 的分支上改。
+5. 要修的地方：小問題自己修；需要重做的，寫成一段可以貼回給 Codex 的訊息。
