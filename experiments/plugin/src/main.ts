@@ -16,6 +16,8 @@ class ReviewSession {
   metrics: SessionMetrics;
   closed = false;
   notice = '';
+  // 自動量測與連續複習把每次開啟的數字併進自己的結果檔，不另外寫「開啟」「手勢」檔。
+  private quiet: boolean;
   private previousFocus: HTMLElement | null;
   private cleanup: (() => void)[] = [];
   private closing?: Promise<void>;
@@ -23,6 +25,7 @@ class ReviewSession {
     this.metrics = new SessionMetrics(!plugin.hasOpened, { ...plugin.settings }); plugin.hasOpened = true;
     // 命令起點由 open() 在建立分頁之前記下。
     this.metrics.openedAt = plugin.commandAt;
+    this.quiet = !!plugin.run;
     this.previousFocus = document.activeElement as HTMLElement | null;
     this.host = document.createElement('div'); this.host.className = 'ec-host' + (leaf ? '' : ' ec-fullscreen'); this.host.tabIndex = -1;
     this.host.setAttribute('role', leaf ? 'region' : 'dialog'); this.host.setAttribute('aria-label', plugin.label + ' 複習');
@@ -66,6 +69,7 @@ class ReviewSession {
   }
   private async finish() {
     await this.metrics.settle();
+    if (this.quiet) return;
     try {
       await this.plugin.reporter.write('開啟', { opening: this.metrics.opening(), animations: this.metrics.animations, markdown: this.metrics.markdown }, this.metrics.settings);
       await this.plugin.reporter.write('手勢', { touches: this.metrics.gestures, scrolls: this.metrics.scrolls }, this.metrics.settings);
