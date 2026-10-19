@@ -323,6 +323,33 @@ label.tr-t { cursor: pointer; }
 .sc-date input { min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--page); color: var(--ink); font: inherit; font-size: 15px; }
 .sc-note { margin: 4px 0 12px; font-size: 12px; color: var(--muted); }
 
+/* 考前抽測（D-075）：考前 3 天在入口科目列的第一列；結果頁列出比較弱的單元 */
+.ck-sub { font-size: 13px; color: var(--muted); }
+.ck-score { margin: 26px 0 0; font-size: 40px; line-height: 1.1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ck-score span { margin-left: 10px; font-size: 17px; font-weight: 400; color: var(--muted); }
+.ck-lead { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+.ck-h { margin: 30px 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; }
+.ck-u { display: flex; align-items: center; gap: 12px; min-height: 56px; border-top: 1px solid var(--line); }
+.ck-u:last-child { border-bottom: 1px solid var(--line); }
+.ck-un { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 16px; }
+.ck-un small { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 「給家長」一區（D-103）：只在電腦版、有建議時出現，放在「目錄」連結下面 */
+.pa { margin-top: 30px; }
+.pa h2 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .06em; }
+.pa-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.pa-row:last-child { border-bottom: 1px solid var(--line); }
+.pa-t { flex: 1; min-width: 0; font-size: 14px; line-height: 1.55; }
+.pa-t b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 電腦版：Obsidian 的視窗與最下面的狀態列 */
+.ob-status { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 14px; height: 26px; padding: 0 max(12px, var(--gr)) 0 max(12px, var(--gl)); border-top: 1px solid var(--line); background: color-mix(in srgb, var(--line) 40%, var(--page)); color: var(--muted); font-size: 12px; white-space: nowrap; }
+.ob-status button { height: 100%; padding: 0 6px; border: 0; background: none; color: var(--ink); font-size: 12px; }
+.ob-status button:active { background: var(--press); }
+@media (min-width: 640px) {
+  .ec-app.is-desk { width: 640px; height: min(720px, 100%); border: 1px solid var(--mk-line); border-radius: 10px; box-shadow: 0 10px 34px rgb(0 0 0 / .14); }
+}
+
 .ec-toast { position: absolute; left: max(16px, var(--gl)); right: max(16px, var(--gr)); bottom: 92px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 12px; background: var(--ink); color: var(--page); font-size: 14px; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
 .ec-toast button { flex: none; border: 0; background: none; color: inherit; font-weight: 600; padding: 6px 8px; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -344,6 +371,8 @@ label.tr-t { cursor: pointer; }
     </div>
     <div class="mk-row">
       <span class="mk-lab" id="var-lab">顯示答案</span>
+      <div class="seg" role="group" aria-label="裝置" id="seg-dev"><button type="button" data-v="phone">iPhone</button><button type="button" data-v="desk">電腦</button></div>
+      <div class="seg" role="group" aria-label="離考試" id="seg-near"><button type="button" data-v="far">平常</button><button type="button" data-v="near">考前 3 天</button></div>
       <div class="seg" role="group" aria-label="考試倒數" id="seg-ex"><button type="button" data-v="on">顯示倒數</button><button type="button" data-v="off">不顯示</button></div>
     </div>
     <p class="mk-hint" id="hint" aria-live="polite"></p>
@@ -352,6 +381,7 @@ label.tr-t { cursor: pointer; }
   <main class="mk-stage">
     <section class="ec-app" id="app" aria-label="Essence Cards">
       <div class="scr" id="scr"></div>
+      <div class="ob-status" id="ob-status" hidden></div>
       <div class="ec-toast" id="toast" role="status" hidden></div>
     </section>
   </main>
@@ -417,7 +447,17 @@ label.tr-t { cursor: pointer; }
       legend: { new: '未複習', near: '快忘了', good: '記得', easy: '很熟' },
       scopeTitle: '考試範圍', scopeLead: '勾選這次要考的單元；最近學的已經先勾好了。', date: '考試日期', optional: '選填',
       dateNote: '填了考試期間，考前會自動多複習範圍內的卡，考完自動取消。', ok: '確定', scopeSaved: '考試範圍已設定', navBack: '返回',
-      sep: '、', join: '・'
+      sep: '、', join: '・',
+      check: '考前抽測', checkSub: '範圍內抽 40 題，可以請家長問', checkRes: '看結果', checkDone: '考前抽測完成',
+      checkLead: '記得的題數；作答已照常記錄，排程也更新了。', weak: '比較弱的單元', weakN: (a, b) => `記得 ${a}/${b}`,
+      parent: '給家長', status: n => `Essence Cards：${n} 項建議`, words: '182 個字',
+      pa: {
+        backlog: ['積的卡一直變多：目前積了 <b>46</b> 張，每日時間上限 <b>30</b> 分鐘。可以放慢新卡，或暫停重要性低的卡。', '暫停重要性低的卡'],
+        skip: ['自然已經 <b>5</b> 天沒做了。', '知道了'],
+        anchor: ['常錯的英文單字有 <b>6</b> 個，可以補記憶錨點。', '補記憶錨點'],
+        drafts: ['待審核的卡組有 <b>2</b> 份。', '打開']
+      },
+      paToast: { backlog: '已打開目錄的管理模式，篩好「重要性：低」（樣式稿不做篩選）', anchor: 'AI 會為這些字產生錨點草稿，家長審核後採用（樣式稿不做）', drafts: '這裡會打開待審核的卡組筆記（樣式稿不做）' }
     },
     en: {
       show: 'Show answer', check: 'Check', type: 'Type the English word', typed: 'You typed', spelling: 'Spelling', fresh: 'New', blank: 'blank',
@@ -442,7 +482,17 @@ label.tr-t { cursor: pointer; }
       legend: { new: 'New', near: 'Fading', good: 'Remembered', easy: 'Solid' },
       scopeTitle: 'Exam scope', scopeLead: 'Check the units on this exam. Recent units are already checked.', date: 'Exam date', optional: 'optional',
       dateNote: 'With an exam period, cards in scope get extra review before the exam; the scope ends after the last day.', ok: 'Save', scopeSaved: 'Exam scope saved', navBack: 'Back',
-      sep: ', ', join: ' · '
+      sep: ', ', join: ' · ',
+      check: 'Pre-exam check', checkSub: '40 random questions from the scope; a parent can ask', checkRes: 'Results', checkDone: 'Pre-exam check done',
+      checkLead: 'Remembered. Answers are logged and the schedule is updated as usual.', weak: 'Weaker units', weakN: (a, b) => `Remembered ${a}/${b}`,
+      parent: 'For parents', status: n => `Essence Cards: ${n} suggestions`, words: '182 words',
+      pa: {
+        backlog: ['The backlog keeps growing: <b>46</b> cards behind, daily limit <b>30</b> min. Slow down new cards or pause low-importance ones.', 'Pause low importance'],
+        skip: ['Science has been skipped for <b>5</b> days.', 'Got it'],
+        anchor: ['<b>6</b> English words are often missed. Add memory anchors?', 'Add anchors'],
+        drafts: ['<b>2</b> decks are waiting for review.', 'Open']
+      },
+      paToast: { backlog: 'Contents opens in manage mode, filtered to low importance (not in this mockup)', anchor: 'AI drafts anchors for these words for a parent to review (not in this mockup)', drafts: 'This opens the decks waiting for review (not in this mockup)' }
     }
   };
   const HINT = {
@@ -451,6 +501,8 @@ label.tr-t { cursor: pointer; }
     C1: 'C1：把真正的答案霧化，點了變清楚。看看英文單字霧化後是不是還認得出字形。',
     C2: 'C2：霧化同樣字數的假文字，看不出字形；附上字數或重點數當提示。',
     eA: '入口（2026-10-16 選定 A）：每一科底下的細線就是進度條，做完整條填滿、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
+    near: '考前 3 天：「考前抽測」排在第一列，不算進今日複習；先抽測，量到的才不會是剛複習過的。做完移到最下面、可以看結果，第二天消失。',
+    desk: '電腦版：有建議時，「目錄」下面出現「給家長」一區，狀態列多一行提示（D-103）；「知道了」會讓那一項消失。',
     eB: '入口 B：按鈕外圈就是進度環，做完合成完整的一圈、移到最下面。建議先做的科目排第一（考試最近的先，同一天就剩比較多的先）。',
     dir: '目錄：▶ 是今天的份；點開單元才有「全部練習這個單元」。按「管理」出現勾選與批次按鈕（D-073 的簡單版）。',
     scope: '考試範圍：入口 → 勾選單元（已先勾好最近學的）→ 日期、確定，最多三步。'
@@ -480,8 +532,12 @@ label.tr-t { cursor: pointer; }
     deck: [], i: 0, mode: 'today', subj: null, from: 'entry', revealed: false, spell: null, typed: '', hist: [], view: null,
     busy: false, just: false, revealedAt: 0, t0: Date.now(), reviewed: 0,
     done: { eng: false, sci: false }, cnt: { eng: 10, sci: 0 }, scope: null, scopeDraft: new Set(), scopeDate: '', scopeFrom: 'entry',
-    manage: false, open: new Set(), sel: new Set(), dirView: 'all', semOpen: new Set([CURRENT_SEM, 'ext']), udone: new Set(), unit: null, udue: 0, scopeStart: '', scopeEnd: ''
+    manage: false, open: new Set(), sel: new Set(), dirView: 'all', semOpen: new Set([CURRENT_SEM, 'ext']), udone: new Set(), unit: null, udue: 0, scopeStart: '', scopeEnd: '',
+    dev: 'phone', near: false, checkCnt: 0, checkDone: false, paGone: new Set()
   };
+  const CHECK_N = 40;
+  // 抽測結果的範例數字（樣式稿只有三張示範卡）
+  const WEAK = [['s2', 4, 7], ['e2', 5, 8]];
   const t = () => T[S.lang];
   const nm = s => S.lang === 'en' ? s.en : s.zh;
   const subjById = id => SUBJ.find(s => s.id === id);
@@ -575,7 +631,7 @@ label.tr-t { cursor: pointer; }
     const n = S.deck.length, viewing = S.view != null, done = !viewing && S.i >= n;
     const canBack = S.hist.length > 0 && S.view !== 0;
     const center = viewing ? `<button type="button" class="ec-return" data-act="fwd">${t().ret}${ICON.chevR}</button>`
-      : done ? '<span></span>' : `<span class="ec-count" aria-live="polite">${S.mode === 'prac' ? t().prac + (S.lang === 'en' ? ' · ' : '・') : ''}${t().left(n - S.i)}</span>`;
+      : done ? '<span></span>' : `<span class="ec-count" aria-live="polite">${S.mode === 'prac' || S.mode === 'check' ? t()[S.mode] + (S.lang === 'en' ? ' · ' : '・') : ''}${t().left(n - S.i)}</span>`;
     const top = `<div class="ec-top"><button type="button" class="ec-ico" data-act="back" aria-label="${t().back}"${canBack ? '' : ' disabled'}>${ICON.back}</button>${center}`
       + `<button type="button" class="ec-ico" data-act="exit" aria-label="${t().exit}"${done ? ' hidden' : ''}>${ICON.x}</button></div>`
       + `<div class="ec-prog" aria-hidden="true"><i style="width:${Math.min(1, S.i / n) * 100}%"></i></div>`;
@@ -651,6 +707,7 @@ label.tr-t { cursor: pointer; }
     S.i++; S.reviewed++; S.revealed = false; S.spell = null; S.typed = '';
     if (S.i >= S.deck.length && S.mode === 'utoday') { const u = unitById(S.unit); S.udone.add(u.id); S.cnt[u.subj] = Math.min(TODAY[u.subj], S.cnt[u.subj] + S.udue); }
     if (S.i >= S.deck.length && S.mode === 'today') (S.subj ? [S.subj] : ORDER).forEach(id => { S.done[id] = true; S.cnt[id] = TODAY[id]; });
+    if (S.i >= S.deck.length && S.mode === 'check') { S.checkDone = true; S.checkCnt = CHECK_N; S.screen = 'checkres'; }
     render();
     await anim(scr.querySelector('.ec-card, .ec-done'), [{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
     S.busy = false;
@@ -704,11 +761,43 @@ label.tr-t { cursor: pointer; }
       const ex = S.ex && d ? `<span class="sb-ex">${examText(d)}</span>` : '';
       const bar = S.dv === 'A' ? `<i class="sb-bar" aria-hidden="true"><i style="width:${dn1 / tot1 * 100}%"></i></i>` : '';
       return `<div class="sb${done ? ' is-done' : ''}"><div class="sb-main"><span class="sb-l1"><span class="sb-name">${nm(subjById(id))}</span><span class="sb-n">${dn1}/${tot1}</span></span>${ex}</div>${subjBtn(id)}${bar}</div>`;
-    }).join('');
+    });
+    // 考前抽測：沒做完排第一，做完和做完的科目一起移到最下面；不算進「今日複習」
+    if (checkOn()) {
+      const ck = checkRow();
+      S.checkDone ? rows.push(ck) : rows.unshift(ck);
+    }
     return `<div class="en"><div class="en-top"><p class="sb-l1 en-today${dn >= tot ? ' is-done' : ''}"><span class="sb-name">${t().todayLbl}</span><span class="sb-n">${dn}/${tot}</span></p>${settingsBtn()}</div>
-      <div class="en-scroll" data-scroll="entry"><div class="sb-list sb-${S.dv}">${rows}</div><p class="en-filter">${t().filtered}</p>
+      <div class="en-scroll" data-scroll="entry"><div class="sb-list sb-${S.dv}">${rows.join('')}</div><p class="en-filter">${t().filtered}</p>
       ${dn >= tot ? `<button type="button" class="en-start is-soft sb-more" data-act="more">${t().more}</button>` : ''}
-      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div></div><p class="en-mark" lang="en">Essence Cards</p></div>`;
+      <div class="en-group" style="margin-top:28px">${scopeRow(true)}${dirRow(true)}</div>${parentHTML()}</div><p class="en-mark" lang="en">Essence Cards</p></div>`;
+  }
+  // 考前抽測出現的時間：考試開始前 3 天到開始前一天（D-075）
+  const checkOn = () => !!(S.scope && S.scope.start) && daysLeft(S.scope.start) > 0 && daysLeft(S.scope.start) <= 3;
+  function checkRow() {
+    const n = S.checkCnt, done = S.checkDone;
+    const btn = done ? `<button type="button" class="sb-btn" data-act="check-res">${t().checkRes}</button>`
+      : `<button type="button" class="sb-btn" data-act="check" aria-label="${t().check}"><span class="sb-lbl">${ICON.play}<span>${t().minBtn(7)}</span></span></button>`;
+    return `<div class="sb${done ? ' is-done' : ''}"><div class="sb-main"><span class="sb-l1"><span class="sb-name">${t().check}</span><span class="sb-n">${n}/${CHECK_N}</span></span>`
+      + `<span class="ck-sub">${t().checkSub}</span></div>${btn}<i class="sb-bar" aria-hidden="true"><i style="width:${n / CHECK_N * 100}%"></i></i></div>`;
+  }
+  const paItems = () => S.dev === 'desk' ? Object.keys(t().pa).filter(k => !S.paGone.has(k)) : [];
+  function parentHTML() {
+    const ks = paItems();
+    if (!ks.length) return '';
+    return `<section class="pa" aria-label="${t().parent}"><h2>${t().parent}</h2>` + ks.map(k => {
+      const [txt, lbl] = t().pa[k];
+      return `<div class="pa-row"><span class="pa-t">${txt}</span><button type="button" class="u-btn" data-act="pa" data-k="${k}">${lbl}</button></div>`;
+    }).join('') + '</section>';
+  }
+  function checkResHTML() {
+    const ok = 34, pct = Math.round(ok / CHECK_N * 100);
+    const weak = WEAK.map(([id, a, b]) => { const u = unitById(id);
+      return `<div class="ck-u"><span class="ck-un">${nm(subjById(u.subj))} ${u.name}<small>${t().weakN(a, b)}</small></span>`
+        + `<button type="button" class="u-btn" data-act="prac" data-u="${id}">${ICON.play}${t().practice}</button></div>`; }).join('');
+    return `<div class="en"><div class="en-top nav"><button type="button" class="ec-ico" data-act="nav-back" aria-label="${t().navBack}">${ICON.back}</button><h1 class="en-title">${t().checkDone}</h1><span></span></div>`
+      + `<div class="en-scroll" data-scroll="checkres"><p class="ck-score">${ok}/${CHECK_N}<span>${pct}%</span></p><p class="ck-lead">${t().checkLead}</p>`
+      + `<h2 class="ck-h">${t().weak}</h2><div>${weak}</div></div></div>`;
   }
 
   /* ---------- 目錄與管理（D-057、D-073） ---------- */
@@ -811,7 +900,12 @@ label.tr-t { cursor: pointer; }
   function render() {
     const old = scr.querySelector('[data-scroll]'), key = old && old.dataset.scroll, top = old ? old.scrollTop : 0;
     app.lang = S.lang === 'en' ? 'en' : 'zh-Hant';
-    scr.innerHTML = S.screen === 'review' ? reviewHTML() : S.screen === 'dir' ? dirHTML() : S.screen === 'scope' ? scopeHTML() : entryHTML();
+    scr.innerHTML = S.screen === 'review' ? reviewHTML() : S.screen === 'dir' ? dirHTML() : S.screen === 'scope' ? scopeHTML() : S.screen === 'checkres' ? checkResHTML() : entryHTML();
+    // 電腦版的狀態列：有建議時多一行提示，點了打開入口（D-103）
+    const st = $('ob-status'), n = paItems().length;
+    app.classList.toggle('is-desk', S.dev === 'desk');
+    st.hidden = S.dev !== 'desk';
+    st.innerHTML = `<span>${t().words}</span>` + (n ? `<button type="button" data-act="status">${t().status(n)}</button>` : '');
     const nw = scr.querySelector('[data-scroll]');
     if (nw && nw.dataset.scroll === key) nw.scrollTop = top;
     syncBar();
@@ -854,6 +948,15 @@ label.tr-t { cursor: pointer; }
       case 'batch': return batch(b.dataset.b);
       case 'undo': return toast(t().undone);
       case 'settings': return toast(t().settingsToast);
+      case 'check': return startReview({ mode: 'check', cards: CARDS.slice() });
+      case 'check-res': S.screen = 'checkres'; return render();
+      case 'status': S.screen = 'entry'; S.manage = false; S.sel.clear(); return render();
+      case 'pa': {
+        const k = b.dataset.k;
+        if (k === 'skip') { S.paGone.add(k); return render(); }
+        if (k === 'backlog') { S.screen = 'dir'; S.manage = true; S.sel.clear(); render(); }
+        return toast(t().paToast[k]);
+      }
       case 'src': { const w = b.closest('.ec-srcw'); if (w.classList.contains('is-tip')) return toast(t().srcOpen); w.classList.add('is-tip'); return; }
       case 'src-open': return toast(t().srcOpen);
       case 'say': { const c = S.deck[S.view != null ? S.hist[S.view].idx : S.i]; return say(c.say); }
@@ -910,16 +1013,17 @@ label.tr-t { cursor: pointer; }
   /* ---------- 控制列 ---------- */
   function syncBar() {
     const scrKey = S.screen === 'review' ? 'review' : 'entry';
-    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-ex': S.ex ? 'on' : 'off' };
+    const on = { 'seg-screen': scrKey, 'seg-theme': root.dataset.theme || (DARK.matches ? 'dark' : 'light'), 'seg-lang': S.lang, 'seg-ex': S.ex ? 'on' : 'off', 'seg-dev': S.dev, 'seg-near': S.near ? 'near' : 'far' };
     for (const id in on) document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === on[id])));
-    $('seg-ex').hidden = $('var-lab').hidden = scrKey === 'review';
+    $('seg-ex').hidden = $('seg-near').hidden = $('var-lab').hidden = scrKey === 'review';
     $('var-lab').textContent = '入口';
-    $('hint').textContent = S.screen === 'review' ? HINT[S.rv] : S.screen === 'scope' ? HINT.scope
-      : S.screen === 'dir' ? HINT.dir : HINT['e' + S.dv];
+    $('hint').textContent = S.screen === 'review' ? (S.mode === 'check' ? HINT.near : HINT[S.rv]) : S.screen === 'scope' ? HINT.scope
+      : S.screen === 'dir' ? HINT.dir : S.screen === 'checkres' ? HINT.near
+      : [S.near ? HINT.near : HINT['e' + S.dv], S.dev === 'desk' ? HINT.desk : ''].filter(Boolean).join(' ');
     mk.classList.toggle('is-folded', S.fold);
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ theme: root.dataset.theme || '', lang: S.lang, rv: S.rv, dv: S.dv, ex: S.ex, screen: S.screen === 'review' ? 'review' : 'entry', fold: S.fold })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ theme: root.dataset.theme || '', lang: S.lang, rv: S.rv, dv: S.dv, ex: S.ex, screen: S.screen === 'review' ? 'review' : 'entry', fold: S.fold, dev: S.dev, near: S.near })); } catch (e) {}
   }
   document.querySelector('.mk-bar').addEventListener('click', e => {
     const b = e.target.closest('.seg button');
@@ -930,6 +1034,8 @@ label.tr-t { cursor: pointer; }
     else if (g === 'seg-lang') S.lang = v;
     else if (g === 'seg-dv') S.dv = v;
     else if (g === 'seg-ex') S.ex = v === 'on';
+    else if (g === 'seg-dev') S.dev = v;
+    else if (g === 'seg-near') { S.near = v === 'near'; setExam(); S.checkCnt = 0; S.checkDone = false; if (S.screen === 'checkres') S.screen = 'entry'; }
     else if (g === 'seg-rv') { S.rv = v; if (S.screen === 'review' && S.view == null) { S.revealed = false; S.spell = null; } }
     else if (g === 'seg-screen') {
       if (v === 'review') return (startReview({ mode: 'demo' }), save());
@@ -947,9 +1053,13 @@ label.tr-t { cursor: pointer; }
     if (s.ex === false) S.ex = false;
     if (s.screen === 'entry') S.screen = 'entry';
     S.fold = s.fold === true;
+    if (s.dev === 'desk') S.dev = 'desk';
+    if (s.near === true) S.near = true;
   } catch (e) {}
   const addDays = n => { const d = new Date(todayISO + 'T00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-  S.scope = { units: new Set(RECENT), start: addDays(12), end: addDays(13) }; // 範例：段考分兩天考
+  // 範例：段考分兩天考；「考前 3 天」把考試期間移到 3 天後
+  function setExam() { const n = S.near ? 3 : 12; S.scope = { units: S.scope ? S.scope.units : new Set(RECENT), start: addDays(n), end: addDays(n + 1) }; }
+  setExam();
   if (S.screen === 'review') startReview({ mode: 'demo' }); else render();
 })();
 </script>
