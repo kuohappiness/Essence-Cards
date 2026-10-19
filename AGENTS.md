@@ -14,7 +14,7 @@
 - 要知道某個決定或它的理由，先看 `docs/decisions.md` 開頭的索引，再讀那幾條；提出新決定前，也先用索引查有沒有相關的舊決定。
 - 做製卡規則、語法解析、資料格式相關的工作時，讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
 - 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 就好（[D-065](docs/decisions.md#d-065-試作場)）。
-- `docs/archive/` 已被取代，只在追溯歷史時閱讀，不當作有效依據。
+- `docs/archive/v0-planning/` 已被取代，不當作依據。`docs/archive/discussions/` 是過程紀錄：可以追溯當時的取捨，但不直接當規格；有些討論仍在進行，它們的未決問題與下一步一定也寫在 `backlog.md` 或 `roadmap.md`（[D-106](docs/decisions.md#d-106-claude-與-codex-的協作流程)）。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
 
 ## 文件分工
@@ -30,7 +30,8 @@
 | `docs/card-rules/` | 交給 AI 的製卡規則（未來外掛的內建預設） |
 | `docs/ai-models.md` | 現在推薦的 AI 服務與模型；新模型推出時更新 |
 | `docs/research/` | 參考軟體研究 |
-| `docs/archive/` | 歷史討論、v0 規劃、路線圖較舊的已完成紀錄 |
+| `docs/archive/` | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 |
+| `Claude Codex Discussion/` | Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 |
 | `experiments/` | 試作場：樣式稿、試作外掛與測試結果 |
 
 - 一件事只寫在一個地方，其他地方用連結引用。
@@ -53,6 +54,7 @@
 - 主要由 Claude 處理架構判斷與文件維護。
 - 使用者額度有限。遇到大量機械式整理，或適合在 ChatGPT 進行的長篇發想，助理要主動建議轉交，並附上一段可以直接貼上的精簡任務說明。
 - 使用者也訂閱 Codex。規格清楚的程式與機械式工作（例如試作場的測試程式、腳手架、批次整理）可以交給 Codex：Claude 寫好任務說明並附上建議的推理等級（照規格寫程式通常用中等就夠），Codex 依本文件在指定的檔案或分支工作，完成後由 Claude 檢查。架構判斷、介面設計（D-024）與文件維護仍由 Claude 負責。
+- Claude 和 Codex 要討論時，在 `Claude Codex Discussion/` 的討論稿輪流回覆，雙方一致後才交給使用者；請使用者決定時，分別說明 Claude 和 Codex 各自的考量與不採用的代價。結案時在檔頭標「已結案」並連到 D-ID，不另寫摘要（D-106）。
 - 由不同 AI 接手時，同樣遵守本文件。
 
 ## 實作與 Git

@@ -1,12 +1,12 @@
 # 封存區
 
-這裡的內容**僅供追溯**，不是目前有效的依據。目前內容請看 [README](../../README.md) 與 `docs/` 下的五份核心文件。
+`v0-planning/` 已被取代，**不是**目前有效的依據。`discussions/` 是過程紀錄：可以追溯當時的取捨，但不直接當規格；有些討論仍在進行，它們的未決問題與下一步也寫在 [backlog](../backlog.md) 或 [roadmap](../roadmap.md)（[D-106](../decisions.md#d-106-claude-與-codex-的協作流程)）。目前內容請看 [README](../../README.md) 與 `docs/` 下的五份核心文件。
 
 ## 內容
 
 | 位置 | 內容 |
 |---|---|
-| [discussions/](discussions/README.md) | 全部歷史討論紀錄，原樣保留；之後的新討論摘要也放在這裡 |
+| [discussions/](discussions/README.md) | 討論紀錄（摘要，原樣保留）；新的重要討論也放在這裡。Claude 與 Codex 的討論稿放在 repo 根目錄的 `Claude Codex Discussion/` |
 | [roadmap-completed.md](roadmap-completed.md) | 路線圖「已完成」裡較舊的紀錄；路線圖只留最近 10 條（D-099） |
 | [v0-planning/](v0-planning/consensus.md) | 2026-10-06～09 的 v0 規劃：共識 C-001～C-023、任務、點子、學習藍圖、功能目錄、模組與整合約定、技術路線圖、藍圖 SVG |
 | [v0-planning/board/](v0-planning/board/) | 已退役的討論看板：`index.html`、`mobile.html`、產生器腳本、範本與 GitHub Actions 工作流程 |
