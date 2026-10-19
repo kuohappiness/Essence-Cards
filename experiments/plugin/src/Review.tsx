@@ -145,8 +145,3 @@ export function Review(props: ReviewProps) {
       <div className="ec-rates">{ratings.filter(r => allowed.includes(r)).map((r, i) => <button key={r} className="ec-rate" disabled={!ratingReady || animating} data-k={r} aria-pressed={entry?.rating === r} onClick={() => void rate(r)}>{(card.en ? ['No idea', 'Almost', 'Got it', 'Too easy'] : ['沒印象', '差一點', '記住了', '太簡單'])[ratings.indexOf(r)]}</button>)}</div>}</div>
   </div>;
 }
-
-
-
-
-

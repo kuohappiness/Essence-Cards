@@ -18,4 +18,3 @@ const data: Omit<Card, 'lt' | 'v'>[] = [
 const fingerprints = ["4edb7010","1714603e","e71277dc","361d661e","85f7d1ba","af58ff24","9d0dd437","ef3cb98f","518faf92","0b1a5299","fec3880b","408165ba"];
 export const samples: Card[] = data.map((c, i) => ({ ...c, lt: 't2' + i.toString(36).padStart(4, '0'), v: fingerprints[i] }));
 export const SOURCE = 'Essence-T2/轉錄稿.md';
-

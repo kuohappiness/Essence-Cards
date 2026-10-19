@@ -26,4 +26,3 @@ if (preview) {
     console.log(framework + ': main.js ' + Buffer.byteLength(code) + ' bytes; require: ' + [...new Set(requires)].join(', ') + '; dependency graph OK');
   }
 }
-

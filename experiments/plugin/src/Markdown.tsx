@@ -80,5 +80,3 @@ export function Markdown({ app, text, revealed, cloze, card, side, metrics, firs
   useEffect(() => { if (ready.current) updateBlanks(true); }, [revealed]);
   return <div className="ec-markdown-host" ref={host} />;
 }
-
-

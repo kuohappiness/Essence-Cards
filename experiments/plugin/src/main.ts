@@ -230,4 +230,3 @@ export default class Prototype extends Plugin {
   }
   onunload() { this.cancelRun(); void this.session?.close().catch(() => {}); this.app.workspace.getLeavesOfType(this.viewType).forEach(leaf => leaf.detach()); }
 }
-
