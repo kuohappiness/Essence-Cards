@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：節省 token、文件編排與歸檔流程
 
-日期：2026-10-19｜整理者：Codex｜狀態：✅ 使用者已確認，寫成 [D-106](../docs/decisions.md#d-106-claude-與-codex-的協作流程)；codex-brief 已改；第二批搬移清單 Claude 與 Codex 已一致，待使用者確認後實作
+日期：2026-10-19｜整理者：Codex｜狀態：**已結案** → [D-106](../docs/decisions.md#d-106-claude-與-codex-的協作流程)；第一批、codex-brief 與第二批入口瘦身都已完成
 
 ## 先讀這裡
 
@@ -367,6 +367,14 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 4. **限制與適用時期**（模擬是估計、早期模型比較的時期、💡 提案標示）→ 和結果放在一起，不能在入口只留結論造成「已驗證」的印象。
 
 位置照草案表與 Codex 第 1 點；trials.md 合併兩份重疊的試用紀錄時，依日期、輪次、規則版本去重。T1～T8 的章節標題保留，讓既有錨點有效。連結依用途改目標，搬完檢查檔案、錨點與用途。
+
+**實作（2026-10-19，Claude）**：使用者同意後照四條原則搬完。
+
+- 新增 `experiments/mockups/README.md`、`tts-probe/README.md`、`load-sim/README.md`、`docs/card-rules/trials.md`；`experiments/t4/README.md` 加「誰測」「模型選型結果紀錄」「T7 Jev 判斷模型」（重測方式與結果紀錄分開）。T4 第四、五、六輪兩邊各自獨有的數字併進 trials.md 的同一列。
+- 試作場入口加狀態表；T1～T8 標題不變。T4 還有錯題照片與 Mistral 待測，標題維持「待做」。製卡規則 README 的試用紀錄換成「目前的驗證狀態」。
+- 連結依用途改：roadmap、backlog、architecture、decisions 的「試用紀錄」改指 trials.md；T4 選型、T8 模擬的出處改指 t4、load-sim 的 README；AGENTS.md 與試作場入口改成「讀這一頁和該任務連到的說明」。D-106 的「入口瘦身」改成已完成。
+- 字數更正：草案寫的 29,000、13,500 是位元組數；字元數是 13,900、6,100，搬完是 5,900、3,600。
+- 連結檢查（檔案與錨點，`docs/archive/v0-planning/` 除外）：這次的修改沒有斷連結；順手修了 `roadmap-completed.md` 搬過去時壞掉的兩個 `syntax.md` 連結。`docs/archive/discussions/` 的 2026-10-06～07 紀錄還有 95 個舊連結指向 v0 規劃搬走前的位置，是過程紀錄，沒有動。
 
 ## 9. 官方參考資料
 

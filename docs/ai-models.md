@@ -1,6 +1,6 @@
 # Essence Cards｜AI 模型推薦
 
-更新：2026-10-14｜狀態：依試作場 T4 兩輪實測（[結果](../experiments/README.md)）；語音與 Mistral 還沒測
+更新：2026-10-14｜狀態：依試作場 T4 兩輪實測（[結果](../experiments/t4/README.md#模型選型結果紀錄)）；語音與 Mistral 還沒測
 
 這份文件回答「現在推薦用哪個 AI 服務與模型」。外掛設定頁的預設選單、[使用說明書](decisions.md#d-048-使用說明書)的「申請免費金鑰」都以這份為準（[D-072](decisions.md#d-072-ai-服務的推薦與設定方式)）。調查細節見[AI API 供應商調查](research/api-providers.md)。
 
@@ -122,5 +122,5 @@
 | 2026-10-14 | 轉錄改用 GPT-6 Sol：Terra 截圖大多截錯（使用者發現，T4 第三輪確認） | T4 第三輪 |
 | 2026-10-14 | 首選改為 OpenAI GPT-5.6 Terra（資料分享額度），Gemini 3.8 Flash 改成完全免費的入門（[D-085](decisions.md#d-085-首選-openai-gpt-56-terra)） | T4 第二輪 |
 | 2026-10-13 | 刪除 OpenRouter 免費模型；免費備案改找 Mistral、OpenAI 的資料分享額度 | 使用者決定 |
-| 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/README.md) |
+| 2026-10-13 | T4 第一輪：轉錄與製卡都用 Gemini 3.8 Flash；Flash-Lite 不適合轉錄；OpenRouter 免費模型取消推薦。注意 3.8 Flash 免費方案常回 503，外掛要能自動稍後重試 | [T4 結果](../experiments/t4/README.md#模型選型結果紀錄) |
 | 2026-10-12 | 第一版：依桌面調查暫定，等 T4 實測 | [供應商調查](research/api-providers.md)、[討論紀錄](archive/discussions/2026-10-11-api-selection.md) |

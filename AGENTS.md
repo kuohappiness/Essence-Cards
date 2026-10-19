@@ -13,7 +13,7 @@
 - 先讀 `docs/roadmap.md` 的「現在在哪裡」：現況、下一步與進行中的專題討論（[D-099](docs/decisions.md#d-099-文件精簡)）。其他文件看任務需要再讀，用下面的「文件分工」找。
 - 要知道某個決定或它的理由，先看 `docs/decisions.md` 開頭的索引，再讀那幾條；提出新決定前，也先用索引查有沒有相關的舊決定。
 - 做製卡規則、語法解析、資料格式相關的工作時，讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
-- 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 就好（[D-065](docs/decisions.md#d-065-試作場)）。
+- 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 和該任務連到的說明就好（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/v0-planning/` 已被取代，不當作依據。`docs/archive/discussions/` 是過程紀錄：可以追溯當時的取捨，但不直接當規格；有些討論仍在進行，它們的未決問題與下一步一定也寫在 `backlog.md` 或 `roadmap.md`（[D-106](docs/decisions.md#d-106-claude-與-codex-的協作流程)）。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
 
