@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：節省 token、文件編排與歸檔流程
 
-日期：2026-10-19｜整理者：Codex｜狀態：✅ 使用者已確認，寫成 [D-106](../docs/decisions.md#d-106-claude-與-codex-的協作流程)；codex-brief 修改與第二批入口瘦身尚未完成
+日期：2026-10-19｜整理者：Codex｜狀態：✅ 使用者已確認，寫成 [D-106](../docs/decisions.md#d-106-claude-與-codex-的協作流程)；codex-brief 已改；第二批入口瘦身的搬移清單待 Codex 審查
 
 ## 先讀這裡
 
