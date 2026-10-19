@@ -11,6 +11,7 @@ export interface ReviewProps { app: App; metrics: SessionMetrics; close(): void;
 function Icon({ type }: { type: 'book' | 'speaker' }) {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{type === 'book' ? <><path d="M12 5v15M12 5C8 2 3 3 2 4v15c4-2 7-1 10 1 3-2 6-3 10-1V4c-4-2-7-1-10 1Z" /></> : <><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" /></>}</svg>;
 }
+const offsetX = (el: HTMLElement) => new DOMMatrix(getComputedStyle(el).transform).m41;
 export function Review(props: ReviewProps) {
   const { app, metrics, close, control } = props;
   const [index, setIndex] = useState(0), [view, setView] = useState<number | null>(null);
@@ -39,7 +40,9 @@ export function Review(props: ReviewProps) {
     try {
       const el = body.current;
       await metrics.track(metrics.animation(kind, async () => {
-        await animate(el, { opacity: [1, 0], x: direction ? direction * 70 : 0 }, { duration: 0.11 });
+        // 從手指放開的位置接著滑出，不先跳回原位。
+        const from = offsetX(el);
+        await animate(el, { opacity: [1, 0], x: [from, direction ? from + direction * 70 : from] }, { duration: 0.11 });
         if (!alive.current) return;
         change();
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
@@ -100,7 +103,7 @@ export function Review(props: ReviewProps) {
       if (outcome !== '點擊') suppressClick.current = performance.now() + 450;
       if (outcome === '上一張') void back();
       else if (outcome === '回到目前') void forward();
-      else if (body.current && t.axis === 'horizontal') void metrics.track(metrics.animation('彈回', async () => { await animate(body.current!, { x: 0 }, { type: 'spring', stiffness: 360, damping: 30 }); }));
+      else if (body.current && t.axis === 'horizontal') void metrics.track(metrics.animation('彈回', async () => { await animate(body.current!, { x: [offsetX(body.current!), 0] }, { type: 'spring', stiffness: 360, damping: 30 }); }));
       void metrics.track(delay(500).then(() => {
         const after = sidebars(app);
         metrics.gestures.push({ start: { x: t.x, y: t.y }, edgeDistance: t.edges, dx: t.dx, dy: t.dy, durationMs: ms, axis: t.axis, outcome, cancelled: event.type === 'touchcancel', before: t.before, after, sidebarOpened: { left: t.before.left === true && after.left === false, right: t.before.right === true && after.right === false } });
