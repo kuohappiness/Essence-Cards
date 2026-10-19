@@ -71,7 +71,9 @@ export function Review(props: ReviewProps) {
     await runAnimation('自評換卡', () => { setHistory([...history, next]); setIndex(index + 1); setRevealed(false); setTyped(''); });
   };
   const back = async () => { if (!canBack) return; await runAnimation('上一張', () => setView(view === null ? history.length - 1 : view - 1), 1); };
-  const forward = async () => { if (view === null) return; await runAnimation('回到目前', () => setView(null), -1); };
+  // 往左滑、右方向鍵一次往後一張，和往右滑對稱；上方的「回到目前 ›」一次跳回目前這張。
+  const forward = async () => { if (view === null) return; await runAnimation('回到目前', () => setView(view < history.length - 1 ? view + 1 : null), -1); };
+  const toCurrent = async () => { if (view === null) return; await runAnimation('回到目前', () => setView(null), -1); };
   const restart = () => { setIndex(0); setView(null); setHistory([]); setRevealed(false); setTyped(''); };
   control.current = { reveal, rate, back, forward, restart, done: () => done };
   useEffect(() => () => { control.current = null; }, []);
@@ -126,7 +128,7 @@ export function Review(props: ReviewProps) {
     else if (event.key === ' ' || event.key === 'Enter') { if (!(event.target as HTMLElement).closest('button')) { event.preventDefault(); reveal(); } }
   };
   return <div className="ec-app" tabIndex={-1} lang={card?.en ? 'en' : 'zh-Hant'} onKeyDown={key}>
-    <div className="ec-top"><button className="ec-ico" aria-label="上一張" disabled={!canBack || animating} onClick={() => void back()}>‹</button>{viewing ? <button className="ec-return" disabled={animating} onClick={() => void forward()}>回到目前 ›</button> : <span className="ec-count">{done ? '' : '還剩 ' + (samples.length - index) + ' 張'}</span>}<button className="ec-ico" aria-label="結束複習" onClick={close}>✕</button></div>
+    <div className="ec-top"><button className="ec-ico" aria-label="上一張" disabled={!canBack || animating} onClick={() => void back()}>‹</button>{viewing ? <button className="ec-return" disabled={animating} onClick={() => void toCurrent()}>回到目前 ›</button> : <span className="ec-count">{done ? '' : '還剩 ' + (samples.length - index) + ' 張'}</span>}<button className="ec-ico" aria-label="結束複習" onClick={close}>✕</button></div>
     <div className="ec-prog"><i style={{ width: Math.min(index / samples.length, 1) * 100 + '%' }} /></div>
     {(props.notice || warning) && <div className="ec-warning" role="status">{props.notice || warning}</div>}
     <div className="ec-stage" ref={stage} onScroll={() => metrics.scrolls++} onClick={e => { if (!card?.spell && performance.now() > suppressClick.current && !(e.target as HTMLElement).closest('button,input,a,audio')) reveal(); }}>
