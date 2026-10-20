@@ -27,7 +27,9 @@
 
 **根本問題**：品質規則分散在 5 個 skill、D-106、D-117、AGENTS.md 和 4 份 Claude 記憶裡。第三方 skill 預設的情境是「同一個 agent 自己寫、自己審，而且有 issue tracker」；本專案則是 Claude 寫規格、Codex 寫程式、Claude 審查。W1～W2 實際最有效的做法沒有寫進任何 skill：先由 Codex 審查，找到 2 個 P1；Claude 再用邊界例子重跑核對，又找到 N1～N3 和標題的 bug；延後處理的 4 件事各自記下了觸發點。
 
-## 2. 提案：一個 `essence-quality`（程式品質）
+## 2. 提案：一個通用的 `code-quality`（程式品質）
+
+使用者補充（2026-10-20）：這是通用的開發用 skill，名稱不綁 essence。`code-quality` 這個名稱是 Claude 的提案；專案專屬的設定怎麼拆出去，見 §2-6。
 
 依**時機**組織，不依技術組織。每個時機寫清楚：做什麼、誰做、花誰的額度。
 
@@ -71,7 +73,7 @@ L2 取代 D-106「影響大的改動照 code-review 開兩個子代理」的做�
 SKILL.md 只放原則、額度階梯、時機表和測試規則（約 80～100 行），細節分成幾個檔，到了那個時機才讀：
 
 ```
-essence-quality/
+code-quality/
   SKILL.md       原則、額度階梯、時機表、測試規則（濃縮自 tdd：只透過公開介面測試、
                  不寫把預期值用同樣方式算一次的斷言、一次只做一小段、往返測試）
   review.md      兩軸審查清單（規格＝TASK＋它引用的 D-ID＋syntax.md；
@@ -93,17 +95,31 @@ W1～W2 留下的 4 件事，現在寫在 roadmap「下一次對話從這裡開�
 
 提案：`backlog.md` 加一節「技術債」，一件事一行，格式是「項目｜觸發點｜來源」。寫 TASK 或開始新的 W 任務時，skill 會要求先看這一節。處理完照 backlog 的慣例，只留一行連結或刪除。
 
+### 2-6 通用內容和專案設定分開
+
+skill 本身只寫通用的做法。上面時機表裡屬於本專案的部分，改由專案裡一份短檔 `docs/agents/quality.md` 提供，skill 載入時才讀。這些部分包括：`npm run check`、寫回筆記的函式、ESLint 邊界規則、`deckCases`、backlog 的技術債一節。這份檔案寫：
+
+- **檢查指令**：`npm run check`，以及 hook 和 CI 放在哪裡。
+- **規格來源**：`tasks/*.md`、試作場的 `TASK.md`、D-ID、`syntax.md`。
+- **影響大、要做 L2 的範圍**：跨模組、資料格式、排程、寫回筆記。
+- **模組邊界**：D-110 與 `eslint.config.js`；共用範例清單（`deckCases`）。
+- **技術債記在哪裡**：§2-5 談定的位置。
+- **里程碑**：連到 roadmap，第一個是 W1～W6 打通。
+- **交叉審查找誰**：Codex。
+
+不寫進 AGENTS.md，因為 AGENTS.md 每次對話都會載入。專案沒有這份檔案時，skill 先從 AGENTS.md 和 package.json 推斷，推斷不出來再問使用者。
+
 ## 3. 刪除與修改清單
 
 **刪除**
 
 - `.claude/skills/` 裡的 code-review、tdd、diagnosing-bugs、retro、codebase-design 和 UPSTREAM.md
 - `.agents/skills/` 裡的 tdd、diagnosing-bugs、codebase-design 和 UPSTREAM.md
-- `docs/agents/issue-tracker.md`：只是讓第三方 skill 找到規格用的，那些 skill 刪掉後就沒有地方引用它
+- `docs/agents/issue-tracker.md`：原本只是讓第三方 skill 找到規格用的，由 §2-6 的 `docs/agents/quality.md` 取代
 
 **修改**
 
-- `codex-brief`：「Codex 完成後檢查」整段移到 essence-quality，原處只留一行連過去；「自我測試」連到 essence-quality 的測試規則；TASK 的存放位置補上 `tasks/`。
+- `codex-brief`：「Codex 完成後檢查」整段移到 code-quality，原處只留一行連過去；「自我測試」連到 code-quality 的測試規則；TASK 的存放位置補上 `tasks/`。
 - `decisions.md`：新增一條決定（預計是 D-119，寫入前先確認沒有被其他 session 用掉），修改 D-106 的審查分級和 D-117 的 retro 做法，並更新索引。
 - `roadmap.md`：在「已完成」加一行。如果 §2-5 採用，4 件延後的事搬到 backlog 的「技術債」一節。
 - Claude 的記憶 `milestone-retro-security`：改成連到 skill 的里程碑一節。
@@ -137,6 +153,11 @@ W1～W2 留下的 4 件事，現在寫在 roadmap「下一次對話從這裡開�
 4. **技術債記在哪裡**：backlog 的「技術債」一節，還是繼續留在 roadmap？
 5. **兩份 skill 的一致性**：要不要寫一個小程式，檢查 `.claude/skills` 和 `.agents/skills` 共用的 skill 內容是否相同？放進 `npm run check`，還是只在改 skill 時手動跑？
 6. **遺漏**：在本專案的開發過程中，還有哪些讓程式變乾淨或抓到錯誤的做法，沒有列進時機表？
+7. **通用 skill 放在哪裡**：
+   - **放在 repo**（`.claude/skills`、`.agents/skills`）：有版本紀錄，Codex 雲端也看得到。
+   - **放在家目錄**（`~/.claude/skills`、`~/.codex/skills`）：Capture 等其他專案共用一份。
+
+   Claude 傾向先放 repo，Capture 開始寫程式時再決定要不要搬。另外，§2-6 怎麼劃分通用內容和專案設定，你同意嗎？
 
 ## 7. 另外發現（不在這次範圍）
 
