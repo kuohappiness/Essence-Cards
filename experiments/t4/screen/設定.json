@@ -1,0 +1,40 @@
+{
+  "說明": "AI 品質初篩的固定條件，由 Claude 維護，程式只讀。路徑相對於 experiments/t4。見 tasks/ai-quality-screen.md",
+  "model": { "provider": "openai", "model": "gpt-5.6-terra" },
+  "groups": {
+    "精簡指令": ["screen/格式.md", "screen/精簡指令.md"],
+    "完整規則": ["screen/格式.md", "../../docs/card-rules/common.md", "{科目預設}", "screen/完整規則.md"]
+  },
+  "materials": {
+    "自然2-2": {
+      "教材": null,
+      "科目預設": "../../docs/card-rules/science.md",
+      "checkSyntax": { "subject": "自然", "unit": "2-2" },
+      "任務資料": [
+        "學生：國中二年級",
+        "科目：自然",
+        "單元：2-2 水溶液",
+        "學習目的：準備段考",
+        "允許 AI 補充：否",
+        "學生已有的學習目標：無",
+        "家長調整：無",
+        "教材：課本轉錄稿"
+      ]
+    },
+    "熱的傳播": {
+      "教材": "screen/熱的傳播.md",
+      "科目預設": "../../docs/card-rules/science.md",
+      "checkSyntax": { "subject": "自然", "unit": "熱的傳播" },
+      "任務資料": [
+        "學生：國中二年級",
+        "科目：自然",
+        "單元：熱的傳播",
+        "學習目的：準備段考",
+        "允許 AI 補充：否",
+        "學生已有的學習目標：無",
+        "家長調整：無",
+        "教材：講義"
+      ]
+    }
+  }
+}
