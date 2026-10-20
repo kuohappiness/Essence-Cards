@@ -2,6 +2,19 @@
 
 收錄不等於採用。每項保留原意與來源；談定後寫進[決策紀錄](decisions.md)，這裡只留一行連到 D-ID，內容以決策紀錄為準（[D-099](decisions.md#d-099-文件精簡)）。
 
+## 技術債
+
+開始一件工作或改到相關區域前，先看這張表；觸發點到了，連同完成條件一起帶進那次工作（[D-119](decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。處理完刪掉那一行，修正與驗證的 commit 寫在 roadmap 的已完成。
+
+| 項目與影響 | 觸發點 | 完成條件 | 來源 |
+|---|---|---|---|
+| 清單解析還沒和 Obsidian 的 metadataCache 對照過。清單裡縮排過深（`- a` 底下 8 格的 `- b`）、沒有空行又頂格的一行字夾在題目之間，現在的行為和 CommonMark 不同，判斷錯的代價是題目消失 | W5 開始前 | 在 Windows 版 Obsidian 用對照筆記（F1、F2、N1～N3 的例子，加上這兩種）比對解析結果，以及 `assignIds` 寫回後的結構；有出入的已修正，或寫成決定 | [技術債審查 §5](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md#5-claude-檢查與合併2026-10-20>) |
+| F6：建置測試綁死骨架（`styles.css` 必須是空的、`src/` 只能有 `core` 和 `main.ts`），W5、W6 加入檔案就會誤報 | W5 開始前（寫進 W5 的任務說明） | 合法新增的模組與 CSS 不會誤報；隔離的無 CSS 案例仍然受測 | 同上 |
+| F3：`validateOut` 只檢查目前與主工作樹，私人輸出可能寫進其他 worktree | 下一次跑 T4 前 | 用 `git worktree list --porcelain` 比對所有 worktree 的真實路徑，並有測試 | 同上 |
+| F5：`check-syntax.mjs` 的分類順序和 W2 不同，還留著每頁 6 個目標的上限 | 下一次跑 T4 前 | 分類順序和 W2 一致、拿掉上限；那次 T4 用 W2 的 `parseDeck` 對照題數 | 同上 |
+| code-quality 在 bug 與里程碑兩個時機靠 description 和記憶觸發，還沒確認過真的會載入 | Codex 第一次交回 W3、第一次遇到 bug、第一個里程碑 | 三個時機都確認 code-quality 有載入；沒有載入就改 description 或記憶 | D-119 |
+| `essence-discuss` 第一步要載入的 `grilling` skill 不存在 | 下一次用 essence-discuss 前 | essence-discuss 直接寫出需要的做法，不再依賴 grilling；兩份副本一起改 | [討論稿 §7](<../Claude Codex Discussion/2026-10-20-code-quality-skill.md#7-另外發現不在這次範圍>) |
+
 ## 待決問題
 
 ### 架構釐清中會碰到的（依七步排序）

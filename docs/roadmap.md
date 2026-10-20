@@ -15,7 +15,7 @@
 
 ### 下一次對話從這裡開始
 
-1. **v1 第一批**（[D-111](decisions.md#d-111-v1-的開發順序capture-延後)）：W1 骨架與 W2 卡組模組已合併（[任務說明](../tasks/w1-w2.md)、[審查與修正](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md>)）。下一步把 [W3 的任務說明](../tasks/w3.md)交給 Codex（排程用 FSRS-6，[D-112](decisions.md#d-112-排程用-fsrs-6)）。等 Codex 的時候，Claude 可以先把 W4 今天的佇列（D-069、D-071、D-074 等）整理成規格。程式結構照 [D-110](decisions.md#d-110-v1-外掛的程式結構)；試作場已停用。之後各模組寫規格時，照 [D-115](decisions.md#d-115-回頭查要用的證據先收好) 把要多存的證據寫進出題語法，打字卡與自動朗讀照 [D-116](decisions.md#d-116-打字卡的沒印象與自動朗讀)。審查留下 4 件事，到時候照[討論稿 §5](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md#5-claude-檢查與合併2026-10-20>)處理：W5 開始前在 Obsidian 和 metadataCache 對照清單解析、整理 F6 的建置測試；下一次跑 T4 前修 F3、F5。
+1. **v1 第一批**（[D-111](decisions.md#d-111-v1-的開發順序capture-延後)）：W1 骨架與 W2 卡組模組已合併（[任務說明](../tasks/w1-w2.md)、[審查與修正](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md>)）。下一步把 [W3 的任務說明](../tasks/w3.md)交給 Codex（排程用 FSRS-6，[D-112](decisions.md#d-112-排程用-fsrs-6)）。等 Codex 的時候，Claude 可以先把 W4 今天的佇列（D-069、D-071、D-074 等）整理成規格。程式結構照 [D-110](decisions.md#d-110-v1-外掛的程式結構)；試作場已停用。之後各模組寫規格時，照 [D-115](decisions.md#d-115-回頭查要用的證據先收好) 把要多存的證據寫進出題語法，打字卡與自動朗讀照 [D-116](decisions.md#d-116-打字卡的沒印象與自動朗讀)。開始任務前，先核對 [backlog 的技術債](backlog.md#技術債)（W1～W2 審查留下的 4 件事已搬過去，[D-119](decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。
 2. 製卡規則：學習目標的數量由內容決定（[D-101](decisions.md#d-101-學習目標的數量由內容決定)）2026-10-19 試過，沒有變瑣碎，規則不改（[試用紀錄](card-rules/trials.md)）。之後有真實的影片筆記時再試一次，順便看一般知識的數量（這次約加倍，同一份筆記 20～31 個）。下一輪試用時一併試「共同成功判準」（[backlog](backlog.md#其他待決)）。也一併看 AI 品質初篩留下的兩點：2-2 每份仍約 5 題洩漏（多是二選一與互補配對），以及把相鄰能力的一題放錯池（D-118）。
 3. **AI 品質初篩** ✅ 2026-10-20 結案：兩次盲評後照兩個問題改了規則（通用 v0.13、自然 v0.5，[D-118](decisions.md#d-118-ai-品質初篩後的製卡規則修改)），T4 小規模驗證：例題的觀念都有出題、按例子拆開變少，洩漏沒變、偶爾把相鄰能力的一題放錯池（[試用紀錄](card-rules/trials.md)）。這兩點併進第 2 項的下一輪試用再看，不擋 v1。
 
@@ -67,6 +67,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-20 | 程式品質的 skill 整併（Claude 與 Codex 討論後使用者確認）：Matt Pocock 的 5 個 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債移到 backlog 一節，每件寫觸發點與完成條件；`tools/check-skill-mirror.ts` 檢查 Claude 與 Codex 兩份 skill 一致，W3 第 0 步接進 `npm run check`（D-119） |
 | 2026-10-20 | W1 骨架＋W2 卡組模組合併：Codex 寫、Codex 審查找到 7 項、Claude 核對另找到 3 項；合併前修好補 ID 不冪等（問答題的螢光筆留在名稱）、程式碼圍欄與標題跟著清單容器結束、文件層級縮排 4 欄不是清單、修改佇列不分大小寫；所有卡組範例自動跑補 ID 往返測試（156 份）；syntax.md §2-3 名稱規則釐清 |
 | 2026-10-20 | AI 品質初篩結案、製卡規則修改：例題背後的觀念一定要出一題，備註寫出觀念出在哪個目標；同一個原理的不同例子放同一池；洩漏多三種判法（互補配對、答案在名詞裡算，池主題題不算），也寫進初篩任務說明；反例都取自其他單元。T4 驗證 4 份：2-2 的兩個例題觀念都有出題，熱的傳播目標 14～16 → 10～11、重複變少，洩漏沒變（通用 v0.13、自然 v0.5，D-118） |
 | 2026-10-20 | 技術債預防：`npm run check`（型別、測試、ESLint 模組邊界、knip、secretlint）在 pre-commit 與 CI 自動跑，Codex 在 W3 第 0 步裝好；AI 審查只在大改動合併前，抓到能程式檢查的問題當場加規則；retro 與 security-review 每個里程碑一次（D-117） |
@@ -76,6 +77,4 @@ flowchart LR
 | 2026-10-20 | 開始寫 v1：建好 Capture repo 骨架（AGENTS.md 指向本 repo、複製通用記憶）；程式結構定為四個不碰 Obsidian 的核心模組加一個檔案存取接點（D-110）；先打通手寫卡組到 iPhone 複習，Capture 延後（D-111）；第一份 Codex 任務 W1＋W2 |
 | 2026-10-19 | T2、T3 iPhone 實測全部過門檻：開啟 40 ms 內、動畫掉格 ≤ 4.2%、側欄一次都沒被滑開、離線連續複習 15 分鐘寫檔 7 ms 且一行不少 → 維持 React、全螢幕、往左滑一次一張（D-109）。兩端離線改同一篇筆記會遺失一邊、裝置代碼要存本機，記入 backlog |
 | 2026-10-19 | T2 試作外掛（Codex 寫、Claude 檢查）：React／Preact 兩個建置、全螢幕複習畫面、自動量測，加上 T3 的連續複習與三年份紀錄。Windows 兩版都在 20 ms 內開啟、動畫掉格 1% 以下，16.8 萬行紀錄 0.18 秒讀完；修了滑動放開時卡片跳回的問題。iPhone 清單已備好 |
-| 2026-10-19 | 補記憶錨點的草稿集中成一份：放新的系統資料夾 `記憶錨點/`，沿用「加進已有的學習目標」引言框，家長看一次、全部加入，外掛搬回各卡組；系統資料夾變五個（[D-108](decisions.md#d-108-補記憶錨點的草稿集中成一份)） |
-| 2026-10-19 | 入口瘦身（D-106）：試作場說明與製卡規則說明只留現況、使用方式與待驗證事項；T1、T5 的過程移到 [`mockups/`](../experiments/mockups/README.md)，T6、T8 移到 [`tts-probe/`](../experiments/tts-probe/README.md)、[`load-sim/`](../experiments/load-sim/README.md)，模型選型與 Jev 移到 [`t4/`](../experiments/t4/README.md)，製卡規則的試用合併成[試用紀錄](card-rules/trials.md)。兩份入口約 20,000 → 9,500 字元 |
 
