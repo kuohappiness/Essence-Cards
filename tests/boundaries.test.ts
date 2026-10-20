@@ -4,7 +4,7 @@ import { builtinModules } from 'node:module';
 import { readdir, readFile } from 'node:fs/promises';
 import ts from 'typescript';
 
-test('core 的靜態 import/export、動態 import 與 require 都不能指向 Obsidian 或 Node', async () => {
+void test('core 的靜態 import/export、動態 import 與 require 都不能指向 Obsidian 或 Node', async () => {
   const root = new URL('../src/core/', import.meta.url);
   const builtins = new Set(builtinModules.map(name => name.replace(/^node:/, '')));
   const paths = (await readdir(root, { recursive: true })).filter(path => path.endsWith('.ts'));
@@ -27,7 +27,7 @@ test('core 的靜態 import/export、動態 import 與 require 都不能指向 O
     check(source);
   }
 });
-test('deck 對外只透過指定 index 匯出', async () => {
+void test('deck 對外只透過指定 index 匯出', async () => {
   const module = await import('../src/core/deck/index.ts');
   assert.deepEqual(Object.keys(module).sort(), ['assignIds', 'parseDeck']);
 });

@@ -10,20 +10,32 @@
     "build": "node tools/build.mjs",
     "test": "node --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "install-vault": "node tools/install-vault.mjs"
+    "install-vault": "node tools/install-vault.mjs",
+    "lint": "eslint src tools tests",
+    "knip": "knip",
+    "secretlint": "node --input-type=module -e \"import {execFileSync} from 'node:child_process'; import {runSecretLint} from 'secretlint'; const files=execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\\0').filter(p=>p&&!p.split('/').includes('node_modules')&&p!=='main.js'); const r=await runSecretLint({cliOptions:{cwd:process.cwd(),filePathOrGlobList:files,noGlob:true},engineOptions:{formatter:'stylish',color:false,maskSecrets:true}}); if(r.stdout) console.log(r.stdout); if(r.stderr) console.error(r.stderr); process.exitCode=r.exitStatus;\"",
+    "skills": "node tools/check-skill-mirror.ts",
+    "check": "npm run typecheck && npm run lint && npm run knip && npm run secretlint && npm run skills && npm test",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "motion": "^12.23.24",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "motion": "^12.23.24",
-    "yaml": "^2.8.1",
-    "@noble/hashes": "^2.0.1"
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
-    "obsidian": "^1.8.7",
-    "esbuild": "^0.25.11",
-    "typescript": "^5.9.3",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0"
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.25.11",
+    "eslint": "^10.13.0",
+    "knip": "^6.42.1",
+    "obsidian": "^1.8.7",
+    "secretlint": "^13.0.7",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0"
   }
 }
