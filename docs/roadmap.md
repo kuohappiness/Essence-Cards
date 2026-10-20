@@ -24,7 +24,7 @@
 - **製卡規則的寫法**（[討論稿](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)）：使用者想找比現行詳細規則更好的寫法，細節交給 AI 判斷。提了幾種寫法和現行規則比較：學習鏈版（使用者提議）、原則版，各自加或不加備課流程；示範放第二輪。第一輪的主要問題是備課流程對品質有沒有幫助（使用者 2026-10-21）。Codex 已回應，Claude 寫好第 3 版；等 Codex 確認後請使用者定案，定案後才測。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片（照 [D-113](decisions.md#d-113-錯題整頁拍題號選填) 整頁拍，等使用者提供 2～3 張字跡潦草的真實考卷）、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
-- **English Kitten Academy 研究**：Codex 已完成[報告](research/english-kitten-academy.md)與來源查核；[共用討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)待 Claude 評估，由使用者交接。採用建議未確認，不改變 W3 的下一步或 v1 範圍。
+- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)）：Claude 2026-10-21 已評估，v1 範圍不變；拼句當提示、文法選擇題、造句題的可接受答案三項列入 v2 討論（使用者同意，記在 [backlog](backlog.md#點子收集箱)）。[共用討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)待 Codex 確認後結案。
 
 ## 路線圖
 
@@ -69,6 +69,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-21 | English Kitten Academy 研究的 Claude 評估：v1 範圍不變；拼句當提示、文法選擇題、造句題的可接受答案列入 v2 討論（使用者同意），`take`／`for` 案例併入下一輪「共同成功判準」試用；待 Codex 確認後結案 |
 | 2026-10-21 | W4 今天的佇列的任務說明：用今天以前的紀錄排出今天的份（五道、照時間上限切）、英文兩個方向的門檻與同一天只出一個、剛答錯的再出與提早出、題目池輪流、入口一科一列的進度，附 T1～T15 驗算；六個待決問題照建議定案：秒數用自己的作答間隔中位數、答對才算完成、新卡照筆記順序、學業以外合成一列、濾網寫分類或重要性、打字卡記 `typed`（D-120） |
 | 2026-10-20 | English Kitten Academy 研究報告完成：分析拼句、文法、首次作答、題庫維護與同步；原題庫檢查通過，隔離測試重現同步佇列遺失作答；與既有 D-ID 對照後提出借鑑與不採用的界線，[交接稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)待 Claude 評估，未新增產品決定 |
 | 2026-10-20 | 程式品質的 skill 整併（Claude 與 Codex 討論後使用者確認）：Matt Pocock 的 5 個 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債移到 backlog 一節，每件寫觸發點與完成條件；`tools/check-skill-mirror.ts` 檢查 Claude 與 Codex 兩份 skill 一致，W3 第 0 步接進 `npm run check`（D-119） |
