@@ -149,6 +149,7 @@ export async function selftest() {
     assert.equal(stats.notes, 1); assert.equal(stats.candidates, 1); assert.equal(stats.existing, 1);
     assert.equal(stats.costUsd, (100 * 2 + 50 * 12) / 1e6);
     assert(stats.categories['格式錯誤'] > 0);
+    assert.equal(Object.values(stats.formatCodes).reduce((a, b) => a + b, 0), stats.categories['格式錯誤']);
     // 實際 check 輸出也涵蓋另外四類。
     const noisy = Array.from({ length: 7 }, (_, i) => `- 能測試${i}\n    - 出處：p.1\n    - 是否测試？ :: 软件\n`).join('');
     const noisyStats = await inspect(path.join(temp, 'noise'), noisy, 'p.1 ^p1\n', {}, { usage: {}, seconds: 0 });
@@ -182,6 +183,8 @@ export async function selftest() {
       const text = await readText(file);
       for (const hidden of [...Object.keys(config.groups), config.model.model, 'token', '費用']) assert(!text.includes(hidden));
     }
+    const times = await Promise.all((await inventory(path.join(out, '盲評'))).map(async file => (await fs.stat(file)).mtimeMs));
+    assert.equal(new Set(times).size, 1, '盲評檔的修改時間會透露寫入順序');
     assert.deepEqual(await Promise.all(Object.keys(config.materials).map(async name => hash(await fs.readFile(path.join(out, '能力清單', name + '.md'))))), abilityHashes);
     const duplicate = path.join(temp, '重複能力/能力清單/測試.md');
     await put(duplicate, ABILITIES + '| K1 | 重複 |\n');

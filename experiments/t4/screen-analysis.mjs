@@ -30,11 +30,14 @@ export async function inspect(stem, text, transcript, options, reply, price) {
   const usage = reply.usage ?? {};
   const cost = price && Number.isFinite(usage.prompt_tokens) && Number.isFinite(usage.completion_tokens)
     ? (usage.prompt_tokens * price.input + usage.completion_tokens * price.output) / 1e6 : null;
+  const byCode = issues => Object.fromEntries([...new Set(issues.map(i => i.code))].map(code => [code, issues.filter(i => i.code === code).length]));
   const stats = { ...result.stats,
     // check() 的 images 不含共用補充及深層子項目，這裡計本文目標內實際附圖次數。
     images: result.targets.reduce((n, t) => n + [...JSON.stringify([t.questions.map(q => [q.raw, q.supplements]), t.shared]).matchAll(/!\[\[/g)].length, 0),
     categories: Object.fromEntries(CATEGORIES.map(c => [c, classified[c].length])),
-    ruleCodes: Object.fromEntries([...new Set(classified['規則類'].map(i => i.code))].map(code => [code, classified['規則類'].filter(i => i.code === code).length])),
+    // 格式錯誤也依代碼分：例如 colon-space 程式照樣讀得懂，報告要看得出來。
+    formatCodes: byCode(classified['格式錯誤']),
+    ruleCodes: byCode(classified['規則類']),
     noteNames: result.notes, candidateNames: result.candidates.map(t => t.name),
     usage, seconds: reply.seconds, costUsd: cost };
   await writeJson(stem + '.統計.json', stats);
@@ -193,11 +196,15 @@ export async function blind(out, config, print = console.log) {
   if (!safe(readme.join('\n'))) throw new Error('盲評說明有可能透露條件');
   await fs.mkdir(path.join(out, '盲評/評分'), { recursive: true });
   await writeJson(mappingFile, mapping);
-  for (const p of plans) {
+  // plans 照組別排序；寫入順序打亂，最後把修改時間設成同一個，評分者依時間列檔案也看不出組別。
+  for (const p of shuffled(plans)) {
     await fs.writeFile(path.join(out, '盲評', p.entry.code + '.md'), p.normalized.text);
     if (!(await exists(p.scoreFile))) await fs.writeFile(p.scoreFile, p.template, { flag: 'wx' });
   }
   await fs.writeFile(path.join(out, '盲評/README.md'), readme.join('\n') + '\n');
+  const stamp = new Date();
+  for (const file of [path.join(out, '盲評/README.md'), ...plans.flatMap(p => [path.join(out, '盲評', p.entry.code + '.md'), p.scoreFile])])
+    await fs.utimes(file, stamp, stamp);
   print(`盲評完成：${plans.length} 份；評分表已保留`);
   return plans.length;
 }
@@ -272,6 +279,7 @@ export async function report(out, config, print = console.log) {
     appendix.push(`### ${entry.material}／${entry.group}／${entry.run}`, '',
       `- 給家長的備註（${stats.notes}）：${stats.noteNames.join(' ／ ') || '—'}`,
       `- 候選卡片（${stats.candidates}）：${stats.candidateNames.join(' ／ ') || '—'}`,
+      `- 格式錯誤：${Object.entries(stats.formatCodes ?? {}).map(([code, n]) => `${code} ${n}`).join('、') || '0'}`,
       `- 規則類不符：${Object.entries(stats.ruleCodes).map(([code, n]) => `${code} ${n}`).join('、') || '0'}`,
       `- 用語 ${stats.categories['用語']}｜提醒 ${stats.categories['提醒']}｜輸入 token ${stats.usage.prompt_tokens ?? '—'}｜輸出 token ${stats.usage.completion_tokens ?? '—'}｜秒 ${stats.seconds ?? '—'}｜估計美元 ${stats.costUsd?.toFixed(6) ?? '—'}`, '');
   }
