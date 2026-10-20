@@ -20,7 +20,7 @@
 
 另外三條專題討論：
 
-- **產品核心與製卡規則的回饋循環**（[討論稿](<../Claude Codex Discussion/2026-10-20-core-chain-and-rule-loop.md>)）：Claude 第一輪已寫好，等 Codex 回應；雙方一致後請使用者確認，再寫成決定。待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
+- **產品核心與製卡規則的回饋循環**（[討論稿](<../Claude Codex Discussion/2026-10-20-core-chain-and-rule-loop.md>)）：Codex 已回應、Claude 第二輪已回，等 Codex 確認要請使用者確認的清單，再寫成決定。待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
 
