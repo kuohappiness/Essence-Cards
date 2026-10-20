@@ -78,9 +78,10 @@ export function listTree(lines: Line[], start: number): Item[] {
       if (new RegExp('^' + fence.char + '{' + fence.count + ',}\\s*$').test(trimmed)) fence = null;
       continue;
     }
+    // 引言框在某一項的內容裡時，只結束比它深的項目，後面的題目仍屬於同一個目標。
     if (/^>/.test(trimmed)) {
-      if (stack.length && indent >= stack.at(-1)!.contentColumn) extend(i);
-      else stack.length = 0;
+      while (stack.length && indent < stack.at(-1)!.contentColumn) stack.pop();
+      if (stack.length) extend(i);
       continue;
     }
     const opening = /^(`{3,}|~{3,})(.*)$/.exec(trimmed);
@@ -96,7 +97,8 @@ export function listTree(lines: Line[], start: number): Item[] {
     }
     if (!trimmed) continue;
     const heading = /^(#{1,6})(?:\s+(.*)|$)/.exec(trimmed);
-    if (heading && indent < 4 && (!stack.length || indent < stack.at(-1)!.contentColumn)) {
+    // 只有不在任何項目內容裡的標題才分組；在項目內容裡的是那一項的文字。
+    if (heading && indent < 4 && (!stack.length || indent < stack[0].contentColumn)) {
       section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); stack.length = 0; continue;
     }
     // CommonMark：1～4 欄間隔都屬於符號；超過 4 欄只取一欄。

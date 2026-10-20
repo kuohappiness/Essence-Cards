@@ -393,6 +393,15 @@ test('F2-2 implicit 題目底下的標題補 ID 前後仍屬於原題', () => {
   assert.equal(qa(after.prompts[0]).answer, 'A\n### 小標題');
 });
 
+for (const [label, unit, line] of [
+  ['標題', '  ', '### 小標'], ['標題', '    ', '### 小標'],
+  ['引言框', '  ', '> [!note] 註記'], ['引言框', '    ', '> [!note] 註記'],
+]) test('目標內容層的' + label + '不拆目標、不改 section：' + unit.length + ' 格縮排', () => {
+  const parsed = parseDeck('## 分組\n- 目標\n' + unit + '- Q :: A\n' + unit + line + '\n' + unit + '- R :: B');
+  assert.deepEqual(parsed.targets.map(t => [t.name, t.section]), [['目標', '分組']]);
+  assert.deepEqual(parsed.targets[0].prompts.map(p => [qa(p).question, qa(p).answer]), [['Q', 'A'], ['R', 'B']]);
+});
+
 for (const text of ['    - 假題 :: 不該排程', '\t- 假題 :: 不該排程', '段落\n    - 假題 :: 不該排程']) test('F2-3 文件層級縮排四欄的清單符號不是目標：' + JSON.stringify(text), () => {
   assert.deepEqual(parseDeck(text).targets, []);
   assert.deepEqual(assignIds(text, { taken: new Set() }), { text, assigned: [] });
