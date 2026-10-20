@@ -31,6 +31,22 @@ node check-syntax.mjs <卡片.md>… --transcript <轉錄稿.md> --unit 2-2 [--t
 - `check-syntax.mjs`：照 syntax.md 解析 AI 交回的草稿，分「錯誤」（程式會跳過那個學習目標或連結壞掉）、「不符」（違反語法或製卡規則）、「提醒」（啟發式，要人看）列出行號；`--tree` 印出程式看到的正面與背面。`--selftest` 用自己編的範例檢查它本身。
 - 一般知識（2026-10-18 起）：`cards` 加 `--rules ../../docs/card-rules/general.md` 換掉 science.md，用 `--source <來源筆記.md>` 代替 `--transcript`，可以重複給好幾份，每份會標出筆記名稱，不需要 PDF 頁面；檢查時加 `--subject 一般知識`。筆記沒有頁面，記得加 `--variant 只用轉錄稿`，不然兩種 variant 會用一樣的輸入各跑一次。
 
+## AI 品質初篩
+
+固定條件與評分方式見 [任務說明](../../tasks/ai-quality-screen.md)。比較同一個模型在兩組提示下的草稿，結果只放 repo 外；這不是學業成效驗證。先執行三個離線自測：
+
+```powershell
+node screen.mjs selftest
+node t4.mjs selftest
+node check-syntax.mjs --selftest
+node screen.mjs run --out <結果資料夾> --material 自然2-2=<轉錄稿路徑>
+node screen.mjs blind --out <結果資料夾>
+```
+
+`run` 預設第 1 次，依設定送出兩段材料各兩組；材料及附圖第一次複製到結果資料夾，後續都讀複本。已完成的輸出沿用，缺少金鑰或請求失敗時結束碼為 2，重跑相同指令可補上；教材、圖片或提示不同時改用新的 `--out`。送出前 `screen/` 與 `docs/card-rules/` 必須沒有未提交的修改。輸出保留提示與雜湊、API 回覆版本及機械統計，不存 HTTP 標頭或圖片 base64。
+
+`能力清單/` 必須在生成前準備，只讀不改。`blind` 隨機分配代號，保留已填的評分表；評分者只讀結果資料夾的 `能力清單/`、`材料/` 與 `盲評/`，不可先看 `生成/`、`紀錄.json` 或報告。評分完成後才執行 `node screen.mjs report --out <結果資料夾>`。沒有額外指示就只做第 1 次，不執行報告；需要後續輪次時用 `--run <N>`。
+
 ## 誰測
 
 AI 寫小程式送出，檢查格式、繁體與台灣用語、和課本不符的地方、錯題的手寫字與錯因，先打一輪 ✅✏️❌。使用者要做三件 AI 做不了的事：申請金鑰（第一輪是 Google AI Studio 與 OpenRouter；開帳號、處理金鑰只能本人來）；把教材放進測試 vault（教材在使用者手上，有版權不能進 repo）；最後從前兩名裡挑一份，看的時候不標模型名稱（哪一份比較好審要由家長判斷）。
