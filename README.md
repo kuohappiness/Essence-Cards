@@ -6,7 +6,7 @@
 
 Essence Cards 是一個 Obsidian 外掛：把筆記變成閃卡，讓學生用間隔重複，在手機上隨時、低摩擦地快速複習。AI 是選用的加速器，沒有 AI 也能完整使用。
 
-**目前階段：規劃中。架構釐清七步已完成，接著做 v1 開發前的準備；產品程式碼尚未開始。** → [開發現況與路線圖](docs/roadmap.md)
+**目前階段**：看[開發現況與路線圖](docs/roadmap.md)的「現在在哪裡」（進度只寫在那裡）。
 
 ## 文件
 
@@ -40,13 +40,16 @@ docs/
 ├─ ai-models.md      AI 模型推薦
 ├─ research/         參考軟體研究、舊外掛分析
 └─ archive/          歷史討論與 v0 規劃
+tasks/           交給 Codex 的任務說明
+Claude Codex Discussion/  Claude 與 Codex 的討論稿
+experiments/     試作場（試作外掛已停用；T4 小程式照常用）
 ```
 
-程式碼開始開發後，再依技術選型建立 `src/` 等目錄。
+正式外掛的程式放在 repo 最上層的 `src/`、`tests/`、`tools/`（[D-110](docs/decisions.md#d-110-v1-外掛的程式結構)）。
 
 ## 相關專案
 
-**Essence Capture**（預計名稱，尚未建立）：可靠的知識入口：想保存任何資料進知識庫就用它，也能獨立產出閱讀筆記。v1 先做 PDF 與圖片的忠實轉錄，成為教材庫；另開 repo（[D-076](docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。
+**[Essence Capture](https://github.com/kuohappiness/Essence-Capture)**：可靠的知識入口：想保存任何資料進知識庫就用它，也能獨立產出閱讀筆記。v1 先做 PDF 與圖片的忠實轉錄，成為教材庫；另開 repo（[D-076](docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）。
 
 **Essence Mindmap**（暫定名，未來，尚未建立）：把知識架構視覺化；Essence Cards 保留和它對接的彈性（[D-056](docs/decisions.md#d-056-保留和心智圖外掛對接的彈性)）。
 
