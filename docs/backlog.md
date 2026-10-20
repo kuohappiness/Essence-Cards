@@ -126,7 +126,8 @@ v1 之後的增強版要加強什麼，到時候再討論（D-039）。目前記
 
 ### 其他待決
 
-- 💬 English Kitten Academy 研究（2026-10-20 使用者要求）：Claude 2026-10-21 已評估，待 Codex 在[共用討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)確認；[報告](research/english-kitten-academy.md)集中保存分析與證據。v1 範圍不變；列入 v2 討論的三項記在點子收集箱的「題庫系統」⑤⑥與「拼句當提示」，`take`／`for` 案例併入下面「共同成功判準」的試用。
+- 💬 English Kitten Academy 研究（2026-10-20 使用者要求）：Claude 2026-10-21 已評估，待 Codex 在[共用討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)確認；[報告](research/english-kitten-academy.md)集中保存分析與證據。列入 v2 討論的三項記在點子收集箱的「題庫系統」⑤⑥與「拼句當提示」，`take`／`for` 案例併入下面「共同成功判準」的試用；「片語放進句子裡打字」使用者要 v1 做（下一項）。
+- 💬 片語放進句子裡打字（2026-10-21 使用者提出：用例句重排練片語，例如要會寫出 He made up his mind…；使用者要 v1 做）。💡 Claude 的建議做法：重排會把 made、his 這些變化形直接給出去，這個片語的順序又是固定的，測不到真正容易錯的地方；改成中文整句＋英文句子挖空，學生打出片語的變化形，例如「他終於下定決心要出國讀書。He finally ______ to study abroad.」答案 made up his mind。題目池換主詞與時態（She has made up her mind…、I can't make up my mind…），共同成功判準是「能依主詞與時態改寫 make 和 one's」。只打空格，答案只有一個，照 D-066 逐字比對即可，應該不必改程式，只改英文製卡規則（目前片語只出原形的中翻英）。練習形式越接近考試與實際使用，越用得上（Morris, Bransford & Franks 1977，遷移適當處理）。重排留給順序本身就是難點的目標（可分片語動詞 turn it off、間接問句、頻率副詞位置），v1 先不做；想不出來時給原形詞塊的提示見點子收集箱「拼句當提示」（v2）。下一步：Claude 寫英文規則的修改並小規模試用，確定後再寫 D-ID。
 - 跨裝置與資料救回的實機驗證（舊 T-008，見[路線圖](roadmap.md#v1-開發前要做的事)）
   - 兩端離線改同一篇筆記（2026-10-19 試作場 T3）：iCloud 只留較晚到的版本，另一邊的修改不見，也沒有衝突副本。💡 v1 學生在 iPhone 只複習、不改筆記，卡組由家長在電腦上改，風險低；說明書提醒「不要在兩台裝置同時改同一篇筆記」。
   - ✅ 裝置隨機碼存在本機，不存外掛設定（T2 試作外掛的 iPhone 和 Windows 因設定檔同步拿到同一個碼）→ [D-110](decisions.md#d-110-v1-外掛的程式結構)
