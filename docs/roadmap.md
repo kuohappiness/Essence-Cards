@@ -18,8 +18,9 @@
 1. **v1 第一批**（[D-111](decisions.md#d-111-v1-的開發順序capture-延後)）：W1 骨架與 W2 卡組模組已交給 Codex（[任務說明](../tasks/w1-w2.md)，分支 `codex/w1-w2`）。Codex 做完由 Claude 檢查、合併；合併後把 [W3 的任務說明](../tasks/w3.md)交給 Codex（排程用 FSRS-6，[D-112](decisions.md#d-112-排程用-fsrs-6)）。等 Codex 的時候，Claude 可以先把 W4 今天的佇列（D-069、D-071、D-074 等）整理成規格。程式結構照 [D-110](decisions.md#d-110-v1-外掛的程式結構)；試作場已停用。
 2. 製卡規則：學習目標的數量由內容決定（[D-101](decisions.md#d-101-學習目標的數量由內容決定)）2026-10-19 試過，沒有變瑣碎，規則不改（[試用紀錄](card-rules/trials.md)）。之後有真實的影片筆記時再試一次，順便看一般知識的數量（這次約加倍，同一份筆記 20～31 個）。
 
-另外兩條專題討論：
+另外三條專題討論：
 
+- **產品核心與製卡規則的回饋循環**（[討論稿](<../Claude Codex Discussion/2026-10-20-core-chain-and-rule-loop.md>)）：Claude 第一輪已寫好，等 Codex 回應；雙方一致後請使用者確認，再寫成決定。待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
 
