@@ -46,3 +46,9 @@ void test('deck 連同 YAML 與 SHA-256 可直接建成 browser bundle', async (
   const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
   assert.deepEqual(imports.filter(entry => entry.external), []);
 });
+
+void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或 Node', async () => {
+  const result = await build({ absWorkingDir: root, entryPoints: ['src/core/study/index.ts'], bundle: true, platform: 'browser', format: 'esm', write: false, metafile: true });
+  const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
+  assert.deepEqual(imports.filter(entry => entry.external), []);
+});
