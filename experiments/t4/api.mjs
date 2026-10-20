@@ -27,13 +27,13 @@ export class ApiClient {
     records.push(entry);
     await writeJson(file, records);
   }
-  async request(step, model, system, content, variant) {
+  async request(step, model, system, content, variant, options = {}) {
     if (this.busy) throw new Error('一次只允許一個 API 請求');
     this.busy = true;
-    try { return await this.send(step, model, system, content, variant); }
+    try { return await this.send(step, model, system, content, variant, options); }
     finally { this.busy = false; }
   }
-  async send(step, model, system, content, variant) {
+  async send(step, model, system, content, variant, options = {}) {
     const provider = this.config.providers[model.provider];
     if (!provider) throw new Error(`未定義供應商 ${model.provider}`);
     if (!this.keys[model.provider]) {
@@ -77,7 +77,15 @@ export class ApiClient {
       const text = typeof choice?.message?.content === 'string' ? choice.message.content : null;
       const valid = response.ok && text?.trim() && choice.finish_reason !== 'length' && choice.finish_reason !== 'content_filter';
       await this.record({ time: new Date(start).toISOString(), step, provider: model.provider, model: model.model, variant, status: response.status, seconds: (this.now() - start) / 1000, usage: numericUsage(payload.usage), outcome: valid ? 'ok' : response.ok ? 'invalid-response' : 'http-error' });
-      if (valid) return redact(text, this.secrets);
+      if (valid) {
+        const cleanText = redact(text, this.secrets);
+        if (!options.metadata) return cleanText;
+        return { text: cleanText,
+          model: typeof payload.model === 'string' ? redact(payload.model, this.secrets) : null,
+          system_fingerprint: typeof payload.system_fingerprint === 'string' ? redact(payload.system_fingerprint, this.secrets) : null,
+          finish_reason: typeof choice.finish_reason === 'string' ? redact(choice.finish_reason, this.secrets) : null,
+          usage: numericUsage(payload.usage), seconds: (this.now() - start) / 1000 };
+      }
       if (response.status === 429) {
         const detail = payload.error?.message ?? payload.message ?? payload.error ?? payload;
         this.print('HTTP 429：' + redact(typeof detail === 'string' ? detail : JSON.stringify(detail), this.secrets).slice(0, 300));
