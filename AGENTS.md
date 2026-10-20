@@ -65,4 +65,5 @@
 - 尚未完成的功能標示為規劃中，不宣稱已可使用；學習效果是待驗證的目標。
 - AI 能測的由 AI 測；要請使用者測之前，先說明 AI 為什麼測不了。需要 iPhone 實機的測試集中成一次（D-065）。
 - 規劃階段的文件修改直接 commit 到 `main` 並 push；開始寫程式後，較大的程式改動再開分支。commit 訊息要清楚，並保留其他協作者的修改；不使用 force push。
+- 改程式的 commit 會由 pre-commit hook 自動跑 `npm run check`（[D-117](docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）；沒通過就修到通過，不用 `--no-verify` 跳過。
 - 可能有多個 AI session 同時在同一個資料夾工作：commit 前先看 `git status`，只 stage 自己改過的檔案，不用 `git add -A`；別人未提交的修改不要動。
