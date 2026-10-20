@@ -1,0 +1,172 @@
+import { parseDocument } from 'yaml';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { linesOf, listTree, questionSyntax, stripId } from './markdown.ts';
+import type { Item, Line } from './markdown.ts';
+import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
+
+const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
+const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', categories: [], isTranscript: false });
+const string = (value: unknown): string | null => typeof value === 'string' ? value : null;
+const strings = (value: unknown): string[] => typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+
+export function readProperties(lines: Line[]): { props: DeckProps; start: number; problems: Problem[] } {
+  const props = defaultProps();
+  const problems: Problem[] = [];
+  if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return { props, start: 0, problems };
+  const end = lines.findIndex((line, index) => index > 0 && /^(---|\.\.\.)\s*$/.test(line.raw));
+  const hint = (line: number, message: string): void => { problems.push({ line, level: 'hint', code: 'unknown-property-value', message, targetLine: null }); };
+  const start = end < 0 ? lines.length : end + 1;
+  try {
+    if (end < 0) throw Error('屬性區塊沒有結束');
+    const doc = parseDocument(lines.slice(1, end).map(line => line.raw).join('\n'));
+    if (doc.errors.length) throw Error('無法解析屬性');
+    const data: unknown = doc.toJS();
+    if (data !== null && (typeof data !== 'object' || Array.isArray(data))) throw Error('屬性不是對照表');
+    const values = (data ?? {}) as Record<string, unknown>;
+    props.term = string(values['年級學期']);
+    props.subject = string(values['科目']);
+    const unit = string(values['單元']);
+    if (unit !== null) {
+      const split = unit.indexOf(' ');
+      props.unit = split < 0 ? { code: unit, name: '' } : { code: unit.slice(0, split), name: unit.slice(split + 1) };
+    }
+    props.materials = strings(values['材料']);
+    props.categories = strings(values['分類']);
+    props.isTranscript = Object.hasOwn(values, '來源類型');
+    if (Object.hasOwn(values, '狀態')) {
+      const status = values['狀態'];
+      if (status === '草稿') props.status = 'draft';
+      else if (status === '暫停') props.status = 'paused';
+      else if (status !== '啟用') {
+        const line = lines.slice(1, end).findIndex(value => /^狀態\s*:/.test(value.raw)) + 1;
+        hint(line, '屬性「狀態」的值認不得，先當作啟用');
+      }
+    }
+  } catch {
+    hint(0, '屬性區塊寫法有問題，先使用預設值');
+    return { props: defaultProps(), start, problems };
+  }
+  return { props, start, problems };
+}
+
+function fingerprint(question: string, answer: string): string {
+  const normalize = (text: string): string => text.split('\n')
+    .map(line => line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').trim())
+    .join('\n').replace(/\s+/g, ' ').trim();
+  // 正反面各自整理，分隔的換行保留（任務的三個 SHA-256 驗算值）。
+  const normalized = normalize(question) + '\n' + normalize(answer);
+  return bytesToHex(sha256(new TextEncoder().encode(normalized))).slice(0, 8);
+}
+
+export function parseDeck(text: string): Deck {
+  const lines = linesOf(text);
+  const { props, start, problems } = readProperties(lines);
+  const targets: Target[] = [];
+  if (props.isTranscript) return { props, targets, problems };
+  const seenIds = new Set<string>();
+  for (const root of listTree(lines, start)) {
+    const head = stripId(root.text);
+    const syntax = questionSyntax(head.text);
+    const implicit = syntax.colon >= 0 || syntax.blanks.length > 0;
+    let name = implicit ? (syntax.colon >= 0 ? head.text.slice(0, syntax.colon) : head.text) : head.text.split('\n')[0];
+    if (implicit) {
+      // 只移除程式碼與公式外、成對的記號；由後往前改，保留原本的位置。
+      for (const { start, end } of questionSyntax(name).blanks.reverse()) {
+        name = name.slice(0, start) + name.slice(start + 2, end - 2) + name.slice(end);
+      }
+      name = name.trim().replaceAll('\n', ' ');
+    }
+    const directionMatch = / (英翻中|中翻英)$/.exec(name);
+    const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
+    const target: Target = { id: implicit ? null : head.id, name, line: root.line, implicit, section: root.section,
+      fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
+      pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true };
+    const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint'): void => {
+      problems.push({ line: node.line, targetLine: root.line, level, code, message });
+      if (level === 'error') target.ok = false;
+    };
+    const seenFields = new Set<string>();
+    function collectFields(node: Item): void {
+      if (fieldStart.test(node.text)) {
+        for (const segment of node.text.split('｜')) {
+          const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
+          const key = match?.[1] ?? '', value = match?.[2] ?? '';
+          if (!['出處', '類型', '重要性', '狀態', '備註', '錯題補強'].includes(key)) {
+            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段');
+            continue;
+          }
+          if (key === '出處' || key === '備註' || key === '錯題補強') {
+            const destination = key === '出處' ? fields.sources : key === '備註' ? fields.remarks : fields.mistakes;
+            for (const entry of value.split('、').map(v => v.trim()).filter(Boolean)) if (!destination.includes(entry)) destination.push(entry);
+          } else {
+            if (seenFields.has(key)) { addProblem(node, 'duplicate-field', '「' + key + '」寫了兩次，使用第一個'); continue; }
+            seenFields.add(key);
+            if (key === '類型') fields.type = value || null;
+            if (key === '重要性') {
+              const importance = ({ 高: 'high', 中: 'medium', 低: 'low' } as const)[value as '高' | '中' | '低'];
+              if (importance) fields.importance = importance;
+              else addProblem(node, 'unknown-field-value', '重要性的值認不得，先當作中');
+            }
+            if (key === '狀態') {
+              if (value === '暫停') fields.paused = true;
+              else if (value !== '啟用') addProblem(node, 'unknown-field-value', '狀態的值認不得，先當作啟用');
+            }
+          }
+        }
+      }
+      for (const child of node.children) collectFields(child);
+    }
+    // 補充或多行答案裡的資料也屬於整個目標。
+    for (const child of root.children) collectFields(child);
+    function markdown(node: Item, base = node.indent, nested = false): string {
+      if (fieldStart.test(node.text)) return '';
+      const prefix = nested ? ' '.repeat(node.indent - base) + lines[node.line].raw.trimStart().match(/^(?:[-*+]|\d+[.)])\s*/)?.[0] : '';
+      const body = (prefix ?? '') + node.text;
+      return [body, ...node.children.map(child => markdown(child, base, true)).filter(Boolean)].join('\n');
+    }
+    function prompt(node: Item): Prompt {
+      const body = stripId(node.text).text;
+      const { colon, blanks } = questionSyntax(body);
+      const children = node.children.filter(child => !fieldStart.test(child.text));
+      if (colon >= 0) {
+        const question = body.slice(0, colon).trim();
+        let answer = body.slice(colon + 2).trim();
+        const multiline = !answer;
+        if (multiline) answer = children.map(child => markdown(child)).filter(Boolean).join('\n');
+        const extras = multiline ? [] : children.map(child => markdown(child));
+        if (!question) addProblem(node, 'empty-question', '這一題 :: 的左邊沒有題目', 'error');
+        if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
+        let typed: string | null = null;
+        if (target.direction === 'zh-en') {
+          typed = answer.replace(/\*\*|\*|_|==/g, '').trim();
+          if (!typed || /[\r\n]|\p{Script=Han}/u.test(typed)) {
+            addProblem(node, 'typed-answer-invalid', '中翻英的答案必須是單行英文單字或片語', 'error');
+          }
+        }
+        return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
+      }
+      if (target.direction === 'zh-en') addProblem(node, 'cloze-not-typed', '中翻英的填空題照一般翻面，不要求打字');
+      return { kind: 'cloze', line: node.line, text: body, blanks, extras: children.map(child => markdown(child)), fingerprint: fingerprint(body, '') };
+    }
+    if (implicit) target.prompts.push(prompt(root));
+    else for (const child of root.children) {
+      if (fieldStart.test(child.text)) continue;
+      const syntax = questionSyntax(stripId(child.text).text);
+      if (syntax.colon >= 0 || syntax.blanks.length) target.prompts.push(prompt(child));
+      else target.shared.push(markdown(child));
+    }
+    if (!target.prompts.length) {
+      // 一般筆記不是目標，不回報它的欄位提示。
+      for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
+      continue;
+    }
+    if (target.id) {
+      if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和前面的重複，補 ID 時會換新');
+      seenIds.add(target.id);
+    }
+    targets.push(target);
+  }
+  problems.sort((a, b) => a.line - b.line);
+  return { props, targets, problems };
+}

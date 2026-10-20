@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 _site/
 .claude/settings.local.json
+
+# 正式外掛的相依套件與建置產物
+node_modules/
+/main.js
+/styles.css
