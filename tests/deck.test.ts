@@ -1,8 +1,13 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseDeck, assignIds } from '../src/core/deck/index.ts';
-import type { Prompt } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign } from '../src/core/deck/index.ts';
+import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
+
+// 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
+const deckCases = new Set<string>();
+function parseDeck(text: string) { deckCases.add(text); return parse(text); }
+function assignIds(text: string, options: AssignOptions) { deckCases.add(text); return assign(text, options); }
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = [...syntax.slice(syntax.indexOf('### 2-2'), syntax.indexOf('### 2-3')).matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
@@ -309,4 +314,133 @@ test('效能：2,000 個目標，每個 3 題，200 ms 內', t => {
   t.diagnostic('parseDeck 2000 targets / 6000 prompts: ' + elapsed.toFixed(2) + ' ms');
   assert.equal(parsed.targets.length, 2000); assert.equal(parsed.targets.reduce((sum, target) => sum + target.prompts.length, 0), 6000);
   assert.ok(elapsed < 200, '實際 ' + elapsed.toFixed(2) + ' ms');
+});
+
+test('F1 問答題的螢光筆不留在 implicit 名稱，補 ID 後仍是原題', () => {
+  const text = '- ==糖==是什麼？ :: 碳水化合物';
+  assert.equal(parseDeck(text).targets[0].name, '糖是什麼？');
+  const result = assignIds(text, { taken: new Set(), random: () => 0 });
+  assert.equal(result.text, '- 糖是什麼？ ^aaaaaa\n    - ==糖==是什麼？ :: 碳水化合物');
+  const target = parseDeck(result.text).targets[0];
+  assert.equal(target.id, 'aaaaaa'); assert.equal(target.implicit, false);
+  assert.deepEqual([qa(target.prompts[0]).question, qa(target.prompts[0]).answer], ['==糖==是什麼？', '碳水化合物']);
+});
+
+for (const [body, name] of [
+  ['`a==b` 時 ==c== 成立', '`a==b` 時 c 成立'],
+  ['$x==y$ 代表什麼？ :: 相等', '$x==y$ 代表什麼？'],
+  ['$$x==y$$ 與 ==z==', '$$x==y$$ 與 z'],
+  ['==  == 看看 :: x', '看看'],
+]) test('N2 implicit 名稱只去掉程式碼與公式外的填空記號：' + body, () => {
+  const text = '- ' + body;
+  assert.equal(parseDeck(text).targets[0].name, name);
+  const target = parseDeck(assignIds(text, { taken: new Set(), random: () => 0 }).text).targets[0];
+  assert.equal(target.name, name); assert.equal(target.id, 'aaaaaa'); assert.equal(target.implicit, false);
+  const prompt = target.prompts[0];
+  if (prompt.kind === 'qa') assert.deepEqual([prompt.question, prompt.answer], body.split(' :: '));
+  else assert.equal(prompt.text, body);
+});
+
+for (const [text, name] of [['- :: 答案', ''], ['- ==  == :: x', ''], ['- ====糖====', '==糖==']]) test('N1 空名稱或仍是題目的 implicit 原文不動、不取亂數：' + text, () => {
+  const result = assignIds(text, { taken: new Set(), random: () => { throw Error('不應配 ID'); } });
+  assert.deepEqual(result, { text, assigned: [] });
+  const parsed = parseDeck(text);
+  assert.equal(parsed.targets[0].name, name); assert.equal(parsed.targets[0].id, null);
+  if (text === '- :: 答案') assert.ok(parsed.problems.some(p => p.code === 'empty-question'));
+});
+
+test('N1 跳過 implicit 不影響其他目標的 replace、taken 與重複 ID', () => {
+  const text = '- :: 答案 ^same\n- A ^same\n  - Q :: A\n- B ^same\n  - R :: B';
+  const result = assignIds(text, { taken: new Set(['aaaaaa']), replace: new Set(['same']), random: () => 0 });
+  assert.ok(result.text.startsWith('- :: 答案 ^same\n'));
+  assert.deepEqual(result.assigned, [{ line: 1, id: 'aaaaab' }, { line: 3, id: 'aaaaac' }]);
+  const parsed = parseDeck(result.text);
+  assert.deepEqual(parsed.targets.map(t => t.id), [null, 'aaaaab', 'aaaaac']);
+  assert.ok(parsed.problems.some(p => p.code === 'empty-question'));
+});
+
+for (const fence of ['```', '~~~~']) for (const opening of ['item', 'content']) test('F2-1 圍欄隨清單容器結束：' + opening + ' ' + fence, () => {
+  const block = opening === 'item' ? '  - ' + fence + '\n    ignored' : '    ' + fence + '\n    ignored';
+  const text = '## 分組\n- 目標 ^first\n  - Q :: A\n' + block + '\n- 新目標 ^next\n  - R :: B';
+  const parsed = parseDeck(text);
+  assert.deepEqual(parsed.targets.map(t => [t.id, t.name, t.section]), [['first', '目標', '分組'], ['next', '新目標', '分組']]);
+  assert.deepEqual(parsed.targets.map(t => t.prompts.map(p => [qa(p).question, qa(p).answer])), [[['Q', 'A']], [['R', 'B']]]);
+});
+
+for (const opening of ['  ```', '  - ```']) test('N3 補 implicit 的 ID 不縮排後方已有 ID 的目標：' + opening, () => {
+  const tail = '- 目標 ^abc234\n  - R :: B';
+  const text = '- Q :: A\n' + opening + '\n    ignored\n' + tail;
+  assert.deepEqual(parseDeck(text).targets.map(t => t.id), [null, 'abc234']);
+  const result = assignIds(text, { taken: new Set(), random: () => 0 });
+  assert.ok(result.text.endsWith('\n' + tail));
+  const parsed = parseDeck(result.text);
+  assert.deepEqual(parsed.targets.map(t => t.id), ['aaaaaa', 'abc234']);
+  assert.deepEqual(parsed.targets.map(t => qa(t.prompts[0]).question), ['Q', 'R']);
+});
+
+test('F2-2 題目裡的巢狀標題是接續文字，不拆目標、不改 section', () => {
+  const parsed = parseDeck('## 分組\n- 目標\n  - Q :: A\n    ### 答案裡的小標題\n  - R :: B');
+  assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].section, '分組');
+  assert.deepEqual(parsed.targets[0].prompts.map(p => [qa(p).question, qa(p).answer]), [['Q', 'A\n### 答案裡的小標題'], ['R', 'B']]);
+});
+
+test('F2-2 implicit 題目底下的標題補 ID 前後仍屬於原題', () => {
+  const text = '## 分組\n- Q :: A\n  ### 小標題';
+  const before = parseDeck(text).targets[0];
+  assert.equal(before.section, '分組'); assert.equal(qa(before.prompts[0]).answer, 'A\n### 小標題');
+  const after = parseDeck(assignIds(text, { taken: new Set(), random: () => 0 }).text).targets[0];
+  assert.equal(after.id, 'aaaaaa'); assert.equal(after.section, '分組');
+  assert.equal(qa(after.prompts[0]).answer, 'A\n### 小標題');
+});
+
+for (const text of ['    - 假題 :: 不該排程', '\t- 假題 :: 不該排程', '段落\n    - 假題 :: 不該排程']) test('F2-3 文件層級縮排四欄的清單符號不是目標：' + JSON.stringify(text), () => {
+  assert.deepEqual(parseDeck(text).targets, []);
+  assert.deepEqual(assignIds(text, { taken: new Set() }), { text, assigned: [] });
+});
+
+for (const line of ['    ```', '\t~~~', '段落\n    ```']) test('F2-3 文件層級縮排的圍欄不吃掉後面的目標：' + JSON.stringify(line), () => {
+  const parsed = parseDeck(line + '\n- 目標\n  - Q :: A');
+  assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].name, '目標');
+  assert.deepEqual([qa(parsed.targets[0].prompts[0]).question, qa(parsed.targets[0].prompts[0]).answer], ['Q', 'A']);
+});
+
+for (const line of ['    # 假標題', '\t## 假標題']) test('文件層級縮排四欄的 # 不更新 section：' + JSON.stringify(line), () => {
+  const parsed = parseDeck('## 分組\n' + line + '\n- 目標\n  - Q :: A');
+  assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].section, '分組');
+});
+
+test('等 metadataCache 對照：清單內縮排過深仍照目前當子項目', () => {
+  const parsed = parseDeck('- 目標\n        - Q :: A');
+  assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].implicit, false);
+  assert.deepEqual([qa(parsed.targets[0].prompts[0]).question, qa(parsed.targets[0].prompts[0]).answer], ['Q', 'A']);
+});
+
+test('文件層級未閉合的圍欄仍持續到檔尾', () => {
+  for (const fence of ['```', '~~~']) assert.deepEqual(parseDeck(fence + '\n- 假題 :: A').targets, []);
+});
+
+// after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
+after(() => {
+  const fingerprints = (text: string) => parse(text).targets.flatMap(t => t.prompts.map(p => p.fingerprint)).sort();
+  for (const text of deckCases) {
+    const context = '往返範例：' + text.slice(0, 160);
+    const before = parse(text), once = assign(text, { taken: new Set(), random: () => 0 });
+    const after = parse(once.text), twice = assign(once.text, { taken: new Set(), random: () => 0 });
+    assert.equal(twice.text, once.text, context + '：第二次改字');
+    assert.deepEqual(twice.assigned, [], context + '：第二次重新配 ID');
+    assert.equal(after.targets.length, before.targets.length, context + '：目標數改變');
+    assert.deepEqual(fingerprints(once.text), fingerprints(text), context + '：題目指紋多重集合改變');
+    const ids = after.targets.map(t => t.id).filter(id => id !== null);
+    assert.equal(new Set(ids).size, ids.length, context + '：ID 重複');
+    for (let i = 0; i < after.targets.length; i++) {
+      const original = before.targets[i];
+      const unsafeName = !original.name || parse('- ' + original.name).targets.length > 0;
+      if (original.implicit && unsafeName) {
+        assert.equal(after.targets[i].id, null, context + '：跳過的 implicit 被改動');
+      } else assert.ok(after.targets[i].id, context + '：缺少 ID');
+      const promptContent = (prompts: Prompt[]) => prompts.map(({ line, fingerprint, ...content }) => content);
+      assert.deepEqual(promptContent(after.targets[i].prompts), promptContent(before.targets[i].prompts), context + '：題目內容改變');
+    }
+  }
+  console.log('往返驗證：' + deckCases.size + ' 份卡組範例全部通過');
 });

@@ -23,9 +23,11 @@ export function createNodeFiles(root: string): Files {
   }
   // 同一個實作中的 modify / append 共用佇列，避免相互蓋掉尚未寫完的內容。
   function serial(path: string, action: () => Promise<void>): Promise<void> {
-    const next = (pending.get(path) ?? Promise.resolve()).catch(() => {}).then(action);
-    pending.set(path, next);
-    void next.finally(() => { if (pending.get(path) === next) pending.delete(path); }).catch(() => {});
+    // 只正規化排隊的身分，實際開檔路徑不動；不同檔案頂多多排隊。
+    const key = path.normalize('NFC').toLowerCase();
+    const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
+    pending.set(key, next);
+    void next.finally(() => { if (pending.get(key) === next) pending.delete(key); }).catch(() => {});
     return next;
   }
   return {

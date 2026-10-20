@@ -69,7 +69,14 @@ export function parseDeck(text: string): Deck {
     const head = stripId(root.text);
     const syntax = questionSyntax(head.text);
     const implicit = syntax.colon >= 0 || syntax.blanks.length > 0;
-    const name = implicit ? (syntax.colon >= 0 ? head.text.slice(0, syntax.colon).trim() : head.text.replaceAll('==', '')).replaceAll('\n', ' ') : head.text.split('\n')[0];
+    let name = implicit ? (syntax.colon >= 0 ? head.text.slice(0, syntax.colon) : head.text) : head.text.split('\n')[0];
+    if (implicit) {
+      // 只移除程式碼與公式外、成對的記號；由後往前改，保留原本的位置。
+      for (const { start, end } of questionSyntax(name).blanks.reverse()) {
+        name = name.slice(0, start) + name.slice(start + 2, end - 2) + name.slice(end);
+      }
+      name = name.trim().replaceAll('\n', ' ');
+    }
     const directionMatch = / (英翻中|中翻英)$/.exec(name);
     const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
     const target: Target = { id: implicit ? null : head.id, name, line: root.line, implicit, section: root.section,

@@ -64,13 +64,15 @@ export function questionSyntax(text: string): { colon: number; blanks: { start: 
 export function listTree(lines: Line[], start: number): Item[] {
   const roots: Item[] = [], stack: Item[] = [];
   let section: string | null = null;
-  let fence: { char: string; count: number } | null = null;
+  let fence: { char: string; count: number; contentColumn: number } | null = null;
   const extend = (line: number): void => { for (const item of stack) item.end = line + 1; };
   for (let i = start; i < lines.length; i++) {
     const raw = lines[i].raw;
     const expanded = expandTabs(raw);
     const indent = expanded.match(/^ */)![0].length;
     const trimmed = expanded.trimStart();
+    // 清單容器已結束時，這一行必須重新判斷，不能延伸到前一個目標的 end。
+    if (fence && trimmed && indent < fence.contentColumn) fence = null;
     if (fence) {
       extend(i);
       if (new RegExp('^' + fence.char + '{' + fence.count + ',}\\s*$').test(trimmed)) fence = null;
@@ -83,25 +85,32 @@ export function listTree(lines: Line[], start: number): Item[] {
     }
     const opening = /^(`{3,}|~{3,})(.*)$/.exec(trimmed);
     if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
-      if (stack.length && indent >= stack.at(-1)!.contentColumn) extend(i);
-      else stack.length = 0;
-      fence = { char: opening[1][0], count: opening[1].length };
-      continue;
+      let container = stack.length - 1;
+      while (container >= 0 && indent < stack[container].contentColumn) container--;
+      if (container >= 0 || indent < 4) {
+        stack.length = container + 1;
+        extend(i);
+        fence = { char: opening[1][0], count: opening[1].length, contentColumn: stack.at(-1)?.contentColumn ?? 0 };
+        continue;
+      }
     }
     if (!trimmed) continue;
     const heading = /^(#{1,6})(?:\s+(.*)|$)/.exec(trimmed);
-    if (heading) { section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); stack.length = 0; continue; }
+    if (heading && indent < 4 && (!stack.length || indent < stack.at(-1)!.contentColumn)) {
+      section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); stack.length = 0; continue;
+    }
     // CommonMark：1～4 欄間隔都屬於符號；超過 4 欄只取一欄。
     const match = /^( *)([-*+]|\d{1,9}[.)])( +|$)(.*)$/.exec(expanded);
     if (match) {
       while (stack.length && indent < stack.at(-1)!.contentColumn) stack.pop();
+      if (!stack.length && indent >= 4) continue;
       extend(i);
       const gap = match[3].length > 4 ? 1 : Math.max(1, match[3].length);
       // 只展開縮排；正文中的 Tab 仍是原文。
       const body = raw.replace(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]*/, '');
       const itemFence = /^(`{3,}|~{3,})(.*)$/.exec(body);
       if (itemFence && !(itemFence[1][0] === '`' && itemFence[2].includes('`'))) {
-        fence = { char: itemFence[1][0], count: itemFence[1].length };
+        fence = { char: itemFence[1][0], count: itemFence[1].length, contentColumn: indent + match[2].length + gap };
         continue;
       }
       const item: Item = { line: i, end: i + 1, indent, contentColumn: indent + match[2].length + gap,

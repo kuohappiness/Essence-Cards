@@ -47,6 +47,18 @@ test('Files.modify 同檔並行的讀改寫串接，append 也不互蓋', async 
   await Promise.all([files.modify('a', () => 'start\n'), files.append('a', 'second'), files.modify('a', old => old + 'end')]);
   assert.equal(await files.read('a'), 'start\nsecond\nend');
 });
+
+test('F4 不分大小寫的檔案系統：同檔大小寫別名的 40 次 modify 不遺失', async t => {
+  const { files } = await fixture(t);
+  await files.modify('counter.txt', () => '0');
+  if (await files.read('COUNTER.txt') === null) {
+    t.skip('暫存資料夾區分大小寫，counter.txt 與 COUNTER.txt 不是同一個檔案');
+    return;
+  }
+  await Promise.all(Array.from({ length: 40 }, (_, i) => files.modify(i % 2 ? 'counter.txt' : 'COUNTER.txt', old => String(Number(old) + 1))));
+  assert.equal(await files.read('counter.txt'), '40');
+  assert.equal(await files.read('COUNTER.txt'), '40');
+});
 test('Files.modify edit 丟錯不會寫檔，也不堵住後續修改', async t => {
   const { files } = await fixture(t);
   await files.modify('a', () => 'before');

@@ -1,4 +1,4 @@
-import { linesOf, listTree } from './markdown.ts';
+import { linesOf, listTree, questionSyntax } from './markdown.ts';
 import { parseDeck, readProperties } from './parse.ts';
 import type { AssignOptions, AssignResult } from './types.ts';
 
@@ -46,6 +46,10 @@ export function assignIds(text: string, options: AssignOptions): AssignResult {
   const fallbackEol = lines.find(line => line.eol)?.eol ?? '\n';
   let added = 0;
   for (const target of deck.targets) {
+    if (target.implicit) {
+      const syntax = questionSyntax(target.name);
+      if (!target.name || syntax.colon >= 0 || syntax.blanks.length) continue;
+    }
     const duplicate = target.id !== null && seen.has(target.id);
     if (target.id) seen.add(target.id);
     if (target.id && !duplicate && !options.replace?.has(target.id)) continue;
