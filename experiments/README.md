@@ -80,7 +80,7 @@
 ### T4 API 模型實測｜待做
 
 - 問題：轉錄、製卡與錯題分析的預設模型各用哪一個？轉錄稿夠不夠準，只用轉錄稿製卡的品質如何？（D-076）（[D-072](../docs/decisions.md#d-072-ai-服務的推薦與設定方式)、[AI 模型推薦](../docs/ai-models.md)）
-- 現況：轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra，只用轉錄稿製卡可行（[D-085](../docs/decisions.md#d-085-首選-openai-gpt-56-terra)）。剩下：錯題照片（使用者把 2～3 題放進測試 vault）、Mistral 的其他模型（Large 不在免費方案，改測 Medium 或 Small）。
+- 現況：轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra，只用轉錄稿製卡可行（[D-085](../docs/decisions.md#d-085-首選-openai-gpt-56-terra)）。剩下：錯題照片（照 [D-113](../docs/decisions.md#d-113-錯題整頁拍題號選填)：使用者把 2～3 張字跡潦草的真實考卷整頁拍、遮住姓名，放進測試 vault；比較 Terra 與 Sol 讀手寫的準確度、量實際 token）、Mistral 的其他模型（Large 不在免費方案，改測 Medium 或 Small）。
 - 程式與操作：指令、正式格式的製卡流程、`check-syntax.mjs`、一般知識的參數與誰測，見 [T4 說明](t4/README.md)；程式規格見[任務說明](t4/TASK.md)，由 Codex 撰寫。提示詞（`t4/prompts/`）與模型清單（`t4/models.json`）由 Claude 維護。教材與結果都只放測試 vault。
 - 金鑰放在 `%USERPROFILE%\.essence-api-keys.env`，不在 repo、也不在 vault。試作場停用時（D-065）刪掉這個檔案；之後由正式外掛在電腦本機保存金鑰（D-003）。
 - 評比轉錄時要打開每一張裁切的圖看，不能只看數量。
