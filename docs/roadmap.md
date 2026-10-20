@@ -21,7 +21,7 @@
 
 另外的專題與研究：
 
-- **製卡規則的寫法**（[討論稿](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)）：使用者想找比現行詳細規則更好的寫法，細節交給 AI 判斷。提了四種寫法和現行規則比較：學習鏈版（使用者提議）、原則版、原則＋示範、原則＋備課流程。等 Codex 回應，討論定案後才測。
+- **製卡規則的寫法**（[討論稿](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)）：使用者想找比現行詳細規則更好的寫法，細節交給 AI 判斷。提了幾種寫法和現行規則比較：學習鏈版（使用者提議）、原則版，各自加或不加備課流程；示範放第二輪。第一輪的主要問題是備課流程對品質有沒有幫助（使用者 2026-10-21）。等 Codex 回應，討論定案後才測。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片（照 [D-113](decisions.md#d-113-錯題整頁拍題號選填) 整頁拍，等使用者提供 2～3 張字跡潦草的真實考卷）、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
 - **English Kitten Academy 研究**：Codex 已完成[報告](research/english-kitten-academy.md)與來源查核；[共用討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)待 Claude 評估，由使用者交接。採用建議未確認，不改變 W3 的下一步或 v1 範圍。
