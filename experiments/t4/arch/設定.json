@@ -1,0 +1,48 @@
+{
+  "說明": "學習目標架構實驗的固定條件，由 Claude 維護；程式只讀。路徑相對於 experiments/t4/arch。Codex 只能在查核官方文件後修改各模型的 parameters，並在回報說明。見 tasks/objective-architecture.md",
+  "models": {
+    "terra": { "provider": "openai", "model": "gpt-5.6-terra", "parameters": {} },
+    "sol": { "provider": "openai", "model": "gpt-6.1-sol", "parameters": { "reasoning_effort": "xhigh" } },
+    "opus": { "provider": "openrouter", "model": "anthropic/claude-opus-5.5", "parameters": { "reasoning": { "effort": "xhigh" } } }
+  },
+  "transcribe": { "provider": "openai", "model": "gpt-6-sol", "parameters": {} },
+  "configs": {
+    "S0": [
+      { "model": "terra", "system": ["../screen/格式.md", "../../../docs/card-rules/common.md", "../../../docs/card-rules/science.md", "../screen/完整規則.md"], "input": [], "output": ["卡組"] }
+    ],
+    "S1": [
+      { "model": "opus", "system": ["格式.md", "短規則.md", "單次.md"], "input": [], "output": ["架構", "卡組"] }
+    ],
+    "S2": [
+      { "model": "sol", "system": ["格式.md", "短規則.md", "單次.md"], "input": [], "output": ["架構", "卡組"] }
+    ],
+    "S3": [
+      { "model": "sol", "system": ["格式.md", "短規則.md", "流水線-1架構.md"], "input": [], "output": ["架構"] },
+      { "model": "sol", "system": ["格式.md", "短規則.md", "流水線-2出題.md"], "input": ["架構"], "output": ["卡組"] },
+      { "model": "opus", "system": ["格式.md", "審查.md", "流水線-3審查.md"], "input": ["架構", "卡組"], "output": ["架構", "卡組", "修改紀錄"] }
+    ],
+    "S4": [
+      { "model": "terra", "system": ["格式.md", "短規則.md", "單次.md"], "input": [], "output": ["架構", "卡組"] }
+    ]
+  },
+  "materials": {
+    "2-1": {
+      "pdfPages": "3-11",
+      "unit": "國二上自然 2-1",
+      "title": "國二上自然 2-1 認識物質",
+      "任務資料": ["學生：國中二年級", "科目：自然", "單元：2-1 認識物質", "學習目的：準備段考", "允許 AI 補充：否", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師備課用書，含給老師的註記）"]
+    },
+    "2-2": {
+      "pdfPages": "12-16",
+      "unit": "國二上自然 2-2",
+      "title": "國二上自然 2-2 水溶液",
+      "任務資料": ["學生：國中二年級", "科目：自然", "單元：2-2 水溶液", "學習目的：準備段考", "允許 AI 補充：否", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師備課用書，含給老師的註記）"]
+    },
+    "2-3": {
+      "pdfPages": "17-22",
+      "unit": "國二上自然 2-3",
+      "title": "國二上自然 2-3 空氣的組成",
+      "任務資料": ["學生：國中二年級", "科目：自然", "單元：2-3 空氣的組成", "學習目的：準備段考", "允許 AI 補充：否", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師備課用書，含給老師的註記）"]
+    }
+  }
+}
