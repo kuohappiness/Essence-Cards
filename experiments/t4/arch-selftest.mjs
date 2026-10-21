@@ -58,6 +58,9 @@ export async function selftest() {
     await assert.rejects(budget.reserve(0.4, 'second'), /預算不足/);
     await budget.settle({ costUsd: 0.1, outcome: 'ok' });
     assert.equal(await budget.total(), 0.1);
+    await budget.reserve(0.2, 'credit-rejection');
+    await budget.settle({ provider: 'openrouter', status: 402, costUsd: null, usage: {}, outcome: 'http-error' });
+    assert.equal(await budget.total(), 0.1, '402在模型處理前拒絕，應釋放預留而非算成未知推理花費');
     const config = await settings();
     for (const [name, spec] of Object.entries(config.materials)) for (const steps of Object.values(config.configs)) for (const step of steps) {
       const prompt = await buildStep(ROOT, spec, step);

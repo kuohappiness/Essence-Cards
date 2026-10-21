@@ -61,8 +61,9 @@ export class Budget {
     if (!reservation) throw new Error('找不到請求的預算保留');
     // 未收到帳單資訊的請求保守計入預留值，避免逾時後重跑造成漏算。
     const routeCostUnknown = entry.provider === 'openrouter' && !Number.isFinite(entry.usage?.cost);
-    reservation.chargedUsd = !routeCostUnknown && Number.isFinite(entry.costUsd) ? entry.costUsd : [400, 401, 403, 429].includes(entry.status) ? 0 : reservation.reservedUsd;
-    reservation.costKnown = !routeCostUnknown && Number.isFinite(entry.costUsd);
+    const rejectedBeforeInference = [400, 401, 402, 403, 429].includes(entry.status);
+    reservation.chargedUsd = !routeCostUnknown && Number.isFinite(entry.costUsd) ? entry.costUsd : rejectedBeforeInference ? 0 : reservation.reservedUsd;
+    reservation.costKnown = (!routeCostUnknown && Number.isFinite(entry.costUsd)) || rejectedBeforeInference;
     reservation.outcome = entry.outcome;
     await writeJson(this.file, state);
     this.active = null;
