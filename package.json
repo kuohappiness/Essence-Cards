@@ -29,6 +29,8 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
     "@types/node": "^24.19.2",
     "@types/react": "^19.2.0",
