@@ -71,14 +71,14 @@ async function resolvedPath(target) {
   while (!(await exists(current))) { tail.unshift(path.basename(current)); current = path.dirname(current); }
   return path.join(await fs.realpath(current), ...tail);
 }
-export async function validateOut(value) {
+export async function validateOut(value, { repo = REPO } = {}) {
   if (!value) throw new Error('請指定 repo 外的 --out 資料夾');
   const out = await resolvedPath(value);
-  const roots = [REPO];
+  const roots = [repo];
   try {
-    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: REPO, encoding: 'utf8', windowsHide: true }).trim();
-    roots.push(path.dirname(common));
-  } catch { /* 沒有 Git 時仍保護目前的 repo。 */ }
+    const listing = execFileSync('git', ['-c', 'core.quotePath=false', 'worktree', 'list', '--porcelain', '-z'], { cwd: repo, encoding: 'utf8', windowsHide: true });
+    for (const field of listing.split('\0')) if (field.startsWith('worktree ')) roots.push(field.slice(9));
+  } catch { throw new Error('無法取得 Git worktree 清單，為保護私人輸出，停止執行'); }
   for (const root of roots) if (isInside(await resolvedPath(root), out)) throw new Error('--out 不可位於 repo 或其 worktree 內');
   return out;
 }

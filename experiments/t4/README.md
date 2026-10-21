@@ -47,6 +47,24 @@ node screen.mjs blind --out <結果資料夾>
 
 `能力清單/` 必須在生成前準備，只讀不改。`blind` 隨機分配代號，保留已填的評分表；評分者只讀結果資料夾的 `能力清單/`、`材料/` 與 `盲評/`，不可先看 `生成/`、`紀錄.json` 或報告。評分完成後才執行 `node screen.mjs report --out <結果資料夾>`。沒有額外指示就只做第 1 次，不執行報告；需要後續輪次時用 `--run <N>`。
 
+## 學習目標架構實驗
+
+規格見 [任務說明](../../tasks/objective-architecture.md)。Node 24 可直接載入 W2 的 `parseDeck`；不增加套件。先安裝本目錄與 repo 根目錄既有依賴。
+
+```powershell
+node arch.mjs selftest
+node arch.mjs transcribe --out <repo外結果資料夾> --pdf <課本PDF>
+node arch.mjs exams --out <repo外結果資料夾> --photos <考卷照片資料夾>
+node arch.mjs run --out <repo外結果資料夾> [--run 2]
+node arch.mjs blind --out <repo外結果資料夾> [--run 2]
+```
+
+前三步完成後先獨立標註，使用者轉達「已凍結」後才執行 `run`；沒有 `考題/凍結.md` 時程式也會拒絕。生成與修訂不讀考題。第 1 次的產物在 `生成/<節>/<設定>/`，後續次數在底下的 `第N次/`。S3 的原架構、原稿、修訂架構、修訂稿與修改紀錄均保留。
+
+每個請求以模型、參數、提示及文字／圖片指紋保存到 `請求/`；相同條件沿用，不重付費。改參數會產生新指紋，歷史原始回覆不覆蓋。曾中斷、截斷或缺段落的請求標為未完成，需先查核紀錄，不自動重送。`紀錄/預算.json` 在每次請求及重試前保留保守費用上界，回覆後按 token 與官方標價估算，OpenRouter 有回 `usage.cost` 時優先使用；未知花費仍保留上界。總上限 20 美元，資料分享抵免與實際帳單由帳戶決定。定價查核日 2026-10-21，來源見 [OpenAI 模型](https://developers.openai.com/api/docs/models)、[OpenRouter Opus](https://openrouter.ai/anthropic/claude-opus-5.5)。
+
+所有 worktree 都禁止用作 `--out`。操作期間以 `.arch.lock` 防止同時寫入；若中斷留鎖，先確認沒有仍在執行的指令，再移除該鎖。`blind` 做卡組與架構各自編碼的盲評包，不附修改紀錄；對照只在 `紀錄/`。
+
 ## 誰測
 
 AI 寫小程式送出，檢查格式、繁體與台灣用語、和課本不符的地方、錯題的手寫字與錯因，先打一輪 ✅✏️❌。使用者要做三件 AI 做不了的事：申請金鑰（第一輪是 Google AI Studio 與 OpenRouter；開帳號、處理金鑰只能本人來）；把教材放進測試 vault（教材在使用者手上，有版權不能進 repo）；最後從前兩名裡挑一份，看的時候不標模型名稱（哪一份比較好審要由家長判斷）。

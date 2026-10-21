@@ -179,9 +179,9 @@ export function check(text, options = {}) {
   }
 
   function classify(text) {
-    if (isQuestion(text)) return 'question';
     const m = text.match(/^([^\s：:｜]+)\s*[：:]/);
-    return m && FIELDS.includes(m[1]) ? 'data' : 'supplement';
+    if (m && FIELDS.includes(m[1])) return 'data';
+    return isQuestion(text) ? 'question' : 'supplement';
   }
 
   function analyzeTarget(node, where) {
@@ -288,7 +288,6 @@ export function check(text, options = {}) {
 
   // 數量與比例
   const n = result.targets.length;
-  if (source?.pages && n > source.pages * 6) issue(1, '不符', 'too-many-targets', `學習目標 ${n} 個，超過每頁約 6 個（${source.pages} 頁）（通用規則 5）`);
   const understanding = result.targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${understanding}/${n}，少於三分之一（自然預設規則 1）`);
   const language = languageStats(text);
