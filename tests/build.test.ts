@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian、無 CSS 時空檔', async t => {
+void test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian、無 CSS 時空檔', async t => {
   const vault = await mkdtemp(join(tmpdir(), 'essence-vault-'));
   t.after(() => rm(vault, { recursive: true, force: true }));
   const { stdout } = await run(process.execPath, ['tools/install-vault.mjs', vault], { cwd: root });
@@ -20,11 +20,11 @@ test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian、無
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
   }
   assert.equal(await readFile(join(root, 'styles.css'), 'utf8'), '');
-  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
+  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Record<string, unknown>;
   assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.0.1', '1.8.0', false]);
 });
 
-test('W1 CSS 合併：tokens 第一、其餘依路徑排序，隔離在暫存專案', async t => {
+void test('W1 CSS 合併：tokens 第一、其餘依路徑排序，隔離在暫存專案', async t => {
   const project = await mkdtemp(join(tmpdir(), 'essence-build-'));
   t.after(() => rm(project, { recursive: true, force: true }));
   await mkdir(join(project, 'tools')); await mkdir(join(project, 'src', 'ui'), { recursive: true });
@@ -38,11 +38,17 @@ test('W1 CSS 合併：tokens 第一、其餘依路徑排序，隔離在暫存專
   assert.equal(await readFile(join(project, 'styles.css'), 'utf8'), 'tokens{}\na{}\nb{}\nz{}');
   assert.deepEqual((await readdir(join(root, 'src'))).sort(), ['core', 'main.ts']);
 });
-test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
+void test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
   await assert.rejects(run(process.execPath, ['tools/install-vault.mjs'], { cwd: root }), /用法/);
 });
-test('deck 連同 YAML 與 SHA-256 可直接建成 browser bundle', async () => {
+void test('deck 連同 YAML 與 SHA-256 可直接建成 browser bundle', async () => {
   const result = await build({ absWorkingDir: root, entryPoints: ['src/core/deck/index.ts'], bundle: true, platform: 'browser', format: 'esm', write: false, metafile: true });
+  const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
+  assert.deepEqual(imports.filter(entry => entry.external), []);
+});
+
+void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或 Node', async () => {
+  const result = await build({ absWorkingDir: root, entryPoints: ['src/core/study/index.ts'], bundle: true, platform: 'browser', format: 'esm', write: false, metafile: true });
   const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
   assert.deepEqual(imports.filter(entry => entry.external), []);
 });

@@ -1,0 +1,8 @@
+{
+  // tools/check-skill-mirror.ts 由 skills npm script 自動列為入口。
+  "entry": ["src/main.ts", "tools/*.mjs", "tests/**/*.test.ts"],
+  "project": ["src/**/*.{ts,tsx}", "tools/*.{ts,mjs}", "tests/**/*.ts"],
+  // React/Motion 與型別套件為已定的 W5/W6 畫面保留；Obsidian 已被 main.ts 使用，不忽略。
+  // secretlint 在 npm script 的 node -e 載入；recommend preset 由 .secretlintrc.json 動態載入。
+  "ignoreDependencies": ["react", "react-dom", "motion", "@types/react", "@types/react-dom", "secretlint", "@secretlint/secretlint-rule-preset-recommend"]
+}

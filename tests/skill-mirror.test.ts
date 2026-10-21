@@ -23,14 +23,14 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   return { root, put };
 }
 
-test('兩份相同時沒有問題；只差換行（CRLF／LF）也算相同', async t => {
+void test('兩份相同時沒有問題；只差換行（CRLF／LF）也算相同', async t => {
   const { root, put } = await fixture(t);
   assert.deepEqual(checkMirror(root), []);
   await put(COPIES[1], `${SHARED[0]}/detail.md`, '細節\r\n');
   assert.deepEqual(checkMirror(root), []);
 });
 
-test('內容不同、少一個檔案、多一個檔案都報出來', async t => {
+void test('內容不同、少一個檔案、多一個檔案都報出來', async t => {
   const { root, put } = await fixture(t);
   await put(COPIES[0], `${SHARED[0]}/detail.md`, '改過的細節\n');
   await put(COPIES[1], `${SHARED[1]}/extra.md`, '只有一邊\n');
@@ -42,13 +42,13 @@ test('內容不同、少一個檔案、多一個檔案都報出來', async t => 
   ]);
 });
 
-test('缺少整個 skill 資料夾時報出來', async t => {
+void test('缺少整個 skill 資料夾時報出來', async t => {
   const { root } = await fixture(t);
   await rm(join(root, COPIES[0], SHARED[1]), { recursive: true });
   assert.deepEqual(checkMirror(root), [`缺少資料夾：${COPIES[0]}/${SHARED[1]}`]);
 });
 
-test('相對連結找不到時報出來，兩份各報一次；網址與頁內錨點不檢查', async t => {
+void test('相對連結找不到時報出來，兩份各報一次；網址與頁內錨點不檢查', async t => {
   const { root, put } = await fixture(t);
   const text = '見 [不存在](missing.md)、[上層](<../../../有 空格.md>)、[壞的上層](<../../../沒有 這個.md#節>)。\n';
   for (const copy of COPIES) await put(copy, `${SHARED[0]}/SKILL.md`, text);
