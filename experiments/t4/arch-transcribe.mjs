@@ -62,7 +62,9 @@ export async function transcribe({ out, pdf }) {
     // 先在 staging 轉換，與既有 final 比對後才寫出，避免重跑改掉 Claude 正在核對的稿。
     const staging = path.join(work, '正式格式');
     execFileSync(process.execPath, [path.join(ROOT, 'to-formal.mjs'), path.join(adapter, '轉錄稿.md'), staging, spec.unit, '教材'], { windowsHide: true, stdio: 'pipe' });
-    let formal = await fs.readFile(path.join(staging, '教材.md'), 'utf8');
+    let formal = (await fs.readFile(path.join(staging, '教材.md'), 'utf8'))
+      // 轉錄提示也容許例題寫成標題；Obsidian 的標題不能帶區塊 ID。
+      .replace(/^#{1,6}[ \t]+(例題[ \t]*\d+-\d+[^\r\n]*?)[ \t]+\^(ex\d+-\d+)[ \t]*$/gm, '**$1** ^$2');
     // 引言框內的圖不是 to-formal 舊入口的處理範圍；同樣給正式、安全且無模型名稱的檔名。
     let extra = 0;
     for (const image of references(formal)) if (!(await exists(path.join(staging, '圖', image)))) {
