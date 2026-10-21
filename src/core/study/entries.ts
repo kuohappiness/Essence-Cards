@@ -24,6 +24,11 @@ export function parseLine(line: string): LogEntry | null {
   if (Object.hasOwn(data, 'set')) {
     if (typeof data.set !== 'string' || !data.set || !Object.hasOwn(data, 'val')) return null;
     if (data.deck != null && typeof data.deck !== 'string' || data.lt != null && typeof data.lt !== 'string') return null;
+    if (data.set === 'status') {
+      if (Object.hasOwn(data, 'deck') === Object.hasOwn(data, 'lt')) return null;
+      const target = Object.hasOwn(data, 'deck') ? data.deck : data.lt;
+      if (typeof target !== 'string' || !target.trim()) return null;
+    }
     return { kind: 'change', t: data.t, at: time.at, offset: time.offset, set: data.set, deck: data.deck as string | null ?? null, lt: data.lt as string | null ?? null, val: data.val };
   }
   if (typeof data.lt !== 'string' || !data.lt || !['easy', 'good', 'near', 'miss'].includes(data.r as string)) return null;

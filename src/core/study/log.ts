@@ -20,12 +20,16 @@ export function createLogWriter(files: Files, options: {
   const pending: { path: string; line: string }[] = [];
   let last = -Infinity;
   let running: Promise<void> | null = null;
+  let writeVersion = 0;
+  let failedVersion = 0;
 
   async function drain(): Promise<void> {
     while (pending.length) {
       const job = pending[0];
+      const version = writeVersion;
       try { await files.append(job.path, job.line); }
       catch (error) {
+        failedVersion = version;
         // 通知回呼失敗也不能讓背景 Promise 無人接手，或丟失原始的寫檔錯誤。
         try { options.onError?.(error); } catch { /* 保留原始錯誤給 flush。 */ }
         throw error;
@@ -40,7 +44,12 @@ export function createLogWriter(files: Files, options: {
         running = null;
         // drain 已回傳、這個收尾尚未執行時，也可能收到新的 write。
         if (pending.length) return start();
-      }, (error: unknown) => { running = null; throw error; });
+      }, (error: unknown) => {
+        running = null;
+        // 每輪 append 記住當時的 write 版本，失敗前後的新 write 只觸發下一輪。
+        if (writeVersion !== failedVersion) return start();
+        throw error;
+      });
       // write 同步回傳；失敗留在佇列，由下一次 write / flush 重試。
       void running.catch(() => {});
     }
@@ -56,6 +65,7 @@ export function createLogWriter(files: Files, options: {
       const path = logPath(options.device, at, offset);
       last = at;
       pending.push({ path, line });
+      writeVersion++;
       void start().catch(() => {});
       return t;
     },

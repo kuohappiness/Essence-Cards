@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-if ! git diff --cached --name-only --diff-filter=ACMRD | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
+if ! git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
   exit 0
 fi
 if [ ! -d node_modules ]; then

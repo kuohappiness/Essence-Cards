@@ -65,3 +65,75 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依擋程式 co
   await run('git', ['add', '--', 'doc.md'], isolated);
   await run('git', commit, isolated);
 });
+
+for (const scenario of ['中文新增', '移出 src 的改名'] as const) void test('L2-3 hook 擋下缺相依的' + scenario, async t => {
+  const root = await mkdtemp(join(tmpdir(), 'essence-hook-path-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  const isolated = { cwd: root, env };
+  const run = promisify(execFile);
+  const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
+  await run('git', ['init', '-q'], isolated);
+  await run('git', ['config', 'core.quotepath', 'true'], isolated);
+  await mkdir(join(root, 'src'));
+  if (scenario === '移出 src 的改名') {
+    await mkdir(join(root, 'docs'));
+    await writeFile(join(root, 'src/x.ts'), 'export {};\n');
+    await run('git', ['add', '--', 'src/x.ts'], isolated);
+    await run('git', commit, isolated);
+    await run('git', ['mv', 'src/x.ts', 'docs/x.ts'], isolated);
+  } else {
+    await writeFile(join(root, 'src/中文.ts'), 'export {};\n');
+    await run('git', ['add', '--', 'src/中文.ts'], isolated);
+  }
+  await mkdir(join(root, '.githooks'));
+  const hook = join(root, '.githooks/pre-commit');
+  await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await chmod(hook, 0o755);
+  await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
+  await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
+});
+
+const loadForms = (name: string) => [
+  "import '" + name + "';", "export * from '" + name + "';",
+  "void import('" + name + "');", "require('" + name + "');",
+];
+const isBoundary = (message: { ruleId: string | null }) => message.ruleId === 'no-restricted-imports' || message.ruleId === 'essence/module-boundaries';
+for (const [name, path, dependency] of [
+  ['核心不能載入 React', 'src/core/files.ts', 'react'],
+  ['入口不能載入核心內部', 'src/main.ts', './core/study/fsrs.ts'],
+  ['工具不能直接載入 ts-fsrs', 'tools/example.mjs', 'ts-fsrs'],
+] as const) void test('L2-4 ' + name + '，涵蓋 import、export、動態 import 與 require', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const code of loadForms(dependency)) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.ok(result.messages.some(isBoundary), path + ': ' + code);
+  }
+});
+
+void test('L2-4 三個目錄都受邊界規則保護，公開入口與 FSRS 包裝例外仍可使用', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [path, name, blocked] of [
+    ['src/core/files.ts', 'node:fs', true], ['src/core/files.ts', 'fs/promises', true],
+    ['src/core/files.ts', 'obsidian', true], ['src/core/files.ts', 'motion/react', true],
+    ['src/core/files.ts', 'react-dom/client', true], ['src/core/files.ts', 'react/jsx-runtime', true],
+    ['src/core/study/fsrs.ts', 'react', true],
+    ['src/core/study/entries.ts', 'ts-fsrs', true], ['src/main.ts', 'ts-fsrs', true],
+    ['tests/example.test.ts', 'ts-fsrs', true],
+    ['tools/nested/example.mjs', 'ts-fsrs', true], ['tests/nested/example.mjs', 'ts-fsrs', true],
+    ['tools/example.mjs', '../src/core/study/log.ts', true],
+    ['tests/example.test.ts', '../src/core/deck/types.ts', true],
+    ['src/core/study/fsrs.ts', 'ts-fsrs', false],
+    ['src/main.ts', './core/files.ts', false], ['src/main.ts', './core/study/index.ts', false],
+    ['tools/example.mjs', '../src/core/study/index.ts', false],
+    ['tests/example.test.ts', '../src/core/deck/index.ts', false],
+  ] as const) for (const code of loadForms(name)) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+  }
+  for (const [path, blocked] of [['src/core/study/types.ts', true], ['tests/example.test.ts', true], ['src/core/study/fsrs.ts', false]] as const) {
+    const [result] = await lint.lintText("export type External = import('ts-fsrs').FSRS;", { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path);
+  }
+});

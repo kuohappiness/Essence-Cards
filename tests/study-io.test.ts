@@ -155,3 +155,71 @@ void test('readHistory 不吞真正的 I/O 失敗', async () => {
   files.read = () => Promise.reject(Error('read 失敗'));
   await assert.rejects(readHistory(files), /read 失敗/);
 });
+
+for (const when of ['同步', '收尾前的微任務'] as const) void test('L2-1 onError ' + when + ' write 不需 flush 就依序重試', async () => {
+  const saved: string[] = [];
+  const attempts: string[] = [];
+  let second = '';
+  const writer = createLogWriter(fake((_path, line) => {
+    attempts.push(line);
+    if (attempts.length === 1) return Promise.reject(Error('只失敗一次'));
+    saved.push(line);
+    return Promise.resolve();
+  }), {
+    device: 'PC-abcd', now: () => at, offset: () => 480,
+    onError: () => {
+      const writeNext = () => { second = writer.write({ ...answer, lt: 'second' }); };
+      if (when === '同步') writeNext();
+      else queueMicrotask(writeNext);
+    },
+  });
+  const first = writer.write(answer);
+  await tick();
+  assert.deepEqual(saved.map(line => (JSON.parse(line) as { t: string }).t), [first, second]);
+  assert.equal(attempts.length, 3);
+  assert.equal(attempts[0], attempts[1]);
+});
+
+void test('L2-1 重入 write 的重試仍失敗時只重試一輪，之後仍可 flush', async () => {
+  let attempts = 0;
+  let fail = true;
+  const saved: string[] = [];
+  const error = Error('持續失敗');
+  const writer = createLogWriter(fake((_path, line) => {
+    attempts++;
+    if (fail) return Promise.reject(error);
+    saved.push(line);
+    return Promise.resolve();
+  }), {
+    device: 'PC-abcd', now: () => at, offset: () => 480,
+    onError: () => { if (attempts === 1) writer.write({ ...answer, lt: 'second' }); },
+  });
+  writer.write(answer);
+  await tick();
+  assert.equal(attempts, 2);
+  await tick();
+  assert.equal(attempts, 2);
+  fail = false;
+  await writer.flush();
+  assert.deepEqual(saved.map(line => (JSON.parse(line) as { lt: string }).lt), ['target', 'second']);
+});
+
+void test('L2-1 append 已 reject 但 catch 尚未執行前的 write 也會重試', async () => {
+  let rejectFirst: (error: unknown) => void = () => { throw Error('尚未建立 append'); };
+  const firstAppend = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+  const saved: string[] = [];
+  let attempts = 0;
+  const writer = createLogWriter(fake((_path, line) => {
+    attempts++;
+    if (attempts === 1) return firstAppend;
+    saved.push(line);
+    return Promise.resolve();
+  }), { device: 'PC-abcd', now: () => at, offset: () => 480 });
+  const first = writer.write(answer);
+  await Promise.resolve();
+  rejectFirst(Error('append 已失敗'));
+  const second = writer.write({ ...answer, lt: 'second' });
+  await tick();
+  assert.deepEqual(saved.map(line => (JSON.parse(line) as { t: string }).t), [first, second]);
+  assert.equal(attempts, 3);
+});

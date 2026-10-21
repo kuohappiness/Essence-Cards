@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { formatTime, dayOf, dayStart, encodeEntry, parseLine, mergeHistory } from '../src/core/study/index.ts';
+import { formatTime, dayOf, dayStart, encodeEntry, parseLine, mergeHistory, replay } from '../src/core/study/index.ts';
 import type { NewEntry } from '../src/core/study/index.ts';
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
@@ -145,4 +145,45 @@ void test('來源重複使用同一路徑時，同一時間仍依原行號排列
   const line = (lt: string) => JSON.stringify({ t, lt, r: 'good', v: 'x' });
   const history = mergeHistory([{ path: 'same', text: line('a') + '\n' + line('c') }, { path: 'same', text: line('b') }]);
   assert.deepEqual(history.reviews.map(e => e.lt), ['a', 'b', 'c']);
+});
+
+void test('L2-2 同時間同路徑同行號依 trim 原文 code unit 排序，交換來源不改歷史與重播', () => {
+  const t = '2026-10-16T20:00:00Z';
+  const good = encodeEntry(t, { lt: 'goal', r: 'good', v: 'fp' });
+  const miss = encodeEntry(t, { lt: 'goal', r: 'miss', v: 'fp' });
+  const change = (val: string) => JSON.stringify({ t, set: 'future', val });
+  const sources = [
+    { path: 'same.jsonl', text: '  ' + miss + '\r\n' + change('a') },
+    { path: 'same.jsonl', text: '\t' + good + '  \n' + change('Z') },
+  ];
+  const forward = mergeHistory(sources);
+  const reversed = mergeHistory([...sources].reverse());
+  assert.deepEqual(forward.reviews.map(entry => entry.r), ['good', 'miss']);
+  assert.deepEqual(forward.changes.map(entry => entry.val), ['Z', 'a']);
+  assert.deepEqual(forward, reversed);
+  assert.deepEqual(replay(forward.reviews), replay(reversed.reviews));
+});
+
+void test('L2-5 status 必須剛好有一個非空字串對象，壞行跳過並記 problem', () => {
+  const t = '2026-10-16T20:00:00Z';
+  const invalid = [
+    {}, { deck: '' }, { lt: '' }, { deck: '  ' }, { lt: 0 }, { deck: null },
+    { deck: 'deck.md', lt: 'goal' }, { deck: 'deck.md', lt: null },
+  ].map(target => JSON.stringify({ t, set: 'status', ...target, val: '暫停' }));
+  for (const line of invalid) assert.equal(parseLine(line), null, line);
+  const valid = [
+    JSON.stringify({ t, set: 'status', deck: 'deck.md', val: '啟用' }),
+    JSON.stringify({ t, set: 'status', lt: 'goal', val: '暫停' }),
+  ];
+  const history = mergeHistory([{ path: 'status.jsonl', text: [...invalid, ...valid].join('\n') }]);
+  assert.deepEqual(history.changes.map(entry => [entry.deck, entry.lt]), [['deck.md', null], [null, 'goal']]);
+  assert.deepEqual(history.problems.map(problem => [problem.path, problem.line]), invalid.map((_, line) => ['status.jsonl', line]));
+});
+
+void test('L2-5 其他已知變更不新增 val 型別限制，未知種類仍原樣保留', () => {
+  const t = '2026-10-16T20:00:00Z';
+  const rows = [{ set: 'cap', val: 'future' }, { set: 'retention', val: null }, { set: 'semester', val: 1 }, { set: 'filter', val: {} }, { set: 'future', val: { nested: [1, true] } }];
+  const history = mergeHistory([{ path: 'changes.jsonl', text: rows.map(row => JSON.stringify({ t, ...row })).join('\n') }]);
+  assert.deepEqual(history.changes.map(entry => [entry.set, entry.val]), rows.map(row => [row.set, row.val]));
+  assert.deepEqual(history.problems, []);
 });
