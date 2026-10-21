@@ -24,7 +24,7 @@
 - **學習目標架構**（[討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md>)）：2026-10-21 使用者要求把「製卡規則的寫法」（[前一份](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)，暫停）歸零重想，同意新方向：用真實考題當尺、先用最強的模型找天花板、比較單次與流水線（架構 → 出題 → 另一家審查），詳細規則改給審查者用。結論使用者 2026-10-21 確認（強模型用 xhigh）；單元是 2-2，保留單元 2-1、2-3，尺是第一次段考。下一步：Codex 照[任務說明](../tasks/objective-architecture.md)寫程式、轉錄、獨立標考題；Claude 核對轉錄、另標一次、凍結後才生成。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片（照 [D-113](decisions.md#d-113-錯題整頁拍題號選填) 整頁拍，等使用者提供 2～3 張字跡潦草的真實考卷）、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
-- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案留 v2（[backlog](backlog.md#點子收集箱)）。使用者要 v1 做「片語放進句子裡打字」：答錯時的三步流程已定（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)，W6 照做）；寫法、乙方案加四條線、多種答案都接受等英文規則試用後再定（[backlog](backlog.md#其他待決)）。
+- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案留 v2（[backlog](backlog.md#點子收集箱)）。使用者要 v1 做「片語放進句子裡打字」：答錯時的三步流程已定（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)，W6 照做）；寫法、乙方案加四條線、多種答案都接受已照[英文規則 v0.8](card-rules/english.md) 試用 14 份，三項都有定案建議，等使用者確認後寫 D-ID；` | ` 要先請 Codex 改解析器（[backlog](backlog.md#其他待決)）。
 
 ## 路線圖
 
@@ -69,6 +69,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-21 | 片語放進句子裡打字：英文規則 v0.8（中文整句＋英文挖空、打出變化形；有會變的部分再出 1～2 題換主詞或時態；「只有一個答案」四條反例）。Terra 試用 14 份：多解 5 → 0～2 題，題幹都不洩漏原形，學習目標數不變；`parseDeck()` 都是 qa、zh-en、沒有 problems，` \| ` 不會拆開要交給 Codex（[試用紀錄](card-rules/trials.md)）；三項定案建議待使用者確認 |
 | 2026-10-21 | 打字卡答錯時的三步流程（使用者提出）：先給原形再試一次、第一步不標拼錯字母，還是不會就看著答案照打一次；自評只看第一次（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)） |
 | 2026-10-21 | English Kitten Academy 研究的 Claude 評估：片語放進句子裡打字列入 v1（使用者）；拼句當提示、文法選擇題、造句題的可接受答案列入 v2 討論（使用者同意），`take`／`for` 案例併入下一輪「共同成功判準」試用；Codex 同日已回覆，拼句的定位與提示後評分待 Claude 確認 |
 | 2026-10-21 | W4 今天的佇列的任務說明：用今天以前的紀錄排出今天的份（五道、照時間上限切）、英文兩個方向的門檻與同一天只出一個、剛答錯的再出與提早出、題目池輪流、入口一科一列的進度，附 T1～T15 驗算；六個待決問題照建議定案：秒數用自己的作答間隔中位數、答對才算完成、新卡照筆記順序、學業以外合成一列、濾網寫分類或重要性、打字卡記 `typed`（D-120） |
