@@ -56,14 +56,14 @@ node arch.mjs selftest
 node arch.mjs transcribe --out <repo外結果資料夾> --pdf <課本PDF>
 node arch.mjs exams --out <repo外結果資料夾> --photos <考卷照片資料夾>
 node arch.mjs run --out <repo外結果資料夾> [--run 2]
-node arch.mjs blind --out <repo外結果資料夾> [--run 2]
+node arch.mjs blind --out <repo外結果資料夾> [--materials 2-1,2-2] [--run 2]
 ```
 
 前三步完成後先獨立標註，使用者轉達「已凍結」後才執行 `run`；沒有 `考題/凍結.md` 時程式也會拒絕。生成與修訂不讀考題。第 1 次的產物在 `生成/<節>/<設定>/`，後續次數在底下的 `第N次/`。S3 的原架構、原稿、修訂架構、修訂稿與修改紀錄均保留。
 
 每個請求以模型、參數、提示及文字／圖片指紋保存到 `請求/`；相同條件沿用，不重付費。改參數會產生新指紋，歷史原始回覆不覆蓋。曾中斷、截斷或缺段落的請求標為未完成，需先查核紀錄，不自動重送。`紀錄/預算.json` 在每次請求及重試前保留保守費用上界，回覆後按 token 與官方標價估算，OpenRouter 有回 `usage.cost` 時優先使用；未知花費仍保留上界。總上限 20 美元，資料分享抵免與實際帳單由帳戶決定。定價查核日 2026-10-21，來源見 [OpenAI 模型](https://developers.openai.com/api/docs/models)、[OpenRouter Opus](https://openrouter.ai/anthropic/claude-opus-5.5)。
 
-所有 worktree 都禁止用作 `--out`。操作期間以 `.arch.lock` 防止同時寫入；若中斷留鎖，先確認沒有仍在執行的指令，再移除該鎖。`blind` 做卡組與架構各自編碼的盲評包，不附修改紀錄；對照只在 `紀錄/`。本實驗使用 Node 原生 HTTP／HTTPS 等待長推理，總逾時 20 分鐘，不受內建 fetch 的 300 秒標頭逾時影響；不自動跟隨轉址或重送，既有 T4／screen 的傳輸維持原設定。
+所有 worktree 都禁止用作 `--out`。操作期間以 `.arch.lock` 防止同時寫入；若中斷留鎖，先確認沒有仍在執行的指令，再移除該鎖。`blind` 做卡組與架構各自編碼的盲評包，不附修改紀錄；對照只在 `紀錄/`。未指定 `--materials` 時仍包全部節；例如 `--materials 2-1,2-2` 只讀這兩節，產生 12 份卡組、10 份架構，其他盲評規則相同。節名不得空白、重複或不在設定裡；已有盲評包時，拒絕換範圍覆蓋。此選項只適用於 `blind`，不改生成範圍，也不送 API 請求。本實驗使用 Node 原生 HTTP／HTTPS 等待長推理，總逾時 20 分鐘，不受內建 fetch 的 300 秒標頭逾時影響；不自動跟隨轉址或重送，既有 T4／screen 的傳輸維持原設定。
 
 ## 誰測
 

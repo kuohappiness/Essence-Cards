@@ -133,6 +133,40 @@ export async function selftest() {
       assert.ok(!/\bS[0-4]\b|gpt-|claude-|短規則\.md|不送入盲評|類型：|重要性：/.test(text), file);
       assert.equal((await fs.stat(file)).mtimeMs, new Date('2000-01-01T00:00:00Z').getTime());
     });
+    // 指定兩節時，第三節來源不存在也能做完整的兩節盲評包。
+    const subsetOut = path.join(temp, 'subset');
+    for (const name of ['2-1', '2-2']) for (const folder of ['生成', '材料']) {
+      await fs.mkdir(path.join(subsetOut, folder), { recursive: true });
+      await fs.cp(path.join(out, folder, name), path.join(subsetOut, folder, name), { recursive: true });
+    }
+    const subset = await makeBlind({ out: subsetOut, materials: ['2-2', '2-1'] }, { config, random: () => 0.5 });
+    assert.equal(subset.entries.filter(e => e.kind === '卡組').length, 12);
+    assert.equal(subset.entries.filter(e => e.kind === '架構').length, 10);
+    assert.deepEqual([...new Set(subset.entries.map(e => e.material))], ['2-1', '2-2']);
+    for (const kind of ['卡組', '架構']) for (const name of ['2-1', '2-2']) {
+      const entries = subset.entries.filter(e => e.kind === kind && e.material === name);
+      const pair = entries.map((e, i) => e.setting === 'S3' ? i : -1).filter(i => i >= 0);
+      assert.equal(pair.length, 2); assert.ok(Math.abs(pair[0] - pair[1]) > 1);
+    }
+    assert.equal(subset.entries.filter(e => e.kind === '卡組').some(c => subset.entries.some(a => a.kind === '架構' && a.code === c.code)), false);
+    await scan(path.join(subsetOut, '盲評'), async file => {
+      const text = await fs.readFile(file, 'utf8');
+      assert.ok(!/\bS[0-4]\b|gpt-|claude-|短規則\.md|不送入盲評|類型：|重要性：|2-3/.test(text), file);
+      assert.equal((await fs.stat(file)).mtimeMs, new Date('2000-01-01T00:00:00Z').getTime());
+    });
+    for (const entry of subset.entries.filter(e => e.kind === '卡組')) {
+      const text = await fs.readFile(path.join(subsetOut, '盲評/卡組', entry.code + '.md'), 'utf8');
+      assert.ok(text.includes('    - 看 ![[測試.png]] 說出 :: **基礎**\n        - ![[測試.png]]\n    - 基礎是==知識=='));
+      assert.equal(await fs.readFile(path.join(subsetOut, '盲評/卡組/圖/測試.png'), 'utf8'), 'test-image-bytes');
+    }
+    const subsetFile = path.join(subsetOut, '紀錄/盲評對照.json');
+    const subsetBefore = await fs.readFile(subsetFile, 'utf8'), subsetMtime = (await fs.stat(subsetFile)).mtimeMs;
+    execFileSync(process.execPath, [path.join(ROOT, 'arch.mjs'), 'blind', '--out', subsetOut, '--materials', '2-1,2-2'], { encoding: 'utf8', windowsHide: true });
+    assert.equal(await fs.readFile(subsetFile, 'utf8'), subsetBefore);
+    assert.equal((await fs.stat(subsetFile)).mtimeMs, subsetMtime);
+    for (const materials of [[], ['2-1', '2-1'], ['2-9']]) await assert.rejects(makeBlind({ out: subsetOut, materials }, { config }), /節|materials/);
+    await assert.rejects(makeBlind({ out: subsetOut, materials: ['2-1'] }, { config }), /來源有變/);
+    assert.equal(await fs.readFile(subsetFile, 'utf8'), subsetBefore);
     // 不完整段落仍記費，不會被標成完成，也不會自動再付費。
     const invalidOut = path.join(temp, 'invalid');
     const invalid = await createSession(invalidOut, { ...dependencies, api: { print: () => {}, fetch: async () => new Response(JSON.stringify({ choices: [{ message: { content: '沒有標記' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } })) } });
@@ -144,7 +178,7 @@ export async function selftest() {
     const limited = await createSession(path.join(temp, 'limited'), { ...dependencies, limit: 0.01, api: { fetch: async () => { paid++; throw new Error('不應送出'); } } });
     await assert.rejects(limited.produce({ ...simple, dir: path.join(temp, 'limited') }), /預算/);
     assert.equal(paid, 0);
-    console.log('arch selftest：8 類驗收通過（21 次假請求；18 卡組／15 架構；離線，未讀取真實金鑰）');
+    console.log('arch selftest：9 類驗收通過（21 次假請求；全節 18 卡組／15 架構、指定兩節 12 卡組／10 架構；離線，未讀取真實金鑰）');
   } finally {
     const resolved = await fs.realpath(temp), parent = await fs.realpath(os.tmpdir());
     if (!resolved.startsWith(parent + path.sep)) throw new Error('暫存路徑不安全');

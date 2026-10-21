@@ -107,12 +107,17 @@ export function blindCards(text) {
   }
   return result.join('\n').trim() + '\n';
 }
-export async function makeBlind({ out, run = 1 }, dependencies = {}) {
+export async function makeBlind({ out, run = 1, materials }, dependencies = {}) {
   const config = dependencies.config ?? await settings(), random = dependencies.random ?? Math.random;
+  const allMaterials = Object.keys(config.materials), requested = materials ?? allMaterials;
+  if (!Array.isArray(requested) || !requested.length || new Set(requested).size !== requested.length || requested.some(name => !allMaterials.includes(name)))
+    throw new Error('materials 必須指定非空、不重複且存在於設定的節名稱');
+  // 依設定順序處理，命令列節名順序不影響既有盲評包的指紋。
+  const selected = allMaterials.filter(name => requested.includes(name));
   const mappingFile = path.join(out, '紀錄', `盲評對照${run === 1 ? '' : '-' + run}.json`);
   const base = path.join(out, run === 1 ? '盲評' : `盲評-第${run}次`);
   const descriptors = [];
-  for (const name of Object.keys(config.materials)) {
+  for (const name of selected) {
     for (const [id, steps] of Object.entries(config.configs)) {
       const dir = path.join(out, '生成', name, id, ...(run === 1 ? [] : [`第${run}次`]));
       for (const file of id === 'S3' ? ['原稿', '修訂稿', '原架構', '修訂架構'] : id === 'S0' ? ['卡組'] : ['卡組', '架構']) {
@@ -128,7 +133,7 @@ export async function makeBlind({ out, run = 1 }, dependencies = {}) {
     return previous;
   }
   const entries = [], plans = [];
-  for (const kind of ['卡組', '架構']) for (const name of Object.keys(config.materials)) {
+  for (const kind of ['卡組', '架構']) for (const name of selected) {
     const group = descriptors.filter(d => d.kind === kind && d.name === name);
     // Fisher-Yates；S3 的兩份用交換修正相鄰，沒有機率無限迴圈。
     for (let i = group.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [group[i], group[j]] = [group[j], group[i]]; }
@@ -165,7 +170,7 @@ export async function makeBlind({ out, run = 1 }, dependencies = {}) {
   for (const plan of plans) await blindFile(plan.file, plan.text);
   for (const kind of ['卡組', '架構']) {
     const dir = path.join(base, kind), lines = ['# 評分順序', ''];
-    for (const name of Object.keys(config.materials)) lines.push(`## ${name}`, '', ...entries.filter(e => e.kind === kind && e.material === name).map(e => `- ${e.code}.md`), '');
+    for (const name of selected) lines.push(`## ${name}`, '', ...entries.filter(e => e.kind === kind && e.material === name).map(e => `- ${e.code}.md`), '');
     const readme = path.join(dir, 'README.md');
     await blindFile(readme, lines.join('\n'));
     if (images.size) await fs.mkdir(path.join(dir, '圖'), { recursive: true });
@@ -180,12 +185,13 @@ export async function makeBlind({ out, run = 1 }, dependencies = {}) {
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    out: { type: 'string' }, pdf: { type: 'string' }, photos: { type: 'string' }, run: { type: 'string' }, help: { type: 'boolean' },
+    out: { type: 'string' }, pdf: { type: 'string' }, photos: { type: 'string' }, run: { type: 'string' }, materials: { type: 'string' }, help: { type: 'boolean' },
   } });
   const [command] = positionals;
-  if (values.help || !command) { console.log('node arch.mjs <transcribe|exams|run|blind> --out <repo外資料夾> [--pdf <PDF>] [--photos <照片資料夾>] [--run <N>]\nnode arch.mjs selftest'); return; }
+  if (values.help || !command) { console.log('node arch.mjs <transcribe|exams|run|blind> --out <repo外資料夾> [--pdf <PDF>] [--photos <照片資料夾>] [--run <N>]\nnode arch.mjs blind --out <repo外資料夾> [--materials 2-1,2-2] [--run <N>]\nnode arch.mjs selftest'); return; }
   if (command === 'selftest') { await (await import('./arch-selftest.mjs')).selftest(); return; }
   if (positionals.length !== 1 || !['transcribe', 'exams', 'run', 'blind'].includes(command)) throw new Error('未知指令');
+  if (values.materials !== undefined && command !== 'blind') throw new Error('--materials 只適用於 blind');
   const out = await validateOut(values.out), run = Number(values.run ?? 1);
   if (!Number.isSafeInteger(run) || run < 1) throw new Error('--run 必須是正整數');
   await fs.mkdir(out, { recursive: true });
@@ -194,7 +200,7 @@ async function main() {
   try {
     await handle.writeFile(JSON.stringify({ pid: process.pid, command, time: new Date().toISOString() }));
     if (command === 'run') await runArch({ out, run });
-    if (command === 'blind') await makeBlind({ out, run });
+    if (command === 'blind') await makeBlind({ out, run, materials: values.materials?.split(',').map(name => name.trim()) });
     if (command === 'transcribe' || command === 'exams') {
       const module = await import('./arch-transcribe.mjs');
       await module[command]({ out, pdf: values.pdf, photos: values.photos });
