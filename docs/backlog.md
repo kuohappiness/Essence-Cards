@@ -13,7 +13,7 @@
 | F3：`validateOut` 只檢查目前與主工作樹，私人輸出可能寫進其他 worktree | 下一次跑 T4 前 | 用 `git worktree list --porcelain` 比對所有 worktree 的真實路徑，並有測試 | 同上 |
 | F5：`check-syntax.mjs` 的分類順序和 W2 不同，還留著每頁 6 個目標的上限 | 下一次跑 T4 前 | 分類順序和 W2 一致、拿掉上限；那次 T4 用 W2 的 `parseDeck` 對照題數 | 同上 |
 | code-quality 在 bug 與里程碑兩個時機靠 description 和記憶觸發，還沒確認過真的會載入 | Codex 第一次交回 W3、第一次遇到 bug、第一個里程碑 | 三個時機都確認 code-quality 有載入；沒有載入就改 description 或記憶 | D-119 |
-| 中翻英的答案格不會拆開 ` \| `：`parseDeck()` 的 `typed` 是整串 `made up his mind \| made his mind up`，學生打哪一個都會判錯（D-122） | W6 開始前（寫進 W6 的任務說明），或先單獨交給 Codex | `typed` 改成好幾個答案：照 `\|` 拆開、去掉前後空白，`a\|b` 也認得；有空的答案報錯，字數不一樣給提示；題目指紋照舊用整個答案格；syntax.md 與英文規則的 ` \| ` 範例有測試 | [試用紀錄](card-rules/trials.md) 2026-10-21 |
+| 中翻英的答案格不會拆開 ` \| `：`parseDeck()` 的 `typed` 是整串 `made up his mind \| made his mind up`，學生打哪一個都會判錯（D-122） | W6 開始前（寫進 W6 的任務說明，使用者 2026-10-21 決定不單獨做） | `typed` 改成好幾個答案：照 `\|` 拆開、去掉前後空白，`a\|b` 也認得；有空的答案報錯，字數不一樣給提示；題目指紋照舊用整個答案格；syntax.md 與英文規則的 ` \| ` 範例有測試 | [試用紀錄](card-rules/trials.md) 2026-10-21 |
 | `essence-discuss` 第一步要載入的 `grilling` skill 不存在 | 下一次用 essence-discuss 前 | essence-discuss 直接寫出需要的做法，不再依賴 grilling；兩份副本一起改 | [討論稿 §7](<../Claude Codex Discussion/2026-10-20-code-quality-skill.md#7-另外發現不在這次範圍>) |
 
 ## 待決問題
