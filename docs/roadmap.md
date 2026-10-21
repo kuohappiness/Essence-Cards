@@ -24,7 +24,7 @@
 - **學習目標架構**（[討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md>)）：2026-10-21 使用者要求把「製卡規則的寫法」（[前一份](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)，暫停）歸零重想，同意新方向：用真實考題當尺、先用最強的模型找天花板、比較單次與流水線（架構 → 出題 → 另一家審查），詳細規則改給審查者用。結論使用者 2026-10-21 確認（強模型用 xhigh）；單元是 2-2，保留單元 2-1、2-3，尺是第一次段考。下一步：Codex 照[任務說明](../tasks/objective-architecture.md)寫程式、轉錄、獨立標考題；Claude 核對轉錄、另標一次、凍結後才生成。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片（照 [D-113](decisions.md#d-113-錯題整頁拍題號選填) 整頁拍，等使用者提供 2～3 張字跡潦草的真實考卷）、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
-- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案留 v2（[backlog](backlog.md#點子收集箱)）。使用者要 v1 做「片語放進句子裡打字」：Claude 寫英文製卡規則的修改，試用時比較題幹給不給原形，定了再寫 D-ID（[backlog](backlog.md#其他待決)）。
+- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案留 v2（[backlog](backlog.md#點子收集箱)）。使用者要 v1 做「片語放進句子裡打字」：答錯時的三步流程已定（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)，W6 照做）；寫法、乙方案加四條線、多種答案都接受等英文規則試用後再定（[backlog](backlog.md#其他待決)）。
 
 ## 路線圖
 
@@ -69,6 +69,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-21 | 打字卡答錯時的三步流程（使用者提出）：先給原形再試一次、第一步不標拼錯字母，還是不會就看著答案照打一次；自評只看第一次（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)） |
 | 2026-10-21 | English Kitten Academy 研究的 Claude 評估：片語放進句子裡打字列入 v1（使用者）；拼句當提示、文法選擇題、造句題的可接受答案列入 v2 討論（使用者同意），`take`／`for` 案例併入下一輪「共同成功判準」試用；Codex 同日已回覆，拼句的定位與提示後評分待 Claude 確認 |
 | 2026-10-21 | W4 今天的佇列的任務說明：用今天以前的紀錄排出今天的份（五道、照時間上限切）、英文兩個方向的門檻與同一天只出一個、剛答錯的再出與提早出、題目池輪流、入口一科一列的進度，附 T1～T15 驗算；六個待決問題照建議定案：秒數用自己的作答間隔中位數、答對才算完成、新卡照筆記順序、學業以外合成一列、濾網寫分類或重要性、打字卡記 `typed`（D-120） |
 | 2026-10-20 | English Kitten Academy 研究報告完成：分析拼句、文法、首次作答、題庫維護與同步；原題庫檢查通過，隔離測試重現同步佇列遺失作答；與既有 D-ID 對照後提出借鑑與不採用的界線，[交接稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)待 Claude 評估，未新增產品決定 |
@@ -78,6 +79,4 @@ flowchart LR
 | 2026-10-20 | 技術債預防：`npm run check`（型別、測試、ESLint 模組邊界、knip、secretlint）在 pre-commit 與 CI 自動跑，Codex 在 W3 第 0 步裝好；AI 審查只在大改動合併前，抓到能程式檢查的問題當場加規則；retro 與 security-review 每個里程碑一次（D-117） |
 | 2026-10-20 | 產品核心與回饋循環（Claude 與 Codex 討論四輪後使用者確認）：核心差異是以學習目標為單位；回饋先找原因再回到相應的環節，不要求家長查證（D-114）；v1 在背景多存四組證據（D-115）；打字卡的「沒印象」按鈕、複習畫面的自動朗讀開關，預設關（D-116）；說明書強調四條不能做的事、考後一週提醒上傳考卷（D-048、D-103 補充）；architecture 加 §8 整條鏈的分工 |
 | 2026-10-20 | 錯題整頁拍、題號選填：沒給題號時 AI 照批改記號挑、寫在備註，家長在草稿刪掉挑錯的；學生答案看不清楚不猜；拍到姓名沒關係、只提醒；學生的說明選填、當證據不當結論；不做「先辨識全卷再勾選」的兩段式（一科約 0.1 美元，兩段式請求數加倍、家長多跑一趟）；通用規則 v0.12（D-113） |
-| 2026-10-20 | W3 複習紀錄與 FSRS 重播的任務說明：紀錄的讀寫、合併、取消與去重，記憶狀態只用 FSRS 的記憶模型，差一點＝穩定度照沒印象、難度照 Hard，附 12 列驗算值；ts-fsrs 預設是 FSRS-6，D-078 的估算是 FSRS-5，使用者選 FSRS-6（[D-112](decisions.md#d-112-排程用-fsrs-6)） |
-| 2026-10-20 | 開始寫 v1：建好 Capture repo 骨架（AGENTS.md 指向本 repo、複製通用記憶）；程式結構定為四個不碰 Obsidian 的核心模組加一個檔案存取接點（D-110）；先打通手寫卡組到 iPhone 複習，Capture 延後（D-111）；第一份 Codex 任務 W1＋W2 |
 
