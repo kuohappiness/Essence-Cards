@@ -63,7 +63,7 @@ node arch.mjs blind --out <repo外結果資料夾> [--run 2]
 
 每個請求以模型、參數、提示及文字／圖片指紋保存到 `請求/`；相同條件沿用，不重付費。改參數會產生新指紋，歷史原始回覆不覆蓋。曾中斷、截斷或缺段落的請求標為未完成，需先查核紀錄，不自動重送。`紀錄/預算.json` 在每次請求及重試前保留保守費用上界，回覆後按 token 與官方標價估算，OpenRouter 有回 `usage.cost` 時優先使用；未知花費仍保留上界。總上限 20 美元，資料分享抵免與實際帳單由帳戶決定。定價查核日 2026-10-21，來源見 [OpenAI 模型](https://developers.openai.com/api/docs/models)、[OpenRouter Opus](https://openrouter.ai/anthropic/claude-opus-5.5)。
 
-所有 worktree 都禁止用作 `--out`。操作期間以 `.arch.lock` 防止同時寫入；若中斷留鎖，先確認沒有仍在執行的指令，再移除該鎖。`blind` 做卡組與架構各自編碼的盲評包，不附修改紀錄；對照只在 `紀錄/`。
+所有 worktree 都禁止用作 `--out`。操作期間以 `.arch.lock` 防止同時寫入；若中斷留鎖，先確認沒有仍在執行的指令，再移除該鎖。`blind` 做卡組與架構各自編碼的盲評包，不附修改紀錄；對照只在 `紀錄/`。本實驗使用 Node 原生 HTTP／HTTPS 等待長推理，總逾時 20 分鐘，不受內建 fetch 的 300 秒標頭逾時影響；不自動跟隨轉址或重送，既有 T4／screen 的傳輸維持原設定。
 
 ## 誰測
 

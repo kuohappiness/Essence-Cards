@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { longRequest } from './arch-transport.mjs';
 import { validateOut } from './core.mjs';
 import { check } from './check-syntax.mjs';
 import { ApiClient } from './api.mjs';
@@ -13,6 +15,20 @@ import { ROOT, writeJson } from './core.mjs';
 export async function selftest() {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'essence-arch-'));
   try {
+    // 真實本機 HTTP：延後標頭仍可回覆，Unicode 本文完整、429 標頭保留，AbortSignal 可停止。
+    const server = createServer(async (request, response) => {
+      let body = ''; for await (const chunk of request) body += chunk;
+      setTimeout(() => { response.writeHead(request.url === '/retry' ? 429 : 200, { 'Retry-After': '0.5' }); response.end(body || '完成'); }, 30);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const url = `http://127.0.0.1:${server.address().port}`;
+      const response = await longRequest(url, { method: 'POST', body: '測試本文', signal: AbortSignal.timeout(2000) });
+      assert.equal(response.status, 200); assert.equal(await response.text(), '測試本文');
+      const limited = await longRequest(url + '/retry', { signal: AbortSignal.timeout(2000) });
+      assert.equal(limited.ok, false); assert.equal(limited.headers.get('Retry-After'), '0.5');
+      await assert.rejects(longRequest(url, { signal: AbortSignal.timeout(5) }), { name: 'AbortError' });
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
     const repo = path.join(temp, 'repo'), other = path.join(temp, 'other');
     await fs.mkdir(repo);
     const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true });

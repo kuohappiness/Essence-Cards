@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { ROOT, exists, readJson, writeJson, loadKeys, redact } from './core.mjs';
 import { ApiClient } from './api.mjs';
 import { hash } from './screen-analysis.mjs';
+import { longRequest } from './arch-transport.mjs';
 
 export const PRICES = {
   'gpt-6-sol': { input: 2, output: 10 },
@@ -88,6 +89,7 @@ export async function createSession(out, dependencies = {}) {
   const secrets = Object.values(keys).filter(Boolean), budget = new Budget(out, dependencies.limit ?? MAX_USD);
   let currentEstimate;
   const client = new ApiClient({ ...providerConfig, pricesUsdPerMillion: PRICES }, keys, out, {
+    fetch: longRequest, timeoutMs: 20 * 60 * 1000,
     ...dependencies.api,
     beforeRequest: async ({ step, model, attempt }) => {
       await budget.reserve(currentEstimate.upperUsd, `${step}/${model.model}/${attempt + 1}`);

@@ -16,6 +16,7 @@ export class ApiClient {
   constructor(config, keys, out, options = {}) {
     this.config = config; this.keys = keys; this.out = out;
     this.fetch = options.fetch || fetch; this.wait = options.wait || sleep;
+    this.timeoutMs = options.timeoutMs ?? 600000;
     this.now = options.now || Date.now; this.print = options.print || console.log;
     this.last = new Map(); this.busy = false;
     this.secrets = Object.values(keys).filter(Boolean);
@@ -74,13 +75,16 @@ export class ApiClient {
         response = await this.fetch(provider.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
           method: 'POST', headers: { Authorization: `Bearer ${this.keys[model.provider]}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...parameters, model: model.model, messages: [{ role: 'system', content: system }, { role: 'user', content }] }),
-          signal: AbortSignal.timeout(600000)
+          signal: AbortSignal.timeout(this.timeoutMs)
         });
         const raw = await response.text();
         try { payload = JSON.parse(raw) ?? {}; } catch { payload = { error: { message: raw } }; }
       } catch (error) {
         this.last.set(model.provider, this.now());
-        await this.record({ time: new Date(start).toISOString(), step, provider: model.provider, model: model.model, parameters, variant, status: null, seconds: (this.now() - start) / 1000, usage: {}, outcome: 'network-error' });
+        const code = error.cause?.code ?? error.code;
+        const entry = { time: new Date(start).toISOString(), step, provider: model.provider, model: model.model, parameters, variant, status: null, seconds: (this.now() - start) / 1000, usage: {}, outcome: 'network-error', networkCode: typeof code === 'string' && /^[A-Z_0-9]{1,64}$/.test(code) ? code : null };
+        this.lastResult = entry;
+        await this.record(entry);
         this.print(`HTTP 未收到回應：${redact(error.message, this.secrets).slice(0, 300)}`);
         return null;
       }
