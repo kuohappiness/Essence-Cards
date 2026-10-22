@@ -128,6 +128,7 @@ v1 之後的增強版要加強什麼，到時候再討論（D-039）。目前記
 
 ### 其他待決
 
+- 💬 Claudian 與訂閱製卡：2026-10-22 使用者要求訂閱優先；Claude 第二版與 [Codex 六題回應](<../Claude Codex Discussion/2026-10-22-claudian.md#codex-回應2026-10-22>)待核對，重點是發布資格、方案限制、第二輪接法驗證與代理輸入證據；💡 Codex 建議 v1 先手動匯入代理輸出，暫緩自動監看與清理。雙方一致後連同第二輪整合版請使用者確認。
 - 💬 學習目標架構第二輪：和 [Astra 稿的結論](<../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#結論claude-與-codex-一致2026-10-22>)整合成[第二輪設計（整合版）](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第二輪設計整合版claude-與-codex-一致待使用者確認>)，待使用者確認並選驗證單元；尚未改規則或補跑。
 - ✅ English Kitten Academy 研究：2026-10-21 結案（[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)、[報告](research/english-kitten-academy.md)），沒有新增 D-ID；去向是點子收集箱的「拼句練習」與「題庫系統」⑤⑥、下面的「片語放進句子裡打字」與「共同成功判準」。
 - ✅ 片語放進句子裡打字：答錯時的三步流程 → [D-121](decisions.md#d-121-打字卡答錯時的三步流程)；寫法、依字數畫線、好幾個正確答案用 ` | ` 分開 → [D-122](decisions.md#d-122-片語放進句子裡打字)（解析器的修改見[技術債](#技術債)）

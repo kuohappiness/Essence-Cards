@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-20 | 程式品質的 skill 整併（Claude 與 Codex 討論後使用者確認）：Matt Pocock 的 5 個 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債移到 backlog 一節，每件寫觸發點與完成條件；`tools/check-skill-mirror.ts` 檢查 Claude 與 Codex 兩份 skill 一致，W3 第 0 步接進 `npm run check`（D-119） |
 | 2026-10-20 | W1 骨架＋W2 卡組模組合併：Codex 寫、Codex 審查找到 7 項、Claude 核對另找到 3 項；合併前修好補 ID 不冪等（問答題的螢光筆留在名稱）、程式碼圍欄與標題跟著清單容器結束、文件層級縮排 4 欄不是清單、修改佇列不分大小寫；所有卡組範例自動跑補 ID 往返測試（156 份）；syntax.md §2-3 名稱規則釐清 |
 | 2026-10-20 | AI 品質初篩結案、製卡規則修改：例題背後的觀念一定要出一題，備註寫出觀念出在哪個目標；同一個原理的不同例子放同一池；洩漏多三種判法（互補配對、答案在名詞裡算，池主題題不算），也寫進初篩任務說明；反例都取自其他單元。T4 驗證 4 份：2-2 的兩個例題觀念都有出題，熱的傳播目標 14～16 → 10～11、重複變少，洩漏沒變（通用 v0.13、自然 v0.5，D-118） |
 | 2026-10-20 | 技術債預防：`npm run check`（型別、測試、ESLint 模組邊界、knip、secretlint）在 pre-commit 與 CI 自動跑，Codex 在 W3 第 0 步裝好；AI 審查只在大改動合併前，抓到能程式檢查的問題當場加規則；retro 與 security-review 每個里程碑一次（D-117） |
