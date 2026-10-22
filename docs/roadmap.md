@@ -1,6 +1,6 @@
 # Essence Cards｜開發現況與路線圖
 
-更新：2026-10-21
+更新：2026-10-22
 
 ## 現在在哪裡
 
@@ -21,7 +21,7 @@
 
 另外的專題與研究：
 
-- **學習目標架構**（[討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md>)）：2026-10-21 使用者要求把「製卡規則的寫法」（[前一份](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)，暫停）歸零重想，同意新方向：用真實考題當尺、先用最強的模型找天花板、比較單次與流水線（架構 → 出題 → 另一家審查），詳細規則改給審查者用。結論使用者 2026-10-21 確認（強模型用 xhigh）；單元是 2-2，保留單元 2-1、2-3，尺是第一次段考。考題已凍結、生成完成 2-1 與 2-2；第一輪只評這兩節（使用者決定，2-3 不補）。第一輪盲評完成（[評分說明](../experiments/t4/arch/評分說明.md)），2026-10-22 揭曉，報告見[討論稿〈第一輪結果〉](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第一輪結果claude-報告2026-10-22>)。兩家的卡組名次不一致，所以卡組這一輪沒有贏家；兩家一致的是：缺口主要出在架構的判準太寬，S4 有核心題倒退，審查步驟幾乎沒改到架構。另外發現 2-2 的轉錄把「給學生」欄標成教師註記。下一步：Codex 回應第二輪的設計（建議固定 S2、只比架構提示、補「強模型＋詳細規則」的對照、換新單元驗證），再請使用者決定第二輪的方向，以及只在教師註記裡的內容要不要出卡。
+- **學習目標架構**（[討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md>)）：2026-10-21 使用者要求把「製卡規則的寫法」（[前一份](<../Claude Codex Discussion/2026-10-20-card-rule-writing.md>)，暫停）歸零重想，同意新方向：用真實考題當尺、先用最強的模型找天花板、比較單次與流水線（架構 → 出題 → 另一家審查），詳細規則改給審查者用。結論使用者 2026-10-21 確認（強模型用 xhigh）；單元是 2-2，保留單元 2-1、2-3，尺是第一次段考。考題已凍結、生成完成 2-1 與 2-2；第一輪只評這兩節（使用者決定，2-3 不補）。第一輪盲評完成（[評分說明](../experiments/t4/arch/評分說明.md)），2026-10-22 揭曉，報告見[討論稿〈第一輪結果〉](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第一輪結果claude-報告2026-10-22>)。兩家的卡組名次不一致，所以卡組這一輪沒有贏家；兩家一致的是：缺口主要出在架構的判準太寬，S4 有核心題倒退，審查步驟幾乎沒改到架構。另外發現 2-2 的轉錄把「給學生」欄標成教師註記。Codex 已[回應第一輪結果與第二輪設計](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-回應第一輪結果與第二輪設計2026-10-22>)：建議先校準評分，再固定 S2 比三種提示，保留 S1 錨點與 S0 基準；第 6、8、10 題的輸入與必要知識解讀仍有異議。下一步由 Claude 核對、修訂提案，雙方一致後再請使用者決定第二輪與教師材料的範圍，尚未定案或補跑。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片（照 [D-113](decisions.md#d-113-錯題整頁拍題號選填) 整頁拍，等使用者提供 2～3 張字跡潦草的真實考卷）、Mistral 的其他模型；增強版再談語音模型與模型自動更新。
 - **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案留 v2（[backlog](backlog.md#點子收集箱)）。使用者要 v1 做「片語放進句子裡打字」：答錯時的三步流程已定（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)，W6 照做）；寫法、依字數畫線、好幾個正確答案用 ` | ` 分開已定（[D-122](decisions.md#d-122-片語放進句子裡打字)，英文規則 v0.8）；解析器拆開 ` | ` 寫進 W6 的任務說明（[技術債](backlog.md#技術債)）。
@@ -69,6 +69,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-22 | 學習目標架構第一輪的 Codex 回應已補入[同一討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-回應第一輪結果與第二輪設計2026-10-22>)：釐清背面圖、複合要點與合證口徑，提出第二輪三種提示對照及 S1 錨點；教材必要知識與實驗方向待 Claude 核對、使用者確認，未改鎖定評分、未跑生成 |
 | 2026-10-21 | W3 複習紀錄與 FSRS 重播合併：第 0 步裝好 `npm run check`（型別、ESLint 模組邊界、knip、secretlint、skill 副本、測試）、pre-commit hook 與 CI；紀錄的讀寫與合併、FSRS-6 重播與到期日，驗算值全對。Codex 寫、新 Codex session 審查找到 6 項（寫入重試、排序、hook 檔名、動態 import、status 對象、效能門檻），Claude 核對後補規格、Codex 修正；效能改由 `npm run bench` 量（中位數約 450 ms／500 ms）；D-115 改寫成紀錄檔只追加不修改；CI 第一次跑時 `npm ci` 因 Windows 產生的 lock 缺 Linux 才用的 `@emnapi` 套件而失敗，改成明列為開發相依後通過 |
 | 2026-10-21 | 片語放進句子裡打字：英文規則 v0.8（中文整句＋英文挖空、打出變化形；有會變的部分再出 1～2 題換主詞或時態；「只有一個答案」四條反例）。Terra 試用 14 份：多解 5 → 0～2 題，題幹都不洩漏原形，學習目標數不變；`parseDeck()` 都是 qa、zh-en、沒有 problems，` \| ` 不會拆開要交給 Codex（[試用紀錄](card-rules/trials.md)）；使用者照建議定案：寫法照 v0.8、依字數畫線、好幾個正確答案都接受，D-089 第 13 條與 syntax.md §2-3 一起改（[D-122](decisions.md#d-122-片語放進句子裡打字)） |
 | 2026-10-21 | 打字卡答錯時的三步流程（使用者提出）：先給原形再試一次、第一步不標拼錯字母，還是不會就看著答案照打一次；自評只看第一次（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)） |
@@ -78,5 +79,4 @@ flowchart LR
 | 2026-10-20 | 程式品質的 skill 整併（Claude 與 Codex 討論後使用者確認）：Matt Pocock 的 5 個 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債移到 backlog 一節，每件寫觸發點與完成條件；`tools/check-skill-mirror.ts` 檢查 Claude 與 Codex 兩份 skill 一致，W3 第 0 步接進 `npm run check`（D-119） |
 | 2026-10-20 | W1 骨架＋W2 卡組模組合併：Codex 寫、Codex 審查找到 7 項、Claude 核對另找到 3 項；合併前修好補 ID 不冪等（問答題的螢光筆留在名稱）、程式碼圍欄與標題跟著清單容器結束、文件層級縮排 4 欄不是清單、修改佇列不分大小寫；所有卡組範例自動跑補 ID 往返測試（156 份）；syntax.md §2-3 名稱規則釐清 |
 | 2026-10-20 | AI 品質初篩結案、製卡規則修改：例題背後的觀念一定要出一題，備註寫出觀念出在哪個目標；同一個原理的不同例子放同一池；洩漏多三種判法（互補配對、答案在名詞裡算，池主題題不算），也寫進初篩任務說明；反例都取自其他單元。T4 驗證 4 份：2-2 的兩個例題觀念都有出題，熱的傳播目標 14～16 → 10～11、重複變少，洩漏沒變（通用 v0.13、自然 v0.5，D-118） |
-| 2026-10-20 | 技術債預防：`npm run check`（型別、測試、ESLint 模組邊界、knip、secretlint）在 pre-commit 與 CI 自動跑，Codex 在 W3 第 0 步裝好；AI 審查只在大改動合併前，抓到能程式檢查的問題當場加規則；retro 與 security-review 每個里程碑一次（D-117） |
 
