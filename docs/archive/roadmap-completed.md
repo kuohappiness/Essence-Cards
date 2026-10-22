@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-22 | Astra 學習目標優化討論：使用者結掉「跳出既有架構重想」（核心照 D-114），品質看整體、重視五項做法、採用 R3 並放寬範圍與底層補強；Claude 與 Codex 談定 R3 五步與評分口徑（[結論](<../../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#結論claude-與-codex-一致2026-10-22>)），整合成第二輪設計（整合版，待使用者確認）。使用者的產品路線三點（知識庫、依能力產生複習、精熟循環）和散在各處的願景整合成 [backlog〈產品路線〉](../backlog.md#產品路線2026-10-22-使用者)，v1 完工前再問要不要做進 v1 |
 | 2026-10-22 | 學習目標架構第一輪的 Codex 回應已補入[同一討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-回應第一輪結果與第二輪設計2026-10-22>)：釐清背面圖、複合要點與合證口徑，提出第二輪三種提示對照及 S1 錨點；教材必要知識與實驗方向待 Claude 核對、使用者確認，未改鎖定評分、未跑生成 |
 | 2026-10-22 | 依使用者要求新增 [Astra 學習目標優化紀錄](<../../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md>)：重點索引與完整 13 則對話，保留案例、研究來源、實驗建議與最終釐清；屬助理提案，未新增產品決定 |
 | 2026-10-21 | W3 複習紀錄與 FSRS 重播合併：第 0 步裝好 `npm run check`（型別、ESLint 模組邊界、knip、secretlint、skill 副本、測試）、pre-commit hook 與 CI；紀錄的讀寫與合併、FSRS-6 重播與到期日，驗算值全對。Codex 寫、新 Codex session 審查找到 6 項（寫入重試、排序、hook 檔名、動態 import、status 對象、效能門檻），Claude 核對後補規格、Codex 修正；效能改由 `npm run bench` 量（中位數約 450 ms／500 ms）；D-115 改寫成紀錄檔只追加不修改；CI 第一次跑時 `npm ci` 因 Windows 產生的 lock 缺 Linux 才用的 `@emnapi` 套件而失敗，改成明列為開發相依後通過 |
