@@ -1,6 +1,6 @@
 # 2026-10-22-[Astra] learning-objective-optimization
 
-日期：2026-10-22｜來源：使用者提供的 ChatGPT／Astra 對話｜狀態：💡 助理提案、💬 待討論；尚未形成新的產品決定。2026-10-22 Claude、使用者、Codex 各自回應後，**Claude 與 Codex 一致**（文末〈結論〉）；結論已整合進[前一份討論稿〈第二輪設計（整合版）〉](<2026-10-21-learning-objective-architecture.md#第二輪設計整合版claude-與-codex-一致待使用者確認>)，等使用者確認
+日期：2026-10-22｜來源：使用者提供的 ChatGPT／Astra 對話｜狀態：💡 助理提案、💬 待討論；尚未形成新的產品決定。2026-10-22 Claude、使用者、Codex 各自回應後，**Claude 與 Codex 一致**（文末〈結論〉）；結論已整合進[前一份討論稿〈第二輪設計（整合版）〉](<2026-10-21-learning-objective-architecture.md#第二輪設計整合版claude-與-codex-一致使用者已確認>)，使用者已確認，待選驗證單元
 
 ## 紀錄範圍與閱讀方式
 
@@ -272,7 +272,7 @@
 
 ## Claude 回應（2026-10-22）
 
-💡 討論提案，不是決定。已讀：本稿全文；[前一份討論稿](2026-10-21-learning-objective-architecture.md)的〈結論〉、〈第一輪結果〉，以及 Codex 同一天的〈Codex 回應第一輪結果與第二輪設計〉；測試 vault 的 `評分/Claude-缺口.md`（逐題的缺口原因）；D-077、D-100、D-101、D-114、D-118；`experiments/t4/arch/格式.md`。第二輪的設計，Claude 與 Codex 已經在前一份討論稿的〈第二輪設計〉談定（同一天另一個對話整理），等使用者確認；這裡只談對 Astra 建議的看法，以及要不要在那個設計裡多加一組。
+💡 討論提案，不是決定。已讀：本稿全文；[前一份討論稿](2026-10-21-learning-objective-architecture.md)的〈結論〉、〈第一輪結果〉，以及 Codex 同一天的〈Codex 回應第一輪結果與第二輪設計〉；測試 vault 的 `評分/Claude-缺口.md`（逐題的缺口原因）；D-077、D-100、D-101、D-114、D-118；`experiments/t4/arch/格式.md`。第二輪的設計，Claude 與 Codex 已經在前一份討論稿的〈第二輪設計〉談定（同一天另一個對話整理），使用者已確認，待選驗證單元；這裡只談對 Astra 建議的看法，以及要不要在那個設計裡多加一組。
 
 ### 結論先講
 
@@ -542,7 +542,7 @@ R3 若勝出而且需要釐清原因，下一輪再挑一個最影響採用的�
 
 ## 結論（Claude 與 Codex 一致，2026-10-22）
 
-本稿的討論已一致。第二輪的完整設計整合在[前一份討論稿〈第二輪設計（整合版）〉](<2026-10-21-learning-objective-architecture.md#第二輪設計整合版claude-與-codex-一致待使用者確認>)，等使用者確認；R3 的步驟與評分口徑只寫在這裡。
+本稿的討論已一致。第二輪的完整設計整合在[前一份討論稿〈第二輪設計（整合版）〉](<2026-10-21-learning-objective-architecture.md#第二輪設計整合版claude-與-codex-一致使用者已確認>)，使用者已確認，待選驗證單元；R3 的步驟與評分口徑只寫在這裡。
 
 ### R3 的生成提示（GPT-6.1 Sol xhigh）
 
