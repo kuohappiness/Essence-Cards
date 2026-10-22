@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-22 | 學習目標架構第一輪的 Codex 回應已補入[同一討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-回應第一輪結果與第二輪設計2026-10-22>)：釐清背面圖、複合要點與合證口徑，提出第二輪三種提示對照及 S1 錨點；教材必要知識與實驗方向待 Claude 核對、使用者確認，未改鎖定評分、未跑生成 |
 | 2026-10-22 | 依使用者要求新增 [Astra 學習目標優化紀錄](<../../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md>)：重點索引與完整 13 則對話，保留案例、研究來源、實驗建議與最終釐清；屬助理提案，未新增產品決定 |
 | 2026-10-21 | W3 複習紀錄與 FSRS 重播合併：第 0 步裝好 `npm run check`（型別、ESLint 模組邊界、knip、secretlint、skill 副本、測試）、pre-commit hook 與 CI；紀錄的讀寫與合併、FSRS-6 重播與到期日，驗算值全對。Codex 寫、新 Codex session 審查找到 6 項（寫入重試、排序、hook 檔名、動態 import、status 對象、效能門檻），Claude 核對後補規格、Codex 修正；效能改由 `npm run bench` 量（中位數約 450 ms／500 ms）；D-115 改寫成紀錄檔只追加不修改；CI 第一次跑時 `npm ci` 因 Windows 產生的 lock 缺 Linux 才用的 `@emnapi` 套件而失敗，改成明列為開發相依後通過 |
 | 2026-10-21 | 片語放進句子裡打字：英文規則 v0.8（中文整句＋英文挖空、打出變化形；有會變的部分再出 1～2 題換主詞或時態；「只有一個答案」四條反例）。Terra 試用 14 份：多解 5 → 0～2 題，題幹都不洩漏原形，學習目標數不變；`parseDeck()` 都是 qa、zh-en、沒有 problems，` \| ` 不會拆開要交給 Codex（[試用紀錄](../card-rules/trials.md)）；使用者照建議定案：寫法照 v0.8、依字數畫線、好幾個正確答案都接受，D-089 第 13 條與 syntax.md §2-3 一起改（[D-122](../decisions.md#d-122-片語放進句子裡打字)） |
