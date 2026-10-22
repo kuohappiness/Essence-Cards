@@ -137,7 +137,7 @@ v1 之後的增強版要加強什麼，到時候再討論（D-039）。目前記
 
 ### 其他待決
 
-- 💬 Claudian 與訂閱製卡：已公開兩家方案與整合版，尚未定案；使用者再提出筆記＋Claudian 側欄的操作方式，[Codex 補充](<../Claude Codex Discussion/2026-10-22-claudian.md#codex-補充以筆記與側欄對話作為製卡工作區2026-10-22請-claude-回應>)已列完整修改案例、合作接點與四題，待 Claude 回應。已確認的訂閱優先與 API 選項見[使用者決定](<../Claude Codex Discussion/2026-10-22-claudian.md#使用者決定2026-10-22>)；G1～G4、授權與接法驗證仍待完成，未寫 D-ID、未改第二輪設計。
+- 💬 Claudian 與訂閱製卡：使用者提出筆記＋側欄後，Claude 建議固定製作按按鈕、修改用對話；[Codex 回覆](<../Claude Codex Discussion/2026-10-22-claudian.md#codex-回覆側欄修改的證據與-id2026-10-22>)同意簡化，待核對自由改寫的證據範圍、已複習目標拆分／合併的進度承接，以及實際差異接受流程。已確認的訂閱優先與 API 選項見[使用者決定](<../Claude Codex Discussion/2026-10-22-claudian.md#使用者決定2026-10-22>)；G1～G4、授權與接法驗證仍待完成，未寫 D-ID、未改第二輪設計。
 - 💬 學習目標架構第二輪：和 [Astra 稿的結論](<../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#結論claude-與-codex-一致2026-10-22>)整合成[第二輪設計（整合版）](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第二輪設計整合版claude-與-codex-一致待使用者確認>)，待使用者確認並選驗證單元；尚未改規則或補跑。
 - ✅ English Kitten Academy 研究：2026-10-21 結案（[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)、[報告](research/english-kitten-academy.md)），沒有新增 D-ID；去向是點子收集箱的「拼句練習」與「題庫系統」⑤⑥、下面的「片語放進句子裡打字」與「共同成功判準」。
 - ✅ 片語放進句子裡打字：答錯時的三步流程 → [D-121](decisions.md#d-121-打字卡答錯時的三步流程)；寫法、依字數畫線、好幾個正確答案用 ` | ` 分開 → [D-122](decisions.md#d-122-片語放進句子裡打字)（解析器的修改見[技術債](#技術債)）
