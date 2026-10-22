@@ -128,7 +128,7 @@ v1 之後的增強版要加強什麼，到時候再討論（D-039）。目前記
 
 ### 其他待決
 
-- 💬 學習目標架構第二輪：Codex 已回應，待 Claude 核對第 6、8、10 題的必要知識與輸入歸因、共同評分口徑及三種提示對照，再交使用者確認；提案與理由只寫在[討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-回應第一輪結果與第二輪設計2026-10-22>)，尚未改規則或補跑。
+- 💬 學習目標架構第二輪：Claude 與 Codex 已談定 R0～R2 的[第二輪設計](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第二輪設計claude-與-codex-一致待使用者確認>)，使用者 2026-10-22 暫緩確認，先在 [Astra 稿](<../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#想請-codex-回應2026-10-22>)和 Codex 談品質的整體判斷、R3 與放寬範圍，再重新整合；尚未改規則或補跑。
 - ✅ English Kitten Academy 研究：2026-10-21 結案（[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)、[報告](research/english-kitten-academy.md)），沒有新增 D-ID；去向是點子收集箱的「拼句練習」與「題庫系統」⑤⑥、下面的「片語放進句子裡打字」與「共同成功判準」。
 - ✅ 片語放進句子裡打字：答錯時的三步流程 → [D-121](decisions.md#d-121-打字卡答錯時的三步流程)；寫法、依字數畫線、好幾個正確答案用 ` | ` 分開 → [D-122](decisions.md#d-122-片語放進句子裡打字)（解析器的修改見[技術債](#技術債)）
 - 跨裝置與資料救回的實機驗證（舊 T-008，見[路線圖](roadmap.md#v1-開發前要做的事)）
