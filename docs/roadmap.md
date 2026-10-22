@@ -45,7 +45,7 @@ flowchart LR
 | 階段 | 內容 | 完成條件 |
 |---|---|---|
 | 0 規劃 ✅ 2026-10-20 | 架構釐清七步 ✅ 2026-10-10，結果寫在 [product](product.md) 與 [architecture](architecture.md)；接著做[v1 開發前要做的事](#v1-開發前要做的事) | product.md 與 architecture.md 沒有 💬 項目；v1 範圍確定 |
-| 1 v1 | [產品定義 §5](product.md#5-範圍-第-7-步)的 v1 範圍，包括 AI 製卡（[D-039](decisions.md#d-039-v1-範圍)） | 能在 iPhone 完成一次段考範圍的每日複習；附上完整的 HTML 使用說明書，並說清楚學習目標 ID 與題目指紋（[D-048](decisions.md#d-048-使用說明書)） |
+| 1 v1 | [產品定義 §5](product.md#5-範圍-第-7-步)的 v1 範圍，包括 AI 製卡（[D-039](decisions.md#d-039-v1-範圍)） | 能在 iPhone 完成一次段考範圍的每日複習；附上完整的 HTML 使用說明書，並說清楚學習目標 ID 與題目指紋（[D-048](decisions.md#d-048-使用說明書)）。完工前 Claude 先問使用者：[產品路線](backlog.md#產品路線2026-10-22-使用者)（知識庫、依能力產生複習、精熟循環）要不要做進 v1 |
 | 2 真實驗證 | 一位學生、一次考試 | 依[成功標準](product.md#2-成功標準-第-1-步)記錄結果，決定下一步優先順序 |
 | 3 增強版 | 發音朗讀、記憶錨點的素材等；要加強什麼到時候再討論（[backlog](backlog.md#增強版待討論)） | 待定 |
 | 3 Essence Capture | 另一個 repo；PDF 與圖片的轉錄已提前進 v1（D-076），這裡是影片、網頁等其他來源 | 待定 |
@@ -70,6 +70,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-22 | Astra 學習目標優化討論：使用者結掉「跳出既有架構重想」（核心照 D-114），品質看整體、重視五項做法、採用 R3 並放寬範圍與底層補強；Claude 與 Codex 談定 R3 五步與評分口徑（[結論](<../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md#結論claude-與-codex-一致2026-10-22>)），整合成第二輪設計（整合版，待使用者確認）。使用者的產品路線三點（知識庫、依能力產生複習、精熟循環）和散在各處的願景整合成 [backlog〈產品路線〉](backlog.md#產品路線2026-10-22-使用者)，v1 完工前再問要不要做進 v1 |
 | 2026-10-22 | 學習目標架構第一輪的 Codex 回應已補入[同一討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-回應第一輪結果與第二輪設計2026-10-22>)：釐清背面圖、複合要點與合證口徑，提出第二輪三種提示對照及 S1 錨點；教材必要知識與實驗方向待 Claude 核對、使用者確認，未改鎖定評分、未跑生成 |
 | 2026-10-22 | 依使用者要求新增 [Astra 學習目標優化紀錄](<../Claude Codex Discussion/2026-10-22-[Astra] learning-objective-optimization.md>)：重點索引與完整 13 則對話，保留案例、研究來源、實驗建議與最終釐清；屬助理提案，未新增產品決定 |
 | 2026-10-21 | W3 複習紀錄與 FSRS 重播合併：第 0 步裝好 `npm run check`（型別、ESLint 模組邊界、knip、secretlint、skill 副本、測試）、pre-commit hook 與 CI；紀錄的讀寫與合併、FSRS-6 重播與到期日，驗算值全對。Codex 寫、新 Codex session 審查找到 6 項（寫入重試、排序、hook 檔名、動態 import、status 對象、效能門檻），Claude 核對後補規格、Codex 修正；效能改由 `npm run bench` 量（中位數約 450 ms／500 ms）；D-115 改寫成紀錄檔只追加不修改；CI 第一次跑時 `npm ci` 因 Windows 產生的 lock 缺 Linux 才用的 `@emnapi` 套件而失敗，改成明列為開發相依後通過 |
@@ -79,5 +80,4 @@ flowchart LR
 | 2026-10-21 | W4 今天的佇列的任務說明：用今天以前的紀錄排出今天的份（五道、照時間上限切）、英文兩個方向的門檻與同一天只出一個、剛答錯的再出與提早出、題目池輪流、入口一科一列的進度，附 T1～T15 驗算；六個待決問題照建議定案：秒數用自己的作答間隔中位數、答對才算完成、新卡照筆記順序、學業以外合成一列、濾網寫分類或重要性、打字卡記 `typed`（D-120） |
 | 2026-10-20 | English Kitten Academy 研究報告完成：分析拼句、文法、首次作答、題庫維護與同步；原題庫檢查通過，隔離測試重現同步佇列遺失作答；與既有 D-ID 對照後提出借鑑與不採用的界線，[交接稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)待 Claude 評估，未新增產品決定 |
 | 2026-10-20 | 程式品質的 skill 整併（Claude 與 Codex 討論後使用者確認）：Matt Pocock 的 5 個 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債移到 backlog 一節，每件寫觸發點與完成條件；`tools/check-skill-mirror.ts` 檢查 Claude 與 Codex 兩份 skill 一致，W3 第 0 步接進 `npm run check`（D-119） |
-| 2026-10-20 | W1 骨架＋W2 卡組模組合併：Codex 寫、Codex 審查找到 7 項、Claude 核對另找到 3 項；合併前修好補 ID 不冪等（問答題的螢光筆留在名稱）、程式碼圍欄與標題跟著清單容器結束、文件層級縮排 4 欄不是清單、修改佇列不分大小寫；所有卡組範例自動跑補 ID 往返測試（156 份）；syntax.md §2-3 名稱規則釐清 |
 
