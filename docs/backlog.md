@@ -126,6 +126,11 @@ v1 之後的增強版要加強什麼，到時候再討論（D-039）。目前記
 - [Kokoro](https://www.npmjs.com/package/kokoro-js)：8200 萬參數，Apache 2.0，量化後約 86 MB、原版約 326 MB；第三方說 CPU 就能即時產生。英文好，中文只部分支援，口音待測。可以在網頁環境執行，也有 OpenAI 相容的本機伺服器（[Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI)）。
 - [BreezyVoice](https://arxiv.org/abs/2501.17790)：聯發科研究院與台大的台灣華語語音模型，處理破音字；以 CosyVoice 為基礎，比較重，硬體需求未查到。
 
+### 英文學習判準
+
+- ✅ 四個維度與「先懂中文意思、會念，再練拼寫與運用」→ [D-123](decisions.md#d-123-英文學習框架與先懂意思再練拼寫)。
+- 💬 下一步逐一訂「懂意思、會念、會寫、會用」怎樣算會，用英文規則裡的 `borrow` 例子驗證；先處理「會念」如何確認，以及如何銜接 D-069 的中翻英出題門檻。目前已有字義的自評與朗讀，沒有已確認的發音評量。來源：2026-10-22 英文製卡規則討論（[摘要](archive/discussions/2026-10-22-english-learning-framework.md)）。
+
 ### 其他待決
 
 - 💬 Claudian 與訂閱製卡：2026-10-22 使用者要求訂閱優先；Claude 與 Codex 已一致（[結論](<../Claude Codex Discussion/2026-10-22-claudian.md#結論claude-與-codex-一致2026-10-22待使用者確認>)），待使用者確認後和第二輪設計（整合版）一起更新。連帶待決：發布前選開源授權（G1）；D-113 錯題照片的姓名規則（未滿 13 歲個資要零資料保留，和接法無關）。
