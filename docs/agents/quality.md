@@ -6,11 +6,11 @@
 
 | 角色 | 由誰擔任 |
 |---|---|
-| 實作者 | Codex，照任務說明實作；Claude 只做小修補 |
+| 實作者 | Claude（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)）；例外轉出時是 Codex |
 | 獨立審查者（L2） | 新開的 Codex session，不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude：寫規格、L1 對照、核對 L2 的發現、合併 |
 
-成本：使用者的 Claude 額度有限，Codex 另外訂閱。檢查不減；能交給自動檢查或 Codex 的，就不由 Claude 做（[AGENTS.md](../../AGENTS.md)「AI 協作分工」）。困難的除錯，建議使用者把 Claude 切到 xhigh，或交給 Codex（推理等級：高）。
+成本：檢查不減；能交給自動檢查的就不靠人看。Claude 實作時的 L1 是自己對照規格，不算獨立審查，所以驗收條件要先寫成能用程式判斷的句子。困難的除錯，建議使用者把 Claude 切到 xhigh，或請 Codex 查核（推理等級：高）。
 
 ## 檢查指令
 

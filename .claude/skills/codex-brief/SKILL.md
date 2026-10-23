@@ -1,11 +1,11 @@
 ---
 name: codex-brief
-description: 把規格清楚的程式或機械式工作寫成給 Codex 的任務說明（TASK.md），並在 Codex 完成後檢查。Use when work should be handed to Codex, the user says 交給 Codex, or a prototype, test script, scaffold or batch edit is fully specified.
+description: 把工作寫成給 Codex 的任務說明（TASK.md），並在 Codex 完成後檢查。Use when the user says 交給 Codex, or Claude has decided a large mechanical job should be handed out as an exception (D-131). Not for asking Codex to review Claude's work.
 ---
 
 # 交給 Codex
 
-依 `AGENTS.md`「AI 協作分工」：架構判斷、介面設計與文件維護留給 Claude；規格清楚、照做就好的工作才交給 Codex。還有沒決定的設計問題時，先談定（`/essence-discuss`），不要寫進任務說明讓 Codex 猜。
+依 `AGENTS.md`「AI 協作分工」（D-131）：程式預設由 Claude 自己做；只有使用者要求、或大量機械式工作要例外轉出時，才寫任務說明交給 Codex。架構判斷、介面設計與文件維護一律留給 Claude。還有沒決定的設計問題時，先談定（`/essence-discuss`），不要寫進任務說明讓 Codex 猜。
 
 範本：v1 程式是 `tasks/w3.md`，試作場是 `experiments/t4/TASK.md`。
 
