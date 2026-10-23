@@ -12,7 +12,8 @@ import { splitSections } from './arch-request.mjs';
 import { requestPlan, verifyIdentity, planBody } from './arch-plan.mjs';
 
 const image = '自編原始圖.png';
-const sample = `> [!note] 給家長的備註\n> 另練實作\n\n- 能觀察\n    - 出處：p.1｜類型：原理｜重要性：高\n    - 共用補充\n    - 問題 :: **答案**\n    - 看 ![[${image}]] 判斷 :: **結果**\n        - ![[${image}]]\n        - 詳解：原因\n    - 水溫越==高==，溶解越==快==\n    - 多行問題 ::\n        - 第一點\n        - 第二點\n\n> [!note]- 候選卡片\n> - 能候選\n>     - 候選題 :: 候選答\n`;
+const jpeg = '自編照片.jpg';
+const sample = `> [!note] 給家長的備註\n> 另練實作\n\n- 能觀察\n    - 出處：p.1｜類型：原理｜重要性：高\n    - 共用補充\n    - ![[${jpeg}]]\n    - 問題 :: **答案**\n    - 看 ![[${image}]] 判斷 :: **結果**\n        - ![[${image}]]\n        - 詳解：原因\n    - 水溫越==高==，溶解越==快==\n    - 多行問題 ::\n        - 第一點\n        - 第二點\n\n> [!note]- 候選卡片\n> - 能候選\n>     - 候選題 :: 候選答\n`;
 const architecture = '- T01｜①｜能觀察\n    - 判準：能觀察\n    - 出處：p.1';
 const replyText = full => (full ? '<<<全貌>>>\n全貌原文\n' : '') + '<<<架構>>>\n' + architecture + '\n<<<卡組>>>\n' + sample;
 function stream(text, { type = 'response.completed', reason, code, effort = 'high' } = {}) {
@@ -43,6 +44,7 @@ export async function selftest() {
       await fs.mkdir(path.join(out, '材料', name, '圖'), { recursive: true });
       await fs.writeFile(path.join(out, '材料', name, '教材.md'), `p.1 ^p1\n\n自編文字\n![[${image}]]`);
       await fs.writeFile(path.join(out, '材料', name, '圖', image), 'fixture-png-bytes');
+      await fs.writeFile(path.join(out, '材料', name, '圖', jpeg), 'fixture-png-bytes');
     }
     // 1. 每個提示的原始字串按設定順序；覆寫只取代既有鍵。
     for (const [id, steps] of Object.entries(config.configs)) for (const step of steps) {
@@ -69,10 +71,11 @@ export async function selftest() {
     assert.ok(rendered.text.includes('**正面**\n\n問題\n\n**背面**\n\n**答案**\n\n共用補充'));
     assert.ok(rendered.text.includes(`**正面**\n\n看 ![[${image}]] 判斷\n\n**背面**\n\n**結果**\n\n![[${image}]]\n\n詳解：原因\n\n共用補充`));
     assert.ok(rendered.text.includes('**正面**\n\n水溫越＿＿，溶解越＿＿\n\n**背面**\n\n水溫越高，溶解越快'));
-    assert.ok(rendered.text.includes('**正面**\n\n多行問題\n\n**背面**\n\n第一點\n第二點\n\n共用補充'));
+    assert.ok(rendered.text.includes('**正面**\n\n多行問題\n\n**背面**\n\n- 第一點\n- 第二點\n\n共用補充'));
     assert.equal((rendered.text.match(/共用補充/g) ?? []).length, 4);
     assert.ok(rendered.text.includes('候選（不是正式的卡）')); assert.ok(rendered.text.includes('候選答'));
     assert.ok(!/類型：|重要性：/.test(rendered.text));
+    assert.ok(renderCards('- 目標\n\t- 多行 ::\n\t\t- 第一點\n\t\t- 第二點').text.includes('**背面**\n\n- 第一點\n- 第二點'));
     const bad = renderCards('- 目標\n    - 出處：p.1\n    - 問 ::');
     assert.deepEqual(bad.problemLines, [3]); assert.ok(bad.text.includes('第 3 行')); assert.ok(bad.text.includes('- 問 ::'));
     assert.deepEqual(renderCards('這行判斷不了\n\n- 問 :: 答').problemLines, [1]);
@@ -84,6 +87,12 @@ export async function selftest() {
     const completed = await requestPlan({ ...request, fetcher: async (_url, options) => { sent = JSON.parse(options.body); return stream(replyText(true)); } });
     assert.equal(sent.reasoning.effort, 'high'); assert.equal(sent.store, false); assert.equal(sent.stream, true);
     assert.equal(sent.input[0].content[1].type, 'input_image'); assert.equal(sent.max_output_tokens, undefined);
+    assert.equal(completed.reasoningEffort, 'high');
+    const missingEffort = await requestPlan({ ...request, fetcher: async () => stream('完成', { effort: null }) });
+    assert.equal(missingEffort.reasoningEffort, null);
+    const rejectedEffort = await requestPlan({ ...request, fetcher: async () => new Response(JSON.stringify({ error: { code: 'subscription_sharing_unsupported_capability', param: 'reasoning' } }), { status: 400 }) });
+    assert.equal(rejectedEffort.errorParam, 'reasoning'); assert.equal(rejectedEffort.status, 400);
+    assert.equal(rejectedEffort.category, 'provider');
     assert.equal(completed.category, 'complete'); assert.equal(completed.usage.output_tokens_details.reasoning_tokens, 20);
     const cases = [
       [async () => stream('部分', { type: 'response.incomplete', reason: 'max_output_tokens' }), 'length'],
@@ -133,6 +142,9 @@ export async function selftest() {
     const full = mapping.entries.find(e => e.kind === '架構' && e.setting === 'R3');
     assert.ok((await fs.readFile(path.join(out, '盲評/架構', full.code + '.md'), 'utf8')).startsWith('# 全貌\n\n全貌原文'));
     await blindSecond({ out }, { config });
+    const imageNames = await fs.readdir(path.join(out, '盲評/卡組/圖'));
+    assert.equal(imageNames.filter(n => n.endsWith('.jpg')).length, 5);
+    assert.equal(imageNames.filter(n => n.endsWith('.png')).length, 5);
     await scan(path.join(out, '盲評'), async file => {
       assert.equal((await fs.stat(file)).mtimeMs, 946684800000);
       if (file.endsWith('.md')) {

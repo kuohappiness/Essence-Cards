@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomInt } from 'node:crypto';
 import { parseDeck, readProperties } from '../../src/core/deck/parse.ts';
-import { linesOf, listTree } from '../../src/core/deck/markdown.ts';
+import { linesOf, listTree, questionSyntax, stripId } from '../../src/core/deck/markdown.ts';
 import { exists, readJson, writeJson } from './core.mjs';
 import { hash, references } from './screen-analysis.mjs';
 import { secondSettings } from './arch-r2.mjs';
@@ -46,7 +46,16 @@ export function renderCards(text, { candidate = false } = {}) {
     if (target.fields.sources.length) output.push('出處：' + target.fields.sources.map(trace).join('、'), '');
     for (const [j, prompt] of target.prompts.entries()) {
       let front, back;
-      if (prompt.kind === 'qa') { front = prompt.question; back = prompt.answer; }
+      if (prompt.kind === 'qa') {
+        front = prompt.question; back = prompt.answer;
+        const root = roots.find(r => r.line === target.line);
+        const node = target.implicit ? root : root.children.find(c => c.line === prompt.line);
+        const body = stripId(node.text).text, colon = questionSyntax(body).colon;
+        if (colon >= 0 && !body.slice(colon + 2).trim()) {
+          back = node.children.filter(c => !/^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/.test(c.text)).map(c =>
+            lines.slice(c.line, c.end).map(l => l.raw.replace(/^[ \t]*/, indent => { let column = 0; for (const ch of indent) column += ch === '\t' ? 4 - column % 4 : 1; return ' '.repeat(Math.max(0, column - c.indent)); })).join('\n').trimEnd()).join('\n');
+        }
+      }
       else {
         front = prompt.text; back = prompt.text;
         for (const blank of [...prompt.blanks].reverse()) {
@@ -133,7 +142,7 @@ export async function blindSecond({ out, run = 1, materials }, dependencies = {}
     for (const [i, image] of references(text).entries()) {
       if (image !== path.basename(image) || /[\\/:*?"<>|]/.test(image)) throw new Error('圖片名稱不安全');
       const bytes = await fs.readFile(path.join(out, '材料', item.name, '圖', image));
-      const neutral = `${entry.code}-圖${String(i + 1).padStart(2, '0')}.png`;
+      const neutral = `${entry.code}-圖${String(i + 1).padStart(2, '0')}${path.extname(image)}`;
       text = text.replaceAll(image, neutral); imagePlans.push({ file: path.join(base, entry.kind, '圖', neutral), bytes });
     }
     // 除圖片外的連結、來源洩漏不猜著修改；停下來讓人查留存原稿。

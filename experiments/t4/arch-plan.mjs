@@ -148,7 +148,7 @@ export function failureCategory(status, code) {
 export async function requestPlan({ model, system, content, credential, fetcher = fetch, now = Date.now }) {
   const start = now(), body = planBody(model, system, content);
   const result = { text: '', parameters: model.parameters, responseModel: null, usage: null, finish_reason: null,
-    stopStatus: '未確認', reasoningEffort: null, quota: null, quotaNote: '未提供', streamCompleted: false, category: 'unknown-stop', status: null, requestId: null };
+    stopStatus: '未確認', errorParam: null, reasoningEffort: null, quota: null, quotaNote: '未提供', streamCompleted: false, category: 'unknown-stop', status: null, requestId: null };
   try {
     const response = await fetcher(PLAN_BASE + '/responses', { method: 'POST', redirect: 'error',
       headers: { Authorization: 'Bearer ' + credential.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20 * 60000) });
@@ -159,6 +159,7 @@ export async function requestPlan({ model, system, content, credential, fetcher 
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       result.errorCode = typeof payload.error?.code === 'string' ? payload.error.code : null;
+      result.errorParam = typeof payload.error?.param === 'string' ? payload.error.param : null;
       result.errorShape = Object.keys(payload); result.category = failureCategory(response.status, result.errorCode);
       return result;
     }
@@ -177,6 +178,7 @@ export async function requestPlan({ model, system, content, credential, fetcher 
         result.reasoningEffort = final.reasoning?.effort ?? null;
         result.finish_reason = final.incomplete_details?.reason ?? (value.type === 'response.completed' ? 'completed' : value.type === 'error' ? null : final.status ?? null);
         result.errorCode = final.error?.code ?? value.error?.code ?? value.code ?? null;
+        result.errorParam = final.error?.param ?? value.error?.param ?? value.param ?? null;
         result.streamCompleted = value.type === 'response.completed' && final.status === 'completed';
         result.stopStatus = result.finish_reason === null ? '未確認' : '已提供';
         result.category = result.streamCompleted ? 'complete' : result.finish_reason === 'max_output_tokens' ? 'length' :
