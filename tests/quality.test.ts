@@ -137,3 +137,32 @@ void test('L2-4 三個目錄都受邊界規則保護，公開入口與 FSRS 包�
     assert.equal(result.messages.some(isBoundary), blocked, path);
   }
 });
+
+void test('W4 核心模組之間只能 import 對方的 index.ts，deck 不能依賴 study，study 從 deck 只拿型別', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [path, code, blocked] of [
+    ['src/core/study/plan.ts', "import type { Deck } from '../deck/index.ts';", false],
+    ['src/core/study/plan.ts', "export type { Deck } from '../deck/index.ts';", false],
+    ['src/core/study/plan.ts', "export type Deck = import('../deck/index.ts').Deck;", false],
+    ['src/core/study/plan.ts', "import type { Files } from '../files.ts';", false],
+    ['src/core/study/plan.ts', "import { review } from './fsrs.ts';", false],
+    ['src/core/study/plan.ts', "import type { Deck } from '../deck/types.ts';", true],
+    ['src/core/study/plan.ts', "import '../deck/parse.ts';", true],
+    ['src/core/study/plan.ts', "import { parseDeck } from '../deck/index.ts';", true],
+    ['src/core/study/plan.ts', "import { type Deck } from '../deck/index.ts';", true],
+    ['src/core/study/plan.ts', "export * from '../deck/index.ts';", true],
+    ['src/core/study/plan.ts', "void import('../deck/index.ts');", true],
+    ['src/core/study/plan.ts', "require('../deck/index.ts');", true],
+    ['src/core/deck/parse.ts', "import type { Memory } from '../study/index.ts';", true],
+    ['src/core/deck/parse.ts', "export type Memory = import('../study/index.ts').Memory;", true],
+    ['src/core/deck/parse.ts', "void import('../study/index.ts');", true],
+    ['src/core/deck/parse.ts', "require('../study/time.ts');", true],
+    ['src/core/deck/parse.ts', "import { linesOf } from './markdown.ts';", false],
+    ['src/core/future/x.ts', "import { planToday } from '../study/index.ts';", false],
+    ['src/core/future/x.ts', "import { planToday } from '../study/plan.ts';", true],
+    ['src/core/future/x.ts', "export { dayOf } from '../study/time.ts';", true],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+  }
+});
