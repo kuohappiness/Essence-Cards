@@ -1,11 +1,11 @@
 {
   "說明": "學習目標架構實驗的固定條件，由 Claude 維護；程式只讀。路徑相對於 experiments/t4/arch。Codex 只能在查核官方文件後修改各模型的 parameters，並在回報說明。見 tasks/objective-architecture.md",
   "models": {
-    "terra": { "provider": "openai", "model": "gpt-5.6-terra", "parameters": {} },
-    "sol": { "provider": "openai", "model": "gpt-6.1-sol", "parameters": { "reasoning_effort": "xhigh" } },
-    "opus": { "provider": "openrouter", "model": "anthropic/claude-opus-5.5", "parameters": { "reasoning": { "effort": "xhigh" } } }
+    "terra": { "provider": "openai", "model": "gpt-5.6-terra", "parameters": { "max_completion_tokens": 32768 } },
+    "sol": { "provider": "openai", "model": "gpt-6.1-sol", "parameters": { "reasoning_effort": "xhigh", "max_completion_tokens": 65536 } },
+    "opus": { "provider": "openrouter", "model": "anthropic/claude-opus-5.5", "parameters": { "reasoning": { "effort": "xhigh" }, "max_tokens": 65536 } }
   },
-  "transcribe": { "provider": "openai", "model": "gpt-6-sol", "parameters": {} },
+  "transcribe": { "provider": "openai", "model": "gpt-6-sol", "parameters": { "max_completion_tokens": 32768 } },
   "configs": {
     "S0": [
       { "model": "terra", "system": ["../screen/格式.md", "../../../docs/card-rules/common.md", "../../../docs/card-rules/science.md", "../screen/完整規則.md"], "input": [], "output": ["卡組"] }

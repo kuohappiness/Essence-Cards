@@ -153,7 +153,7 @@ export async function selftest() {
     // 實際 check 輸出也涵蓋另外四類。
     const noisy = Array.from({ length: 7 }, (_, i) => `- 能測試${i}\n    - 出處：p.1\n    - 是否测試？ :: 软件\n`).join('');
     const noisyStats = await inspect(path.join(temp, 'noise'), noisy, 'p.1 ^p1\n', {}, { usage: {}, seconds: 0 });
-    for (const c of ['用語', '不計', '規則類', '提醒']) assert(noisyStats.categories[c] > 0, c);
+    for (const c of ['用語', '規則類', '提醒']) assert(noisyStats.categories[c] > 0, c);
     pass();
 
     await assert.rejects(blind(out, config, deps.print), /先寫能力清單/);

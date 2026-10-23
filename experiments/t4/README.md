@@ -47,6 +47,47 @@ node screen.mjs blind --out <結果資料夾>
 
 `能力清單/` 必須在生成前準備，只讀不改。`blind` 隨機分配代號，保留已填的評分表；評分者只讀結果資料夾的 `能力清單/`、`材料/` 與 `盲評/`，不可先看 `生成/`、`紀錄.json` 或報告。評分完成後才執行 `node screen.mjs report --out <結果資料夾>`。沒有額外指示就只做第 1 次，不執行報告；需要後續輪次時用 `--run <N>`。
 
+## 學習目標架構實驗
+
+規格見 [任務說明](../../tasks/objective-architecture.md)。Node 24 可直接載入 W2 的 `parseDeck`；不增加套件。先安裝本目錄與 repo 根目錄既有依賴。
+
+```powershell
+node arch.mjs selftest
+node arch.mjs transcribe --out <repo外結果資料夾> --pdf <課本PDF>
+node arch.mjs exams --out <repo外結果資料夾> --photos <考卷照片資料夾>
+node arch.mjs run --out <repo外結果資料夾> [--run 2]
+node arch.mjs blind --out <repo外結果資料夾> [--materials 2-1,2-2] [--run 2]
+```
+
+前三步完成後先獨立標註，使用者轉達「已凍結」後才執行 `run`；沒有 `考題/凍結.md` 時程式也會拒絕。生成與修訂不讀考題。第 1 次的產物在 `生成/<節>/<設定>/`，後續次數在底下的 `第N次/`。S3 的原架構、原稿、修訂架構、修訂稿與修改紀錄均保留。
+
+每個請求以模型、參數、提示及文字／圖片指紋保存到 `請求/`；相同條件沿用，不重付費。改參數會產生新指紋，歷史原始回覆不覆蓋。曾中斷、截斷或缺段落的請求標為未完成，需先查核紀錄，不自動重送。`紀錄/預算.json` 在每次請求及重試前保留保守費用上界，回覆後按 token 與官方標價估算，OpenRouter 有回 `usage.cost` 時優先使用；未知花費仍保留上界。總上限 20 美元，資料分享抵免與實際帳單由帳戶決定。定價查核日 2026-10-21，來源見 [OpenAI 模型](https://developers.openai.com/api/docs/models)、[OpenRouter Opus](https://openrouter.ai/anthropic/claude-opus-5.5)。
+
+所有 worktree 都禁止用作 `--out`。操作期間以 `.arch.lock` 防止同時寫入；若中斷留鎖，先確認沒有仍在執行的指令，再移除該鎖。`blind` 做卡組與架構各自編碼的盲評包，不附修改紀錄；對照只在 `紀錄/`。未指定 `--materials` 時仍包全部節；例如 `--materials 2-1,2-2` 只讀這兩節，產生 12 份卡組、10 份架構，其他盲評規則相同。節名不得空白、重複或不在設定裡；已有盲評包時，拒絕換範圍覆蓋。此選項只適用於 `blind`，不改生成範圍，也不送 API 請求。本實驗使用 Node 原生 HTTP／HTTPS 等待長推理，總逾時 20 分鐘，不受內建 fetch 的 300 秒標頭逾時影響；不自動跟隨轉址或重送，既有 T4／screen 的傳輸維持原設定。
+
+### 第二輪（實驗程式；真實接法尚未驗證）
+
+照 [第二輪任務說明](../../tasks/objective-architecture-r2-connection.md) 分三段執行，每段停下回報。設定與提示讀取 `arch/第二輪/設定.json`；不改第一輪輸出。先用下列 dry-run 核對材料、圖片、提示雜湊及 S0 的費用上界，不讀憑證、不發請求：
+
+```powershell
+node arch.mjs run --round 2 --out <第二輪資料夾> --plan 接法驗證 --dry-run
+node arch.mjs run --round 2 --out <第二輪資料夾> --dry-run
+# 本人同意開始第 2 段後，先登入，再跑兩份預試
+node arch.mjs plan-login --out <第二輪資料夾>
+node arch.mjs run --round 2 --out <第二輪資料夾> --plan 接法驗證
+# 接法凍結後才正式生成；可用 --materials、--configs 指定子集
+node arch.mjs run --round 2 --out <第二輪資料夾>
+node arch.mjs blind --round 2 --out <第二輪資料夾>
+```
+
+方案接法只用官方 [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)：終端提供登入網址，由本人在瀏覽器操作。PKCE、state、nonce 與 ID token 簽章／身分都要驗證；憑證只放 `%USERPROFILE%\.essence-chatgpt-plan`（Windows 限本人的 ACL；Unix 0700／0600），不讀 Codex CLI／app 的登入檔。更新 token 使用獨立鎖；若中斷留鎖，先查核程序再處理。這不是 Obsidian 的 G4 驗收。
+
+以 OAuth 存取公開 `/v1/responses`，送 `reasoning.effort: high`、`store: false`、`stream: true`。官方[預覽限制](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)不接受 `max_output_tokens`，因此設定的方案輸出上限為 `null`；模型公開的 128,000 上限不代表方案路線已驗證。回覆沒有提供的模型版本、用量、推理設定與額度記為 `null`／未提供，不推定 high 或長輸出已通過 G3。
+
+預試存在 `接法驗證/`，正式結果在 `生成/`；各自保存原始提示檔雜湊、材料與圖片指紋、參數、停止原因及完整／未完成狀態。只在一份預試明確因長度截斷時重試一次；兩份都截斷或重試仍截斷就停。網路、登入、額度、缺段及未確認的停止原因不自動重送。第二輪的 S0 API 預算在這個 out 獨立計，上限 $5。
+
+盲評使用產品的 `parseDeck` 分正面／背面，保留家長備註與候選，異常附原文與行號。卡組、架構各自產生隨機代碼、每份重新命名圖片；對照及完成清單只存 `紀錄/`。`selftest` 同時跑第一輪與第二輪的假請求回歸，不會登入或生成。
+
 ## 誰測
 
 AI 寫小程式送出，檢查格式、繁體與台灣用語、和課本不符的地方、錯題的手寫字與錯因，先打一輪 ✅✏️❌。使用者要做三件 AI 做不了的事：申請金鑰（第一輪是 Google AI Studio 與 OpenRouter；開帳號、處理金鑰只能本人來）；把教材放進測試 vault（教材在使用者手上，有版權不能進 repo）；最後從前兩名裡挑一份，看的時候不標模型名稱（哪一份比較好審要由家長判斷）。
