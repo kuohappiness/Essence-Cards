@@ -90,7 +90,7 @@ export interface ExamScope {
 
 export interface TodayInput {
   decks: readonly DeckEntry[];
-  /** 只用 reviews，不讀 changes。 */
+  /** 只用 reviews，不讀 changes。reviews 依時間排好（mergeHistory 的結果；作答後新的一筆加在最後）。 */
   history: History;
   settings: Settings;
   exam: ExamScope | null;
