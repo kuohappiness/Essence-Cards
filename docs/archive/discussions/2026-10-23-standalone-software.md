@@ -18,10 +18,21 @@ Codex 接著比較產品提供雲端同步與使用者自備雲端空間，曾�
 
 把儲存交給使用者的雲端，可以移除專案營運同步服務的責任；App 的相容、合併紀錄、衝突提示與復原仍需維護。初期支援太多供應商會擴大維護面，因此建議逐一驗證。這些是 Codex 建議，尚未確認為實作方案。
 
+## 續談：以 Obsidian 版為主要開發入口
+
+使用者提出希望以 Obsidian 版作主要開發與更新的版本，獨立 App 能沿用其更新，甚至讀取 Obsidian 筆記轉換成 App 內資料。此為詢問可行性的提案，尚未確認具體架構。
+
+Codex 認為概念可行，建議把功能更新與內容更新分開處理：主要在 Obsidian 版開發與驗證功能，兩種產品使用同一份學習核心與格式，再各自建置發布；筆記、附件與複習紀錄則經使用者自己的同步空間傳遞。現有 `src/core/deck` 已把卡組文字解析成目標與題目，`src/core/study` 已提供紀錄合併與排程；`src/main.ts` 與建置入口仍依賴 Obsidian 執行環境，因此完整外掛產物不能直接視為獨立 App 的更新包。
+
+資料方面，建議讓獨立版直接讀寫相同格式，內部資料庫先定位為可重建的索引或快取；保留目標 ID 與原始作答紀錄，避免兩份可各自修改的資料形成不同版本。符合 Essence 格式的卡組筆記可由同一解析器讀取；一般筆記先作為教材，經手動或 AI 製卡流程才能成為學習目標與題目。資料同步完成不代表 App 程式也已更新，版本不相容時必須明確提示，不能靜默遺失內容或進度。
+
+這能減少兩套學習邏輯的維護，但 Obsidian 的筆記編輯、渲染、出處跳轉、Claudian 等功能仍需要獨立版的替代入口。未安裝 Obsidian 的使用者也要能使用，是 D-128 的前提；若只完成讀卡與複習，應標為階段性版本。第一個驗證可用同一份卡組、附件與紀錄，比較兩版讀到的目標、題目與排程，並驗證 App 作答同步回去後仍可正確重播。這些是提案，尚未實作。
+
 ## 技術參考
 
 - [MDN：showDirectoryPicker](https://developer.mozilla.org/en-US/docs/Web/API/Window/showDirectoryPicker)：瀏覽器目錄存取尚非普遍支援的能力。
 - [Apple：Providing access to directories](https://developer.apple.com/documentation/uikit/providing-access-to-directories)：文件選擇器可提供使用者選定目錄的存取權限，涵蓋支援 File Provider 的位置；不代表所有供應商的離線與同步行為相同。
 - [Obsidian：跨裝置同步](https://obsidian.md/help/sync-notes)：列出各平台支援限制，並指出 Windows 的 iCloud Drive 可能造成檔案重複或損壞。此為現有工具的經驗，不能直接當成 Essence 獨立版已驗證的結果。
+- [Obsidian：Build a plugin](https://docs.obsidian.md/Plugins/Getting%20started/Build%20a%20plugin)：外掛建置產物由 Obsidian 載入；共用程式與資料格式仍需各自的宿主入口。
 
 後續問題集中在 [backlog](../../backlog.md#脫離-obsidian-的通用軟體2026-10-23-使用者)。
