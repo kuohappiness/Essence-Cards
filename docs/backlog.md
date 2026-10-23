@@ -23,7 +23,7 @@
 | F6：建置測試綁死骨架（`styles.css` 必須是空的、`src/` 只能有 `core` 和 `main.ts`），W5、W6 加入檔案就會誤報 | W5 開始前（寫進 W5 的任務說明） | 合法新增的模組與 CSS 不會誤報；隔離的無 CSS 案例仍然受測 | 同上 |
 | F3：`validateOut` 只檢查目前與主工作樹，私人輸出可能寫進其他 worktree | 下一次跑 T4 前 | 用 `git worktree list --porcelain` 比對所有 worktree 的真實路徑，並有測試 | 同上 |
 | F5：`check-syntax.mjs` 的分類順序和 W2 不同，還留著每頁 6 個目標的上限 | 下一次跑 T4 前 | 分類順序和 W2 一致、拿掉上限；那次 T4 用 W2 的 `parseDeck` 對照題數 | 同上 |
-| code-quality 在 bug 與里程碑兩個時機靠 description 和記憶觸發，還沒確認過真的會載入（W3 交回時已確認：經由 codex-brief 載入） | 第一次遇到 bug、第一個里程碑 | 兩個時機都確認 code-quality 有載入；沒有載入就改 description 或記憶 | D-119 |
+| code-quality 的第一個里程碑觸發尚未確認；W3 交回時已經由 codex-brief 載入，2026-10-23 修正 hook 換行誤報時也已依 AGENTS 在 bug 情境讀取 | 第一個里程碑 | 確認里程碑時機有載入 code-quality；沒有載入就改 description 或記憶 | D-119；2026-10-23 hook 換行修正 |
 | `Files.watch 能監看既有深層檔案`（`tests/node-files.test.ts`）在 Windows 偶爾失敗：2026-10-21 合併 W3 時 hook 跑到一次，約 17 ms 就失敗，之後連跑 6 次都通過，錯誤訊息沒留下。會不定期擋下 commit | 再失敗一次，或 W5 接上 Obsidian 的檔案監看前 | 留下錯誤訊息找出原因（可能是監看剛開始還沒就緒就寫檔）；修正後在 Windows 連跑 20 次都通過 | W3 合併 |
 | 中翻英的答案格不會拆開 ` \| `：`parseDeck()` 的 `typed` 是整串 `made up his mind \| made his mind up`，學生打哪一個都會判錯（D-122） | W6 開始前（寫進 W6 的任務說明，使用者 2026-10-21 決定不單獨做） | `typed` 改成好幾個答案：照 `\|` 拆開、去掉前後空白，`a\|b` 也認得；有空的答案報錯，字數不一樣給提示；題目指紋照舊用整個答案格；syntax.md 與英文規則的 ` \| ` 範例有測試 | [試用紀錄](card-rules/trials.md) 2026-10-21 |
 | 一字多義的名稱 `light（輕的） 英翻中`（D-125）：D-121 的原形提示會變成「light（輕的）」；找已學過的字時對不到 `light` | W6 開始前，與 ` | ` 一起寫進 W6 的任務說明；找已學過的字在寫 AI 製卡模組時 | 原形提示去掉名稱最後的全形括號；找已學過的字時名稱去掉方向與最後的全形括號再比對；syntax.md §2-3 的例子有測試 | [D-125](decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
