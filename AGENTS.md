@@ -23,12 +23,13 @@
 
 | 文件 | 回答什麼 |
 |---|---|
-| `docs/product.md` | 為什麼做、為誰做、原則、範圍（v1／之後／不做） |
+| `docs/product.md` | 為什麼做、為誰做、原則、範圍（v1／第二階段／不做） |
 | `docs/architecture.md` | 術語、概念模型、模組邊界、平台、資料存放、AI 的位置 |
 | `docs/syntax.md` | 出題語法與資料格式：卡組筆記、轉錄稿、錯題本、考試範圍、複習紀錄、AI 輸出快照怎麼寫 |
 | `docs/decisions.md` | 已確認的決定與理由（D-ID）；開頭有索引 |
 | `docs/roadmap.md` | 開發現況、下一步、路線圖、最近完成的事 |
-| `docs/backlog.md` | 待決問題、待重新確認的舊共識、點子 |
+| `docs/backlog.md` | v1 任務與第二階段候選的統一入口、待決問題與歷史索引 |
+| `docs/plans/` | 展開的主題細項規畫；一主題一份，從 backlog 引用，命名與維護見該目錄 README |
 | `docs/card-rules/` | 交給 AI 的製卡規則（未來外掛的內建預設） |
 | `docs/ai-models.md` | 現在推薦的 AI 服務與模型；新模型推出時更新 |
 | `docs/research/` | 參考軟體研究 |
@@ -39,7 +40,7 @@
 - 一件事只寫在一個地方，其他地方用連結引用。
 - 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。只有使用者明確同意才標 ✅；沒有反對不等於同意。
 - 有新決定時，在 `decisions.md` 新增條目（D-ID 不重用），再更新受影響的 product、architecture、roadmap。被取代的決定標「已取代 → D-xxx」，不刪除；被修改的舊決定，在標題下第一行寫「……見 D-xxx」。改完執行 `node experiments/tools/decisions-index.mjs` 更新索引，再補上新決定的一句話。
-- 新點子先記進 `backlog.md`，保留原意與來源，不要求先整理完整；談定後那一項只留一行，連到 D-ID。
+- 新點子先記進 `backlog.md`，保留原意與來源，不要求先整理完整；只分 v1 任務與第二階段想做的事（D-130）。展開的細項搬到 `docs/plans/<主題>.md`，backlog 只留項目、狀態與引用；談定後引用 D-ID，不重複維護詳細內容。
 - 重要討論在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`，記錄決定、理由與未解問題，並更新該目錄的 README 索引。內容採摘要，不冒充逐字紀錄。
 - 階段或任務有變動時，更新 `roadmap.md` 的「現在在哪裡」。做完一件事時在「已完成」最上面加一行；超過 10 條就把最舊的搬到 `docs/archive/roadmap-completed.md` 的最上面。
 - 文件以繁體中文撰寫；英文名稱、程式識別字與必要引用保留原文。
