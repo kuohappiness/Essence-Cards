@@ -39,6 +39,7 @@ export class ApiClient {
   async request(step, model, system, content, variant, options = {}) {
     if (this.busy) throw new Error('一次只允許一個 API 請求');
     this.busy = true;
+    this.lastText = ''; this.lastResult = null;
     try { return await this.send(step, model, system, content, variant, options); }
     finally { this.busy = false; }
   }
@@ -91,12 +92,14 @@ export class ApiClient {
       this.last.set(model.provider, this.now());
       const choice = payload.choices?.[0];
       const text = typeof choice?.message?.content === 'string' ? choice.message.content : null;
-      const valid = response.ok && text?.trim() && choice.finish_reason !== 'length' && choice.finish_reason !== 'content_filter';
+      const valid = response.ok && text?.trim() && choice.finish_reason !== 'length' && choice.finish_reason !== 'content_filter' && (!options.strictEnd || choice.finish_reason === 'stop');
       const metadata = { parameters, responseModel: typeof payload.model === 'string' ? redact(payload.model, this.secrets) : null,
         route: typeof payload.provider === 'string' ? redact(payload.provider, this.secrets) : '未確認',
         requestId: typeof payload.id === 'string' ? redact(payload.id, this.secrets) : null,
         finish_reason: typeof choice?.finish_reason === 'string' ? redact(choice.finish_reason, this.secrets) : null };
       const entry = { time: new Date(start).toISOString(), step, provider: model.provider, model: model.model, ...metadata, variant, status: response.status, seconds: (this.now() - start) / 1000, usage: numericUsage(payload.usage), outcome: valid ? 'ok' : response.ok ? 'invalid-response' : 'http-error' };
+      this.lastText = redact(text ?? '', this.secrets);
+      entry.errorCode = typeof payload.error?.code === 'string' ? redact(payload.error.code, this.secrets) : null;
       await this.record(entry);
       this.lastResult = entry;
       if (valid) {
@@ -109,6 +112,7 @@ export class ApiClient {
           finish_reason: typeof choice.finish_reason === 'string' ? redact(choice.finish_reason, this.secrets) : null,
           usage: numericUsage(payload.usage), seconds: (this.now() - start) / 1000 };
       }
+      if (options.strictEnd) return null;
       if (response.status === 429) {
         const detail = payload.error?.message ?? payload.message ?? payload.error ?? payload;
         this.print('HTTP 429：' + redact(typeof detail === 'string' ? detail : JSON.stringify(detail), this.secrets).slice(0, 300));

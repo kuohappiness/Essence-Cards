@@ -185,11 +185,16 @@ export async function makeBlind({ out, run = 1, materials }, dependencies = {}) 
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    out: { type: 'string' }, pdf: { type: 'string' }, photos: { type: 'string' }, run: { type: 'string' }, materials: { type: 'string' }, help: { type: 'boolean' },
+    out: { type: 'string' }, pdf: { type: 'string' }, photos: { type: 'string' }, run: { type: 'string' }, materials: { type: 'string' }, configs: { type: 'string' }, round: { type: 'string' }, plan: { type: 'string' }, 'dry-run': { type: 'boolean' }, help: { type: 'boolean' },
   } });
   const [command] = positionals;
-  if (values.help || !command) { console.log('node arch.mjs <transcribe|exams|run|blind> --out <repo外資料夾> [--pdf <PDF>] [--photos <照片資料夾>] [--run <N>]\nnode arch.mjs blind --out <repo外資料夾> [--materials 2-1,2-2] [--run <N>]\nnode arch.mjs selftest'); return; }
-  if (command === 'selftest') { await (await import('./arch-selftest.mjs')).selftest(); return; }
+  if (values.help || !command) { console.log('node arch.mjs <transcribe|exams|run|blind> --out <repo外資料夾> [--pdf <PDF>] [--photos <照片資料夾>] [--run <N>]\nnode arch.mjs blind --out <repo外資料夾> [--materials 2-1,2-2] [--run <N>]\nnode arch.mjs run --round 2 --out <repo外資料夾> [--plan 接法驗證] [--materials 1-3] [--configs R0,R1,R2,R3,S0] [--dry-run]\nnode arch.mjs blind --round 2 --out <repo外資料夾>\nnode arch.mjs plan-login --out <repo外資料夾>\nnode arch.mjs selftest'); return; }
+  if (command === 'selftest') { await (await import('./arch-selftest.mjs')).selftest(); await (await import('./arch-r2-selftest.mjs')).selftest(); return; }
+  if (values.round === '2' || command === 'plan-login') {
+    await (await import('./arch-r2-cli.mjs')).secondMain(command, values, positionals); return;
+  }
+  if (values.round !== undefined && values.round !== '1') throw new Error('--round 只能是 1 或 2');
+  if (values.configs || values.plan || values['dry-run']) throw new Error('configs、plan、dry-run 只適用第二輪');
   if (positionals.length !== 1 || !['transcribe', 'exams', 'run', 'blind'].includes(command)) throw new Error('未知指令');
   if (values.materials !== undefined && command !== 'blind') throw new Error('--materials 只適用於 blind');
   const out = await validateOut(values.out), run = Number(values.run ?? 1);

@@ -74,7 +74,7 @@ export class Budget {
 export function splitSections(text, expected, plain = false) {
   if (!text.trim()) throw new Error('空回應');
   if (plain) return { 卡組: text.trim() };
-  const parts = {}, markers = [...text.matchAll(/^<<<(架構|卡組|修改紀錄)>>>\s*$/gm)];
+  const parts = {}, markers = [...text.matchAll(/^<<<(全貌|架構|卡組|修改紀錄)>>>\s*$/gm)];
   if (text.slice(0, markers[0]?.index ?? text.length).trim()) throw new Error('標記前有額外內容或缺少標記');
   markers.forEach((m, i) => {
     if (parts[m[1]] !== undefined) throw new Error('段落標記重複');
