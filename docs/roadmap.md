@@ -1,13 +1,13 @@
 # Essence Cards｜開發現況與路線圖
 
-更新：2026-10-23
+更新：2026-10-24
 
 ## 現在在哪裡
 
 | 項目 | 現況 |
 |---|---|
 | 階段 | **v1**：v1 開發前要做的事全部完成，2026-10-20 開始寫程式 |
-| 產品程式碼 | 程式結構已定（[D-110](decisions.md#d-110-v1-外掛的程式結構)）；W1 骨架＋W2 卡組模組、W3 複習紀錄與 FSRS 重播（含自動檢查，[D-117](decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）已合併進 main（183 個測試）；下一步把 W4 今天的佇列（[任務說明](../tasks/w4.md)）交給 Codex |
+| 產品程式碼 | 程式結構已定（[D-110](decisions.md#d-110-v1-外掛的程式結構)）；W1 骨架＋W2 卡組模組、W3 複習紀錄與 FSRS 重播（含自動檢查，[D-117](decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）已合併進 main（183 個測試）；W4 今天的佇列（[任務說明](../tasks/w4.md)）由 Claude 實作在分支 `claude/w4`（200 個測試），等 Codex 的 L2 審查（[審查請求](../tasks/w4-review.md)）後合併 |
 | 已驗證 | Windows 與 iPhone：最小原型（2026-10-07）；複習畫面原型與實機驗證全部過門檻（2026-10-19，[D-109](decisions.md#d-109-複習畫面原型的實測結論)） |
 | 下一個里程碑 | 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（W1～W6，[D-111](decisions.md#d-111-v1-的開發順序capture-延後)）；Capture 延到這之後 |
 
@@ -17,7 +17,7 @@ v1 任務與第二階段候選的[統一入口](backlog.md)已整理；細項存
 
 ### 下一次對話從這裡開始
 
-1. **v1 第一批**（[D-111](decisions.md#d-111-v1-的開發順序capture-延後)）：W1 骨架、W2 卡組模組（[任務說明](../tasks/w1-w2.md)、[審查與修正](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md>)）與 W3 複習紀錄與 FSRS 重播（[任務說明](../tasks/w3.md)，排程用 FSRS-6，[D-112](decisions.md#d-112-排程用-fsrs-6)）已合併。下一步把 W4 今天的佇列的[任務說明](../tasks/w4.md)（[D-120](decisions.md#d-120-今天的佇列的細節)）交給 Codex；W3 的 iPhone 效能（D-110 要不要加快取）在 W5 接上外掛後用 `npm run bench` 的資料量測。程式結構照 [D-110](decisions.md#d-110-v1-外掛的程式結構)；試作場已停用。之後各模組寫規格時，照 [D-115](decisions.md#d-115-回頭查要用的證據先收好) 把要多存的證據寫進出題語法，打字卡與自動朗讀照 [D-116](decisions.md#d-116-打字卡的沒印象與自動朗讀)。開始任務前，先核對 [backlog 的技術債](backlog.md#技術債)（W1～W2 審查留下的 4 件事已搬過去，[D-119](decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。
+1. **v1 第一批**（[D-111](decisions.md#d-111-v1-的開發順序capture-延後)）：W1 骨架、W2 卡組模組（[任務說明](../tasks/w1-w2.md)、[審查與修正](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md>)）與 W3 複習紀錄與 FSRS 重播（[任務說明](../tasks/w3.md)，排程用 FSRS-6，[D-112](decisions.md#d-112-排程用-fsrs-6)）已合併。W4 今天的佇列（[任務說明](../tasks/w4.md)、[D-120](decisions.md#d-120-今天的佇列的細節)）已由 Claude 實作在分支 `claude/w4`，下一步請 Codex 照[審查請求](../tasks/w4-review.md)做 L2 審查，Claude 核對、修正後合併，再寫 W5 的任務說明；W3 的 iPhone 效能（D-110 要不要加快取）在 W5 接上外掛後用 `npm run bench` 的資料量測。程式結構照 [D-110](decisions.md#d-110-v1-外掛的程式結構)；試作場已停用。之後各模組寫規格時，照 [D-115](decisions.md#d-115-回頭查要用的證據先收好) 把要多存的證據寫進出題語法，打字卡與自動朗讀照 [D-116](decisions.md#d-116-打字卡的沒印象與自動朗讀)。開始任務前，先核對 [backlog 的技術債](backlog.md#技術債)（W1～W2 審查留下的 4 件事已搬過去，[D-119](decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)）。
 2. 製卡規則：學習目標的數量由內容決定（[D-101](decisions.md#d-101-學習目標的數量由內容決定)）2026-10-19 試過，沒有變瑣碎，規則不改（[試用紀錄](card-rules/trials.md)）。之後有真實的影片筆記時再試一次，順便看一般知識的數量（這次約加倍，同一份筆記 20～31 個）。下一輪試用時一併試「共同成功判準」（[backlog](backlog.md#其他待決)）。也一併看 AI 品質初篩留下的兩點：2-2 每份仍約 5 題洩漏（多是二選一與互補配對），以及把相鄰能力的一題放錯池（D-118）。
 3. **AI 品質初篩** ✅ 2026-10-20 結案：兩次盲評後照兩個問題改了規則（通用 v0.13、自然 v0.5，[D-118](decisions.md#d-118-ai-品質初篩後的製卡規則修改)），T4 小規模驗證：例題的觀念都有出題、按例子拆開變少，洩漏沒變、偶爾把相鄰能力的一題放錯池（[試用紀錄](card-rules/trials.md)）。這兩點併進第 2 項的下一輪試用再看，不擋 v1。
 
@@ -72,6 +72,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-24 | W4 今天的佇列（Claude 實作，D-131）：`planToday`、`nextCard`、`progress`、`checkTyped` 與紀錄的 `typed` 欄位，ESLint 加上核心模組之間只能透過 `index.ts`、deck 不能 import study；T1～T15 寫成測試，`npm run check` 200 個通過，22 個突變全部擋下，三年份資料 `planToday` 約 86 ms。規格沒說清楚的 13 處寫在[審查請求](../tasks/w4-review.md)。在分支 `claude/w4`（`6be30fa`、`9c52acd`），未審查、未合併 |
 | 2026-10-24 | 學習目標架構第二輪結論與第三輪安排定案（[D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組)）：AI 製卡模組開工時暫選 R3（自然科第 ① 層），取消 1-3 的補跑，第三輪等兩三個新單元比 R0、R2、R3、一個單元多跑一份；修改 D-127 第 2 點。尚未跑第三輪 |
 | 2026-10-24 | 學習目標架構第二輪揭曉：兩家盲評都沒失盲，配對和對照表一致。R3（五步）的卡組與架構兩家都第一，S0 的卡組兩家都最後；九份都缺「由密度求質量或體積」與「容量」。Claude 核對 R3 兩張爭議卡（判洩漏）後寫好[第二輪結果](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第二輪結果claude-報告2026-10-24>)；Codex 回應後雙方一致：判例整套談定，補跑改成 R3、R0、S0（不補 R1），只重評卡組，1-1＋1-2 不拿掉。使用者想改等新單元再測，補跑暫停；第三輪規劃 Claude 提案、Codex 回應後雙方一致（三組、留一個單元做第二份） |
 | 2026-10-24 | Codex 查核第二輪的生成紀錄與盲評包，通過：五份的雜湊、提示、參數與費用相符，147 張卡的正反面全數比對一致，沒有來源線索；盲評前不用修。`codex/arch-r2`（第一、二輪的實驗程式）合併進 `main`，合併後各項自測與 `npm run check` 通過。尚未盲評 |
@@ -81,4 +82,3 @@ flowchart LR
 | 2026-10-23 | 修正 pre-commit 換行誤報：[.gitattributes](../.gitattributes) 固定 hook 為 LF，保留原腳本與 preprepare。隔離重現由誤報轉為乾淨，checkout／npm install 後仍維持 LF，Git Bash 語法與缺依賴阻擋通過；完整 `npm run check` 重跑通過（首輪只有既有效能測試 2883 ms 超過 2000 ms，單獨重跑 1648 ms 通過，未改程式或門檻）。code-quality 已在 bug 情境讀取，第一個里程碑的觸發驗證保留在 backlog |
 | 2026-10-23 | 寫好學習目標架構第二輪的[接法驗證與盲評包任務說明](../tasks/objective-architecture-r2-connection.md)與[第二輪設定](../experiments/t4/arch/第二輪/設定.json)：只用官方的方案額度接法，不通就停下來回報；R3 在 2-1、2-2 預試，截斷最多重試一次；盲評包用隨機代碼、改圖檔名，照 parseDeck 分出正面與背面。尚未交給 Codex |
 | 2026-10-23 | 照 Codex 的檢查修改第二輪評分說明：兩家改用共用的評分要點（① 14、② 5、輸入 2，層次分歧照標註說明決定並記在凍結檔的〈修訂〉）、刪掉單張失誤不改名次、教材外內容看內容不只看標籤並記查證紀錄、加判例與「最拿不準的判斷」、24/25 題用 6 組情境總結。盲評包的規格留到之後的任務說明；尚未實際校準 |
-| 2026-10-23 | 依 [D-130](decisions.md#d-130-任務分成-v1-與第二階段) 整理 v1 任務與第二階段清單，細項移到 [docs/plans/](plans/README.md)；記錄「學習目標熟練度作為升級標準」的使用者提議，尚未定案；[Claude 交接](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md>) |
