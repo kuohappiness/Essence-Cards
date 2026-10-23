@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-23 | 審查第二輪的 [Codex 與使用者結論](<../../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#claude-審查2026-10-23>)：核對 S0 接法、第 1 章 11 題與各提示的密度範例；更正 1-1／1-2 題數，提出 1-3 的偏差判讀與三個前置條件；待使用者確認，未寫 D-ID、未跑生成 |
 | 2026-10-23 | 第二輪設計的 [Codex 與使用者結論](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#codex-與使用者的結論2026-10-23>)已整理：high、第 1 章與分批驗證由使用者選定，找回舊答案紀錄並釐清第 1 章仍需補標；首測 1-3 等建議待 Claude 審查，未寫 D-ID、未跑生成 |
 | 2026-10-23 | 依使用者要求將「Claudian 完整學習鏈與固定呼叫的品質比較」加入 [backlog](backlog.md#訂閱製卡接法驗證d-126)；測試細節與時程待規劃，未寫 D-ID、未跑生成 |
 | 2026-10-23 | 學習目標架構第二輪交接給 Codex：使用者決定 S1 暫緩，整合版與驗證單元改在 Codex 那邊討論、有結論後交 Claude 審查（[交接](<../../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#交接給-codex和使用者討論第二輪設計與驗證單元2026-10-23>)）；更正「整合版已獲確認」的標示 |
