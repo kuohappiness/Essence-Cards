@@ -22,9 +22,11 @@ async function privateDirectory(out) {
   if (isInside(actual, AUTH_DIR) || isInside(AUTH_DIR, actual)) throw fail('login', 'credential-path');
   await fs.mkdir(AUTH_DIR, { recursive: true, mode: 0o700 });
   if (process.platform === 'win32') {
-    const sid = execFileSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true }).match(/S-1-[\d-]+/)?.[0];
+    // Git Bash 的 PATH 會先找到 GNU whoami；指定 Windows 系統目錄裡的版本。
+    const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+    const sid = execFileSync(path.join(system32, 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true }).match(/S-1-[\d-]+/)?.[0];
     if (!sid) throw fail('login', 'credential-acl');
-    execFileSync('icacls', [AUTH_DIR, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], { stdio: 'pipe', windowsHide: true });
+    execFileSync(path.join(system32, 'icacls.exe'), [AUTH_DIR, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], { stdio: 'pipe', windowsHide: true });
   } else await fs.chmod(AUTH_DIR, 0o700);
 }
 async function privateWrite(file, value) {
