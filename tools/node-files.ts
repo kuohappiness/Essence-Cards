@@ -84,7 +84,10 @@ export function createNodeFiles(root: string): Files {
       const watcher = watchFs(base, { recursive: true }, (event, filename) => {
         // 重新列出 rename 前後的檔案，也能通知資料夾改名內的舊、新路徑。
         if (event === 'rename' || filename === null) {
-          const now = snapshot();
+          // Windows 列刪除中的資料夾會回 EPERM；回呼裡丟錯會變成未攔截的例外。
+          // 保留上一次的清單，下一次通知再比對，期間的變動不會漏掉。
+          let now: Set<string>;
+          try { now = snapshot(); } catch { return; }
           const changed = new Set([...known].filter(path => !now.has(path)));
           for (const path of now) if (!known.has(path)) changed.add(path);
           const named = filename?.toString().split(sep).join('/');

@@ -8,8 +8,15 @@ import { createNodeFiles } from '../tools/node-files.ts';
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const root = await mkdtemp(join(tmpdir(), 'essence-files-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  return { root, files: createNodeFiles(root) };
+  const files = createNodeFiles(root);
+  // t.after 照登錄順序執行；先停掉這次開的監看再刪資料夾。
+  const stops: (() => void)[] = [];
+  t.after(async () => {
+    for (const stop of stops) stop();
+    await rm(root, { recursive: true, force: true });
+  });
+  const watch: typeof files.watch = onChange => { const stop = files.watch(onChange); stops.push(stop); return stop; };
+  return { root, files: { ...files, watch } };
 }
 
 void test('Files.list 遞迴只列檔案，vault 相對 / 路徑，依字串排序，缺資料夾回 []', async t => {
@@ -112,6 +119,20 @@ void test('Files.watch recursive 通知新增、修改、刪除、改名的舊�
   stop(); const count = events.length;
   await files.append('later/a.md', 'later'); await setTimeout(80);
   assert.equal(events.length, count);
+});
+void test('Files.watch 監看中的資料夾被刪掉時不丟出未攔截的錯誤（Windows 刪除中回 EPERM）', async t => {
+  for (let round = 0; round < 10; round++) {
+    const root = await mkdtemp(join(tmpdir(), 'essence-files-'));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    for (let i = 0; i < 20; i++) {
+      await mkdir(join(root, 'd' + String(i)), { recursive: true });
+      await writeFile(join(root, 'd' + String(i), 'x.md'), 'x');
+    }
+    const stop = createNodeFiles(root).watch(() => {});
+    await rm(root, { recursive: true, force: true });
+    await setTimeout(30);
+    stop();
+  }
 });
 void test('Files.watch 能監看既有深層檔案', async t => {
   const { files } = await fixture(t);
