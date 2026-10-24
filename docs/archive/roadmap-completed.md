@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-23 | 協作分工改為 Claude 實作、Codex 在關鍵點查核（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)）：更新 `AGENTS.md`〈AI 協作分工〉、`docs/agents/quality.md` 的角色與 codex-brief 的使用時機；D-016、D-106、D-119 加註 |
 | 2026-10-23 | 學習目標架構第二輪凍結接法：Codex 完成任務說明的第 1、2 段（官方方案接法、R3 在 2-1／2-2 預試），Claude 逐頁核對官方文件、重跑自測、抽查回覆紀錄。兩份都完整結束（輸出約 1.7～2.1 萬 tokens，含推理），`high` 有回傳可核對、圖片 22／22 與 10／10 送達，R3 不拆；額度剩餘量未確認。未跑正式生成、未合併分支 |
 | 2026-10-23 | 修正 pre-commit 換行誤報：[.gitattributes](../../.gitattributes) 固定 hook 為 LF，保留原腳本與 preprepare。隔離重現由誤報轉為乾淨，checkout／npm install 後仍維持 LF，Git Bash 語法與缺依賴阻擋通過；完整 `npm run check` 重跑通過（首輪只有既有效能測試 2883 ms 超過 2000 ms，單獨重跑 1648 ms 通過，未改程式或門檻）。code-quality 已在 bug 情境讀取，第一個里程碑的觸發驗證保留在 backlog |
 | 2026-10-23 | 寫好學習目標架構第二輪的[接法驗證與盲評包任務說明](../../tasks/objective-architecture-r2-connection.md)與[第二輪設定](../../experiments/t4/arch/第二輪/設定.json)：只用官方的方案額度接法，不通就停下來回報；R3 在 2-1、2-2 預試，截斷最多重試一次；盲評包用隨機代碼、改圖檔名，照 parseDeck 分出正面與背面。尚未交給 Codex |
