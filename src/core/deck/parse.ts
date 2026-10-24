@@ -16,9 +16,13 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
   if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return { props, start: 0, problems };
   const end = lines.findIndex((line, index) => index > 0 && /^(---|\.\.\.)\s*$/.test(line.raw));
   const hint = (line: number, message: string): void => { problems.push({ line, level: 'hint', code: 'unknown-property-value', message, targetLine: null }); };
-  const start = end < 0 ? lines.length : end + 1;
+  // 沒有結束的屬性區，Obsidian 當成一般文字，底下的清單照樣顯示（W5 對照）。
+  if (end < 0) {
+    hint(0, '屬性區塊沒有結束，Obsidian 把它當成一般文字；先使用預設值');
+    return { props, start: 0, problems };
+  }
+  const start = end + 1;
   try {
-    if (end < 0) throw Error('屬性區塊沒有結束');
     const doc = parseDocument(lines.slice(1, end).map(line => line.raw).join('\n'));
     if (doc.errors.length) throw Error('無法解析屬性');
     const data: unknown = doc.toJS();

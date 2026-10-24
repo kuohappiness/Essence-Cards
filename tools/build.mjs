@@ -4,11 +4,13 @@ import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+// --dev 加上給 AI 測試與量測的開發命令；正式建置時 DEV 是 false，整段被拿掉。
+const dev = process.argv.includes('--dev');
 const result = await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], outfile: 'main.js',
   bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
   jsx: 'automatic', external: ['obsidian'], metafile: true,
-  define: { 'process.env.NODE_ENV': '"production"' },
+  define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
 });
 const code = await readFile(resolve(root, 'main.js'), 'utf8');
 const requires = [...code.matchAll(/\brequire\(["']([^"']+)["']\)/g)].map(m => m[1]);

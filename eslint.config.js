@@ -4,23 +4,29 @@ import tseslint from 'typescript-eslint';
 
 const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tests/**/*.ts'];
 const core = ['src/core/**/*.{ts,tsx}'];
+// state 與 dev 和核心一樣不碰畫面、Obsidian 與 Node，才能在 Node 直接測。
+const pure = ['src/state/**/*.{ts,tsx}', 'src/dev/**/*.{ts,tsx}'];
 const moduleFiles = ['src/**/*.{ts,tsx}', 'tools/**/*.{ts,mjs}', 'tests/**/*.{ts,tsx,mjs}'];
 const corePackages = ['obsidian', 'react', 'react-dom', 'motion'];
 const coreImports = {
   group: [...corePackages.flatMap(name => [name, name + '/*']), 'node:*', ...builtinModules],
   message: '核心不能依賴畫面、Obsidian 或 Node。',
 };
+const pureImports = { ...coreImports, message: 'state 與 dev 不能依賴畫面、Obsidian 或 Node。' };
 const coreEntry = { regex: '(^|/)core/(?!files\\.ts$|[^/]+/index\\.ts$)', message: '核心只能透過 files.ts 或各模組的 index.ts 使用。' };
 const restricted = (patterns) => ['error', { patterns }];
 const fsrs = { group: ['ts-fsrs', 'ts-fsrs/*'], message: 'ts-fsrs 只由 study/fsrs.ts 包裝。' };
 const localDate = /^(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)$|^to(Locale.*)?(Date|Time)?String$|^getYear$|^setYear$/;
 
+// 核心不能 import src 裡核心以外的檔案。
 // 核心的模組之間：src/core/<模組>/ 從別的模組只能 import 那個模組的 index.ts；deck 不能 import study；study 從 deck 只拿型別。
 const coreModule = /\/src\/core\/([^/]+)\//;
 function crossModule(path, name, typeOnly) {
-  const from = coreModule.exec(path)?.[1];
-  if (!from || !name.startsWith('.')) return undefined;
+  if (!name.startsWith('.')) return undefined;
   const target = posix.normalize(posix.join(posix.dirname(path), name));
+  if (!target.includes('/src/core/')) return '核心不能 import src 裡核心以外的檔案。';
+  const from = coreModule.exec(path)?.[1];
+  if (!from) return undefined;
   const to = coreModule.exec(target)?.[1];
   if (!to || to === from) return undefined;
   if (from === 'deck' && to === 'study') return 'deck 不能 import study。';
@@ -35,6 +41,7 @@ const moduleBoundaries = {
   create(context) {
     const path = context.filename.replaceAll('\\', '/');
     const inCore = path.includes('/src/core/');
+    const inPure = /\/src\/(state|dev)\//.test(path);
     const isFsrs = path.endsWith('/src/core/study/fsrs.ts');
     const privateCore = new RegExp(coreEntry.regex);
     function check(node, source) {
@@ -42,7 +49,7 @@ const moduleBoundaries = {
       const name = literal?.value;
       let message;
       if (typeof name !== 'string') message = '模組名稱必須是字串常值，才能檢查邊界。';
-      else if (inCore && (name.startsWith('node:') || builtinModules.includes(name) || corePackages.some(pkg => name === pkg || name.startsWith(pkg + '/')))) message = coreImports.message;
+      else if ((inCore || inPure) && (name.startsWith('node:') || builtinModules.includes(name) || corePackages.some(pkg => name === pkg || name.startsWith(pkg + '/')))) message = inCore ? coreImports.message : pureImports.message;
       else if (!isFsrs && (name === 'ts-fsrs' || name.startsWith('ts-fsrs/'))) message = fsrs.message;
       else if (!inCore && privateCore.test(name)) message = coreEntry.message;
       else if (inCore) message = crossModule(path, name, node.type === 'TSImportType');
@@ -122,5 +129,9 @@ export default tseslint.config(
       fsrs,
       coreEntry,
     ]) },
+  },
+  {
+    files: pure,
+    rules: { 'no-restricted-imports': restricted([pureImports, fsrs, coreEntry]) },
   },
 );

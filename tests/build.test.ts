@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, rm, writeFile, mkdir, symlink, copyFile, readdir } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile, mkdir, symlink, copyFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +45,7 @@ void test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian�
   }
   assert.deepEqual(await tree(join(root, 'src')), before);
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Record<string, unknown>;
-  assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.0.1', '1.8.0', false]);
+  assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.0.1', '1.8.7', false]);
 });
 
 void test('W1 沒有 CSS 時 styles.css 是空字串，隔離在暫存專案', async t => {
@@ -87,4 +87,28 @@ void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或
   const result = await build({ absWorkingDir: root, entryPoints: ['src/core/study/index.ts'], bundle: true, platform: 'browser', format: 'esm', write: false, metafile: true });
   const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
   assert.deepEqual(imports.filter(entry => entry.external), []);
+});
+
+void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱與對照程式', async t => {
+  const dir = await project(t, {});
+  await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
+  const marks = ['essence-cards-dev', 'cases.json', 'export-compare', 'metadataCache'];
+  await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
+  const dev = await readFile(join(dir, 'main.js'), 'utf8');
+  for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
+  const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
+  assert.match(stdout, /require: obsidian\n/);
+  const production = await readFile(join(dir, 'main.js'), 'utf8');
+  for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
+});
+
+void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {
+  const vault = await mkdtemp(join(tmpdir(), 'essence-vault-'));
+  t.after(async () => { await rm(vault, { recursive: true, force: true }); await run(process.execPath, ['tools/build.mjs'], { cwd: root }); });
+  await mkdir(join(vault, '.obsidian'));
+  await writeFile(join(vault, '.obsidian/community-plugins.json'), '["other"]');
+  for (let i = 0; i < 2; i++) await run(process.execPath, ['tools/install-vault.mjs', vault, '--dev'], { cwd: root });
+  assert.deepEqual(JSON.parse(await readFile(join(vault, '.obsidian/community-plugins.json'), 'utf8')), ['other', 'essence-cards']);
+  assert.ok((await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8')).includes('essence-cards-dev'));
+  await assert.rejects(run(process.execPath, ['tools/install-vault.mjs', vault, '--dev', 'x'], { cwd: root }), /用法/);
 });
