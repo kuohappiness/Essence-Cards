@@ -1,4 +1,5 @@
 import { builtinModules } from 'node:module';
+import { posix } from 'node:path';
 import tseslint from 'typescript-eslint';
 
 const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tests/**/*.ts'];
@@ -14,7 +15,21 @@ const restricted = (patterns) => ['error', { patterns }];
 const fsrs = { group: ['ts-fsrs', 'ts-fsrs/*'], message: 'ts-fsrs 只由 study/fsrs.ts 包裝。' };
 const localDate = /^(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)$|^to(Locale.*)?(Date|Time)?String$|^getYear$|^setYear$/;
 
-// no-restricted-imports 處理靜態 import/export；其餘載入形式套用相同三條邊界。
+// 核心的模組之間：src/core/<模組>/ 從別的模組只能 import 那個模組的 index.ts；deck 不能 import study；study 從 deck 只拿型別。
+const coreModule = /\/src\/core\/([^/]+)\//;
+function crossModule(path, name, typeOnly) {
+  const from = coreModule.exec(path)?.[1];
+  if (!from || !name.startsWith('.')) return undefined;
+  const target = posix.normalize(posix.join(posix.dirname(path), name));
+  const to = coreModule.exec(target)?.[1];
+  if (!to || to === from) return undefined;
+  if (from === 'deck' && to === 'study') return 'deck 不能 import study。';
+  if (!target.endsWith('/src/core/' + to + '/index.ts')) return '核心的模組之間只能 import 對方的 index.ts。';
+  if (from === 'study' && to === 'deck' && !typeOnly) return 'study 從 deck 只能 import 型別（import type）。';
+  return undefined;
+}
+
+// no-restricted-imports 處理靜態 import/export；其餘載入形式套用相同三條邊界。核心模組之間的規則四種形式都在這裡。
 const moduleBoundaries = {
   meta: { type: 'problem', schema: [] },
   create(context) {
@@ -30,9 +45,17 @@ const moduleBoundaries = {
       else if (inCore && (name.startsWith('node:') || builtinModules.includes(name) || corePackages.some(pkg => name === pkg || name.startsWith(pkg + '/')))) message = coreImports.message;
       else if (!isFsrs && (name === 'ts-fsrs' || name.startsWith('ts-fsrs/'))) message = fsrs.message;
       else if (!inCore && privateCore.test(name)) message = coreEntry.message;
+      else if (inCore) message = crossModule(path, name, node.type === 'TSImportType');
+      if (message) context.report({ node, message });
+    }
+    function checkStatic(node, typeOnly) {
+      const message = node.source && inCore ? crossModule(path, node.source.value, typeOnly) : undefined;
       if (message) context.report({ node, message });
     }
     return {
+      ImportDeclaration(node) { checkStatic(node, node.importKind === 'type'); },
+      ExportNamedDeclaration(node) { checkStatic(node, node.exportKind === 'type'); },
+      ExportAllDeclaration(node) { checkStatic(node, node.exportKind === 'type'); },
       ImportExpression(node) { check(node, node.source); },
       CallExpression(node) {
         if (node.callee.type === 'Identifier' && node.callee.name === 'require') check(node, node.arguments[0]);

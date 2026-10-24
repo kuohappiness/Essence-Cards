@@ -6,7 +6,7 @@ export function encodeEntry(t: string, entry: NewEntry): string {
   if ('set' in entry) {
     return JSON.stringify({ t, set: entry.set, ...('deck' in entry ? { deck: entry.deck } : 'lt' in entry ? { lt: entry.lt } : {}), val: entry.val });
   }
-  return JSON.stringify({ t, lt: entry.lt, r: entry.r, ...('v' in entry ? { v: entry.v } : {}), ...(entry.src ? { src: entry.src } : {}) });
+  return JSON.stringify({ t, lt: entry.lt, r: entry.r, ...('v' in entry ? { v: entry.v } : {}), ...('typed' in entry && entry.typed ? { typed: entry.typed } : {}), ...(entry.src ? { src: entry.src } : {}) });
 }
 
 /** 從完整 JSON 解析；壞 JSON 的尾段救回由 mergeHistory 處理並留下 problem。 */
@@ -34,5 +34,5 @@ export function parseLine(line: string): LogEntry | null {
   if (typeof data.lt !== 'string' || !data.lt || !['easy', 'good', 'near', 'miss'].includes(data.r as string)) return null;
   if (data.src != null && typeof data.src !== 'string') return null;
   if (typeof data.v !== 'string' && !(data.src === 'mistake' && data.v == null)) return null;
-  return { kind: 'review', t: data.t, at: time.at, offset: time.offset, lt: data.lt, r: data.r as Rating, v: data.v as string | null ?? null, src: data.src as string | null ?? null };
+  return { kind: 'review', t: data.t, at: time.at, offset: time.offset, lt: data.lt, r: data.r as Rating, v: data.v as string | null ?? null, typed: typeof data.typed === 'string' ? data.typed : null, src: data.src as string | null ?? null };
 }

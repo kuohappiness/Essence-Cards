@@ -21,7 +21,7 @@ void test('syntax §5 的八行逐欄解析，寫回和原文完全相同', () =
   assert.equal(examples.length, 8);
   rows.forEach(({ t, entry, kind }, index) => {
     const stamp = { t, at: Date.parse(t), offset: 480 };
-    const defaults = kind === 'review' ? { v: null, src: null } : kind === 'change' ? { deck: null, lt: null } : {};
+    const defaults = kind === 'review' ? { v: null, typed: null, src: null } : kind === 'change' ? { deck: null, lt: null } : {};
     assert.deepEqual(parseLine(examples[index]), { ...stamp, kind, ...defaults, ...entry });
     assert.equal(encodeEntry(t, entry), examples[index]);
   });
@@ -64,11 +64,11 @@ void test('時間格式完全由 offset 決定，清晨四點換日，跨月、�
 
 void test('parseLine 接受 Z、1～3 位小數與未知欄位，拒絕無時區、不存在的日期及缺欄位', () => {
   for (const t of ['2024-02-29T03:02:01Z', '2026-10-16T20:00:00.1-05:00', '2026-10-16T20:00:00.12+05:45', '0000-01-01T00:00:00.123+00:00']) {
-    const result = parseLine(JSON.stringify({ t, lt: 'a', r: 'good', v: '12345678', typed: 'right' }));
+    const result = parseLine(JSON.stringify({ t, lt: 'a', r: 'good', v: '12345678', future: 'right' }));
     assert.ok(result?.kind === 'review', t);
     assert.equal(result.at, Date.parse(t));
     assert.equal(result.offset, t.endsWith('-05:00') ? -300 : t.endsWith('+05:45') ? 345 : 0);
-    assert.equal('typed' in result, false);
+    assert.equal('future' in result, false);
   }
   for (const t of ['2026-10-16T20:00:00', '2026-10-16 20:00:00Z', '2026-02-29T20:00:00Z', '2026-04-31T20:00:00Z', '2026-13-01T20:00:00Z', '2026-10-00T20:00:00Z', '2026-10-16T24:00:00Z', '2026-10-16T20:60:00Z', '2026-10-16T20:00:60Z', '2026-10-16T20:00:00.1234Z', '2026-10-16T20:00:00+24:00', '2026-10-16T20:00:00+08:60']) {
     assert.equal(parseLine(JSON.stringify({ t, lt: 'a', r: 'good', v: '12345678' })), null, t);
@@ -186,4 +186,28 @@ void test('L2-5 其他已知變更不新增 val 型別限制，未知種類仍�
   const history = mergeHistory([{ path: 'changes.jsonl', text: rows.map(row => JSON.stringify({ t, ...row })).join('\n') }]);
   assert.deepEqual(history.changes.map(entry => [entry.set, entry.val]), rows.map(row => [row.set, row.val]));
   assert.deepEqual(history.problems, []);
+});
+
+void test('T15 typed 欄位：寫在 v 後 src 前、往返相同、認不得的保留、非字串當作沒有、只差 typed 不算重複', () => {
+  const t = '2026-10-16T20:15:03.250+08:00';
+  const right = encodeEntry(t, { lt: 'c9tn3e', r: 'good', v: '3c4d5e6f', typed: 'right' });
+  assert.equal(right, '{"t":"2026-10-16T20:15:03.250+08:00","lt":"c9tn3e","r":"good","v":"3c4d5e6f","typed":"right"}');
+  const check = encodeEntry(t, { lt: 'c9tn3e', r: 'miss', v: '3c4d5e6f', typed: 'skip', src: 'check' });
+  assert.equal(check, '{"t":"2026-10-16T20:15:03.250+08:00","lt":"c9tn3e","r":"miss","v":"3c4d5e6f","typed":"skip","src":"check"}');
+  for (const line of [right, check]) {
+    const entry = parseLine(line);
+    assert.ok(entry?.kind === 'review');
+    assert.equal(entry.typed, line === right ? 'right' : 'skip');
+    const { lt, r, v, typed, src } = entry;
+    assert.ok(v !== null && (typed === 'right' || typed === 'skip') && (src === null || src === 'check'));
+    assert.equal(encodeEntry(entry.t, { lt, r, v, typed, ...(src ? { src } : {}) }), line);
+  }
+  const maybe = parseLine('{"t":"2026-10-16T20:15:03.250+08:00","lt":"c9tn3e","r":"good","v":"3c4d5e6f","typed":"maybe"}');
+  assert.ok(maybe?.kind === 'review');
+  assert.equal(maybe.typed, 'maybe');
+  const number = '{"t":"2026-10-16T20:15:03.250+08:00","lt":"c9tn3e","r":"good","v":"3c4d5e6f","typed":1}';
+  const plain = '{"t":"2026-10-16T20:15:03.250+08:00","lt":"c9tn3e","r":"good","v":"3c4d5e6f"}';
+  const history = mergeHistory([{ path: 'typed.jsonl', text: [number, plain, right].join('\n') }]);
+  assert.deepEqual(history.problems, []);
+  assert.deepEqual(history.reviews.map(entry => entry.typed), [null, 'right']);
 });

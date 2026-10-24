@@ -52,7 +52,7 @@ export function mergeHistory(sources: readonly { path: string; text: string }[])
         }
         const previous = seenReviews.get(entry.t);
         if (previous) {
-          const same = (other: ReviewEntry) => other.lt === entry.lt && other.r === entry.r && other.v === entry.v && other.src === entry.src;
+          const same = (other: ReviewEntry) => other.lt === entry.lt && other.r === entry.r && other.v === entry.v && other.typed === entry.typed && other.src === entry.src;
           if (same(previous)) continue;
           const others = collisions.get(entry.t);
           if (others?.some(same)) continue;
