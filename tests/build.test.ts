@@ -6,7 +6,7 @@ import { cp, mkdtemp, readFile, rm, writeFile, mkdir, symlink, copyFile, readdir
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
+import { build, type Metafile } from 'esbuild';
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -103,15 +103,16 @@ void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、�
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
 });
 
-void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包括計數 Files 呼叫的包裝）', async () => {
-  // 和 tools/build.mjs 相同的選項；看每個輸入檔實際進了輸出多少 bytes。
-  const bundle = (dev: boolean) => build({
-    absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, minify: true, format: 'cjs', platform: 'browser',
-    target: 'es2022', jsx: 'automatic', external: ['obsidian'], metafile: true, write: false,
-    define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
-  });
-  const included = async (dev: boolean) => Object.entries(Object.values((await bundle(dev)).metafile.outputs)[0].inputs)
-    .filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
+void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包括計數 Files 呼叫的包裝）', async t => {
+  // 跑真正的 tools/build.mjs（隔離在暫存專案），看它的 metafile 裡每個輸入檔實際進了輸出多少 bytes。
+  const dir = await project(t, {});
+  await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
+  const included = async (dev: boolean) => {
+    const out = join(dir, 'meta.json');
+    await run(process.execPath, ['tools/build.mjs', ...(dev ? ['--dev'] : [])], { cwd: dir, env: { ...process.env, ESSENCE_METAFILE: out } });
+    const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
+    return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
+  };
   const devOnly = (path: string) => path.startsWith('src/dev/') || path === 'src/obsidian/dev.ts';
   assert.deepEqual((await included(false)).filter(devOnly), []);
   assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev.ts']);

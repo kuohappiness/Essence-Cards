@@ -14,13 +14,21 @@ export interface StateOptions {
   settings?: Settings;
   /** 收到檔案變動後等多久才處理（毫秒），預設 500。 */
   delay?: number;
-  onError?: (error: unknown) => void;
+  /**
+   * write：紀錄寫不進去（下一次作答或 flush 時重試）；read：卡組或紀錄讀不到（自己隔一段時間重試）；
+   * listener：onChange 的監聽者丟出錯誤（程式的錯，不重試）。
+   */
+  onError?: (error: unknown, source: ErrorSource) => void;
 }
+export type ErrorSource = 'write' | 'read' | 'listener';
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
 
 export interface State {
-  /** 第一次讀完卡組與紀錄、排好今天；之後每次呼叫回傳同一個 Promise。 */
+  /**
+   * 第一次讀完卡組與紀錄、排好今天；之後每次呼叫回傳同一個 Promise。
+   * 讀不到時自己重試（1 秒起、每次加倍、最多 60 秒），每次失敗交給 onError；只有 close() 會讓它 reject。
+   */
   ready(): Promise<LoadTimings>;
   decks(): readonly DeckEntry[];
   history(): History;
@@ -42,7 +50,7 @@ export interface State {
 }
 
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
-const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [] };
+const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [] };
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
 export function createState(options: StateOptions): State {
@@ -51,10 +59,10 @@ export function createState(options: StateOptions): State {
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
   const settings = options.settings ?? DEFAULT_SETTINGS;
   const delay = options.delay ?? 500;
-  const report = (error: unknown): void => {
-    try { options.onError?.(error); } catch { /* 回呼的錯誤不影響狀態。 */ }
+  const report = (error: unknown, source: ErrorSource): void => {
+    try { options.onError?.(error, source); } catch { /* 回呼的錯誤不影響狀態。 */ }
   };
-  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: report });
+  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); } });
   // 自己的紀錄：`YYYY-MM <device>.jsonl`；衝突副本（例如 `… 2.jsonl`）算別台裝置的。
   const ownName = new RegExp('^\\d{4}-\\d{2} ' + device.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.jsonl$');
   const own = (path: string): boolean => path.startsWith(LOG_FOLDER + '/') && ownName.test(path.slice(LOG_FOLDER.length + 1));
@@ -72,6 +80,18 @@ export function createState(options: StateOptions): State {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let processing: Promise<void> = Promise.resolve();
   let unwatch: (() => void) | null = null;
+  // 連續讀不到的次數；決定下一次重試要等多久（Codex 審查 W5 的 F3：不能只等下一次通知）。
+  let failures = 0;
+  const retryDelay = (): number => Math.min(60_000, 1000 * 2 ** Math.max(0, failures - 1));
+  /** ready() 重試前的等待；close() 會提早叫醒它。 */
+  let wake: (() => void) | null = null;
+  function pause(ms: number): Promise<void> {
+    return new Promise(resolve => {
+      const id = setTimeout(done, ms);
+      function done(): void { clearTimeout(id); wake = null; resolve(); }
+      wake = done;
+    });
+  }
 
   function input(): TodayInput {
     if (!loaded) throw Error('state 還沒 ready');
@@ -92,37 +112,39 @@ export function createState(options: StateOptions): State {
     // 讀完之前收到的，讀完後一起處理。
     if (loaded) schedule();
   }
-  function schedule(): void {
+  function schedule(wait = delay): void {
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      processing = processing.then(apply).catch(report);
-    }, delay);
+      processing = processing.then(apply).catch((error: unknown) => { report(error, 'read'); });
+    }, wait);
   }
   async function apply(): Promise<void> {
     if (closed || !pending.size) return;
     const paths = [...pending];
     pending.clear();
-    let texts: (string | null)[];
-    try { texts = await Promise.all(paths.map(path => files.read(path))); }
-    catch (error) {
-      // 讀不到就留著，下一次通知再試。
-      for (const path of paths) pending.add(path);
-      throw error;
-    }
+    const results = await Promise.allSettled(paths.map(path => files.read(path)));
     if (closed) return;
     let decksChanged = false, logsChanged = false;
-    paths.forEach((path, i) => {
-      const text = texts[i];
+    let failure: { error: unknown } | null = null;
+    for (const [i, path] of paths.entries()) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        // 讀不到的留著等重試；讀得到的照常處理，不被它擋住。
+        pending.add(path);
+        failure ??= { error: result.reason };
+        continue;
+      }
+      const text = result.value;
       if (isDeckPath(path)) {
         const before = deckMap.get(path);
         if (text === null) {
           if (deckMap.delete(path)) decksChanged = true;
-          return;
+          continue;
         }
         const deck = parseDeck(text);
         // 通知了但解析結果相同（例如內容沒變）就不重排。
-        if (before && JSON.stringify(before) === JSON.stringify(deck)) return;
+        if (before && JSON.stringify(before) === JSON.stringify(deck)) continue;
         deckMap.set(path, deck);
         decksChanged = true;
       } else {
@@ -134,21 +156,46 @@ export function createState(options: StateOptions): State {
           logsChanged = true;
         }
       }
-    });
+    }
+    if (failure) {
+      failures++;
+      report(failure.error, 'read');
+      // 等待中已經有新的通知排好時，就跟著那一次重讀。
+      if (timer === null) schedule(retryDelay());
+    } else failures = 0;
     if (!decksChanged && !logsChanged) return;
     if (decksChanged) deckList = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
     // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
     if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
     current = planToday(input());
     for (const listener of [...listeners]) {
-      try { listener(); } catch (error) { report(error); }
+      try { listener(); } catch (error) { report(error, 'listener'); }
+    }
+  }
+
+  /** 讀不到就整個重讀：先監看，失敗時等一段時間再試，close() 之後才放棄。 */
+  async function start(): Promise<LoadTimings> {
+    // 先監看再讀：讀的期間改到的檔不會漏掉。
+    if (!closed) unwatch = files.watch(notify);
+    for (;;) {
+      try {
+        const timings = await load();
+        failures = 0;
+        return timings;
+      } catch (error) {
+        if (closed) throw error;
+        failures++;
+        report(error, 'read');
+        await pause(retryDelay());
+        if (closed) throw Error('state 已關閉，沒有讀完');
+      }
     }
   }
 
   async function load(): Promise<LoadTimings> {
     const start = performance.now();
-    // 先監看再讀：讀的期間改到的檔不會漏掉。
-    if (!closed) unwatch = files.watch(notify);
+    deckMap.clear();
+    sources.clear();
     const entries = await readDecks(files);
     for (const { path, deck } of entries) deckMap.set(path, deck);
     deckList = entries.map(({ path, deck }) => ({ path, deck })).sort(byPath);
@@ -167,7 +214,7 @@ export function createState(options: StateOptions): State {
 
   return {
     ready() {
-      loading ??= load();
+      loading ??= start();
       return loading;
     },
     decks: () => deckList,
@@ -206,6 +253,7 @@ export function createState(options: StateOptions): State {
       closed = true;
       if (timer !== null) clearTimeout(timer);
       timer = null;
+      wake?.();
       unwatch?.();
       unwatch = null;
       await processing;

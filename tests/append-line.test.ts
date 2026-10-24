@@ -57,6 +57,23 @@ void test('T5 appendLine：重複的一行只加一次、t 相同內容不同兩
   assert.throws(() => appendLine(base, ''));
 });
 
+// Codex 審查 W5 的 F2：取消之後才加進來的同一筆作答，仍然是取消的（mergeHistory 對所有來源的取消都有效）。
+void test('T5 appendLine：取消之後才加進來的同一筆作答仍然取消', () => {
+  const answer = encodeEntry('2026-10-24T19:00:00.000+08:00', { lt: 'a', r: 'good', v: '12345678' });
+  const undo = encodeEntry('2026-10-24T19:00:01.000+08:00', { undo: '2026-10-24T19:00:00.000+08:00' });
+  const empty = mergeHistory([]);
+  const stepwise = [answer, undo, answer].reduce(appendLine, empty);
+  const merged = mergeHistory([{ path: 'x.jsonl', text: [answer, undo, answer].join('\n') }]);
+  assert.deepEqual([stepwise.reviews, stepwise.cancelled], [[], ['2026-10-24T19:00:00.000+08:00']]);
+  assert.deepEqual(stepwise, merged);
+  // 別台裝置的取消先到，這台的時鐘剛好寫出同一個 t。
+  const cancelledFirst = appendLine(mergeHistory([{ path: 'other.jsonl', text: undo }]), answer);
+  assert.deepEqual(cancelledFirst.reviews, []);
+  assert.deepEqual(cancelledFirst, mergeHistory([{ path: 'other.jsonl', text: undo }, { path: 'own.jsonl', text: answer }]));
+  // 已經取消過、也沒有那一筆時，同一行取消不改任何東西。
+  assert.equal(appendLine(stepwise, undo), stepwise);
+});
+
 // 固定種子的亂數（mulberry32）。
 function seeded(seed: number): () => number {
   return () => {
@@ -81,12 +98,25 @@ void test('T5 appendLine 性質：200 組隨機的自己的作答、取消、變
       otherAts.push(at);
       return encodeEntry(formatTime(at, 480), { lt: pick(['a', 'b', 'c']), r: pick(ratings), v: '12345678' });
     });
+    // 別台裝置也有取消：取消它自己的一筆，或取消一個這台之後剛好會寫出的時間（時鐘相撞，F2）。
+    for (let i = Math.floor(random() * 3); i > 0; i--) {
+      const target = otherAts.length && random() < 0.5 ? pick(otherAts) : start + Math.floor(random() * 40) * 1000;
+      other.push(encodeEntry(formatTime(start + 50_000 + i, 480), { undo: formatTime(target, 480) }));
+      if (random() < 0.5) otherAts.push(target);
+    }
     const otherSource = { path: 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl', text: other.join('\n') + '\n' };
     let history = mergeHistory([otherSource]);
     const own: string[] = [];
     const answered: string[] = [];
     let at = start;
     for (let step = 0; step < 12; step++) {
+      // 同一行再加一次（例如重讀到自己剛寫的行）：結果不變，重新 merge 也去重。
+      if (own.length && random() < 0.1) {
+        const line = pick(own);
+        own.push(line);
+        history = appendLine(history, line);
+        continue;
+      }
       // 自己的 t 嚴格遞增；有時和別台裝置的某一筆同一毫秒。
       at = random() < 0.2 && otherAts.some(time => time > at) ? Math.min(...otherAts.filter(time => time > at)) : at + 1 + Math.floor(random() * 3000);
       const t = formatTime(at, 480);
@@ -101,6 +131,7 @@ void test('T5 appendLine 性質：200 組隨機的自己的作答、取消、變
     }
     const merged = mergeHistory([otherSource, { path: 'Essence Cards/紀錄/2026-10 PC-test.jsonl', text: own.join('\n') + '\n' }]);
     assert.deepEqual(history.changes, merged.changes, 'round ' + String(round));
+    assert.deepEqual(history.cancelled, merged.cancelled, 'round ' + String(round));
     assert.deepEqual(multiset(history), multiset(merged), 'round ' + String(round));
     // 只有 at 完全相同、來自不同檔案的兩筆之間先後可以不同（§3-4）。
     assert.deepEqual(history.reviews.map(entry => entry.at), merged.reviews.map(entry => entry.at), 'round ' + String(round));

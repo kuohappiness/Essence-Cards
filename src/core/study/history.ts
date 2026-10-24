@@ -23,7 +23,7 @@ export function isLogPath(path: string): boolean {
 }
 
 export function mergeHistory(sources: readonly { path: string; text: string }[]): History {
-  const history: History = { reviews: [], changes: [], problems: [] };
+  const history: History = { reviews: [], changes: [], problems: [], cancelled: [] };
   const cancelled = new Set<string>();
   const seenReviews = new Map<string, ReviewEntry>();
   const collisions = new Map<string, ReviewEntry[]>();
@@ -73,6 +73,7 @@ export function mergeHistory(sources: readonly { path: string; text: string }[])
   }
   history.reviews = history.reviews.filter(entry => !cancelled.has(entry.t)).sort((a, b) => a.at - b.at);
   history.changes.sort((a, b) => a.at - b.at);
+  history.cancelled = [...cancelled].sort();
   return history;
 }
 
@@ -91,9 +92,11 @@ export function appendLine(history: History, line: string): History {
   const entry = parseLine(line);
   if (!entry) throw Error('不是合法的一行紀錄：' + line);
   if (entry.kind === 'undo') {
-    // mergeHistory 也取消所有檔案裡 t 相同的作答。
-    if (!history.reviews.some(review => review.t === entry.undo)) return history;
-    return { ...history, reviews: history.reviews.filter(review => review.t !== entry.undo) };
+    // mergeHistory 也取消所有檔案裡 t 相同的作答，包括之後才加進來的（記在 cancelled）。
+    const known = history.cancelled.includes(entry.undo);
+    const reviews = history.reviews.filter(review => review.t !== entry.undo);
+    if (known && reviews.length === history.reviews.length) return history;
+    return { ...history, reviews, cancelled: known ? history.cancelled : [...history.cancelled, entry.undo].sort() };
   }
   if (entry.kind === 'change') {
     const key = changeKey(entry);
@@ -102,6 +105,7 @@ export function appendLine(history: History, line: string): History {
     changes.splice(firstAfter(changes, entry.at), 0, entry);
     return { ...history, changes };
   }
+  if (history.cancelled.includes(entry.t)) return history;
   // t 相同時 at 也相同，只要看 at 相同的那一段。
   const end = firstAfter(history.reviews, entry.at);
   for (let i = end - 1; i >= 0 && history.reviews[i].at === entry.at; i--) {

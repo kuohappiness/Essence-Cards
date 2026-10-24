@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { mkdtemp, mkdir, writeFile, stat, utimes, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -133,6 +135,48 @@ void test('Files.watch 監看中的資料夾被刪掉時不丟出未攔截的錯
     await setTimeout(30);
     stop();
   }
+});
+// Codex 審查 W5 的 F4：列資料夾暫時失敗後，不能等下一次通知；恢復後要補送刪除。
+void test('Files.watch 列資料夾暫時回 EPERM：恢復後自己重新比對，補送刪除的路徑；停止監看就不再重試', async t => {
+  const { root, files } = await fixture(t);
+  await files.append('folder/a.md', 'a');
+  await files.append('folder/b.md', 'b');
+  // 換掉 node:fs 的 readdirSync（named import 也跟著換），模擬 Windows 刪除中的資料夾。
+  const original = fs.readdirSync;
+  let failing = false, calls = 0;
+  const replace = (fn: typeof fs.readdirSync) => { fs.readdirSync = fn; syncBuiltinESMExports(); };
+  t.after(() => { replace(original); });
+  replace(((...args: Parameters<typeof fs.readdirSync>) => {
+    calls++;
+    if (failing) throw Object.assign(Error('EPERM: operation not permitted, scandir'), { code: 'EPERM' });
+    return original(...args);
+  }) as typeof fs.readdirSync);
+  const events: string[] = [];
+  const stopFirst = files.watch(path => { events.push(path); });
+  failing = true;
+  await rm(join(root, 'folder/a.md'));
+  // 檔案系統的通知都送完了（這段期間每次比對都失敗），之後不會再有新的通知。
+  await setTimeout(300);
+  assert.deepEqual(events, []);
+  failing = false;
+  const deadline = performance.now() + 3000;
+  while (!events.includes('folder/a.md') && performance.now() < deadline) await setTimeout(10);
+  assert.deepEqual(events, ['folder/a.md']);
+  stopFirst();
+
+  // 停止監看之後，排好的重試也取消。
+  const second = createNodeFiles(root);
+  const seen: string[] = [];
+  const stop = second.watch(path => { seen.push(path); });
+  failing = true;
+  await rm(join(root, 'folder/b.md'));
+  await setTimeout(300);
+  stop();
+  failing = false;
+  const before = calls;
+  await setTimeout(1500);
+  assert.equal(calls, before);
+  assert.deepEqual(seen, []);
 });
 void test('Files.watch 能監看既有深層檔案', async t => {
   const { files } = await fixture(t);

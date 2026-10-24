@@ -48,6 +48,11 @@ export interface History {
   reviews: ReviewEntry[];
   changes: ChangeEntry[];
   problems: { path: string; line: number; message: string }[];
+  /**
+   * 被取消的 t（所有 undo 行指的，不論那一筆作答在不在），照字串排序、不重複。
+   * appendLine 靠它讓取消之後才加進來的同一筆作答仍然取消，和重新 mergeHistory 相同（Codex 審查 W5 的 F2）。
+   */
+  cancelled: string[];
 }
 
 export interface LogWriter {

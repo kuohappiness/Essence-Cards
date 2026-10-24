@@ -45,6 +45,10 @@ interface Harness {
   changed: () => number;
   clock: { now: number; offset: number };
   write: (path: string, text: string) => Promise<void>;
+  /** 放進來的路徑 read 會失敗（模擬 iCloud 還沒同步好之類的暫時錯誤）。 */
+  failing: Set<string>;
+  /** onError 收到的 [錯誤, 來源]。 */
+  errors: [unknown, string][];
 }
 async function setup(t: TestContext, options: Partial<StateOptions> & { vault?: Record<string, string>; now?: () => number } = {}, start = at('2026-10-24T19:00:00.000+08:00')): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), 'essence-state-'));
@@ -55,13 +59,19 @@ async function setup(t: TestContext, options: Partial<StateOptions> & { vault?: 
   for (const [path, text] of Object.entries(options.vault ?? baseVault)) await write(path, text);
   const node = createNodeFiles(root);
   const reads: string[] = [];
-  const files: Files = { ...node, read: path => { reads.push(path); return node.read(path); } };
+  const failing = new Set<string>();
+  const files: Files = { ...node, read: path => {
+    reads.push(path);
+    return failing.has(path) ? Promise.reject(Error('讀不到：' + path)) : node.read(path);
+  } };
   const clock = { now: start, offset: 480 };
-  const state = createState({ device: 'PC-test', delay: 50, now: () => clock.now, offset: () => clock.offset, ...options, files });
+  const errors: [unknown, string][] = [];
+  const state = createState({ device: 'PC-test', delay: 50, now: () => clock.now, offset: () => clock.offset,
+    onError: (error, source) => { errors.push([error, source]); }, ...options, files });
   let changes = 0;
   state.onChange(() => { changes++; });
   t.after(async () => { await state.close(); await rm(root, { recursive: true, force: true }); });
-  return { root, files, state, reads, changed: () => changes, clock, write };
+  return { root, files, state, reads, changed: () => changes, clock, write, failing, errors };
 }
 async function until(condition: () => boolean, message: string, timeout = 5000): Promise<void> {
   const end = Date.now() + timeout;
@@ -147,6 +157,18 @@ void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔�
   await settle();
   assert.deepEqual(reads.filter(path => path.includes('/紀錄/')), []);
   assert.equal(changed(), 0);
+});
+
+// Codex 審查 W5 的 F2：別台裝置已經取消某個 t，這台的時鐘剛好寫出同一個 t；記憶中和重新讀檔要相同。
+void test('T7 作答：別台裝置先取消了同一個 t，作答後 history 仍和 readHistory 相同', async t => {
+  const t0 = '2026-10-24T19:00:00.000+08:00';
+  const { state, files } = await setup(t, { vault: { [NATURAL]: naturalText, [PHONE]: encodeEntry('2026-10-24T18:00:00.000+08:00', { undo: t0 }) + '\n' } });
+  await state.ready();
+  const v = state.decks()[0].deck.targets[0].prompts[0].fingerprint;
+  assert.equal(state.answer({ lt: 'a', r: 'good', v }), t0);
+  await state.flush();
+  assert.deepEqual(state.history().reviews, []);
+  assert.deepEqual(state.history(), await readHistory(files));
 });
 
 void test('T8 別台裝置的紀錄：只重讀那個檔、delay 內合併成一次、衝突副本不重複、刪除與內容沒變', async t => {
@@ -312,4 +334,57 @@ void test('T6 讀的期間收到的通知：讀完後照檔案變動處理一次
   assert.deepEqual(state.history().reviews.map(entry => entry.lt), ['a']);
   await until(() => changes === 1, '讀完後處理讀的期間的通知');
   assert.deepEqual(state.history().reviews.map(entry => entry.lt), ['a', 'b']);
+});
+
+// Codex 審查 W5 的 F3：讀檔失敗後不能等「下一次通知」，也不能拖住同一批讀得到的檔。
+void test('讀檔失敗：讀得到的照常處理，讀不到的自己重試；恢復後不用新的通知就更新', async t => {
+  const { state, root, failing, errors, changed, write } = await setup(t);
+  await state.ready();
+  failing.add(PHONE);
+  await appendFile(join(root, PHONE), review('2026-10-23T19:00:00.000+08:00', 'a', 'easy') + '\n');
+  await write(NATURAL, naturalText + goal('c'));
+  // 卡組不被讀不到的紀錄擋住。
+  await until(() => changed() === 1, '讀得到的卡組先更新');
+  assert.ok(state.decks()[0].deck.targets.some(target => target.id === 'c'));
+  assert.ok(ids(state.today().share).includes('c'));
+  assert.equal(state.history().reviews.some(entry => entry.r === 'easy'), false);
+  assert.deepEqual(errors.map(([, source]) => source), ['read']);
+  // 恢復之後沒有新的通知，也會在重試時讀到。
+  failing.delete(PHONE);
+  await until(() => changed() === 2, '重試讀到別台裝置的紀錄');
+  assert.equal(state.history().reviews.some(entry => entry.lt === 'a' && entry.r === 'easy'), true);
+  assert.deepEqual(state.today(), planToday(state.input()));
+});
+
+void test('讀檔失敗後 close：不再重試', async t => {
+  const { state, root, failing, errors, reads } = await setup(t);
+  await state.ready();
+  failing.add(PHONE);
+  await appendFile(join(root, PHONE), review('2026-10-23T19:00:00.000+08:00', 'a') + '\n');
+  await until(() => errors.length === 1, '第一次讀失敗');
+  await state.close();
+  const count = reads.length;
+  await wait(1500);
+  assert.equal(reads.length, count);
+});
+
+void test('ready() 讀不到時自己重試，恢復後完成；重試中 close 會 reject', async t => {
+  const { state, failing, errors, files } = await setup(t);
+  failing.add(PC);
+  const ready = state.ready();
+  await until(() => errors.length === 1, '第一次讀失敗');
+  assert.deepEqual(errors.map(([, source]) => source), ['read']);
+  assert.throws(() => state.today());
+  failing.delete(PC);
+  await ready;
+  assert.equal(state.ready(), ready);
+  assert.deepEqual(state.history(), await readHistory(files));
+  assert.deepEqual(state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT, ENGLISH]);
+
+  const other = await setup(t);
+  other.failing.add(PC);
+  const pending = other.state.ready();
+  await until(() => other.errors.length === 1, '第一次讀失敗');
+  await other.state.close();
+  await assert.rejects(pending);
 });

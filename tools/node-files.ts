@@ -81,25 +81,43 @@ export function createNodeFiles(root: string): Files {
         return files;
       }
       let known = snapshot();
+      // 列資料夾暫時失敗後的重新比對（Codex 審查 W5 的 F4）：不能只等下一次通知，那可能永遠不來。
+      let retry: ReturnType<typeof setTimeout> | null = null;
+      let wait = 50;
+      const named = new Set<string>();
+      /** 和上一次的清單比對，通知不同的路徑；暫時列不到時保留舊清單，稍後自己再比一次。 */
+      function rescan(): void {
+        let now: Set<string>;
+        try { now = snapshot(); } catch (error) {
+          // Windows 列刪除中的資料夾會回 EPERM；回呼裡丟錯會變成未攔截的例外。其他錯誤照舊丟出。
+          if (!['EPERM', 'EBUSY', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+          if (retry === null) retry = setTimeout(() => { retry = null; rescan(); }, wait);
+          wait = Math.min(1000, wait * 2);
+          return;
+        }
+        wait = 50;
+        const changed = new Set([...known].filter(path => !now.has(path)));
+        for (const path of now) if (!known.has(path)) changed.add(path);
+        for (const path of named) if (known.has(path) || now.has(path)) changed.add(path);
+        named.clear();
+        known = now;
+        for (const path of changed) onChange(path);
+      }
       const watcher = watchFs(base, { recursive: true }, (event, filename) => {
         // 重新列出 rename 前後的檔案，也能通知資料夾改名內的舊、新路徑。
         if (event === 'rename' || filename === null) {
-          // Windows 列刪除中的資料夾會回 EPERM；回呼裡丟錯會變成未攔截的例外。
-          // 保留上一次的清單，下一次通知再比對，期間的變動不會漏掉。
-          let now: Set<string>;
-          try { now = snapshot(); } catch { return; }
-          const changed = new Set([...known].filter(path => !now.has(path)));
-          for (const path of now) if (!known.has(path)) changed.add(path);
-          const named = filename?.toString().split(sep).join('/');
-          if (named && (known.has(named) || now.has(named))) changed.add(named);
-          known = now;
-          for (const path of changed) onChange(path);
+          if (filename) named.add(filename.toString().split(sep).join('/'));
+          rescan();
         } else {
           const path = filename.toString().split(sep).join('/');
           if (known.has(path)) onChange(path);
         }
       });
-      return () => watcher.close();
+      return () => {
+        if (retry !== null) clearTimeout(retry);
+        retry = null;
+        watcher.close();
+      };
     },
   };
 }

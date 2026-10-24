@@ -12,6 +12,8 @@ const result = await build({
   jsx: 'automatic', external: ['obsidian'], metafile: true,
   define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
 });
+// 測試用：寫出 esbuild 的 metafile，檢查真正的建置含了哪些檔案（不另抄一份建置選項）。
+if (process.env.ESSENCE_METAFILE) await writeFile(process.env.ESSENCE_METAFILE, JSON.stringify(result.metafile));
 const code = await readFile(resolve(root, 'main.js'), 'utf8');
 const requires = [...code.matchAll(/\brequire\(["']([^"']+)["']\)/g)].map(m => m[1]);
 const imports = Object.values(result.metafile.outputs).flatMap(out => out.imports);

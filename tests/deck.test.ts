@@ -210,6 +210,23 @@ void test('沒有空行、頂格的一行接在上一題後面，後面的題目
     assert.deepEqual(parseDeck('- 目標\n  - Q :: A\n' + breaker + '\n').targets.map(t => qa(t.prompts[0]).answer), ['A'], breaker);
   }
 });
+// Codex 審查 W5 的 F1：分隔線與圍欄之後沒有段落可以延續，頂格的家長筆記不能接進目標名稱或上一題。
+// Windows 版 Obsidian 1.14.5 的閱讀模式（2026-10-25 對照）：那一行留在同一個項目裡當一般段落，清單沒有結束，
+// 後面的 R 仍是目標的子題目（不是 CommonMark 會得到的新清單）；這裡照閱讀模式（D-135）。
+void test('分隔線、圍欄之後的頂格一行是目標裡的一般段落：ID、題目、指紋與歸屬都不變，後面的題目仍屬於同一個目標', () => {
+  const plain = parseDeck('- 目標 ^k3m9x2\n    - Q :: A\n    - R :: B').targets[0];
+  const shape = (text: string) => parseDeck(text).targets.map(t => [t.id, t.name, t.implicit, t.prompts.map(p => [qa(p).question, qa(p).answer, p.fingerprint])]);
+  const prompts = plain.prompts.map(p => [qa(p).question, qa(p).answer, p.fingerprint]);
+  const expected = [['k3m9x2', '目標', false, prompts]];
+  for (const rule of ['***', '___', '- - -', '* * *']) {
+    assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n  ' + rule + '\n家長筆記 :: 不能出題\n    - R :: B'), expected, rule);
+  }
+  // 項目自己開的圍欄，與目標內容裡的圍欄。
+  assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n    - ```\n      code\n      ```\n家長筆記\n    - R :: B'), expected);
+  assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n  ```\n  code\n  ```\n家長筆記\n    - R :: B'), expected);
+  // 空一行之後的頂格段落才結束清單（和 M3 相同）。
+  assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n  ***\n\n家長筆記\n    - R :: B'), [['k3m9x2', '目標', false, prompts.slice(0, 1)]]);
+});
 void test('接續行不會讓目標／題目行的 ID 失效', () => {
   const t = parseDeck('- 目標 ^parent\n  接續\n  - Q :: A ^child\n    next').targets[0];
   assert.equal(t.id, 'parent'); assert.equal(t.name, '目標'); assert.equal(qa(t.prompts[0]).answer, 'A\nnext');
@@ -235,6 +252,14 @@ for (const broken of ['科目: [', '科目: 自然\n科目: 英文', '- 不是�
 void test('未閉合 YAML 照 Obsidian 當成一般文字：清單照樣出題，屬性用預設值並提示', () => {
   const parsed = parseDeck('---\n科目: 自然\n- Q :: A');
   assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit]), [[2, true]]);
+  assert.deepEqual(parsed.props, parseDeck('').props);
+  assert.deepEqual(parsed.problems.map(p => [p.line, p.code]), [[0, 'unknown-property-value']]);
+});
+// Codex 審查 W5：Obsidian 只認 `---` 當屬性區的結尾（2026-10-25 對照：`...` 是 Q 的延續文字，Q、R 都顯示），
+// 所以只有開頭 `---`、中間是 `...` 的筆記也是沒有結束的屬性區（D-135）。
+void test('開頭 --- 之後用 ... 結尾不算結束：當成一般文字，前後的清單都出題', () => {
+  const parsed = parseDeck('---\n科目: 自然\n- Q :: A\n...\n- R :: B');
+  assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit, t.prompts.map(p => [qa(p).question, qa(p).answer])]), [[2, true, [['Q', 'A\n...']]], [4, true, [['R', 'B']]]]);
   assert.deepEqual(parsed.props, parseDeck('').props);
   assert.deepEqual(parsed.problems.map(p => [p.line, p.code]), [[0, 'unknown-property-value']]);
 });

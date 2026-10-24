@@ -14,7 +14,8 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
   const props = defaultProps();
   const problems: Problem[] = [];
   if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return { props, start: 0, problems };
-  const end = lines.findIndex((line, index) => index > 0 && /^(---|\.\.\.)\s*$/.test(line.raw));
+  // Obsidian 只認 `---` 當結尾；YAML 的 `...` 不算（W5 對照，2026-10-25）。
+  const end = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw));
   const hint = (line: number, message: string): void => { problems.push({ line, level: 'hint', code: 'unknown-property-value', message, targetLine: null }); };
   // 沒有結束的屬性區，Obsidian 當成一般文字，底下的清單照樣顯示（W5 對照）。
   if (end < 0) {
