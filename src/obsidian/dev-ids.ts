@@ -1,8 +1,8 @@
 import { MarkdownView, TFile } from 'obsidian';
 import type { App, Plugin, WorkspaceLeaf } from 'obsidian';
-import { Transaction } from '@codemirror/state';
+import { StateEffect, Transaction } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import type { EditorState } from '@codemirror/state';
-import type { EditorView } from '@codemirror/view';
 import { parseDeck } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
@@ -11,7 +11,7 @@ import { BUTTONS, MESSAGES, TIPS, type wireSave } from './save.ts';
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
 // 每一種操作都寫出操作後的文字或判斷，不只寫「通過」。
 
-interface DevLog { notices: string[]; removed: { path: string; ids: string[] }[]; tokens: ((state: EditorState) => IdToken[]) | null; save: ReturnType<typeof wireSave> | null }
+interface DevLog { notices: string[]; events: string[]; removed: { path: string; ids: string[] }[]; tokens: ((state: EditorState) => IdToken[]) | null; save: ReturnType<typeof wireSave> | null }
 export interface IdsHost extends Plugin { state: State | null; devLog: DevLog }
 
 const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
@@ -91,9 +91,12 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
     ['中文組字（compositionstart／end 加上組字的交易）', () => {
       select(nameEnd);
       cm.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
-      type('組', 'input.type.compose'); type('組字', 'input.type.compose');
+      // 輸入法組字時，每一步取代上一步組好的字。
+      type('ㄗ', 'input.type.compose');
+      cm.dispatch({ changes: { from: nameEnd, to: nameEnd + 1, insert: '組' }, selection: { anchor: nameEnd + 1 }, userEvent: 'input.type.compose' });
+      cm.dispatch({ changes: { from: nameEnd, to: nameEnd + 1, insert: '組字' }, selection: { anchor: nameEnd + 2 }, userEvent: 'input.type.compose' });
       cm.contentDOM.dispatchEvent(new CompositionEvent('compositionend', { data: '組字', bubbles: true }));
-      return { ok: line(1).endsWith(' ^k3m9x2') && line(1).includes('組') && tokens().includes('k3m9x2'), note: '注意：不是真的輸入法，只模擬事件與交易' };
+      return { ok: line(1) === '- 能說明擴散組字 ^k3m9x2', note: '不是真的輸入法：模擬組字的事件與 CodeMirror 組字時的交易' };
     }],
     ['名稱最後按 Enter', () => { select(nameEnd); key('Enter'); return { ok: line(1) === A && !line(2).includes('^'), note: '第 2 行：' + JSON.stringify(line(2)) }; }],
     ['名稱最後按 Backspace（刪名稱最後一個字，ID 不動）', () => { select(nameEnd); key('Backspace'); return { ok: line(1) === '- 能說明擴 ^k3m9x2' }; }],
@@ -109,7 +112,8 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
       cm.contentDOM.dispatchEvent(new DragEvent('drop', { dataTransfer: data, clientX: at.left, clientY: (at.top + at.bottom) / 2, bubbles: true, cancelable: true }));
       return { ok: line(1).endsWith(' ^k3m9x2') && line(1).includes('拖來的'), note: line(1) };
     }],
-    ['清單縮排（Tab）', () => { select(bLine + 3); key('Tab'); return { ok: cm.state.doc.toString().includes(B) && tokens().includes('p7q2w8'), note: JSON.stringify(cm.state.doc.toString()) }; }],
+    // 縮排之後那一行不是最上層的目標（不再鎖），ID 仍在它自己那一行的最後。
+    ['清單縮排（Tab）', () => { select(bLine + 3); key('Tab'); return { ok: /^\s+- 能說明溶解 \^p7q2w8$/m.test(cm.state.doc.toString()) && tokens().join() === 'k3m9x2', note: JSON.stringify(cm.state.doc.toString()) }; }],
     ['上下移動整行（命令 editor:swap-line-up）', () => {
       select(bLine + 3);
       (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('editor:swap-line-up');
@@ -121,6 +125,20 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
       const undone = cm.state.doc.toString();
       view.editor.redo();
       return { ok: undone === BASE && line(1) === '- 能說明擴散的現象 ^k3m9x2', note: 'undo 後：' + JSON.stringify(undone) };
+    }],
+    ['Undo 掉存檔補上的 ID：鎖定回報拿掉，Redo 回報補回', () => {
+      const seen: string[] = [];
+      cm.dispatch({ effects: StateEffect.appendConfig.of(EditorView.updateListener.of(update => {
+        for (const tr of update.transactions) if (tr.docChanged) seen.push(String(tr.annotation(Transaction.userEvent)));
+      })) });
+      reset(BASE.replace(' ^k3m9x2', ''));
+      view.editor.transaction({ changes: [{ from: view.editor.offsetToPos(nameEnd), to: view.editor.offsetToPos(nameEnd), text: ' ^k3m9x2' }] });
+      const count = host.devLog.removed.length, events = host.devLog.events.length;
+      view.editor.undo();
+      const undone = cm.state.doc.toString();
+      view.editor.redo();
+      return { ok: undone === BASE.replace(' ^k3m9x2', '') && removedSince(count).includes('k3m9x2') && host.devLog.events.slice(events).some(e => e.includes('補回 k3m9x2')),
+        note: 'userEvent：' + seen.join(',') + '；紀錄：' + host.devLog.events.slice(events).join('；') };
     }],
     ['刪掉整個目標（removedInEditor 收到）', () => {
       const count = host.devLog.removed.length;
@@ -162,9 +180,9 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
     }],
     ['同一篇開兩個分頁：另一個分頁看到同樣的文字與鎖定', async () => {
       const second = await open(app, file);
+      app.workspace.setActiveLeaf(leaf, { focus: true });
       select(nameEnd); type('丙');
-      await sleep(300);
-      const same = second.cm.state.doc.toString() === cm.state.doc.toString();
+      const same = await until(() => second.cm.state.doc.toString() === cm.state.doc.toString(), 3000);
       const locked = (host.devLog.tokens?.(second.cm.state) ?? []).map(t => t.id).join();
       second.leaf.detach();
       app.workspace.setActiveLeaf(leaf, { focus: true });
@@ -216,15 +234,26 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   if (!state) throw Error('state 還沒建立');
   await state.ready();
   const out: Record<string, unknown> = {};
+  const events = host.devLog.events.length;
+  // 前一次留下沒關的小視窗先關掉。
+  Array.from(document.querySelectorAll('.modal-container')).filter(el => el.querySelector('.essence-cards-issue')).forEach(el => { el.remove(); });
   const button = (view: MarkdownView) => view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
   const look = (view: MarkdownView) => {
     host.devLog.save?.refresh();
     const el = button(view);
     return el ? { tip: el.getAttribute('aria-label'), kind: ['done', 'missing', 'issues'].find(kind => el.hasClass('is-' + kind)) } : null;
   };
+  // 重設成沒有 ID 的內容：先刪掉、等 state 忘掉上一版再建立；直接改寫會被當成在編輯器以外弄丟 ID（那正是 §8-5 要抓的）。
+  async function fresh(): Promise<TFile> {
+    const old = app.vault.getFileByPath(TRIAL);
+    if (old) await app.vault.delete(old);
+    await until(() => !state!.decks().some(entry => entry.path === TRIAL));
+    const created = await writeFile(app, TRIAL, TRIAL_TEXT);
+    await until(() => state!.deckStatus(TRIAL).missing === 2);
+    return created;
+  }
   // 1. 兩個目標沒有 ID：醒目。不是卡組的筆記沒有按鈕。
-  const file = await writeFile(app, TRIAL, TRIAL_TEXT);
-  await until(() => state.deckStatus(TRIAL).missing === 2);
+  let file = await fresh();
   const first = await open(app, file);
   out.missing = look(first.view);
   out.missingExpected = TIPS.missing(2);
@@ -259,24 +288,28 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const id = /能說明蒸發 \^([a-z0-9]{6})/.exec(filled)?.[1] ?? '';
   await app.vault.adapter.write(TRIAL, filled.replace(' ^' + id, ''));
   await until(() => state.deckStatus(TRIAL).issues.length === 1);
+  out.issueFound = state.deckStatus(TRIAL).issues.map(issue => ({ ...issue }));
+  out.eventsAtIssue = host.devLog.events.slice(events);
   await until(() => !editor.getValue().includes(id), 3000);
   out.issues = look(first.view);
+  out.beforeClick = { editorReloaded: !editor.getValue().includes(id), editor: editor.getValue(), issues: state.deckStatus(TRIAL).issues.map(issue => ({ ...issue })) };
   out.issuesExpected = TIPS.issues(1);
   button(first.view)?.click();
   await sleep(300);
-  const modal = document.querySelector('.modal-container .essence-cards-issue');
+  out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(TRIAL).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
+  const modal = Array.from(document.querySelectorAll('.modal-container .essence-cards-issue')).at(-1);
   out.modal = { text: modal?.querySelector('p')?.textContent, buttons: Array.from(modal?.querySelectorAll('button') ?? []).map(b => b.textContent) };
   out.modalExpected = { text: MESSAGES.lost('能說明蒸發'), buttons: [BUTTONS.restore, BUTTONS.fresh] };
   (modal?.querySelector('button.mod-cta') as HTMLElement | null)?.click();
   await sleep(300);
   out.restored = editor.getValue().includes('能說明蒸發 ^' + id);
-  out.modalClosed = !document.querySelector('.modal-container .essence-cards-issue');
+  out.modalClosed = !!modal && !modal.isConnected;
+  out.staleModals = document.querySelectorAll('.modal-container .essence-cards-issue').length;
   out.afterRestore = look(first.view);
   first.leaf.detach();
   // 4. 離開筆記的備援：開著一個分頁（等 2 秒）、開到第二個分頁並關掉一個、兩個都關掉之後（等 2 秒）。
-  await sleep(1500);
-  await app.vault.modify(file, TRIAL_TEXT);
-  await until(() => state.deckStatus(TRIAL).missing === 2);
+  await sleep(2500);
+  file = await fresh();
   const timeline: { step: string; hasIds: boolean; text: string }[] = [];
   const snap = async (step: string) => { const text = await app.vault.read(file); timeline.push({ step, hasIds: /\^[a-z0-9]{6}$/m.test(text), text }); };
   const one = await open(app, file);
@@ -287,6 +320,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   two.leaf.detach();
   await sleep(2500); await snap('兩個都關掉之後（等 2.5 秒）');
   out.leave = timeline;
+  out.events = host.devLog.events.slice(events);
   out.leaveOk = timeline.map(t => t.hasIds).join() === 'false,false,true';
   out.checks = {
     missing: (out.missing as { tip?: string } | null)?.tip === TIPS.missing(2),

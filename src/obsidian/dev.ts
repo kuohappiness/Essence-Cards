@@ -222,17 +222,25 @@ async function compare(app: App): Promise<unknown> {
     for (const m of compareAssigned(await app.vault.read(after), listItems(app, after))) found.push({ case: name, stage: 'after', ...m });
   }
   // 有不一致的前幾篇，附上 metadataCache 的原始 listItems 與閱讀模式畫出來的清單（每篇只有幾項），判斷原因用。
-  const detail: Record<string, { cache: ListItem[]; reading: string[] }> = {};
-  for (const name of [...new Set(found.map(m => m.case))].slice(0, 10)) {
+  // 補 ID 之後還不一致的排前面（存檔之後家長看到的），再來是補 ID 之前的。
+  const detail: Record<string, { cache: ListItem[]; reading: string[]; after?: ListItem[] }> = {};
+  const order = [...new Set([...found.filter(m => m.stage === 'after' && (m.rule === 'd' || m.rule === 'e')), ...found].map(m => m.case))];
+  for (const name of order.slice(0, 10)) {
     const file = app.vault.getFileByPath(`${folder}/${name}.md`);
-    if (file) detail[name] = { cache: listItems(app, file), reading: await reading(app, await app.vault.read(file), file.path) };
+    const after = app.vault.getFileByPath(`${folder}/補ID後/${name}.md`);
+    if (file) detail[name] = { cache: listItems(app, file), reading: await reading(app, await app.vault.read(file), file.path), ...(after ? { after: listItems(app, after) } : {}) };
   }
+  // 第二部分 I2：M1（縮排多一層）補 ID 後縮排改回一層，metadataCache 與閱讀模式都把題目當成目標的子項目（D-135）。
+  const m1 = app.vault.getFileByPath(folder + '/補ID後/M1.md');
+  const m1Text = m1 ? await app.vault.read(m1) : null;
+  const m1Check = m1 && m1Text !== null ? { text: m1Text, cache: listItems(app, m1), reading: await reading(app, m1Text, m1.path) } : null;
   return {
+    m1: m1Check,
     cases: cases.length, changedOnDisk,
     mismatches: found.length,
     before: found.filter(m => m.stage === 'before').length,
     after: found.filter(m => m.stage === 'after').length,
-    byCase: found.reduce<Record<string, number>>((count, m) => ({ ...count, [m.case]: (count[m.case] ?? 0) + 1 }), {}),
+    byCase: found.reduce<Record<string, string[]>>((all, m) => ({ ...all, [m.case]: [...all[m.case] ?? [], m.stage + ':' + m.rule] }), {}),
     first: found.slice(0, limit),
     detail,
   };

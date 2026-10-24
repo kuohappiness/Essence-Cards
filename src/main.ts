@@ -30,7 +30,7 @@ export default class EssenceCardsPlugin extends Plugin {
   /** layout ready 之後才建立；畫面從這裡拿資料。 */
   state: State | null = null;
   /** 開發版：存檔按鈕、提示與編輯器鎖定的紀錄，給開發命令讀（W5 §8-7 的 lock、save）。 */
-  devLog = { notices: [] as string[], removed: [] as { path: string; ids: string[] }[], tokens: null as ((state: EditorState) => IdToken[]) | null, save: null as ReturnType<typeof wireSave> | null };
+  devLog = { notices: [] as string[], events: [] as string[], removed: [] as { path: string; ids: string[] }[], tokens: null as ((state: EditorState) => IdToken[]) | null, save: null as ReturnType<typeof wireSave> | null };
   /** 這次載入已經提示過的來源：同一種只提示一次。 */
   private warned = new Set<ErrorSource>();
   private unloaded = false;
@@ -81,7 +81,12 @@ export default class EssenceCardsPlugin extends Plugin {
         const path = pathOf(state);
         if (!path) return;
         this.state?.removedInEditor(path, ids);
-        if (DEV) this.devLog.removed.push({ path, ids });
+        if (DEV) { this.devLog.removed.push({ path, ids }); this.devLog.events.push(Math.round(performance.now()) + " 編輯器拿掉 " + ids.join(",")); }
+      },
+      onRestored: (state, ids) => {
+        const path = pathOf(state);
+        if (path) this.state?.restoredInEditor(path, ids);
+        if (DEV) this.devLog.events.push(Math.round(performance.now()) + " 編輯器補回 " + ids.join(","));
       },
     });
     this.registerEditorExtension(lock.extension);
@@ -90,6 +95,7 @@ export default class EssenceCardsPlugin extends Plugin {
       state: () => this.state,
       notify: message => { new Notice(message); if (DEV) this.devLog.notices.push(message); },
       onError: error => { console.error('Essence Cards：離開筆記時補學習目標 ID 失敗', error); },
+      log: DEV ? event => { this.devLog.events.push(Math.round(performance.now()) + ' ' + event); } : undefined,
     });
     if (DEV) Object.assign(this.devLog, { tokens: lock.tokens, save: this.saver });
   }

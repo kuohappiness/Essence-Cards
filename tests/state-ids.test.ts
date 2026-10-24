@@ -260,13 +260,26 @@ void test('I6 ambiguous 選還原只剩原本的；選當成新的拿掉候選�
   assert.equal(h2.state.fillText(P, next + C), next + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
 });
 
-void test('自己寫回造成的變化不算弄丟：補 ID 之後按 Undo（ID 拿掉）不變成問題', async t => {
+void test('補 ID 之後按 Undo（編輯器回報拿掉）不是問題；Redo 回來（回報回來）之後在外部弄丟仍是問題', async t => {
   const h = await setup(t, { [P]: B });
   const filled = h.state.fillText(P, B + C);
   assert.equal(filled, B + '- 能說明 C ^aaaaaa\n    - QC :: AC\n');
   await h.edit(P, filled);
+  h.state.removedInEditor(P, ['aaaaaa']);
   await h.edit(P, B + C);
   assert.deepEqual(h.issues(), []);
+  h.state.restoredInEditor(P, ['aaaaaa']);
+  await h.edit(P, filled);
+  await h.edit(P, B + C);
+  assert.deepEqual(plain(h.issues()).map(i => [i.kind, i.restore, i.name]), [['lost', 'aaaaaa', '能說明 C']]);
+});
+
+void test('這次載入才配的 ID 在外部弄丟也是問題（沒有另外放過剛配出的 ID）', async t => {
+  const h = await setup(t, { [P]: B + C });
+  assert.equal(await h.state.fillIds(P), true);
+  await wait(150);
+  await h.edit(P, B + C);
+  assert.deepEqual(plain(h.issues()).map(i => [i.kind, i.restore]), [['lost', 'aaaaaa']]);
 });
 
 void test('改名（同一批的刪除與新增）時待處理的問題跟著新路徑', async t => {

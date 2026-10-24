@@ -10,11 +10,11 @@ import { idLock, scanTokens } from '../src/obsidian/lock.ts';
 // 真正的鍵盤、中文輸入法、Live Preview／Source mode 在 Windows 版 Obsidian 用開發命令 lock 驗。
 
 function editor(doc: string, deck = true) {
-  const removed: string[] = [];
-  const lock = idLock({ isDeck: () => deck, onRemoved: (_state, ids) => { removed.push(...ids); } });
+  const removed: string[] = [], restored: string[] = [];
+  const lock = idLock({ isDeck: () => deck, onRemoved: (_state, ids) => { removed.push(...ids); }, onRestored: (_state, ids) => { restored.push(...ids); } });
   let state = EditorState.create({ doc, extensions: lock.extension });
   return {
-    removed,
+    removed, restored,
     get text() { return state.doc.toString(); },
     get head() { return state.selection.main.head; },
     get tokens() { return lock.tokens(state); },
@@ -182,15 +182,27 @@ void test('I7 清單縮排與上下移動整行：ID 跟著它的那一行', () 
   assert.deepEqual(f.tokens.map(t => t.id), ['p7q2w8', 'k3m9x2']);
 });
 
-void test('I7 Undo／Redo 照常（不調整），拿掉的 ID 回報；沒有標記的交易（外部改檔後重新載入）不碰也不回報', () => {
+void test('I7 Undo／Redo 照常（不調整）：拿掉的 ID 回報，回來的 ID 也回報；沒有標記的交易（外部改檔後重新載入）不碰也不回報', () => {
   const e = editor(doc);
-  e.dispatch({ changes: { from: nameEnd, to: lineEnd }, userEvent: 'undo' });
+  // CodeMirror 的 history 交易帶 filter: false（Obsidian 的 Undo／Redo 就是這樣），transactionFilter 不會跑。
+  e.dispatch({ changes: { from: nameEnd, to: lineEnd }, userEvent: 'undo', filter: false });
   assert.equal(e.text, doc.replace(' ^k3m9x2', ''));
   assert.deepEqual(e.removed, ['k3m9x2']);
+  e.dispatch({ changes: { from: nameEnd, insert: ' ^k3m9x2' }, userEvent: 'redo', filter: false });
+  assert.equal(e.text, doc);
+  assert.deepEqual(e.restored, ['k3m9x2']);
+  // 貼回剪下的整個目標也算回來。
+  const g = editor(doc);
+  g.select(0, bLine);
+  g.dispatch({ ...g.state.replaceSelection(''), userEvent: 'delete.cut' });
+  g.select(0);
+  g.input(doc.slice(0, bLine), 'input.paste');
+  assert.deepEqual([g.removed, g.restored], [['k3m9x2'], ['k3m9x2']]);
   const f = editor(doc);
   f.dispatch({ changes: { from: nameEnd, to: lineEnd } });
-  assert.equal(f.text, doc.replace(' ^k3m9x2', ''));
-  assert.deepEqual(f.removed, []);
+  f.dispatch({ changes: { from: nameEnd, insert: ' ^k3m9x2' } });
+  assert.equal(f.text, doc);
+  assert.deepEqual([f.removed, f.restored], [[], []]);
 });
 
 void test('I7 不是卡組筆記：不鎖', () => {

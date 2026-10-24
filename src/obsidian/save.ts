@@ -30,6 +30,8 @@ export interface SaveHost {
   notify: (message: string) => void;
   /** 離開筆記時補 ID 失敗（例如寫不進去）。 */
   onError: (error: unknown) => void;
+  /** 開發版：記下離開筆記與補 ID 的時間點。 */
+  log?: (event: string) => void;
 }
 
 /** 只改有變的部分，經 Editor 的交易套用：游標、選取與 Undo 照常（W5 §8-2 第 4 點）。 */
@@ -146,7 +148,11 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
     const state = host.state();
     if (open && state) for (const path of open) if (!now.has(path) && isDeckPath(path)) {
       // 等編輯器把最後打的字存進檔案，再讀檔補；這段時間又打開了就不補。
-      window.setTimeout(() => { if (!openPaths().has(path)) host.state()?.fillIds(path).catch(host.onError); }, LEAVE_DELAY);
+      host.log?.('離開 ' + path);
+      window.setTimeout(() => {
+        if (openPaths().has(path)) { host.log?.('又打開了，不補 ' + path); return; }
+        host.state()?.fillIds(path).then(changed => { host.log?.('補 ' + path + ' → ' + changed); }, host.onError);
+      }, LEAVE_DELAY);
     }
     open = now;
     refresh();

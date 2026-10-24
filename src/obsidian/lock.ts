@@ -1,5 +1,5 @@
-import { ChangeSet, EditorSelection, EditorState, StateField } from '@codemirror/state';
-import type { ChangeSpec, Extension, Text, Transaction, TransactionSpec } from '@codemirror/state';
+import { EditorSelection, EditorState, StateField } from '@codemirror/state';
+import type { ChangeSpec, Extension, Text, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 
@@ -222,7 +222,10 @@ export interface LockOptions {
   isDeck: (state: EditorState) => boolean;
   /** 使用者的編輯讓這些 ID 從筆記裡消失了（刪掉或剪下整個目標、Undo 掉補上的 ID、全選取代）。 */
   onRemoved: (state: EditorState, ids: string[]) => void;
+  /** 使用者的編輯讓這些 ID 回到筆記裡（Redo、貼回剪下的目標）：之後再弄丟就照常算。 */
+  onRestored?: (state: EditorState, ids: string[]) => void;
 }
+const present = (text: string, id: string): boolean => new RegExp('(?:^|[ \\t])\\^' + id + '(?![A-Za-z0-9-])', 'm').test(text);
 
 /** 使用者自己的編輯；Undo／Redo 照常，不調整；沒有標記的交易（外部改檔後重新載入、其他外掛）不碰。 */
 const isEdit = (tr: Transaction): boolean => tr.isUserEvent('input') || tr.isUserEvent('delete') || tr.isUserEvent('move');
@@ -251,23 +254,30 @@ export function idLock(options: LockOptions): { extension: Extension; tokens: (s
       const moved = tr.selection && before.length ? park(tr.selection, before) : null;
       return moved ? [tr, { selection: moved, sequential: true }] : tr;
     }
-    if (!isEdit(tr) && !isHistory(tr)) return tr;
-    const touched = before.filter(t => touches(tr, t));
-    const specs: TransactionSpec[] = [tr];
-    let final = tr.newDoc;
-    if (isEdit(tr)) {
-      const fix = repair(tr, touched);
-      if (fix.length) {
-        final = ChangeSet.of(fix, final.length).apply(final);
-        specs.push({ changes: fix, sequential: true });
-      }
-    }
-    if (touched.length) {
-      const text = final.toString();
-      const removed = [...new Set(touched.map(t => t.id))].filter(id => !new RegExp('(?:^|[ \\t])\\^' + id + '(?![A-Za-z0-9-])', 'm').test(text));
-      if (removed.length) options.onRemoved(tr.startState, removed);
-    }
-    return specs.length > 1 ? specs : tr;
+    if (!isEdit(tr)) return tr;
+    const fix = repair(tr, before.filter(t => touches(tr, t)));
+    return fix.length ? [tr, { changes: fix, sequential: true }] : tr;
   });
-  return { extension: [field, filter], tokens: state => state.field(field, false)?.tokens ?? [] };
+  // 回報拿掉與補回的 ID：Undo／Redo 的交易關掉了 transactionFilter（CodeMirror 的 history 用 filter: false），
+  // transactionExtender 仍然會跑，而且看到的是調整之後的整筆交易。
+  // filter 改過的交易，CodeMirror 會對同一筆交易套兩次 extender：記住報過的。
+  const reported = new WeakSet<Transaction>();
+  const report = EditorState.transactionExtender.of(tr => {
+    if (reported.has(tr)) return null;
+    reported.add(tr);
+    if (!tr.docChanged || !(isEdit(tr) || isHistory(tr)) || !options.isDeck(tr.startState)) return null;
+    const touched = tr.startState.field(field).tokens.filter(t => touches(tr, t));
+    const inserted: string[] = [];
+    tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, text) => { if (text.length) inserted.push(text.toString()); });
+    const back = [...new Set(inserted.flatMap(text => [...text.matchAll(/[ \t]\^([A-Za-z0-9-]+)[ \t]*(?=\r?\n|$)/gm)].map(m => m[1])))];
+    if (!touched.length && !back.length) return null;
+    const text = tr.newDoc.toString();
+    const removed = [...new Set(touched.map(t => t.id))].filter(id => !present(text, id));
+    if (removed.length) options.onRemoved(tr.startState, removed);
+    const startText = back.length ? tr.startState.doc.toString() : '';
+    const restored = back.filter(id => present(text, id) && !present(startText, id));
+    if (restored.length) options.onRestored?.(tr.startState, restored);
+    return null;
+  });
+  return { extension: [field, filter, report], tokens: state => state.field(field, false)?.tokens ?? [] };
 }

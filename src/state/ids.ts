@@ -42,9 +42,7 @@ export function createIdTracker(options: IdTrackerOptions) {
   const pending = new Map<string, Pending[]>();
   /** 這次載入在任何卡組看過的 ID，以及自己配出的：不再配出，重新出現也不算沒見過。 */
   const seen = new Set<string>();
-  /** 這次載入自己配出的 ID：還沒有紀錄時被拿掉（例如補完按 Undo）不算弄丟。 */
-  const issued = new Set<string>();
-  /** 刻意拿掉的：removedInEditor 報的，以及自己寫回時拿掉的。 */
+  /** 刻意拿掉的：removedInEditor 報的（restoredInEditor 報回來時取消），以及自己寫回時拿掉的。 */
   const removed = new Set<string>();
   /** pending 改變時加一，state 用來決定要不要重排。 */
   let revision = 0;
@@ -113,8 +111,8 @@ export function createIdTracker(options: IdTrackerOptions) {
     if (detect && prev) {
       const others = elsewhere(path);
       const logs = options.logIds();
-      // 不見的 ID：上一版的目標有、這一版整篇都沒有、別篇也沒有，也不是刻意拿掉的或自己剛配出還沒有紀錄的。
-      const missing = [...new Set(targetIds(prev))].filter(id => !now.has(id) && !others.has(id) && !removed.has(id) && !(issued.has(id) && !logs.has(id)));
+      // 不見的 ID：上一版的目標有、這一版整篇都沒有、別篇也沒有，也不是刻意拿掉的。
+      const missing = [...new Set(targetIds(prev))].filter(id => !now.has(id) && !others.has(id) && !removed.has(id));
       // 上一版就在、同樣沒有 ID 的目標不算新出現（同名或至少一題相同，一對一）。
       const pool = prev.targets.filter(t => idless(t) && !oldLines.has(t.line));
       const appeared: [Target, IdIssueKind][] = [];
@@ -153,7 +151,7 @@ export function createIdTracker(options: IdTrackerOptions) {
   /** 照一般規則補這一篇（待處理的跳過），記下配出的 ID。 */
   function fill(path: string, text: string): string {
     const result = assignIds(text, { taken: taken(), skip: lines(path), random: options.random });
-    for (const { id } of result.assigned) { seen.add(id); issued.add(id); }
+    for (const { id } of result.assigned) seen.add(id);
     return result.text;
   }
 
@@ -181,6 +179,7 @@ export function createIdTracker(options: IdTrackerOptions) {
       return { missing, issues: (pending.get(path) ?? []).map(item => item.issue) };
     },
     removed(ids: readonly string[]): void { for (const id of ids) removed.add(id); },
+    restored(ids: readonly string[]): void { for (const id of ids) removed.delete(id); },
     /** 存檔：先把這份文字當成新版本比對（可能比讀到的新），再補。回傳要寫回的文字。 */
     fill(path: string, text: string): string {
       if (texts.get(path) !== text) observe(path, text, parseDeck(text), true);

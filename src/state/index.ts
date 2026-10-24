@@ -64,6 +64,8 @@ export interface State {
   resolveText(issue: IdIssue, choice: 'restore' | 'new', text: string): string | null;
   /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
   removedInEditor(path: string, ids: readonly string[]): void;
+  /** 這台電腦的編輯器裡 Undo／Redo 或貼上讓這些 ID 回來了：之後再弄丟就照常算弄丟。 */
+  restoredInEditor(path: string, ids: readonly string[]): void;
 }
 
 const DECK_ROOT = 'Essence Cards';
@@ -343,6 +345,7 @@ export function createState(options: StateOptions): State {
       return next;
     },
     removedInEditor(_path, ids) { tracker.removed(ids); },
+    restoredInEditor(_path, ids) { tracker.restored(ids); },
     decks: () => deckList,
     history: () => history,
     input,
