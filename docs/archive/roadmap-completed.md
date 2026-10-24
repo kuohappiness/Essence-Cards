@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-24 | 寫好 W5 檔案存取的 Obsidian 版、索引與外掛接線的[任務說明](../tasks/w5.md)（給之後實作的 Claude，也是 L2 的對照清單）：先做 F6、`Files.watch` 偶發失敗、metadataCache 對照三項技術債；Obsidian 版和 Node 版跑同一份契約檢查；新增不 import `obsidian` 的 `src/state/` 給 W6 用，包括 `appendLine`、換日與換時區重排（Codex 審查 W4 的 F3）、離開筆記時才補 ID；開發版命令讓 AI 在 Windows 版 Obsidian 自己測，iPhone 量測 D-110 的快取門檻。兩個問題待使用者回答；W4 尚未合併，未開工 |
 | 2026-10-24 | W4 今天的佇列（Claude 實作，D-131）：`planToday`、`nextCard`、`progress`、`checkTyped` 與紀錄的 `typed` 欄位，ESLint 加上核心模組之間只能透過 `index.ts`、deck 不能 import study；T1～T15 寫成測試，`npm run check` 200 個通過，22 個突變全部擋下，三年份資料 `planToday` 約 86 ms。規格沒說清楚的 13 處寫在[審查請求](../tasks/w4-review.md)。在分支 `claude/w4`（`6be30fa`、`9c52acd`），未審查、未合併 |
 | 2026-10-24 | 學習目標架構第二輪結論與第三輪安排定案（[D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組)）：AI 製卡模組開工時暫選 R3（自然科第 ① 層），取消 1-3 的補跑，第三輪等兩三個新單元比 R0、R2、R3、一個單元多跑一份；修改 D-127 第 2 點。尚未跑第三輪 |
 | 2026-10-24 | 學習目標架構第二輪揭曉：兩家盲評都沒失盲，配對和對照表一致。R3（五步）的卡組與架構兩家都第一，S0 的卡組兩家都最後；九份都缺「由密度求質量或體積」與「容量」。Claude 核對 R3 兩張爭議卡（判洩漏）後寫好[第二輪結果](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第二輪結果claude-報告2026-10-24>)；Codex 回應後雙方一致：判例整套談定，補跑改成 R3、R0、S0（不補 R1），只重評卡組，1-1＋1-2 不拿掉。使用者想改等新單元再測，補跑暫停；第三輪規劃 Claude 提案、Codex 回應後雙方一致（三組、留一個單元做第二份） |
