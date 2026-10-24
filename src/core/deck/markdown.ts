@@ -18,7 +18,7 @@ export function linesOf(text: string): Line[] {
   }
   return lines;
 }
-function expandTabs(text: string): string {
+export function expandTabs(text: string): string {
   let expanded = '';
   for (const ch of text) expanded += ch === '\t' ? ' '.repeat(4 - expanded.length % 4) : ch;
   return expanded;
@@ -53,6 +53,42 @@ function maskInline(text: string): string {
     markers.lastIndex = end;
   }
   return masked + text.slice(cursor);
+}
+/** 行尾的區塊 ID（家長自訂的也算）。 */
+export const TRAILING_ID = /[ \t]+\^([A-Za-z0-9-]+)[ \t]*$/;
+// 程式產生的 ID：前面是行首或空白，6 碼指定字母表，後面不是英數字或 -（D-134）。
+const programId = /(?<=^|[ \t])\^([abcdefghjkmnpqrstuvwxyz23456789]{6})(?![A-Za-z0-9-])/g;
+/** 相同長度的遮罩：[[連結]] 與 [文字](網址) 裡的字不算。 */
+function maskLinks(text: string): string {
+  return text.replace(/\[\[[^\]\n]*\]\]|\[[^\]\n]*\]\([^)\n]*\)/g, match => '\u0000'.repeat(match.length));
+}
+export interface NameIds {
+  /** 行尾的區塊 ID；start 是它前面空白的開頭。 */
+  trailing: { id: string; start: number } | null;
+  /** 行中的程式格式 ID（不在行內程式碼、公式、連結裡）；[start, end) 含它前面的空白，拿掉後不留雙空白。 */
+  middle: { id: string; start: number; end: number }[];
+}
+/** 學習目標名稱那一行的 ID 寫法（W5 §8-4）。只給目標名稱用，題目與答案的正文不套用。 */
+export function nameIds(line: string): NameIds {
+  const trail = TRAILING_ID.exec(line);
+  const limit = trail ? trail.index : line.length;
+  const middle: NameIds['middle'] = [];
+  for (const match of maskLinks(maskInline(line)).matchAll(programId)) {
+    if (match.index >= limit) break;
+    let start = match.index;
+    while (start > 0 && (line[start - 1] === ' ' || line[start - 1] === '\t')) start--;
+    let end = match.index + match[0].length;
+    // 在行首（前面沒有空白）時，連同後面的空白一起拿掉。
+    if (start === match.index) while (end < limit && (line[end] === ' ' || line[end] === '\t')) end++;
+    middle.push({ id: match[1], start, end });
+  }
+  return { trailing: trail ? { id: trail[1], start: trail.index } : null, middle };
+}
+/** 拿掉行中的候選（由後往前，保留其他字）。 */
+export function removeMiddle(line: string, middle: NameIds['middle']): string {
+  let result = line;
+  for (const { start, end } of [...middle].reverse()) result = result.slice(0, start) + result.slice(end);
+  return result;
 }
 export function questionSyntax(text: string): { colon: number; blanks: { start: number; end: number }[] } {
   const masked = maskInline(text);
