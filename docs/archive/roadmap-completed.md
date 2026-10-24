@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-23 | 修正 pre-commit 換行誤報：[.gitattributes](../../.gitattributes) 固定 hook 為 LF，保留原腳本與 preprepare。隔離重現由誤報轉為乾淨，checkout／npm install 後仍維持 LF，Git Bash 語法與缺依賴阻擋通過；完整 `npm run check` 重跑通過（首輪只有既有效能測試 2883 ms 超過 2000 ms，單獨重跑 1648 ms 通過，未改程式或門檻）。code-quality 已在 bug 情境讀取，第一個里程碑的觸發驗證保留在 backlog |
 | 2026-10-23 | 寫好學習目標架構第二輪的[接法驗證與盲評包任務說明](../../tasks/objective-architecture-r2-connection.md)與[第二輪設定](../../experiments/t4/arch/第二輪/設定.json)：只用官方的方案額度接法，不通就停下來回報；R3 在 2-1、2-2 預試，截斷最多重試一次；盲評包用隨機代碼、改圖檔名，照 parseDeck 分出正面與背面。尚未交給 Codex |
 | 2026-10-23 | 照 Codex 的檢查修改第二輪評分說明：兩家改用共用的評分要點（① 14、② 5、輸入 2，層次分歧照標註說明決定並記在凍結檔的〈修訂〉）、刪掉單張失誤不改名次、教材外內容看內容不只看標籤並記查證紀錄、加判例與「最拿不準的判斷」、24/25 題用 6 組情境總結。盲評包的規格留到之後的任務說明；尚未實際校準 |
 | 2026-10-23 | 依 [D-130](../decisions.md#d-130-任務分成-v1-與第二階段) 整理 v1 任務與第二階段清單，細項移到 [docs/plans/](../plans/README.md)；記錄「學習目標熟練度作為升級標準」的使用者提議，尚未定案；[Claude 交接](<../../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md>) |
