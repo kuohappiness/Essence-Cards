@@ -1,42 +1,78 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm, writeFile, mkdir, symlink, copyFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-void test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian、無 CSS 時空檔', async t => {
+/** 遞迴列出資料夾裡的檔案（相對路徑、排序），比對建置前後用。 */
+async function tree(dir: string): Promise<string[]> {
+  return (await readdir(dir, { recursive: true, withFileTypes: true }))
+    .filter(entry => entry.isFile())
+    .map(entry => relative(dir, join(entry.parentPath, entry.name)).replaceAll('\\', '/'))
+    .sort();
+}
+
+/** 只有 tools/build.mjs 與給定 src 檔案的暫存專案；相依套件用 junction 指回 repo。 */
+async function project(t: TestContext, files: Record<string, string>): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'essence-build-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(join(dir, 'tools'));
+  await copyFile(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
+  // Windows junction 不需要系統管理員權限，也不複製相依套件。
+  await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(dir, 'src', path)), { recursive: true });
+    await writeFile(join(dir, 'src', path), content);
+  }
+  return dir;
+}
+
+void test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian，不改動 src/', async t => {
   const vault = await mkdtemp(join(tmpdir(), 'essence-vault-'));
   t.after(() => rm(vault, { recursive: true, force: true }));
+  const before = await tree(join(root, 'src'));
   const { stdout } = await run(process.execPath, ['tools/install-vault.mjs', vault], { cwd: root });
-  assert.match(stdout, /main\.js \d+ bytes; require: obsidian/);
+  assert.match(stdout, /main\.js \d+ bytes; require: obsidian\n/);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
   }
-  assert.equal(await readFile(join(root, 'styles.css'), 'utf8'), '');
+  assert.deepEqual(await tree(join(root, 'src')), before);
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Record<string, unknown>;
   assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.0.1', '1.8.0', false]);
 });
 
-void test('W1 CSS 合併：tokens 第一、其餘依路徑排序，隔離在暫存專案', async t => {
-  const project = await mkdtemp(join(tmpdir(), 'essence-build-'));
-  t.after(() => rm(project, { recursive: true, force: true }));
-  await mkdir(join(project, 'tools')); await mkdir(join(project, 'src', 'ui'), { recursive: true });
-  await mkdir(join(project, 'src', 'nested'));
-  await copyFile(join(root, 'tools/build.mjs'), join(project, 'tools/build.mjs'));
-  // Windows junction 不需要系統管理員權限，也不複製相依套件。
-  await symlink(join(root, 'node_modules'), join(project, 'node_modules'), 'junction');
-  await writeFile(join(project, 'src/main.ts'), 'import { Notice } from "obsidian"; new Notice("test");');
-  for (const [path, content] of [['ui/tokens.css', 'tokens{}'], ['a.css', 'a{}'], ['z.css', 'z{}'], ['nested/b.css', 'b{}']]) await writeFile(join(project, 'src', path), content);
-  await run(process.execPath, ['tools/build.mjs'], { cwd: project });
-  assert.equal(await readFile(join(project, 'styles.css'), 'utf8'), 'tokens{}\na{}\nb{}\nz{}');
-  assert.deepEqual((await readdir(join(root, 'src'))).sort(), ['core', 'main.ts']);
+void test('W1 沒有 CSS 時 styles.css 是空字串，隔離在暫存專案', async t => {
+  const dir = await project(t, { 'main.ts': 'import { Notice } from "obsidian"; new Notice("test");' });
+  await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
+  assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), '');
+});
+
+void test('W1 CSS 合併：tokens 第一、其餘依路徑排序，建置前後 src/ 的檔案清單相同', async t => {
+  const dir = await project(t, {
+    'main.ts': 'import { Notice } from "obsidian"; new Notice("test");',
+    'ui/tokens.css': 'tokens{}', 'a.css': 'a{}', 'z.css': 'z{}', 'nested/b.css': 'b{}',
+  });
+  const before = await tree(join(dir, 'src'));
+  await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
+  assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), 'tokens{}\na{}\nb{}\nz{}');
+  assert.deepEqual(await tree(join(dir, 'src')), before);
+});
+
+void test('W1 新增模組資料夾與 CSS 不會誤報：建置成功、只 require obsidian', async t => {
+  const dir = await project(t, {
+    'main.ts': 'import { Notice } from "obsidian"; import { a } from "./state/a.ts"; import { b } from "./dev/b.ts"; new Notice(a + b);',
+    'state/a.ts': 'export const a = "a";', 'dev/b.ts': 'export const b = "b";', 'obsidian/c.css': 'c{}',
+  });
+  const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
+  assert.match(stdout, /require: obsidian\n/);
+  assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), 'c{}');
 });
 void test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
   await assert.rejects(run(process.execPath, ['tools/install-vault.mjs'], { cwd: root }), /用法/);
