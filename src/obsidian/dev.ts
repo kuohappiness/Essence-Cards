@@ -1,7 +1,9 @@
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
 import { compareAssigned, compareLists, type ListItem, type Mismatch } from '../dev/compare.ts';
+import { runFilesContract } from '../dev/files-contract.ts';
 import { loadDeviceCode } from './device.ts';
+import { createObsidianFiles } from './files.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -10,6 +12,7 @@ const limit = 20;
 interface DevCommand { name: string; run: (app: App) => Promise<unknown> }
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: compare },
+  files: { name: 'Essence 開發：檔案存取', run: filesContract },
 };
 
 export function registerDev(plugin: Plugin): void {
@@ -137,4 +140,21 @@ async function reading(app: App, text: string, path: string): Promise<string[]> 
       return depth + ':' + own.slice(0, 40);
     });
   } finally { component.unload(); }
+}
+
+/** §2：在 Essence W5/暫存/ 跑 C1～C14；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+async function filesContract(app: App): Promise<unknown> {
+  const dir = root + '/暫存';
+  const old = app.vault.getAbstractFileByPath(dir);
+  if (old) await app.vault.delete(old, true);
+  const entry = (path: string) => {
+    const found = app.vault.getAbstractFileByPath(path);
+    if (!found) throw Error('找不到 ' + path);
+    return found;
+  };
+  const results = await runFilesContract(createObsidianFiles(app), {
+    rename: (from, to) => app.vault.rename(entry(from), to),
+    remove: path => app.vault.delete(entry(path), true),
+  }, dir, { notice: 3000, quiet: 500 });
+  return { passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results };
 }

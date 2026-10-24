@@ -89,10 +89,11 @@ void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或
   assert.deepEqual(imports.filter(entry => entry.external), []);
 });
 
-void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱與對照程式', async t => {
+void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱、對照與契約檢查的程式', async t => {
   const dir = await project(t, {});
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
-  const marks = ['essence-cards-dev', 'cases.json', 'export-compare', 'metadataCache'];
+  // 中文會被 esbuild 跳脫成 \uXXXX，契約檢查用它的代號 "C14" 當記號。
+  const marks = ['essence-cards-dev', 'cases.json', 'export-compare', 'metadataCache', '"C14"'];
   await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
