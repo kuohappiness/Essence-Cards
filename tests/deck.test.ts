@@ -439,7 +439,8 @@ for (const line of ['    # 假標題', '\t## 假標題']) void test('文件層�
   assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].section, '分組');
 });
 
-void test('等 metadataCache 對照：清單內縮排過深仍照目前當子項目', () => {
+// D-135：閱讀模式把它顯示成目標那一行的接續文字，程式仍當子題目出題；第二部分的存檔會把縮排改回一層。
+void test('D-135 清單內縮排多一層照樣當子題目出題', () => {
   const parsed = parseDeck('- 目標\n        - Q :: A');
   assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].implicit, false);
   assert.deepEqual([qa(parsed.targets[0].prompts[0]).question, qa(parsed.targets[0].prompts[0]).answer], ['Q', 'A']);

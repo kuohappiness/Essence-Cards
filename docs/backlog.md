@@ -19,7 +19,6 @@
 
 | 項目與影響 | 觸發點 | 完成條件 | 來源 |
 |---|---|---|---|
-| 清單解析還沒和 Obsidian 的 metadataCache 對照過。清單裡縮排過深（`- a` 底下 8 格的 `- b`）、沒有空行又頂格的一行字夾在題目之間，現在的行為和 CommonMark 不同，判斷錯的代價是題目消失 | W5 開始前（寫進 [W5 任務說明 §0](../tasks/w5.md#0-先清掉的技術債)） | 在 Windows 版 Obsidian 用對照筆記（F1、F2、N1～N3 的例子，加上這兩種）比對解析結果，以及 `assignIds` 寫回後的結構；有出入的已修正，或寫成決定 | [技術債審查 §5](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md#5-claude-檢查與合併2026-10-20>) |
 | F3：`validateOut` 只檢查目前與主工作樹，私人輸出可能寫進其他 worktree | 下一次跑 T4 前 | 用 `git worktree list --porcelain` 比對所有 worktree 的真實路徑，並有測試 | 同上 |
 | F5：`check-syntax.mjs` 的分類順序和 W2 不同，還留著每頁 6 個目標的上限 | 下一次跑 T4 前 | 分類順序和 W2 一致、拿掉上限；那次 T4 用 W2 的 `parseDeck` 對照題數 | 同上 |
 | code-quality 的第一個里程碑觸發尚未確認；W3 交回時已經由 codex-brief 載入，2026-10-23 修正 hook 換行誤報時也已依 AGENTS 在 bug 情境讀取 | 第一個里程碑 | 確認里程碑時機有載入 code-quality；沒有載入就改 description 或記憶 | D-119；2026-10-23 hook 換行修正 |
