@@ -1,9 +1,11 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { parseArgs } from 'node:util';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, formatTime, logPath, mergeHistory, nextCard, planToday, progress, readHistory, replay } from '../src/core/study/index.ts';
-import type { DeckEntry, Rating, TodayInput } from '../src/core/study/index.ts';
+import type { Card, DeckEntry, Pick, Rating, TodayInput } from '../src/core/study/index.ts';
+import { createState, type LoadTimings } from '../src/state/index.ts';
 import { createNodeFiles } from './node-files.ts';
 
 export function threeYears() {
@@ -34,13 +36,66 @@ export function threeYears() {
   return { days: day, sources: [...files].map(([path, lines]) => ({ path, text: lines.join('\n') + '\n' })), lines: [...files.values()].reduce((sum, lines) => sum + lines.length, 0) };
 }
 
-/** threeYears 的 2000 個學習目標，分成四科、20 篇卡組。 */
-export function threeYearDecks(): DeckEntry[] {
+/** threeYears 的 2000 個學習目標，分成四科、20 篇卡組的文字；量測寫進 vault 時放在 `Essence Cards/` 底下。 */
+function threeYearDeckTexts(): { path: string; text: string }[] {
   return Array.from({ length: 20 }, (_, d) => ({
     path: '卡組 ' + String(d).padStart(2, '0') + '.md',
-    deck: parseDeck('---\n科目: ' + ['自然', '英文', '數學', '社會'][d % 4] + '\n---\n'
-      + Array.from({ length: 100 }, (_, i) => '- 能說明 goal' + String(d * 100 + i) + ' ^goal' + String(d * 100 + i) + '\n    - 題目 :: 答案\n').join('')),
+    text: '---\n科目: ' + ['自然', '英文', '數學', '社會'][d % 4] + '\n---\n'
+      + Array.from({ length: 100 }, (_, i) => '- 能說明 goal' + String(d * 100 + i) + ' ^goal' + String(d * 100 + i) + '\n    - 題目 :: 答案\n').join(''),
   }));
+}
+
+/** threeYearDeckTexts 解析好的卡組。 */
+export function threeYearDecks(): DeckEntry[] {
+  return threeYearDeckTexts().map(({ path, text }) => ({ path, deck: parseDeck(text) }));
+}
+
+/** 把三年份的紀錄與 20 篇卡組寫進 root（root 底下就是 `Essence Cards/`）。 */
+async function writeThreeYears(root: string, sources: { path: string; text: string }[]): Promise<void> {
+  const all = [...sources, ...threeYearDeckTexts().map(({ path, text }) => ({ path: 'Essence Cards/' + path, text }))];
+  for (const folder of new Set(all.map(({ path }) => dirname(join(root, path))))) await mkdir(folder, { recursive: true });
+  await Promise.all(all.map(({ path, text }) => writeFile(join(root, path), text)));
+}
+
+const rounded = (t: LoadTimings) => `decks ${t.decks.toFixed(1)}, history ${t.history.toFixed(1)}, plan ${t.plan.toFixed(1)}, total ${t.total.toFixed(1)}`;
+
+/** W5 §5-1：對寫好的資料夾建 state、跑一次 ready()，印出 LoadTimings。 */
+async function benchOpen(root: string, label: string): Promise<void> {
+  const state = createState({ files: createNodeFiles(root), device: 'Bench-0000' });
+  try {
+    const timings = await state.ready();
+    const targets = state.decks().reduce((n, d) => n + d.deck.targets.length, 0);
+    console.log(label + ' ready(): ' + rounded(timings) + ' ms; history + plan ' + (timings.history + timings.plan).toFixed(1)
+      + ' ms (I1 budget 1000 ms on iPhone); ' + state.history().reviews.length + ' reviews, ' + state.decks().length + ' decks, ' + targets + ' targets, share ' + state.today().share.length);
+  } finally { await state.close(); }
+}
+
+/** W5 §5-1：state 的 answer＋next＋progress 一次，21 次取中位數（寫檔在背景，不計時）。 */
+async function benchAnswer(root: string): Promise<boolean> {
+  const state = createState({ files: createNodeFiles(root), device: 'Bench-0000' });
+  const steps: number[] = [];
+  try {
+    await state.ready();
+    // 畫面的用法：在還有卡的那一科取下一張；今天的份做完就取「再複習一些」。
+    const upcoming = (): { pick: Pick; card: Card } => {
+      const picks: Pick[] = [...state.progress().subjects.map(row => ({ subject: row.subject })), { more: true }];
+      for (const pick of picks) {
+        const next = state.next(pick);
+        if (next.kind === 'card') return { pick, card: next.card };
+      }
+      throw Error('三年份資料沒有可以作答的卡');
+    };
+    for (let run = 0; run < 21; run++) {
+      const { pick, card } = upcoming();
+      const start = performance.now();
+      state.answer({ lt: card.lt, r: 'good', v: card.prompt.fingerprint });
+      state.next(pick);
+      state.progress();
+      steps.push(performance.now() - start);
+    }
+  } finally { await state.close(); }
+  console.log('state answer + next + progress median: ' + median(steps).toFixed(2) + ' ms (budget 20 ms)');
+  return median(steps) <= 20;
 }
 
 const median = (times: number[]): number => [...times].sort((a, b) => a - b)[times.length >> 1];
@@ -71,7 +126,7 @@ function benchToday(sources: { path: string; text: string }[]): boolean {
   return median(plans) <= 300 && median(steps) <= 20;
 }
 
-async function benchStudy(): Promise<void> {
+async function benchStudy(vault: string | undefined): Promise<void> {
   const { sources, lines } = threeYears();
   console.log(lines + ' lines / ' + sources.length + ' files / 2000 targets');
   const times: number[] = [];
@@ -86,17 +141,31 @@ async function benchStudy(): Promise<void> {
   const today = benchToday(sources);
 
   const root = await mkdtemp(join(tmpdir(), 'essence-study-bench-'));
+  let answer: boolean;
   try {
-    await mkdir(dirname(join(root, sources[0].path)), { recursive: true });
-    await Promise.all(sources.map(source => writeFile(join(root, source.path), source.text)));
+    await writeThreeYears(root, sources);
     const files = createNodeFiles(root);
     const start = performance.now();
     replay((await readHistory(files)).reviews);
     console.log('readHistory + replay (Node Files): ' + (performance.now() - start).toFixed(2) + ' ms');
+    answer = await benchAnswer(root);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-  if (median(times) > 500 || !today) process.exitCode = 1;
+
+  if (vault) {
+    // 開發命令 open 讀的資料夾（W5 說明 §4-4）；只有 bench 寫這裡，先清掉上一次的。
+    const target = join(vault, 'Essence W5', '量測');
+    await rm(target, { recursive: true, force: true });
+    await writeThreeYears(target, sources);
+    console.log('wrote ' + lines + ' log lines and 20 decks to <vault>/Essence W5/量測/');
+    await benchOpen(target, 'vault (Node Files)');
+  }
+  if (median(times) > 500 || !today || !answer) process.exitCode = 1;
 }
 
-if (import.meta.main) await benchStudy();
+if (import.meta.main) {
+  const { values } = parseArgs({ options: { vault: { type: 'string' } } });
+  if (values.vault !== undefined && !(await stat(values.vault)).isDirectory()) throw Error('--vault 必須是已存在的資料夾');
+  await benchStudy(values.vault);
+}
