@@ -1,23 +1,34 @@
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
+import { encodeEntry, logPath, parseLine } from '../core/study/index.ts';
+import type { NewEntry } from '../core/study/index.ts';
 import { compareAssigned, compareLists, type ListItem, type Mismatch } from '../dev/compare.ts';
 import { runFilesContract } from '../dev/files-contract.ts';
-import { loadDeviceCode } from './device.ts';
+import { scopedFiles } from '../dev/wrap-files.ts';
+import { createState, type State } from '../state/index.ts';
 import { createObsidianFiles } from './files.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
+const examples = 'Essence Cards/W5 範例/';
 const limit = 20;
 
-interface DevCommand { name: string; run: (app: App) => Promise<unknown> }
+/** 外掛本身（main.ts）：開發命令用它正在用的 state 與裝置碼。 */
+interface Host extends Plugin { device: string; state: State | null }
+/** 載入時記下的數字，每個結果檔都附上（T12）。 */
+interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () => number | null }
+
+interface DevCommand { name: string; run: (host: Host) => Promise<unknown> }
 const commands: Record<string, DevCommand> = {
-  compare: { name: 'Essence 開發：metadataCache 對照', run: compare },
-  files: { name: 'Essence 開發：檔案存取', run: filesContract },
+  compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
+  files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
+  open: { name: 'Essence 開發：量測第一次打開', run: open },
+  today: { name: 'Essence 開發：今天的份', run: today },
+  answer: { name: 'Essence 開發：寫一筆再取消', run: answer },
+  watch: { name: 'Essence 開發：記錄檔案通知', run: watch },
 };
 
-export function registerDev(plugin: Plugin): void {
-  const loadedAt = performance.now();
-  const device = loadDeviceCode(plugin.app);
+export function registerDev(plugin: Host, load: LoadInfo): void {
   let runs = 0;
   async function run(code: string): Promise<void> {
     const command = Object.hasOwn(commands, code) ? commands[code] : undefined;
@@ -25,12 +36,13 @@ export function registerDev(plugin: Plugin): void {
     runs++;
     const startedAt = performance.now();
     let result: unknown;
-    try { result = await command.run(plugin.app); }
+    try { result = await command.run(plugin); }
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
-    const path = await writeResult(plugin.app, code, device, {
-      code, device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
+    const path = await writeResult(plugin.app, code, plugin.device, {
+      code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
       obsidian: apiVersion, plugin: plugin.manifest.version,
-      sinceLoadMs: Math.round(startedAt - loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
+      onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
+      sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
     });
     new Notice(command.name.replace('Essence 開發：', '') + '完成\n' + path);
   }
@@ -45,6 +57,103 @@ export function registerDev(plugin: Plugin): void {
       void plugins.disablePlugin(id).then(() => plugins.enablePlugin(id)).then(() => { new Notice('Essence 開發：已重新載入'); });
     } else void run(params.run ?? '');
   });
+}
+
+async function ready(host: Host): Promise<State> {
+  if (!host.state) throw Error('state 還沒建立（layout 還沒 ready）');
+  await host.state.ready();
+  return host.state;
+}
+
+const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+
+/** §4-4 open：對 Essence W5/量測/ 建一個新的 state，記下 ready() 的時間與資料量，量完就關。 */
+async function open(host: Host): Promise<unknown> {
+  const state = createState({ files: scopedFiles(createObsidianFiles(host.app), root + '/量測'), device: host.device });
+  try {
+    const timings = await state.ready();
+    const value = state.today();
+    const { reviews, changes, problems } = state.history();
+    return {
+      timings: { decks: Math.round(timings.decks), history: Math.round(timings.history), plan: Math.round(timings.plan), total: Math.round(timings.total) },
+      historyPlusPlan: Math.round(timings.history + timings.plan),
+      lines: { reviews: reviews.length, changes: changes.length, problems: problems.length },
+      decks: state.decks().length, targets: state.decks().reduce((n, d) => n + d.deck.targets.length, 0),
+      share: value.share.length, more: value.more.length,
+    };
+  } finally { await state.close(); }
+}
+
+/** §4-4 today：外掛正在用的 state 的今天的份；lt 清單只在測試 vault 的 W5 範例（三篇）上產生。 */
+async function today(host: Host): Promise<unknown> {
+  const state = await ready(host);
+  const value = state.today();
+  return {
+    decks: state.decks().map(d => d.path),
+    day: value.day, offset: value.offset,
+    share: value.share.map(item => item.lt), more: value.more.map(item => item.lt),
+    problems: value.problems.slice(0, limit),
+    progress: state.progress(),
+  };
+}
+
+/** §4-4 answer：W5 範例路徑排第一的卡組的第一個目標寫一筆 good，讀回檔案，再取消它。 */
+async function answer(host: Host): Promise<unknown> {
+  const state = await ready(host);
+  const deck = state.decks().find(d => d.path.startsWith(examples));
+  const target = deck?.deck.targets[0];
+  if (!deck || !target?.id || !target.prompts.length) throw Error('找不到 ' + examples + ' 的卡組，或第一個目標沒有 ID 或題目');
+  const snapshot = () => {
+    const value = state.today();
+    return JSON.stringify({ day: value.day, share: value.share, more: value.more });
+  };
+  const todayBefore = snapshot();
+  const before = { reviews: state.history().reviews.length, progress: state.progress() };
+  // 寫一筆、等寫完，回傳 encodeEntry 的結果與它的檔案（和 state 寫檔的路徑相同）。
+  async function write(entry: NewEntry) {
+    const t = state.answer(entry);
+    const line = encodeEntry(t, entry);
+    const stamp = parseLine(line);
+    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
+    await state.flush();
+    return { t, line, path: logPath(host.device, stamp.at, stamp.offset) };
+  }
+  const good = await write({ lt: target.id, r: 'good', v: target.prompts[0].fingerprint });
+  const afterGood = { reviews: state.history().reviews.length, progress: state.progress() };
+  const undo = await write({ undo: good.t });
+  const lines = (await createObsidianFiles(host.app).read(good.path) ?? '').split('\n').filter(Boolean);
+  return {
+    deck: deck.path, lt: target.id, path: good.path, samePath: good.path === undo.path,
+    wrote: [good.line, undo.line], readBack: lines.slice(-2),
+    readBackMatches: lines.at(-2) === good.line && lines.at(-1) === undo.line,
+    reviews: { before: before.reviews, afterGood: afterGood.reviews, afterUndo: state.history().reviews.length },
+    goodGone: !state.history().reviews.some(r => r.t === good.t),
+    progress: { before: before.progress, afterGood: afterGood.progress, afterUndo: state.progress() },
+    todaySame: snapshot() === todayBefore,
+  };
+}
+
+/** §4-4 watch：60 秒內 onChange 與 history().reviews 長度的變化（測別台裝置的紀錄進來）。 */
+async function watch(host: Host): Promise<unknown> {
+  const state = await ready(host);
+  const start = performance.now();
+  const at = () => Math.round(performance.now() - start);
+  const events: { ms: number; kind: 'onChange' | 'reviews'; reviews: number }[] = [];
+  const initial = state.history().reviews.length;
+  let reviews = initial;
+  const stop = state.onChange(() => { events.push({ ms: at(), kind: 'onChange', reviews: state.history().reviews.length }); });
+  try {
+    while (performance.now() - start < 60_000) {
+      await sleep(250);
+      const count = state.history().reviews.length;
+      if (count !== reviews) { reviews = count; events.push({ ms: at(), kind: 'reviews', reviews: count }); }
+    }
+  } finally { stop(); }
+  return {
+    initial, final: reviews,
+    onChange: events.filter(e => e.kind === 'onChange').length,
+    events: events.slice(0, limit), more: Math.max(0, events.length - limit),
+  };
 }
 
 async function ensureFolder(app: App, folder: string): Promise<void> {

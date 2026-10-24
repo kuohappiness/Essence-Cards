@@ -92,8 +92,8 @@ void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或
 void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱、對照與契約檢查的程式', async t => {
   const dir = await project(t, {});
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
-  // 中文會被 esbuild 跳脫成 \uXXXX，契約檢查用它的代號 "C14" 當記號。
-  const marks = ['essence-cards-dev', 'cases.json', 'export-compare', 'metadataCache', '"C14"'];
+  // 中文會被 esbuild 跳脫成 \uXXXX，契約檢查用它的代號 "C14" 當記號；URI 帶引號，不和裝置碼的 "essence-cards-device" 混淆。
+  const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', 'metadataCache', '"C14"', 'Essence W5'];
   await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
@@ -101,6 +101,20 @@ void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、�
   assert.match(stdout, /require: obsidian\n/);
   const production = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
+});
+
+void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包括計數 Files 呼叫的包裝）', async () => {
+  // 和 tools/build.mjs 相同的選項；看每個輸入檔實際進了輸出多少 bytes。
+  const bundle = (dev: boolean) => build({
+    absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, minify: true, format: 'cjs', platform: 'browser',
+    target: 'es2022', jsx: 'automatic', external: ['obsidian'], metafile: true, write: false,
+    define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
+  });
+  const included = async (dev: boolean) => Object.entries(Object.values((await bundle(dev)).metafile.outputs)[0].inputs)
+    .filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
+  const devOnly = (path: string) => path.startsWith('src/dev/') || path === 'src/obsidian/dev.ts';
+  assert.deepEqual((await included(false)).filter(devOnly), []);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {
