@@ -4,7 +4,7 @@ import { parseDeck } from '../src/core/deck/index.ts';
 import { checkTyped, encodeEntry, mergeHistory, nextCard, planToday, progress } from '../src/core/study/index.ts';
 import type { Card, DeckEntry, ExamScope, History, Next, Rating, Today, TodayInput } from '../src/core/study/index.ts';
 import type { Prompt } from '../src/core/deck/index.ts';
-import { threeYears } from '../tools/bench-study.ts';
+import { threeYearDecks, threeYears } from '../tools/bench-study.ts';
 
 // 除了特別寫的：+08:00、retention 0.8、每日 30 分鐘、沒有濾網、沒有考試範圍。
 const A = '2026-10-16T20:15:03.250+08:00';
@@ -119,6 +119,8 @@ void test('T4 每張卡的秒數：這一科最近 30 天的間隔中位數', ()
   const withMistakes = chain('10-20', tens).map((row, i) => i % 2 && typeof row !== 'string' ? mistake(row[0], 'n1') : row);
   assert.deepEqual(seconds([...withMistakes, ...chain('10-21', Array<number>(10).fill(10))]), { n2: 15, w2: 15 });
   assert.deepEqual(seconds([...withMistakes, ...chain('10-21', Array<number>(11).fill(10))]), { n2: 20, w2: 15 });
+  // 中位數不到 0.5 秒時最少算 1 秒，時間上限才不會失效。
+  assert.deepEqual(seconds(chain('10-20', Array<number>(30).fill(0.25))), { n2: 1, w2: 15 });
 });
 
 const ENGLISH = '國二上/英文/L1 Back to School.md';
@@ -301,7 +303,7 @@ void test('T10 錯題補強：照一般到期排，不進 relearn；今天的錯
   assert.equal(card(nextCard(fresh, input(only, log(), at('10-24')), { subject: '自然' })).isNew, true);
 });
 
-void test('T11 入口排序：考試範圍的先、剩比較多的先、null 同分排最後、做完的到最下面', () => {
+void test('T11 入口排序：考試範圍的先、剩比較多的先、學業以外的（null）在沒做完的最後、做完的到最下面', () => {
   const decks = [
     deckEntry('英文.md', { 科目: '英文' }, [goal('e1'), goal('e2'), goal('e3')]),
     deckEntry('自然.md', { 科目: '自然' }, [goal('n1'), goal('n2')]),
@@ -321,7 +323,9 @@ void test('T11 入口排序：考試範圍的先、剩比較多的先、null 同
   assert.deepEqual(rows(english), { done: 3, total: 8, subjects: [
     ['數學', 0, 1, 15, true], ['自然', 0, 2, 30, false], [null, 0, 2, 30, false], ['英文', 3, 3, 0, false]] });
   assert.deepEqual(rows([...english, [at('10-24'), 'n1', 'near']]).subjects.slice(1, 3), [['自然', 0, 2, 30, false], [null, 0, 2, 30, false]]);
-  assert.deepEqual(rows([...english, [at('10-24'), 'n1', 'good']]).subjects.slice(1, 3), [[null, 0, 2, 30, false], ['自然', 1, 2, 15, false]]);
+  // 學業以外的那一列剩得比較多，仍排在學業科目後面。
+  assert.deepEqual(rows([...english, [at('10-24'), 'n1', 'good']]).subjects.slice(1, 3), [['自然', 1, 2, 15, false], [null, 0, 2, 30, false]]);
+  assert.deepEqual(rows([...english, [at('10-24'), 'o1', 'good'], [at('10-24', '19:00:10.000'), 'o2', 'good']]).subjects.map(row => row[0]), ['數學', '自然', '英文', null]);
   // 範圍內的目標只在 more 裡也算這一科在範圍裡；沒有範圍時都是 false。
   const relearn = log([at('10-23'), 'n1', 'miss']);
   const cut = planToday(input(decks, relearn, at('10-24'), { exam: scope(['n2'], false), cap: 0.25 }));
@@ -373,12 +377,10 @@ void test('T13 固定性：卡組與紀錄來源的順序不影響結果，planT
   }
 });
 
-void test('T14 效能：三年份紀錄、2000 個學習目標', t => {
-  const { sources } = threeYears();
-  const history = mergeHistory(sources);
-  const decks = Array.from({ length: 20 }, (_, d) => deckEntry('卡組 ' + String(d).padStart(2, '0') + '.md', { 科目: ['自然', '英文', '數學', '社會'][d % 4] },
-    Array.from({ length: 100 }, (_, i) => goal('goal' + String(d * 100 + i)))));
-  const state = input(decks, history, '2026-10-02T19:00:00.000+08:00');
+// 300 ms／20 ms 的量測在 npm run bench；這裡只抓演算法變慢好幾倍的錯（W3 L2-6）。
+void test('T14 三年份防退化：planToday 1000 ms、作答後 nextCard＋progress 100 ms 內', t => {
+  const history = mergeHistory(threeYears().sources);
+  const state = input(threeYearDecks(), history, '2026-10-02T19:00:00.000+08:00');
   const median = (times: number[]) => [...times].sort((a, b) => a - b)[times.length >> 1];
   const plans: number[] = [];
   let plan = planToday(state);
@@ -399,6 +401,59 @@ void test('T14 效能：三年份紀錄、2000 個學習目標', t => {
     assert.equal(next.kind, 'card');
   }
   t.diagnostic('planToday median ' + median(plans).toFixed(2) + ' ms; nextCard + progress median ' + median(steps).toFixed(2) + ' ms');
-  assert.ok(median(plans) < 300, 'planToday ' + median(plans).toFixed(2) + ' ms');
-  assert.ok(median(steps) < 20, 'nextCard + progress ' + median(steps).toFixed(2) + ' ms');
+  assert.ok(median(plans) < 1000, 'planToday ' + median(plans).toFixed(2) + ' ms，防退化門檻 1000 ms');
+  assert.ok(median(steps) < 100, 'nextCard + progress ' + median(steps).toFixed(2) + ' ms，防退化門檻 100 ms');
+});
+
+void test('L2-F1 被排除的重複 ID 不參與配對：不汙染原本的配對，也不壓掉不相干的目標', () => {
+  const pair = (path: string, word: string, en: string, zh: string) => deckEntry(path, { 科目: '英文' }, [
+    '- ' + word + ' 英翻中 ^' + en, '    - ' + word + ' :: 意思', '- ' + word + ' 中翻英 ^' + zh, '    - 意思 :: ' + word,
+  ]);
+  const next = (decks: DeckEntry[], rows: Row[]) => {
+    const plan = planToday(input(decks, log(), at('10-24'), { cap: 0 }));
+    assert.deepEqual(ids(plan.more), ['e', 'z2']);
+    return nextCard(plan, input(decks, log(...rows), at('10-24', '19:05:00.000')), { more: true });
+  };
+  // b.md 的 e 是複製來的副本：a.md 的 z 作答過，a.md 的 e 照樣跳過。
+  assert.equal(card(next([pair('a.md', 'borrow', 'e', 'z'), pair('b.md', 'borrow', 'e', 'z2')], [[at('10-24'), 'z', 'good']])).lt, 'z2');
+  // b.md 改成別的字：它的中翻英作答過，不影響 a.md 的 borrow。
+  assert.equal(card(next([pair('a.md', 'borrow', 'e', 'z'), pair('b.md', 'lend', 'e', 'z2')], [[at('10-24'), 'z2', 'good']])).lt, 'e');
+});
+
+void test('L2-F2 秒數算在有效的那篇卡組：草稿或暫停的卡組有同一個 ID 也不搶走科目', () => {
+  const natural = deckEntry('b.md', { 科目: '自然' }, [goal('old'), goal('n1'), goal('n2')]);
+  const rows: Row[] = Array.from({ length: 31 }, (_, i) => [local(Date.parse(at('10-20', '20:00:00.000')) + i * 10_000), 'old', 'good']);
+  for (const status of ['草稿', '暫停']) {
+    const copy = deckEntry('a.md', { 科目: '英文', 狀態: status }, [goal('old')]);
+    for (const decks of [[natural], [copy, natural]]) {
+      const plan = planToday(input(decks, log(...rows), at('10-24'), { cap: 20 / 60 }));
+      assert.deepEqual([ids(plan.share), ids(plan.more), plan.share[0].seconds], [['n1', 'n2'], [], 10], status);
+    }
+  }
+});
+
+void test('L2-F3 換了時區就要重排：日編號相同也回 stale，進度照排的時候的時區算', () => {
+  const only = [deckEntry(NATURAL, { 科目: '自然' }, [goal('x')])];
+  const plan = planToday(input(only, log(), '2026-10-24T04:10:00.000+08:00'));
+  assert.equal(plan.offset, 480);
+  const rows: Row[] = [['2026-10-24T04:10:00.000+08:00', 'x', 'good']];
+  const moved: TodayInput = { ...input(only, log(...rows), '2026-10-24T19:00:00.000-05:00'), offset: -300 };
+  assert.deepEqual(nextCard(plan, moved, { subject: '自然' }), { kind: 'stale' });
+  const row = progress(plan, moved);
+  assert.deepEqual([row.done, row.total], [1, 1]);
+  assert.deepEqual(nextCard(plan, { ...moved, offset: 480, now: Date.parse('2026-10-24T19:00:00.000+08:00') }, { subject: '自然' }), { kind: 'done' });
+  // 用新的時區重排：那一筆在新的一天開始之前，算今天以前的紀錄。
+  const again = planToday(moved);
+  assert.deepEqual([again.offset, again.share, again.more], [-300, [], []]);
+});
+
+void test('L2-F4 做完的科目照當天一開始的順序，不因剩下的時間歸零而改照名稱排', () => {
+  const decks = [deckEntry('英文.md', { 科目: '英文' }, [goal('e1'), goal('e2'), goal('e3')]), deckEntry('自然.md', { 科目: '自然' }, [goal('n1')])];
+  const plan = planToday(input(decks, log(), at('10-24')));
+  const order = (lts: string[]) => progress(plan, input(decks, log(...lts.map((lt, i): Row => [at('10-24', '19:00:0' + String(i) + '.000'), lt, 'good'])), at('10-24', '20:00:00.000')))
+    .subjects.map(row => row.subject);
+  assert.deepEqual(order([]), ['英文', '自然']);
+  assert.deepEqual(order(['n1']), ['英文', '自然']);
+  assert.deepEqual(order(['e1', 'e2', 'e3']), ['自然', '英文']);
+  assert.deepEqual(order(['e1', 'e2', 'e3', 'n1']), ['英文', '自然']);
 });

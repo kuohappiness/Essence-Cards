@@ -77,14 +77,17 @@ export function planToday(input: TodayInput): Today {
     else categories.add(label);
   }
 
-  // 候選：同一個 ID 在好幾篇啟用的卡組裡時，照路徑第一篇的算。
+  // ID 的歸屬：好幾篇啟用的卡組有同一個 ID 時，照路徑第一篇的算，同一篇照行號第一個。
+  // 出卡、配對與科目都照這個歸屬；只在草稿、暫停的卡組裡的 ID，科目用路徑第一篇的。
   const subjectOf = new Map<string, string | null>();
-  const owner = new Map<string, string>();
+  const owner = new Map<string, { path: string; target: Target }>();
   const chosen: { entry: DeckEntry; target: Target; id: string }[] = [];
   for (const entry of decks) {
     const { props, targets } = entry.deck;
-    for (const target of targets) if (target.id !== null && !subjectOf.has(target.id)) subjectOf.set(target.id, props.subject);
-    if (props.isTranscript || props.status !== 'active') continue;
+    if (props.isTranscript || props.status !== 'active') {
+      for (const target of targets) if (target.id !== null && !subjectOf.has(target.id)) subjectOf.set(target.id, props.subject);
+      continue;
+    }
     const filtered = props.categories.some(category => categories.has(category));
     for (const target of targets) {
       const id = target.id;
@@ -92,10 +95,11 @@ export function planToday(input: TodayInput): Today {
       const first = owner.get(id);
       if (first !== undefined) {
         // 同一篇裡的重複 W2 已經回報。
-        if (first !== entry.path) problems.push({ deck: entry.path, line: target.line, message: '學習目標 ID ' + id + ' 和「' + first + '」重複，這一篇的不出' });
+        if (first.path !== entry.path) problems.push({ deck: entry.path, line: target.line, message: '學習目標 ID ' + id + ' 和「' + first.path + '」重複，這一篇的不出' });
         continue;
       }
-      owner.set(id, entry.path);
+      owner.set(id, { path: entry.path, target });
+      subjectOf.set(id, props.subject);
       if (target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance)) chosen.push({ entry, target, id });
     }
   }
@@ -130,14 +134,14 @@ export function planToday(input: TodayInput): Today {
   const shows = (c: Candidate): boolean => c.due === null || c.due < end;
   const remembered = (c: Candidate): boolean => c.memory !== null && (c.memory.last.r === 'good' || c.memory.last.r === 'easy') && !shows(c);
 
-  // 英文的兩個方向：同一篇裡 pairKey 相同，各方向取行號小的。
+  // 英文的兩個方向：同一篇裡 pairKey 相同，各方向取行號小的；重複而被排除的目標不算。
   const pairOf = new Map<string, string>();
   const dropped = new Set<string>();
   for (const entry of decks) {
     if (entry.deck.props.isTranscript || entry.deck.props.status !== 'active') continue;
     const pairs = new Map<string, { en?: Target; zh?: Target }>();
     for (const target of entry.deck.targets) {
-      if (target.pairKey === null || target.direction === null) continue;
+      if (target.pairKey === null || target.direction === null || target.id === null || owner.get(target.id)?.target !== target) continue;
       const pair = pairs.get(target.pairKey) ?? {};
       const side = target.direction === 'en-zh' ? 'en' : 'zh';
       if (!pair[side] || target.line < pair[side].line) pair[side] = target;
@@ -174,7 +178,7 @@ export function planToday(input: TodayInput): Today {
     slots.set(c.id, { target: c.target, pair: pairOf.get(c.id) ?? null, memory: c.memory, retention: c.retention, inExam: c.inExam,
       correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map<string, number>() });
   }
-  return { day, share, more, problems, slots };
+  return { day, offset, share, more, problems, slots };
 }
 
 function compareInLane(a: Candidate, b: Candidate): number {

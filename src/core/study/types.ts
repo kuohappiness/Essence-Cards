@@ -129,6 +129,8 @@ export interface Slot {
 export interface Today {
   /** dayOf(now, offset) */
   day: number;
+  /** 排這一份時的時區；換了時區 nextCard 回 stale，要重新 planToday。 */
+  offset: number;
   /** 今天的份，照出卡順序。 */
   share: QueueItem[];
   /** 「再複習一些」，接在 share 後面的順序。 */

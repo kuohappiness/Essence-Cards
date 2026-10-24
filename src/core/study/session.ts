@@ -11,10 +11,11 @@ interface Answers {
   any: Set<string>;
 }
 
+/** 今天的作答：照排這一份時的時區算今天從什麼時候開始，和記憶狀態用同一條界線。 */
 function answersOf(today: Today, input: TodayInput): Answers {
   const reviews = input.history.reviews;
   const valid = new Map<string, ReviewEntry[]>(), any = new Set<string>();
-  for (let i = firstAtOrAfter(reviews, dayStart(today.day, input.offset)); i < reviews.length; i++) {
+  for (let i = firstAtOrAfter(reviews, dayStart(today.day, today.offset)); i < reviews.length; i++) {
     const entry = reviews[i];
     any.add(entry.lt);
     if (entry.src === 'mistake') continue;
@@ -61,7 +62,7 @@ function choosePrompt(slot: Slot, entries: readonly ReviewEntry[]): Prompt {
 }
 
 export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
-  if (dayOf(input.now, input.offset) !== today.day) return { kind: 'stale' };
+  if (input.offset !== today.offset || dayOf(input.now, input.offset) !== today.day) return { kind: 'stale' };
   const { valid, any } = answersOf(today, input);
   let scope: QueueItem[];
   if ('more' in pick) scope = today.more.filter(item => { const pair = slotOf(today, item.lt).pair; return pair === null || !valid.has(pair); });
@@ -94,10 +95,13 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
 export function progress(today: Today, input: TodayInput): Progress {
   const { valid } = answersOf(today, input);
   const rows = new Map<string | null, SubjectRow>();
+  // 這一科在今天的份裡一開始要花的秒數：做完的列照當天一開始的順序排。
+  const planned = new Map<SubjectRow, number>();
   for (const item of today.share) {
     let row = rows.get(item.subject);
     if (!row) rows.set(item.subject, row = { subject: item.subject, done: 0, total: 0, remainingSeconds: 0, inExam: false });
     row.total++;
+    planned.set(row, (planned.get(row) ?? 0) + item.seconds);
     const last = valid.get(item.lt)?.at(-1);
     // 還沒碰過、等再出的都還要一份時間；答對才算完成。
     if (!last || wrong(last)) row.remainingSeconds += item.seconds;
@@ -110,8 +114,11 @@ export function progress(today: Today, input: TodayInput): Progress {
     }
   }
   const finished = (row: SubjectRow): number => row.done === row.total ? 1 : 0;
-  const subjects = [...rows.values()].sort((a, b) => finished(a) - finished(b) || Number(b.inExam) - Number(a.inExam)
-    || b.remainingSeconds - a.remainingSeconds || compareSubject(a.subject, b.subject));
+  // 學業以外的那一列（null）排在學業科目後面，沒做完、做完的都一樣（D-133）。
+  const other = (row: SubjectRow): number => row.subject === null ? 1 : 0;
+  const subjects = [...rows.values()].sort((a, b) => finished(a) - finished(b) || other(a) - other(b) || Number(b.inExam) - Number(a.inExam)
+    || (finished(a) ? (planned.get(b) ?? 0) - (planned.get(a) ?? 0) : b.remainingSeconds - a.remainingSeconds)
+    || compareSubject(a.subject, b.subject));
   return { done: subjects.reduce((sum, row) => sum + row.done, 0), total: subjects.reduce((sum, row) => sum + row.total, 0), subjects };
 }
 
