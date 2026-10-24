@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-24 | W4 今天的佇列合併進 `main`（`bc01b87`）：Codex 再審修正 `dbe2c35` 通過（原本的反例、第一次的 8 組與 10 組新組合都過，bench 超標時結束碼確實不是 0）。合併後 `npm run check` 204 個通過、`main.js` 663 bytes 只 require `obsidian`、`npm run bench` 結束碼 0（`planToday` 中位數約 83 ms）。分支與 worktree 已清掉 |
 | 2026-10-24 | W4 的 L2 審查與修正：Codex 找到 2 項 P2（被排除的重複 ID 汙染英文配對、草稿副本搶走秒數的科目）與 3 項規格問題（換時區沒有失效、做完的列與「其他」的排序、T14 的硬門檻），Claude 先寫失敗測試重現再修（`claude/w4` 的 `dbe2c35`）：`Today` 記下 `offset`、換時區回 `stale`，精確效能移到 `npm run bench`；使用者決定「其他」那一列排在學業科目後面（[D-133](decisions.md#d-133-入口的其他那一列排在學業科目後面)）。`npm run check` 204 個通過；等 Codex 再審，未合併 |
 | 2026-10-24 | 寫好 W5 檔案存取的 Obsidian 版、索引與外掛接線的[任務說明](../tasks/w5.md)（給之後實作的 Claude，也是 L2 的對照清單）：先做 F6、`Files.watch` 偶發失敗、metadataCache 對照三項技術債；Obsidian 版和 Node 版跑同一份契約檢查；新增不 import `obsidian` 的 `src/state/` 給 W6 用，包括 `appendLine`、換日與換時區重排（Codex 審查 W4 的 F3）、離開筆記時才補 ID；開發版命令讓 AI 在 Windows 版 Obsidian 自己測，iPhone 量測 D-110 的快取門檻。兩個問題待使用者回答；W4 尚未合併，未開工 |
 | 2026-10-24 | W4 今天的佇列（Claude 實作，D-131）：`planToday`、`nextCard`、`progress`、`checkTyped` 與紀錄的 `typed` 欄位，ESLint 加上核心模組之間只能透過 `index.ts`、deck 不能 import study；T1～T15 寫成測試，`npm run check` 200 個通過，22 個突變全部擋下，三年份資料 `planToday` 約 86 ms。規格沒說清楚的 13 處寫在[審查請求](../tasks/w4-review.md)。在分支 `claude/w4`（`6be30fa`、`9c52acd`），未審查、未合併 |
