@@ -61,7 +61,7 @@ const rounded = (t: LoadTimings) => `decks ${t.decks.toFixed(1)}, history ${t.hi
 
 /** W5 §5-1：對寫好的資料夾建 state、跑一次 ready()，印出 LoadTimings。 */
 async function benchOpen(root: string, label: string): Promise<void> {
-  const state = createState({ files: createNodeFiles(root), device: 'Bench-0000' });
+  const state = createState({ files: createNodeFiles(root), device: 'Bench-0000', fillIds: false });
   try {
     const timings = await state.ready();
     const targets = state.decks().reduce((n, d) => n + d.deck.targets.length, 0);
@@ -72,7 +72,7 @@ async function benchOpen(root: string, label: string): Promise<void> {
 
 /** W5 §5-1：state 的 answer＋next＋progress 一次，21 次取中位數（寫檔在背景，不計時）。 */
 async function benchAnswer(root: string): Promise<boolean> {
-  const state = createState({ files: createNodeFiles(root), device: 'Bench-0000' });
+  const state = createState({ files: createNodeFiles(root), device: 'Bench-0000', fillIds: false });
   const steps: number[] = [];
   try {
     await state.ready();

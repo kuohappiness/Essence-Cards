@@ -1,6 +1,9 @@
 import type { Files } from '../core/files.ts';
-import { isDeckPath, parseDeck, readDecks } from '../core/deck/index.ts';
+import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
+import { createIdTracker } from './ids.ts';
+import type { IdIssue } from './ids.ts';
+export type { IdIssue } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 
@@ -19,6 +22,10 @@ export interface StateOptions {
    * listener：onChange 的監聽者丟出錯誤（程式的錯，不重試）。
    */
   onError?: (error: unknown, source: ErrorSource) => void;
+  /** 補學習目標 ID：電腦 true、手機 false（D-134：iPhone 不寫卡組筆記）。 */
+  fillIds: boolean;
+  /** 傳給 assignIds，測試用。 */
+  random?: () => number;
 }
 export type ErrorSource = 'write' | 'read' | 'listener';
 /** 毫秒。 */
@@ -47,7 +54,29 @@ export interface State {
   flush(): Promise<void>;
   /** 停止監看、等紀錄寫完。 */
   close(): Promise<void>;
+  /** 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。 */
+  deckStatus(path: string): { missing: number; issues: IdIssue[] };
+  /** 存檔（開著的筆記）：回傳補 ID、歸位之後的文字；沒有要改、手機、不是卡組時回傳原文。 */
+  fillText(path: string, text: string): string;
+  /** 離開筆記時（沒開著的檔）：讀檔、照 fillText 寫回；不存在時不建立。有改字回傳 true。 */
+  fillIds(path: string): Promise<boolean>;
+  /** 家長選了之後：回傳寫回後的文字；證據不再成立時回傳 null，問題保留。 */
+  resolveText(issue: IdIssue, choice: 'restore' | 'new', text: string): string | null;
+  /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
+  removedInEditor(path: string, ids: readonly string[]): void;
 }
+
+const DECK_ROOT = 'Essence Cards';
+/** 紀錄行裡的 lt（作答、變更都算），取消不影響：配新 ID 時避開（W5 §8-5、I3）。 */
+function ltsOf(text: string): Set<string> {
+  const ids = new Set<string>();
+  for (const match of text.matchAll(/"lt":"((?:[^"\\]|\\.)*)"/g)) {
+    try { ids.add(JSON.parse('"' + match[1] + '"') as string); } catch { /* 壞掉的行不算 */ }
+  }
+  return ids;
+}
+/** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
+class NothingToFill extends Error {}
 
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
 const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [] };
@@ -93,10 +122,47 @@ export function createState(options: StateOptions): State {
     });
   }
 
+  // 原始紀錄每一行的 lt：只在配新 ID 或判斷「沒見過的 ID」時才算，照來源的文字快取。
+  const ltCache = new Map<string, { text: string; ids: Set<string> }>();
+  function logIds(): Set<string> {
+    const all = new Set<string>();
+    for (const [path, text] of sources) {
+      let cached = ltCache.get(path);
+      if (cached?.text !== text) { cached = { text, ids: ltsOf(text) }; ltCache.set(path, cached); }
+      for (const id of cached.ids) all.add(id);
+    }
+    for (const path of ltCache.keys()) if (!sources.has(path)) ltCache.delete(path);
+    return all;
+  }
+  let tracker = createIdTracker({ random: options.random, logIds });
+  /** 給 planToday 的卡組：拿掉待處理的目標（W5 §8-5：不出題）。 */
+  let planList: DeckEntry[] = [];
+  function rebuild(): void {
+    deckList = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
+    planList = deckList.map(entry => {
+      const skip = tracker.lines(entry.path);
+      return skip.size ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !skip.has(t.line)) } } : entry;
+    });
+  }
+  function replan(): void {
+    current = planToday(input());
+    for (const listener of [...listeners]) {
+      try { listener(); } catch (error) { report(error, 'listener'); }
+    }
+  }
+  /** 存檔或家長選了之後，state 把這份文字當成這篇卡組現在的內容（tracker 已經比對過），立刻重排。 */
+  function adopt(path: string): void {
+    const text = tracker.text(path);
+    if (text === undefined) return;
+    deckMap.set(path, parseDeck(text));
+    rebuild();
+    replan();
+  }
+
   function input(): TodayInput {
     if (!loaded) throw Error('state 還沒 ready');
     const at = now();
-    return { decks: deckList, history, settings, exam: null, now: at, offset: offsetOf(at) };
+    return { decks: planList, history, settings, exam: null, now: at, offset: offsetOf(at) };
   }
   /** 換日或換時區就重排（W4 的 F3：日編號相同、時區不同也要重排）。 */
   function fresh(): { today: Today; input: TodayInput } {
@@ -127,6 +193,20 @@ export function createState(options: StateOptions): State {
     if (closed) return;
     let decksChanged = false, logsChanged = false;
     let failure: { error: unknown } | null = null;
+    const revision = tracker.revision();
+    // 改名：同一批裡消失的卡組與第一次出現的配對（內容相同優先，再來是檔名相同），上一版與待處理的問題跟著新路徑。
+    const texts = new Map(paths.flatMap((path, i) => {
+      const result = results[i];
+      return result.status === 'fulfilled' && isDeckPath(path) ? [[path, result.value] as const] : [];
+    }));
+    const gone = [...texts].filter(([path, text]) => text === null && tracker.text(path) !== undefined).map(([path]) => path);
+    const name = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+    for (const [path, text] of texts) {
+      if (text === null || tracker.text(path) !== undefined || !gone.length) continue;
+      const same = gone.findIndex(old => tracker.text(old) === text);
+      const from = same >= 0 ? same : gone.findIndex(old => name(old) === name(path));
+      if (from >= 0) tracker.move(gone.splice(from, 1)[0], path);
+    }
     for (const [i, path] of paths.entries()) {
       const result = results[i];
       if (result.status === 'rejected') {
@@ -139,10 +219,13 @@ export function createState(options: StateOptions): State {
       if (isDeckPath(path)) {
         const before = deckMap.get(path);
         if (text === null) {
+          tracker.forget(path);
           if (deckMap.delete(path)) decksChanged = true;
           continue;
         }
         const deck = parseDeck(text);
+        // 和上一版比對弄丟的 ID（W5 §8-5）；自己剛寫回或存檔時已經比對過的同一份文字不再比。
+        if (tracker.text(path) !== text) tracker.observe(path, text, deck, true);
         // 通知了但解析結果相同（例如內容沒變）就不重排。
         if (before && JSON.stringify(before) === JSON.stringify(deck)) continue;
         deckMap.set(path, deck);
@@ -163,14 +246,12 @@ export function createState(options: StateOptions): State {
       // 等待中已經有新的通知排好時，就跟著那一次重讀。
       if (timer === null) schedule(retryDelay());
     } else failures = 0;
+    if (tracker.revision() !== revision) decksChanged = true;
     if (!decksChanged && !logsChanged) return;
-    if (decksChanged) deckList = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
+    if (decksChanged) rebuild();
     // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
     if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
-    current = planToday(input());
-    for (const listener of [...listeners]) {
-      try { listener(); } catch (error) { report(error, 'listener'); }
-    }
+    replan();
   }
 
   /** 讀不到就整個重讀：先監看，失敗時等一段時間再試，close() 之後才放棄。 */
@@ -196,9 +277,18 @@ export function createState(options: StateOptions): State {
     const start = performance.now();
     deckMap.clear();
     sources.clear();
-    const entries = await readDecks(files);
-    for (const { path, deck } of entries) deckMap.set(path, deck);
-    deckList = entries.map(({ path, deck }) => ({ path, deck })).sort(byPath);
+    tracker = createIdTracker({ random: options.random, logIds });
+    // 和 readDecks 相同（照路徑的字串順序、讀到 null 的不算），另外把文字交給 tracker 當第一版（不偵測）。
+    const deckPaths = (await files.list(DECK_ROOT)).filter(isDeckPath).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    const deckTexts = await Promise.all(deckPaths.map(path => files.read(path)));
+    deckPaths.forEach((path, i) => {
+      const text = deckTexts[i];
+      if (text === null) return;
+      const deck = parseDeck(text);
+      deckMap.set(path, deck);
+      tracker.observe(path, text, deck, false);
+    });
+    rebuild();
     const afterDecks = performance.now();
     const paths = (await files.list(LOG_FOLDER)).filter(isLogPath);
     const texts = await Promise.all(paths.map(path => files.read(path)));
@@ -212,11 +302,47 @@ export function createState(options: StateOptions): State {
     return { decks: afterDecks - start, history: afterHistory - afterDecks, plan: end - afterHistory, total: end - start };
   }
 
+  /** 存檔：補 ID、歸位、改縮排（待處理的跳過）；只在電腦、只對卡組（D-134）。 */
+  function fillText(path: string, text: string): string {
+    if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return text;
+    const revision = tracker.revision(), known = tracker.text(path);
+    const next = tracker.fill(path, text);
+    if (next !== known || tracker.revision() !== revision) adopt(path);
+    return next;
+  }
+
   return {
     ready() {
       loading ??= start();
       return loading;
     },
+    deckStatus: path => loaded ? tracker.status(path) : { missing: 0, issues: [] },
+    fillText,
+    async fillIds(path) {
+      if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return false;
+      let changed = false;
+      try {
+        // 在 modify 的回呼裡對最新的文字重新計算（W5 §8-2 第 4 點）。
+        await files.modify(path, text => {
+          if (text === '') throw new NothingToFill();
+          const next = fillText(path, text);
+          changed = next !== text;
+          return next;
+        });
+      } catch (error) {
+        if (error instanceof NothingToFill) return false;
+        throw error;
+      }
+      return changed;
+    },
+    resolveText(issue, choice, text) {
+      if (!options.fillIds || !loaded || closed) return null;
+      const revision = tracker.revision(), known = tracker.text(issue.path);
+      const next = tracker.resolve(issue, choice, text);
+      if (tracker.text(issue.path) !== known || tracker.revision() !== revision) adopt(issue.path);
+      return next;
+    },
+    removedInEditor(_path, ids) { tracker.removed(ids); },
     decks: () => deckList,
     history: () => history,
     input,

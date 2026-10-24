@@ -67,7 +67,7 @@ export default class EssenceCardsPlugin extends Plugin {
   private start(files: Files): void {
     // onLayoutReady 的回呼不會隨外掛停用取消：layout ready 之前就停用時不建立 state。
     if (this.unloaded) return;
-    this.state = createState({ files, device: this.device, onError: (error, source) => { this.report(error, source); } });
+    this.state = createState({ files, device: this.device, fillIds: false, onError: (error, source) => { this.report(error, source); } });
     // 讀不到時 ready() 自己重試（每次失敗都經過 onError）；只有停用外掛會讓它 reject。
     this.state.ready().catch(() => {});
   }

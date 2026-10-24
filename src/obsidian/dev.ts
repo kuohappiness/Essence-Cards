@@ -69,7 +69,7 @@ const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(r
 
 /** §4-4 open：對 Essence W5/量測/ 建一個新的 state，記下 ready() 的時間與資料量，量完就關。 */
 async function open(host: Host): Promise<unknown> {
-  const state = createState({ files: scopedFiles(createObsidianFiles(host.app), root + '/量測'), device: host.device });
+  const state = createState({ files: scopedFiles(createObsidianFiles(host.app), root + '/量測'), device: host.device, fillIds: false });
   try {
     const timings = await state.ready();
     const value = state.today();
