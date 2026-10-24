@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import * as codemirrorState from '@codemirror/state';
+import * as codemirrorView from '@codemirror/view';
 
 // src/main.ts 的接線（W5 §4-1）：用最小的 obsidian 替身在 Node 跑正式建置的程式碼，不是 Obsidian 實機。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bundled = (await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022',
-  external: ['obsidian'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: 'false' },
+  external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: 'false' },
 })).outputFiles[0].text;
 
 class TAbstractFile { path: string; constructor(path: string) { this.path = path; } }
@@ -16,8 +18,12 @@ class TFile extends TAbstractFile {}
 class TFolder extends TAbstractFile { children: TAbstractFile[] = []; }
 
 interface Host {
-  plugin: { onload(): void; onunload(): void; state: { ready(): Promise<unknown>; answer(entry: unknown): string } | null };
+  plugin: { onload(): void; onunload(): void; state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean> } | null };
   notices: string[];
+  /** addCommand 的 id 與 registerEditorExtension 的次數（W5 §8-6：補 ID 與鎖定只在電腦）。 */
+  commands: string[];
+  extensions: () => number;
+  text: (path: string) => string | undefined;
   /** onLayoutReady 之前 vault 被呼叫的次數。 */
   callsBeforeReady: () => number;
   layoutReady: () => void;
@@ -25,8 +31,10 @@ interface Host {
 }
 
 /** 記憶體裡的 vault；failRead／failWrite 決定哪些路徑讀不到、寫不進去。 */
-function host(texts: Record<string, string>, fail: { read?: (path: string) => boolean; write?: boolean }): Host {
+function host(texts: Record<string, string>, fail: { read?: (path: string) => boolean; write?: boolean }, desktop = false): Host {
   const notices: string[] = [];
+  const commands: string[] = [];
+  let extensions = 0;
   let calls = 0, ready = false, before = 0;
   const files = new Map(Object.entries(texts));
   const count = () => { if (!ready) calls++; };
@@ -44,29 +52,35 @@ function host(texts: Record<string, string>, fail: { read?: (path: string) => bo
   const layout: (() => void)[] = [];
   const app = {
     vault,
-    workspace: { onLayoutReady: (callback: () => void) => { layout.push(callback); } },
+    workspace: { onLayoutReady: (callback: () => void) => { layout.push(callback); }, on: () => ({}), getLeavesOfType: () => [], getActiveViewOfType: () => null },
     loadLocalStorage: () => null, saveLocalStorage: () => {},
   };
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   class Plugin {
     app: unknown; manifest: unknown;
     constructor(app: unknown, manifest: unknown) { this.app = app; this.manifest = manifest; }
-    addCommand() {}
+    addCommand(command: { id: string }) { commands.push(command.id); }
+    registerEditorExtension() { extensions++; }
+    registerEvent() {}
     registerDomEvent(target: EventTarget, type: string, callback: () => void) { target.addEventListener(type, callback); }
   }
   class Notice { constructor(message: string) { notices.push(message); } }
-  const obsidian = { Plugin, Notice, TFile, TFolder, TAbstractFile, Platform: { isWin: true } };
+  class MarkdownView {}
+  class Modal {}
+  const obsidian = { Plugin, Notice, TFile, TFolder, TAbstractFile, MarkdownView, Modal, setIcon: () => {}, editorInfoField: {}, Platform: { isWin: true, isDesktopApp: desktop } };
   const module = { exports: {} as { default: new (app: unknown, manifest: unknown) => Host['plugin'] } };
   // 執行 esbuild 剛建好的正式版程式碼；document 由參數提供，不動 Node 的全域。
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const run = new Function('require', 'module', 'exports', 'document', bundled) as (require: (name: string) => unknown, module: unknown, exports: unknown, document: unknown) => void;
   run((name: string) => {
-    if (name !== 'obsidian') throw Error('只能 require obsidian：' + name);
+    if (name === '@codemirror/state') return codemirrorState;
+    if (name === '@codemirror/view') return codemirrorView;
+    if (name !== 'obsidian') throw Error('只能 require obsidian 與 CodeMirror：' + name);
     return obsidian;
   }, module, module.exports, document);
   const plugin = new module.exports.default(app, { id: 'essence-cards', version: '0.0.1' });
   return {
-    plugin, notices,
+    plugin, notices, commands, extensions: () => extensions, text: path => files.get(path),
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout) callback(); },
     hide: () => { document.visibilityState = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); },
@@ -124,4 +138,21 @@ void test('接線：啟動時讀不到紀錄，提示讀不到並自己重試到
   await ready;
   plugin.onunload();
   assert.equal(notices.length, 1);
+});
+
+void test('接線：補 ID、存檔命令與編輯器的鎖定只在電腦；手機的 state 不寫卡組', async t => {
+  const missing = { 'Essence Cards/b.md': '- 新目標\n    - Q :: A\n' };
+  for (const desktop of [false, true]) {
+    const { plugin, commands, extensions, layoutReady, text } = host(missing, {}, desktop);
+    t.after(() => { plugin.onunload(); });
+    plugin.onload();
+    assert.equal(commands.includes('save'), desktop);
+    assert.equal(extensions(), desktop ? 1 : 0);
+    layoutReady();
+    assert.ok(plugin.state);
+    await plugin.state.ready();
+    assert.equal(await plugin.state.fillIds('Essence Cards/b.md'), desktop);
+    assert.equal(/\^[a-z0-9]{6}\n/.test(text('Essence Cards/b.md') ?? ''), desktop);
+    plugin.onunload();
+  }
 });

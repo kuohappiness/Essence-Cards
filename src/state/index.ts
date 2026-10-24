@@ -3,7 +3,7 @@ import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
 import type { IdIssue } from './ids.ts';
-export type { IdIssue } from './ids.ts';
+export type { IdIssue, IdIssueKind } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 

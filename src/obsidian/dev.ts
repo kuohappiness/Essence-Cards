@@ -7,14 +7,15 @@ import { runFilesContract } from '../dev/files-contract.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
 import { createObsidianFiles } from './files.ts';
+import { lockTest, saveTest, type IdsHost } from './dev-ids.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
 const limit = 20;
 
-/** 外掛本身（main.ts）：開發命令用它正在用的 state 與裝置碼。 */
-interface Host extends Plugin { device: string; state: State | null }
+/** 外掛本身（main.ts）：開發命令用它正在用的 state、裝置碼，以及存檔與鎖定的紀錄（第二部分）。 */
+interface Host extends Plugin, IdsHost { device: string; state: State | null }
 /** 載入時記下的數字，每個結果檔都附上（T12）。 */
 interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () => number | null }
 
@@ -26,6 +27,9 @@ const commands: Record<string, DevCommand> = {
   today: { name: 'Essence 開發：今天的份', run: today },
   answer: { name: 'Essence 開發：寫一筆再取消', run: answer },
   watch: { name: 'Essence 開發：記錄檔案通知', run: watch },
+  // 第二部分（W5 §8-7 的 I7、I8），只在電腦。
+  lock: { name: 'Essence 開發：鎖住 ID', run: lockTest },
+  save: { name: 'Essence 開發：存檔按鈕與備援', run: saveTest },
 };
 
 export function registerDev(plugin: Host, load: LoadInfo): void {

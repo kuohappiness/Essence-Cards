@@ -185,6 +185,13 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
     ['src/core/files.ts', "import type { State } from '../state/index.ts';", true],
     ['src/core/files.ts', "import type { Deck } from './deck/index.ts';", false],
     ['src/obsidian/files.ts', "import { Notice } from 'obsidian';", false],
+    // W5 §8-7 I10：CodeMirror 只能在 src/obsidian/ 與 main.ts。
+    ['src/core/deck/parse.ts', "import { EditorState } from '@codemirror/state';", true],
+    ['src/core/deck/parse.ts', "import type { Extension } from '@codemirror/state';", true],
+    ['src/core/study/plan.ts', "void import('@codemirror/view');", true],
+    ['src/state/index.ts', "import { EditorView } from '@codemirror/view';", true],
+    ['src/dev/compare.ts', "require('@codemirror/state');", true],
+    ['src/obsidian/lock.ts', "import { EditorState } from '@codemirror/state';", false],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
     assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);

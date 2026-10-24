@@ -1,0 +1,25 @@
+/* 學習目標的編號：小而淡的標記，原始的 Markdown 不變（W5 §8-6、D-134）。 */
+.essence-cards-id {
+  margin-left: 0.4em;
+  padding: 0 0.3em;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-faint);
+  font-size: var(--font-smallest);
+  vertical-align: middle;
+  cursor: default;
+  user-select: none;
+}
+
+/* 存檔按鈕：沒有要做的是淡的，有目標還沒有編號時醒目，有待處理的問題時警示。 */
+.essence-cards-save.is-done { opacity: 0.4; }
+.essence-cards-save.is-missing { color: var(--interactive-accent); }
+.essence-cards-save.is-issues { color: var(--text-error); }
+
+.essence-cards-issue + .essence-cards-issue {
+  margin-top: var(--size-4-4);
+  padding-top: var(--size-4-4);
+  border-top: 1px solid var(--background-modifier-border);
+}
+.essence-cards-issue-buttons { display: flex; flex-wrap: wrap; gap: var(--size-4-2); }
+.essence-cards-issue-note { color: var(--text-muted); font-size: var(--font-ui-small); }

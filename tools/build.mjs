@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 // --dev 加上給 AI 測試與量測的開發命令；正式建置時 DEV 是 false，整段被拿掉。
 const dev = process.argv.includes('--dev');
+// 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
+const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
 const result = await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], outfile: 'main.js',
   bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
-  jsx: 'automatic', external: ['obsidian'], metafile: true,
+  jsx: 'automatic', external, metafile: true,
   define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
 });
 // 測試用：寫出 esbuild 的 metafile，檢查真正的建置含了哪些檔案（不另抄一份建置選項）。
@@ -17,9 +19,12 @@ if (process.env.ESSENCE_METAFILE) await writeFile(process.env.ESSENCE_METAFILE, 
 const code = await readFile(resolve(root, 'main.js'), 'utf8');
 const requires = [...code.matchAll(/\brequire\(["']([^"']+)["']\)/g)].map(m => m[1]);
 const imports = Object.values(result.metafile.outputs).flatMap(out => out.imports);
-if (requires.some(name => name !== 'obsidian') || imports.some(i => i.external && i.path !== 'obsidian')) {
-  throw Error('建置含有 obsidian 以外的外部相依：' + requires.join(', '));
+if (requires.some(name => !external.includes(name)) || imports.some(i => i.external && !external.includes(i.path))) {
+  throw Error('建置含有 ' + external.join('、') + ' 以外的外部相依：' + requires.join(', '));
 }
+// 另一份 CodeMirror 被打包進來時，類別身分和 Obsidian 的不同，編輯器的擴充會失效。
+const bundled = Object.keys(result.metafile.inputs).filter(path => path.replaceAll('\\', '/').includes('node_modules/@codemirror/'));
+if (bundled.length) throw Error('CodeMirror 被打包進 main.js：' + bundled.join(', '));
 const css = [];
 for (const entry of await readdir(resolve(root, 'src'), { recursive: true, withFileTypes: true })) {
   if (entry.isFile() && entry.name.endsWith('.css')) css.push(resolve(entry.parentPath, entry.name));
@@ -31,4 +36,4 @@ css.sort((a, b) => {
   return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
 });
 await writeFile(resolve(root, 'styles.css'), (await Promise.all(css.map(path => readFile(path, 'utf8')))).join('\n'));
-console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${[...new Set(requires)].join(', ')}`);
+console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${[...new Set(requires)].sort().join(', ')}`);
