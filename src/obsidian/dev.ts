@@ -1,0 +1,269 @@
+import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
+import { assignIds } from '../core/deck/index.ts';
+import { encodeEntry, logPath, parseLine } from '../core/study/index.ts';
+import type { NewEntry } from '../core/study/index.ts';
+import { compareAssigned, compareLists, type ListItem, type Mismatch } from '../dev/compare.ts';
+import { runFilesContract } from '../dev/files-contract.ts';
+import { scopedFiles } from '../dev/wrap-files.ts';
+import { createState, type State } from '../state/index.ts';
+import { createObsidianFiles } from './files.ts';
+
+// 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
+const root = 'Essence W5';
+const examples = 'Essence Cards/W5 範例/';
+const limit = 20;
+
+/** 外掛本身（main.ts）：開發命令用它正在用的 state 與裝置碼。 */
+interface Host extends Plugin { device: string; state: State | null }
+/** 載入時記下的數字，每個結果檔都附上（T12）。 */
+interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () => number | null }
+
+interface DevCommand { name: string; run: (host: Host) => Promise<unknown> }
+const commands: Record<string, DevCommand> = {
+  compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
+  files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
+  open: { name: 'Essence 開發：量測第一次打開', run: open },
+  today: { name: 'Essence 開發：今天的份', run: today },
+  answer: { name: 'Essence 開發：寫一筆再取消', run: answer },
+  watch: { name: 'Essence 開發：記錄檔案通知', run: watch },
+};
+
+export function registerDev(plugin: Host, load: LoadInfo): void {
+  let runs = 0;
+  async function run(code: string): Promise<void> {
+    const command = Object.hasOwn(commands, code) ? commands[code] : undefined;
+    if (!command) { new Notice('Essence 開發：沒有「' + code + '」'); return; }
+    runs++;
+    const startedAt = performance.now();
+    let result: unknown;
+    try { result = await command.run(plugin); }
+    catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
+    const path = await writeResult(plugin.app, code, plugin.device, {
+      code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
+      obsidian: apiVersion, plugin: plugin.manifest.version,
+      onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
+      sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
+    });
+    new Notice(command.name.replace('Essence 開發：', '') + '完成\n' + path);
+  }
+  for (const [code, command] of Object.entries(commands)) {
+    plugin.addCommand({ id: 'dev-' + code, name: command.name, callback: () => { void run(code); } });
+  }
+  plugin.registerObsidianProtocolHandler('essence-cards-dev', params => {
+    // reload：重新安裝開發版之後，不關 Obsidian 就換成新的 main.js（用 Obsidian 未公開的 app.plugins）。
+    if (params.run === 'reload') {
+      const plugins = (plugin.app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
+      const id = plugin.manifest.id;
+      void plugins.disablePlugin(id).then(() => plugins.enablePlugin(id)).then(() => { new Notice('Essence 開發：已重新載入'); });
+    } else void run(params.run ?? '');
+  });
+}
+
+async function ready(host: Host): Promise<State> {
+  if (!host.state) throw Error('state 還沒建立（layout 還沒 ready）');
+  await host.state.ready();
+  return host.state;
+}
+
+const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+
+/** §4-4 open：對 Essence W5/量測/ 建一個新的 state，記下 ready() 的時間與資料量，量完就關。 */
+async function open(host: Host): Promise<unknown> {
+  const state = createState({ files: scopedFiles(createObsidianFiles(host.app), root + '/量測'), device: host.device });
+  try {
+    const timings = await state.ready();
+    const value = state.today();
+    const { reviews, changes, problems } = state.history();
+    return {
+      timings: { decks: Math.round(timings.decks), history: Math.round(timings.history), plan: Math.round(timings.plan), total: Math.round(timings.total) },
+      historyPlusPlan: Math.round(timings.history + timings.plan),
+      lines: { reviews: reviews.length, changes: changes.length, problems: problems.length },
+      decks: state.decks().length, targets: state.decks().reduce((n, d) => n + d.deck.targets.length, 0),
+      share: value.share.length, more: value.more.length,
+    };
+  } finally { await state.close(); }
+}
+
+/** §4-4 today：外掛正在用的 state 的今天的份；lt 清單只在測試 vault 的 W5 範例（三篇）上產生。 */
+async function today(host: Host): Promise<unknown> {
+  const state = await ready(host);
+  const value = state.today();
+  return {
+    decks: state.decks().map(d => d.path),
+    day: value.day, offset: value.offset,
+    share: value.share.map(item => item.lt), more: value.more.map(item => item.lt),
+    problems: value.problems.slice(0, limit),
+    progress: state.progress(),
+  };
+}
+
+/** §4-4 answer：W5 範例路徑排第一的卡組的第一個目標寫一筆 good，讀回檔案，再取消它。 */
+async function answer(host: Host): Promise<unknown> {
+  const state = await ready(host);
+  const deck = state.decks().find(d => d.path.startsWith(examples));
+  const target = deck?.deck.targets[0];
+  if (!deck || !target?.id || !target.prompts.length) throw Error('找不到 ' + examples + ' 的卡組，或第一個目標沒有 ID 或題目');
+  const snapshot = () => {
+    const value = state.today();
+    return JSON.stringify({ day: value.day, share: value.share, more: value.more });
+  };
+  const todayBefore = snapshot();
+  const before = { reviews: state.history().reviews.length, progress: state.progress() };
+  // 寫一筆、等寫完，回傳 encodeEntry 的結果與它的檔案（和 state 寫檔的路徑相同）。
+  async function write(entry: NewEntry) {
+    const t = state.answer(entry);
+    const line = encodeEntry(t, entry);
+    const stamp = parseLine(line);
+    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
+    await state.flush();
+    return { t, line, path: logPath(host.device, stamp.at, stamp.offset) };
+  }
+  const good = await write({ lt: target.id, r: 'good', v: target.prompts[0].fingerprint });
+  const afterGood = { reviews: state.history().reviews.length, progress: state.progress() };
+  const undo = await write({ undo: good.t });
+  const lines = (await createObsidianFiles(host.app).read(good.path) ?? '').split('\n').filter(Boolean);
+  return {
+    deck: deck.path, lt: target.id, path: good.path, samePath: good.path === undo.path,
+    wrote: [good.line, undo.line], readBack: lines.slice(-2),
+    readBackMatches: lines.at(-2) === good.line && lines.at(-1) === undo.line,
+    reviews: { before: before.reviews, afterGood: afterGood.reviews, afterUndo: state.history().reviews.length },
+    goodGone: !state.history().reviews.some(r => r.t === good.t),
+    progress: { before: before.progress, afterGood: afterGood.progress, afterUndo: state.progress() },
+    todaySame: snapshot() === todayBefore,
+  };
+}
+
+/** §4-4 watch：60 秒內 onChange 與 history().reviews 長度的變化（測別台裝置的紀錄進來）。 */
+async function watch(host: Host): Promise<unknown> {
+  const state = await ready(host);
+  const start = performance.now();
+  const at = () => Math.round(performance.now() - start);
+  const events: { ms: number; kind: 'onChange' | 'reviews'; reviews: number }[] = [];
+  const initial = state.history().reviews.length;
+  let reviews = initial;
+  const stop = state.onChange(() => { events.push({ ms: at(), kind: 'onChange', reviews: state.history().reviews.length }); });
+  try {
+    while (performance.now() - start < 60_000) {
+      await sleep(250);
+      const count = state.history().reviews.length;
+      if (count !== reviews) { reviews = count; events.push({ ms: at(), kind: 'reviews', reviews: count }); }
+    }
+  } finally { stop(); }
+  return {
+    initial, final: reviews,
+    onChange: events.filter(e => e.kind === 'onChange').length,
+    events: events.slice(0, limit), more: Math.max(0, events.length - limit),
+  };
+}
+
+async function ensureFolder(app: App, folder: string): Promise<void> {
+  let path = '';
+  for (const part of folder.split('/')) {
+    path = path ? path + '/' + part : part;
+    if (!app.vault.getAbstractFileByPath(path)) await app.vault.createFolder(path);
+  }
+}
+
+async function writeResult(app: App, code: string, device: string, data: unknown): Promise<string> {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  await ensureFolder(app, root + '/結果');
+  let path = `${root}/結果/${code} ${device} ${stamp}.json`;
+  for (let n = 2; app.vault.getAbstractFileByPath(path); n++) path = `${root}/結果/${code} ${device} ${stamp}-${n}.json`;
+  await app.vault.create(path, JSON.stringify(data, null, 2));
+  return path;
+}
+
+/** 寫入（內容不同時）並等 metadataCache 重新解析這一篇。 */
+async function writeIndexed(app: App, path: string, text: string): Promise<TFile> {
+  await ensureFolder(app, path.slice(0, path.lastIndexOf('/')));
+  const existing = app.vault.getFileByPath(path);
+  if (existing && await app.vault.read(existing) === text && app.metadataCache.getFileCache(existing)) return existing;
+  const indexed = new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(() => { app.metadataCache.offref(ref); reject(Error('metadataCache 沒有更新：' + path)); }, 10000);
+    const ref = app.metadataCache.on('changed', file => {
+      if (file.path !== path) return;
+      window.clearTimeout(timer); app.metadataCache.offref(ref); resolve();
+    });
+  });
+  let file = existing;
+  if (file) await app.vault.modify(file, text);
+  else file = await app.vault.create(path, text);
+  await indexed;
+  return file;
+}
+
+function listItems(app: App, file: TFile): ListItem[] {
+  return (app.metadataCache.getFileCache(file)?.listItems ?? []).map(item => ({
+    line: item.position.start.line, end: item.position.end.line, parent: item.parent, ...(item.id ? { id: item.id } : {}),
+  }));
+}
+
+/** §0-3：每個例子寫成筆記，和 metadataCache 比 (a)～(d)；補 ID 後存到「補ID後/」再比一次，加上 (e)。 */
+async function compare(app: App): Promise<unknown> {
+  const folder = root + '/對照';
+  const source = app.vault.getFileByPath(folder + '/cases.json');
+  if (!source) throw Error('找不到 ' + folder + '/cases.json；先在電腦執行 npm run export-compare');
+  const cases = JSON.parse(await app.vault.read(source)) as { name: string; text: string }[];
+  const found: (Mismatch & { case: string; stage: 'before' | 'after' })[] = [];
+  let changedOnDisk = 0;
+  for (const { name, text } of cases) {
+    const file = await writeIndexed(app, `${folder}/${name}.md`, text);
+    const written = await app.vault.read(file);
+    if (written !== text) changedOnDisk++;
+    for (const m of compareLists(written, listItems(app, file))) found.push({ case: name, stage: 'before', ...m });
+    const assigned = assignIds(written, { taken: new Set() }).text;
+    const after = await writeIndexed(app, `${folder}/補ID後/${name}.md`, assigned);
+    for (const m of compareAssigned(await app.vault.read(after), listItems(app, after))) found.push({ case: name, stage: 'after', ...m });
+  }
+  // 有不一致的前幾篇，附上 metadataCache 的原始 listItems 與閱讀模式畫出來的清單（每篇只有幾項），判斷原因用。
+  const detail: Record<string, { cache: ListItem[]; reading: string[] }> = {};
+  for (const name of [...new Set(found.map(m => m.case))].slice(0, 10)) {
+    const file = app.vault.getFileByPath(`${folder}/${name}.md`);
+    if (file) detail[name] = { cache: listItems(app, file), reading: await reading(app, await app.vault.read(file), file.path) };
+  }
+  return {
+    cases: cases.length, changedOnDisk,
+    mismatches: found.length,
+    before: found.filter(m => m.stage === 'before').length,
+    after: found.filter(m => m.stage === 'after').length,
+    byCase: found.reduce<Record<string, number>>((count, m) => ({ ...count, [m.case]: (count[m.case] ?? 0) + 1 }), {}),
+    first: found.slice(0, limit),
+    detail,
+  };
+}
+
+/** 閱讀模式畫出來的清單：每個項目一行「層數:自己的文字」（不含子清單），看家長實際看到的結構。 */
+async function reading(app: App, text: string, path: string): Promise<string[]> {
+  const el = document.createElement('div');
+  const component = new Component();
+  component.load();
+  try {
+    await MarkdownRenderer.render(app, text, el, path, component);
+    return Array.from(el.querySelectorAll('li')).map(li => {
+      let depth = 0;
+      for (let p = li.parentElement; p && p !== el; p = p.parentElement) if (p.tagName === 'LI') depth++;
+      const own = Array.from(li.childNodes).filter(node => !(node instanceof HTMLElement && /^(UL|OL)$/.test(node.tagName)))
+        .map(node => node.textContent ?? '').join('').replace(/\s+/g, ' ').trim();
+      return depth + ':' + own.slice(0, 40);
+    });
+  } finally { component.unload(); }
+}
+
+/** §2：在 Essence W5/暫存/ 跑 C1～C14；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+async function filesContract(app: App): Promise<unknown> {
+  const dir = root + '/暫存';
+  const old = app.vault.getAbstractFileByPath(dir);
+  if (old) await app.vault.delete(old, true);
+  const entry = (path: string) => {
+    const found = app.vault.getAbstractFileByPath(path);
+    if (!found) throw Error('找不到 ' + path);
+    return found;
+  };
+  const results = await runFilesContract(createObsidianFiles(app), {
+    rename: (from, to) => app.vault.rename(entry(from), to),
+    remove: path => app.vault.delete(entry(path), true),
+  }, dir, { notice: 3000, quiet: 500 });
+  return { passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results };
+}

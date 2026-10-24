@@ -65,6 +65,11 @@ export function listTree(lines: Line[], start: number): Item[] {
   const roots: Item[] = [], stack: Item[] = [];
   let section: string | null = null;
   let fence: { char: string; count: number; contentColumn: number } | null = null;
+  // 上一行是哪個項目的段落文字；下一行沒有空行又縮排不夠時，照 CommonMark 接在這段後面（Obsidian 相同，W5 對照）。
+  let paragraph: Item | null = null;
+  // 項目裡的分隔線或圍欄之後：Obsidian 的閱讀模式把縮排不夠的下一行留在同一個項目裡當一般段落，清單沒有結束
+  // （2026-10-25 對照，Codex 審查 W5 的 F1）。這種行不接進名稱或題目，後面的題目仍屬於同一個目標。
+  let inside = false;
   const extend = (line: number): void => { for (const item of stack) item.end = line + 1; };
   for (let i = start; i < lines.length; i++) {
     const raw = lines[i].raw;
@@ -80,6 +85,7 @@ export function listTree(lines: Line[], start: number): Item[] {
     }
     // 引言框在某一項的內容裡時，只結束比它深的項目，後面的題目仍屬於同一個目標。
     if (/^>/.test(trimmed)) {
+      paragraph = null; inside = false;
       while (stack.length && indent < stack.at(-1)!.contentColumn) stack.pop();
       if (stack.length) extend(i);
       continue;
@@ -89,20 +95,24 @@ export function listTree(lines: Line[], start: number): Item[] {
       let container = stack.length - 1;
       while (container >= 0 && indent < stack[container].contentColumn) container--;
       if (container >= 0 || indent < 4) {
+        paragraph = null; inside = container >= 0;
         stack.length = container + 1;
         extend(i);
         fence = { char: opening[1][0], count: opening[1].length, contentColumn: stack.at(-1)?.contentColumn ?? 0 };
         continue;
       }
     }
-    if (!trimmed) continue;
+    if (!trimmed) { paragraph = null; inside = false; continue; }
     const heading = /^(#{1,6})(?:\s+(.*)|$)/.exec(trimmed);
     // 只有不在任何項目內容裡的標題才分組；在項目內容裡的是那一項的文字。
     if (heading && indent < 4 && (!stack.length || indent < stack[0].contentColumn)) {
-      section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); stack.length = 0; continue;
+      section = (heading[2] ?? '').replace(/\s+#+\s*$/, '').trim(); stack.length = 0; paragraph = null; inside = false; continue;
     }
+    const thematic = /^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(trimmed);
+    // 標題與分隔線（相對所屬項目縮排不到 4 欄）是自己的區塊：打斷段落，`- - -` 也不是清單項目（CommonMark 4.1）。
+    const breaks = (heading !== null || thematic) && indent - ([...stack].reverse().find(item => item.contentColumn <= indent)?.contentColumn ?? 0) < 4;
     // CommonMark：1～4 欄間隔都屬於符號；超過 4 欄只取一欄。
-    const match = /^( *)([-*+]|\d{1,9}[.)])( +|$)(.*)$/.exec(expanded);
+    const match = breaks ? null : /^( *)([-*+]|\d{1,9}[.)])( +|$)(.*)$/.exec(expanded);
     if (match) {
       while (stack.length && indent < stack.at(-1)!.contentColumn) stack.pop();
       if (!stack.length && indent >= 4) continue;
@@ -112,6 +122,7 @@ export function listTree(lines: Line[], start: number): Item[] {
       const body = raw.replace(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]*/, '');
       const itemFence = /^(`{3,}|~{3,})(.*)$/.exec(body);
       if (itemFence && !(itemFence[1][0] === '`' && itemFence[2].includes('`'))) {
+        paragraph = null; inside = true;
         fence = { char: itemFence[1][0], count: itemFence[1].length, contentColumn: indent + match[2].length + gap };
         continue;
       }
@@ -119,12 +130,22 @@ export function listTree(lines: Line[], start: number): Item[] {
         text: body.trimEnd(), children: [], section };
       (stack.at(-1)?.children ?? roots).push(item);
       stack.push(item);
+      paragraph = body.trim() ? item : null; inside = false;
+    } else if (paragraph && !breaks) {
+      // 段落的延續行，縮排不夠也一樣。
+      paragraph.text += '\n' + raw.trim();
+      extend(i);
+    } else if (inside && !breaks && stack.length && indent < stack.at(-1)!.contentColumn) {
+      extend(i);
     } else {
       while (stack.length && indent < stack.at(-1)!.contentColumn) stack.pop();
       if (stack.length) {
         stack.at(-1)!.text += '\n' + raw.trim();
         extend(i);
-      } else stack.length = 0;
+        // 標題與分隔線之後沒有段落可以延續；分隔線之後縮排不夠的行仍留在這個項目裡。
+        paragraph = heading || thematic ? null : stack.at(-1)!;
+        inside = thematic;
+      } else { stack.length = 0; paragraph = null; inside = false; }
     }
   }
   return roots;

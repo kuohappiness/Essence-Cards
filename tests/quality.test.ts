@@ -166,3 +166,27 @@ void test('W4 核心模組之間只能 import 對方的 index.ts，deck 不能�
     assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
   }
 });
+
+void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不能 import 核心以外的 src', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [path, code, blocked] of [
+    ['src/state/index.ts', "import { Notice } from 'obsidian';", true],
+    ['src/state/index.ts', "void import('obsidian');", true],
+    ['src/state/index.ts', "import 'react';", true],
+    ['src/dev/compare.ts', "import { readFile } from 'node:fs/promises';", true],
+    ['src/dev/compare.ts', "require('fs');", true],
+    ['src/dev/compare.ts', "import '../core/deck/parse.ts';", true],
+    ['src/dev/compare.ts', "import { parseDeck } from '../core/deck/index.ts';", false],
+    ['src/state/index.ts', "import type { Files } from '../core/files.ts';", false],
+    ['src/state/index.ts', "import { x } from '../dev/compare.ts';", false],
+    ['src/core/study/plan.ts', "import { createState } from '../../state/index.ts';", true],
+    ['src/core/study/plan.ts', "export * from '../../dev/compare.ts';", true],
+    ['src/core/study/plan.ts', "void import('../../main.ts');", true],
+    ['src/core/files.ts', "import type { State } from '../state/index.ts';", true],
+    ['src/core/files.ts', "import type { Deck } from './deck/index.ts';", false],
+    ['src/obsidian/files.ts', "import { Notice } from 'obsidian';", false],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+  }
+});

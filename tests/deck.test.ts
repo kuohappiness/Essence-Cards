@@ -1,6 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { parseDeck as parse, assignIds as assign } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 
@@ -195,6 +195,38 @@ void test('接續行以換行相接，空行不結束清單，外部段落會結
   assert.equal(qa(parsed.targets[0].prompts[0]).answer, 'A\nnext');
   assert.equal(parsed.targets.length, 2); assert.equal(parsed.targets[1].implicit, true);
 });
+// W5 對照 M2a、M2b、M3：沒有空行的頂格一行，Obsidian 接在上一題的文字後面，後面的題目仍是同一個目標的；
+// 有空行時頂格段落才結束清單。
+void test('沒有空行、頂格的一行接在上一題後面，後面的題目仍屬於同一個目標', () => {
+  for (const indent of ['    ', '  ']) {
+    const parsed = parseDeck('- 目標\n' + indent + '- Q :: A\n隨手一行\n' + indent + '- R :: B');
+    assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit]), [[0, false]], JSON.stringify(indent));
+    assert.deepEqual(parsed.targets[0].prompts.map(p => [p.line, qa(p).question, qa(p).answer]), [[1, 'Q', 'A\n隨手一行'], [3, 'R', 'B']]);
+  }
+  const blank = parseDeck('- 目標\n    - Q :: A\n\n隨手一行\n\n    - R :: B');
+  assert.deepEqual(blank.targets.map(t => t.prompts.map(p => p.line)), [[1]]);
+  // 標題、引言框、圍欄會打斷段落，不是延續。
+  for (const breaker of ['# 標題', '> 引言', '~~~']) {
+    assert.deepEqual(parseDeck('- 目標\n  - Q :: A\n' + breaker + '\n').targets.map(t => qa(t.prompts[0]).answer), ['A'], breaker);
+  }
+});
+// Codex 審查 W5 的 F1：分隔線與圍欄之後沒有段落可以延續，頂格的家長筆記不能接進目標名稱或上一題。
+// Windows 版 Obsidian 1.14.5 的閱讀模式（2026-10-25 對照）：那一行留在同一個項目裡當一般段落，清單沒有結束，
+// 後面的 R 仍是目標的子題目（不是 CommonMark 會得到的新清單）；這裡照閱讀模式（D-135）。
+void test('分隔線、圍欄之後的頂格一行是目標裡的一般段落：ID、題目、指紋與歸屬都不變，後面的題目仍屬於同一個目標', () => {
+  const plain = parseDeck('- 目標 ^k3m9x2\n    - Q :: A\n    - R :: B').targets[0];
+  const shape = (text: string) => parseDeck(text).targets.map(t => [t.id, t.name, t.implicit, t.prompts.map(p => [qa(p).question, qa(p).answer, p.fingerprint])]);
+  const prompts = plain.prompts.map(p => [qa(p).question, qa(p).answer, p.fingerprint]);
+  const expected = [['k3m9x2', '目標', false, prompts]];
+  for (const rule of ['***', '___', '- - -', '* * *']) {
+    assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n  ' + rule + '\n家長筆記 :: 不能出題\n    - R :: B'), expected, rule);
+  }
+  // 項目自己開的圍欄，與目標內容裡的圍欄。
+  assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n    - ```\n      code\n      ```\n家長筆記\n    - R :: B'), expected);
+  assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n  ```\n  code\n  ```\n家長筆記\n    - R :: B'), expected);
+  // 空一行之後的頂格段落才結束清單（和 M3 相同）。
+  assert.deepEqual(shape('- 目標 ^k3m9x2\n    - Q :: A\n  ***\n\n家長筆記\n    - R :: B'), [['k3m9x2', '目標', false, prompts.slice(0, 1)]]);
+});
 void test('接續行不會讓目標／題目行的 ID 失效', () => {
   const t = parseDeck('- 目標 ^parent\n  接續\n  - Q :: A ^child\n    next').targets[0];
   assert.equal(t.id, 'parent'); assert.equal(t.name, '目標'); assert.equal(qa(t.prompts[0]).answer, 'A\nnext');
@@ -216,7 +248,21 @@ for (const broken of ['科目: [', '科目: 自然\n科目: 英文', '- 不是�
   const parsed = parseDeck('---\n' + broken + '\n---\n- Q :: A');
   assert.deepEqual(parsed.props, parseDeck('').props); assert.equal(parsed.problems[0].line, 0); assert.equal(parsed.problems[0].code, 'unknown-property-value');
 });
-void test('未閉合 YAML 不洩出清單', () => assert.equal(parseDeck('---\n科目: 自然\n- Q :: A').targets.length, 0));
+// W5 對照 D068：Obsidian 把沒有結束的屬性區當成一般文字，底下的清單照樣顯示，所以照樣出題。
+void test('未閉合 YAML 照 Obsidian 當成一般文字：清單照樣出題，屬性用預設值並提示', () => {
+  const parsed = parseDeck('---\n科目: 自然\n- Q :: A');
+  assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit]), [[2, true]]);
+  assert.deepEqual(parsed.props, parseDeck('').props);
+  assert.deepEqual(parsed.problems.map(p => [p.line, p.code]), [[0, 'unknown-property-value']]);
+});
+// Codex 審查 W5：Obsidian 只認 `---` 當屬性區的結尾（2026-10-25 對照：`...` 是 Q 的延續文字，Q、R 都顯示），
+// 所以只有開頭 `---`、中間是 `...` 的筆記也是沒有結束的屬性區（D-135）。
+void test('開頭 --- 之後用 ... 結尾不算結束：當成一般文字，前後的清單都出題', () => {
+  const parsed = parseDeck('---\n科目: 自然\n- Q :: A\n...\n- R :: B');
+  assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit, t.prompts.map(p => [qa(p).question, qa(p).answer])]), [[2, true, [['Q', 'A\n...']]], [4, true, [['R', 'B']]]]);
+  assert.deepEqual(parsed.props, parseDeck('').props);
+  assert.deepEqual(parsed.problems.map(p => [p.line, p.code]), [[0, 'unknown-property-value']]);
+});
 void test('YAML 未知狀態提示位於狀態行', () => {
   const parsed = parseDeck('---\n科目: 自然\n狀態: 已採用\n---');
   assert.equal(parsed.props.status, 'active'); assert.equal(parsed.problems[0].line, 2); assert.equal(parsed.problems[0].targetLine, null);
@@ -418,7 +464,8 @@ for (const line of ['    # 假標題', '\t## 假標題']) void test('文件層�
   assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].section, '分組');
 });
 
-void test('等 metadataCache 對照：清單內縮排過深仍照目前當子項目', () => {
+// D-135：閱讀模式把它顯示成目標那一行的接續文字，程式仍當子題目出題；第二部分的存檔會把縮排改回一層。
+void test('D-135 清單內縮排多一層照樣當子題目出題', () => {
   const parsed = parseDeck('- 目標\n        - Q :: A');
   assert.equal(parsed.targets.length, 1); assert.equal(parsed.targets[0].implicit, false);
   assert.deepEqual([qa(parsed.targets[0].prompts[0]).question, qa(parsed.targets[0].prompts[0]).answer], ['Q', 'A']);
@@ -430,6 +477,8 @@ void test('文件層級未閉合的圍欄仍持續到檔尾', () => {
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 after(() => {
+  // tools/export-compare.ts 用：全部範例寫成一個 JSON，拿到 Obsidian 和 metadataCache 對照（W5 §0-3）。
+  if (process.env.ESSENCE_DECK_CASES) writeFileSync(process.env.ESSENCE_DECK_CASES, JSON.stringify([...deckCases]));
   const fingerprints = (text: string) => parse(text).targets.flatMap(t => t.prompts.map(p => p.fingerprint)).sort();
   for (const text of deckCases) {
     const context = '往返範例：' + text.slice(0, 160);

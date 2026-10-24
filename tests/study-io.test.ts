@@ -131,7 +131,7 @@ void test('真的寫檔後 readHistory 讀回；不存在回空，子資料夾�
   const root = await mkdtemp(join(tmpdir(), 'essence-study-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const files = createNodeFiles(root);
-  assert.deepEqual(await readHistory(files), { reviews: [], changes: [], problems: [] });
+  assert.deepEqual(await readHistory(files), { reviews: [], changes: [], problems: [], cancelled: [] });
   const writer = createLogWriter(files, { device: 'Phone-abcd', now: () => at, offset: () => 480 });
   const t1 = writer.write(answer);
   const t2 = writer.write(answer);
