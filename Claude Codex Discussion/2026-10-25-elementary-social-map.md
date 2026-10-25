@@ -5,7 +5,7 @@
 ## 先讀這裡
 
 - 使用者 2026-10-25 在專案討論串「制定國小社會學習目標地圖」提出兩個想法（下面第 2 節），並說「也可以找 Codex 一起討論」。國小社會已放進 v1（[D-137](../docs/decisions.md#d-137-國小社會放進-v1)）；這份預設寫好、用真實教材試用通過後才開放。
-- 基準 commit：`{{BASE}}`（`main`）。
+- 基準 commit：`9f6c98d`（`main`）。
 - 必讀：`AGENTS.md`；[D-010](../docs/decisions.md#d-010-三層概念模型)、[D-027](../docs/decisions.md#d-027-跨課題目與重複出現的知識)、[D-114](../docs/decisions.md#d-114-產品核心以學習目標為單位回饋先找原因)、[D-118](../docs/decisions.md#d-118-ai-品質初篩後的製卡規則修改)、[D-132](../docs/decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組)、[D-136](../docs/decisions.md#d-136-學習地圖課本是起點加深可以超出課本)（含補充）、D-137；R3 的四份提示（[短規則](../experiments/t4/arch/短規則.md)、[判斷邊界](../experiments/t4/arch/第二輪/判斷邊界.md)、[五步](../experiments/t4/arch/第二輪/五步.md)、[格式](../experiments/t4/arch/第二輪/格式.md)）；草稿 [docs/card-rules/elementary-social.md](../docs/card-rules/elementary-social.md)；[通用規則](../docs/card-rules/common.md) 的規則 2、17、18（只讀，第三輪結束前凍結）；[syntax.md §2-9](../docs/syntax.md#2-9-ai-製卡交回的草稿)；[討論紀錄](../docs/archive/discussions/2026-10-25-elementary-social-map.md)。
 - 只回應、不改程式與其他文件。回應寫在這份檔案最後，標題「Codex 回應（日期）」；每一題寫同意、不同意或改法，並寫理由。
 - 沒有真實的國小社會教材可以看（版權，不進 repo）；例子取自各版本常見的內容（台灣的海岸、鹽田、漢人開墾），判斷時以結構為主，不必核對某一個版本。
