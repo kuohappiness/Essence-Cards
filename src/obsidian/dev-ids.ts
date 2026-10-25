@@ -3,7 +3,7 @@ import type { App, Plugin, WorkspaceLeaf } from 'obsidian';
 import { StateEffect, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { EditorState } from '@codemirror/state';
-import { parseDeck } from '../core/deck/index.ts';
+import { nameIds, parseDeck } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type wireSave } from './save.ts';
@@ -43,9 +43,9 @@ async function open(app: App, file: TFile): Promise<{ leaf: WorkspaceLeaf; view:
 /** 每一個最上層、有 ID 的目標行剛好一個 ID 在行尾；名稱中間沒有程式格式的 ID。 */
 function invariant(text: string): string[] {
   const problems: string[] = [];
+  // 名稱中間或兩個 ID 用解析同一個辨識判斷（程式碼、公式、連結裡的字不算）。
   for (const [i, line] of text.split('\n').entries()) {
-    if (/[ \t]\^[a-z0-9]{6}(?![A-Za-z0-9-])[^\n]*[ \t]\^[A-Za-z0-9-]+\s*$/.test(line)) problems.push(`第 ${i + 1} 行有兩個 ID：${line}`);
-    else if (/[ \t]\^[abcdefghjkmnpqrstuvwxyz23456789]{6}(?![A-Za-z0-9-])\S/.test(line.replace(/[ \t]\^[A-Za-z0-9-]+\s*$/, ''))) problems.push(`第 ${i + 1} 行 ID 在中間：${line}`);
+    if (/^ {0,3}[-*+] /.test(line) && nameIds(line).middle.length) problems.push(`第 ${i + 1} 行名稱中間有 ID：${line}`);
   }
   for (const problem of parseDeck(text).problems) if (problem.code === 'ambiguous-id' || problem.code === 'misplaced-id') problems.push(problem.code + ' 第 ' + (problem.line + 1) + ' 行');
   const ids = text.match(/(?<=[ \t]\^)[A-Za-z0-9-]+(?=\s*$)/gm) ?? [];
@@ -88,6 +88,11 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
     ['End 後游標停在名稱最後（ID 前面）', () => { select(0); key('End'); return { ok: cm.state.selection.main.head === nameEnd, note: 'head ' + cm.state.selection.main.head }; }],
     ['名稱後面打字', () => { select(0); key('End'); type('的現象'); return { ok: line(1) === '- 能說明擴散的現象 ^k3m9x2' }; }],
     ['名稱後面貼上帶 ID 的文字', () => { select(nameEnd); clip('paste', '貼上 ^zzzzz9'); return { ok: line(1) === '- 能說明擴散貼上 ^k3m9x2' }; }],
+    ['貼上程式碼、公式、連結（裡面像 ID 的字是正文，原樣保留）', () => {
+      const pasted = ' `^p7q2w8` $x ^p7q2w8$ [[筆記 ^p7q2w8]] [說明 ^p7q2w8](筆記.md)';
+      select(nameEnd); clip('paste', pasted);
+      return { ok: line(1) === '- 能說明擴散' + pasted + ' ^k3m9x2', note: line(1) };
+    }],
     ['中文組字（compositionstart／end 加上組字的交易）', () => {
       select(nameEnd);
       cm.contentDOM.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true }));
@@ -224,7 +229,8 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
   return { passed: results.filter(r => (r as { ok: boolean }).ok).length, failed: results.filter(r => !(r as { ok: boolean }).ok).length, results };
 }
 
-const TRIAL = 'Essence Cards/W5 範例/補 ID 試用（卡片）.md';
+/** save 命令每個情境用自己的新卡組，結束時整個資料夾刪掉。 */
+const TRIAL_FOLDER = 'Essence Cards/W5 範例/存檔測試';
 const TRIAL_TEXT = '---\n科目: 自然\n---\n- 能說明蒸發\n    - 水變成水蒸氣叫什麼？ :: 蒸發\n- 能說明凝結\n    - 水蒸氣變成水叫什麼？ :: 凝結\n';
 
 /** §8-7 I8：存檔按鈕的三種樣子、按下去補 ID、離開筆記的備援、外部弄丟 ID 之後的小視窗。 */
@@ -243,13 +249,14 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
     const el = button(view);
     return el ? { tip: el.getAttribute('aria-label'), kind: ['done', 'missing', 'issues'].find(kind => el.hasClass('is-' + kind)) } : null;
   };
-  // 重設成沒有 ID 的內容：先刪掉、等 state 忘掉上一版再建立；直接改寫會被當成在編輯器以外弄丟 ID（那正是 §8-5 要抓的）。
+  // 每個情境一篇新的、沒有 ID 的卡組。不改寫舊的：直接改寫會被當成在編輯器以外弄丟 ID（那正是 §8-5 要抓的）；
+  // 也不刪了再建同名檔：iCloud 會把那個檔鎖住一段時間（2026-10-25 實測）。
+  let trial = '', count = 0;
+  const stamp = Date.now().toString(36);
   async function fresh(): Promise<TFile> {
-    const old = app.vault.getFileByPath(TRIAL);
-    if (old) await app.vault.delete(old);
-    await until(() => !state!.decks().some(entry => entry.path === TRIAL));
-    const created = await writeFile(app, TRIAL, TRIAL_TEXT);
-    await until(() => state!.deckStatus(TRIAL).missing === 2);
+    trial = `${TRIAL_FOLDER}/試用 ${stamp}-${++count}（卡片）.md`;
+    const created = await writeFile(app, trial, TRIAL_TEXT);
+    await until(() => state!.deckStatus(trial).missing === 2);
     return created;
   }
   // 1. 兩個目標沒有 ID：醒目。不是卡組的筆記沒有按鈕。
@@ -286,17 +293,17 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   // 3. 外部（Obsidian 以外）拿掉一個 ID：按鈕變警示，小視窗的文字與按鈕，選「還原」後 ID 回來。
   await sleep(2500);
   const id = /能說明蒸發 \^([a-z0-9]{6})/.exec(filled)?.[1] ?? '';
-  await app.vault.adapter.write(TRIAL, filled.replace(' ^' + id, ''));
-  await until(() => state.deckStatus(TRIAL).issues.length === 1);
-  out.issueFound = state.deckStatus(TRIAL).issues.map(issue => ({ ...issue }));
+  await app.vault.adapter.write(trial, filled.replace(' ^' + id, ''));
+  await until(() => state.deckStatus(trial).issues.length === 1);
+  out.issueFound = state.deckStatus(trial).issues.map(issue => ({ ...issue }));
   out.eventsAtIssue = host.devLog.events.slice(events);
   await until(() => !editor.getValue().includes(id), 3000);
   out.issues = look(first.view);
-  out.beforeClick = { editorReloaded: !editor.getValue().includes(id), editor: editor.getValue(), issues: state.deckStatus(TRIAL).issues.map(issue => ({ ...issue })) };
+  out.beforeClick = { editorReloaded: !editor.getValue().includes(id), editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })) };
   out.issuesExpected = TIPS.issues(1);
   button(first.view)?.click();
   await sleep(300);
-  out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(TRIAL).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
+  out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
   const modal = Array.from(document.querySelectorAll('.modal-container .essence-cards-issue')).at(-1);
   out.modal = { text: modal?.querySelector('p')?.textContent, buttons: Array.from(modal?.querySelectorAll('button') ?? []).map(b => b.textContent) };
   out.modalExpected = { text: MESSAGES.lost('能說明蒸發'), buttons: [BUTTONS.restore, BUTTONS.fresh] };
@@ -320,9 +327,86 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   two.leaf.detach();
   await sleep(2500); await snap('兩個都關掉之後（等 2.5 秒）');
   out.leave = timeline;
-  out.events = host.devLog.events.slice(events);
   out.leaveOk = timeline.map(t => t.hasIds).join() === 'false,false,true';
+  // Codex 審查第二部分要補證據的情境。
+  const idCount = (text: string) => (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length;
+  const restoreButton = () => Array.from(document.querySelectorAll<HTMLElement>('.modal-container .essence-cards-issue button.mod-cta')).at(-1);
+  const addTarget = (view: MarkdownView) => { view.editor.replaceRange('- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n', { line: view.editor.lastLine(), ch: 0 }); };
+  // 5.（F1）小視窗開著時，那個目標的題目在 Obsidian 以外改了：小視窗換成現在的內容（舊的按鈕不在了），新的「還原」照常。
+  file = await fresh();
+  const stale = await open(app, file);
+  button(stale.view)?.click();
+  await sleep(2500);
+  const staleFilled = stale.view.editor.getValue();
+  const staleId = /能說明蒸發 \^([a-z0-9]{6})/.exec(staleFilled)?.[1] ?? '';
+  await app.vault.adapter.write(trial, staleFilled.replace(' ^' + staleId, ''));
+  await until(() => state.deckStatus(trial).issues.length === 1);
+  await until(() => !stale.view.editor.getValue().includes(staleId), 3000);
+  button(stale.view)?.click();
+  await sleep(300);
+  const oldButton = restoreButton();
+  const edited = staleFilled.replace(' ^' + staleId, '').replace('水變成水蒸氣叫什麼？', '水加熱變成水蒸氣叫什麼？');
+  await app.vault.adapter.write(trial, edited);
+  await until(() => stale.view.editor.getValue() === edited, 3000);
+  await until(() => !oldButton?.isConnected, 3000);
+  restoreButton()?.click();
+  await sleep(300);
+  const afterStale = stale.view.editor.getValue();
+  out.staleModal = { oldButtonGone: !!oldButton && !oldButton.isConnected, restored: afterStale.includes('能說明蒸發 ^' + staleId) && afterStale.includes('水加熱'), text: afterStale };
+  stale.leaf.detach();
+  await sleep(2500);
+  // 6. 打完字、還沒重讀就按存檔：提示的數量是這次真的補上的。
+  file = await fresh();
+  const typed = await open(app, file);
+  addTarget(typed.view);
+  const typedNotices = host.devLog.notices.length;
+  button(typed.view)?.click();
+  out.typedNotice = host.devLog.notices.slice(typedNotices);
+  typed.leaf.detach();
+  await sleep(2500);
+  // 7. 打完字馬上關分頁：檔案裡有剛打的字，也補了 ID，沒有誤報。
+  file = await fresh();
+  const quick = await open(app, file);
+  addTarget(quick.view);
+  quick.leaf.detach();
+  await sleep(2500);
+  const quickText = await app.vault.read(file);
+  out.closeRightAway = { hasTyped: quickText.includes('能說明沸騰'), ids: idCount(quickText), issues: state.deckStatus(trial).issues.length, text: quickText };
+  // 8. 改名開著的卡組：舊路徑不補、新路徑還開著也不補，沒有問題；關掉之後在新路徑補。
+  file = await fresh();
+  const renamedPath = trial.replace('（卡片）', ' 改名（卡片）');
+  const renaming = await open(app, file);
+  await app.vault.rename(file, renamedPath);
+  await sleep(2500);
+  const whileOpen = await app.vault.read(file);
+  const renameIssues = state.deckStatus(renamedPath).issues.length;
+  renaming.leaf.detach();
+  await sleep(2500);
+  const afterClose = await app.vault.read(file);
+  out.rename = { whileOpen: idCount(whileOpen), issues: renameIssues, afterClose: idCount(afterClose) };
+  // 9. 開在另一個視窗：主視窗的分頁關掉時另一個視窗還開著，不補；那個視窗也關掉之後才補。
+  file = await fresh();
+  const inMain = await open(app, file);
+  const popout = app.workspace.openPopoutLeaf();
+  await popout.openFile(file);
+  await sleep(500);
+  inMain.leaf.detach();
+  await sleep(2500);
+  const popoutOpen = await app.vault.read(file);
+  popout.detach();
+  await sleep(2500);
+  const popoutClosed = await app.vault.read(file);
+  out.popout = { whileOpen: idCount(popoutOpen), afterClose: idCount(popoutClosed) };
+  out.events = host.devLog.events.slice(events);
+  // 清掉這次建的卡組（只刪，不再建同名檔）。
+  const folder = app.vault.getAbstractFileByPath(TRIAL_FOLDER);
+  if (folder) await app.vault.delete(folder, true);
   out.checks = {
+    staleModal: (out.staleModal as { oldButtonGone: boolean; restored: boolean }).oldButtonGone && (out.staleModal as { restored: boolean }).restored,
+    typedNotice: (out.typedNotice as string[]).includes(TIPS.added(3)),
+    closeRightAway: (out.closeRightAway as { hasTyped: boolean; ids: number; issues: number }).hasTyped && (out.closeRightAway as { ids: number }).ids === 3 && (out.closeRightAway as { issues: number }).issues === 0,
+    rename: JSON.stringify(out.rename) === JSON.stringify({ whileOpen: 0, issues: 0, afterClose: 2 }),
+    popout: JSON.stringify(out.popout) === JSON.stringify({ whileOpen: 0, afterClose: 2 }),
     missing: (out.missing as { tip?: string } | null)?.tip === TIPS.missing(2),
     plainNoNoteButton: out.plainNoteHasButton === false,
     filled: invariant(filled).length === 0 && (filled.match(/\^[a-z0-9]{6}$/gm) ?? []).length === 2,

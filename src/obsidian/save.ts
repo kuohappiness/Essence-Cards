@@ -1,6 +1,6 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
-import { isDeckPath } from '../core/deck/index.ts';
+import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { IdIssue, IdIssueKind, State } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
@@ -51,13 +51,18 @@ function buttonLook(status: { missing: number; issues: IdIssue[] }): { kind: 'do
 class IssuesModal extends Modal {
   private readonly host: SaveHost;
   private readonly view: MarkdownView;
+  private stop: (() => void) | null = null;
   constructor(app: App, host: SaveHost, view: MarkdownView) {
     super(app);
     this.host = host;
     this.view = view;
   }
-  onOpen(): void { this.render(); }
-  onClose(): void { this.contentEl.empty(); }
+  onOpen(): void {
+    // 卡組重讀後問題可能變了（內容改過的問題換成新的物件，舊的不能寫回）：跟著重畫，家長看到的就是現在的內容。
+    this.stop = this.host.state()?.onChange(() => { this.render(); }) ?? null;
+    this.render();
+  }
+  onClose(): void { this.stop?.(); this.stop = null; this.contentEl.empty(); }
   private render(): void {
     const state = this.host.state(), path = this.view.file?.path;
     const issues = state && path ? state.deckStatus(path).issues : [];
@@ -94,11 +99,12 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
     const state = host.state(), path = view.file?.path;
     if (!state || !path || !isDeckPath(path)) return;
     const editor = view.editor, before = editor.getValue();
-    const missing = state.deckStatus(path).missing;
     const after = state.fillText(path, before);
     applyText(editor, before, after);
     const status = state.deckStatus(path);
-    const added = Math.max(0, missing - status.missing);
+    // 這次真的加上 ID 的目標數（用存檔當下的文字算，不用 state 上一次讀到的）。
+    const withId = (text: string): number => parseDeck(text).targets.filter(target => target.id).length;
+    const added = Math.max(0, withId(after) - withId(before));
     if (added) host.notify(TIPS.added(added));
     refresh();
     if (status.issues.length) new IssuesModal(app, host, view).open();

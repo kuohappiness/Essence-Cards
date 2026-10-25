@@ -2,18 +2,17 @@ import { EditorSelection, EditorState, StateField } from '@codemirror/state';
 import type { ChangeSpec, Extension, Text, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
+import { nameIds } from '../core/deck/index.ts';
 
 // 鎖住學習目標的 ID（W5 §8-6、D-134）：電腦版編輯器裡，目標那一行行尾的 ` ^id` 顯示成一個小而淡的標記，
 // 一般編輯碰不到它。這個檔不 import obsidian，在 Node 用 @codemirror/state 直接測；Obsidian 的接線在 main.ts。
-// 核心的解析不能從這裡 import（D-110 的邊界），所以判斷用簡化的規則：最上層的清單項目、行尾的區塊 ID，
-// 屬性區與圍欄裡的不算。和 parseDeck 的對照在 tests/lock.test.ts。
+// 每按一個鍵不能重新解析整篇，所以哪幾行鎖用簡化的規則：最上層的清單項目、行尾的區塊 ID，屬性區與圍欄裡的不算；
+// 和 parseDeck 的對照在 tests/lock.test.ts。名稱裡的行中 ID 用核心同一個辨識（nameIds）。
 
 const TRAILING = /[ \t]+\^([A-Za-z0-9-]+)[ \t]*$/;
 const ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const DIVIDER = /^ {0,3}(?:`{3,}|~{3,}|---)/m;
-// 貼進名稱中間的程式格式 ID（D-134 的行中候選）：不能讓一行有兩個 ID。
-const MIDDLE = /[ \t]+\^[abcdefghjkmnpqrstuvwxyz23456789]{6}(?![A-Za-z0-9-])/g;
 
 /** 一個被鎖住的 ID：[from, to) 是 ID 連同前面的空白到行尾；contentFrom 是名稱的開頭（清單符號之後）。 */
 export interface IdToken { id: string; from: number; to: number; lineFrom: number; contentFrom: number }
@@ -186,17 +185,16 @@ function repair(tr: Transaction, touched: readonly IdToken[]): ChangeSpec[] {
     else if (foreign) add(trailFrom, line.to, insert);
     else add(line.to, line.to, insert);
   }
-  // 貼進目標名稱中間的程式格式 ID 拿掉（原本的那個還在別處）。
+  // 貼進目標名稱中間的程式格式 ID 拿掉（原本的那個還在別處），不能讓一行有兩個 ID。用解析同一個辨識：
+  // 行內程式碼、公式、連結裡的字是正文，不拿（Codex 審查第二部分的 F2）。
   for (const c of changes) {
     if (!c.text) continue;
     for (let pos = c.fromB; pos <= c.toB;) {
       const line = doc.lineAt(pos);
       if (ITEM.test(line.text)) {
-        const trail = TRAILING.exec(line.text);
-        const limit = trail ? trail.index : line.text.length;
-        for (const match of line.text.matchAll(MIDDLE)) {
-          const from = line.from + match.index, to = from + match[0].length;
-          if (match.index < limit && from < c.toB && to > c.fromB) add(from, to);
+        for (const middle of nameIds(line.text).middle) {
+          const from = line.from + middle.start, to = line.from + middle.end;
+          if (from < c.toB && to > c.fromB) add(from, to);
         }
       }
       pos = line.to + 1;

@@ -82,13 +82,16 @@ export function createIdTracker(options: IdTrackerOptions) {
   }
 
   /**
-   * 這一篇的新版本（讀到的、或自己要寫回的）。detect 是 false 時（第一次讀、自己寫回）只延續待處理的問題，
-   * 不找新的弄丟；ambiguous-id 不論如何都待處理。
+   * 這幾篇的新版本（同一批讀到的、或自己要寫回的）。detect 是 false 時（第一次讀、自己寫回）只延續待處理的問題，
+   * 不找新的弄丟；ambiguous-id 不論如何都待處理。同一批先把每一篇最新的占用放上，再各自和上一版比：
+   * 跨檔搬移不因通知的先後被當成弄丟（Codex 審查第二部分的 F5）。
    */
-  function observe(path: string, text: string, deck: Deck, detect: boolean): void {
-    const prev = versions.get(path);
-    const prevPresent = present.get(path) ?? new Set<string>();
-    const now = presentOf(text, deck);
+  function observe(entries: readonly { path: string; text: string; deck: Deck }[], detect: boolean): void {
+    const batch = entries.map(entry => ({ ...entry, prev: versions.get(entry.path), prevPresent: present.get(entry.path) ?? new Set<string>(), now: presentOf(entry.text, entry.deck) }));
+    for (const entry of batch) present.set(entry.path, entry.now);
+    for (const entry of batch) observeOne(entry, detect);
+  }
+  function observeOne({ path, text, deck, prev, prevPresent, now }: { path: string; text: string; deck: Deck; prev: Deck | undefined; prevPresent: Set<string>; now: Set<string> }, detect: boolean): void {
     const old = pending.get(path) ?? [];
     const oldLines = new Set(old.map(item => item.issue.line));
     const used = new Set<Target>();
@@ -97,9 +100,14 @@ export function createIdTracker(options: IdTrackerOptions) {
       const target = match(item, deck.targets, used);
       if (!target) { unmatched.push(item); continue; }
       used.add(target);
-      Object.assign(item.issue, { line: target.line, name: target.name });
-      Object.assign(item, { id: target.id, candidates: target.idCandidates ?? [], fingerprints: target.prompts.map(p => p.fingerprint) });
-      kept.push(item);
+      const fingerprints = target.prompts.map(p => p.fingerprint);
+      const candidates = target.idCandidates ?? [];
+      // 名稱、題目或候選改了：換一個新的問題物件，舊的（小視窗拿到的）就不能再用來寫回（D-134：寫回前重新確認內容沒變）。
+      const same = target.name === item.issue.name && target.id === item.id && sameSet(candidates, item.candidates)
+        && fingerprints.length === item.fingerprints.length && [...fingerprints].sort().join() === [...item.fingerprints].sort().join();
+      const issue = same ? Object.assign(item.issue, { line: target.line }) : { ...item.issue, line: target.line, name: target.name };
+      if (!same) revision++;
+      kept.push({ issue, id: target.id, candidates, fingerprints });
     }
     const fresh: Pending[] = [];
     for (const target of deck.targets) {
@@ -136,9 +144,9 @@ export function createIdTracker(options: IdTrackerOptions) {
     if (next.length) pending.set(path, next); else pending.delete(path);
     versions.set(path, deck);
     texts.set(path, text);
-    present.set(path, now);
     for (const id of now) seen.add(id);
   }
+  const observeText = (path: string, text: string, detect: boolean): void => { observe([{ path, text, deck: parseDeck(text) }], detect); };
 
   function lines(path: string): Set<number> {
     return new Set((pending.get(path) ?? []).map(item => item.issue.line));
@@ -180,17 +188,19 @@ export function createIdTracker(options: IdTrackerOptions) {
     },
     removed(ids: readonly string[]): void { for (const id of ids) removed.add(id); },
     restored(ids: readonly string[]): void { for (const id of ids) removed.delete(id); },
-    /** 存檔：先把這份文字當成新版本比對（可能比讀到的新），再補。回傳要寫回的文字。 */
-    fill(path: string, text: string): string {
-      if (texts.get(path) !== text) observe(path, text, parseDeck(text), true);
+    /**
+     * 存檔：先把這份文字當成新版本比對（可能比讀到的新），再補。回傳要寫回的文字，以及寫成之後才呼叫的 commit
+     * （把寫回的文字當成這一篇現在的內容；寫不進去時不呼叫，state 就不會以為 ID 已經在檔案裡）。
+     */
+    fill(path: string, text: string): { text: string; commit: () => void } {
+      if (texts.get(path) !== text) observeText(path, text, true);
       const next = fill(path, text);
-      if (next !== text) observe(path, next, parseDeck(next), false);
-      return next;
+      return { text: next, commit: () => { if (texts.get(path) !== next) observeText(path, next, false); } };
     },
-    /** 家長選了：回傳寫回後的文字；問題已不在、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。 */
+    /** 家長選了：回傳寫回後的文字；問題已不在、內容改過（問題物件已換新）、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。 */
     resolve(issue: IdIssue, choice: 'restore' | 'new', text: string): string | null {
       const path = issue.path;
-      if (texts.get(path) !== text) observe(path, text, parseDeck(text), true);
+      if (texts.get(path) !== text) observeText(path, text, true);
       const items = pending.get(path) ?? [];
       const item = items.find(each => each.issue === issue);
       if (!item) return null;
@@ -218,7 +228,7 @@ export function createIdTracker(options: IdTrackerOptions) {
       for (const id of own) if (id !== item.issue.restore || choice !== 'restore') removed.add(id);
       if (item.issue.restore && choice === 'restore') seen.add(item.issue.restore);
       if (!pending.get(path)?.length) pending.delete(path);
-      observe(path, next, parseDeck(next), false);
+      observeText(path, next, false);
       return next;
     },
   };

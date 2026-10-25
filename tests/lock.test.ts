@@ -12,7 +12,8 @@ import { idLock, scanTokens } from '../src/obsidian/lock.ts';
 function editor(doc: string, deck = true) {
   const removed: string[] = [], restored: string[] = [];
   const lock = idLock({ isDeck: () => deck, onRemoved: (_state, ids) => { removed.push(...ids); }, onRestored: (_state, ids) => { restored.push(...ids); } });
-  let state = EditorState.create({ doc, extensions: lock.extension });
+  // Obsidian 允許多個游標。
+  let state = EditorState.create({ doc, extensions: [lock.extension, EditorState.allowMultipleSelections.of(true)] });
   return {
     removed, restored,
     get text() { return state.doc.toString(); },
@@ -262,4 +263,24 @@ void test('一般輸入不整篇重掃：6,000 行的卡組打 200 個字在 1 �
   const ms = performance.now() - start;
   assert.ok(ms < 1000, ms + ' ms');
   assert.equal(e.tokens.length, 2000);
+});
+
+// Codex L2（2026-10-25）F2：貼上的文字裡，程式碼、公式、連結中像 ID 的字是正文，不能刪。
+for (const pasted of [' ` ^p7q2w8`', ' [[note ^p7q2w8]]', ' $x ^p7q2w8$', ' [說明 ^p7q2w8](筆記.md)', ' ``a ^p7q2w8``']) void test('F2 貼上的程式碼、公式、連結原樣保留：' + pasted, () => {
+  const e = editor(doc);
+  e.select(nameEnd);
+  e.input(pasted, 'input.paste');
+  assert.equal(e.text, doc.replace(A, '- 能說明擴散' + pasted + ' ^k3m9x2'));
+  // 沒有 ID 的目標行也一樣。
+  const f = editor('- 新目標\n    - Q :: A\n');
+  f.select(5);
+  f.input(pasted, 'input.paste');
+  assert.equal(f.text, '- 新目標' + pasted + '\n    - Q :: A\n');
+});
+
+void test('F2 多個游標同時貼上：正文不變，只拿掉名稱裡真的 ID 候選', () => {
+  const e = editor(doc);
+  e.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(nameEnd), EditorSelection.cursor(bLine + B.indexOf(' ^'))]), userEvent: 'select' });
+  e.dispatch({ ...e.state.replaceSelection(' $y ^aaaaaa$ 與 ^zzzzz9'), userEvent: 'input.paste' });
+  assert.equal(e.text, doc.replace(A, '- 能說明擴散 $y ^aaaaaa$ 與 ^k3m9x2').replace(B, '- 能說明溶解 $y ^aaaaaa$ 與 ^p7q2w8'));
 });

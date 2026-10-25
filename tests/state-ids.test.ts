@@ -292,3 +292,115 @@ void test('改名（同一批的刪除與新增）時待處理的問題跟著新
   assert.deepEqual(plain(h.issues('Essence Cards/新名字.md')).map(i => [i.kind, i.restore]), [['lost', 'k3m9x2']]);
   assert.equal(await h.state.fillIds('Essence Cards/新名字.md'), false);
 });
+
+// ---- Codex L2（2026-10-25）的反例 ----
+
+/** 記憶體裡的檔案：通知由測試手動送（控制同一批裡的順序），modify 可以設成寫不進去。 */
+function memoryVault(initial: Record<string, string>) {
+  const texts = new Map(Object.entries(initial));
+  const watchers = new Set<(path: string) => void>();
+  const control = { failModify: false };
+  const files: Files = {
+    list: folder => Promise.resolve([...texts.keys()].filter(path => path.startsWith(folder + '/')).sort()),
+    read: path => Promise.resolve(texts.get(path) ?? null),
+    modify: (path, edit) => {
+      const old = texts.get(path) ?? '';
+      const next = edit(old);
+      if (control.failModify) return Promise.reject(Error('寫不進去'));
+      texts.set(path, next);
+      return Promise.resolve();
+    },
+    append: (path, line) => { texts.set(path, (texts.get(path) ?? '') + line + '\n'); return Promise.resolve(); },
+    watch: onChange => { watchers.add(onChange); return () => { watchers.delete(onChange); }; },
+  };
+  const notify = (...paths: string[]) => { for (const path of paths) for (const watcher of watchers) watcher(path); };
+  return { files, texts, notify, control };
+}
+async function memoryState(t: TestContext, vault: Record<string, string>) {
+  const memory = memoryVault(vault);
+  const state = createState({ files: memory.files, device: 'PC-test', delay: 20, fillIds: true, random: () => 0,
+    now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
+  t.after(() => state.close());
+  await state.ready();
+  return { ...memory, state, settle: () => wait(120) };
+}
+
+void test('F1 小視窗拿到的問題在內容改過之後失效：還原回傳 null、問題保留（新的問題物件可以還原）', async t => {
+  const h = await setup(t, { [P]: A + B });
+  const lost = A.replace(' ^k3m9x2', '') + B;
+  await h.edit(P, lost);
+  const [shown] = h.issues();
+  // 按鈕先到：還沒重讀，直接拿改過題目的文字還原。
+  const changed = lost.replace('QA1 :: AA1', 'totally new :: answer');
+  assert.equal(h.state.resolveText(shown, 'restore', changed), null);
+  assert.equal(h.issues().length, 1);
+  assert.notEqual(h.issues()[0], shown);
+  assert.equal(h.state.resolveText(h.issues()[0], 'restore', changed), changed.replace('- 能說明 A', '- 能說明 A ^k3m9x2'));
+});
+
+void test('F1 重讀先到：題目改過之後，舊的問題物件不能還原；只改行號（上面多一行）時仍可以', async t => {
+  const h = await setup(t, { [P]: A + B });
+  const lost = A.replace(' ^k3m9x2', '') + B;
+  await h.edit(P, lost);
+  const [shown] = h.issues();
+  await h.edit(P, '\n' + lost);
+  assert.equal(h.issues()[0], shown);
+  assert.equal(shown.line, 1);
+  const renamed = '\n' + lost.replace('能說明 A', '能說明 A 改名');
+  await h.edit(P, renamed);
+  assert.notEqual(h.issues()[0], shown);
+  assert.equal(h.state.resolveText(shown, 'restore', renamed), null);
+  assert.equal(h.issues().length, 1);
+});
+
+for (const line of [
+  '{"t":"2026-10-24T12:00:00+08:00","lt": "aaaaaa","r":"good","v":"12345678"}',
+  '{ "t" : "2026-10-24T12:00:00+08:00" , "lt" : "aaaaaa" , "r" : "good" , "v" : "12345678" }',
+  '{"t":"2026-10-24T12:00:00+08:00","\u006ct":"aaaaaa","r":"good","v":"12345678"}',
+]) void test('F3 紀錄裡合法 JSON 的空白與跳脫鍵名：舊 ID 不再配出（有、沒有取消都一樣）：' + line.slice(30, 60), async t => {
+  for (const undo of [false, true]) {
+    const text = line + '\n' + (undo ? encodeEntry('2026-10-24T12:00:05.000+08:00', { undo: '2026-10-24T12:00:00+08:00' }) + '\n' : '');
+    const h = await memoryState(t, { [P]: B, [LOG]: text });
+    assert.equal(h.state.history().reviews.length, undo ? 0 : 1);
+    assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n', 'undo ' + undo);
+  }
+});
+
+void test('F3 壞掉的行：救回的尾段與認不出的行裡的 lt 也避開', async t => {
+  const broken = '{"t":"2026-10-24T12:00:00+08:00","lt":"aaaaaa","r":"go' + review('2026-10-24T12:01:00.000+08:00', 'aaaaab') + '\n{"lt": "aaaaac", 壞掉\n';
+  const h = await memoryState(t, { [P]: B, [LOG]: broken });
+  assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaad\n    - QC :: AC\n');
+});
+
+for (const order of [['P', 'O'], ['O', 'P']]) void test('F5 同一批跨檔搬移不因通知順序誤報：' + order.join('→'), async t => {
+  const O = OTHER;
+  const h = await memoryState(t, { [P]: A, [O]: B });
+  h.texts.set(P, C);
+  h.texts.set(O, B + A);
+  h.notify(...order.map(name => name === 'P' ? P : O));
+  await h.settle();
+  assert.deepEqual([h.state.deckStatus(P), h.state.deckStatus(O)], [{ missing: 1, issues: [] }, { missing: 0, issues: [] }]);
+});
+
+void test('F5 同一批交換兩篇的目標、搬出同時新增：沒有問題', async t => {
+  const O = OTHER;
+  const h = await memoryState(t, { [P]: A, [O]: B });
+  h.texts.set(P, B + C);
+  h.texts.set(O, A);
+  h.notify(O, P);
+  await h.settle();
+  assert.deepEqual([h.state.deckStatus(P).issues, h.state.deckStatus(O).issues], [[], []]);
+  assert.equal(h.state.deckStatus(P).missing, 1);
+});
+
+void test('離開筆記的補 ID 寫不進去時，state 不採用沒寫成的文字：之後照磁碟上的內容補，不誤報弄丟', async t => {
+  const h = await memoryState(t, { [P]: B + C });
+  h.control.failModify = true;
+  await assert.rejects(h.state.fillIds(P));
+  assert.equal(h.state.deckStatus(P).missing, 1);
+  h.control.failModify = false;
+  assert.equal(await h.state.fillIds(P), true);
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  // 寫不進去那次配出的 aaaaaa 仍算用過（不再配出），所以是 aaaaab。
+  assert.equal(h.texts.get(P), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+});

@@ -69,11 +69,24 @@ export interface State {
 }
 
 const DECK_ROOT = 'Essence Cards';
-/** 紀錄行裡的 lt（作答、變更都算），取消不影響：配新 ID 時避開（W5 §8-5、I3）。 */
+/**
+ * 原始紀錄每一行的 lt（作答、變更都算），取消不影響：配新 ID 時避開（W5 §8-5、I3）。每一行照完整的 JSON 讀
+ * （空白、跳脫的鍵名都算，和 parseLine 一樣）；壞掉的行另外用寬鬆的比對找 `"lt": "…"`，多避開幾個不會錯配
+ * （Codex 審查第二部分的 F3）。
+ */
 function ltsOf(text: string): Set<string> {
   const ids = new Set<string>();
-  for (const match of text.matchAll(/"lt":"((?:[^"\\]|\\.)*)"/g)) {
-    try { ids.add(JSON.parse('"' + match[1] + '"') as string); } catch { /* 壞掉的行不算 */ }
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string') ids.add((value as { lt: string }).lt);
+      continue;
+    } catch { /* 寫入中斷的行：下面寬鬆地找 */ }
+    for (const match of line.matchAll(/"lt"\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
+      try { ids.add(JSON.parse('"' + match[1] + '"') as string); } catch { /* 字串本身壞了 */ }
+    }
   }
   return ids;
 }
@@ -209,6 +222,15 @@ export function createState(options: StateOptions): State {
       const from = same >= 0 ? same : gone.findIndex(old => name(old) === name(path));
       if (from >= 0) tracker.move(gone.splice(from, 1)[0], path);
     }
+    // 和上一版比對弄丟的 ID（W5 §8-5）：刪掉的先忘掉，改到的同一批一起比（Codex 審查第二部分的 F5）；
+    // 自己剛寫回或存檔時已經比對過的同一份文字不再比。
+    const changed: { path: string; text: string; deck: Deck }[] = [];
+    for (const [path, text] of texts) {
+      if (text === null) tracker.forget(path);
+      else if (tracker.text(path) !== text) changed.push({ path, text, deck: parseDeck(text) });
+    }
+    tracker.observe(changed, true);
+    const parsed = new Map(changed.map(entry => [entry.path, entry.deck]));
     for (const [i, path] of paths.entries()) {
       const result = results[i];
       if (result.status === 'rejected') {
@@ -221,13 +243,10 @@ export function createState(options: StateOptions): State {
       if (isDeckPath(path)) {
         const before = deckMap.get(path);
         if (text === null) {
-          tracker.forget(path);
           if (deckMap.delete(path)) decksChanged = true;
           continue;
         }
-        const deck = parseDeck(text);
-        // 和上一版比對弄丟的 ID（W5 §8-5）；自己剛寫回或存檔時已經比對過的同一份文字不再比。
-        if (tracker.text(path) !== text) tracker.observe(path, text, deck, true);
+        const deck = parsed.get(path) ?? parseDeck(text);
         // 通知了但解析結果相同（例如內容沒變）就不重排。
         if (before && JSON.stringify(before) === JSON.stringify(deck)) continue;
         deckMap.set(path, deck);
@@ -283,13 +302,12 @@ export function createState(options: StateOptions): State {
     // 和 readDecks 相同（照路徑的字串順序、讀到 null 的不算），另外把文字交給 tracker 當第一版（不偵測）。
     const deckPaths = (await files.list(DECK_ROOT)).filter(isDeckPath).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
     const deckTexts = await Promise.all(deckPaths.map(path => files.read(path)));
-    deckPaths.forEach((path, i) => {
+    const first = deckPaths.flatMap((path, i) => {
       const text = deckTexts[i];
-      if (text === null) return;
-      const deck = parseDeck(text);
-      deckMap.set(path, deck);
-      tracker.observe(path, text, deck, false);
+      return text === null ? [] : [{ path, text, deck: parseDeck(text) }];
     });
+    for (const { path, deck } of first) deckMap.set(path, deck);
+    tracker.observe(first, false);
     rebuild();
     const afterDecks = performance.now();
     const paths = (await files.list(LOG_FOLDER)).filter(isLogPath);
@@ -304,13 +322,27 @@ export function createState(options: StateOptions): State {
     return { decks: afterDecks - start, history: afterHistory - afterDecks, plan: end - afterHistory, total: end - start };
   }
 
-  /** 存檔：補 ID、歸位、改縮排（待處理的跳過）；只在電腦、只對卡組（D-134）。 */
-  function fillText(path: string, text: string): string {
-    if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return text;
+  /**
+   * 存檔的準備：補 ID、歸位、改縮排（待處理的跳過）；只在電腦、只對卡組（D-134）。輸入的文字是這一篇最新的內容，
+   * 比對出的問題立刻採用；寫回的文字要等 commit（寫成之後）才採用。
+   */
+  function prepare(path: string, text: string): { text: string; commit: () => void } | null {
+    if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return null;
     const revision = tracker.revision(), known = tracker.text(path);
-    const next = tracker.fill(path, text);
-    if (next !== known || tracker.revision() !== revision) adopt(path);
-    return next;
+    const fill = tracker.fill(path, text);
+    if (tracker.text(path) !== known || tracker.revision() !== revision) adopt(path);
+    return { text: fill.text, commit() {
+      const before = tracker.text(path);
+      fill.commit();
+      if (tracker.text(path) !== before) adopt(path);
+    } };
+  }
+  /** 開著的筆記：呼叫端馬上用 Editor 的交易寫回，所以直接採用。 */
+  function fillText(path: string, text: string): string {
+    const fill = prepare(path, text);
+    if (!fill) return text;
+    fill.commit();
+    return fill.text;
   }
 
   return {
@@ -322,19 +354,21 @@ export function createState(options: StateOptions): State {
     fillText,
     async fillIds(path) {
       if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return false;
-      let changed = false;
+      let fill: ReturnType<typeof prepare> = null, changed = false;
       try {
         // 在 modify 的回呼裡對最新的文字重新計算（W5 §8-2 第 4 點）。
         await files.modify(path, text => {
           if (text === '') throw new NothingToFill();
-          const next = fillText(path, text);
-          changed = next !== text;
-          return next;
+          fill = prepare(path, text);
+          changed = !!fill && fill.text !== text;
+          return fill?.text ?? text;
         });
       } catch (error) {
         if (error instanceof NothingToFill) return false;
         throw error;
       }
+      // 寫成了才採用（Codex 審查第二部分第 14 點）。
+      (fill as ReturnType<typeof prepare>)?.commit();
       return changed;
     },
     resolveText(issue, choice, text) {
