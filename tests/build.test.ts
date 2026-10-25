@@ -135,3 +135,15 @@ void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vaul
   assert.ok((await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8')).includes('essence-cards-dev'));
   await assert.rejects(run(process.execPath, ['tools/install-vault.mjs', vault, '--dev', 'x'], { cwd: root }), /用法/);
 });
+
+// 技術債 A6（D-138 第 1 層）：編輯器鎖定的 Node 測試用的 CodeMirror，必須是 Obsidian 實際提供的那一版。
+void test('A6 @codemirror/state、@codemirror/view 的開發相依和 obsidian 套件的 peerDependencies 完全相同', async () => {
+  const own = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
+  const obsidian = JSON.parse(await readFile(join(root, 'node_modules/obsidian/package.json'), 'utf8')) as { peerDependencies: Record<string, string> };
+  for (const name of ['@codemirror/state', '@codemirror/view']) {
+    assert.ok(obsidian.peerDependencies[name], 'obsidian 沒有指定 ' + name);
+    assert.equal(own.devDependencies[name], obsidian.peerDependencies[name], name + ' 要和 obsidian 的 peerDependencies 一樣（不加 ^）');
+    const installed = JSON.parse(await readFile(join(root, 'node_modules', name, 'package.json'), 'utf8')) as { version: string };
+    assert.equal(installed.version, obsidian.peerDependencies[name], name + ' 實際裝的版本');
+  }
+});
