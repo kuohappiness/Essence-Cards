@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-25 | 寫好 W6 複習畫面的[任務說明](../../tasks/w6.md)（給之後實作的 Claude，也是 L2 的對照清單）：先做解析器拆開 ` \| `、原形去掉全形括號兩項技術債；核心只改 `typed` 變成好幾個答案、`baseForm`、`checkTyped`，紀錄加 `retry` 記打字卡第 2 步（D-121 留給 W6 定）；畫面的判斷放不碰 React 與 Obsidian 的 `src/review/` 在 Node 測，畫面只透過 `state` 拿資料；入口做好前用暫時的「開始複習」選單；iPhone 測試一次做完，含 W5 §5-2 的 I1～I4（I1 超過 1 秒就停下來回報）。兩題使用者已回答（自評按鈕一律中文；出處先做同一篇卡組的材料，跨單元的之後一定要能點），未開工 |
 | 2026-10-25 | W5 第一部分合併進 `main`（`b30c41e`）：Codex 再審 `8806152` 通過（7 點規格、原反例與 7 組新的相鄰組合都過，F1 改照閱讀模式的判準 Codex 同意）。合併後 `npm run check` 260 個通過、`main.js` 141,936 bytes 只 require `obsidian`、`npm run bench` 結束碼 0（state 的作答一次約 1.2 ms）。分支與 worktree 已清掉 |
 | 2026-10-25 | W5 第一部分的 L2 審查與修正：Codex 找到 4 項 P2（分隔線與圍欄之後的頂格一行把家長筆記併進目標、`appendLine` 讓取消後的作答復活、讀檔失敗後停住、Node 監看漏送刪除）與 1 項 P3（`flush`／`close` 的 rejection 沒人接），Claude 先寫失敗測試重現再修（`claude/w5` 的 `8806152`）。F1 的預期照 Obsidian 閱讀模式（D-135）：頂格那一行是目標裡的一般筆記、後面的題目仍屬於同一個目標；`...` 不算屬性區結尾。`History` 多 `cancelled`，state 讀不到時自己重試、提示照錯誤來源，`main.ts` 的接線有了 Node 測試。`npm run check` 260 個通過；等 Codex 再審，未合併 |
 | 2026-10-24 | 寫好 W5 第一部分的[審查請求](../../tasks/w5-review.md)（待審 `babfb3a..b7f0e06` 共 8 個 commit）：請 Codex 特別看 `appendLine` 和 `mergeHistory` 一致、檔案變動與自己的紀錄不漏不重複、換日與換時區、沒有寫卡組筆記的路徑、照 D-135 改的解析器，並逐點回覆 Claude 自己選的 17 處做法。backlog 技術債加上「狀態變更的紀錄」（W5 §6 延後）。未審查、未合併 |
