@@ -7,18 +7,20 @@ import { runFilesContract } from '../dev/files-contract.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
 import { createObsidianFiles } from './files.ts';
+import { lockTest, saveTest, t1Close, t1Prep, type IdsHost } from './dev-ids.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
 const limit = 20;
 
-/** 外掛本身（main.ts）：開發命令用它正在用的 state 與裝置碼。 */
-interface Host extends Plugin { device: string; state: State | null }
+/** 外掛本身（main.ts）：開發命令用它正在用的 state、裝置碼，以及存檔與鎖定的紀錄（第二部分）。 */
+interface Host extends Plugin, IdsHost { device: string; state: State | null }
 /** 載入時記下的數字，每個結果檔都附上（T12）。 */
 interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () => number | null }
 
-interface DevCommand { name: string; run: (host: Host) => Promise<unknown> }
+/** desktop：會寫卡組筆記的命令，只在電腦註冊、只在電腦執行（D-134：iPhone 不寫卡組；Codex 審查第二部分的 F4）。 */
+interface DevCommand { name: string; run: (host: Host) => Promise<unknown>; desktop?: true }
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -26,6 +28,11 @@ const commands: Record<string, DevCommand> = {
   today: { name: 'Essence 開發：今天的份', run: today },
   answer: { name: 'Essence 開發：寫一筆再取消', run: answer },
   watch: { name: 'Essence 開發：記錄檔案通知', run: watch },
+  // 第二部分（W5 §8-7 的 I7、I8）。
+  lock: { name: 'Essence 開發：鎖住 ID', run: lockTest, desktop: true },
+  save: { name: 'Essence 開發：存檔按鈕與備援', run: saveTest, desktop: true },
+  t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: t1Prep, desktop: true },
+  t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: t1Close, desktop: true },
 };
 
 export function registerDev(plugin: Host, load: LoadInfo): void {
@@ -33,6 +40,8 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
   async function run(code: string): Promise<void> {
     const command = Object.hasOwn(commands, code) ? commands[code] : undefined;
     if (!command) { new Notice('Essence 開發：沒有「' + code + '」'); return; }
+    // 命令面板與 URI 都經過這裡：手機上不執行會寫卡組的命令。
+    if (command.desktop && !Platform.isDesktopApp) { new Notice('Essence 開發：「' + code + '」只在電腦上執行'); return; }
     runs++;
     const startedAt = performance.now();
     let result: unknown;
@@ -47,6 +56,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     new Notice(command.name.replace('Essence 開發：', '') + '完成\n' + path);
   }
   for (const [code, command] of Object.entries(commands)) {
+    if (command.desktop && !Platform.isDesktopApp) continue;
     plugin.addCommand({ id: 'dev-' + code, name: command.name, callback: () => { void run(code); } });
   }
   plugin.registerObsidianProtocolHandler('essence-cards-dev', params => {
@@ -69,7 +79,7 @@ const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(r
 
 /** §4-4 open：對 Essence W5/量測/ 建一個新的 state，記下 ready() 的時間與資料量，量完就關。 */
 async function open(host: Host): Promise<unknown> {
-  const state = createState({ files: scopedFiles(createObsidianFiles(host.app), root + '/量測'), device: host.device });
+  const state = createState({ files: scopedFiles(createObsidianFiles(host.app), root + '/量測'), device: host.device, fillIds: false });
   try {
     const timings = await state.ready();
     const value = state.today();
@@ -218,17 +228,25 @@ async function compare(app: App): Promise<unknown> {
     for (const m of compareAssigned(await app.vault.read(after), listItems(app, after))) found.push({ case: name, stage: 'after', ...m });
   }
   // 有不一致的前幾篇，附上 metadataCache 的原始 listItems 與閱讀模式畫出來的清單（每篇只有幾項），判斷原因用。
-  const detail: Record<string, { cache: ListItem[]; reading: string[] }> = {};
-  for (const name of [...new Set(found.map(m => m.case))].slice(0, 10)) {
+  // 補 ID 之後還不一致的排前面（存檔之後家長看到的），再來是補 ID 之前的。
+  const detail: Record<string, { cache: ListItem[]; reading: string[]; after?: ListItem[]; afterReading?: string[] }> = {};
+  const order = [...new Set([...found.filter(m => m.stage === 'after' && (m.rule === 'd' || m.rule === 'e')), ...found].map(m => m.case))];
+  for (const name of order.slice(0, 10)) {
     const file = app.vault.getFileByPath(`${folder}/${name}.md`);
-    if (file) detail[name] = { cache: listItems(app, file), reading: await reading(app, await app.vault.read(file), file.path) };
+    const after = app.vault.getFileByPath(`${folder}/補ID後/${name}.md`);
+    if (file) detail[name] = { cache: listItems(app, file), reading: await reading(app, await app.vault.read(file), file.path), ...(after ? { after: listItems(app, after), afterReading: await reading(app, await app.vault.read(after), after.path) } : {}) };
   }
+  // 第二部分 I2：M1（縮排多一層）補 ID 後縮排改回一層，metadataCache 與閱讀模式都把題目當成目標的子項目（D-135）。
+  const m1 = app.vault.getFileByPath(folder + '/補ID後/M1.md');
+  const m1Text = m1 ? await app.vault.read(m1) : null;
+  const m1Check = m1 && m1Text !== null ? { text: m1Text, cache: listItems(app, m1), reading: await reading(app, m1Text, m1.path) } : null;
   return {
+    m1: m1Check,
     cases: cases.length, changedOnDisk,
     mismatches: found.length,
     before: found.filter(m => m.stage === 'before').length,
     after: found.filter(m => m.stage === 'after').length,
-    byCase: found.reduce<Record<string, number>>((count, m) => ({ ...count, [m.case]: (count[m.case] ?? 0) + 1 }), {}),
+    byCase: found.reduce<Record<string, string[]>>((all, m) => ({ ...all, [m.case]: [...all[m.case] ?? [], m.stage + ':' + m.rule] }), {}),
     first: found.slice(0, limit),
     detail,
   };

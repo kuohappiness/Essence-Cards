@@ -24,6 +24,8 @@ export interface Target {
   direction: 'en-zh' | 'zh-en' | null;
   pairKey: string | null;
   ok: boolean;
+  /** 只有 ambiguous-id 的目標才有：那一行出現的 ID 寫法，照出現的順序、不重複（W5 §8-3）。 */
+  idCandidates?: string[];
 }
 export interface Fields {
   sources: string[];
@@ -46,11 +48,15 @@ export interface Problem {
 export type ProblemCode =
   | 'empty-question' | 'missing-answer' | 'typed-answer-invalid'
   | 'duplicate-field' | 'unknown-field-value' | 'unknown-field'
-  | 'unknown-property-value' | 'duplicate-id' | 'cloze-not-typed';
+  | 'unknown-property-value' | 'duplicate-id' | 'cloze-not-typed'
+  // misplaced-id：hint，目標的 ID 不在行尾，照樣認得、存檔時移回行尾；ambiguous-id：error，目標那一行有兩個以上的 ID（D-134）。
+  | 'misplaced-id' | 'ambiguous-id';
 export interface AssignOptions {
   taken: ReadonlySet<string>;
   replace?: ReadonlySet<string>;
   random?: () => number;
+  /** 這些行的目標不補、不移動、不改縮排（待處理的，W5 §8-5）。 */
+  skip?: ReadonlySet<number>;
 }
 export interface AssignResult {
   text: string;

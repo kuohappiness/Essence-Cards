@@ -66,7 +66,7 @@ async function setup(t: TestContext, options: Partial<StateOptions> & { vault?: 
   } };
   const clock = { now: start, offset: 480 };
   const errors: [unknown, string][] = [];
-  const state = createState({ device: 'PC-test', delay: 50, now: () => clock.now, offset: () => clock.offset,
+  const state = createState({ device: 'PC-test', delay: 50, fillIds: false, now: () => clock.now, offset: () => clock.offset,
     onError: (error, source) => { errors.push([error, source]); }, ...options, files });
   let changes = 0;
   state.onChange(() => { changes++; });
@@ -326,7 +326,7 @@ void test('T6 讀的期間收到的通知：讀完後照檔案變動處理一次
       return text;
     },
   };
-  const state = createState({ files, device: 'PC-test', delay: 10, now: () => at('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
+  const state = createState({ files, device: 'PC-test', delay: 10, fillIds: false, now: () => at('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
   t.after(() => state.close());
   let changes = 0;
   state.onChange(() => { changes++; });

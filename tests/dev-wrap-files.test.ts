@@ -55,7 +55,7 @@ void test('open 的做法：對 scopedFiles 建的 state 只讀那個資料夾�
   const outer = createNodeFiles(await vault(t));
   await outer.modify('Essence Cards/真的（卡片）.md', () => '---\n科目: 自然\n---\n\n- 真的 ^zzzzz1\n    - 問 :: 答\n');
   await outer.modify('量測/Essence Cards/量測（卡片）.md', () => '---\n科目: 自然\n---\n\n- 量測 ^goal01\n    - 問 :: 答\n');
-  const state = createState({ files: scopedFiles(outer, '量測'), device: 'PC-test', now: () => Date.UTC(2026, 9, 24, 11), offset: () => 480 });
+  const state = createState({ files: scopedFiles(outer, '量測'), device: 'PC-test', fillIds: false, now: () => Date.UTC(2026, 9, 24, 11), offset: () => 480 });
   t.after(() => state.close());
   const timings = await state.ready();
   assert.ok(timings.total >= 0);

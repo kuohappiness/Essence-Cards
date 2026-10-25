@@ -1,13 +1,14 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDeck as parse, assignIds as assign } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign, setTargetId as setId, blockIds } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
 function parseDeck(text: string) { deckCases.add(text); return parse(text); }
 function assignIds(text: string, options: AssignOptions) { deckCases.add(text); return assign(text, options); }
+function setTargetId(text: string, line: number, id: string | null) { deckCases.add(text); return setId(text, line, id); }
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = [...syntax.slice(syntax.indexOf('### 2-2'), syntax.indexOf('### 2-3')).matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
@@ -475,6 +476,147 @@ void test('文件層級未閉合的圍欄仍持續到檔尾', () => {
   for (const fence of ['```', '~~~']) assert.deepEqual(parseDeck(fence + '\n- 假題 :: A').targets, []);
 });
 
+// W5 §8-4、§8-7 I1：名稱那一行中間的程式格式 ID 照樣認得（D-134）；不改共用的 stripId，題目與答案的正文不受影響。
+const question = '\n    - Q :: A';
+const plainFingerprint = parse('- 目標' + question).targets[0].prompts[0].fingerprint;
+for (const [line, id, name, code] of [
+  ['- 能說明擴散 ^k3m9x2 的現象', 'k3m9x2', '能說明擴散 的現象', 'misplaced-id'],
+  ['- 能說明擴散 ^k3m9x2的現象', 'k3m9x2', '能說明擴散的現象', 'misplaced-id'],
+  // 後面接英數字不是候選；放在行中時不認得，放在行尾時照舊是家長自訂的區塊 ID（不截成前六碼）。
+  ['- 能說明擴散 ^k3m9x2abc 的現象', null, '能說明擴散 ^k3m9x2abc 的現象', null],
+  ['- 能說明擴散 ^k3m9x2abc', 'k3m9x2abc', '能說明擴散', null],
+  ['- 能說明擴散 ^k3m9x2 和 ^p7q2w8', null, '能說明擴散 和', 'ambiguous-id'],
+  ['- 能說明擴散 ^k3m9x2 補充 ^mine-1', null, '能說明擴散 補充', 'ambiguous-id'],
+  ['- 寫法是 `^k3m9x2` 喔', null, '寫法是 `^k3m9x2` 喔', null],
+  ['- 寫法是 $^k3m9x2$ 喔', null, '寫法是 $^k3m9x2$ 喔', null],
+  ['- 連到 [[筆記 ^k3m9x2]] 與 [說明 ^p7q2w8](筆記.md)', null, '連到 [[筆記 ^k3m9x2]] 與 [說明 ^p7q2w8](筆記.md)', null],
+  ['- 能說明擴散 ^mine-1', 'mine-1', '能說明擴散', null],
+  ['- 能說明擴散 ^k3m9x2 的現象 ^k3m9x2', 'k3m9x2', '能說明擴散 的現象', 'misplaced-id'],
+  ['- ^k3m9x2 能說明擴散', 'k3m9x2', '能說明擴散', 'misplaced-id'],
+] as const) void test('I1 認得：' + line, () => {
+  const parsed = parseDeck(line + question);
+  const target = parsed.targets[0];
+  assert.equal(parsed.targets.length, 1);
+  assert.deepEqual([target.id, target.name], [id, name]);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.level, p.line, p.targetLine]), code ? [[code, code === 'ambiguous-id' ? 'error' : 'hint', 0, 0]] : []);
+  assert.equal(target.ok, code !== 'ambiguous-id');
+  assert.deepEqual(target.idCandidates, code === 'ambiguous-id' ? line.match(/(?<=\^)[a-z0-9-]+/g) : undefined);
+  assert.deepEqual([qa(target.prompts[0]).question, qa(target.prompts[0]).answer, target.prompts[0].fingerprint], ['Q', 'A', plainFingerprint]);
+});
+
+void test('I1 題目行與 implicit 題目裡的程式格式 ID 不是目標 ID，題目文字照 W2', () => {
+  const prompt = parseDeck('- 目標' + '\n    - Q ^k3m9x2 補 :: A').targets[0];
+  assert.deepEqual([prompt.id, prompt.name, qa(prompt.prompts[0]).question, prompt.idCandidates], [null, '目標', 'Q ^k3m9x2 補', undefined]);
+  const implicit = parseDeck('- borrow ^k3m9x2 x :: 借入').targets[0];
+  assert.deepEqual([implicit.implicit, implicit.id, implicit.name, qa(implicit.prompts[0]).question], [true, null, 'borrow ^k3m9x2 x', 'borrow ^k3m9x2 x']);
+  assert.deepEqual(parseDeck('- borrow ^k3m9x2 x :: 借入').problems, []);
+});
+
+void test('I1 沒有題目的一般清單不回報 ID 的提示', () => {
+  const parsed = parseDeck('- 一般筆記 ^k3m9x2 的現象\n- 另一行 ^k3m9x2 和 ^p7q2w8');
+  assert.deepEqual([parsed.targets, parsed.problems], [[], []]);
+});
+
+void test('I2 歸位：行中的 ID 移回行尾，其他字一字不動，第二次不改字', () => {
+  const once = assignIds('- 能說明擴散 ^k3m9x2 的現象' + question, { taken: new Set(), random: () => 0 });
+  assert.deepEqual(once, { text: '- 能說明擴散 的現象 ^k3m9x2' + question, assigned: [] });
+  assert.deepEqual(assignIds(once.text, { taken: new Set() }), { text: once.text, assigned: [] });
+  // 已經在行尾的同一個 ID 只拿掉行中那個。
+  assert.equal(assignIds('- 能說明擴散 ^k3m9x2 的現象 ^k3m9x2' + question, { taken: new Set() }).text, '- 能說明擴散 的現象 ^k3m9x2' + question);
+  assert.equal(assignIds('- ^k3m9x2 能說明擴散' + question, { taken: new Set() }).text, '- 能說明擴散 ^k3m9x2' + question);
+});
+
+void test('I2 歸位保留 CRLF、BOM 與檔尾', () => {
+  for (const tail of ['', '\r\n', '\r\n\r\n']) {
+    const text = '﻿---\r\n科目: 自然\r\n---\r\n- 能說明擴散 ^k3m9x2的現象\r\n    - Q :: A' + tail;
+    assert.equal(assignIds(text, { taken: new Set() }).text, '﻿---\r\n科目: 自然\r\n---\r\n- 能說明擴散的現象 ^k3m9x2\r\n    - Q :: A' + tail);
+  }
+});
+
+void test('I2 implicit 題目裡像 ID 的字不帶進補上的名稱那一行', () => {
+  const result = assignIds('- borrow ^k3m9x2 x :: 借入', { taken: new Set(), random: () => 0 });
+  assert.equal(result.text, '- borrow x ^aaaaaa\n    - borrow ^k3m9x2 x :: 借入');
+  assert.deepEqual(parseDeck(result.text).targets.map(t => [t.id, t.name, t.idCandidates]), [['aaaaaa', 'borrow x', undefined]]);
+});
+
+void test('I2 skip 的行一字不動，其他目標照常補與歸位', () => {
+  const text = '- 能說明 A\n    - Q1 :: A1\n- 能說明擴散 ^k3m9x2 的現象\n    - Q2 :: A2\n- 能說明 B\n        - Q3 :: A3';
+  const result = assignIds(text, { taken: new Set(), random: () => 0, skip: new Set([0, 2, 4]) });
+  assert.deepEqual(result, { text, assigned: [] });
+  const some = assignIds(text, { taken: new Set(), random: () => 0, skip: new Set([0]) });
+  assert.equal(some.text, '- 能說明 A\n    - Q1 :: A1\n- 能說明擴散 的現象 ^k3m9x2\n    - Q2 :: A2\n- 能說明 B ^aaaaaa\n  - Q3 :: A3');
+  assert.deepEqual(some.assigned, [{ line: 4, id: 'aaaaaa' }]);
+});
+
+void test('I2 ambiguous-id 的行不動、不配 ID；它的候選也不會配給別的目標', () => {
+  const text = '- 能說明擴散 ^aaaaaa 和 ^aaaaab\n    - Q :: A\n- 新目標\n    - R :: B';
+  const result = assignIds(text, { taken: new Set(), random: () => 0 });
+  assert.equal(result.text, '- 能說明擴散 ^aaaaaa 和 ^aaaaab\n    - Q :: A\n- 新目標 ^aaaaac\n    - R :: B');
+  assert.deepEqual(result.assigned, [{ line: 2, id: 'aaaaac' }]);
+});
+
+void test('I2 行中的 ID 和別的目標重複時換新，行中那個也拿掉', () => {
+  const text = '- 目標一 ^k3m9x2\n    - Q :: A\n- 目標二 ^k3m9x2 尾巴\n    - R :: B';
+  const result = assignIds(text, { taken: new Set(), random: () => 0 });
+  assert.equal(result.text, '- 目標一 ^k3m9x2\n    - Q :: A\n- 目標二 尾巴 ^aaaaaa\n    - R :: B');
+});
+
+void test('I2 setTargetId：設成指定 ID、拿掉、不是目標的行回傳 null', () => {
+  const ambiguous = '- 能說明擴散 ^k3m9x2 和 ^p7q2w8\r\n    - Q :: A ^child\r\n- 一般筆記\r\n';
+  assert.equal(setTargetId(ambiguous, 0, 'k3m9x2'), '- 能說明擴散 和 ^k3m9x2\r\n    - Q :: A ^child\r\n- 一般筆記\r\n');
+  assert.equal(setTargetId(ambiguous, 0, null), '- 能說明擴散 和\r\n    - Q :: A ^child\r\n- 一般筆記\r\n');
+  assert.equal(setTargetId(ambiguous, 1, 'k3m9x2'), null);
+  assert.equal(setTargetId(ambiguous, 2, 'k3m9x2'), null);
+  assert.equal(setTargetId(ambiguous, 9, 'k3m9x2'), null);
+  assert.equal(setTargetId('- borrow :: 借入', 0, 'k3m9x2'), null);
+  assert.equal(setTargetId('- 目標 ^mine-1\n    - Q :: A', 0, 'k3m9x2'), '- 目標 ^k3m9x2\n    - Q :: A');
+  assert.equal(setTargetId('- 目標\n    - Q :: A', 0, 'k3m9x2'), '- 目標 ^k3m9x2\n    - Q :: A');
+  assert.throws(() => setTargetId('- 目標\n    - Q :: A', 0, 'bad id'));
+  for (const text of [setTargetId(ambiguous, 0, 'k3m9x2')!, setTargetId(ambiguous, 0, null)!]) assert.deepEqual(parseDeck(text).problems, []);
+});
+
+void test('blockIds：每一行行尾的區塊 ID（題目、一般筆記、圍欄裡也算）', () => {
+  assert.deepEqual([...blockIds('- 目標 ^aaaaaa\n    - Q :: A ^child\n- 一般 ^Mine-1\n文字 ^k3m9x2 中間\n```\n- 圍欄 ^fence\n```')].sort(), ['Mine-1', 'aaaaaa', 'child', 'fence']);
+});
+
+// D-135：目標底下第一層的項目比目標的內容欄多 4 欄以上時，存檔改回一層，底下的行跟著移。
+void test('I2 縮排改正：多一層的題目改回一層，補充跟著移，題目、指紋與 ID 不變，第二次不改字', () => {
+  const text = '- 目標 ^k3m9x2\n        - Q :: A\n            - 例句：x';
+  const result = assignIds(text, { taken: new Set() });
+  assert.deepEqual(result, { text: '- 目標 ^k3m9x2\n  - Q :: A\n      - 例句：x', assigned: [] });
+  assert.deepEqual(parse(result.text).targets, parse(text).targets);
+  assert.deepEqual(assignIds(result.text, { taken: new Set() }), { text: result.text, assigned: [] });
+});
+
+void test('I2 縮排改正：Tab 縮排照樣用 Tab', () => {
+  for (const [text, expected] of [
+    ['- 目標 ^k3m9x2\n\t\t- Q :: A\n\t\t\t- 例句：x', '- 目標 ^k3m9x2\n\t- Q :: A\n\t\t- 例句：x'],
+    ['- 目標 ^k3m9x2\n\t\t\t- Q :: A\n\t\t\t\t- 例句：x', '- 目標 ^k3m9x2\n\t- Q :: A\n\t\t- 例句：x'],
+  ]) {
+    const result = assignIds(text, { taken: new Set() });
+    assert.equal(result.text, expected);
+    assert.deepEqual(parse(result.text).targets, parse(text).targets);
+  }
+});
+
+void test('I2 縮排改正：有正常縮排的兄弟項目時對齊它，不讓後面的題目變成子項目', () => {
+  const text = '- 目標 ^k3m9x2\n          - Q :: A\n    - R :: B\n    - 出處：p.1';
+  const result = assignIds(text, { taken: new Set() });
+  assert.equal(result.text, '- 目標 ^k3m9x2\n    - Q :: A\n    - R :: B\n    - 出處：p.1');
+  assert.deepEqual(parse(result.text).targets, parse(text).targets);
+});
+
+void test('I2 縮排改正：只改有題目的明確目標底下第一層；更深的補充、skip、沒有題目的清單不動', () => {
+  const deeper = '- 目標 ^k3m9x2\n    - Q :: A\n              - 很深的補充';
+  assert.equal(assignIds(deeper, { taken: new Set() }).text, deeper);
+  const skipped = '- 目標 ^k3m9x2\n        - Q :: A';
+  assert.equal(assignIds(skipped, { taken: new Set(), skip: new Set([0]) }).text, skipped);
+  const plain = '- 一般筆記\n        - 不是題目';
+  assert.equal(assignIds(plain, { taken: new Set() }).text, plain);
+  // 第一部分 §0-3 的 M1：補 ID 後縮排也改正。
+  assert.equal(assignIds('- 目標\n        - Q :: A', { taken: new Set(), random: () => 0 }).text, '- 目標 ^aaaaaa\n  - Q :: A');
+});
+
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 after(() => {
   // tools/export-compare.ts 用：全部範例寫成一個 JSON，拿到 Obsidian 和 metadataCache 對照（W5 §0-3）。
@@ -495,7 +637,12 @@ after(() => {
       const unsafeName = !original.name || parse('- ' + original.name).targets.length > 0;
       if (original.implicit && unsafeName) {
         assert.equal(after.targets[i].id, null, context + '：跳過的 implicit 被改動');
+      } else if (original.idCandidates) {
+        // ambiguous-id 不配 ID、不動，等家長選（D-134）。
+        assert.deepEqual([after.targets[i].id, after.targets[i].idCandidates], [null, original.idCandidates], context + '：ambiguous-id 被改動');
       } else assert.ok(after.targets[i].id, context + '：缺少 ID');
+      // 原本就有的 ID（包括行中被認得的）補 ID 之後不變。
+      if (original.id && !before.targets.some((other, j) => j < i && other.id === original.id)) assert.equal(after.targets[i].id, original.id, context + '：既有 ID 改變');
       const promptContent = (prompts: Prompt[]) => prompts.map(({ line, fingerprint, ...content }) => content);
       assert.deepEqual(promptContent(after.targets[i].prompts), promptContent(before.targets[i].prompts), context + '：題目內容改變');
     }

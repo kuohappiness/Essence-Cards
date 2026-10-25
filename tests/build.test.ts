@@ -34,12 +34,13 @@ async function project(t: TestContext, files: Record<string, string>): Promise<s
   return dir;
 }
 
-void test('W1 安裝指令先建置並複製三個檔案，僅 require obsidian，不改動 src/', async t => {
+void test('W1 安裝指令先建置並複製三個檔案，只 require Obsidian 提供的套件，不改動 src/', async t => {
   const vault = await mkdtemp(join(tmpdir(), 'essence-vault-'));
   t.after(() => rm(vault, { recursive: true, force: true }));
   const before = await tree(join(root, 'src'));
   const { stdout } = await run(process.execPath, ['tools/install-vault.mjs', vault], { cwd: root });
-  assert.match(stdout, /main\.js \d+ bytes; require: obsidian\n/);
+  // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
+  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian\n/);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
   }
@@ -98,7 +99,7 @@ void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、�
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: obsidian\n/);
+  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian\n/);
   const production = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
 });
@@ -113,9 +114,15 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
     return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
   };
-  const devOnly = (path: string) => path.startsWith('src/dev/') || path === 'src/obsidian/dev.ts';
+  const devOnly = (path: string) => path.startsWith('src/dev/') || path === 'src/obsidian/dev.ts' || path === 'src/obsidian/dev-ids.ts';
   assert.deepEqual((await included(false)).filter(devOnly), []);
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev.ts']);
+  // I9：CodeMirror 由 Obsidian 提供，沒有另一份被打包進來；編輯器的鎖定在正式版裡。
+  for (const dev of [false, true]) {
+    const inputs = await included(dev);
+    assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
+    assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
+  }
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {
@@ -127,4 +134,16 @@ void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vaul
   assert.deepEqual(JSON.parse(await readFile(join(vault, '.obsidian/community-plugins.json'), 'utf8')), ['other', 'essence-cards']);
   assert.ok((await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8')).includes('essence-cards-dev'));
   await assert.rejects(run(process.execPath, ['tools/install-vault.mjs', vault, '--dev', 'x'], { cwd: root }), /用法/);
+});
+
+// 技術債 A6（D-138 第 1 層）：編輯器鎖定的 Node 測試用的 CodeMirror，必須是 Obsidian 實際提供的那一版。
+void test('A6 @codemirror/state、@codemirror/view 的開發相依和 obsidian 套件的 peerDependencies 完全相同', async () => {
+  const own = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
+  const obsidian = JSON.parse(await readFile(join(root, 'node_modules/obsidian/package.json'), 'utf8')) as { peerDependencies: Record<string, string> };
+  for (const name of ['@codemirror/state', '@codemirror/view']) {
+    assert.ok(obsidian.peerDependencies[name], 'obsidian 沒有指定 ' + name);
+    assert.equal(own.devDependencies[name], obsidian.peerDependencies[name], name + ' 要和 obsidian 的 peerDependencies 一樣（不加 ^）');
+    const installed = JSON.parse(await readFile(join(root, 'node_modules', name, 'package.json'), 'utf8')) as { version: string };
+    assert.equal(installed.version, obsidian.peerDependencies[name], name + ' 實際裝的版本');
+  }
 });

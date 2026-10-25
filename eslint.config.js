@@ -7,7 +7,8 @@ const core = ['src/core/**/*.{ts,tsx}'];
 // state 與 dev 和核心一樣不碰畫面、Obsidian 與 Node，才能在 Node 直接測。
 const pure = ['src/state/**/*.{ts,tsx}', 'src/dev/**/*.{ts,tsx}'];
 const moduleFiles = ['src/**/*.{ts,tsx}', 'tools/**/*.{ts,mjs}', 'tests/**/*.{ts,tsx,mjs}'];
-const corePackages = ['obsidian', 'react', 'react-dom', 'motion'];
+// @codemirror 是 Obsidian 提供的編輯器（W5 §8-2），和 obsidian 一樣只有 src/obsidian/ 與 main.ts 能用。
+const corePackages = ['obsidian', 'react', 'react-dom', 'motion', '@codemirror'];
 const coreImports = {
   group: [...corePackages.flatMap(name => [name, name + '/*']), 'node:*', ...builtinModules],
   message: '核心不能依賴畫面、Obsidian 或 Node。',

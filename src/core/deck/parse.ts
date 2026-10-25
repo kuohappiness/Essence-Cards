@@ -1,7 +1,7 @@
 import { parseDocument } from 'yaml';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { linesOf, listTree, questionSyntax, stripId } from './markdown.ts';
+import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
 import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
 
@@ -82,15 +82,30 @@ export function parseDeck(text: string): Deck {
       }
       name = name.trim().replaceAll('\n', ' ');
     }
+    // 明確目標的名稱那一行：行中只有一個程式格式的 ID 時照樣認得；兩個以上或和行尾的不同是身分衝突（D-134）。
+    let id = implicit ? null : head.id;
+    let idProblem: 'misplaced-id' | 'ambiguous-id' | null = null;
+    let idCandidates: string[] | undefined;
+    if (!implicit) {
+      const firstLine = root.text.split('\n')[0];
+      const found = nameIds(firstLine);
+      if (found.middle.length) {
+        const distinct = [...new Set([...found.middle.map(m => m.id), ...(found.trailing ? [found.trailing.id] : [])])];
+        name = removeMiddle(found.trailing ? firstLine.slice(0, found.trailing.start) : firstLine, found.middle).trim();
+        if (distinct.length === 1) { id = distinct[0]; idProblem = 'misplaced-id'; } else { id = null; idProblem = 'ambiguous-id'; idCandidates = distinct; }
+      }
+    }
     const directionMatch = / (英翻中|中翻英)$/.exec(name);
     const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
-    const target: Target = { id: implicit ? null : head.id, name, line: root.line, implicit, section: root.section,
+    const target: Target = { id, name, line: root.line, implicit, section: root.section,
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
-      pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true };
+      pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
     const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint'): void => {
       problems.push({ line: node.line, targetLine: root.line, level, code, message });
       if (level === 'error') target.ok = false;
     };
+    if (idProblem === 'misplaced-id') addProblem(root, idProblem, '學習目標 ID 跑到名稱中間；照樣認得，存檔時移回行尾');
+    if (idProblem === 'ambiguous-id') addProblem(root, idProblem, '學習目標那一行有兩個以上的 ID，先不出題，等家長選要用哪一個', 'error');
     const seenFields = new Set<string>();
     function collectFields(node: Item): void {
       if (fieldStart.test(node.text)) {
