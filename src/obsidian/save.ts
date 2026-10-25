@@ -91,9 +91,9 @@ class IssuesModal extends Modal {
   }
 }
 
-/** 接上存檔按鈕、同名命令與離開筆記時的備援；回傳更新按鈕的函式（state 變了時呼叫）。 */
-/** wireSave 交回的：更新按鈕、存檔、編輯器建立時記下這篇開著。 */
-export interface Saver { refresh: () => void; save: (view: MarkdownView) => void; opened: (path: string | undefined) => void }
+/** wireSave 交回的：更新按鈕、存檔、編輯器建立時記下這篇開著、layout ready 時記下目前開著哪些。 */
+export interface Saver { refresh: () => void; save: (view: MarkdownView) => void; opened: (path: string | undefined) => void; start: () => void }
+/** 接上存檔按鈕、同名命令與離開筆記時的備援。 */
 export function wireSave(host: SaveHost): Saver {
   const { plugin } = host;
   const { app } = plugin;
@@ -180,11 +180,14 @@ export function wireSave(host: SaveHost): Saver {
   plugin.registerEvent(app.workspace.on('active-leaf-change', refresh));
   // 開到背景分頁時 Obsidian 不發 file-open（2026-10-26 實測），只開不改就關也要補（D-134，Codex 再審的 R3）：
   // 編輯器一建立（main.ts 的 ViewPlugin 呼叫 opened）、在編輯器裡改過字、每 2 秒看一次分頁，都把開著的卡組記下來。
-  // 只是記下開著，補 ID 仍然只在「上一次開著、這一次沒有」時；啟動的第一個事件之前（open 是 null）不記。
+  // 只是記下開著，補 ID 仍然只在「上一次開著、這一次沒有」時；還不知道誰開著（open 是 null）時不記。
   const remember = (path: string | undefined): void => { if (open && path && isDeckPath(path)) open.add(path); };
   plugin.registerEvent(app.workspace.on('editor-change', (_editor, info) => { remember(info.file?.path); }));
   plugin.registerInterval(window.setInterval(() => { for (const path of openPaths()) remember(path); }, REMEMBER_EVERY));
-  return { refresh, save, opened: remember };
+  // layout ready 時（包括 layout 已經 ready、外掛才重新啟用）先記下目前開著哪些，不補；
+  // 不然第一個事件就是關掉原本開著的卡組時，基準是空的，那篇就漏補（Codex 第三次審查的 T1）。
+  const start = (): void => { open ??= openPaths(); };
+  return { refresh, save, opened: remember, start };
 }
 
 /** 分頁開著的檔案；還沒載入的分頁從 viewState 拿。 */

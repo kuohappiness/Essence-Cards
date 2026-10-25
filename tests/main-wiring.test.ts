@@ -35,6 +35,9 @@ interface Host {
   uri: (params: Record<string, string>) => void;
   /** 寫入 vault 的動作與路徑。 */
   writes: string[];
+  /** 放一個開著這篇的分頁（不送事件）；關掉全部分頁並送 layout-change。 */
+  openTab: (path: string) => void;
+  closeTabs: () => void;
 }
 
 /** 記憶體裡的 vault；failRead／failWrite 決定哪些路徑讀不到、寫不進去。 */
@@ -63,9 +66,15 @@ function host(texts: Record<string, string>, fail: { read?: (path: string) => bo
     offref: () => {},
   };
   const layout: (() => void)[] = [];
+  const handlers = new Map<string, () => void>();
+  const leaves: { view: MarkdownView; getViewState: () => { state: { file: string } } }[] = [];
   const app = {
     vault,
-    workspace: { onLayoutReady: (callback: () => void) => { layout.push(callback); }, on: () => ({}), getLeavesOfType: () => [], getActiveViewOfType: () => null },
+    workspace: {
+      onLayoutReady: (callback: () => void) => { layout.push(callback); },
+      on: (name: string, callback: () => void) => { handlers.set(name, callback); return name; },
+      getLeavesOfType: () => leaves, getActiveViewOfType: () => null,
+    },
     loadLocalStorage: () => null, saveLocalStorage: () => {},
   };
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
@@ -80,7 +89,11 @@ function host(texts: Record<string, string>, fail: { read?: (path: string) => bo
     registerDomEvent(target: EventTarget, type: string, callback: () => void) { target.addEventListener(type, callback); }
   }
   class Notice { constructor(message: string) { notices.push(message); } }
-  class MarkdownView {}
+  class MarkdownView {
+    file: { path: string };
+    constructor(path: string) { this.file = { path }; }
+    addAction() { return { addClass() {}, setAttribute() {}, toggleClass() {}, remove() {} }; }
+  }
   class Modal {}
   const obsidian = { Plugin, Notice, TFile, TFolder, TAbstractFile, MarkdownView, Modal, setIcon: () => {}, editorInfoField: {}, Platform: { isWin: true, isDesktopApp: desktop } };
   const module = { exports: {} as { default: new (app: unknown, manifest: unknown) => Host['plugin'] } };
@@ -99,6 +112,8 @@ function host(texts: Record<string, string>, fail: { read?: (path: string) => bo
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout) callback(); },
     hide: () => { document.visibilityState = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); },
+    openTab: path => { leaves.push({ view: new MarkdownView(path), getViewState: () => ({ state: { file: path } }) }); },
+    closeTabs: () => { leaves.length = 0; handlers.get('layout-change')?.(); },
   };
 }
 
@@ -192,4 +207,21 @@ void test('接線：開發版在手機上沒有 lock、save 命令，直接用 U
     assert.deepEqual(h.notices.filter(n => n.includes('只在電腦上執行')).length, 2);
     assert.equal(h.text(trial), '- 能說明蒸發 ^aaaaaa\n    - Q :: A\n');
   }
+});
+
+// Codex 第三次審查的 T1：layout 已經 ready 時重新啟用外掛，第一個事件就是關掉原本開著的卡組，也要補一次。
+void test('接線：重新啟用外掛時已經開著的卡組，啟用時不寫，第一個事件就是關掉時補一次', async t => {
+  const path = 'Essence Cards/b.md';
+  const h = host({ [path]: '- 新目標\n    - Q :: A\n' }, {}, true);
+  t.after(() => { h.plugin.onunload(); });
+  h.openTab(path);
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(1100);
+  assert.deepEqual(h.writes, []);
+  h.closeTabs();
+  await wait(1200);
+  assert.deepEqual(h.writes, ['process ' + path]);
+  assert.match(h.text(path) ?? '', /^- 新目標 \^[a-z0-9]{6}\n/);
 });

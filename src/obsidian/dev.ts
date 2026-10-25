@@ -7,7 +7,7 @@ import { runFilesContract } from '../dev/files-contract.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
 import { createObsidianFiles } from './files.ts';
-import { lockTest, saveTest, type IdsHost } from './dev-ids.ts';
+import { lockTest, saveTest, t1Close, t1Prep, type IdsHost } from './dev-ids.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -31,6 +31,8 @@ const commands: Record<string, DevCommand> = {
   // 第二部分（W5 §8-7 的 I7、I8）。
   lock: { name: 'Essence 開發：鎖住 ID', run: lockTest, desktop: true },
   save: { name: 'Essence 開發：存檔按鈕與備援', run: saveTest, desktop: true },
+  t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: t1Prep, desktop: true },
+  t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: t1Close, desktop: true },
 };
 
 export function registerDev(plugin: Host, load: LoadInfo): void {

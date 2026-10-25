@@ -115,6 +115,8 @@ export default class EssenceCardsPlugin extends Plugin {
     // onLayoutReady 的回呼不會隨外掛停用取消：layout ready 之前就停用時不建立 state。
     if (this.unloaded) return;
     this.state = createState({ files, device: this.device, fillIds: Platform.isDesktopApp, onError: (error, source) => { this.report(error, source); } });
+    // 離開筆記的備援：記下現在開著哪些（只記，不補）。
+    this.saver?.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
     this.state.onChange(() => { this.saver?.refresh(); });
     // 讀不到時 ready() 自己重試（每次失敗都經過 onError）；只有停用外掛會讓它 reject。

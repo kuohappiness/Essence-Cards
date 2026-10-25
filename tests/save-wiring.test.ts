@@ -32,7 +32,7 @@ function setup() {
   const plugin = { app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
   const window = { setTimeout, setInterval: (callback: () => void) => { intervals.push(callback); return intervals.length; } };
   const obsidian = { MarkdownView, Modal: class {}, setIcon() {} };
-  const module = { exports: {} as { wireSave: (host: unknown) => { refresh(): void; opened(path: string): void } } };
+  const module = { exports: {} as { wireSave: (host: unknown) => { refresh(): void; opened(path: string): void; start(): void } } };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const run = new Function('require', 'module', 'exports', 'window', code) as (require: (name: string) => unknown, module: unknown, exports: unknown, window: unknown) => void;
   run(name => name === 'obsidian' ? obsidian : {}, module, module.exports, window);
@@ -82,4 +82,19 @@ void test('啟動時只記下開著哪些不補；只是切換焦點（同一篇
   g.fire('layout-change');
   await wait(1100);
   assert.deepEqual(g.fills, []);
+});
+
+// Codex 第三次審查的 T1：重新啟用外掛時 layout 已經 ready，第一個分頁事件可能就是關掉原本開著的卡組。
+void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不補），第一個事件就是關掉也補一次', async () => {
+  for (const make of [leaf, deferred]) {
+    const h = setup();
+    h.leaves.push(make(DECK));
+    h.saver.start();
+    await wait(1100);
+    assert.deepEqual(h.fills, [], '啟用時不補');
+    h.leaves.length = 0;
+    h.fire('layout-change');
+    await wait(1100);
+    assert.deepEqual(h.fills, [DECK]);
+  }
 });

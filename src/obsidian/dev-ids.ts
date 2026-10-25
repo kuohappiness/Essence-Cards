@@ -431,3 +431,30 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   };
   return out;
 }
+
+// Codex 第三次審查的 T1：layout 已經 ready 時重新啟用外掛，第一個事件就是關掉原本開著的卡組。
+// 分兩個命令，中間用 URI 的 reload 重新啟用外掛：t1prep 建一篇沒有 ID 的卡組開在分頁（不改字），t1close 直接關掉它。
+const T1_FOLDER = 'Essence Cards/W5 範例/重新啟用測試';
+export async function t1Prep(host: IdsHost): Promise<unknown> {
+  const { app } = host;
+  const path = `${T1_FOLDER}/重新啟用 ${Date.now().toString(36)}（卡片）.md`;
+  const file = await writeFile(app, path, TRIAL_TEXT);
+  if (host.state) await until(() => host.state!.deckStatus(path).missing === 2);
+  const leaf = app.workspace.getLeaf('tab');
+  await leaf.openFile(file, { active: false });
+  return { path, text: await app.vault.read(file) };
+}
+export async function t1Close(host: IdsHost): Promise<unknown> {
+  const { app } = host;
+  const leaves = app.workspace.getLeavesOfType('markdown').filter(leaf => leaf.view instanceof MarkdownView && leaf.view.file?.path.startsWith(T1_FOLDER + '/'));
+  const paths = leaves.map(leaf => (leaf.view as MarkdownView).file!.path);
+  if (!paths.length) throw Error('找不到 t1prep 開的分頁');
+  const events = host.devLog.events.length;
+  for (const leaf of leaves) leaf.detach();
+  await sleep(2500);
+  const texts = await Promise.all(paths.map(path => app.vault.adapter.read(path)));
+  const result = { paths, ids: texts.map(text => (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length), events: host.devLog.events.slice(events) };
+  const folder = app.vault.getAbstractFileByPath(T1_FOLDER);
+  if (folder) await app.vault.delete(folder, true);
+  return { ...result, ok: result.ids.every(count => count === 2) };
+}
