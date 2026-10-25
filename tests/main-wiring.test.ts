@@ -75,6 +75,7 @@ function host(texts: Record<string, string>, fail: { read?: (path: string) => bo
     addCommand(command: { id: string }) { commands.push(command.id); }
     registerEditorExtension() { extensions++; }
     registerEvent() {}
+    registerInterval(id: number) { return id; }
     registerObsidianProtocolHandler(_action: string, handler: (params: Record<string, string>) => void) { uri = handler; }
     registerDomEvent(target: EventTarget, type: string, callback: () => void) { target.addEventListener(type, callback); }
   }
@@ -83,15 +84,15 @@ function host(texts: Record<string, string>, fail: { read?: (path: string) => bo
   class Modal {}
   const obsidian = { Plugin, Notice, TFile, TFolder, TAbstractFile, MarkdownView, Modal, setIcon: () => {}, editorInfoField: {}, Platform: { isWin: true, isDesktopApp: desktop } };
   const module = { exports: {} as { default: new (app: unknown, manifest: unknown) => Host['plugin'] } };
-  // 執行 esbuild 剛建好的正式版程式碼；document 由參數提供，不動 Node 的全域。
+  // 執行 esbuild 剛建好的正式版程式碼；document 與 window 由參數提供，不動 Node 的全域。
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  const run = new Function('require', 'module', 'exports', 'document', code) as (require: (name: string) => unknown, module: unknown, exports: unknown, document: unknown) => void;
+  const run = new Function('require', 'module', 'exports', 'document', 'window', code) as (require: (name: string) => unknown, module: unknown, exports: unknown, document: unknown, window: unknown) => void;
   run((name: string) => {
     if (name === '@codemirror/state') return codemirrorState;
     if (name === '@codemirror/view') return codemirrorView;
     if (name !== 'obsidian') throw Error('只能 require obsidian 與 CodeMirror：' + name);
     return obsidian;
-  }, module, module.exports, document);
+  }, module, module.exports, document, { setTimeout, setInterval: () => 0 });
   const plugin = new module.exports.default(app, { id: 'essence-cards', version: '0.0.1' });
   return {
     plugin, notices, commands, extensions: () => extensions, text: path => files.get(path), writes, uri: params => { uri(params); },
@@ -161,7 +162,8 @@ void test('接線：補 ID、存檔命令與編輯器的鎖定只在電腦；手
     t.after(() => { plugin.onunload(); });
     plugin.onload();
     assert.equal(commands.includes('save'), desktop);
-    assert.equal(extensions(), desktop ? 1 : 0);
+    // 鎖定，以及告訴離開筆記的備援「這篇開著」的 ViewPlugin。
+    assert.equal(extensions(), desktop ? 2 : 0);
     layoutReady();
     assert.ok(plugin.state);
     await plugin.state.ready();

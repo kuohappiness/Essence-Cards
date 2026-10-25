@@ -1,6 +1,7 @@
 import { editorInfoField, Notice, Platform, Plugin } from 'obsidian';
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
+import { ViewPlugin } from '@codemirror/view';
 import { isDeckPath } from './core/deck/index.ts';
 import type { Files } from './core/files.ts';
 import { countFiles } from './dev/wrap-files.ts';
@@ -90,6 +91,8 @@ export default class EssenceCardsPlugin extends Plugin {
       },
     });
     this.registerEditorExtension(lock.extension);
+    // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開到背景分頁時 Obsidian 不發 file-open（Codex 再審的 R3）。
+    this.registerEditorExtension(ViewPlugin.define(view => { this.saver?.opened(pathOf(view.state)); return {}; }));
     this.saver = wireSave({
       plugin: this,
       state: () => this.state,

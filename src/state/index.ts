@@ -84,6 +84,13 @@ function ltsOf(text: string): Set<string> {
       if (value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string') ids.add((value as { lt: string }).lt);
       continue;
     } catch { /* 寫入中斷的行：下面寬鬆地找 */ }
+    // 每一段 `{"t":` 開頭的尾段都照 JSON 讀（紀錄模組救回的就是最後一段；跳脫的鍵名也認得，Codex 再審的 R1）。
+    for (let at = line.indexOf('{"t":', 1); at > 0; at = line.indexOf('{"t":', at + 1)) {
+      try {
+        const value: unknown = JSON.parse(line.slice(at));
+        if (value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string') ids.add((value as { lt: string }).lt);
+      } catch { /* 這一段也壞了 */ }
+    }
     for (const match of line.matchAll(/"lt"\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
       try { ids.add(JSON.parse('"' + match[1] + '"') as string); } catch { /* 字串本身壞了 */ }
     }
@@ -209,6 +216,18 @@ export function createState(options: StateOptions): State {
     let decksChanged = false, logsChanged = false;
     let failure: { error: unknown } | null = null;
     const revision = tracker.revision();
+    // 同一批讀到的紀錄先放進來源，下面比對卡組時「紀錄裡出現過的 ID」才包括它們（Codex 再審的 R2）。
+    paths.forEach((path, i) => {
+      const result = results[i];
+      if (result.status !== 'fulfilled' || isDeckPath(path)) return;
+      const text = result.value, before = sources.get(path);
+      if (text === null) {
+        if (sources.delete(path)) logsChanged = true;
+      } else if (before !== text) {
+        sources.set(path, text);
+        logsChanged = true;
+      }
+    });
     // 改名：同一批裡消失的卡組與第一次出現的配對（內容相同優先，再來是檔名相同），上一版與待處理的問題跟著新路徑。
     const texts = new Map(paths.flatMap((path, i) => {
       const result = results[i];
@@ -251,14 +270,6 @@ export function createState(options: StateOptions): State {
         if (before && JSON.stringify(before) === JSON.stringify(deck)) continue;
         deckMap.set(path, deck);
         decksChanged = true;
-      } else {
-        const before = sources.get(path);
-        if (text === null) {
-          if (sources.delete(path)) logsChanged = true;
-        } else if (before !== text) {
-          sources.set(path, text);
-          logsChanged = true;
-        }
       }
     }
     if (failure) {

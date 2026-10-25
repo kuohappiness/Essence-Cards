@@ -21,6 +21,8 @@ export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
 };
 /** 離開筆記之後等多久才補（毫秒）。 */
 const LEAVE_DELAY = 1000;
+/** 多久看一次分頁、把開著的卡組記下來（毫秒）。 */
+const REMEMBER_EVERY = 2000;
 export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號' };
 
 export interface SaveHost {
@@ -90,7 +92,9 @@ class IssuesModal extends Modal {
 }
 
 /** 接上存檔按鈕、同名命令與離開筆記時的備援；回傳更新按鈕的函式（state 變了時呼叫）。 */
-export function wireSave(host: SaveHost): { refresh: () => void; save: (view: MarkdownView) => void } {
+/** wireSave 交回的：更新按鈕、存檔、編輯器建立時記下這篇開著。 */
+export interface Saver { refresh: () => void; save: (view: MarkdownView) => void; opened: (path: string | undefined) => void }
+export function wireSave(host: SaveHost): Saver {
   const { plugin } = host;
   const { app } = plugin;
   const buttons = new Map<MarkdownView, HTMLElement>();
@@ -174,12 +178,13 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
   plugin.registerEvent(app.workspace.on('layout-change', leave));
   plugin.registerEvent(app.workspace.on('file-open', leave));
   plugin.registerEvent(app.workspace.on('active-leaf-change', refresh));
-  // 開到背景分頁時 Obsidian 不發 file-open：在編輯器裡改過字的卡組一定記成開著，關掉時才補得到（2026-10-26 實測）。
-  plugin.registerEvent(app.workspace.on('editor-change', (_editor, info) => {
-    const path = info.file?.path;
-    if (open && path && isDeckPath(path)) open.add(path);
-  }));
-  return { refresh, save };
+  // 開到背景分頁時 Obsidian 不發 file-open（2026-10-26 實測），只開不改就關也要補（D-134，Codex 再審的 R3）：
+  // 編輯器一建立（main.ts 的 ViewPlugin 呼叫 opened）、在編輯器裡改過字、每 2 秒看一次分頁，都把開著的卡組記下來。
+  // 只是記下開著，補 ID 仍然只在「上一次開著、這一次沒有」時；啟動的第一個事件之前（open 是 null）不記。
+  const remember = (path: string | undefined): void => { if (open && path && isDeckPath(path)) open.add(path); };
+  plugin.registerEvent(app.workspace.on('editor-change', (_editor, info) => { remember(info.file?.path); }));
+  plugin.registerInterval(window.setInterval(() => { for (const path of openPaths()) remember(path); }, REMEMBER_EVERY));
+  return { refresh, save, opened: remember };
 }
 
 /** 分頁開著的檔案；還沒載入的分頁從 viewState 拿。 */

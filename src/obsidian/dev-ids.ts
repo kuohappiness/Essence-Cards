@@ -399,6 +399,13 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   await sleep(2500);
   const popoutClosed = await app.vault.read(file);
   out.popout = { whileOpen: idCount(popoutOpen), afterClose: idCount(popoutClosed) };
+  // 10.（Codex 再審的 R3）開到背景分頁、什麼都不改就關掉：仍然補。
+  file = await fresh();
+  const background = app.workspace.getLeaf('tab');
+  await background.openFile(file, { active: false });
+  background.detach();
+  await sleep(2500);
+  out.openOnly = { ids: idCount(await app.vault.read(file)) };
   out.events = host.devLog.events.slice(events);
   // 清掉這次建的卡組（只刪，不再建同名檔）。
   const folder = app.vault.getAbstractFileByPath(TRIAL_FOLDER);
@@ -409,6 +416,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
     closeRightAway: (out.closeRightAway as { hasTyped: boolean; ids: number; issues: number }).hasTyped && (out.closeRightAway as { ids: number }).ids === 3 && (out.closeRightAway as { issues: number }).issues === 0,
     rename: JSON.stringify(out.rename) === JSON.stringify({ whileOpen: 0, issues: 0, afterClose: 2 }),
     popout: JSON.stringify(out.popout) === JSON.stringify({ whileOpen: 0, afterClose: 2 }),
+    openOnly: (out.openOnly as { ids: number }).ids === 2,
     missing: (out.missing as { tip?: string } | null)?.tip === TIPS.missing(2),
     plainNoNoteButton: out.plainNoteHasButton === false,
     filled: invariant(filled).length === 0 && (filled.match(/\^[a-z0-9]{6}$/gm) ?? []).length === 2,

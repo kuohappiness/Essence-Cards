@@ -356,7 +356,7 @@ void test('F1 重讀先到：題目改過之後，舊的問題物件不能還原
 for (const line of [
   '{"t":"2026-10-24T12:00:00+08:00","lt": "aaaaaa","r":"good","v":"12345678"}',
   '{ "t" : "2026-10-24T12:00:00+08:00" , "lt" : "aaaaaa" , "r" : "good" , "v" : "12345678" }',
-  '{"t":"2026-10-24T12:00:00+08:00","\u006ct":"aaaaaa","r":"good","v":"12345678"}',
+  '{"t":"2026-10-24T12:00:00+08:00","\\u006ct":"aaaaaa","r":"good","v":"12345678"}',
 ]) void test('F3 紀錄裡合法 JSON 的空白與跳脫鍵名：舊 ID 不再配出（有、沒有取消都一樣）：' + line.slice(30, 60), async t => {
   for (const undo of [false, true]) {
     const text = line + '\n' + (undo ? encodeEntry('2026-10-24T12:00:05.000+08:00', { undo: '2026-10-24T12:00:00+08:00' }) + '\n' : '');
@@ -403,4 +403,26 @@ void test('離開筆記的補 ID 寫不進去時，state 不採用沒寫成的�
   assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
   // 寫不進去那次配出的 aaaaaa 仍算用過（不再配出），所以是 aaaaab。
   assert.equal(h.texts.get(P), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+});
+
+// ---- Codex 再審（2026-10-26）的反例 ----
+
+void test('R1 寫入中斷後救回的尾段用跳脫的 lt 鍵：舊 ID 不再配出（有、沒有取消都一樣）', async t => {
+  const broken = '{"t":"2026-10-24T11:00:00+08:00","r":"go{"t":"2026-10-24T12:00:00+08:00","\\u006ct":"aaaaaa","r":"good","v":"12345678"}';
+  for (const undo of [false, true]) {
+    const text = broken + '\n' + (undo ? encodeEntry('2026-10-24T12:00:05.000+08:00', { undo: '2026-10-24T12:00:00+08:00' }) + '\n' : '');
+    const h = await memoryState(t, { [P]: B, [LOG]: text });
+    assert.equal(h.state.history().reviews.length, undo ? 0 : 1);
+    assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n', 'undo ' + undo);
+  }
+});
+
+for (const order of [['P', 'LOG'], ['LOG', 'P']]) void test('R2 同一批讀到的紀錄也算數：換成紀錄裡已經有的 ID 不是 changed：' + order.join('→'), async t => {
+  const h = await memoryState(t, { [P]: A + B, [LOG]: '' });
+  h.texts.set(P, A.replace('^k3m9x2', '^aaaaaa') + B);
+  h.texts.set(LOG, review('2026-10-24T12:00:00.000+08:00', 'aaaaaa') + '\n');
+  h.notify(...order.map(name => name === 'P' ? P : LOG));
+  await h.settle();
+  assert.equal(h.state.history().reviews.length, 1);
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
 });
