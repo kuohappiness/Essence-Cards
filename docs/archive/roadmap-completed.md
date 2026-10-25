@@ -4,6 +4,7 @@
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-24 | W5 §2 Obsidian 版檔案存取（`claude/w5` 的 `3848859`）：`createObsidianFiles` 用 `vault.process` 改檔（內容不變時 Obsidian 不寫，C6 驗過）、同一路徑排隊、資料夾改名與刪除通知裡面每個檔；契約檢查 `src/dev/files-contract.ts` 的 C1～C14 在 Node（另有故意弄壞的實作確認會失敗）與 Windows 版 Obsidian 1.14.5 的開發命令 `files` 都 14／14 通過。Claude 自己選的：Obsidian 版擋掉任何一段是 `..` 的路徑（比 Node 版嚴）、C6 另外確認監看有效。§3 以後未開始 |
 | 2026-10-24 | W5 開工（分支 `claude/w5`）：第 0 步的 F6 與 `Files.watch` 偶發失敗已修（後者是 Windows 刪除中的資料夾回 EPERM）；開發版骨架與 metadataCache 對照打通，在 Windows 版 Obsidian 對照 166 個例子，照 Obsidian 修好頂格延續行與未閉合屬性區。剩下三種出入使用者同意 Claude 的建議，寫成 [D-135](../decisions.md#d-135-清單解析和-obsidian-對照後的處理)：以閱讀模式為準、縮排多一層照樣出題並在存檔時改回（W5 第二部分）、名稱兩行時 ID 維持。第一部分其他步驟未開始 |
 | 2026-10-24 | 學習目標 ID 的補上時機與保護定案（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護)，修改 D-034、D-079）：使用者提出「存檔」按鈕與鎖住 ID，Claude 與 Codex 討論三輪（[討論稿](<../../Claude Codex Discussion/2026-10-24-id-protection.md>)）；不用題目指紋找回、在 Obsidian 以外弄丟時先停出由家長選、v1 不做解鎖。syntax.md §2-3 已更新；W5 說明分成兩部分，第二部分寫好介面與 I1～I10。尚未實作 |
 | 2026-10-24 | W4 今天的佇列合併進 `main`（`bc01b87`）：Codex 再審修正 `dbe2c35` 通過（原本的反例、第一次的 8 組與 10 組新組合都過，bench 超標時結束碼確實不是 0）。合併後 `npm run check` 204 個通過、`main.js` 663 bytes 只 require `obsidian`、`npm run bench` 結束碼 0（`planToday` 中位數約 83 ms）。分支與 worktree 已清掉 |
