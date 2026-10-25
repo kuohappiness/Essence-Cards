@@ -335,6 +335,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   // 5.（F1）小視窗開著時，那個目標的題目在 Obsidian 以外改了：小視窗換成現在的內容（舊的按鈕不在了），新的「還原」照常。
   file = await fresh();
   const stale = await open(app, file);
+  await until(() => { host.devLog.save?.refresh(); return !!button(stale.view); });
   button(stale.view)?.click();
   await sleep(2500);
   const staleFilled = stale.view.editor.getValue();
@@ -358,6 +359,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   // 6. 打完字、還沒重讀就按存檔：提示的數量是這次真的補上的。
   file = await fresh();
   const typed = await open(app, file);
+  await until(() => { host.devLog.save?.refresh(); return !!button(typed.view); });
   addTarget(typed.view);
   const typedNotices = host.devLog.notices.length;
   button(typed.view)?.click();

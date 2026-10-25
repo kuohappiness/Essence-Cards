@@ -94,6 +94,8 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
   const { plugin } = host;
   const { app } = plugin;
   const buttons = new Map<MarkdownView, HTMLElement>();
+  /** 上一次知道開著的檔（離開筆記的備援用）；啟動後第一次事件之前是 null。 */
+  let open: Set<string> | null = null;
 
   function save(view: MarkdownView): void {
     const state = host.state(), path = view.file?.path;
@@ -119,6 +121,7 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
       const path = view.file?.path;
       if (!state || !path || !isDeckPath(path)) continue;
       seen.add(view);
+      open?.add(path);
       const look = buttonLook(state.deckStatus(path));
       let button = buttons.get(view);
       if (!button) {
@@ -146,8 +149,7 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
   });
 
   // 離開筆記時的備援：上一次開著、這一次所有 Markdown 分頁都沒有開著的卡組，各補一次（只是切換焦點不算）。
-  // 第一次（啟動）只記下開著哪些，不補。
-  let open: Set<string> | null = null;
+  // 第一次（啟動）只記下開著哪些，不補。open 在 wireSave 的開頭宣告，refresh 也會把看到的卡組記進去。
   const openPaths = (): Set<string> => new Set(app.workspace.getLeavesOfType('markdown').map(fileOf).filter((path): path is string => !!path));
   function leave(): void {
     const now = openPaths();
@@ -157,7 +159,13 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
       host.log?.('離開 ' + path);
       window.setTimeout(() => {
         if (openPaths().has(path)) { host.log?.('又打開了，不補 ' + path); return; }
-        host.state()?.fillIds(path).then(changed => { host.log?.('補 ' + path + ' → ' + changed); }, host.onError);
+        host.state()?.fillIds(path).then(async changed => {
+          if (!host.log) return;
+          // 開發版：補完之後檔案裡有幾個 ID、state 怎麼看這一篇（查備援的時序用）。
+          const text = await app.vault.adapter.read(path).catch(() => null);
+          const ids = text === null ? '讀不到' : (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length + ' 個 ID';
+          host.log('補 ' + path + ' → ' + changed + '；檔案 ' + ids + '；' + JSON.stringify(host.state()?.deckStatus(path)));
+        }, host.onError);
       }, LEAVE_DELAY);
     }
     open = now;
@@ -166,6 +174,11 @@ export function wireSave(host: SaveHost): { refresh: () => void; save: (view: Ma
   plugin.registerEvent(app.workspace.on('layout-change', leave));
   plugin.registerEvent(app.workspace.on('file-open', leave));
   plugin.registerEvent(app.workspace.on('active-leaf-change', refresh));
+  // 開到背景分頁時 Obsidian 不發 file-open：在編輯器裡改過字的卡組一定記成開著，關掉時才補得到（2026-10-26 實測）。
+  plugin.registerEvent(app.workspace.on('editor-change', (_editor, info) => {
+    const path = info.file?.path;
+    if (open && path && isDeckPath(path)) open.add(path);
+  }));
   return { refresh, save };
 }
 
