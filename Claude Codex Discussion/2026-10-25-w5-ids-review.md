@@ -334,3 +334,25 @@
 - 兩份結果標示 Obsidian 1.14.5，仍沒有 build SHA／hash；核對的是提供的結果內容，不宣稱已獨立證明實機二進位與待審 commit 完全一致。沒有讀取更早試跑，沒有操作或寫入測試 vault。
 
 沒查的項目與原因：未審 c6a6c8a 之後的 commit 或無關既有功能（指定只審修正差異）；未操作 Obsidian，熱重載與短於掃描間隔的 deferred 分頁實際事件順序未驗（本次只有替身，指定實機結果不含這兩項）；未驗真實中文 IME、Vim、iPhone、兩台電腦離線同步及慢磁碟交錯（無新實機證據，iPhone 併 W6）；沙箱限制的 11 項測試未完成，未讀其他 vault 或較早試跑。
+
+## T1 確認（2026-10-26）
+
+**可以合併。** T1 修正成立；本次沒有發現需要合併前修正的問題。
+
+範圍限定為 `git diff 46c6f38 885dbc2` 的 7 個檔案，待審完整 SHA：`885dbc2f6c350de104bf7b2aa30fe04754b64f2a`。依 `tasks/w5-ids-review.md` 最後一節、D-134 與 `tasks/w5.md` §8-9 第 19 點確認。分支已有後續 commit，本次從指定 commit 匯出隔離副本驗證，沒有將分支後續變更納入結論。
+
+- **T1 可結案（規格）**：`main.ts` 在 layout ready 建立 state 後、等待 `state.ready()` 前呼叫 `saver.start()`；桌面 saver 此時已建立。`start()` 只用 `openPaths()` 初始化集合，涵蓋已載入 MarkdownView 與只有 viewState 的分頁，不呼叫補 ID。第一次關閉最後一個分頁時，既有 leave 路徑能比對到該卡組、延遲後確認未重開，再補一次。與第 19 點及 D-134 一致。
+- **啟動、同步重讀與焦點沒有新增誤補路徑（規格／設計）**：啟動快照、opened、定時補記與 state 重讀後的 refresh 都只記錄開著的分頁；補 ID 仍須經 leave 發現該篇已不在所有分頁中。`open ??=` 保留已由事件建立的集合，重複 start 不會清掉既有追蹤。新增的開發命令受既有 desktop 限制，只在開發版提供；沒有改到正式鎖定、解析或 State 的配號規則。
+
+### 驗證與證據
+
+- **獨立執行指定 commit 的回歸：9／9 通過**。`tests/save-wiring.test.ts` 與 `tests/main-wiring.test.ts`：已載入／只有 viewState 的分頁，啟動零補號、第一次關頁補一次；實際打包 main 的接線確認啟動零寫入、關頁後一次 `process` 且檔案得到 ID。既有桌面／手機限制、初始化與焦點情境也通過。
+- **另做 3 組獨立相鄰測試，全通過**：① start 後重複 start、模擬重讀通知的 refresh、定時補記、焦點及同集合事件，含同篇兩分頁（已載入／deferred 各一次），保持零補號；最後關閉再連續送 layout-change／file-open 只補一次。② 關閉後在備援執行前重開，不補。③ start 前已有事件初始化、且已記住背景卡組，start 不清掉該追蹤，之後關頁事件仍補一次。這些是實際 wireSave 配事件替身，沒有操作實機。
+- **機械檢查**：隔離副本的 TypeScript、ESLint、knip、共用 skill 一致性檢查通過。測試採本機既有相依；新增的獨立驗證只放隔離副本，沒有修改產品程式或提交測試。
+- **指定實機結果已逐份讀取核對**（Windows／Obsidian 1.14.5）：`t1close Windows-c50c 2026-10-26 015244.json` 對照組為 `ids=[0]`、`events=[]`、`ok=false`；`015332.json` 修正後為 `ids=[2]`、`ok=true`，事件依序為「離開」與「補 → true」，補後 missing=0、issues=[]。這補足上一輪 T1 缺少的熱重載實機證據。
+- `lock Windows-c50c 2026-10-26 015651.json`：**50／50**，逐項 ok 全 true；`save Windows-c50c 2026-10-26 015501.json`：**17／17**，並核對多分頁離開、rename、popout、openOnly 的前後數值。四份檔案沒有 build SHA／hash，因此確認的是所提供的結果內容，不宣稱獨立證明實機二進位等同指定 commit。
+- 已核對 main 的 backlog：紀錄讀取失敗時新 lt 尚未知、恢復後 pending 仍保留，已併入 `ready()` 技術債，觸發點為 W6 的 iPhone 測試前；本次維持原約定，不擴大處理。
+
+只在主資料夾附加本節報告；未改產品 worktree，未 commit、push 或合併。
+
+沒查的項目與原因：本次僅確認 T1 差異及相鄰行為，未重跑完整 354 項測試或完整 `npm run check`，不把 Claude 的全套結果列為本次獨立通過；同步重讀的動態驗證限 refresh 通知路徑，未操作真實同步服務。未重新操作 Obsidian／寫入測試 vault（實機依指定四份紀錄核對）；未審後續 commit、真實中文 IME、Vim、iPhone、兩台電腦離線同步與慢磁碟交錯（非此次修正範圍，iPhone 併 W6）。
