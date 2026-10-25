@@ -22,3 +22,4 @@
 - [複習體驗與卡片管理](experience.md)
 - [AI、Capture 與外掛生態](ai-and-ecosystem.md)
 - [獨立 App](standalone-app.md)
+- [更新與相容](updates.md)
