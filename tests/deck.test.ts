@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDeck as parse, assignIds as assign, setTargetId as setId, blockIds } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign, setTargetId as setId, baseForm, blockIds } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
@@ -200,6 +200,21 @@ for (const answer of ['a | ', '| a', 'a | | b', 'a | 借']) void test('R1 有一
   const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
   assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
   assert.equal(parsed.targets[0].ok, false);
+});
+// W6 §0-2（D-121、D-125）：原形提示 = 名稱去掉最後的「 中翻英」，再去掉最後一組全形括號；其他目標 null。
+for (const [name, expected] of [
+  ['borrow 中翻英', 'borrow'],
+  ["make up one's mind 中翻英", "make up one's mind"],
+  ['light（輕的） 中翻英', 'light'],
+  ['light（輕的）中翻英', 'light（輕的）中翻英'],
+  ['take（搭乘） a bus 中翻英', 'take（搭乘） a bus'],
+  ['light（輕的） 英翻中', null],
+  ['light 英翻中', null],
+  ['能說明擴散', null],
+] as const) void test('R2 原形 ' + JSON.stringify(name), () => {
+  const parsed = parseDeck('- ' + name + '\n  - Q :: light');
+  // 沒有「 中翻英」結尾的名稱不是中翻英目標，原形是 null（最後一行的例子只是一般目標）。
+  assert.equal(baseForm(parsed.targets[0]), expected === name ? null : expected);
 });
 void test('R1 中翻英以外的問答題 typed 仍是 null，答案裡的 | 不拆', () => {
   for (const text of ['- x 英翻中\n  - a | b :: 甲 | 乙', '- 目標\n  - Q :: a | b']) {
