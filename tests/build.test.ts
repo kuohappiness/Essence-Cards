@@ -25,6 +25,7 @@ async function project(t: TestContext, files: Record<string, string>): Promise<s
   t.after(() => rm(dir, { recursive: true, force: true }));
   await mkdir(join(dir, 'tools'));
   await copyFile(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
+  await copyFile(join(root, 'manifest.json'), join(dir, 'manifest.json'));
   // Windows junction 不需要系統管理員權限，也不複製相依套件。
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
   for (const [path, content] of Object.entries(files)) {
@@ -40,7 +41,7 @@ void test('W1 安裝指令先建置並複製三個檔案，只 require Obsidian 
   const before = await tree(join(root, 'src'));
   const { stdout } = await run(process.execPath, ['tools/install-vault.mjs', vault], { cwd: root });
   // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
-  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian\n/);
+  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.0\.1\+[0-9a-f]{7,}(\.dirty)?\n/);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
   }
@@ -72,7 +73,7 @@ void test('W1 新增模組資料夾與 CSS 不會誤報：建置成功、只 req
     'state/a.ts': 'export const a = "a";', 'dev/b.ts': 'export const b = "b";', 'obsidian/c.css': 'c{}',
   });
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: obsidian\n/);
+  assert.match(stdout, /require: obsidian; version 0\.0\.1(\+\S+)?\n/);
   assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), 'c{}');
 });
 void test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
@@ -102,7 +103,7 @@ void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI�
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian\n/);
+  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.0\.1(\+\S+)?\n/);
   const production = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
 });

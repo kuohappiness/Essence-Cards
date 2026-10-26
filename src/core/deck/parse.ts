@@ -160,12 +160,16 @@ export function parseDeck(text: string): Deck {
         let typed: readonly string[] | null = null;
         if (target.direction === 'zh-en') {
           // 好幾個正確答案用 | 分開（D-122）：每一段各自去掉格式與前後空白；`a|b` 也認得。指紋仍用整個答案格。
-          // 換行在拆開、trim 之前看整格（`a |` 的下一行是 `b` 時，trim 會把換行吃掉，Codex 格式查核 F2）。
-          typed = answer.split('|').map(part => part.replace(/\*\*|\*|_|==/g, '').trim());
-          if (/[\r\n]/.test(answer) || typed.some(part => !part || /\p{Script=Han}/u.test(part))) {
-            addProblem(node, 'typed-answer-invalid', '中翻英的答案必須是單行英文單字或片語', 'error');
-          } else if (new Set(typed.map(part => part.split(/\s+/).length)).size > 1) {
-            addProblem(node, 'typed-answer-words', '好幾個答案的字數不一樣，畫線照第一個');
+          // 先看整格（W6 §0-1、syntax.md §2-3）：換行、跳脫的管線、行內程式碼、公式、Obsidian 連結或嵌入、Markdown 連結
+          // 都不能當打字答案，不拆開、typed 是 null（換行要在 trim 之前看，Codex 格式查核 F1、F2）。
+          const invalid = (): void => { addProblem(node, 'typed-answer-invalid', '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式', 'error'); };
+          if (/[\r\n]|\\\||`|\$|\[\[|\]\(/.test(answer)) invalid();
+          else {
+            typed = answer.split('|').map(part => part.replace(/\*\*|\*|_|==/g, '').trim());
+            if (typed.some(part => !part || /\p{Script=Han}/u.test(part))) invalid();
+            else if (new Set(typed.map(part => part.split(/\s+/).length)).size > 1) {
+              addProblem(node, 'typed-answer-words', '好幾個答案的字數不一樣，畫線照第一個');
+            }
           }
         }
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };

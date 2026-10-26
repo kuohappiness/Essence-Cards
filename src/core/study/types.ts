@@ -34,9 +34,9 @@ export interface ChangeEntry extends Stamp {
 export type LogEntry = ReviewEntry | UndoEntry | ChangeEntry;
 
 export type NewEntry =
-  // typed：打字卡第 1 步的結果；retry：第 2 步（給了原形提示）的結果，只在真的有第 2 步時寫（D-121、D-115）。
-  // 評分只看第 1 步；retry 只是證據，parseLine 不讀它。
-  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; retry?: 'right' | 'wrong' | 'skip'; src?: 'check' }
+  // typed：打字卡第 1 步的結果；retry：第 2 步（原形提示）的結果，第 1 步 wrong／skip 時一定寫，跳過第 2 步寫 not-needed
+  // （D-121、D-115、syntax.md §5）。評分只看第 1 步；retry 只是證據，parseLine 不讀它。
+  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; src?: 'check' }
   | { lt: string; r: 'miss'; src: 'mistake' }
   | { undo: string }
   | { set: 'cap'; val: number }

@@ -16,14 +16,16 @@ export const RATING_LABELS: Record<Rating, string> = { miss: '沒印象', near: 
 export const RATE_DELAY = 300;
 
 export type StepResult = 'right' | 'wrong' | 'skip';
+/** 第 2 步的結果；原形是 null 或等於某一個答案而跳過第 2 步時是 not-needed（syntax.md §5 的 retry）。 */
+type RetryResult = StepResult | 'not-needed';
 
 /** 打字卡（中翻英）的三步（D-121、W6 §2-3）。 */
 export interface TypedView {
   step: 1 | 2 | 3;
   /** 第 1 步的結果；第 1 步還在進行時是 null。評分只看它。 */
   first: StepResult | null;
-  /** 第 2 步的結果；沒有第 2 步（跳過或還沒到）是 null。 */
-  second: StepResult | null;
+  /** 第 2 步的結果；跳過第 2 步是 not-needed，還沒到或第 1 步拼對是 null。 */
+  second: RetryResult | null;
   /** 第 2 步要說「不對」（第 1 步拼錯進來；按「沒印象」進來不說）。 */
   notice: boolean;
   /** 第 2 步的原形提示；其他步 null。 */
@@ -52,7 +54,7 @@ interface DoneCard {
   /** 這一筆紀錄的 t；改評分後是新的那一筆。 */
   t: string;
   typed: StepResult | null;
-  retry: StepResult | null;
+  retry: RetryResult | null;
   /** 打字卡：第 1 步打的字，和它與最接近答案的比對（回看時顯示）。 */
   firstInput: string | null;
   firstCompare: Spelling | null;
@@ -339,7 +341,7 @@ export function createSession(options: SessionOptions): Session {
         typed.firstAttempt = spelling(text, closest(text, answers));
         const hint = hintOf(card);
         if (hint !== null) { typed.step = 2; typed.hint = hint; typed.notice = true; typed.input = ''; }
-        else enterStep3(typed, card, text);
+        else { typed.second = 'not-needed'; enterStep3(typed, card, text); }
       }
     } else {
       if (ok) { typed.second = 'right'; finish(typed, card, matched, true); }
@@ -359,7 +361,7 @@ export function createSession(options: SessionOptions): Session {
       typed.firstAttempt = spelling(text, closest(text, answersOf(card)));
       const hint = hintOf(card);
       if (hint !== null) { typed.step = 2; typed.hint = hint; typed.notice = false; typed.input = ''; }
-      else enterStep3(typed, card, text);
+      else { typed.second = 'not-needed'; enterStep3(typed, card, text); }
     } else {
       typed.second = 'skip';
       enterStep3(typed, card, text);

@@ -221,6 +221,10 @@ void test('R4 retry 欄位：寫在 typed 後 src 前、沒有就不寫；parseL
     '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"miss","v":"3c9a01fe","typed":"skip","retry":"skip","src":"check"}');
   assert.equal(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'right' }),
     '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"right"}');
+  // 跳過第 2 步（原形是 null 或等於答案）寫 not-needed（格式查核 F3）。
+  assert.equal(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'not-needed' }),
+    '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"not-needed"}');
+  assert.deepEqual(parseLine(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'not-needed' })), parseLine(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong' })));
   const withoutRetry = encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong' });
   assert.equal(withoutRetry, '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong"}');
   assert.deepEqual(parseLine(both), parseLine(withoutRetry));

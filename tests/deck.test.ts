@@ -182,6 +182,11 @@ void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案�
 });
 for (const [name, answer, typed, fingerprint, problems] of [
   ['`a|b` 前後沒空格也認得', 'a|b', ['a', 'b'], '434fa34e', []],
+  ['分隔前後多個空格也認得', 'a  |  b', ['a', 'b'], '03801974', []],
+  ['粗體跨過分隔', '**a | b**', ['a', 'b'], 'b284db9b', []],
+  ['螢光筆跨過分隔', '==a | b==', ['a', 'b'], 'b38b856f', []],
+  ['兩段各自的裝飾', '**a** | ==b==', ['a', 'b'], 'f6fd120c', []],
+  ['兩個答案字數不同只是 hint', 'a | two words', ['a', 'two words'], '03324c7c', ['typed-answer-words']],
   ['只有一個答案', 'borrow', ['borrow'], 'cffabbc2', []],
   ['每一段各自拿掉粗體', '**made** up his mind | made his mind up', ['made up his mind', 'made his mind up'], '01829f8b', []],
   ['字數不一樣：提示、照樣出題', 'made up his mind | decided', ['made up his mind', 'decided'], 'cb4b5fb9', ['typed-answer-words']],
@@ -209,6 +214,13 @@ for (const [answer, fingerprint, typed] of [
 ] as const) void test('R1 指紋和 W5 相同：' + answer, () => {
   const prompt = qa(parseDeck('- x 中翻英\n  - He has already ____ . :: ' + answer).targets[0].prompts[0]);
   assert.deepEqual([prompt.fingerprint, prompt.typed], [fingerprint, typed]);
+});
+// W6 §0-1（格式查核 F1）：整格有跳脫的管線、行內程式碼、公式、Obsidian 連結或嵌入、Markdown 連結時不拆開，typed 是 null。
+for (const answer of ['a \\| b', '`a | b`', '[[word|borrow]]', '![[pic.png|borrow]]', '[borrow](https://example.test/a|b)', '$a|b$']) void test('R1 整格不能當打字答案就是 typed-answer-invalid、不拆開：' + answer, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.level, p.message]), [['typed-answer-invalid', 'error', '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式']]);
+  assert.equal(qa(parsed.targets[0].prompts[0]).typed, null);
+  assert.equal(parsed.targets[0].ok, false);
 });
 // 中文且字數不同（'a | 借 入'）也只報 invalid，不另給字數的 hint（Codex 格式查核 F2）。
 for (const answer of ['a | ', '| a', 'a | | b', 'a || b', 'a | 借', 'a | 借 入', 'a | ** **']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {

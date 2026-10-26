@@ -194,7 +194,7 @@ export async function reviewScript(host: ReviewHost): Promise<unknown> {
     log('0.3 秒內按差一點', session.rate('near'));
     later(); log('記住了（不能按）', session.rate('good'));
     log('差一點', session.rate('near'));
-    // 3. 原形等於答案（light（輕的） → light）：第 1 步拼錯直接到第 3 步。佇列排在下一張，劇本以外多做的一張。
+    // 3. 原形等於答案的打字卡（light（輕的） → light）：第 1 步拼錯直接第 3 步照打 → 差一點，紀錄 retry: not-needed。
     expect('light（輕的） 中翻英');
     type('lihgt');
     type('light');
@@ -219,8 +219,12 @@ export async function reviewScript(host: ReviewHost): Promise<unknown> {
     const undo = await undoAll(state, written);
     const freshAfter = await freshSnapshot(host);
     const logAfter = await logLines(host.app);
+    // 每一行對照劇本的預期（W6 §4、syntax.md §5）。
+    const lines = written.map(w => JSON.parse(w.line) as Record<string, unknown>).filter(line => 'r' in line);
+    const expected = [['good', undefined, undefined], ['near', 'wrong', 'wrong'], ['near', 'wrong', 'not-needed'], ['miss', 'skip', 'right'], ['easy', undefined, undefined]];
     return {
       steps, wrote, undo,
+      linesAsExpected: JSON.stringify(lines.map(line => [line.r, line.typed, line.retry])) === JSON.stringify(expected),
       logAdded: added(logBefore, logAfter),
       todaySame: freshAfter === freshBefore,
       progressSame: snapshot(base) === before,

@@ -15,6 +15,8 @@ import type { Pick } from './core/study/index.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
+/** tools/build.mjs 的 define：manifest 的版本加 git commit，例如 0.0.1+50625d2（「版本」命令顯示它，W6 §7 前提）。 */
+declare const BUILD: string;
 
 // 照錯誤來源如實提示；監聽者丟錯是程式的錯，只記在 console（Codex 審查 W5 第 11 點）。
 const NOTICES: Partial<Record<ErrorSource, string>> = {
@@ -69,7 +71,7 @@ export default class EssenceCardsPlugin extends Plugin {
     this.addCommand({
       id: 'version',
       name: '版本',
-      callback: () => { new Notice('Essence Cards：' + this.manifest.version); },
+      callback: () => { new Notice('Essence Cards：' + BUILD); },
     });
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
     if (Platform.isDesktopApp) this.ids = this.wireIds();

@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,11 +9,18 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const dev = process.argv.includes('--dev');
 // 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
 const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
+// 「版本」命令顯示的建置版本：manifest 的版本加 git commit（有未提交的修改時加 .dirty）。寫進 main.js、不在執行時讀
+// manifest：iCloud 可能先同步到新的 manifest、main.js 還是舊的（更新與相容的規畫第 1 點）；iPhone 測試靠它確認跑的是哪一次建置。
+const manifest = JSON.parse(await readFile(resolve(root, 'manifest.json'), 'utf8'));
+const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+let commit = '';
+try { commit = git(['rev-parse', '--short', 'HEAD']) + (git(['status', '--porcelain', '--untracked-files=no']) ? '.dirty' : ''); } catch { /* 不在 git 裡（測試的暫存專案） */ }
+const version = manifest.version + (commit ? '+' + commit : '');
 const result = await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], outfile: 'main.js',
   bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
   jsx: 'automatic', external, metafile: true,
-  define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
+  define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: JSON.stringify(version) },
 });
 // 測試用：寫出 esbuild 的 metafile，檢查真正的建置含了哪些檔案（不另抄一份建置選項）。
 if (process.env.ESSENCE_METAFILE) await writeFile(process.env.ESSENCE_METAFILE, JSON.stringify(result.metafile));
@@ -36,4 +44,4 @@ css.sort((a, b) => {
   return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
 });
 await writeFile(resolve(root, 'styles.css'), (await Promise.all(css.map(path => readFile(path, 'utf8')))).join('\n'));
-console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${[...new Set(requires)].sort().join(', ')}`);
+console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${[...new Set(requires)].sort().join(', ')}; version ${version}`);

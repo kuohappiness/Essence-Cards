@@ -200,7 +200,7 @@ void test('R5 第 1 步拼錯 → 第 2 步拼錯 → 第 3 步顯示比對（ma
   assert.ok(h.log()[0].includes('"typed":"wrong","retry":"wrong"'));
 });
 
-void test('R5 原形等於答案（borrow）或去掉括號後等於答案（light）：第 1 步拼錯直接第 3 步，沒有 retry', async t => {
+void test('R5 原形等於答案（borrow）或去掉括號後等於答案（light）：第 1 步拼錯直接第 3 步，retry: not-needed', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });
   // 先把 z1 做掉。
@@ -209,15 +209,48 @@ void test('R5 原形等於答案（borrow）或去掉括號後等於答案（lig
   assert.equal(lt(s.view()), 'z2');
   s.input('borow'); s.submit();
   let view = typed(s.view());
-  assert.deepEqual([view.step, view.first, view.second, view.hint], [3, 'wrong', null, null]);
+  assert.deepEqual([view.step, view.first, view.second, view.hint], [3, 'wrong', 'not-needed', null]);
   s.input('borrow'); s.submit();
   await rateLater(h, s, 'near');
   assert.ok(h.log()[1].includes('"lt":"z2","r":"near","v":'));
-  assert.ok(h.log()[1].includes('"typed":"wrong"') && !h.log()[1].includes('retry'));
+  assert.ok(h.log()[1].endsWith(',"typed":"wrong","retry":"not-needed"}'), h.log()[1]);
   assert.equal(lt(s.view()), 'z3');
-  s.input('lite'); s.submit();
+  // 按「沒印象」跳過第 2 步也是 not-needed。
+  s.skip();
   view = typed(s.view());
-  assert.deepEqual([view.step, view.hint, view.answer], [3, null, 'light']);
+  assert.deepEqual([view.step, view.first, view.second, view.hint, view.answer], [3, 'skip', 'not-needed', null, 'light']);
+  s.input('light'); s.submit();
+  await rateLater(h, s, 'miss');
+  assert.ok(h.log()[2].endsWith(',"typed":"skip","retry":"not-needed"}'), h.log()[2]);
+});
+
+// W6 §5 R5 最後一列（格式查核 F6）：只用 Session 的公開介面寫不出非法組合。
+void test('R5 寫不出非法組合：沒有 typed 就沒有 retry；typed: right 沒有 retry；typed: wrong／skip 一定有 retry', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  // z1：第 1 步拼錯、第 2 步拼錯、照打 → 差一點。
+  s.input('made up my mind'); s.submit(); s.input('made up his mand'); s.submit(); s.input('made his mind up'); s.submit();
+  await rateLater(h, s, 'near');
+  // z2：第 1 步拼對。
+  s.input('borrow'); s.submit();
+  await rateLater(h, s, 'good');
+  // z3：沒印象 → 跳過第 2 步 → 照打。
+  s.skip(); s.input('light'); s.submit();
+  await rateLater(h, s, 'miss');
+  // 回看改一次評分（取消加新的一筆），還有一般的卡。
+  s.back(); s.back(); s.rate('easy');
+  const natural = await h.open({ subject: '自然' });
+  natural.reveal();
+  await rateLater(h, natural, 'good');
+  await h.state.flush();
+  const reviews = h.log().map(line => JSON.parse(line) as Record<string, unknown>).filter(line => 'r' in line);
+  assert.equal(reviews.length, 5);
+  for (const line of reviews) {
+    if (!('typed' in line)) assert.ok(!('retry' in line), JSON.stringify(line));
+    else if (line.typed === 'right') assert.ok(!('retry' in line), JSON.stringify(line));
+    else assert.ok(['right', 'wrong', 'skip', 'not-needed'].includes(line.retry as string), JSON.stringify(line));
+  }
+  assert.deepEqual(reviews.map(line => [line.typed ?? null, line.retry ?? null]), [['wrong', 'wrong'], ['right', null], ['skip', 'not-needed'], ['right', null], [null, null]]);
 });
 
 void test('R5 第 2 步中途離開（新的 Session）：沒有寫任何紀錄；同一張從第 1 步開始', async t => {
@@ -307,6 +340,9 @@ void test('R10 回看改評分：取消加新的一筆（lt、v、typed 相同�
   assert.deepEqual(parseLine(lines[2]), { ...parseLine(lines[2]), kind: 'undo', undo: firstT });
   const original = parseLine(lines[0]);
   assert.deepEqual(parseLine(lines[3]), { ...parseLine(lines[3]), lt: 'a1', r: 'easy', v: original?.kind === 'review' ? original.v : '' });
+  // 原始 JSON 的 lt、v、typed、retry 和原本那行完全相同（一般卡沒有 typed、retry）。
+  const raw = (line: string) => { const { lt: id, v, typed: first, retry } = JSON.parse(line) as Record<string, unknown>; return { id, v, first, retry }; };
+  assert.deepEqual(raw(lines[3]), raw(lines[0]));
   assert.deepEqual(h.state.history().reviews.filter(e => e.lt === 'a1').map(e => e.r), ['easy']);
   assert.equal(card(s.view()).pressed, 'easy');
   s.rate('good');
