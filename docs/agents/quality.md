@@ -15,7 +15,7 @@
 
 ## 檢查指令
 
-- `npm run check`：型別、ESLint（含模組邊界）、knip、secretlint、skill 副本一致性、測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。W3 第 0 步裝好之前，用 `npm run typecheck`、`npm test` 和 `node tools/check-skill-mirror.ts`。
+- `npm run check`：型別、ESLint（含模組邊界）、knip、secretlint、skill 副本一致性、文件檢查、測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。W3 第 0 步裝好之前，用 `npm run typecheck`、`npm test` 和 `node tools/check-skill-mirror.ts`。
 - 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
 - 自動執行的地方：`.githooks/pre-commit`、`.github/workflows/check.yml`。
 - 建置：`npm run build`，`main.js` 只能 require Obsidian 提供的 `obsidian`、`@codemirror/state`、`@codemirror/view`（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護) 的編輯器鎖定），不能把另一份 CodeMirror 打包進去（`tools/build.mjs` 會擋）。

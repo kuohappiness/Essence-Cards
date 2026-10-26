@@ -1,11 +1,13 @@
 #!/bin/sh
 set -eu
 
-if ! git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
-  exit 0
-fi
 if [ ! -d node_modules ]; then
   echo '先執行 npm install' >&2
   exit 1
+fi
+# 文件檢查每次都跑，讀暫存區（D-141）；程式檢查只在程式相關的檔案有變動時跑。
+node tools/check-docs.ts --staged
+if ! git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
+  exit 0
 fi
 npm run check

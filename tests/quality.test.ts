@@ -4,9 +4,10 @@ import { ESLint } from 'eslint';
 import tseslint from 'typescript-eslint';
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, chmod, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, chmod, rm, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 void test('ESLint 的模組邊界與日期規則會擋下違規寫法，允許公開介面與 UTC', async () => {
   // 這裡只驗證語法規則；片段不是完整產品檔案，不需要建立 TypeScript project。
@@ -36,7 +37,7 @@ void test('ESLint 的模組邊界與日期規則會擋下違規寫法，允許�
   assert.deepEqual(utc.messages, []);
 });
 
-void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依擋程式 commit、文件 commit 直接通過', async t => {
+void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與文件的 commit 都擋', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-hooks-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const run = promisify(execFile);
@@ -63,7 +64,49 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依擋程式 co
   await run('git', ['rm', '--cached', '--', 'src/probe.ts'], isolated);
   await writeFile(join(root, 'doc.md'), '文件\n');
   await run('git', ['add', '--', 'doc.md'], isolated);
+  await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
+});
+
+void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件不跑程式檢查，沒 stage 的壞連結不擋', async t => {
+  // 相依借用本 repo 的 node_modules（junction，Linux 上是 symlink），檢查程式複製一份；兩者都不 stage。
+  // 清理時先拆掉連結再刪資料夾，不會碰到本 repo 的 node_modules。
+  const root = await mkdtemp(join(tmpdir(), 'essence-hook-docs-'));
+  const modules = join(root, 'node_modules');
+  t.after(async () => {
+    await unlink(modules).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  });
+  const run = promisify(execFile);
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  const isolated = { cwd: root, env };
+  const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
+  await run('git', ['init', '-q'], isolated);
+  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), modules, 'junction');
+  await mkdir(join(root, 'tools'));
+  // 本 repo 的例外表在這裡會變成「沒用到」，複製時清空。
+  const checker = await readFile(new URL('../tools/check-docs.ts', import.meta.url), 'utf8');
+  const emptied = checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];');
+  assert.notEqual(emptied, checker);
+  await writeFile(join(root, 'tools/check-docs.ts'), emptied);
+  await mkdir(join(root, '.githooks'));
+  const hook = join(root, '.githooks/pre-commit');
+  await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await chmod(hook, 0o755);
+  await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
+  // 只改文件：沒有 package.json，跑到程式檢查就會失敗，所以通過表示只跑了文件檢查。
+  await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)\n');
+  await writeFile(join(root, 'b.md'), '# B\n');
+  await run('git', ['add', '--', 'a.md', 'b.md'], isolated);
   await run('git', commit, isolated);
+  // 部分 stage：工作樹的壞連結沒 stage，照樣能 commit。
+  await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)、[壞](missing.md)\n');
+  await writeFile(join(root, 'b.md'), '# B\n\n改了\n');
+  await run('git', ['add', '--', 'b.md'], isolated);
+  await run('git', commit, isolated);
+  // stage 了就擋。
+  await run('git', ['add', '--', 'a.md'], isolated);
+  await assert.rejects(run('git', commit, isolated), /a\.md:3 {2}missing\.md {2}找不到檔案/);
 });
 
 for (const scenario of ['中文新增', '移出 src 的改名'] as const) void test('L2-3 hook 擋下缺相依的' + scenario, async t => {
