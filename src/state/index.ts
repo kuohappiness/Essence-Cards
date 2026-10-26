@@ -1,5 +1,5 @@
 import type { Files } from '../core/files.ts';
-import { isDeckPath, parseDeck } from '../core/deck/index.ts';
+import { isDeckPath, listDeckPaths, parseDeck } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
 import type { IdIssue } from './ids.ts';
@@ -33,10 +33,19 @@ export interface LoadTimings { decks: number; history: number; plan: number; tot
 
 export interface State {
   /**
-   * 第一次讀完卡組與紀錄、排好今天；之後每次呼叫回傳同一個 Promise。
-   * 讀不到時自己重試（1 秒起、每次加倍、最多 60 秒），每次失敗交給 onError；只有 close() 會讓它 reject。
+   * 第一次列出卡組與紀錄、能讀到的都讀完、排好今天就完成；之後每次呼叫回傳同一個 Promise。
+   * 讀不到的那幾篇跳過、之後自己重試（unread()）。只有列不出來（list 失敗）才整個重試（1 秒起、每次加倍、最多 60 秒），
+   * 每次失敗交給 onError。files 的讀取與列出失敗不會讓它 reject，只有 close() 會；程式本身的錯（不是讀不到）
+   * 也會經過 onError(…, 'read') 並讓它 reject（Codex state-load L2 的對齊第 2 點）。
    */
   ready(): Promise<LoadTimings>;
+  /**
+   * 列出來或通知過、但最近一次讀不到的路徑（卡組與紀錄），照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
+   * 不是空的時候占用資訊不完整，補 ID、還原、當成新的都暫停（fillText 回傳原文、fillIds 回傳 false、resolveText
+   * 回傳 null；D-134 不能把「不知道」當成「沒用過」）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
+   * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
+   */
+  unread(): readonly string[];
   decks(): readonly DeckEntry[];
   history(): History;
   /** 目前的輸入：decks、history、settings、exam: null、呼叫當下的 now 與 offset。 */
@@ -68,40 +77,11 @@ export interface State {
   restoredInEditor(path: string, ids: readonly string[]): void;
 }
 
-const DECK_ROOT = 'Essence Cards';
-/**
- * 原始紀錄每一行的 lt（作答、變更都算），取消不影響：配新 ID 時避開（W5 §8-5、I3）。每一行照完整的 JSON 讀
- * （空白、跳脫的鍵名都算，和 parseLine 一樣）；壞掉的行另外用寬鬆的比對找 `"lt": "…"`，多避開幾個不會錯配
- * （Codex 審查第二部分的 F3）。
- */
-function ltsOf(text: string): Set<string> {
-  const ids = new Set<string>();
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    if (!line) continue;
-    try {
-      const value: unknown = JSON.parse(line);
-      if (value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string') ids.add((value as { lt: string }).lt);
-      continue;
-    } catch { /* 寫入中斷的行：下面寬鬆地找 */ }
-    // 每一段 `{"t":` 開頭的尾段都照 JSON 讀（紀錄模組救回的就是最後一段；跳脫的鍵名也認得，Codex 再審的 R1）。
-    for (let at = line.indexOf('{"t":', 1); at > 0; at = line.indexOf('{"t":', at + 1)) {
-      try {
-        const value: unknown = JSON.parse(line.slice(at));
-        if (value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string') ids.add((value as { lt: string }).lt);
-      } catch { /* 這一段也壞了 */ }
-    }
-    for (const match of line.matchAll(/"lt"\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
-      try { ids.add(JSON.parse('"' + match[1] + '"') as string); } catch { /* 字串本身壞了 */ }
-    }
-  }
-  return ids;
-}
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
 
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
-const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [] };
+const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [] };
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
 export function createState(options: StateOptions): State {
@@ -127,14 +107,19 @@ export function createState(options: StateOptions): State {
   let loaded = false;
   let closed = false;
   const listeners = new Set<() => void>();
+  /** 收到通知還沒讀的路徑；讀不到的也留在這裡等重試。 */
   const pending = new Set<string>();
+  /** 列出來或通知過、但最近一次讀不到的路徑（unread()）；一定也在 pending 裡。 */
+  const unread = new Set<string>();
+  /** 第一次載入完成之前收到過通知：完成後照檔案變動處理一次。 */
+  let noticed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let processing: Promise<void> = Promise.resolve();
   let unwatch: (() => void) | null = null;
   // 連續讀不到的次數；決定下一次重試要等多久（Codex 審查 W5 的 F3：不能只等下一次通知）。
   let failures = 0;
   const retryDelay = (): number => Math.min(60_000, 1000 * 2 ** Math.max(0, failures - 1));
-  /** ready() 重試前的等待；close() 會提早叫醒它。 */
+  /** 列不出來時重試前的等待；close() 會提早叫醒它。 */
   let wake: (() => void) | null = null;
   function pause(ms: number): Promise<void> {
     return new Promise(resolve => {
@@ -144,19 +129,13 @@ export function createState(options: StateOptions): State {
     });
   }
 
-  // 原始紀錄每一行的 lt：只在配新 ID 或判斷「沒見過的 ID」時才算，照來源的文字快取。
-  const ltCache = new Map<string, { text: string; ids: Set<string> }>();
+  // 原始紀錄每一行的 lt 由紀錄模組算（history.seen，技術債 A1）；tracker 要 Set，照 history 物件的身分快取一個。
+  let seenIds: { of: History; ids: Set<string> } | null = null;
   function logIds(): Set<string> {
-    const all = new Set<string>();
-    for (const [path, text] of sources) {
-      let cached = ltCache.get(path);
-      if (cached?.text !== text) { cached = { text, ids: ltsOf(text) }; ltCache.set(path, cached); }
-      for (const id of cached.ids) all.add(id);
-    }
-    for (const path of ltCache.keys()) if (!sources.has(path)) ltCache.delete(path);
-    return all;
+    if (seenIds?.of !== history) seenIds = { of: history, ids: new Set(history.seen) };
+    return seenIds.ids;
   }
-  let tracker = createIdTracker({ random: options.random, logIds });
+  const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0 });
   /** 給 planToday 的卡組：拿掉待處理的目標（W5 §8-5：不出題）。 */
   let planList: DeckEntry[] = [];
   function rebuild(): void {
@@ -197,42 +176,74 @@ export function createState(options: StateOptions): State {
     if (closed) return;
     if (!isDeckPath(path) && !(isLogPath(path) && !own(path))) return;
     pending.add(path);
-    // 讀完之前收到的，讀完後一起處理。
+    // 第一次載入完成之前收到的，完成後一起處理。
     if (loaded) schedule();
+    else noticed = true;
   }
   function schedule(wait = delay): void {
+    // onError 的監聽者可能在回呼裡 close()（Codex state-load L2 的 F2）：關閉之後不再排。
+    if (closed) return;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      processing = processing.then(apply).catch((error: unknown) => { report(error, 'read'); });
+      void queue(apply);
     }, wait);
+  }
+  /** 一次只讀一批（第一次載入的兩批、之後每次檔案變動）：重試的計時到了，也等前一批處理完才讀。錯誤交給 onError。 */
+  function queue(work: () => Promise<void>): Promise<void> {
+    const next = processing.then(work);
+    processing = next.catch((error: unknown) => { report(error, 'read'); });
+    return next;
   }
   async function apply(): Promise<void> {
     if (closed || !pending.size) return;
     const paths = [...pending];
     pending.clear();
+    await read(paths);
+  }
+
+  /**
+   * 讀一批路徑（§2-2）：第一次載入的卡組、紀錄各一批，之後每次檔案變動一批，成功與失敗都只在這裡處理。
+   * 讀不到的留在 pending、放進 unread，上一次讀到的內容保留，隔一段時間自己重試；讀到 null 的拿掉。
+   * 代價：有紀錄還沒讀到時，today() 是照不完整的紀錄排的，那幾張卡的間隔可能偏短、剛在別台裝置複習過的卡可能再出一次；
+   * 紀錄讀到後會重排。這比整個外掛打不開好（使用者 2026-10-24：先讓讀到的卡組可以複習）。
+   */
+  async function read(paths: readonly string[]): Promise<void> {
+    if (closed) return;
     const results = await Promise.allSettled(paths.map(path => files.read(path)));
     if (closed) return;
     let decksChanged = false, logsChanged = false;
     let failure: { error: unknown } | null = null;
     const revision = tracker.revision();
-    // 同一批讀到的紀錄先放進來源，下面比對卡組時「紀錄裡出現過的 ID」才包括它們（Codex 再審的 R2）。
-    paths.forEach((path, i) => {
+    const texts = new Map<string, string | null>(), logs = new Map<string, string | null>();
+    for (const [i, path] of paths.entries()) {
       const result = results[i];
-      if (result.status !== 'fulfilled' || isDeckPath(path)) return;
-      const text = result.value, before = sources.get(path);
-      if (text === null) {
+      if (result.status === 'rejected') {
+        // 讀不到的留著等重試；讀得到的照常處理，不被它擋住。
+        pending.add(path);
+        unread.add(path);
+        failure ??= { error: result.reason };
+        continue;
+      }
+      unread.delete(path);
+      (isDeckPath(path) ? texts : logs).set(path, result.value);
+    }
+    // 同一批讀到的紀錄先放進來源、先合併，下面比對卡組時「紀錄裡出現過的 ID」才包括它們（Codex 再審的 R2）。
+    for (const [path, text] of logs) {
+      const before = sources.get(path), file = text ?? '';
+      // 自己的紀錄只有第一次讀不到時才會再讀（通知不理，W5 §3-3）：讀到之前作答的行只在記憶裡（可能還沒寫進檔），
+      // 接在讀到的內容後面；已經寫進檔的會重複，mergeHistory 會去掉。
+      const next = before !== undefined && own(path) ? file + (file && !file.endsWith('\n') ? '\n' : '') + before : text;
+      if (next === null) {
         if (sources.delete(path)) logsChanged = true;
-      } else if (before !== text) {
-        sources.set(path, text);
+      } else if (before !== next) {
+        sources.set(path, next);
         logsChanged = true;
       }
-    });
+    }
+    // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
+    if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
     // 改名：同一批裡消失的卡組與第一次出現的配對（內容相同優先，再來是檔名相同），上一版與待處理的問題跟著新路徑。
-    const texts = new Map(paths.flatMap((path, i) => {
-      const result = results[i];
-      return result.status === 'fulfilled' && isDeckPath(path) ? [[path, result.value] as const] : [];
-    }));
     const gone = [...texts].filter(([path, text]) => text === null && tracker.text(path) !== undefined).map(([path]) => path);
     const name = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
     for (const [path, text] of texts) {
@@ -241,8 +252,8 @@ export function createState(options: StateOptions): State {
       const from = same >= 0 ? same : gone.findIndex(old => name(old) === name(path));
       if (from >= 0) tracker.move(gone.splice(from, 1)[0], path);
     }
-    // 和上一版比對弄丟的 ID（W5 §8-5）：刪掉的先忘掉，改到的同一批一起比（Codex 審查第二部分的 F5）；
-    // 自己剛寫回或存檔時已經比對過的同一份文字不再比。
+    // 和上一版比對弄丟的 ID（W5 §8-5；第一次讀到的那一篇沒有上一版，不偵測）：刪掉的先忘掉，改到的同一批一起比
+    // （Codex 審查第二部分的 F5）；自己剛寫回或存檔時已經比對過的同一份文字不再比。
     const changed: { path: string; text: string; deck: Deck }[] = [];
     for (const [path, text] of texts) {
       if (text === null) tracker.forget(path);
@@ -250,95 +261,79 @@ export function createState(options: StateOptions): State {
     }
     tracker.observe(changed, true);
     const parsed = new Map(changed.map(entry => [entry.path, entry.deck]));
-    for (const [i, path] of paths.entries()) {
-      const result = results[i];
-      if (result.status === 'rejected') {
-        // 讀不到的留著等重試；讀得到的照常處理，不被它擋住。
-        pending.add(path);
-        failure ??= { error: result.reason };
+    for (const [path, text] of texts) {
+      const before = deckMap.get(path);
+      if (text === null) {
+        if (deckMap.delete(path)) decksChanged = true;
         continue;
       }
-      const text = result.value;
-      if (isDeckPath(path)) {
-        const before = deckMap.get(path);
-        if (text === null) {
-          if (deckMap.delete(path)) decksChanged = true;
-          continue;
-        }
-        const deck = parsed.get(path) ?? parseDeck(text);
-        // 通知了但解析結果相同（例如內容沒變）就不重排。
-        if (before && JSON.stringify(before) === JSON.stringify(deck)) continue;
-        deckMap.set(path, deck);
-        decksChanged = true;
-      }
+      const deck = parsed.get(path) ?? parseDeck(text);
+      // 通知了但解析結果相同（例如內容沒變）就不重排。
+      if (before && JSON.stringify(before) === JSON.stringify(deck)) continue;
+      deckMap.set(path, deck);
+      decksChanged = true;
     }
     if (failure) {
       failures++;
       report(failure.error, 'read');
       // 等待中已經有新的通知排好時，就跟著那一次重讀。
       if (timer === null) schedule(retryDelay());
-    } else failures = 0;
+    } else if (!unread.size) failures = 0;
+    // 都讀到了：讀不到期間暫定的問題重新核對（§3-2）。
+    if (!unread.size) tracker.confirm();
     if (tracker.revision() !== revision) decksChanged = true;
-    if (!decksChanged && !logsChanged) return;
     if (decksChanged) rebuild();
-    // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
-    if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
-    replan();
+    if (loaded && (decksChanged || logsChanged)) replan();
   }
 
-  /** 讀不到就整個重讀：先監看，失敗時等一段時間再試，close() 之後才放棄。 */
+  /** 第一次載入（§2-1）：先監看；只有列不出來才整個重試，close() 之後放棄。 */
   async function start(): Promise<LoadTimings> {
     // 先監看再讀：讀的期間改到的檔不會漏掉。
     if (!closed) unwatch = files.watch(notify);
     for (;;) {
+      const begin = performance.now();
+      let lists: [string[], string[]];
       try {
-        const timings = await load();
-        failures = 0;
-        return timings;
+        lists = await Promise.all([listDeckPaths(files), files.list(LOG_FOLDER).then(paths => paths.filter(isLogPath))]);
       } catch (error) {
         if (closed) throw error;
         failures++;
         report(error, 'read');
-        await pause(retryDelay());
+        // 回呼裡 close() 了就不等（Codex state-load L2 的 F2）；等的期間 close() 會提早叫醒。
+        if (!closed) await pause(retryDelay());
         if (closed) throw Error('state 已關閉，沒有讀完');
+        continue;
       }
+      failures = 0;
+      return load(begin, ...lists);
     }
   }
 
-  async function load(): Promise<LoadTimings> {
-    const start = performance.now();
-    deckMap.clear();
-    sources.clear();
-    tracker = createIdTracker({ random: options.random, logIds });
-    // 和 readDecks 相同（照路徑的字串順序、讀到 null 的不算），另外把文字交給 tracker 當第一版（不偵測）。
-    const deckPaths = (await files.list(DECK_ROOT)).filter(isDeckPath).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-    const deckTexts = await Promise.all(deckPaths.map(path => files.read(path)));
-    const first = deckPaths.flatMap((path, i) => {
-      const text = deckTexts[i];
-      return text === null ? [] : [{ path, text, deck: parseDeck(text) }];
-    });
-    for (const { path, deck } of first) deckMap.set(path, deck);
-    tracker.observe(first, false);
-    rebuild();
+  async function load(begin: number, deckPaths: string[], logPaths: string[]): Promise<LoadTimings> {
+    // 卡組一批、紀錄一批（自己的紀錄也讀），和之後的檔案變動走同一個 read。
+    await queue(() => read(deckPaths));
     const afterDecks = performance.now();
-    const paths = (await files.list(LOG_FOLDER)).filter(isLogPath);
-    const texts = await Promise.all(paths.map(path => files.read(path)));
-    paths.forEach((path, i) => { const text = texts[i]; if (text !== null) sources.set(path, text); });
-    history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
+    await queue(() => read(logPaths));
     const afterHistory = performance.now();
+    if (closed) throw Error('state 已關閉，沒有讀完');
     loaded = true;
     current = planToday(input());
     const end = performance.now();
-    if (pending.size && !closed) schedule();
-    return { decks: afterDecks - start, history: afterHistory - afterDecks, plan: end - afterHistory, total: end - start };
+    if (noticed) schedule();
+    return { decks: afterDecks - begin, history: afterHistory - afterDecks, plan: end - afterHistory, total: end - begin };
   }
 
   /**
-   * 存檔的準備：補 ID、歸位、改縮排（待處理的跳過）；只在電腦、只對卡組（D-134）。輸入的文字是這一篇最新的內容，
+   * 能不能配 ID 或還原：只在電腦（D-134）、讀完之後、還沒關閉，而且沒有讀不到的卡組或紀錄（§3：占用資訊不完整時，
+   * 不能把「不知道」當成「沒用過」）。
+   */
+  const writable = (): boolean => options.fillIds && loaded && !closed && !unread.size;
+  /**
+   * 存檔的準備：補 ID、歸位、改縮排（待處理的跳過）；只對卡組。輸入的文字是這一篇最新的內容，
    * 比對出的問題立刻採用；寫回的文字要等 commit（寫成之後）才採用。
    */
   function prepare(path: string, text: string): { text: string; commit: () => void } | null {
-    if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return null;
+    if (!writable() || !isDeckPath(path)) return null;
     const revision = tracker.revision(), known = tracker.text(path);
     const fill = tracker.fill(path, text);
     if (tracker.text(path) !== known || tracker.revision() !== revision) adopt(path);
@@ -361,10 +356,11 @@ export function createState(options: StateOptions): State {
       loading ??= start();
       return loading;
     },
+    unread: () => [...unread].sort(),
     deckStatus: path => loaded ? tracker.status(path) : { missing: 0, issues: [] },
     fillText,
     async fillIds(path) {
-      if (!options.fillIds || !loaded || closed || !isDeckPath(path)) return false;
+      if (!writable() || !isDeckPath(path)) return false;
       let fill: ReturnType<typeof prepare> = null, changed = false;
       try {
         // 在 modify 的回呼裡對最新的文字重新計算（W5 §8-2 第 4 點）。
@@ -383,7 +379,7 @@ export function createState(options: StateOptions): State {
       return changed;
     },
     resolveText(issue, choice, text) {
-      if (!options.fillIds || !loaded || closed) return null;
+      if (!writable()) return null;
       const revision = tracker.revision(), known = tracker.text(issue.path);
       const next = tracker.resolve(issue, choice, text);
       if (tracker.text(issue.path) !== known || tracker.revision() !== revision) adopt(issue.path);

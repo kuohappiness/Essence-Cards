@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendLine, encodeEntry, formatTime, isLogPath, mergeHistory } from '../src/core/study/index.ts';
+import { appendLine, encodeEntry, formatTime, isLogPath, mergeHistory, parseLine } from '../src/core/study/index.ts';
 import type { History, NewEntry, Rating } from '../src/core/study/index.ts';
 
 // syntax.md §5 的例子。
@@ -74,6 +74,45 @@ void test('T5 appendLine：取消之後才加進來的同一筆作答仍然取�
   assert.equal(appendLine(stepwise, undo), stepwise);
 });
 
+// S9（state-load §4）：seen 跟著 appendLine 更新，和重新 mergeHistory 相同。
+void test('T5 appendLine：seen 加上新一行的 lt（作答、變更、被取消的作答），取消的行不改 seen', () => {
+  const answer = (t: string, lt: string) => encodeEntry(t, { lt, r: 'good', v: '12345678' });
+  const lines = [
+    answer('2026-10-24T19:00:00.000+08:00', 'p7q2w8'),
+    answer('2026-10-24T19:00:01.000+08:00', 'a00001'),
+    encodeEntry('2026-10-24T19:00:02.000+08:00', { set: 'status', lt: 'h2m8qd', val: '暫停' }),
+    encodeEntry('2026-10-24T19:00:03.000+08:00', { undo: '2026-10-24T19:00:01.000+08:00' }),
+    // 先取消、之後才加進來的作答（appendLine 不把它放進 reviews），lt 仍算出現過。
+    encodeEntry('2026-10-24T19:00:04.000+08:00', { undo: '2026-10-24T19:00:05.000+08:00' }),
+    answer('2026-10-24T19:00:05.000+08:00', 'zz0001'),
+    answer('2026-10-24T19:00:06.000+08:00', 'p7q2w8'),
+  ];
+  let history = mergeHistory([{ path: WINDOWS, text: windowsText }]);
+  assert.deepEqual(history.seen, ['k3m9x2']);
+  for (const [i, line] of lines.entries()) {
+    const before = history.seen;
+    history = appendLine(history, line);
+    if (parseLine(line)?.kind === 'undo') assert.equal(history.seen, before, line);
+    assert.deepEqual(history.seen, mergeHistory([{ path: WINDOWS, text: windowsText }, { path: IPHONE, text: lines.slice(0, i + 1).join('\n') + '\n' }]).seen, line);
+  }
+  assert.deepEqual(history.seen, ['a00001', 'h2m8qd', 'k3m9x2', 'p7q2w8', 'zz0001']);
+});
+
+// Codex L2 的 F1：取消行多帶的 lt 在 appendLine 也算，和重新 mergeHistory 相同；同一行再加一次不改任何東西。
+void test('T5 appendLine：取消行多帶的 lt 加進 seen（一般與跳脫的鍵名），再加一次同一行不變', () => {
+  const lines = [
+    '{"t":"2026-10-24T19:00:00.000+08:00","undo":"not-present","lt":"undo01"}',
+    '{"t":"2026-10-24T19:00:01.000+08:00","\\u006ct":"undo02","undo":"2026-10-16T20:15:03.250+08:00"}',
+  ];
+  let history = mergeHistory([{ path: WINDOWS, text: windowsText }]);
+  for (const [i, line] of lines.entries()) {
+    history = appendLine(history, line);
+    assert.deepEqual(history, mergeHistory([{ path: WINDOWS, text: windowsText }, { path: IPHONE, text: lines.slice(0, i + 1).join('\n') + '\n' }]), line);
+    assert.equal(appendLine(history, line), history, line);
+  }
+  assert.deepEqual(history.seen, ['k3m9x2', 'undo01', 'undo02']);
+});
+
 // 固定種子的亂數（mulberry32）。
 function seeded(seed: number): () => number {
   return () => {
@@ -132,6 +171,7 @@ void test('T5 appendLine 性質：200 組隨機的自己的作答、取消、變
     const merged = mergeHistory([otherSource, { path: 'Essence Cards/紀錄/2026-10 PC-test.jsonl', text: own.join('\n') + '\n' }]);
     assert.deepEqual(history.changes, merged.changes, 'round ' + String(round));
     assert.deepEqual(history.cancelled, merged.cancelled, 'round ' + String(round));
+    assert.deepEqual(history.seen, merged.seen, 'round ' + String(round));
     assert.deepEqual(multiset(history), multiset(merged), 'round ' + String(round));
     // 只有 at 完全相同、來自不同檔案的兩筆之間先後可以不同（§3-4）。
     assert.deepEqual(history.reviews.map(entry => entry.at), merged.reviews.map(entry => entry.at), 'round ' + String(round));

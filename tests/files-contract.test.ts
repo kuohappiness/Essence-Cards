@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { contractCases, runContractCase } from '../src/dev/files-contract.ts';
 import type { Files } from '../src/core/files.ts';
 import { createNodeFiles } from '../tools/node-files.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
 
 // W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C14；每個例子一個新的暫存 vault。
 for (const item of contractCases) {
@@ -47,3 +48,12 @@ void test('Files 契約抓得到壞掉的實作', async t => {
     assert.equal(result.ok, false, code + ' 應該失敗');
   }
 });
+
+// 技術債 A9：測試用的記憶體 Files 也要過同一份契約，state 與接線的測試才能用它取代真檔案。
+for (const item of contractCases) {
+  void test(`記憶體 Files 契約 ${item.code}：${item.title}`, async () => {
+    const memory = createMemoryFiles();
+    const result = await runContractCase(item, memory.files, memory.ops, 'Essence W5/暫存', { notice: 200, quiet: 50 });
+    assert.deepEqual(result, { code: item.code, ok: true });
+  });
+}
