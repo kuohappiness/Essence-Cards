@@ -1,0 +1,153 @@
+# W6 複習畫面：L2 獨立審查（給 Codex）
+
+> **草稿，還不能送出**（2026-10-26，Opus 5.5）。送出前要先完成[交接單](w6-handoff.md)第 2 節：Fable 決定 Codex 格式查核的 F1（打字答案裡哪些 `|` 算分隔）與 F3（`retry` 要不要加 `not-needed`），Claude 照決定實作、改 syntax.md 之後，再把「審查對象」的 commit 與下面標「待決定」的地方補上，刪掉這一段。
+
+遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（打字卡的三步流程、回看改評分、手勢與換卡互相牽動；解析器與紀錄欄位改了資料格式）。
+
+依 [D-131](../docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)、[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)，[W6 任務說明](w6.md)由 Claude 實作（Fable 5.1 做到畫面，Opus 5.5 接手 Windows 實測與修正）。這一批改了卡組解析（` | `）與複習紀錄的欄位（`retry`），屬於高風險範圍（[docs/agents/quality.md](../docs/agents/quality.md)），合併前請你做獨立審查。**只審查、只回報**，不改產品程式、不 commit；可以在隔離的暫存資料夾重現。要改的由 Claude 改。
+
+開工前的格式查核（[報告](<../Claude Codex Discussion/2026-10-26-w6-format-review.md>)）回來時，§0-1 與 §1 已經做好；F2 已修（`8351638`），F5、F6 補了測試，F1、F3、F4 的處理見下面「規格與優先順序」。
+
+## 審查對象
+
+- worktree：`D:\程式開發\Essence-Cards-w6`，分支 `claude/w6`，沒有未提交的修改。
+- 從 `main` 的 `ab2c99c` 開出；W6 進行中把 `main` 合併進來一次（`620f340`，只有文件：D-140、格式查核、外掛架構討論稿）。**看 W6 的改動用 `git diff main...claude/w6`**（57 個檔案）。
+- 待審 commit（由舊到新）：
+  - `25130c9`：§0-1 中翻英的答案格拆開 ` | `（D-122）
+  - `9af2cae`：§0-2 `baseForm()`（D-121、D-125）
+  - `2168eef`：技術債 A7（state 只能經過 `index.ts`）與 W6 的 ui／review 邊界規則（限制第 3 點）
+  - `0b335b6`：技術債 A10（`main.ts` 只剩一處 `DEV`，開發命令訂閱外掛的事件）
+  - `2ea31fb`：技術債 A9（共用的記憶體 `Files` 與 Obsidian 替身）
+  - `1efb25b`：§1 `retry` 欄位
+  - `48cddfc`：§2 `src/review/`（純程式）與 §3 `src/ui/`（畫面）、`main.ts` 接線
+  - `e182292`：§4 開發命令，與 Windows 實測找到的修正
+  - `8351638`：格式查核 F2（答案格任何一處換行都是 `typed-answer-invalid`）與 F1、F5、F6 的測試
+  - `50625d2`：照打時還沒打字不畫比對那一行
+  - （待決定：F1、F3 的實作）
+- 各 commit 的訊息寫了那一步的做法。`307860a` 是上一個 session 的交接單，不用看。
+
+## 規格與優先順序
+
+- 主要規格：`main` 上的 [tasks/w6.md](w6.md) §0～§6 與它的「必讀範圍」；§7（iPhone）在 L2 之後做，不在這次範圍。基準（說明所在的 commit）是 `79dfe14`；之後 `main` 改過 syntax.md、decisions.md、w5.md、backlog.md（W5 第二部分合併、D-140），以 `main` 的新版為準。
+- 格式查核的建議不是決定。F1、F3 由 Fable 決定（待決定：結果與 syntax.md 的對應句子寫在這裡）；F4（W5／W6 混用時多答案卡的判定不相容）：W5 沒有複習畫面，學生的裝置不會用 W5 判定作答；之後版本混用的規則寫在（待決定）。
+- 規格互相衝突或有漏洞時列成問題，不挑容易通過的那份。
+
+## 請特別看
+
+照 W6 說明〈完成後〉：
+
+1. **` | ` 的拆法和指紋不變**（`src/core/deck/parse.ts` 的答案格那一段、`tests/deck.test.ts` 的 R1）：`answer` 與 `fingerprint` 用整個答案格；格式查核給的 8 個 W5 指紋登錄成測試，W6 算出來相同。換行在拆開之前看整格。
+2. **`retry` 不影響 `appendLine` 和 `mergeHistory` 的一致**（`src/core/study/entries.ts`、`tests/append-line.test.ts`、`tests/study.test.ts` 的 R4）：`parseLine` 不讀 `retry`。
+3. **打字三步的每一格**（`src/review/session.ts`、`tests/review-session.test.ts` 的 R5）：評分只看第 1 步；能按的自評；跳過第 2 步的條件（原形是 null 或等於任何一個答案，不分大小寫）；答案出現前（第 1、2 步）沒有喇叭、不自動念。
+4. **回看改評分的取消與新的評分、打字卡的限制**（`change()`、R10）：寫的是這一次記下的 `lt`、`v`、`typed`、`retry`，不是從 `History` 重建（`History` 不讀 `retry`）。
+5. **中斷時不寫任何紀錄**：✕、Esc、外掛停用、新的 `Session`。
+6. **畫面沒有繞過 `state` 讀寫檔案或排程**：`eslint.config.js` 的 `viewFiles`、`viewNames` 與 `tests/quality.test.ts`；`src/ui/sources.ts` 用 `metadataCache` 找出處（Obsidian 層的唯讀查詢）。
+7. **沒有寫卡組筆記的路徑**：畫面只經過 `state.answer` 寫紀錄；另外只寫自動朗讀的開關（`app.saveLocalStorage`）。開發版的 `w6-save` 會按卡組的「存檔」按鈕（只在電腦、只在開發版）。
+
+## Claude 自己選了做法的地方（請逐點回覆）
+
+上一個 session（Fable 5.1）：
+
+1. **0.3 秒的規則也套在打字卡**：答案出現（第 1 步拼對、第 2 步拼對、進第 3 步）後 0.3 秒內的自評不算，和一般卡翻面相同。
+2. **第 3 步的「最接近的答案」**用編輯距離（`closest`），一樣近取前面的；照打的結束條件是 `checkTyped`（對中任一個）。
+3. **原形等於某一個答案就跳過第 2 步**，不分大小寫（多個答案時任一個相同就跳過）。
+4. **回看時改評分不換目前這張、不重新 `next`**；改成差一點／沒印象的再出交給下一次 `next`。
+5. **`autoRead`** 留在 view 上直到下一個動作，畫面用物件身分判斷只念一次（`state.onChange` 會讓 view 重算）。
+6. **出處**：純函式把每一項分成 `block`／`heading`／`note`／`unit`／`text`；Obsidian 層依序找第一份有那個區塊或標題的材料；頁碼與圖表都找不到時打開第一份材料；標題都沒有時照文字顯示；沒寫出處時打開第一份材料；跨單元照文字顯示（結構能接範圍與目錄模組）。
+7. **打字卡的背面**照原文渲染答案格（含 ` | `），不改寫；寫在線上的是對中的那一個（或第一個）。
+8. **英文語音**：`getVoices()` 回傳空清單時當作有語音照念、不提示；清單非空且沒有 `en*` 才提示一次。
+9. **選單的列**：`約 M 分鐘` 用 `remainingSeconds` 進位到分鐘、至少 1；做完的列選了照樣開畫面（進完成畫面）。
+10. **評分後**先寫紀錄換卡，再做滑入；沒有滑出。回看與換卡的滑動照試作外掛（0.11／0.16 秒）。
+11. **技術債 A1 與「卡組讀不到就整個重試」沒碰**：兩件都要改 `src/state/`（W6 限制第 1 點不改），排程交給 Fable（[交接單](w6-handoff.md)第 2 節）。
+12. ESLint 的 `allowDefaultProject` 上限從 30 提高到 60（檔案數超過 30）。
+13. 建置測試的開發版記號：正式版現在會用 `metadataCache`（出處），記號改成命令 id 前綴 `"dev-"`，再加 W6 的命令代號與 Electron 呼叫。
+
+這個 session（Opus 5.5，Windows 實測與修正）：
+
+14. **Windows 實測不用 computer-use 截圖**：computer-use 截到的 Obsidian 是舊畫面，而且 Obsidian 被當成「被遮住」（`visibilityState: hidden`、`requestAnimationFrame` 不跑、計時器被放慢）。改由開發命令 `ui` 打開真的複習畫面，用 DOM 事件按鍵與點擊（按鍵送到目前有焦點的元素，和真的鍵盤一樣），用 Electron 的 `capturePage()` 截圖；量測期間 `setBackgroundThrottling(false)`。真的中文輸入法組字只用 `isComposing` 模擬。
+15. **焦點留在 `.ec-app`**：每次 render 之後焦點不在畫面裡就移回 `.ec-app`。實測發現打開時焦點在外層、打字卡答完或按鈕消失時焦點掉到 body，Space、1～4、Esc 都沒反應。
+16. **第 3 步照打的即時比對改成照位置比**（`copying`）：用編輯距離對齊時漏打的字母標不到「你打的」那一行（打 `mnd` 畫面上沒有任何標記，按確認也沒反應）；現在從打錯的字母起標出，還沒打的不算錯。「你打的／正確拼字」（最後一次打的字）仍用編輯距離。
+17. **出處圖示在右下**（W6 §3-8 的文字）；樣式稿放在答案下方左邊。
+18. **喇叭排在那段文字的右邊**、和第一行對齊（Markdown 是區塊，原本掉到下一行）。
+19. **換卡動畫（約 0.27 秒）期間的按鍵與點擊不算**（試作外掛的做法）；快速連按 ← 會少走幾張。
+20. **`review-script`** 用只看得到 W6 範例卡組的 state（其他卡組不列出），寫進這台裝置真正的紀錄檔，最後全部取消；佇列把 `light（輕的）` 排在 `go` 前面，所以劇本多做一張（第 1 步拼錯直接第 3 步）。
+21. **W6 範例的英文卡組**比 §4 多兩個目標：`go 中翻英`（答案 went、提示 go；「沒印象 → 第 2 步拼對」要有原形提示的卡，`borrow` 的答案等於原形）、`turn off | switch off`（一個答案等於原形）。`borrow 中翻英` 照 D-069 要等英翻中記得才出，第一天不會出現。
+22. **「打開」量測**從在選單選了科目（`startReview`）算起，不含命令面板與選單。
+23. **§4 以外多的開發命令**：`w6-save`（按 W6 範例的存檔按鈕）、`decks`（卡組內容的雜湊，W6 與 J4 比對用）、`open-times`、`ui`、`errors`（開發版收集 `console.error`）。
+24. **完成畫面也算「畫好」**：評分後換成完成畫面時，「按自評到下一張畫好」的量測在完成畫面記下（原本等到下一張卡才算，量到 1,993 ms）。
+
+## 行為與風險
+
+- 公開介面的改動：`Prompt` 問答題的 `typed` 變成 `readonly string[] | null`；`ProblemCode` 加 `typed-answer-words`（hint）；卡組模組加 `baseForm`；`checkTyped` 對中任一個；`NewEntry` 加 `retry?`；`state/index.ts` 重新匯出 `deviceCode`、`isDeviceCode`（A7，行為不變）。新的 `src/review/`（`createSession` 等純函式）與 `src/ui/`（`openReview`、`registerStart`）；`main.ts` 加 `startReview` 與 `PluginEvents.review`。
+- 不可破壞的性質：
+  - 同一份卡組原文的 `answer` 與指紋和 W5 相同；`typed` 只是衍生值。
+  - 依序 `appendLine` 自己的行，和重新 `mergeHistory` 相同（有 `retry` 的行也一樣）。
+  - 評分只看第 1 步；紀錄的 `typed` 是第 1 步、`retry` 是第 2 步（待決定：F3）。
+  - 沒按自評就離開，什麼都不寫；回看改評分是一行取消加一行新的。
+  - 畫面只透過 `state` 拿資料、只經過 `state.answer` 寫；不寫卡組筆記。
+  - 開發程式不進正式建置（`tests/build.test.ts`）。
+- 測試：`tests/deck.test.ts`（R1、R2、指紋對照）、`tests/study.test.ts`（R3、R4）、`tests/append-line.test.ts`（R4）、`tests/review.test.ts`（R6～R9、R11、R12、照打的比對、完成畫面的文字）、`tests/review-session.test.ts`（R5、R10，接真的 `createState`）、`tests/quality.test.ts`（邊界規則）、`tests/build.test.ts`（R14）。R13（故意讓 `src/review/` import `react`、`src/ui/` import `planToday` 與 `core/files.ts`）：`npm run check` 三次都在 lint 失敗，已還原，沒有留在 repo。
+- 請自己找新的組合，例如：
+  - 打字卡：第 2 步按「沒印象」之後又在第 3 步打第二個答案；答案格是 `A | a`（大小寫不同的兩個答案）；原形等於第二個答案；第 1 步拼對第二個答案後回看。
+  - 回看：目前這張在第 2 步、輸入框有字時往回看再回來；改評分時 `state.answer` 寫不進去；回看中別台裝置的紀錄讓目前這科做完（`onChange`）。
+  - 完成畫面：做完一科時另一科剛好由別台裝置做完；「再複習一些」時 `more` 裡有同一個字的兩個方向。
+  - 解析器：` | ` 碰到行內程式碼、連結、公式、跳脫的 `\|`（格式查核 F1，待決定的處理）。
+
+## 驗證方式
+
+- Node 24 以上。在 worktree 裡：`npm install`、`npm run check`、`npm run build`。
+- Claude 跑過：
+  - `npm run check` 全部通過（432 個測試）。
+  - `npm run build`：`main.js` 483,654 bytes（W5 第二部分是 165,986；多的是 React、react-dom、Motion 與畫面），require 只有 `obsidian`、`@codemirror/state`、`@codemirror/view`；開發版 548,972 bytes。`styles.css` 第一段是 `src/ui/tokens.css`（有測試）。
+- Windows 版 Obsidian 1.14.5（開發版；結果檔在測試 vault 的 `Essence W6/結果/`，測試 vault 的位置不寫進 repo，要看時問使用者）：
+  - **W1 自動複習**（`review-script Windows-c50c 2026-10-26 232538.json`）：寫進紀錄的 6 行和劇本相同（英翻中 `good`；打字卡 `near`、`typed: wrong`、`retry: wrong`；`light` `near`、`typed: wrong`、沒有 `retry`；`go` `miss`、`typed: skip`、`retry: right`；改評分是取消加 `easy`）；翻面前、0.3 秒內、不能按的評分都沒有作用；第 1 步按「沒印象」的那張改不了；回到目前這張沒換。最後取消 4 筆，新讀的 `today` 與 `progress` 和開始前相同；紀錄只在 `Essence Cards/紀錄/2026-10 Windows-c50c.jsonl` 多 10 行。
+  - **W2 畫面**（`畫面 2026-10-26 234050/`，46 張，淺色與深色各一張）：見下方〈W2 截圖〉。
+  - **W3 鍵盤**（`ui Windows-c50c 2026-10-26 234156.json`）：打開後直接按 Space 翻面；翻面後馬上按 3 沒有作用、過 0.3 秒按 3 換下一張；Enter 翻面、4 自評；← 一張一張回看到第一張再按 ← 彈回、→、點「回到目前」；組字中的 Enter（`isComposing`）不送出、Enter 送出；打字卡答完後 1～4 照樣有作用；Esc 關掉。
+  - **W4 速度**：這次載入第一次打開 27 ms、之後 16、16 ms（`open-times … 234044`；門檻 1,000／400）；按自評到下一張畫好 14 次，中位數 12 ms、最大 22 ms（`ui … 234156`）。量測期間視窗是 `hidden`、背景節流關掉（第 14 點）。
+  - **W5 朗讀**（`voices … 121849`）：系統語音 3 個都是 `zh-TW`，英文 0 個；`say` 連叫兩次只提示一次，沒有用中文語音念。
+  - **W6 寫入**（`decks … 121834`、`decks … 234207`）：W5、W6 範例四篇卡組的長度與雜湊在所有實測前後相同（W6 範例在 `w6-save` 補 ID 之後才記基準）；紀錄只在這台裝置的那一個檔追加（6 → 140 行，全部互相取消）。`errors`：沒有 console 錯誤。
+- 沒跑：iPhone 實機（§7，L2 之後）、真的中文輸入法、觸控手勢。
+
+### W2 截圖
+
+每一組是同一個畫面的淺色與深色。Claude 每一組至少看過一張（有幾組看的是前一輪同一個畫面的截圖，那一輪之後只改了喇叭的位置、出處圖示的位置與照打的空白比對列），其餘用 `ui` 結果檔裡每一步記下的畫面文字（按鈕、提示、線上的字、焦點）對照。
+
+| 檔名 | 看到什麼 |
+|---|---|
+| 01、02 選單 | 命令「開始複習」打開的 `SuggestModal`：「自然　0/12　約 3 分鐘」「英文　0/7　約 2 分鐘」，左側功能區有學士帽圖示 |
+| 03、04 自然 正面 | 全螢幕蓋住 Obsidian；上方「‹ 還剩 7 張 ✕」與細進度條；灰色「新」加「自然 › 國二上 › 2-2 水溶液」；題目 24px；底部只有「顯示答案」 |
+| 05、06 圖 背面 | 答案的粗體有紫色底線；答案和詳解之間一條 24px 的短線；自己畫的擴散示意圖（SVG）正常顯示；右下打開的書的圖示；四個自評鍵只有色點和文字 |
+| 07、08 填空 正面 | 一行三個空格，都是和題目同色的底線，不顯示字數 |
+| 09、10 填空 背面 | 「高」「小」「攪拌」粗體寫在線上，線變紫色 |
+| 11、12 多行答案 出處 | 三行答案、每行的粗體重點有紫色底線；點書的圖示後出現「溶液的種類 ↗」（段落標題，找得到） |
+| 13、14 公式 出處 | `$…$` 用 MathJax 顯示成分數；出處「p.46 ↗」可點、「1-3 p.20」（跨單元）照文字顯示 |
+| 15～18 長答案 | 七段的長答案；捲到最底時最後一段「延伸：…」和右下的出處圖示都看得到，自評鍵固定在底部 |
+| 19、20 回看 | 上方換成「回到目前 ›」；當時按的「記住了」有底色；一般科目的卡沒有喇叭 |
+| 21、22 自然 完成 | 「自然的份完成了！」「還有英文 5 張」「接著做英文」，底部「結束複習」 |
+| 23～26 英翻中 | 上方多了「自動朗讀」開關（關）；題目 `borrow` 右邊有喇叭；背面「例句：…」旁邊有喇叭 |
+| 27、28 打字 第 1 步 | `You have to` 後面四條一樣長的線（`make up your mind` 四個字）；輸入框寫「輸入英文」；底部「沒印象」與「確認」（還沒打字不能按）；沒有喇叭 |
+| 29、30 第 2 步 | 紅色「不對」加「提示：make up one's mind」；沒有答案、沒有標拼錯的字母；輸入框清空 |
+| 31～34 第 3 步 | 線上寫出答案、線變紫色；「你打的 make up your m~~a~~nd」「正確拼字 make up your m**i**nd」；輸入框寫「照著打一次」；打 `make up your mnd` 時 `nd` 被劃掉；沒有「沒印象」鍵 |
+| 35、36 打字 結束 | 照打對了之後只剩「沒印象」「差一點」兩個自評，靠左照四個時的位置 |
+| 37、38 原形等於答案 | `light（輕的）` 按「沒印象」直接到第 3 步（沒有提示那一步）；「你打的 —」「正確拼字 light」 |
+| 39、40 拼對 | `went` 第 1 步拼對：打勾加答案，只剩「記住了」「太簡單」；記憶錨點在詳解裡 |
+| 41、42 第二個答案 | 打 `switch off` 拼對：線上寫 `switch off`（對中的那一個），背面照原文顯示 `turn off \| switch off` |
+| 43、44 今天的份 | 「今天的份完成了！」「今天複習了 14 張・約 1 分鐘」「再複習一些」 |
+| 45、46 再複習一些 | `more` 也沒有了：「又多複習了一些」，只有「結束複習」 |
+
+## 已知的縫隙
+
+- 喇叭：`go → went → gone` 這種用箭頭連起來的字會拆成好幾段，記憶錨點那一行排了四個喇叭（`englishParts` 照英文字元切；截圖 39、40）。
+- 回看的卡仍標「新」（是這次第一次出的卡；回看時沒有另外拿掉）。
+- `Markdown.tsx` 的 `useLayoutEffect` 依賴整個 `props`，每次 render 都重跑 `applyState`（成本小）。
+- 填空題翻面後空格的答案是 `<mark>` 的純文字；公式或圖在 `==…==` 裡沒有處理。
+- `host.tsx` 攔截觸控的傳遞；Obsidian 的側欄手勢要在 iPhone 實機確認（試作外掛同樣做法通過）。
+- 新裝置的自動朗讀預設關；Windows 沒有英文語音，自動朗讀的實際聲音只能在 iPhone 確認。
+
+## 回報
+
+寫在主資料夾的 `Claude Codex Discussion/<日期>-w6-review.md`（不用 commit，Claude 整合時會 commit）：
+
+- 依嚴重程度排序。每項寫：哪一軸（規格／規範與設計）、觸發條件、預期／實際、影響、位置、證據（已重現／靜態推斷／待驗證），以及建議（合併前修／記進技術債並寫觸發點與完成條件／加檢查規則）。
+- 「請特別看」的 7 點逐點寫結論；「Claude 自己選了做法的地方」的 24 點逐點回覆：同意，或建議的做法與理由。
+- 最後一行寫沒查的項目與原因。不貼整份執行紀錄。
