@@ -107,8 +107,8 @@ export default tseslint.config(
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: { parserOptions: {
       projectService: {
-        allowDefaultProject: ['tools/*.ts', 'tests/*.ts'],
-        maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 30,
+        allowDefaultProject: ['tools/*.ts', 'tests/*.ts', 'tests/helpers/*.ts'],
+        maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 60,
       },
       tsconfigRootDir: import.meta.dirname,
     } },

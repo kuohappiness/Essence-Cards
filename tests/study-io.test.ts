@@ -1,13 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { setImmediate as tick } from 'node:timers/promises';
 import { createLogWriter, logPath, LOG_FOLDER, readHistory } from '../src/core/study/index.ts';
 import type { NewEntry } from '../src/core/study/index.ts';
 import type { Files } from '../src/core/files.ts';
-import { createNodeFiles } from '../tools/node-files.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
 
 const answer: NewEntry = { lt: 'target', r: 'good', v: '12345678' };
 const at = Date.parse('2026-10-31T23:59:59.999+08:00');
@@ -127,20 +124,18 @@ void test('前一輪 drain 完成與背景 Promise 收尾之間 write，仍會�
   assert.deepEqual(saved.map(e => (JSON.parse(e) as { t: string }).t), [first, second]);
 });
 
-void test('真的寫檔後 readHistory 讀回；不存在回空，子資料夾與非 jsonl 都不讀', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'essence-study-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const files = createNodeFiles(root);
+void test('寫檔後 readHistory 讀回；不存在回空，子資料夾與非 jsonl 都不讀', async () => {
+  const memory = createMemoryFiles();
+  const { files } = memory;
   assert.deepEqual(await readHistory(files), { reviews: [], changes: [], problems: [], cancelled: [] });
   const writer = createLogWriter(files, { device: 'Phone-abcd', now: () => at, offset: () => 480 });
   const t1 = writer.write(answer);
   const t2 = writer.write(answer);
   await writer.flush();
-  await mkdir(join(root, LOG_FOLDER, 'AI 輸出'), { recursive: true });
-  await writeFile(join(root, LOG_FOLDER, 'AI 輸出', 'nested.jsonl'), '壞資料');
-  await writeFile(join(root, LOG_FOLDER, 'notes.md'), '壞資料');
-  await writeFile(join(root, LOG_FOLDER, 'notes.jsonl.bak'), '壞資料');
-  await writeFile(join(root, LOG_FOLDER, '2026-10 conflict.jsonl'), (await files.read(logPath('Phone-abcd', at, 480)))!);
+  memory.write(LOG_FOLDER + '/AI 輸出/nested.jsonl', '壞資料');
+  memory.write(LOG_FOLDER + '/notes.md', '壞資料');
+  memory.write(LOG_FOLDER + '/notes.jsonl.bak', '壞資料');
+  memory.write(LOG_FOLDER + '/2026-10 conflict.jsonl', (await files.read(logPath('Phone-abcd', at, 480)))!);
   const history = await readHistory(files);
   assert.deepEqual(history.reviews.map(e => e.t), [t1, t2]);
   assert.deepEqual(history.problems, []);
