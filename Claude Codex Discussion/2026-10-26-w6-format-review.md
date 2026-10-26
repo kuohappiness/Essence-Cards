@@ -2,6 +2,8 @@
 
 2026-10-26｜Codex｜查核請求：[tasks/w6-format-review.md](../tasks/w6-format-review.md)
 
+2026-10-26 Claude 已核對，F1～F6 全部採用，改法見 [tasks/w6-format-review-fixes.md](../tasks/w6-format-review-fixes.md)；F3 採 `not-needed`。
+
 ## 結論與基準
 
 **有問題：建議 Claude 先核對並處理 F1～F4，再實作 §0-1、§1 與寫入 `typed`／`retry` 的部分。**沒有發現 P1；F1～F4 是 P2 的規格邊界或相容性缺口，F5～F6 是 P3 的實作與文件補強。其餘不依賴新格式的工作可照任務繼續。本報告是查核建議，不是使用者已確認的新決定，也不是 W6 實作的 L2 通過紀錄。
