@@ -197,3 +197,64 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
     assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
   }
 });
+
+// 技術債 A7：state 和核心一樣只能透過 index.ts 使用（state 裡面互相 import 照舊）。
+void test('A7 src/state/ 只能透過 index.ts 使用，涵蓋 import、export、動態 import 與 require', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [path, name, blocked] of [
+    ['src/main.ts', './state/ids.ts', true],
+    ['src/main.ts', './state/device.ts', true],
+    ['src/obsidian/device.ts', '../state/device.ts', true],
+    ['src/dev/compare.ts', '../state/ids.ts', true],
+    ['tests/example.test.ts', '../src/state/device.ts', true],
+    ['tools/example.mjs', '../src/state/ids.ts', true],
+    ['src/main.ts', './state/index.ts', false],
+    ['src/obsidian/device.ts', '../state/index.ts', false],
+    ['tests/example.test.ts', '../src/state/index.ts', false],
+    ['src/state/index.ts', './ids.ts', false],
+    ['src/state/ids.ts', './device.ts', false],
+  ] as const) for (const code of loadForms(name)) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+  }
+});
+
+// W6 限制第 3 點：review 和 state 一樣純；ui 與 review 只透過 state 拿資料，不碰檔案存取、排程與寫紀錄的函式。
+void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review 不能 import 讀檔、排程、寫紀錄的函式', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [path, code, blocked] of [
+    ['src/review/index.ts', "import { useState } from 'react';", true],
+    ['src/review/index.ts', "import { Notice } from 'obsidian';", true],
+    ['src/review/index.ts', "import { animate } from 'motion';", true],
+    ['src/review/index.ts', "import { readFile } from 'node:fs/promises';", true],
+    ['src/review/index.ts', "void import('react-dom/client');", true],
+    ['src/review/index.ts', "import type { Files } from '../core/files.ts';", true],
+    ['src/review/index.ts', "import { planToday } from '../core/study/index.ts';", true],
+    ['src/review/index.ts', "import { nextCard, progress } from '../core/study/index.ts';", true],
+    ['src/review/index.ts', "import { readDecks } from '../core/deck/index.ts';", true],
+    ['src/review/index.ts', "import { parseDeck } from '../core/deck/index.ts';", true],
+    ['src/review/index.ts', "import { checkTyped, dayStart, dayOf } from '../core/study/index.ts';", false],
+    ['src/review/index.ts', "import { baseForm } from '../core/deck/index.ts';", false],
+    ['src/review/index.ts', "import type { Card, Pick } from '../core/study/index.ts';", false],
+    ['src/review/index.ts', "import type { State } from '../state/index.ts';", false],
+    ['src/review/index.ts', "import { x } from '../state/ids.ts';", true],
+    ['src/ui/Review.tsx', "import type { Files } from '../core/files.ts';", true],
+    ['src/ui/Review.tsx', "void import('../core/files.ts');", true],
+    ['src/ui/Review.tsx', "import { appendLine, createLogWriter, mergeHistory, readHistory, replay, review } from '../core/study/index.ts';", true],
+    ['src/ui/Review.tsx', "import { type Card, nextCard } from '../core/study/index.ts';", true],
+    ['src/ui/Review.tsx', "import { checkTyped } from '../core/study/index.ts';", false],
+    ['src/ui/Review.tsx', "import type { Prompt } from '../core/deck/index.ts';", false],
+    ['src/ui/Review.tsx', "import { MarkdownRenderer } from 'obsidian';", false],
+    ['src/ui/Review.tsx', "import { useState } from 'react';", false],
+    ['src/ui/Review.tsx', "import { animate } from 'motion';", false],
+    ['src/ui/Review.tsx', "import { createSession } from '../review/index.ts';", false],
+    ['src/ui/nested/Card.tsx', "import { planToday } from '../../core/study/index.ts';", true],
+    ['src/ui/nested/Card.tsx', "import '../../core/files.ts';", true],
+    // 這些函式在其他地方照舊可以用。
+    ['src/main.ts', "import { planToday } from './core/study/index.ts';", false],
+    ['src/state/index.ts', "import { planToday } from '../core/study/index.ts';", false],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+  }
+});

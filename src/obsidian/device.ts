@@ -1,5 +1,5 @@
 import { Platform, type App } from 'obsidian';
-import { deviceCode, type DevicePlatform } from '../state/device.ts';
+import { deviceCode, type DevicePlatform } from '../state/index.ts';
 
 const key = 'essence-cards-device';
 

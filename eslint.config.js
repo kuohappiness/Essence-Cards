@@ -4,8 +4,12 @@ import tseslint from 'typescript-eslint';
 
 const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tests/**/*.ts'];
 const core = ['src/core/**/*.{ts,tsx}'];
-// state 與 dev 和核心一樣不碰畫面、Obsidian 與 Node，才能在 Node 直接測。
-const pure = ['src/state/**/*.{ts,tsx}', 'src/dev/**/*.{ts,tsx}'];
+// state、dev 與 review（複習畫面的狀態，W6 §2）和核心一樣不碰畫面、Obsidian 與 Node，才能在 Node 直接測。
+const state = ['src/state/**/*.{ts,tsx}'];
+const review = ['src/review/**/*.{ts,tsx}'];
+const pure = [...state, 'src/dev/**/*.{ts,tsx}', ...review];
+// 畫面（W6 §3）：React 元件、CSS、Obsidian 的渲染與朗讀。
+const ui = ['src/ui/**/*.{ts,tsx}'];
 const moduleFiles = ['src/**/*.{ts,tsx}', 'tools/**/*.{ts,mjs}', 'tests/**/*.{ts,tsx,mjs}'];
 // @codemirror 是 Obsidian 提供的編輯器（W5 §8-2），和 obsidian 一樣只有 src/obsidian/ 與 main.ts 能用。
 const corePackages = ['obsidian', 'react', 'react-dom', 'motion', '@codemirror'];
@@ -13,8 +17,18 @@ const coreImports = {
   group: [...corePackages.flatMap(name => [name, name + '/*']), 'node:*', ...builtinModules],
   message: '核心不能依賴畫面、Obsidian 或 Node。',
 };
-const pureImports = { ...coreImports, message: 'state 與 dev 不能依賴畫面、Obsidian 或 Node。' };
+const pureImports = { ...coreImports, message: 'state、dev 與 review 不能依賴畫面、Obsidian 或 Node。' };
 const coreEntry = { regex: '(^|/)core/(?!files\\.ts$|[^/]+/index\\.ts$)', message: '核心只能透過 files.ts 或各模組的 index.ts 使用。' };
+// 技術債 A7：state 也只能透過 index.ts 使用（state 裡面互相 import 不受限）。
+const stateEntry = { regex: '(^|/)state/(?!index\\.ts$)', message: 'state 只能透過 index.ts 使用。' };
+// W6 限制第 3 點：畫面只透過 state 拿資料。ui 與 review 不能碰檔案存取，也不能從核心拿讀檔、排程、寫紀錄的函式；
+// 型別與純計算（checkTyped、baseForm、dayStart、dayOf）可以。
+const viewFiles = { regex: '(^|/)core/files\\.ts$', message: '畫面只透過 state 拿資料，不直接存取檔案。' };
+const viewNames = {
+  group: ['**/core/deck/index.ts', '**/core/study/index.ts'],
+  importNames: ['readDecks', 'parseDeck', 'readHistory', 'mergeHistory', 'appendLine', 'createLogWriter', 'planToday', 'nextCard', 'progress', 'replay', 'review'],
+  message: '畫面只透過 state 拿資料：讀檔、排程、寫紀錄的函式不能在 ui 與 review 用。',
+};
 const restricted = (patterns) => ['error', { patterns }];
 const fsrs = { group: ['ts-fsrs', 'ts-fsrs/*'], message: 'ts-fsrs 只由 study/fsrs.ts 包裝。' };
 const localDate = /^(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)$|^to(Locale.*)?(Date|Time)?String$|^getYear$|^setYear$/;
@@ -42,9 +56,13 @@ const moduleBoundaries = {
   create(context) {
     const path = context.filename.replaceAll('\\', '/');
     const inCore = path.includes('/src/core/');
-    const inPure = /\/src\/(state|dev)\//.test(path);
+    const inPure = /\/src\/(state|dev|review)\//.test(path);
+    const inState = path.includes('/src/state/');
+    const inView = /\/src\/(ui|review)\//.test(path);
     const isFsrs = path.endsWith('/src/core/study/fsrs.ts');
     const privateCore = new RegExp(coreEntry.regex);
+    const privateState = new RegExp(stateEntry.regex);
+    const filesEntry = new RegExp(viewFiles.regex);
     function check(node, source) {
       const literal = source?.type === 'TSLiteralType' ? source.literal : source;
       const name = literal?.value;
@@ -53,6 +71,8 @@ const moduleBoundaries = {
       else if ((inCore || inPure) && (name.startsWith('node:') || builtinModules.includes(name) || corePackages.some(pkg => name === pkg || name.startsWith(pkg + '/')))) message = inCore ? coreImports.message : pureImports.message;
       else if (!isFsrs && (name === 'ts-fsrs' || name.startsWith('ts-fsrs/'))) message = fsrs.message;
       else if (!inCore && privateCore.test(name)) message = coreEntry.message;
+      else if (!inState && privateState.test(name)) message = stateEntry.message;
+      else if (inView && filesEntry.test(name)) message = viewFiles.message;
       else if (inCore) message = crossModule(path, name, node.type === 'TSImportType');
       if (message) context.report({ node, message });
     }
@@ -125,14 +145,28 @@ export default tseslint.config(
   } },
   {
     files: moduleFiles,
-    ignores: core,
+    ignores: [...core, ...state],
     rules: { 'no-restricted-imports': restricted([
       fsrs,
       coreEntry,
+      stateEntry,
     ]) },
   },
   {
-    files: pure,
+    files: state,
     rules: { 'no-restricted-imports': restricted([pureImports, fsrs, coreEntry]) },
+  },
+  {
+    files: pure,
+    ignores: [...state, ...review],
+    rules: { 'no-restricted-imports': restricted([pureImports, fsrs, coreEntry, stateEntry]) },
+  },
+  {
+    files: review,
+    rules: { 'no-restricted-imports': restricted([pureImports, fsrs, coreEntry, stateEntry, viewFiles, viewNames]) },
+  },
+  {
+    files: ui,
+    rules: { 'no-restricted-imports': restricted([fsrs, coreEntry, stateEntry, viewFiles, viewNames]) },
   },
 );

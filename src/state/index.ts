@@ -435,3 +435,6 @@ export function createState(options: StateOptions): State {
     },
   };
 }
+// 裝置碼的純計算（W5 §4-2）：state 只能透過這裡使用（技術債 A7）。
+export { deviceCode, isDeviceCode } from './device.ts';
+export type { DevicePlatform } from './device.ts';
