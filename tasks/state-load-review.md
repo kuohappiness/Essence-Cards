@@ -1,6 +1,6 @@
 # 卡組讀不到就跳過那一篇：L2 獨立審查（給 Codex）
 
-狀態：L2 再審通過（2026-10-27）：F1、F2 已修；結論接在 `main` 的 L2 報告最後〈再審〉，Windows 的 §8 待補
+狀態：已結案：L2 再審通過，已合併進 `main`（`707fbb8`）；結論見 [L2 報告](<../Claude Codex Discussion/2026-10-27-state-load-review.md>)最後〈再審〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（`src/state/` 的讀取失敗語義、ID 的安全、`History` 多一欄，三件互相牽動）。
 

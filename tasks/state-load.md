@@ -1,6 +1,6 @@
 # 卡組讀不到就跳過那一篇（給 Claude，本機執行）
 
-狀態：L2 再審通過：分支 `claude/state-load`（程式到 `782a7df`），等使用者決定合併；Windows 的 §8 在 W6 合併 `main` 後補
+狀態：已完成：已合併進 `main`（`707fbb8`）；§8 的 Windows 驗證在 W6 合併 `main` 後補（[backlog 的收尾列](../docs/backlog.md#技術債)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：排程與設計判斷已在這份說明做完；改的是 `src/state/` 的失敗語義與 ID 的安全，屬於高風險範圍，合併前由 Codex 做 L2）。
 
