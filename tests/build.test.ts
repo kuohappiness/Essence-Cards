@@ -94,7 +94,7 @@ void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、�
   const dir = await project(t, {});
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   // 中文會被 esbuild 跳脫成 \uXXXX，契約檢查用它的代號 "C14" 當記號；URI 帶引號，不和裝置碼的 "essence-cards-device" 混淆。
-  const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', 'metadataCache', '"C14"', 'Essence W5'];
+  const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', '"dev-"', '"C14"', 'Essence W5'];
   await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);

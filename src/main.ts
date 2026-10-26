@@ -10,6 +10,8 @@ import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { createState, type ErrorSource, type State } from './state/index.ts';
+import { openReview, registerStart, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
+import type { Pick } from './core/study/index.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
@@ -36,6 +38,8 @@ export interface PluginEvents {
   event: string;
   /** 編輯器裡刪掉或剪下整個目標：那一篇與拿掉的 ID。 */
   removed: { path: string; ids: string[] };
+  /** 複習畫面的量測與手勢結果（W6 §4 的自動量測）。 */
+  review: ReviewEvent;
 }
 export type PluginEvent = keyof PluginEvents;
 
@@ -51,10 +55,12 @@ export default class EssenceCardsPlugin extends Plugin {
   ids: IdsWiring | null = null;
   /** 除了卡組之外也要鎖 ID 的路徑前綴：開發命令 lock 在 Essence W5/暫存/ 的副本上測各種編輯；正式版是空的。 */
   lockAlso: string[] = [];
+  /** 開著的複習畫面（W6）；同時只有一個。 */
+  review: ReviewHandle | null = null;
   /** 這次載入已經提示過的來源：同一種只提示一次。 */
   private warned = new Set<ErrorSource>();
   private unloaded = false;
-  private readonly listeners: { [K in PluginEvent]: Set<(value: PluginEvents[K]) => void> } = { notice: new Set(), event: new Set(), removed: new Set() };
+  private readonly listeners: { [K in PluginEvent]: Set<(value: PluginEvents[K]) => void> } = { notice: new Set(), event: new Set(), removed: new Set(), review: new Set() };
 
   onload(): void {
     const loadedAt = performance.now();
@@ -67,6 +73,8 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
     if (Platform.isDesktopApp) this.ids = this.wireIds();
+    // 複習畫面的暫時入口（W6 §3-9）：命令與左側功能區的圖示；入口畫面做好時拿掉。
+    registerStart(this, { state: () => this.state, open: pick => { this.startReview(pick); } });
     let files: Files = createObsidianFiles(this.app);
     let calls = (): number => 0;
     let beforeLayoutReady: number | null = null;
@@ -89,7 +97,22 @@ export default class EssenceCardsPlugin extends Plugin {
 
   onunload(): void {
     this.unloaded = true;
+    // 外掛停用時一起關掉複習畫面（什麼都不寫，D-074）。
+    this.review?.close();
     this.state?.close().catch((error: unknown) => { console.error('Essence Cards', error); });
+  }
+
+  /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
+  startReview(pick: Pick): ReviewHandle | null {
+    if (!this.state) return null;
+    const openedAt = performance.now();
+    this.review?.close();
+    this.review = openReview({
+      app: this.app, state: this.state, pick, openedAt,
+      onEvent: event => { this.emit('review', event); },
+      onClose: () => { this.review = null; },
+    });
+    return this.review;
   }
 
   /** 訂閱外掛的事件；回傳取消訂閱的函式。 */

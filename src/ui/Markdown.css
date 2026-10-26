@@ -1,0 +1,29 @@
+/* 卡片內容（Obsidian 渲染）與填空、打字卡的線（D-096、D-068、D-070）。 */
+.ec-app .ec-markdown p { margin: 0 0 12px; }
+.ec-app .ec-markdown p:last-child { margin-bottom: 0; }
+.ec-app .ec-markdown img { max-width: 100%; height: auto; }
+.ec-app .ec-markdown audio { width: 100%; max-width: 100%; }
+.ec-app .ec-markdown mjx-container, .ec-app .ec-markdown .math { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.ec-app .ec-markdown ul, .ec-app .ec-markdown ol { margin: 0 0 8px; padding-left: 1.4em; }
+.ec-app .ec-markdown .internal-embed { display: block; }
+.ec-render-failed { color: var(--ec-muted); font-style: italic; }
+
+/* 填空：一條和題目文字同色的底線，不顯示字數；翻面後答案（粗體）在同一條線上淡入，線變紫色 */
+.ec-blank { display: inline-block; min-width: 4em; margin: 0 .15em; border-bottom: 2px solid var(--ec-ink); vertical-align: baseline; line-height: 1.3; }
+.ec-blank-answer { display: inline-block; opacity: 0; max-width: 0; overflow: hidden; white-space: nowrap; font-weight: 700; }
+.ec-blank.ec-filled { min-width: 0; border-color: var(--ec-key); }
+.ec-blank.ec-filled .ec-blank-answer { opacity: 1; max-width: none; overflow: visible; transition: opacity var(--ec-fade) ease-out; }
+@media (prefers-reduced-motion: reduce) { .ec-blank.ec-filled .ec-blank-answer { transition: none; } }
+
+/* 打字卡的題目：幾條一樣長的線，條數是答案的字數（D-122）；翻面後字寫在線上、線變紫色 */
+.ec-lines { display: inline-flex; flex-wrap: wrap; gap: 0 .35em; margin: 0 .15em; vertical-align: baseline; }
+.ec-line { display: inline-block; min-width: 3em; border-bottom: 2px solid var(--ec-ink); text-align: center; line-height: 1.3; }
+.ec-line.ec-filled { border-color: var(--ec-key); }
+.ec-line-word { display: inline-block; padding: 0 .2em; font-weight: 700; }
+.ec-line.ec-filled .ec-line-word { animation: ec-fade-in var(--ec-fade) ease-out both; }
+
+/* 答案的粗體重點：粗體加一條細的紫色底線（D-068、D-070） */
+.ec-a strong, .ec-a .ec-blank-answer, .ec-mark { background: none; color: inherit; font-weight: 700; text-decoration-line: underline; text-decoration-color: var(--ec-key); text-decoration-thickness: 2px; text-underline-offset: .32em; text-decoration-skip-ink: none; }
+.ec-mark { color: var(--ec-key); }
+
+@keyframes ec-fade-in { from { opacity: 0; } to { opacity: 1; } }

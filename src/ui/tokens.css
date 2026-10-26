@@ -1,0 +1,60 @@
+/* Essence Cards 的設計規範（D-052、D-070、D-060、D-062、D-095）：顏色、字級、間距、圓角、動畫節奏都是變數，
+   只跟著 Obsidian 的亮色與暗色（.theme-dark）切換。之後的入口、目錄共用這一份。 */
+.ec-app {
+  /* 安靜樣式：沒有卡片外框，只靠字和留白 */
+  --ec-page: #FAFAF9;
+  --ec-ink: #1D1F23;
+  --ec-muted: #6A6F77;
+  --ec-line: #E5E5E2;
+  --ec-press: #ECEFF4;
+  /* 要想起來的東西（粗體重點、填空的答案、拼錯的字母）：紫色，不屬於記憶配色 */
+  --ec-key: #7A5BC7;
+  /* 記憶配色：灰（新）、橙（差一點）、綠（記住了）、藍（太簡單）；紅只給「沒印象」按鈕 */
+  --ec-new: #575C64;
+  --ec-miss: #B3261E;
+  --ec-near: #8F4C00;
+  --ec-good: #17693A;
+  --ec-easy: #2862B9;
+  /* 做完今天的份：沉穩的灰綠 */
+  --ec-done: #3F6B52;
+
+  --ec-font-ui: var(--font-interface, -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif);
+  --ec-font-text: var(--font-text, var(--ec-font-ui));
+  --ec-size-base: 15px;
+  --ec-size-small: 13px;
+  --ec-size-meta: 12px;
+  --ec-size-question: 24px;
+  --ec-size-answer: 19px;
+  --ec-size-extra: 16px;
+  --ec-size-button: 16px;
+  --ec-size-title: 22px;
+
+  --ec-gap-stage: 30px 26px 16px;
+  --ec-gap-question: 18px;
+  --ec-gap-answer: 26px;
+  --ec-gap-extra: 20px;
+  --ec-radius: 12px;
+  --ec-radius-small: 6px;
+  --ec-touch: 44px;
+  --ec-action-height: 64px;
+
+  --ec-fade: 0.18s;
+  --ec-slide-out: 0.11s;
+  --ec-slide-in: 0.16s;
+  --ec-progress: 0.35s;
+}
+body.theme-dark .ec-app {
+  --ec-page: #121314;
+  --ec-ink: #E6E7E9;
+  --ec-muted: #959AA2;
+  --ec-line: #2A2C30;
+  --ec-press: #263043;
+  --ec-key: #B69CF5;
+  --ec-new: #A0A5AD;
+  --ec-miss: #FF8A80;
+  --ec-near: #FFB25E;
+  --ec-good: #68D398;
+  --ec-easy: #8DB7FF;
+  --ec-done: #8DBFA2;
+  color-scheme: dark;
+}
