@@ -94,7 +94,9 @@ export function Review(props: ReviewProps): React.JSX.Element {
   });
   // 換卡、回看：捲回最上面，收起出處提示。
   useEffect(() => { if (stage.current) stage.current.scrollTop = 0; setTipOpen(false); }, [cardKey]);
-  // 自動朗讀（D-116）：同一個時刻只念一次；換卡、回看、關掉開關都立刻停。
+  // 自動朗讀（D-116）：同一個時刻只念一次；換卡、回看、關掉開關都立刻停。換卡的停止要排在念新題目之前（effect 照宣告順序跑），
+  // 不然英翻中的題目剛念就被停掉（Codex L2 F3）。
+  useEffect(() => { speech.stop(); }, [cardKey, speech]);
   useEffect(() => {
     if (view.kind !== 'card' || view.card.viewing) { speech.stop(); spoken.current = null; return; }
     const texts = view.card.autoRead;
@@ -103,7 +105,6 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (autoOn) speech.say(texts);
   }, [view, autoOn, speech]);
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
-  useEffect(() => { speech.stop(); }, [cardKey, speech]);
   // 打字卡：輸入框自動取得焦點。
   useEffect(() => {
     if (view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
@@ -126,12 +127,15 @@ export function Review(props: ReviewProps): React.JSX.Element {
     } finally { busy.current = false; if (alive.current) setAnimating(false); }
   }
 
-  const reveal = (): void => { session.reveal(); focusApp(); };
+  // 換卡動畫期間（busy）的按鍵與點擊不算：回看的改評分、翻面、確認、沒印象都一樣，不然會改到滑走那張或還沒滑進來那張（Codex L2 F1）。
+  const reveal = (): void => { if (busy.current) return; session.reveal(); focusApp(); };
+  const submit = (): void => { if (!busy.current) session.submit(); };
+  const skip = (): void => { if (!busy.current) session.skip(); };
   const rate = (rating: Rating): void => {
+    if (busy.current) return;
     const current = latest.current;
     if (current.kind !== 'card' || !current.card.allowed.includes(rating)) return;
     if (current.card.viewing) { session.rate(rating); return; }
-    if (busy.current) return;
     // 先確定這一次自評算數（0.3 秒的規則在 review 裡），再換卡：寫紀錄在背景（D-074）。
     pendingNext.current = performance.now();
     const accepted = session.rate(rating);
@@ -200,7 +204,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (event.nativeEvent.isComposing) return;
     const target = event.target as HTMLElement;
     if (target.matches('input')) {
-      if (event.key === 'Enter') { event.preventDefault(); session.submit(); }
+      if (event.key === 'Enter') { event.preventDefault(); submit(); }
       return;
     }
     if (event.key === 'Escape') { event.preventDefault(); props.close(); }
@@ -246,17 +250,18 @@ export function Review(props: ReviewProps): React.JSX.Element {
     </div>
     <div className="ec-actions">
       {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>結束複習</button>}
-      {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} session={session} />}
+      {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} submit={submit} skip={skip} />}
     </div>
   </div>;
 }
 
-function Actions({ view, animating, reveal, rate, session }: { view: CardView; animating: boolean; reveal: () => void; rate: (r: Rating) => void; session: Session }): React.JSX.Element {
+interface ActionsProps { view: CardView; animating: boolean; reveal: () => void; rate: (r: Rating) => void; submit: () => void; skip: () => void }
+function Actions({ view, animating, reveal, rate, submit, skip }: ActionsProps): React.JSX.Element {
   const typed = view.typed;
   if (!view.viewing && typed && !typed.finished) {
     return <div className="ec-typed-actions">
-      {typed.canSkip && <button type="button" className="ec-show ec-skip" onClick={() => { session.skip(); }}>{RATING_LABELS.miss}</button>}
-      <button type="button" className="ec-show ec-confirm" disabled={!typed.input.trim()} onClick={() => { session.submit(); }}>確認</button>
+      {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{RATING_LABELS.miss}</button>}
+      <button type="button" className="ec-show ec-confirm" disabled={animating || !typed.input.trim()} onClick={submit}>確認</button>
     </div>;
   }
   if (!view.viewing && !view.revealed) return <button type="button" className="ec-show" disabled={animating} onClick={reveal}>顯示答案</button>;
@@ -318,7 +323,8 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
     {/* 照打的即時比對：還沒打字時不畫（不然只有一條「—」） */}
     {typed && typed.step === 3 && !typed.finished && typed.live && <div className="ec-live">{typed.live.typed.length > 0 && <Letters letters={typed.live.typed} mode="typed" />}</div>}
     {revealed && <div className="ec-answer">
-      {typed && (typed.first === 'right' || (view.viewing && !typed.attempt)
+      {/* 拼對（第 1 步，或目前這張的第 2 步，Codex L2 F7）：打勾加答案。回看時照第 1 步（§2-5），第 1 步拼錯的顯示當時的比對。 */}
+      {typed && (typed.first === 'right' || (!view.viewing && typed.second === 'right') || (view.viewing && !typed.attempt)
         ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span></div></div>
         : typed.attempt && <div className="ec-spell">
           <div className="ec-spell-row"><span className="ec-lab">你打的</span><Letters letters={typed.attempt.typed} mode="typed" /></div>
