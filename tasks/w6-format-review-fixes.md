@@ -1,5 +1,7 @@
 # W6 格式查核的處理（給 Claude，本機執行）
 
+狀態：已完成（`7f6e7df`）
+
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：判斷已經在這份說明做完，這裡只照著改文件）。請新開一個 session。
 
 Codex 對 W6 開工前的格式查核回報在 [`Claude Codex Discussion/2026-10-26-w6-format-review.md`](<../Claude Codex Discussion/2026-10-26-w6-format-review.md>)（基準 `90854e6`，回報 commit `8e2fb28`）：F1～F4 是 P2、F5～F6 是 P3，沒有 P1。Fable 2026-10-26 逐條核對過，六項都成立，採用方式寫在下面。這份說明的工作是**只改文件**：把下面的內容寫進 [tasks/w6.md](w6.md) 與 [docs/syntax.md](../docs/syntax.md)，commit 到 `main`，然後 W6 才能照 w6.md 開工。不改程式。

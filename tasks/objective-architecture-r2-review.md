@@ -1,5 +1,7 @@
 # 學習目標架構第二輪：正式生成與盲評包的查核（給 Codex）
 
+狀態：已完成（第二輪；結論 [D-132](../docs/decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組)）
+
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**中等**。
 
 依 [D-131](../docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)，第二輪[任務說明](objective-architecture-r2-connection.md)的第 3 段改由 Claude 執行，交出前請你查核。**只回報，不修改**任何檔案、不重送請求、不重做盲評包；要改的由 Claude 改。

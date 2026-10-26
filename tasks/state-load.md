@@ -1,5 +1,7 @@
 # 卡組讀不到就跳過那一篇（給 Claude，本機執行）
 
+狀態：實作完成待審：分支 `claude/state-load` 到 `c116408`，等 Codex 的 L2
+
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：排程與設計判斷已在這份說明做完；改的是 `src/state/` 的失敗語義與 ID 的安全，屬於高風險範圍，合併前由 Codex 做 L2）。
 
 這是 [backlog 技術債](../docs/backlog.md#技術債)「任何一篇卡組讀不到，`state.ready()` 就整個重試」那一列的任務說明，連同 A1（紀錄的壞行救回規則有兩份）與 A5（`load()` 抄自 `readDecks`）一起做；Fable 2026-10-27 照 W6 交接單 §2（分支 `claude/w6` 上的 `tasks/w6-handoff.md`）排的。**為什麼現在**：iCloud 還沒下載好的一篇卡組會讓整個外掛讀不到，W6 的 iPhone 測試很可能碰到；2026-10-26 在 Windows 也實際碰到一個被 Obsidian 佔住的已刪除檔讓外掛載入一直重試到 Obsidian 關掉。

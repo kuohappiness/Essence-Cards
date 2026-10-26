@@ -1,6 +1,6 @@
 # 2026-10-22-[Astra] learning-objective-optimization
 
-日期：2026-10-22｜來源：使用者提供的 ChatGPT／Astra 對話｜狀態：💡 助理提案、💬 待討論；尚未形成新的產品決定。2026-10-22 Claude、使用者、Codex 各自回應後，**Claude 與 Codex 一致**（文末〈結論〉）；結論已整合進[前一份討論稿〈第二輪設計（整合版）〉](<2026-10-21-learning-objective-architecture.md#第二輪設計整合版>)；整合版與驗證單元由使用者與 Codex 討論中（2026-10-23）
+日期：2026-10-22｜來源：使用者提供的 ChatGPT／Astra 對話｜狀態：已結案：結論整合進第二輪設計，設定定為 [D-127](../docs/decisions.md#d-127-學習目標架構第二輪sol-high第-1-章先跑-1-3)、結論定為 [D-132](../docs/decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組)。原本是 💡 助理提案、💬 待討論。2026-10-22 Claude、使用者、Codex 各自回應後，**Claude 與 Codex 一致**（文末〈結論〉）；結論已整合進[前一份討論稿〈第二輪設計（整合版）〉](<2026-10-21-learning-objective-architecture.md#第二輪設計整合版>)；整合版與驗證單元由使用者與 Codex 討論中（2026-10-23）
 
 ## 紀錄範圍與閱讀方式
 
