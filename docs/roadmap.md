@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | W6 複習畫面 | 分支 `claude/w6`：Codex L2 的 F1～F3、F5～F7 已修，再審請求已寫好 | 再審請求交給新的 Codex；五題交給 Fable，回覆後 Opus 實作 F4 | 使用者轉交 | [任務說明](../tasks/w6.md)、[問題清單](../tasks/w6-l2-questions.md) |
-| 卡組讀不到就跳過那一篇 | 實作完成待審：分支 `claude/state-load` | 審查請求交給新的 Codex 做 L2；通過後合併進 `main`，再併進 `claude/w6` 做 iPhone 測試 | 使用者轉交 | [任務說明](../tasks/state-load.md) |
+| 卡組讀不到就跳過那一篇 | 分支 `claude/state-load`：Codex L2 的 F1、F2 已修（`782a7df`），再審請求已寫好 | 再審請求交給新的 Codex；通過後合併進 `main`，再併進 `claude/w6` 做 iPhone 測試；Windows 的 §8 在 W6 合併 `main` 後補 | 使用者轉交 | [任務說明](../tasks/state-load.md)、[L2 報告](<../Claude Codex Discussion/2026-10-27-state-load-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 討論中 | 一次一題，先問每台裝置要不要記版本 | 使用者 | [規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7 已談定（7 見 [D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)）；環節 8 雙方一致 | 使用者決定電腦專用的主機接點（改 D-053）；環節 4、5、6、9、2、3 等 `state-load` 與 W6 合併後再談 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
@@ -47,4 +47,5 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-27 | 卡組讀不到就跳過那一篇的 L2 修正（分支 `claude/state-load` 的 `782a7df`，[報告](<../Claude Codex Discussion/2026-10-27-state-load-review.md>)）：取消行多帶的 `lt` 也避開、`onError` 裡關閉不留重試；388 個測試通過，等 Codex 再審 |
 | 2026-10-27 | 文件架構整理第一部分（[D-141](decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）：狀態板、主文規則、檔頭狀態行，文件檢查接上每次 commit |
