@@ -3,14 +3,16 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry } from '../src/core/study/index.ts';
 import type { Pick } from '../src/core/study/index.ts';
-import { createSession, RATE_DELAY } from '../src/review/index.ts';
+import { createSession, RATE_DELAY, sourceLinks } from '../src/review/index.ts';
 import type { Session } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { App } from 'obsidian';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
+import { resolveSource } from '../src/ui/sources.ts';
 
-// 複習畫面元件（src/ui/Review.tsx）的時序：Codex L2 審查的 F1（動畫期間的按鍵）、F3（自動朗讀被換卡停掉）、F7（第 2 步拼對的打勾）。
+// 複習畫面元件（src/ui/Review.tsx）的時序：Codex L2 審查的 F1（動畫期間的按鍵）、F3（自動朗讀被換卡停掉）、F7（第 2 步拼對的打勾）；
+// 最後是 F5（出處的子圖，src/ui/sources.ts）。
 // 用 tests/helpers/review-ui.ts 的 hook／Motion 替身跑真的 Review 元件，接真的 createSession 與 createState（記憶體 Files）。
 const START = Date.parse('2026-10-24T19:00:00.000+08:00');
 const NATURAL = 'Essence Cards/國二上/自然/2-2（卡片）.md';
@@ -178,4 +180,29 @@ void test('F7 第 2 步拼對：打勾與答案（寫在線上的那一個）；
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-ok'), [], '回看：第 1 步拼錯，不畫打勾');
   assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你打的', '正確拼字']);
+});
+
+// Codex L2 F5：出處寫 `圖 2-13`、材料只有 `^fig2-13a`、`^fig2-13b` 時連到第一張子圖（D-094、syntax.md §2-5）。
+void test('F5 出處的圖省略子圖字母：精確的錨點優先，沒有時依材料順序找第一張子圖；都沒有才打開第一份材料', () => {
+  const blocks: Record<string, readonly string[]> = {
+    'Essence Cards/材料/甲.md': ['p43', 'fig2-12', 'fig2-13b', 'fig2-13a', 'fig2-13-note'],
+    'Essence Cards/材料/乙.md': ['fig2-14', 'fig2-15b'],
+    'Essence Cards/材料/丙.md': ['fig2-15'],
+  };
+  const app = {
+    metadataCache: {
+      getFirstLinkpathDest: (link: string) => { const path = `Essence Cards/材料/${link}.md`; return path in blocks ? { path } : null; },
+      getFileCache: (file: { path: string }) => ({ blocks: Object.fromEntries(blocks[file.path].map(id => [id, {}])) }),
+    },
+  } as unknown as App;
+  const materials = ['[[甲]]', '[[乙]]', '[[丙]]'];
+  const resolve = (text: string) => { const [item] = sourceLinks([text]); return resolveSource(app, NATURAL, materials, item.link); };
+  assert.equal(resolve('圖 2-13'), 'Essence Cards/材料/甲.md#^fig2-13a', '省略字母：第一張子圖（照字母，不照材料裡的先後）');
+  assert.equal(resolve('圖 2-13 A'), 'Essence Cards/材料/甲.md#^fig2-13a');
+  assert.equal(resolve('圖 2-13 B'), 'Essence Cards/材料/甲.md#^fig2-13b');
+  assert.equal(resolve('圖 2-14'), 'Essence Cards/材料/乙.md#^fig2-14', '不同材料');
+  assert.equal(resolve('圖 2-15'), 'Essence Cards/材料/丙.md#^fig2-15', '精確的錨點優先於前一份材料的子圖');
+  assert.equal(resolve('圖 2-16'), 'Essence Cards/材料/甲.md', '完全不存在：打開第一份材料');
+  assert.equal(resolve('圖 2-1'), 'Essence Cards/材料/甲.md', '2-1 不會對到 2-12 或 2-13a');
+  assert.equal(resolve('p.43'), 'Essence Cards/材料/甲.md#^p43');
 });
