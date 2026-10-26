@@ -55,7 +55,8 @@
 ## AI 協作分工
 
 - 主要由 Claude 處理架構判斷、文件維護與實作：規格清楚的程式與機械式工作（例如試作場的測試程式、腳手架、批次整理）也由 Claude 在同一個 session 做完（[D-131](docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)）。
-- Codex 是關鍵點的查核者：高風險改動合併前的獨立審查（L2，範圍見 `docs/agents/quality.md`）、實驗產物交出前的查核、里程碑回顧與安全檢查、盲評的第二家評分者。請 Codex 查核時，Claude 寫明查什麼、讀哪些檔案、基準 commit 與驗收標準；Codex 只回報，修改由 Claude 做。
+- Claude 裡由 Fable 寫計畫、做難的判斷，Opus 照計畫執行；任務說明沒寫到、做了又很難收回的步驟，Opus 停下來建議交給 Fable，卡關時照 `docs/agents/quality.md` 依序升級（[D-140](docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)）。
+- Codex 是關鍵點的查核者：高風險改動合併前的獨立審查（L2，範圍見 `docs/agents/quality.md`）、改存檔格式的任務開工前的格式查核（D-140）、實驗產物交出前的查核、里程碑回顧與安全檢查、盲評的第二家評分者。請 Codex 查核時，Claude 寫明查什麼、讀哪些檔案、基準 commit 與驗收標準；Codex 只回報，修改由 Claude 做。
 - Claude 的額度仍有上限。大量機械式整理、Claude 正忙的獨立工作，或適合在 ChatGPT 進行的長篇發想，助理可以建議轉交 Codex 或 ChatGPT，並附上可以直接貼上的任務說明與建議的推理等級；這是例外，不是預設。
 - Claude 和 Codex 要討論時，在 `Claude Codex Discussion/` 的討論稿輪流回覆，雙方一致後才交給使用者；請使用者決定時，分別說明 Claude 和 Codex 各自的考量與不採用的代價。結案時在檔頭標「已結案」並連到 D-ID，不另寫摘要（D-106）。
 - 由不同 AI 接手時，同樣遵守本文件。
