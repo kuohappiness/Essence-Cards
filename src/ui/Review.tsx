@@ -315,7 +315,8 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
         placeholder={typed.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typed.step === 3 ? '照著打一次' : '輸入英文'}
         autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />
     </div>}
-    {typed && typed.step === 3 && !typed.finished && typed.live && <div className="ec-live"><Letters letters={typed.live.typed} mode="typed" /></div>}
+    {/* 照打的即時比對：還沒打字時不畫（不然只有一條「—」） */}
+    {typed && typed.step === 3 && !typed.finished && typed.live && <div className="ec-live">{typed.live.typed.length > 0 && <Letters letters={typed.live.typed} mode="typed" />}</div>}
     {revealed && <div className="ec-answer">
       {typed && (typed.first === 'right' || (view.viewing && !typed.attempt)
         ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span></div></div>
