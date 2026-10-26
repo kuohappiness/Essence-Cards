@@ -27,6 +27,20 @@ export function spelling(input: string, answer: string): Spelling {
   return { ok: a.join('') === b.join(''), typed, expected };
 }
 
+/**
+ * 第 3 步照打的即時比對：照位置一個一個比，打到哪裡比到哪裡（還沒打的不算錯），大小寫與開頭的空白不算。
+ * 漏打或多打一個字母時，從那裡起都標出來（照著打的人看得出從哪裡開始不對）；用編輯距離對齊的話，
+ * 漏打的字母標不在「你打的」那一行（2026-10-26 在 Obsidian 實測：打 mnd 時畫面上沒有任何標記）。
+ */
+export function copying(input: string, answer: string): Spelling {
+  const a = [...input.trimStart().toLowerCase()], b = letters(answer);
+  return {
+    ok: a.join('').trimEnd() === b.join(''),
+    typed: a.map((char, i) => ({ char, bad: char !== b[i] })),
+    expected: b.map((char, i) => ({ char, bad: i < a.length && a[i] !== char })),
+  };
+}
+
 /** 編輯距離（大小寫、前後空白不算）。 */
 function distance(input: string, answer: string): number {
   const a = letters(input), b = letters(answer);

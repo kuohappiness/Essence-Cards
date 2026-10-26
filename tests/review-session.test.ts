@@ -172,7 +172,11 @@ void test('R5 第 1 步拼錯 → 第 2 步拼錯 → 第 3 步顯示比對（ma
   s.input('made up his mnd');
   view = typed(s.view());
   assert.equal(view.live?.ok, false);
-  assert.deepEqual(view.live?.expected.filter(l => l.bad).map(l => l.char), ['i'], '照打時打錯的字母當場標出');
+  // 照位置比：mnd 的 n 打在 i 的位置、d 打在 n 的位置，「你打的」那一行從 n 起標出（漏打也看得到）。
+  assert.deepEqual(view.live?.typed.filter(l => l.bad).map(l => l.char), ['n', 'd'], '照打時打錯的字母當場標出');
+  s.input('made up h');
+  assert.deepEqual(typed(s.view()).live?.typed.filter(l => l.bad), [], '還沒打完的部分不算錯');
+  s.input('made up his mnd');
   s.submit();
   assert.equal(typed(s.view()).finished, false, '和答案不同不結束');
   s.input('made up his mind'); s.submit();
@@ -236,6 +240,12 @@ void test('R10 一般的卡：開始拿到 next 的同一張；翻面後 0.3 秒
   assert.deepEqual(last(h.log()), { ...last(h.log()), lt: 'a1', r: 'good', typed: null });
   assert.equal(lt(s.view()), 'a2');
   assert.equal(s.view().top.center, '還剩 1 張');
+  // 回看一般科目的卡：沒有喇叭、沒有自動朗讀（2026-10-26 Obsidian 實測：回看時公式的符號被當成英文）。
+  s.back();
+  assert.equal(card(s.view()).viewing?.index, 0);
+  assert.equal(card(s.view()).english, false);
+  assert.equal(card(s.view()).speakable, false);
+  assert.equal(card(s.view()).autoRead, null);
 });
 
 void test('R10 打字卡答錯後由 next 再出：還有別的卡時先出別的；到了再出的時間再出同一題，從第 1 步開始', async t => {

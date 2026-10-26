@@ -3,7 +3,7 @@ export { createSession, allowedFor, RATINGS, RATING_LABELS, RATE_DELAY } from '.
 export type { Session, View, CardView, TypedView } from './session.ts';
 export type { DoneView } from './done.ts';
 export { todayStats, doneView } from './done.ts';
-export { spelling, closest } from './spelling.ts';
+export { spelling, closest, copying } from './spelling.ts';
 export type { Spelling } from './spelling.ts';
 export { lockAxis, gesture } from './gesture.ts';
 export type { Axis, Gesture } from './gesture.ts';

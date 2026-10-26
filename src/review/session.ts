@@ -5,7 +5,7 @@ import type { State } from '../state/index.ts';
 import { crumb } from './crumb.ts';
 import { doneView, todayStats, type DoneView } from './done.ts';
 import { englishParts, fillBlank } from './english.ts';
-import { closest, spelling, type Spelling } from './spelling.ts';
+import { closest, copying, spelling, type Spelling } from './spelling.ts';
 
 // 一次複習的狀態（W6 §2）：純程式，不碰 React 與 Obsidian。React 元件只把這裡的狀態畫出來、把按鍵與手勢轉成動作。
 
@@ -32,7 +32,7 @@ export interface TypedView {
   answer: string;
   /** 第 3 步：最後一次打的字和最接近的答案逐字比對（拼錯的字母標出）；其他步 null。 */
   attempt: Spelling | null;
-  /** 第 3 步照打：目前輸入和線上答案的即時比對；其他步 null。 */
+  /** 第 3 步照打：目前輸入和線上答案照位置的即時比對（copying）；其他步 null。 */
   live: Spelling | null;
   /** 第 1 步拼錯或按「沒印象」時打的字和最接近答案的比對（回看時顯示）；拼對是 null。 */
   firstAttempt: Spelling | null;
@@ -231,7 +231,7 @@ export function createSession(options: SessionOptions): Session {
       } : null;
       return {
         kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: entry.changeable, pressed: entry.rating,
-        english: entry.card.target.direction !== null, speakable: true, autoRead: null, viewing: { index: viewing, total: done.length },
+        english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length },
       };
     }
     if (!current) return null;
@@ -280,7 +280,7 @@ export function createSession(options: SessionOptions): Session {
     spoken();
     const typed = current.typed;
     typed.input = text;
-    if (typed.step === 3) typed.live = spelling(text, typed.answer);
+    if (typed.step === 3) typed.live = copying(text, typed.answer);
     notify();
   }
 
@@ -292,7 +292,7 @@ export function createSession(options: SessionOptions): Session {
     typed.notice = false;
     typed.answer = answers[0] ?? '';
     typed.attempt = spelling(lastInput, closest(lastInput, answers));
-    typed.live = spelling('', typed.answer);
+    typed.live = copying('', typed.answer);
     typed.input = '';
     typed.canSkip = false;
     revealNow();
@@ -324,7 +324,7 @@ export function createSession(options: SessionOptions): Session {
     const text = typed.input;
     if (typed.step === 3) {
       if (!text.trim()) return;
-      typed.live = spelling(text, typed.answer);
+      typed.live = copying(text, typed.answer);
       if (checkTyped(card.prompt, text)) finish(typed, card, typed.answer, false);
       notify();
       return;

@@ -7,8 +7,11 @@ import { runFilesContract } from '../dev/files-contract.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
 import type { IdsWiring, PluginEvent, PluginEvents } from '../main.ts';
+import type { ReviewHandle } from '../ui/index.ts';
+import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
+import { deckHashes, openTimes, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -21,13 +24,17 @@ interface Host extends Plugin {
   state: State | null;
   ids: IdsWiring | null;
   lockAlso: string[];
+  startReview(pick: Pick): ReviewHandle | null;
   on<K extends PluginEvent>(kind: K, listener: (value: PluginEvents[K]) => void): () => void;
 }
 /** 載入時記下的數字，每個結果檔都附上（T12）。 */
 interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () => number | null }
 
-/** desktop：會寫卡組筆記的命令，只在電腦註冊、只在電腦執行（D-134：iPhone 不寫卡組；Codex 審查第二部分的 F4）。 */
-interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true }
+/**
+ * desktop：會寫卡組筆記或只有電腦做得到的命令，只在電腦註冊、只在電腦執行（D-134：iPhone 不寫卡組；Codex 審查第二部分的 F4）。
+ * root：結果寫到哪個資料夾（W6 的命令寫 Essence W6/，W6 §4）。
+ */
+interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true; root?: string }
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -40,9 +47,30 @@ const commands: Record<string, DevCommand> = {
   save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
   t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
   t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: (_host, ids) => t1Close(ids), desktop: true },
+  // W6 §4、§6。
+  'review-script': { name: 'Essence 開發：自動複習', run: reviewScript, root: W6_ROOT },
+  voices: { name: 'Essence 開發：系統語音', run: () => voices(), root: W6_ROOT },
+  'w6-save': { name: 'Essence 開發：W6 範例存檔', run: saveExamples, desktop: true, root: W6_ROOT },
+  decks: { name: 'Essence 開發：卡組內容', run: deckHashes, root: W6_ROOT },
+  'open-times': { name: 'Essence 開發：打開三次', run: openTimes, root: W6_ROOT },
+  ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  errors: { name: 'Essence 開發：錯誤紀錄', run: () => Promise.resolve({ visibility: document.visibilityState, errors: errors.slice(-50) }), root: W6_ROOT },
 };
 
+/** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
+const errors: string[] = [];
+function collectErrors(plugin: Plugin): void {
+  const original = console.error;
+  const text = (value: unknown): string => value instanceof Error ? value.stack ?? value.message : typeof value === 'string' ? value : (() => { try { return JSON.stringify(value); } catch { return String(value); } })();
+  const push = (line: string) => { errors.push(new Date().toISOString().slice(11, 19) + ' ' + line.slice(0, 2000)); if (errors.length > 200) errors.shift(); };
+  console.error = (...args: unknown[]) => { push(args.map(text).join(' ')); original.apply(console, args); };
+  plugin.register(() => { console.error = original; });
+  plugin.registerDomEvent(window, 'error', event => { push('error: ' + text(event.error ?? event.message)); });
+  plugin.registerDomEvent(window, 'unhandledrejection', event => { push('unhandledrejection: ' + text(event.reason)); });
+}
+
 export function registerDev(plugin: Host, load: LoadInfo): void {
+  collectErrors(plugin);
   // 開發命令 lock 在 Essence W5/暫存/ 的卡組副本上測各種編輯，那裡也要鎖 ID。
   plugin.lockAlso.push('Essence W5/暫存/');
   // 存檔按鈕、提示與編輯器鎖定的紀錄：訂閱外掛的事件，自己記（main.ts 不再有開發用的欄位）。
@@ -50,6 +78,8 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
   plugin.on('notice', message => { devLog.notices.push(message); });
   plugin.on('event', event => { devLog.events.push(event); });
   plugin.on('removed', removed => { devLog.removed.push(removed); });
+  // W6 §4 的自動量測：每次打開複習畫面記下來，關掉時寫一個檔。
+  watchReview(plugin, (code, data) => writeResult(plugin.app, code, plugin.device, data, W6_ROOT));
   const ids: IdsHost = { app: plugin.app, get state() { return plugin.state; }, devLog };
   let runs = 0;
   async function run(code: string): Promise<void> {
@@ -67,7 +97,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
       obsidian: apiVersion, plugin: plugin.manifest.version,
       onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
       sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
-    });
+    }, command.root);
     new Notice(command.name.replace('Essence 開發：', '') + '完成\n' + path);
   }
   for (const [code, command] of Object.entries(commands)) {
@@ -189,13 +219,16 @@ async function ensureFolder(app: App, folder: string): Promise<void> {
   }
 }
 
-async function writeResult(app: App, code: string, device: string, data: unknown): Promise<string> {
-  const now = new Date();
+function stampOf(now: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  await ensureFolder(app, root + '/結果');
-  let path = `${root}/結果/${code} ${device} ${stamp}.json`;
-  for (let n = 2; app.vault.getAbstractFileByPath(path); n++) path = `${root}/結果/${code} ${device} ${stamp}-${n}.json`;
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
+
+async function writeResult(app: App, code: string, device: string, data: unknown, folder = root): Promise<string> {
+  const stamp = stampOf(new Date());
+  await ensureFolder(app, folder + '/結果');
+  let path = `${folder}/結果/${code} ${device} ${stamp}.json`;
+  for (let n = 2; app.vault.getAbstractFileByPath(path); n++) path = `${folder}/結果/${code} ${device} ${stamp}-${n}.json`;
   await app.vault.create(path, JSON.stringify(data, null, 2));
   return path;
 }

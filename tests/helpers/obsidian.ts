@@ -52,7 +52,7 @@ export interface ObsidianStub {
   /** document.visibilityState 變成 hidden 並送事件。 */
   hide: () => void;
   document: EventTarget & { visibilityState: string };
-  window: { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout; setInterval: (callback: () => void, ms?: number) => number; clearInterval: () => void };
+  window: EventTarget & { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout; setInterval: (callback: () => void, ms?: number) => number; clearInterval: () => void };
   /** registerInterval 登記的回呼：tick() 全部跑一次。 */
   tick: () => void;
   /** Markdown 分頁。 */
@@ -121,11 +121,11 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     loadLocalStorage: () => null, saveLocalStorage: () => {},
   };
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
-  const window = {
+  const window = Object.assign(new EventTarget(), {
     setTimeout, clearTimeout,
     setInterval: (callback: () => void) => { intervals.push(callback); return intervals.length; },
     clearInterval: () => {},
-  };
+  });
   class Plugin {
     app: unknown; manifest: unknown;
     constructor(app: unknown, manifest: unknown) { this.app = app; this.manifest = manifest; }
@@ -133,6 +133,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     addRibbonIcon(icon: string, title: string, callback: (evt: unknown) => unknown) { ribbons.push({ icon, title, callback }); return {}; }
     registerEditorExtension() { extensions++; }
     registerEvent() {}
+    register() {}
     registerInterval(id: number) { return id; }
     registerObsidianProtocolHandler(action: string, handler: (params: Record<string, string>) => void) { protocol.set(action, handler); }
     registerDomEvent(target: EventTarget, type: string, callback: () => void) { target.addEventListener(type, callback); }

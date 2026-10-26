@@ -86,6 +86,12 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const focusApp = (): void => { appEl.current?.focus({ preventScroll: true }); };
 
   useEffect(() => () => { alive.current = false; }, []);
+  // 焦點留在畫面裡（W6 §3-2）：按鍵由 .ec-app 處理，所以打開時、輸入框或按鈕消失時（打字卡答完、換卡、
+  // 完成畫面的按鈕），焦點回到 .ec-app；不然焦點掉到 body，Space、1～4、Esc 都沒有作用（2026-10-26 在 Obsidian 實測）。
+  useEffect(() => {
+    const root = appEl.current;
+    if (root && !root.contains(document.activeElement)) focusApp();
+  });
   // 換卡、回看：捲回最上面，收起出處提示。
   useEffect(() => { if (stage.current) stage.current.scrollTop = 0; setTipOpen(false); }, [cardKey]);
   // 自動朗讀（D-116）：同一個時刻只念一次；換卡、回看、關掉開關都立刻停。
@@ -212,7 +218,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
       if (pendingNext.current !== null) { props.onEvent?.({ kind: 'next', ms: performance.now() - pendingNext.current }); pendingNext.current = null; }
     });
   };
-  useLayoutEffect(() => { if (view.kind === 'done' && !opened.current) painted(); });
+  // 完成畫面沒有 Markdown 的 onReady：打開就是完成畫面、或自評後換成完成畫面時在這裡量。
+  useLayoutEffect(() => { if (view.kind === 'done' && (!opened.current || pendingNext.current !== null)) painted(); });
 
   const top = view.top;
   const english = view.kind === 'card' && view.card.english;

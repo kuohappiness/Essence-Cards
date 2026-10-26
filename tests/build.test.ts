@@ -90,11 +90,14 @@ void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或
   assert.deepEqual(imports.filter(entry => entry.external), []);
 });
 
-void test('W5 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱、對照與契約檢查的程式', async t => {
+void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱、對照與契約檢查、複習畫面的量測與劇本', async t => {
   const dir = await project(t, {});
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   // 中文會被 esbuild 跳脫成 \uXXXX，契約檢查用它的代號 "C14" 當記號；URI 帶引號，不和裝置碼的 "essence-cards-device" 混淆。
-  const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', '"dev-"', '"C14"', 'Essence W5'];
+  // W6（R14）：命令代號 review-script、open-times、w6-save（voices 和正式版的 getVoices 撞名，不當記號）、結果資料夾、
+  // 截圖與照常繪製用的 Electron 呼叫。
+  const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', '"dev-"', '"C14"', 'Essence W5',
+    '"review-script"', '"open-times"', '"w6-save"', 'Essence W6', 'setBackgroundThrottling', 'capturePage'];
   await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
@@ -114,7 +117,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
     return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
   };
-  const devOnly = (path: string) => path.startsWith('src/dev/') || path === 'src/obsidian/dev.ts' || path === 'src/obsidian/dev-ids.ts';
+  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-ids|-review)?\.ts$/.test(path);
   assert.deepEqual((await included(false)).filter(devOnly), []);
   // I9：CodeMirror 由 Obsidian 提供，沒有另一份被打包進來；編輯器的鎖定在正式版裡。
   for (const dev of [false, true]) {
@@ -122,7 +125,17 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev.ts']);
+});
+
+void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {
+  const dir = await project(t, {});
+  await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
+  await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
+  const styles = await readFile(join(dir, 'styles.css'), 'utf8');
+  const tokens = await readFile(join(root, 'src/ui/tokens.css'), 'utf8');
+  assert.ok(styles.startsWith(tokens + '\n'), 'styles.css 的第一段不是 tokens.css');
+  for (const name of ['src/ui/Review.css', 'src/ui/Markdown.css', 'src/obsidian/ids.css']) assert.ok(styles.includes(await readFile(join(root, name), 'utf8')), name);
 });
 
 void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {

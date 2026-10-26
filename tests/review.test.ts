@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, crumb, doneView, englishParts, fillBlank, gesture, lockAxis, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, lockAxis, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
 
-// W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路征、R12 出處，以及完成畫面的文字（§2-6）。
+// W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
 const PHRASE = '他已經下定決心要出國讀書。He has already ＿＿ to study abroad.';
 const TWO = ['made up his mind', 'made his mind up'];
@@ -35,6 +35,19 @@ void test('R7 比對：最接近的答案（一樣近取前面的）；試作外
   const mand = spelling('made up his mand', 'made up his mind');
   assert.deepEqual(mand.typed.filter(c => c.bad).map(c => c.char), ['a']);
   assert.deepEqual(mand.expected.filter(c => c.bad).map(c => c.char), ['i']);
+});
+
+void test('R7 第 3 步照打的即時比對：照位置比，還沒打的不算錯，漏打時從那裡起標出', () => {
+  assert.deepEqual(copying('', 'borrow').typed, []);
+  assert.equal(copying('', 'borrow').expected.some(c => c.bad), false);
+  assert.equal(copying('  BoR', 'borrow').typed.some(c => c.bad), false);
+  assert.equal(copying('BORROW ', 'borrow').ok, true);
+  assert.deepEqual(copying('bor', 'borrow').typed.map(c => c.char).join(''), 'bor');
+  const mnd = copying('made up his mnd', 'made up his mind');
+  assert.equal(mnd.ok, false);
+  assert.deepEqual(mnd.typed.filter(c => c.bad).map(c => c.char), ['n', 'd']);
+  assert.deepEqual(mnd.expected.filter(c => c.bad).map(c => c.char), ['i', 'n']);
+  assert.deepEqual(copying('borroww', 'borrow').typed.filter(c => c.bad).map(c => c.char), ['w']);
 });
 
 void test('R8 英文的部分：例句只念英文；＿＿ 填入答案；單字；全是中文沒有；只有詞性縮寫不念', () => {
