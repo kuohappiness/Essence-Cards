@@ -168,7 +168,6 @@ export function createSession(options: SessionOptions): Session {
   const listeners = new Set<() => void>();
   const done: DoneCard[] = [];
   let current: Current | null = null;
-  let finished: DoneView | null = null;
   let viewing: number | null = null;
   let loaded = false;
   let closed = false;
@@ -185,12 +184,11 @@ export function createSession(options: SessionOptions): Session {
     return entry ? crumb(entry.deck.props, card.deck) : card.deck;
   }
 
-  /** 從 state 拿下一張；done 就是完成畫面。 */
+  /** 從 state 拿下一張；done 就是完成畫面（文字在 compute 照當下的 progress 算，不留舊的）。 */
   function load(): void {
     const next = state.next(pick);
     if (next.kind !== 'card') {
       current = null;
-      finished = doneView(pick, state.progress(), todayStats(state.history(), state.today()));
       return;
     }
     const card = next.card;
@@ -202,7 +200,6 @@ export function createSession(options: SessionOptions): Session {
     const question = card.prompt.kind === 'qa' ? card.prompt.question : card.prompt.text;
     const autoRead = english && card.target.direction === 'en-zh' ? englishParts(question) : null;
     current = { card, crumb: crumbOf(card), revealed: false, revealedAt: null, typed, autoRead: autoRead?.length ? autoRead : null };
-    finished = null;
   }
 
   const readyPromise = state.ready().then(() => {
@@ -212,7 +209,12 @@ export function createSession(options: SessionOptions): Session {
     notify();
   });
   // 卡組或別台裝置的紀錄改變：目前這一張不換，上方的「還剩幾張」照新的 progress 重算（W6 §2-1）。
-  const unsubscribe = state.onChange(() => { if (loaded) notify(); });
+  // 在完成畫面（沒有目前這張）時重新問 next：別台裝置可能做完了別科，也可能又有卡（Codex L2 F2）。
+  const unsubscribe = state.onChange(() => {
+    if (!loaded) return;
+    if (!current) load();
+    notify();
+  });
 
   function top(): TopView {
     const canBack = done.length > 0 && viewing !== 0;
@@ -253,7 +255,7 @@ export function createSession(options: SessionOptions): Session {
     if (!loaded) return { kind: 'loading', top: header };
     const card = cardView();
     if (card) return { kind: 'card', top: header, card };
-    return { kind: 'done', top: header, done: finished ?? doneView(pick, state.progress(), todayStats(state.history(), state.today())) };
+    return { kind: 'done', top: header, done: doneView(pick, state.progress(), todayStats(state.history(), state.today())) };
   }
   function view(): View {
     cached ??= compute();
@@ -395,12 +397,16 @@ export function createSession(options: SessionOptions): Session {
     return true;
   }
 
-  /** 回看時改評分（D-084）：取消原本那一筆，再寫同樣的 lt、v、typed、retry 加新的評分。 */
+  /**
+   * 回看時改評分（D-084）：取消原本那一筆，再寫同樣的 lt、v、typed、retry 加新的評分。目前有一張還沒作答的卡時不換它；
+   * 在完成畫面時重新問 next，改成沒印象或差一點的那張回到目前時就出（Codex L2 F2）。
+   */
   function change(entry: DoneCard, rating: Rating): boolean {
     if (entry.rating === rating || !entry.changeable.includes(rating)) return false;
     state.answer({ undo: entry.t });
     entry.t = state.answer({ lt: entry.card.lt, r: rating, v: entry.card.prompt.fingerprint, ...(entry.typed ? { typed: entry.typed } : {}), ...(entry.retry ? { retry: entry.retry } : {}) });
     entry.rating = rating;
+    if (!current) load();
     notify();
     return true;
   }

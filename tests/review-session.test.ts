@@ -389,7 +389,8 @@ void test('R10 打字卡第 1 步拼錯、第 2 步拼對後改評分兩次：�
   for (const history of [h.state.history(), full]) assert.deepEqual(history.reviews.filter(e => e.lt === 'z1').map(e => [e.t, e.r, e.typed]), [[raw[4].t, 'near', 'wrong']]);
 });
 
-void test('R10 回看時目前這張還在第 2 步：回到目前時仍在第 2 步、輸入框是空的；一般卡翻面後回看，回來仍是翻面', async t => {
+// Codex L2：原本名稱寫「第 2 步」，實際走的是 borrow 原形等於答案的第 3 步；兩個情況分開測。
+void test('R10 回看時目前這張在第 3 步（borrow 跳過第 2 步）：回到目前時仍在第 3 步、比對還在；一般卡翻面後回看，回來仍是翻面', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });
   s.input('made up his mind'); s.submit();
@@ -400,7 +401,8 @@ void test('R10 回看時目前這張還在第 2 步：回到目前時仍在第 2
   s.back();
   assert.equal(lt(s.view()), 'z1');
   s.toCurrent();
-  assert.deepEqual([lt(s.view()), typed(s.view()).step, typed(s.view()).input], ['z2', 3, '']);
+  assert.deepEqual([lt(s.view()), typed(s.view()).step, typed(s.view()).input, typed(s.view()).finished], ['z2', 3, '', false]);
+  assert.deepEqual(typed(s.view()).attempt?.typed.map(l => l.char).join(''), 'borow');
 
   const n = await setup(t);
   const natural = await n.open({ subject: '自然' });
@@ -410,6 +412,33 @@ void test('R10 回看時目前這張還在第 2 步：回到目前時仍在第 2
   natural.back();
   natural.forward();
   assert.deepEqual([lt(natural.view()), card(natural.view()).revealed, card(natural.view()).viewing], ['a2', true, null]);
+});
+
+void test('R10 回看時目前這張在第 2 步、輸入框有字：回到目前時仍在第 2 步，「不對」、原形提示與打的字都留著', async t => {
+  // borrow 中翻英排在 make up one's mind 中翻英前面：先做完 borrow，第二張才是有原形提示（第 2 步）的卡。
+  const lines = englishText.split('\n');
+  const z1 = lines.findIndex(line => line.endsWith('^z1'));
+  const z1Block = lines.splice(z1, 3);
+  lines.splice(lines.findIndex(line => line.endsWith('^z2')) + 2, 0, ...z1Block);
+  const h = await setup(t, { ...vault, [ENGLISH]: lines.join('\n') });
+  const s = await h.open({ subject: '英文' });
+  assert.equal(lt(s.view()), 'z2');
+  s.input('borrow'); s.submit();
+  await rateLater(h, s, 'good');
+  assert.equal(lt(s.view()), 'z1');
+  s.input('made up my mind'); s.submit();
+  s.input('made up h');
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).input], [2, 'made up h']);
+  s.back();
+  assert.deepEqual([lt(s.view()), card(s.view()).viewing], ['z2', { index: 0, total: 1 }]);
+  s.input('x'); s.submit(); s.skip();
+  s.toCurrent();
+  const view = typed(s.view());
+  assert.deepEqual([lt(s.view()), view.step, view.notice, view.hint, view.input, card(s.view()).revealed], ['z1', 2, true, "make up one's mind", 'made up h', false]);
+  s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).second], [3, 'wrong'], '回來後照常從第 2 步接著做');
+  await h.state.flush();
+  assert.equal(h.log().length, 1, '回看中打字、確認、沒印象都沒有作用');
 });
 
 void test('R10 中斷：翻面後不評分就丟掉 Session，新的 Session 拿到同一張、在正面；紀錄沒有變', async t => {
@@ -464,4 +493,47 @@ void test('R10 完成畫面：一科做完還有別科 → 接著做；全部做
   if (view.kind !== 'done') throw Error();
   assert.deepEqual([view.done.title, view.done.buttons.map(b => b.label), s.pick()], ['又多複習了一些', ['結束複習'], { more: true }]);
   assert.equal(view.top.center, '再複習一些');
+});
+
+// Codex L2 F2：完成畫面不能固定成算出來那一刻的樣子。同步進來或回看改評分之後，照新的 progress 與 next 重算。
+void test('R10 完成畫面跟著變：別台裝置做完英文 → 今天的份完成了，N 照新的紀錄算', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  s.reveal(); await rateLater(h, s, 'good');
+  s.reveal(); await rateLater(h, s, 'good');
+  let view = s.view();
+  assert.ok(view.kind === 'done');
+  assert.deepEqual([view.done.title, view.done.detail], ['自然的份完成了！', '還有英文 3 張']);
+  const fingerprints = new Map(h.state.decks().flatMap(d => d.deck.targets.flatMap(target => target.prompts.map(p => [target.id, p.fingerprint] as const))));
+  for (const id of ['z1', 'z2', 'z3']) h.append(PHONE, encodeEntry('2026-10-24T18:30:00.000+08:00', { lt: id, r: 'good', v: fingerprints.get(id) ?? '' }));
+  await h.settle();
+  view = s.view();
+  assert.ok(view.kind === 'done');
+  assert.deepEqual([view.done.title, view.done.buttons.map(b => b.label)], ['今天的份完成了！', ['再複習一些', '結束複習']]);
+  assert.match(view.done.detail, /^今天複習了 5 張/, 'N 也照新的紀錄算');
+});
+
+void test('R10 完成畫面回看改成沒印象：回到目前時這科又有卡（正面），不是舊的完成畫面', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  s.reveal(); await rateLater(h, s, 'good');
+  s.reveal(); await rateLater(h, s, 'good');
+  assert.equal(s.view().kind, 'done');
+  s.back();
+  assert.equal(lt(s.view()), 'a2');
+  s.rate('miss');
+  s.toCurrent();
+  assert.deepEqual([lt(s.view()), card(s.view()).revealed, card(s.view()).viewing], ['a2', false, null]);
+  assert.equal(s.view().top.center, '還剩 1 張');
+});
+
+void test('R10 回看改評分時目前有一張還沒作答的卡：目前這張不換（翻面的樣子也留著）', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  s.reveal(); await rateLater(h, s, 'good');
+  s.reveal();
+  s.back();
+  s.rate('miss');
+  s.toCurrent();
+  assert.deepEqual([lt(s.view()), card(s.view()).revealed], ['a2', true]);
 });
