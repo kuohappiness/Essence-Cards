@@ -330,7 +330,11 @@ export async function openTimes(host: ReviewHost): Promise<unknown> {
 
 // ── 畫面與鍵盤（W6 §6 的 W2、W3、W4）：真的打開複習畫面，用鍵盤與點擊操作、截圖 ──
 
-interface Contents { capturePage(): Promise<{ toPNG(): Uint8Array }>; setBackgroundThrottling?(allowed: boolean): void }
+interface Contents {
+  capturePage(): Promise<{ toPNG(): Uint8Array }>;
+  setBackgroundThrottling?(allowed: boolean): void;
+  sendInputEvent?(event: { type: 'keyDown' | 'keyUp'; keyCode: string; modifiers?: string[] }): void;
+}
 function webContents(): Contents | null {
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
   const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
@@ -463,6 +467,20 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
     // 打開後直接按鍵（焦點要已經在畫面裡）；Space 翻面後馬上按 3：0.3 秒內不算，還是同一張。
     const space = press(' '), quick = press('3');
     await record('Space 後馬上按 3', { space, quick, still: name() });
+    // Tab／Shift+Tab 不離開全螢幕（W6 §3-2、Codex L2 F6）：DOM 的 KeyboardEvent 不會移動焦點，所以用 Electron 送真的按鍵。
+    // 從畫面本身 Shift+Tab、從最後一個 Tab、再 Tab 一次；之後的數字鍵從按鈕上按（焦點不在 .ec-app 也要有作用）。
+    const tab = async (shift: boolean): Promise<string | null> => {
+      if (!contents?.sendInputEvent) return null;
+      const modifiers = shift ? ['shift'] : [];
+      contents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab', modifiers });
+      contents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab', modifiers });
+      await settle(150);
+      return String(screen().focus);
+    };
+    overlay()?.querySelector<HTMLElement>('.ec-app')?.focus();
+    await record('Shift+Tab（從畫面本身）', { focus: await tab(true) });
+    await record('Tab（從最後一個）', { focus: await tab(false) });
+    await record('Tab', { focus: await tab(false) });
     await sleep(RATE_DELAY);
     await record('過了 0.3 秒按 3', { before: name(), key: press('3') });
     await record('第二張：點卡片翻面', overlay()?.querySelector<HTMLElement>('.ec-stage')?.click());

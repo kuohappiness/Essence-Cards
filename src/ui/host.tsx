@@ -21,6 +21,9 @@ export interface OpenOptions {
 }
 export interface ReviewHandle { session: Session; close(): void }
 
+/** Tab 會停的元素（Obsidian 渲染的連結、音檔也算）。 */
+const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), a[href], audio[controls], [tabindex]:not([tabindex="-1"])';
+
 export function openReview(options: OpenOptions): ReviewHandle {
   const { app, state } = options;
   const openedAt = options.openedAt ?? performance.now();
@@ -31,6 +34,18 @@ export function openReview(options: OpenOptions): ReviewHandle {
   element.addEventListener('touchstart', event => { event.stopPropagation(); }, { passive: true });
   element.addEventListener('touchmove', event => { event.stopPropagation(); }, { passive: false });
   element.addEventListener('touchend', event => { event.stopPropagation(); });
+  // 鍵盤焦點留在畫面裡（試作外掛 main.ts 的做法，Codex L2 F6）：Tab 從最後一個、Shift+Tab 從第一個或畫面本身繞到另一端；
+  // 不然焦點跑到被蓋住的 Obsidian（2026-10-27 用 Electron 送真的 Shift+Tab 實測），之後的快捷鍵都到不了複習畫面。
+  element.addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const items = Array.from(element.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(item => item.getClientRects().length > 0);
+    const index = items.findIndex(item => item === document.activeElement);
+    if (!items.length) { event.preventDefault(); return; }
+    if (event.shiftKey ? index <= 0 : index === -1 || index === items.length - 1) {
+      event.preventDefault();
+      (event.shiftKey ? items[items.length - 1] : items[0]).focus();
+    }
+  });
   const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   document.body.append(element);
   const session = createSession({ state, pick: options.pick });
