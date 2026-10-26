@@ -1,78 +1,47 @@
-# W6 交接單（Opus 5.5 → Fable 5.1，2026-10-26 晚）
+# W6 交接單（Opus 5.5 → Fable 5.1，2026-10-27 凌晨）
 
-遵守 repo 根目錄的 `AGENTS.md`。這份交接單請 Fable 做幾個決定（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：任務說明沒寫到、做了又很難收回的步驟，Opus 停下來交給 Fable）。決定之後交回 Opus 實作，再送 Codex 的 L2。建議推理等級：**high**（第 2-1、2-2 節是資料格式的決定）。
+遵守 repo 根目錄的 `AGENTS.md`。這份交接單請 Fable 決定兩件狀態層工作的排程（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：任務說明沒寫到、做了又很難收回的，Opus 停下來交給 Fable）。這兩件不擋 W6 的 L2，但擋 W6 的 iPhone 測試。建議推理等級：**high**。
 
 W6 全部做完、合併之後刪掉這份檔。
 
 ## 1. 做到哪裡
 
-- worktree `D:\程式開發\Essence-Cards-w6`，分支 `claude/w6`，最新 `50625d2`，沒有未提交的修改；`main` 已合併進來（`620f340`，只有文件）。`npm run check` 432 個測試通過；`main.js` 483,654 bytes。
-- 上一份交接單第 4 節的 ①～⑤ 做完：在 Windows 版 Obsidian 實際跑起來、開發命令（§4）、R13、R14、W6 §6 的 W1～W6 都有結果（數字與截圖的描述在[審查請求](w6-review.md)〈驗證方式〉）。⑥ 審查請求寫成**草稿**，⑦ 未合併。
-- 在 Obsidian 實測找到、已修的（`e182292`、`50625d2`）：打開時與打字卡答完後焦點掉到 body，鍵盤沒有作用；回看非英文的卡出現喇叭；照打漏打字母時沒有任何標記（改成照位置比）；完成畫面的換卡量測；喇叭與出處圖示的位置；照打還沒打字時多一條「—」。
-- **D-140 的順序沒有照到**：Codex 的 [W6 格式查核](<../Claude Codex Discussion/2026-10-26-w6-format-review.md>)（`main` 的 `8e2fb28`）回來時，上一個 session 已經做好 §0-1（` | `）與 §1（`retry`）。這個 session 已核對：
-  - F2（換行要在拆開前檢查）是真的漏洞，照規格原意修好（`8351638`）。
-  - F5、F6 的測試補了（回看改評分兩次每一行都留著 `retry`；空白輸入按確認不算沒印象），實作本來就對。
-  - 報告裡 8 個 W5 指紋登錄成測試，W6 算出來全部相同。
-  - **F1、F3、F4、F6 的文件要先決定**，見第 2 節。
+- worktree `D:\程式開發\Essence-Cards-w6`，分支 `claude/w6`，最新的程式 commit 是 `7242db0`；`main` 已合併進來（到 `7f6e7df`）。`npm run check` 445 個測試通過；正式版 `main.js` 483,921 bytes。
+- W6 §0～§6 做完：Windows 版 Obsidian 的 W1～W6 都有結果，實測找到的問題都修了。Codex 的格式查核照 `main` 上定案的寫法（`7f6e7df`、[核對說明](w6-format-review-fixes.md)）實作好了：F1 整格不能當打字答案就停出、F2 換行先查、F3 `retry: not-needed`、F5／F6 的測試。「版本」命令顯示建置版本（例如 `0.0.1+7242db0`），iPhone 測試靠它確認跑的是哪一次建置。
+- **[審查請求](w6-review.md)已經寫好，可以交給 Codex 做 L2**（使用者轉交，新開的 Codex session，推理等級：高）。
+- 未合併；W6 的 iPhone 測試（§7）還沒做。
 
 ## 2. 請 Fable 決定
 
-### 2-1 格式查核 F1：打字答案裡哪些 `|` 是分隔
+### 2-1 技術債 A1 的觸發點到了
 
-現在照 `|` 逐字拆開。`a \| b`、`` `a | b` ``、`[[word|borrow]]`、`[borrow](…a|b)`、公式裡的 `|` 都會被拆成兩個「正確答案」，而且帶著反斜線、反引號、括號，學生永遠打不對。
+backlog 的 A1（紀錄的壞行救回規則在 `state` 有第二份）觸發點是「下一次改紀錄格式（W6 加 `retry` 欄位）」。W6 的限制第 1 點不准改 `src/state/`，所以沒做。`retry`（含 `not-needed`）不影響 `ltsOf`（它只找 `lt`），沒有新的錯。
 
-- **Codex 的建議（最小範圍）**：打字答案只支援單字／片語加 `**`、`*`、`_`、`==`；跳脫的管線、行內程式碼、公式、連結、嵌入一律 `typed-answer-invalid`（目標停出），一般翻面題照舊。syntax.md §2-3 補一句、英文製卡規則補「打字答案不用這些寫法」。
-  - 不採用的代價：這幾種寫法會被拆成錯的答案，學生拼對也被判錯，紀錄寫進 `near`／`miss`。
-- **另一個做法**：支援連結的顯示文字與跳脫的 `\|`。要另外定「先認分隔、再取顯示文字、再去標記」的順序，Codex 不建議在 W6 擴成通用的 Markdown 轉純文字。
-  - 不採用的代價：家長真的把答案寫成連結時，要改寫成純文字才能出題。
-- **Claude（Opus）的看法**：同意 Codex。英文製卡規則從來不在打字答案放連結或程式碼；這些寫法在 W5 也是「能解析、但打不對」，改成停出只會更早讓家長看到。實作約 10 行加測試。
+- **Claude（Opus）的建議**：不在 W6 做，併進 2-2 的狀態層工作（兩件都改 `src/state/` 與 study 的紀錄讀取，一次 L2）。請確認，並改 A1 的觸發點。
 
-### 2-2 格式查核 F3（連帶 F6）：`retry` 沒寫是什麼意思
+### 2-2 「卡組讀不到就整個重試」要在 W6 的 iPhone 測試前做
 
-現在 `retry` 只在「真的有第 2 步」時寫。第 1 步拼錯或按沒印象、但原形是 null 或等於答案而跳過第 2 步時，不寫。
-
-- **Codex 的建議**：第 1 步是 `wrong`／`skip` 時一定寫 `retry`，跳過第 2 步時寫新的值 `not-needed`；沒有 `retry` 的舊紀錄解讀成「第 2 步未知」。syntax.md §5 的 `typed`、`retry` 兩列一起改（F6 給了寫法）。
-  - 不採用的代價：只看紀錄分不出「跳過第 2 步」和「不知道有沒有第 2 步」。
-- **保留現在的寫法**：明寫「W6 寫出的紀錄，缺 `retry` 表示沒有第 2 步」。
-  - 不採用 Codex 做法的理由：少一個值。
-- **Claude（Opus）的看法**：建議採用 Codex 的 `not-needed`，理由和 Codex 不完全一樣。Codex 擔心的「混著 W5 的舊紀錄」實際上不存在：W5 沒有複習畫面，真正的學生紀錄裡還沒有任何 `typed`。真正的理由是 **D-115（證據先收好）**：跳不跳過第 2 步取決於當時目標名稱算出的原形，家長之後改名稱就算不回來了，只有當下寫進紀錄才留得住。改動很小：`session.ts` 進第 3 步那裡多寫一個值、`NewEntry` 的型別、syntax.md §5 兩列、R4／R5 的測試。這是寫進學生紀錄的值，定了就收不回來，所以請 Fable 定。
-
-### 2-3 格式查核 F4：多答案卡的版本相容寫在哪裡
-
-舊版外掛判定多答案卡會把第二個答案判錯（W5 的 `checkTyped` 比整串）。W5 沒有複習畫面，所以現在不會發生；之後 W6 以後的版本混用才會（例如 iPhone 還沒更新）。
-
-- **Claude 的建議**：在 [更新與相容的規畫](../docs/plans/updates.md) 加一條發布規則（改了作答判定的版本，所有裝置都更新、重新載入外掛之後才用新語法出題），W6 的審查請求註明；不寫程式。版本偵測照那份規畫原本的步調。
-- 這和 2-1、2-2 是同一類的問題（資料格式向下相容），可以一起寫進 D-140 之後的格式查核做法，或只寫在 updates.md。
-
-### 2-4 技術債 A1 的觸發點到了
-
-backlog 的 A1（紀錄的壞行救回規則在 `state` 有第二份）觸發點是「下一次改紀錄格式（W6 加 `retry` 欄位）」。W6 的限制第 1 點不准改 `src/state/`，所以這次沒做。`retry` 不影響 `ltsOf`（它只找 `lt`），沒有新的錯。
-
-- **Claude 的建議**：不在 W6 做，併進第 2-5 節的狀態層工作（兩件都改 `src/state/` 與 study 的紀錄讀取，一次 L2）。請 Fable 確認，並把 A1 的觸發點改掉。
-
-### 2-5 「卡組讀不到就整個重試」要在 W6 的 iPhone 測試前做
-
-backlog 這一列的觸發點是「W6 的 iPhone 測試前」（iCloud 還沒下載好的一篇卡組會讓整個外掛讀不到，iPhone 測試很可能碰到）。它要改 `src/state/` 很多地方（含 ID 安全的限制、A4／A5 拆檔），超出 W6 的範圍，也需要自己的任務說明與 L2。
+backlog 這一列的觸發點是「W6 的 iPhone 測試前」：iCloud 還沒下載好的一篇卡組會讓整個外掛讀不到，iPhone 測試很可能碰到。它要改 `src/state/` 很多地方（ID 安全的限制、A4／A5 拆檔），超出 W6 的範圍，需要自己的任務說明與 L2。
 
 - **Claude 的建議順序**：Fable 寫這件的任務說明（含 A1）→ Opus 在另一個分支（例如 `claude/state-load`，從 `main` 開）做，和 W6 的 L2 同時進行 → Codex L2 → 合併進 `main` → `main` 合併進 `claude/w6` → W6 的 iPhone 測試 → 合併 W6。
-- **要協調的**：Fable 正在進行的[外掛架構檢查](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 1 的 P1（`watch` 帶 `from`）和環節 4 也改 `state` 的 `apply`；三件改同一段，建議排成一個或依序的分支，不要同時改。另外，那份稿說「環節 9 會提出記憶體 `Files`（A9）」：**A9 已經在 W6 做好**（`tests/helpers/memory-files.ts`、`tests/helpers/obsidian.ts`，`2ea31fb`），W6 合併後 P2 的 C16（失敗注入）可以直接加在它上面。
+  - 不這樣做的代價：照 W6 說明，iPhone 測試在 W6 合併前；如果先不做這件就測 iPhone，碰到一篇還沒下載好的卡組時整個外掛讀不到，測試要重來。
+- **要協調的**：Fable 正在進行的[外掛架構檢查](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 1 的 P1（`watch` 帶 `from`）和環節 4 也改 `state` 的 `apply`；三件改同一段，建議排成一個分支或依序做，不要同時改。另外，那份稿說「環節 9 會提出記憶體 `Files`（A9）」：**A9 已經在 W6 做好**（`tests/helpers/memory-files.ts`、`tests/helpers/obsidian.ts`，`2ea31fb`），W6 合併後 P2 的 C16（失敗注入）可以直接加在它上面。
 
-### 2-6 小事（Fable 看一眼即可，不決定也能照現在的做）
+### 2-3 小事（看一眼即可，不決定也照現在的做）
 
-- 出處圖示：W6 說明 §3-8 寫「背面右下角」，樣式稿放在答案下方左邊；這次照說明放右下。
+- 出處圖示：W6 說明 §3-8 寫「背面右下角」，樣式稿放在答案下方左邊；照說明放右下。
 - 換卡動畫約 0.27 秒內的按鍵不算（試作外掛的做法），快速連按 ← 會少走幾張。
 - 用箭頭連起來的英文（`go → went → gone`）會出現好幾個喇叭。
+- 回看的卡仍標「新」。
 
-## 3. Fable 決定之後，Opus 接著做（照這個順序）
+## 3. 之後 Opus 接著做（照這個順序）
 
-1. 照 2-1、2-2 的決定改 `tasks/w6.md`（或由 Fable 改）、`docs/syntax.md` §2-3、§5（`typed`、`retry` 兩列）、英文製卡規則；實作與測試（先寫會失敗的測試）。2-3 寫進 updates.md。
-2. 把 [審查請求](w6-review.md) 從草稿改成正式（補 commit、刪掉檔頭的草稿說明、填「待決定」），請使用者交給新開的 Codex session 做 L2（推理等級：高）。
-3. 核對 L2、修正、再審。
-4. 第 2-5 節的狀態層工作合併進 `main` 之後，把 `main` 合併進 `claude/w6`，在 Windows 重跑 `review-script`、`ui`、`decks`；寫 iPhone 測試的步驟（W6 §7，照試作外掛 README 的〈iPhone 測試清單〉寫成完整的句子）。J4 的基準在電腦用開發命令 `decks` 記下（測試 vault 的 `Essence W6/結果/`）。
-5. iPhone 測完照 §7 驗收（I1 超過 1 秒就停下來回報使用者）；合併 W6；第一個里程碑，提醒使用者做 code-quality 的里程碑回顧與安全檢查（D-117、D-119），A3 的觸發點也在這時。
+1. 使用者把[審查請求](w6-review.md)交給 Codex；核對 L2、修正、再審。
+2. 2-2 的狀態層工作合併進 `main` 之後，把 `main` 合併進 `claude/w6`，在 Windows 重跑 `review-script`、`ui`、`decks`；寫 iPhone 測試的步驟（W6 §7，照試作外掛 README 的〈iPhone 測試清單〉寫成完整的句子），J4 的基準在電腦用開發命令 `decks` 記下。
+3. iPhone 測完照 §7 驗收（I1 超過 1 秒就停下來回報使用者）；合併 W6；提醒使用者 iPhone 換到 W6 版之前不要複習含 ` | ` 的卡；第一個里程碑，提醒做 code-quality 的里程碑回顧與安全檢查（D-117、D-119），A3 的觸發點也在這時。
 
 ## 4. 在 Windows 測 Obsidian 的注意事項
 
-- **不要用 computer-use 截 Obsidian**：截到的是舊畫面，而且之後 Obsidian 被當成「被遮住」，停止繪製、計時器變慢。改用開發命令：`obsidian://essence-cards-dev?run=ui`（畫面與鍵盤，截圖寫到 `Essence W6/結果/畫面 …/`），`run=reload` 換新的 main.js，`run=errors` 看 console 錯誤。安裝：`npm run install-vault -- <測試 vault> --dev`（位置在 Claude 的記憶 `test-vault-location`）。
+- **不要用 computer-use 截 Obsidian**：截到的是舊畫面，而且之後 Obsidian 被當成「被遮住」，停止繪製、計時器變慢。改用開發命令：`obsidian://essence-cards-dev?run=ui`（畫面與鍵盤，截圖寫到測試 vault 的 `Essence W6/結果/畫面 …/`），`run=reload` 換新的 main.js，`run=errors` 看 console 錯誤。安裝：`npm run install-vault -- <測試 vault> --dev`（位置在 Claude 的記憶 `test-vault-location`）。
 - 每跑一次 `ui` 或 `review-script`，測試 vault 的紀錄檔會多十幾到三十行，全部互相取消，`today` 不變。
 - W6 範例卡組（`Essence Cards/W6 範例/`）已經補好 ID；材料與自己畫的圖在 `Essence W6/材料/`。
