@@ -8,7 +8,7 @@ import { countFiles } from './dev/wrap-files.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
-import { wireSave } from './obsidian/save.ts';
+import { wireSave, type Saver } from './obsidian/save.ts';
 import { createState, type ErrorSource, type State } from './state/index.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
@@ -25,17 +25,36 @@ const NOTICES: Partial<Record<ErrorSource, string>> = {
 const infoField = editorInfoField as unknown as StateField<MarkdownFileInfo>;
 const pathOf = (state: EditorState): string | undefined => state.field(infoField, false)?.file?.path;
 
+/**
+ * 外掛發出的事件（技術債 A10）：開發命令訂閱它們記下存檔按鈕、提示與編輯器鎖定的紀錄（W5 §8-7 的 lock、save）；
+ * 正式版照樣發，沒有人聽就什麼都不做。
+ */
+export interface PluginEvents {
+  /** 存檔按鈕與備援的提示文字（Notice）。 */
+  notice: string;
+  /** 存檔備援與編輯器鎖定的紀錄：「<毫秒> <事件>」。 */
+  event: string;
+  /** 編輯器裡刪掉或剪下整個目標：那一篇與拿掉的 ID。 */
+  removed: { path: string; ids: string[] };
+}
+export type PluginEvent = keyof PluginEvents;
+
+/** 電腦上補 ID 與鎖定接好之後交回的：鎖住的 ID（開發命令看）、存檔按鈕與離開筆記的備援。 */
+export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver }
+
 export default class EssenceCardsPlugin extends Plugin {
   /** 這台裝置的碼（W5 說明 §4-2）；紀錄的檔名用它。 */
   device = '';
   /** layout ready 之後才建立；畫面從這裡拿資料。 */
   state: State | null = null;
-  /** 開發版：存檔按鈕、提示與編輯器鎖定的紀錄，給開發命令讀（W5 §8-7 的 lock、save）。 */
-  devLog = { notices: [] as string[], events: [] as string[], removed: [] as { path: string; ids: string[] }[], tokens: null as ((state: EditorState) => IdToken[]) | null, save: null as ReturnType<typeof wireSave> | null };
+  /** 電腦上補 ID 與鎖定的接線；手機是 null（D-134）。 */
+  ids: IdsWiring | null = null;
+  /** 除了卡組之外也要鎖 ID 的路徑前綴：開發命令 lock 在 Essence W5/暫存/ 的副本上測各種編輯；正式版是空的。 */
+  lockAlso: string[] = [];
   /** 這次載入已經提示過的來源：同一種只提示一次。 */
   private warned = new Set<ErrorSource>();
   private unloaded = false;
-  private saver: ReturnType<typeof wireSave> | null = null;
+  private readonly listeners: { [K in PluginEvent]: Set<(value: PluginEvents[K]) => void> } = { notice: new Set(), event: new Set(), removed: new Set() };
 
   onload(): void {
     const loadedAt = performance.now();
@@ -47,10 +66,9 @@ export default class EssenceCardsPlugin extends Plugin {
       callback: () => { new Notice('Essence Cards：' + this.manifest.version); },
     });
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
-    if (Platform.isDesktopApp) this.wireIds();
+    if (Platform.isDesktopApp) this.ids = this.wireIds();
     let files: Files = createObsidianFiles(this.app);
     let calls = (): number => 0;
-    if (DEV) ({ files, calls } = countFiles(files));
     let beforeLayoutReady: number | null = null;
     this.app.workspace.onLayoutReady(() => {
       beforeLayoutReady = calls();
@@ -61,7 +79,9 @@ export default class EssenceCardsPlugin extends Plugin {
       // 寫不進去的錯誤 writer 已經回報過；這裡只接住，不留下沒人處理的 rejection（Codex 審查 W5 的 F5）。
       if (document.visibilityState === 'hidden') this.state?.flush().catch((error: unknown) => { this.report(error, 'write'); });
     });
+    // 開發版（tools/build.mjs --dev）：計數 layout ready 之前的檔案存取（T12 的證據）、載入開發命令；正式建置整段拿掉。
     if (DEV) {
+      ({ files, calls } = countFiles(files));
       const onloadMs = performance.now() - loadedAt;
       void import('./obsidian/dev.ts').then(dev => { dev.registerDev(this, { loadedAt, onloadMs, beforeLayoutReady: () => beforeLayoutReady }); });
     }
@@ -72,35 +92,49 @@ export default class EssenceCardsPlugin extends Plugin {
     this.state?.close().catch((error: unknown) => { console.error('Essence Cards', error); });
   }
 
+  /** 訂閱外掛的事件；回傳取消訂閱的函式。 */
+  on<K extends PluginEvent>(kind: K, listener: (value: PluginEvents[K]) => void): () => void {
+    const set = this.listeners[kind];
+    set.add(listener);
+    return () => { set.delete(listener); };
+  }
+
+  private emit<K extends PluginEvent>(kind: K, value: PluginEvents[K]): void {
+    for (const listener of this.listeners[kind]) {
+      try { listener(value); } catch (error) { console.error('Essence Cards', kind, error); }
+    }
+  }
+
   /** 編輯器的鎖定、存檔按鈕與命令、離開筆記時的備援（W5 §8-6）。 */
-  private wireIds(): void {
-    // 開發版另外鎖 Essence W5/暫存/ 裡的副本，讓開發命令 lock 在那裡測各種編輯。
-    const lockable = (path: string | undefined): boolean => !!path && (isDeckPath(path) || DEV && path.startsWith('Essence W5/暫存/'));
+  private wireIds(): IdsWiring {
+    const stamp = (event: string): string => Math.round(performance.now()) + ' ' + event;
+    const lockable = (path: string | undefined): boolean => !!path && (isDeckPath(path) || this.lockAlso.some(prefix => path.startsWith(prefix)));
     const lock = idLock({
       isDeck: state => lockable(pathOf(state)),
       onRemoved: (state, ids) => {
         const path = pathOf(state);
         if (!path) return;
         this.state?.removedInEditor(path, ids);
-        if (DEV) { this.devLog.removed.push({ path, ids }); this.devLog.events.push(Math.round(performance.now()) + " 編輯器拿掉 " + ids.join(",")); }
+        this.emit('removed', { path, ids });
+        this.emit('event', stamp('編輯器拿掉 ' + ids.join(',')));
       },
       onRestored: (state, ids) => {
         const path = pathOf(state);
         if (path) this.state?.restoredInEditor(path, ids);
-        if (DEV) this.devLog.events.push(Math.round(performance.now()) + " 編輯器補回 " + ids.join(","));
+        this.emit('event', stamp('編輯器補回 ' + ids.join(',')));
       },
     });
     this.registerEditorExtension(lock.extension);
-    // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開到背景分頁時 Obsidian 不發 file-open（Codex 再審的 R3）。
-    this.registerEditorExtension(ViewPlugin.define(view => { this.saver?.opened(pathOf(view.state)); return {}; }));
-    this.saver = wireSave({
+    const saver = wireSave({
       plugin: this,
       state: () => this.state,
-      notify: message => { new Notice(message); if (DEV) this.devLog.notices.push(message); },
+      notify: message => { new Notice(message); this.emit('notice', message); },
       onError: error => { console.error('Essence Cards：離開筆記時補學習目標 ID 失敗', error); },
-      log: DEV ? event => { this.devLog.events.push(Math.round(performance.now()) + ' ' + event); } : undefined,
+      log: event => { this.emit('event', stamp(event)); },
     });
-    if (DEV) Object.assign(this.devLog, { tokens: lock.tokens, save: this.saver });
+    // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開到背景分頁時 Obsidian 不發 file-open（Codex 再審的 R3）。
+    this.registerEditorExtension(ViewPlugin.define(view => { saver.opened(pathOf(view.state)); return {}; }));
+    return { tokens: lock.tokens, saver };
   }
 
   private report(error: unknown, source: ErrorSource): void {
@@ -116,10 +150,10 @@ export default class EssenceCardsPlugin extends Plugin {
     if (this.unloaded) return;
     this.state = createState({ files, device: this.device, fillIds: Platform.isDesktopApp, onError: (error, source) => { this.report(error, source); } });
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
-    this.saver?.start();
+    this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.saver?.refresh(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); });
     // 讀不到時 ready() 自己重試（每次失敗都經過 onError）；只有停用外掛會讓它 reject。
-    this.state.ready().then(() => { this.saver?.refresh(); }, () => {});
+    this.state.ready().then(() => { this.ids?.saver.refresh(); }, () => {});
   }
 }

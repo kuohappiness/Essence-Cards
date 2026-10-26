@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import * as codemirrorState from '@codemirror/state';
 import * as codemirrorView from '@codemirror/view';
@@ -224,4 +225,13 @@ void test('接線：重新啟用外掛時已經開著的卡組，啟用時不寫
   await wait(1200);
   assert.deepEqual(h.writes, ['process ' + path]);
   assert.match(h.text(path) ?? '', /^- 新目標 \^[a-z0-9]{6}\n/);
+});
+
+// 技術債 A10：開發版的接線集中在 dev 模組。main.ts 只在一處看 DEV（載入 dev 模組），提示、事件與鎖定的紀錄由 dev 模組訂閱。
+void test('A10 src/main.ts 只有一處 DEV（宣告之外），沒有 null as 的開發用欄位', async () => {
+  const source = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const uses = [...source.matchAll(/\bDEV\b/g)].length;
+  assert.equal(uses, 2, 'declare const DEV 加上一處 if (DEV)，實際 ' + String(uses));
+  assert.ok(!source.includes('null as'), 'main.ts 不該再有 null as 宣告的開發用欄位');
+  assert.ok(!source.includes('devLog'), 'devLog 搬到 dev 模組');
 });

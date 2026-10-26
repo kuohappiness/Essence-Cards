@@ -6,21 +6,28 @@ import { compareAssigned, compareLists, type ListItem, type Mismatch } from '../
 import { runFilesContract } from '../dev/files-contract.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
+import type { IdsWiring, PluginEvent, PluginEvents } from '../main.ts';
 import { createObsidianFiles } from './files.ts';
-import { lockTest, saveTest, t1Close, t1Prep, type IdsHost } from './dev-ids.ts';
+import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
 const limit = 20;
 
-/** 外掛本身（main.ts）：開發命令用它正在用的 state、裝置碼，以及存檔與鎖定的紀錄（第二部分）。 */
-interface Host extends Plugin, IdsHost { device: string; state: State | null }
+/** 外掛本身（main.ts）：開發命令用它正在用的 state、裝置碼、補 ID 的接線，並訂閱它的事件（技術債 A10）。 */
+interface Host extends Plugin {
+  device: string;
+  state: State | null;
+  ids: IdsWiring | null;
+  lockAlso: string[];
+  on<K extends PluginEvent>(kind: K, listener: (value: PluginEvents[K]) => void): () => void;
+}
 /** 載入時記下的數字，每個結果檔都附上（T12）。 */
 interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () => number | null }
 
 /** desktop：會寫卡組筆記的命令，只在電腦註冊、只在電腦執行（D-134：iPhone 不寫卡組；Codex 審查第二部分的 F4）。 */
-interface DevCommand { name: string; run: (host: Host) => Promise<unknown>; desktop?: true }
+interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true }
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -29,13 +36,21 @@ const commands: Record<string, DevCommand> = {
   answer: { name: 'Essence 開發：寫一筆再取消', run: answer },
   watch: { name: 'Essence 開發：記錄檔案通知', run: watch },
   // 第二部分（W5 §8-7 的 I7、I8）。
-  lock: { name: 'Essence 開發：鎖住 ID', run: lockTest, desktop: true },
-  save: { name: 'Essence 開發：存檔按鈕與備援', run: saveTest, desktop: true },
-  t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: t1Prep, desktop: true },
-  t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: t1Close, desktop: true },
+  lock: { name: 'Essence 開發：鎖住 ID', run: (_host, ids) => lockTest(ids), desktop: true },
+  save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
+  t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
+  t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: (_host, ids) => t1Close(ids), desktop: true },
 };
 
 export function registerDev(plugin: Host, load: LoadInfo): void {
+  // 開發命令 lock 在 Essence W5/暫存/ 的卡組副本上測各種編輯，那裡也要鎖 ID。
+  plugin.lockAlso.push('Essence W5/暫存/');
+  // 存檔按鈕、提示與編輯器鎖定的紀錄：訂閱外掛的事件，自己記（main.ts 不再有開發用的欄位）。
+  const devLog: DevLog = { notices: [], events: [], removed: [], tokens: plugin.ids?.tokens ?? null, save: plugin.ids?.saver ?? null };
+  plugin.on('notice', message => { devLog.notices.push(message); });
+  plugin.on('event', event => { devLog.events.push(event); });
+  plugin.on('removed', removed => { devLog.removed.push(removed); });
+  const ids: IdsHost = { app: plugin.app, get state() { return plugin.state; }, devLog };
   let runs = 0;
   async function run(code: string): Promise<void> {
     const command = Object.hasOwn(commands, code) ? commands[code] : undefined;
@@ -45,7 +60,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     runs++;
     const startedAt = performance.now();
     let result: unknown;
-    try { result = await command.run(plugin); }
+    try { result = await command.run(plugin, ids); }
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
     const path = await writeResult(plugin.app, code, plugin.device, {
       code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
