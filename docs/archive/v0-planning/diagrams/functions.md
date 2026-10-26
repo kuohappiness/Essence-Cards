@@ -120,6 +120,6 @@ F-009 的操作與基本自評在輸出使用，較深評量可與檢核協作�
 
 - [Mermaid 原始碼](essence-cards-functions.mmd)
 - [靜態 SVG](essence-cards-functions.svg)，供桌面／手機看板離線閱讀。
-- [產生程式](../../scripts/build_function_diagram.py)：名稱與 F-ID 取自目錄，分區及箭頭仍須設計者核對。
+- [產生程式](../board/scripts/build_function_diagram.py)：名稱與 F-ID 取自目錄，分區及箭頭仍須設計者核對。
 
 勿單獨修改生成的本文件、Mermaid 或 SVG。更新功能目錄；若關係變動，修改產生程式；重新渲染、核對所有受影響圖表，再記錄來源快照及建置看板。

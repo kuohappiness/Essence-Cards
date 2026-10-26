@@ -20,5 +20,5 @@
 
 受影響項目：C-009、C-010、T-005；圖檔、產生程式、圖版說明、共識與畫板。
 
-- [目前架構藍圖](../diagrams/README.md)
-- [最新共識](../consensus.md)
+- [目前架構藍圖](../v0-planning/diagrams/README.md)
+- [最新共識](../v0-planning/consensus.md)

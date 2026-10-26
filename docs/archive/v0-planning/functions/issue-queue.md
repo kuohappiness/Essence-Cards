@@ -5,7 +5,7 @@
 更新日期：2026-10-07（Asia/Taipei）
 狀態：功能方向及納入討論目錄已確認；欄位、狀態、操作、同步行為與第一版範圍待細化，尚未實作。
 
-返回[功能討論目錄](../function-discussions.md)。依據：[C-017](../consensus.md)、[I-015 研究整合](../ideas.md)、[U-02／U-06／U-09](../references/design-opportunities.md)。相關功能：F-009、F-010、F-011、F-012、F-015、F-016、F-018。
+返回[功能討論目錄](../function-discussions.md)。依據：[C-017](../consensus.md)、[I-015 研究整合](../ideas.md)、[U-02／U-06／U-09](../../../research/design-opportunities.md)。相關功能：F-009、F-010、F-011、F-012、F-015、F-016、F-018。
 
 ## 使用者目標與已確認方向
 

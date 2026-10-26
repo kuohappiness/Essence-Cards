@@ -13,7 +13,7 @@
 
 結果：使用者同意以對話配合持續維護的文件進行。新軟體形式仍待需求清楚後決定。
 
-對應：[C-001、C-003](../consensus.md)。
+對應：[C-001、C-003](../v0-planning/consensus.md)。
 
 ## D-002 Markdown、無限畫板與同步
 
@@ -27,7 +27,7 @@
 
 取捨：用共同的內容來源減少兩份內容分歧；畫板提供全貌，綱要提供逐項檢查的閱讀順序。
 
-對應：[C-004](../consensus.md)、[T-001](../tasks.md)。
+對應：[C-004](../v0-planning/consensus.md)、[T-001](../v0-planning/tasks.md)。
 
 ## D-003 整個專案放在公開 GitHub
 
@@ -37,7 +37,7 @@
 
 結果：公開 GitHub 方向已確認，當時 repo 尚未建立。
 
-對應：[C-005](../consensus.md)。
+對應：[C-005](../v0-planning/consensus.md)。
 
 ## D-004 英文命名的探索
 
@@ -55,7 +55,7 @@
 
 字義參考：<https://www.ahdictionary.com/word/search.html?q=essence>。
 
-對應：[C-001、C-002](../consensus.md)。
+對應：[C-001、C-002](../v0-planning/consensus.md)。
 
 ## D-005 選定 Essence Cards 並建立 repo
 
@@ -65,7 +65,7 @@
 
 結果：正式英文名稱為 Essence Cards；公開 repo 的位置已確定。中文名稱、畫板生成與發布當時仍未完成。
 
-對應：[C-002、C-005](../consensus.md)。
+對應：[C-002、C-005](../v0-planning/consensus.md)。
 
 ## D-006 中文命名暫緩
 
@@ -75,7 +75,7 @@
 
 結果：中文名稱暫緩，不把任何候選當作正式名稱。
 
-對應：[C-002](../consensus.md)、[T-003](../tasks.md)。
+對應：[C-002](../v0-planning/consensus.md)、[T-003](../v0-planning/tasks.md)。
 
 ## D-007 討論過程與畫板分開
 
@@ -93,4 +93,4 @@
 
 待處理：正式 HTML 畫板、生成程式與發布流程尚未完成；學習情境與成功標準尚待討論。
 
-對應：[C-004](../consensus.md)、[T-001、T-002](../tasks.md)。
+對應：[C-004](../v0-planning/consensus.md)、[T-001、T-002](../v0-planning/tasks.md)。

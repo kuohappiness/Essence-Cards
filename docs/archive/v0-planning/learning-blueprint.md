@@ -8,7 +8,7 @@
 
 技術實作方向與驗證順序另見[技術架構與開發路線圖](technical-roadmap.md)，Essence Cards 與未來 Essence Capture 都是獨立 Obsidian 外掛，Capture repo 尚未建立；完整功能與算法仍待細化。
 
-參考軟體研究後的[架構細化與特色功能提案](references/design-opportunities.md)提供來源跳轉、手機待處理、版本影響清單等候選；部分方向已依 C-017 納入[功能目錄](function-discussions.md)，具體操作及第一版範圍仍待 T-010、T-005／T-006 細化。
+參考軟體研究後的[架構細化與特色功能提案](../../research/design-opportunities.md)提供來源跳轉、手機待處理、版本影響清單等候選；部分方向已依 C-017 納入[功能目錄](function-discussions.md)，具體操作及第一版範圍仍待 T-010、T-005／T-006 細化。
 
 視覺總覽見[架構圖總入口](diagrams/README.md)，保留知識學習圖，新增[功能 Mermaid 總覽](diagrams/functions.md)對照 F-ID；與技術、開發路線圖依 C-019 持續核對更新。
 
@@ -135,8 +135,8 @@
 - 已確認：[C-016 逐項功能討論](consensus.md)；[功能討論目錄](function-discussions.md)保存拆分草案與相依關係；依 C-022，現優先細化輸出、檢核與選用 AI，[F-001 來源匯入](functions/source-input.md)留到第二階段。目錄中的優先級與第一版範圍仍未確認。
 
 - 已確認：[C-009 整體學習循環](consensus.md#c-009-以整體學習循環呈現架構已確認)。
-- 已確認：[C-011 多情境介面共用概念筆記](consensus.md)；[產品形式與回寫邊界討論](discussions/2026-10-06-shared-knowledge-workspace.md)。
+- 已確認：[C-011 多情境介面共用概念筆記](consensus.md)；[產品形式與回寫邊界討論](../discussions/2026-10-06-shared-knowledge-workspace.md)。
 - 已確認：[C-008 共用知識基礎與學習回饋循環](consensus.md#c-008-共用知識基礎與學習回饋循環已確認)；[視覺藍圖](diagrams/README.md)。
 - 待釐清：點子 [I-002 至 I-010](ideas.md)。
 - 任務：[T-010、T-005 與 T-006](tasks.md)；T-011 已依使用者回報通過；依 C-022 細化第一階段材料／閃卡、檢核與文件交接；來源工具取得／轉換安排第二階段；完整 P0 仍保留。
-- [整體學習循環呈現方式的討論摘要](discussions/2026-10-06-integrated-learning-cycle.md)；[早期功能討論](discussions/2026-10-06-learning-workflow.md)。
+- [整體學習循環呈現方式的討論摘要](../discussions/2026-10-06-integrated-learning-cycle.md)；[早期功能討論](../discussions/2026-10-06-learning-workflow.md)。

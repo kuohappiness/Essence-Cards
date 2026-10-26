@@ -12,4 +12,4 @@
 
 待議：最小閃卡的卡型／操作／排程、YouTube 字幕或逐字稿取得與整理方式、檢核對象、精確程式邊界、資料格式及交付門檻。未實作正式模組；雙端原型依先前使用者回報已通過，完整 P0 保留。
 
-[三模組規劃](../module-architecture.md)、[功能目錄](../function-discussions.md)、[架構圖](../diagrams/README.md)、[共識](../consensus.md)、[目前任務](../tasks.md)。
+[三模組規劃](../v0-planning/module-architecture.md)、[功能目錄](../v0-planning/function-discussions.md)、[架構圖](../v0-planning/diagrams/README.md)、[共識](../v0-planning/consensus.md)、[目前任務](../v0-planning/tasks.md)。

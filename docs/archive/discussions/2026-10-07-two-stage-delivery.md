@@ -10,4 +10,4 @@
 
 尚未決定：第一階段卡型、教材與檢核的精確範圍、資料欄位與算法、來源工具宿主／介面、YouTube 等來源取得方法與模型，以及具體交接格式。使用者確認的是工具拆分、開發順序與整合要求，不表示所有功能已實作或全部列為第一階段交付。完整 P0 保留。
 
-[共識](../consensus.md)、[三模組規劃](../module-architecture.md)、[整合約定草案](../integration-contract.md)、[功能目錄](../function-discussions.md)、[目前任務](../tasks.md)、[架構圖](../diagrams/README.md)。
+[共識](../v0-planning/consensus.md)、[三模組規劃](../v0-planning/module-architecture.md)、[整合約定草案](../v0-planning/integration-contract.md)、[功能目錄](../v0-planning/function-discussions.md)、[目前任務](../v0-planning/tasks.md)、[架構圖](../v0-planning/diagrams/README.md)。

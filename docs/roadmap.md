@@ -36,7 +36,7 @@ v1 任務與第二階段候選的[統一入口](backlog.md)已整理；細項存
 - **Claudian 評估與用訂閱製卡**：✅ 2026-10-22 使用者確認最終整合版，已結案為 [D-126](decisions.md#d-126-訂閱優先的-ai-製卡與側欄修改)。訂閱優先，API／手動備援保留；固定生成按按鈕、個別修改用筆記與側欄，證據範圍與拆分／合併的進度規則已定。G1～G4、Claude 背景接法、Claudian skill 與差異接受流程仍[待驗證](backlog.md#訂閱製卡接法驗證d-126)，在 AI 製卡模組開工時處理，不擋 W4～W6；尚未實作。使用者 2026-10-23 另要求將「透過 Claudian 跑完整學習鏈，並與固定呼叫方式比較品質」列入同節待辦，細節與時程待規劃，尚未納入第二輪。
 - **AI 規劃**（[紀錄](archive/discussions/2026-10-11-ai-planning.md)），待決題目見 [backlog](backlog.md#ai-規劃2026-10-11-起的專題討論)。
 - **API 挑選**（[紀錄](archive/discussions/2026-10-11-api-selection.md)）：T4 已選定轉錄用 GPT-6 Sol、製卡用 GPT-5.6 Terra（D-085）。使用者之後再測：錯題照片（照 [D-113](decisions.md#d-113-錯題整頁拍題號選填) 整頁拍，等使用者提供 2～3 張字跡潦草的真實考卷）、Mistral 的其他模型；語音模型與模型自動更新見[第二階段規畫](plans/ai-and-ecosystem.md#發音檢查與語音模型)。
-- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案列[第二階段](plans/practice.md)。使用者要 v1 做「片語放進句子裡打字」：答錯時的三步流程已定（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)，W6 照做）；寫法、依字數畫線、好幾個正確答案用 ` | ` 分開已定（[D-122](decisions.md#d-122-片語放進句子裡打字)，英文規則 v0.8）；解析器拆開 ` | ` 已寫進 [W6 的任務說明 §0-1](../tasks/w6.md#0-1-中翻英的答案格拆開--d-122)。
+- **English Kitten Academy 研究**（[報告](research/english-kitten-academy.md)、[討論稿](<../Claude Codex Discussion/2026-10-20-english-kitten-academy.md>)）：2026-10-21 結案。拼句練習、文法選擇題、造句題的可接受答案列[第二階段](plans/practice.md)。使用者要 v1 做「片語放進句子裡打字」：答錯時的三步流程已定（[D-121](decisions.md#d-121-打字卡答錯時的三步流程)，W6 照做）；寫法、依字數畫線、好幾個正確答案用 ` | ` 分開已定（[D-122](decisions.md#d-122-片語放進句子裡打字)，英文規則 v0.8）；解析器拆開 ` | ` 已寫進 [W6 的任務說明 §0-1](../tasks/w6.md#0-1-中翻英的答案格拆開-d-122)。
 
 ## 路線圖
 

@@ -24,7 +24,7 @@ Vault 並非 SQL、資料庫伺服器或跨裝置交易引擎；它保存 Markdo
 - 固定測試筆記的建立、讀取、儲存、讀回與本機過期版本檢查。
 - Windows／iPhone 使用同一份外掛；沿用既有 iCloud。
 
-程式與安裝／五分鐘驗收見 [experiments/obsidian-ui-probe](../experiments/obsidian-ui-probe/README.md)。這是 P0 前段的 UI 與基本讀寫檢查；通過後仍保留離線事件、併發、附件完整性與 Git 回復等原 P0 門檻。
+程式與安裝／五分鐘驗收見 `experiments/obsidian-ui-probe`（原檔已不存在，`a5b7c5f` 刪除）。這是 P0 前段的 UI 與基本讀寫檢查；通過後仍保留離線事件、併發、附件完整性與 Git 回復等原 P0 門檻。
 
 ## 驗證紀錄
 

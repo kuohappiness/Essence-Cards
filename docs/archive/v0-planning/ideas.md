@@ -20,7 +20,7 @@
 初始參考：
 - [RemNote](https://www.remnote.com/)
 - [Memory Toast](https://www.memory-toast.com/zh-TW)
-- [參考軟體研究筆記](references/software.md)
+- [參考軟體研究筆記](../../research/software.md)
 
 助理提出的比較面向，尚未確認為產品需求：
 - 如何從教材或筆記建立閃卡，以及製卡的操作負擔。
@@ -30,7 +30,7 @@
 
 研究進度：2026-10-06 依使用者要求擴充並補齊官方資料。保留 RemNote／Memory Toast，新增 Anki、Quizlet、Brainscape、Mochi、SuperMemo、Readwise Reader、NotebookLM、Recall、Knowt、StudySmarter；每項記錄定位、功能、成本、平台／離線／同步、匯出限制、借鑑方向與待實測事項。官網查核不等於實際試用，沒有證據的欄位仍標未確認。
 
-2026-10-07 已依使用者要求完成[架構與特色功能統整](references/design-opportunities.md)，收錄六項架構細化、九項功能候選及第一版優先順序；見 I-015，具體採用仍待討論。
+2026-10-07 已依使用者要求完成[架構與特色功能統整](../../research/design-opportunities.md)，收錄六項架構細化、九項功能候選及第一版優先順序；見 I-015，具體採用仍待討論。
 
 下一步（助理提案）：以同份繁體中文生物教材優先比較 RemNote、Anki、Mochi、Readwise Reader、NotebookLM、Recall，另測 Memory Toast 的手機輸入與複習；優先順序及具體功能尚未決定採用。
 
@@ -261,11 +261,11 @@
 
 待釐清：最小必要內容、概念粒度、跨筆記引用、來源定位、材料版本連動，以及一般筆記如何逐步整理成概念筆記。
 
-依據：[C-011](consensus.md)、[T-005](tasks.md)及[本次討論摘要](discussions/2026-10-06-shared-knowledge-workspace.md)。這些為助理提案，尚未成為已確認欄位或技術選型。
+依據：[C-011](consensus.md)、[T-005](tasks.md)及[本次討論摘要](../discussions/2026-10-06-shared-knowledge-workspace.md)。這些為助理提案，尚未成為已確認欄位或技術選型。
 
 ## I-012 跨模型 AI 協作與任務交接｜待釐清
 
-本輪確認（2026-10-07，C-022／C-023）：Cards 的輸出／檢核基本能力不依賴 AI，AI 學習輔助可選，模型接入可插拔；Capture 的來源 AI 整理另 repo 後續開發。兩邊可共用模型介面程式庫，分別打包，無第三個必裝 AI 外掛或互相執行依賴。首批模型、能力檢查、任務接口與驗收方式仍待細化；舊層級提案見[歷史討論](discussions/2026-10-07-shared-ai-and-model-adapters.md)。
+本輪確認（2026-10-07，C-022／C-023）：Cards 的輸出／檢核基本能力不依賴 AI，AI 學習輔助可選，模型接入可插拔；Capture 的來源 AI 整理另 repo 後續開發。兩邊可共用模型介面程式庫，分別打包，無第三個必裝 AI 外掛或互相執行依賴。首批模型、能力檢查、任務接口與驗收方式仍待細化；舊層級提案見[歷史討論](../discussions/2026-10-07-shared-ai-and-model-adapters.md)。
 
 摘要：使用者提出概念筆記應讓不同語言模型順暢介入、接續任務並協助判斷；助理建議共同設計筆記結構、任務脈絡與一致的讀寫介面，減少對特定模型或聊天紀錄的依賴。
 
@@ -284,7 +284,7 @@
 
 待釐清：AI 可自動執行哪些操作？哪些修訂需要確認？任務交接的最小脈絡、共通輸出、失敗處理及相容性驗證如何設計？
 
-依據：[I-011 概念筆記結構](ideas.md)、[T-005、T-006](tasks.md)及[本次討論摘要](discussions/2026-10-06-model-independent-ai.md)。本提案沒有選定模型、API、儲存格式或自動化權限，也不承諾所有模型可零成本互換。
+依據：[I-011 概念筆記結構](ideas.md)、[T-005、T-006](tasks.md)及[本次討論摘要](../discussions/2026-10-06-model-independent-ai.md)。本提案沒有選定模型、API、儲存格式或自動化權限，也不承諾所有模型可零成本互換。
 
 ## I-013 電腦管理與手機複習的跨裝置使用｜待釐清
 
@@ -307,7 +307,7 @@
 
 待釐清：手機支援哪些題型與互動？哪些操作需連線？離線與同步如何取捨？跨裝置身分、附件保存、內容版本、複習排程及衝突如何處理？
 
-依據：[C-011 多情境介面、C-012 保存與同步候選範圍](consensus.md)、[T-005、T-006](tasks.md)及[本次討論摘要](discussions/2026-10-06-cross-device-study.md)。平台與第一版同步基線已由 C-014 選定 Obsidian 外掛及既有 iCloud；手機功能、離線與事件處理仍待驗證。NAS 選配彈性不代表已完成自架支援。
+依據：[C-011 多情境介面、C-012 保存與同步候選範圍](consensus.md)、[T-005、T-006](tasks.md)及[本次討論摘要](../discussions/2026-10-06-cross-device-study.md)。平台與第一版同步基線已由 C-014 選定 Obsidian 外掛及既有 iCloud；手機功能、離線與事件處理仍待驗證。NAS 選配彈性不代表已完成自架支援。
 
 ## I-014 Git 備份與版本回復｜待驗證
 
@@ -334,7 +334,7 @@
 - 選段製卡、混淆對照、份量控制、反覆答錯補強、提示紀錄及同源題錯開。
 - 先驗證資料保存與人工學習循環，再接入 AI；具體題型、算法與第一版交付範圍尚未確認。
 
-完整提案與官方依據見[設計統整](references/design-opportunities.md)；透過 T-010 的[功能討論目錄](function-discussions.md)逐項細化，相關任務 T-005／T-006，真實裝置驗證仍由 T-008 追蹤。
+完整提案與官方依據見[設計統整](../../research/design-opportunities.md)；透過 T-010 的[功能討論目錄](function-discussions.md)逐項細化，相關任務 T-005／T-006，真實裝置驗證仍由 T-008 追蹤。
 
 採用進度：2026-10-07 使用者同意依助理建議修改功能目錄；C-017 保存已確認的方向，[F-019](functions/issue-queue.md)獨立討論手機問題至電腦結案。研究文件中的其他特色與全部實作細節仍是提案，不把整個 I-015 標為已採用。
 

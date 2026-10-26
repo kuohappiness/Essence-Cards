@@ -37,4 +37,4 @@ AI 介面融入製卡、評估與學習任務，底層模型可插拔，不指�
 - Capture 的首批來源、取得方式、人工核對與重新整理保護修改的操作。
 - P0 的跨裝置事件、併發、附件與 Git 回復驗證仍保留。
 
-參照：[最新共識](../consensus.md)、[模組與兩階段交付](../module-architecture.md)、[整合約定](../integration-contract.md)、[目前任務](../tasks.md)。
+參照：[最新共識](../v0-planning/consensus.md)、[模組與兩階段交付](../v0-planning/module-architecture.md)、[整合約定](../v0-planning/integration-contract.md)、[目前任務](../v0-planning/tasks.md)。

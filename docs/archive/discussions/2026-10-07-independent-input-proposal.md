@@ -34,4 +34,4 @@
 
 建議先確定最小文件交接與各自資料責任，再各做一條能完成的情境：來源工具先驗 YouTube → 筆記，Essence Cards 先驗既有／手動閃卡 → 複習與檢核。實際先開發哪邊、首批格式與檢核範圍仍待選定；新提案不自動改變現有開發順序。YouTube 的文字取得、轉錄、成本與模型方式尚未選定，其他來源逐項增加。
 
-參照：[目前三模組架構](../module-architecture.md)、[共識 C-020／C-021](../consensus.md)、[開發原則](../development-principles.md)、[來源匯入討論](../functions/source-input.md)。
+參照：[目前三模組架構](../v0-planning/module-architecture.md)、[共識 C-020／C-021](../v0-planning/consensus.md)、[開發原則](../v0-planning/development-principles.md)、[來源匯入討論](../v0-planning/functions/source-input.md)。

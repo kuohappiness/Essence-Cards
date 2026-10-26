@@ -1,5 +1,5 @@
 // 文件檢查（D-141）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、roadmap「現在在哪裡」的長度、「已完成」的列數與每列長度、任務與討論稿的檔頭狀態行。
-// 用法：node tools/check-docs.ts [--staged] [--root <repo>]
+// 用法：node tools/check-docs.ts [--staged] [--root <repo>]（--root 給測試用）
 //   預設：檔案清單取 Git 追蹤的檔案，內容讀工作樹（npm run check 與 CI 用）。
 //   --staged：清單與內容都讀暫存區（pre-commit 用）。
 // 有問題時每個一行「檔案:行號  目標  原因」並以 exit code 1 結束。不發網路請求，不修改、不 stage 任何檔案。
@@ -19,7 +19,13 @@ export const STATUS_DIRS = ['tasks', 'Claude Codex Discussion'];
 export interface Exception { file: string; target: string; reason: string }
 
 // 確實改不了的連結，逐項寫原因。target 是解碼後的連結目標，和輸出的「目標」一欄相同。
-export const EXCEPTIONS: Exception[] = [];
+export const EXCEPTIONS: Exception[] = [
+  ...['decisions.md#d-066-作答方式', '#2-3-學習目標', 'decisions.md#d-116-打字卡的沒印象與自動朗讀', 'decisions.md#d-120-今天的佇列的細節', 'decisions.md#d-121-打字卡答錯時的三步流程']
+    .map(target => ({ file: 'tasks/w6-format-review-fixes.md', target, reason: '引用框與表格是貼進 syntax.md 的原文，以 docs/ 為基準' })),
+  { file: 'tasks/docs-architecture.md', target: 'docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: '要貼進 AGENTS.md 的原文，以根目錄為基準' },
+  { file: 'tasks/docs-architecture.md', target: '../../tasks/objective-architecture-r2-connection.md', reason: '要貼進 experiments/t4/README.md 的原文' },
+  { file: 'tasks/docs-architecture.md', target: 'decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份', reason: 'roadmap 已完成那一列的範例，以 docs/ 為基準' },
+];
 
 export interface Problem { file: string; line: number; target: string; reason: string }
 
@@ -248,7 +254,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const at = args.indexOf('--root');
   const root = at >= 0 ? resolve(args[at + 1]) : resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const staged = args.includes('--staged');
-  const { problems, files, links } = checkDocs(root, { staged });
+  // --root 給測試用，別的 repo 不套用這裡的例外表。
+  const { problems, files, links } = checkDocs(root, { staged, exceptions: at >= 0 ? [] : EXCEPTIONS });
   if (problems.length) {
     console.error(`文件檢查有 ${problems.length} 個問題（${staged ? '暫存區' : '工作樹'}）：`);
     for (const problem of problems) console.error(formatProblem(problem));

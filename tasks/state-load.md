@@ -169,5 +169,5 @@ Node，放在 `tests/state.test.ts`（S1～S6）、`tests/state-ids.test.ts`（S
 
 - `docs/backlog.md` 技術債：刪掉「卡組讀不到就整個重試」與 A1 兩列；A4 的拆檔那句已改到外掛架構檢查環節 ④（這份說明的〈排程與分支〉），不用另記。
 - `docs/roadmap.md` 的「現在在哪裡」與「已完成」各加一句（分支、commit、測試數）。
-- 寫審查請求 `tasks/state-load-review.md`，格式照 [W6 的審查請求](w6-review.md)。請 Codex 特別看：第一次載入與變動是不是真的同一條路；`unread()` 不是空時所有會配 ID 或還原的路徑都暫停（有沒有漏掉 `prepare` 以外的入口）；暫定 `changed` 的撤銷條件只看 `history.seen`、不自動配回；`seen` 和 `appendLine` 的一致；`close()` 後沒有殘留的計時與重試；`list` 失敗的迴圈；A5 之後 `readDecks` 的既有測試仍走公開介面。
+- 寫審查請求 `tasks/state-load-review.md`，格式照分支 `claude/w6` 的 W6 審查請求 `tasks/w6-review.md`（commit `1a5d851`）。請 Codex 特別看：第一次載入與變動是不是真的同一條路；`unread()` 不是空時所有會配 ID 或還原的路徑都暫停（有沒有漏掉 `prepare` 以外的入口）；暫定 `changed` 的撤銷條件只看 `history.seen`、不自動配回；`seen` 和 `appendLine` 的一致；`close()` 後沒有殘留的計時與重試；`list` 失敗的迴圈；A5 之後 `readDecks` 的既有測試仍走公開介面。
 - 回報：commit 清單、`npm run check` 的測試數、§8 的結果、有沒有停下來的點。合併由使用者決定；合併後通知 W6 的 session 把 `main` 合併進 `claude/w6`（交接單 §3 第 2 點）。

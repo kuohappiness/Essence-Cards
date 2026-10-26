@@ -21,9 +21,9 @@
 
 ## 本輪更新
 
-- [功能目錄](../function-discussions.md)升為 v0.2，更新相依關係、討論批次、研究映射、內容狀態與保存驗收。
-- 新增 [F-019](../functions/issue-queue.md)討論文件，包含人工操作、責任邊界與驗收情境。
-- 補強 [F-001](../functions/source-input.md)的回看與定位驗收。
+- [功能目錄](../v0-planning/function-discussions.md)升為 v0.2，更新相依關係、討論批次、研究映射、內容狀態與保存驗收。
+- 新增 [F-019](../v0-planning/functions/issue-queue.md)討論文件，包含人工操作、責任邊界與驗收情境。
+- 補強 [F-001](../v0-planning/functions/source-input.md)的回看與定位驗收。
 - 新增 C-017、共識 v0.19；同步任務、點子、README、研究的採用進度及桌面／手機討論平台。
 
 ## 未決與界線

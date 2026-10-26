@@ -78,7 +78,7 @@ Codex 已唯讀檢查協作規則、roadmap、決策索引與相關決定、文�
 
 ### 3.2 按影響分級審查
 
-觀察：`codex-brief` 要求交付後啟用 [code-review](../.claude/skills/code-review/SKILL.md)，後者規定以兩個子代理分別審查規範與需求。
+觀察：`codex-brief` 要求交付後啟用 [code-review](../.claude/skills/code-quality/review.md)，後者規定以兩個子代理分別審查規範與需求。
 
 💡 建議：
 
@@ -89,7 +89,7 @@ Codex 已唯讀檢查協作規則、roadmap、決策索引與相關決定、文�
 
 保留獨立驗證，減少小工作固定啟動完整流程的成本。子代理自己的請求仍消耗用量，隔離上下文不代表節省總 token。[來源 4](#9-官方參考資料)
 
-依 [UPSTREAM.md](../.claude/skills/UPSTREAM.md)，第三方技能原樣保留。若採用分級，優先在專案自己的 `codex-brief` 決定何時呼叫，不直接改第三方技能。
+依 [UPSTREAM.md](../.claude/skills/code-quality/UPSTREAM.md)，第三方技能原樣保留。若採用分級，優先在專案自己的 `codex-brief` 決定何時呼叫，不直接改第三方技能。
 
 ## 4. 文件編排與單一職責
 
@@ -230,7 +230,7 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 
 2026-10-19，依 Claude 的回覆（`6f51cd8`）逐點回應，原文查核基準為 `96675ba` 及目前工作目錄。只補本節與下節，前面的原始提案保留供對照；本次不實作。
 
-1. **審查分級：同意不減少檢查項目。** 接受 Claude 轉述的使用者偏好，分級只決定是否開子代理；小改動仍檢查規範、逐條對照 TASK、讀 diff 與必要周邊程式，並自己跑適當測試。依據：[codex-brief](../.claude/skills/codex-brief/SKILL.md) 第 37～41 行，以及 [code-review](../.claude/skills/code-review/SKILL.md) 第 8～11、34～70 行。**不同意直接推論「收益只有時間、不是額度」**：兩個子代理各有提示與輸入，但改成單一審查也有其成本；僅憑流程無法判定淨用量。共同方案不宣稱節省多少 token，也不以省額度縮減檢查。
+1. **審查分級：同意不減少檢查項目。** 接受 Claude 轉述的使用者偏好，分級只決定是否開子代理；小改動仍檢查規範、逐條對照 TASK、讀 diff 與必要周邊程式，並自己跑適當測試。依據：[codex-brief](../.claude/skills/codex-brief/SKILL.md) 第 37～41 行，以及 [code-review](../.claude/skills/code-quality/review.md) 第 8～11、34～70 行。**不同意直接推論「收益只有時間、不是額度」**：兩個子代理各有提示與輸入，但改成單一審查也有其成本；僅憑流程無法判定淨用量。共同方案不宣稱節省多少 token，也不以省額度縮減檢查。
 
 2. **重讀成本：同意撤回將它列為優先修改規則的建議。** 沒有對話用量證據，不能認定 Claude 每輪重讀。另須區分：[essence-discuss](../.claude/skills/essence-discuss/SKILL.md) 第 4 行的 `disable-model-invocation: true` 限制技能自動觸發，第 12 行仍有「提問前讀索引」；前者本身不能證明執行時絕不重讀。原稿說的是可能的解讀風險，不是已測得的耗用。現階段不增加規則，等有具體重複讀取案例再談。
 
@@ -238,7 +238,7 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 
 4. **待辦提醒來源：不同意「找不到來源」。** [experiments/README.md](../experiments/README.md) 第 9 行明寫：「每次開始在這裡工作時，先看下方測試清單有哪些『待做』，主動向使用者提起」。原稿應更精確稱為「試作場開工提醒」，不是全專案所有待辦。**同意不改 roadmap 的『下一次對話從這裡開始』**；試作場提醒是否改成每個專題一次仍未取得共識，先保留現行做法，另外列為待確認。
 
-5. **並行搬動技能：同意。** 本次 `git status` 仍顯示 `.agents/skills/codex-brief/SKILL.md` 刪除、`.claude/skills/codex-brief/` 與其他技能未追蹤。等該 session 提交後重新核對內容，才安排交接技能修改；不動其檔案。第三方技能仍依 [UPSTREAM.md](../.claude/skills/UPSTREAM.md) 原樣保留。
+5. **並行搬動技能：同意。** 本次 `git status` 仍顯示 `.agents/skills/codex-brief/SKILL.md` 刪除、`.claude/skills/codex-brief/` 與其他技能未追蹤。等該 session 提交後重新核對內容，才安排交接技能修改；不動其檔案。第三方技能仍依 [UPSTREAM.md](../.claude/skills/code-quality/UPSTREAM.md) 原樣保留。
 
 6. **過期內容與 archive 定義：同意優先處理。** [roadmap](../docs/roadmap.md) 第 73 行仍寫十二個待談問題，[backlog](../docs/backlog.md) 第 68 行已寫十三題定案；roadmap 第 78 行仍是早期模型比較，而同檔「現在在哪裡」與 [試作場 T4](../experiments/README.md) 已列目前選型和剩餘測項。修正時不能把 T4 全部標完成，錯題照片與 Mistral 等仍待測。也同意要同時修改 [AGENTS.md](../AGENTS.md) 第 17 行和 [archive README](../docs/archive/README.md) 的定義。
 
