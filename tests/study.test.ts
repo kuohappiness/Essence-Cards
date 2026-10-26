@@ -112,6 +112,34 @@ void test('空白 CRLF 與 BOM 不算問題，壞行尾端救回，只在 JSON.p
   assert.match(history.problems[1].message, /救回/);
 });
 
+// S9（state-load §4，技術債 A1）：配新 ID 要避開的 lt 由紀錄模組算，state 不再自己解析原始紀錄。
+void test('seen：每一行出現過的 lt（作答、變更、被取消的）；壞掉的行救回的尾段與寬鬆找到的也算；照字串排序、不重複', () => {
+  const review = (t: string, lt: string) => encodeEntry(t, { lt, r: 'good', v: '12345678' });
+  const lines = [
+    review('2026-10-24T10:00:00.000+08:00', 'k3m9x2'),
+    review('2026-10-24T10:01:00.000+08:00', 'p7q2w8'),
+    encodeEntry('2026-10-24T10:02:00.000+08:00', { undo: '2026-10-24T10:01:00.000+08:00' }),
+    encodeEntry('2026-10-24T10:03:00.000+08:00', { set: 'status', lt: 'h2m8qd', val: '暫停' }),
+    encodeEntry('2026-10-24T10:04:00.000+08:00', { set: 'status', deck: 'Essence Cards/x.md', val: '暫停' }),
+    // 合法 JSON、跳脫的鍵名（Codex 審查第二部分的 F3）。
+    '{"t":"2026-10-24T12:00:00+08:00","\\u006ct":"esc001","r":"good","v":"12345678"}',
+    // 寫入中斷、救回的尾段用跳脫的鍵名（Codex 再審的 R1）。
+    '{"t":"2026-10-24T11:00:00+08:00","r":"go{"t":"2026-10-24T12:00:01+08:00","\\u006ct":"tail01","r":"good","v":"12345678"}',
+    // 寫入中斷、前半段也有 lt。
+    '{"t":"2026-10-24T11:00:00+08:00","lt":"head01","r":"go' + review('2026-10-24T12:00:02.000+08:00', 'tail02'),
+    '{"lt": "loose1", 壞掉',
+    '{"lt":"x\\u0031y", 壞掉',
+    '{"lt":"bad001","r":"good"}',
+  ];
+  const history = mergeHistory([
+    { path: 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl', text: lines.join('\n') + '\n' },
+    { path: 'Essence Cards/紀錄/2026-10 PC-2c9e.jsonl', text: review('2026-10-24T10:00:00.000+08:00', 'k3m9x2') + '\n' + review('2026-10-25T10:00:00.000+08:00', 'k3m9x2') },
+  ]);
+  assert.deepEqual(history.seen, ['bad001', 'esc001', 'h2m8qd', 'head01', 'k3m9x2', 'loose1', 'p7q2w8', 'tail01', 'tail02', 'x1y']);
+  assert.deepEqual(history.reviews.map(entry => entry.lt), ['k3m9x2', 'esc001', 'tail01', 'tail02', 'k3m9x2']);
+  assert.deepEqual(mergeHistory([]).seen, []);
+});
+
 void test('取消找不到對象不算錯，不能取消變更或取消；同一 t 的所有作答都失效', () => {
   const t = '2026-10-16T20:00:00+08:00';
   const equivalent = '2026-10-16T12:00:00Z';

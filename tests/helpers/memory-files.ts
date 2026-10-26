@@ -14,7 +14,8 @@ export interface MemoryFiles {
   reads: string[];
   /** 放進來的路徑 read 會失敗（模擬 iCloud 還沒同步好之類的暫時錯誤）。 */
   failing: Set<string>;
-  control: { failModify: boolean; failAppend: boolean };
+  /** failList：list 一律失敗（模擬整個資料夾暫時列不出來）。 */
+  control: { failModify: boolean; failAppend: boolean; failList: boolean };
   /** 外部寫入：設定內容並通知。 */
   write(path: string, text: string): void;
   /** 外部追加一行（含換行）並通知。 */
@@ -39,7 +40,7 @@ export function createMemoryFiles(initial: Record<string, string> = {}): MemoryF
   const watchers = new Set<(path: string) => void>();
   const reads: string[] = [];
   const failing = new Set<string>();
-  const control = { failModify: false, failAppend: false };
+  const control = { failModify: false, failAppend: false, failList: false };
   const pending = new Map<string, Promise<void>>();
   const notify = (...paths: string[]): void => { for (const path of paths) for (const watcher of [...watchers]) watcher(path); };
   const set = (path: string, text: string): void => { texts.set(path, text); notify(path); };
@@ -56,7 +57,10 @@ export function createMemoryFiles(initial: Record<string, string> = {}): MemoryF
     return [...texts.keys()].filter(path => path.startsWith(prefix)).sort();
   };
   const files: Files = {
-    list: folder => Promise.resolve().then(() => under(location(folder))),
+    list: folder => Promise.resolve().then(() => {
+      if (control.failList) throw Error('列不出來：' + folder);
+      return under(location(folder));
+    }),
     read(path) {
       location(path);
       reads.push(path);

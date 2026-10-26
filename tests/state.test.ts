@@ -355,25 +355,202 @@ void test('讀檔失敗後 close：不再重試', async t => {
   assert.equal(h.reads.length, count);
 });
 
-void test('ready() 讀不到時自己重試，恢復後完成；重試中 close 會 reject', async t => {
+// ---- 卡組讀不到就跳過那一篇（tasks/state-load.md §7） ----
+
+const sources = (h: Harness) => h.errors.map(([, source]) => source);
+const samePlan = (h: Harness) => { assert.deepEqual(h.state.today(), planToday(h.state.input())); };
+
+void test('S1 第一次載入一篇卡組讀不到：ready() 照樣完成、跳過那一篇；重試的等待加倍，恢復後加進來、等待歸零', async t => {
   const h = await setup(t);
-  h.failing.add(PC);
+  h.failing.add(ENGLISH);
+  await h.state.ready();
+  assert.deepEqual(h.state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT]);
+  assert.deepEqual(ids(h.state.today().share), ['b', 'a']);
+  assert.deepEqual(h.state.unread(), [ENGLISH]);
+  assert.deepEqual(sources(h), ['read']);
+  samePlan(h);
+  h.reads.length = 0;
+  await h.settle(999);
+  assert.deepEqual(h.reads, []);
+  await h.settle(1);
+  assert.deepEqual(h.reads, [ENGLISH]);
+  assert.deepEqual(sources(h), ['read', 'read']);
+  // 第二次失敗：下一次等 2 秒。
+  await h.settle(1999);
+  assert.deepEqual(h.reads, [ENGLISH]);
+  h.failing.delete(ENGLISH);
+  await h.settle(1);
+  assert.deepEqual(h.reads, [ENGLISH, ENGLISH]);
+  assert.deepEqual(h.state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT, ENGLISH]);
+  assert.equal(h.changed(), 1);
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(ids(h.state.today().share), ['b', 'a', 'z1']);
+  assert.deepEqual(sources(h), ['read', 'read']);
+  samePlan(h);
+  // 讀到之後等待歸零：再讀不到一次，1 秒後就重試。
+  h.failing.add(ENGLISH);
+  h.notify(ENGLISH);
+  await h.settle();
+  assert.deepEqual(sources(h), ['read', 'read', 'read']);
+  assert.deepEqual(h.state.unread(), [ENGLISH]);
+  h.reads.length = 0;
+  await h.settle(999);
+  assert.deepEqual(h.reads, []);
+  await h.settle(1);
+  assert.deepEqual(h.reads, [ENGLISH]);
+  // 讀不到的期間保留上一次讀到的內容。
+  assert.deepEqual(h.state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT, ENGLISH]);
+});
+
+void test('S2 第一次載入一份別台裝置的紀錄讀不到：history 來自讀到的，恢復後和 readHistory 相同、重排一次', async t => {
+  const h = await setup(t);
+  h.failing.add(PHONE);
+  await h.state.ready();
+  assert.deepEqual(h.state.history().reviews.map(entry => entry.lt), ['b']);
+  assert.deepEqual(h.state.unread(), [PHONE]);
+  assert.deepEqual(sources(h), ['read']);
+  samePlan(h);
+  h.failing.delete(PHONE);
+  await h.settle(1000);
+  assert.equal(h.changed(), 1);
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(h.state.history(), await readHistory(h.files));
+  samePlan(h);
+});
+
+void test('S2 載入後才讀不到的紀錄：保留上一份內容、unread() 含它；恢復後照舊', async t => {
+  const h = await setup(t);
+  await h.state.ready();
+  h.failing.add(PHONE);
+  h.append(PHONE, review('2026-10-23T19:00:00.000+08:00', 'a', 'easy'));
+  await h.settle();
+  assert.deepEqual(h.state.history().reviews.map(entry => entry.lt), ['b', 'e1', 'zzzzz2']);
+  assert.deepEqual(h.state.unread(), [PHONE]);
+  h.failing.delete(PHONE);
+  await h.settle(1000);
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(h.state.history(), await readHistory(h.files));
+  assert.equal(h.changed(), 1);
+  samePlan(h);
+});
+
+// 規格沒列、實作時補的：自己的紀錄只有第一次讀不到才會重讀（通知不理），恢復前作答的行只在記憶裡。
+void test('S2 自己的紀錄第一次讀不到：恢復前作答的行不丟（已經寫進檔、還沒寫進檔都一樣）', async t => {
+  for (const failAppend of [false, true]) {
+    const h = await setup(t, { vault: { [NATURAL]: naturalText, [PC]: review('2026-10-20T19:00:00.000+08:00', 'b', 'miss') + '\n' } });
+    h.failing.add(PC);
+    await h.state.ready();
+    assert.deepEqual(h.state.unread(), [PC]);
+    assert.deepEqual(h.state.history().reviews, []);
+    h.control.failAppend = failAppend;
+    const v = h.state.decks()[0].deck.targets[0].prompts[0].fingerprint;
+    const t1 = h.state.answer({ lt: 'a', r: 'good', v });
+    await h.flush();
+    h.failing.delete(PC);
+    await h.settle(1000);
+    assert.deepEqual(h.state.unread(), []);
+    assert.deepEqual(h.state.history().reviews.map(entry => [entry.lt, entry.t]), [['b', '2026-10-20T19:00:00.000+08:00'], ['a', t1]], String(failAppend));
+    samePlan(h);
+    h.control.failAppend = false;
+    await h.state.flush();
+    assert.deepEqual(h.state.history(), await readHistory(h.files));
+    await h.state.close();
+  }
+});
+
+void test('S3 只有 list 失敗才整個重試：ready() 等到列得出來才完成；重試中 close 會 reject', async t => {
+  const h = await setup(t);
+  h.control.failList = true;
   const ready = h.state.ready();
   await h.flush();
-  assert.deepEqual(h.errors.map(([, source]) => source), ['read']);
+  assert.deepEqual(sources(h), ['read']);
   assert.throws(() => h.state.today());
-  h.failing.delete(PC);
+  assert.deepEqual(h.state.unread(), []);
   await h.settle(1000);
+  assert.deepEqual(sources(h), ['read', 'read']);
+  // 第二次失敗：等 2 秒。
+  h.control.failList = false;
+  await h.settle(1999);
+  assert.throws(() => h.state.today());
+  await h.settle(1);
   await ready;
   assert.equal(h.state.ready(), ready);
+  assert.deepEqual(sources(h), ['read', 'read']);
   assert.deepEqual(h.state.history(), await readHistory(h.files));
   assert.deepEqual(h.state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT, ENGLISH]);
+  samePlan(h);
 
   const other = await setup(t);
-  other.failing.add(PC);
+  other.control.failList = true;
   const pending = other.state.ready();
   await other.flush();
   assert.equal(other.errors.length, 1);
   await other.state.close();
   await assert.rejects(pending);
+});
+
+void test('S4 讀不到期間被刪掉：從 unread() 拿掉、不再重試、沒有錯誤（有沒有通知都一樣）', async t => {
+  for (const notified of [true, false]) {
+    const h = await setup(t);
+    h.failing.add(ENGLISH);
+    await h.state.ready();
+    h.failing.delete(ENGLISH);
+    if (notified) h.remove(ENGLISH);
+    else h.texts.delete(ENGLISH);
+    await h.settle(1000);
+    assert.deepEqual(h.state.unread(), [], String(notified));
+    assert.deepEqual(sources(h), ['read']);
+    assert.deepEqual(h.state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT]);
+    h.reads.length = 0;
+    await h.settle(120_000);
+    assert.deepEqual(h.reads, [], String(notified));
+    await h.state.close();
+  }
+});
+
+void test('S5 連續讀不到：等 1、2、4…秒，最多 60 秒；close() 之後不再重試', async t => {
+  const h = await setup(t);
+  h.failing.add(ENGLISH);
+  await h.state.ready();
+  const waits = [1000, 2000, 4000, 8000, 16_000, 32_000, 60_000, 60_000];
+  for (const wait of waits) {
+    const count = h.reads.length;
+    await h.settle(wait - 1);
+    assert.equal(h.reads.length, count, String(wait));
+    await h.settle(1);
+    assert.equal(h.reads.length, count + 1, String(wait));
+  }
+  assert.equal(h.errors.length, 1 + waits.length);
+  await h.state.close();
+  const count = h.reads.length;
+  await h.settle(120_000);
+  assert.equal(h.reads.length, count);
+});
+
+for (const path of [ENGLISH, PHONE]) void test('S6 第一次載入和之後的變動一致：' + path, async t => {
+  const first = await setup(t);
+  first.failing.add(path);
+  await first.state.ready();
+  assert.deepEqual(first.state.unread(), [path]);
+  first.failing.delete(path);
+  await first.settle(1000);
+
+  const { [path]: text, ...rest } = baseVault;
+  const later = await setup(t, { vault: rest });
+  await later.state.ready();
+  later.failing.add(path);
+  later.write(path, text);
+  await later.settle();
+  assert.deepEqual(later.state.unread(), [path]);
+  later.failing.delete(path);
+  await later.settle(1000);
+
+  for (const h of [first, later]) {
+    assert.deepEqual(h.state.unread(), []);
+    samePlan(h);
+  }
+  assert.deepEqual(later.state.decks(), first.state.decks());
+  assert.deepEqual(later.state.history(), first.state.history());
+  assert.deepEqual(later.state.today(), first.state.today());
+  assert.deepEqual(sources(later), sources(first));
 });
