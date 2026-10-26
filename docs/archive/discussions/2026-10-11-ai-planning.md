@@ -217,4 +217,4 @@
 - 對照實驗的結果。
 - 其他 AI 題目尚未討論：錯題分析、英文記憶錨點、AI 產生反方向題、AI 評測集。
 
-受影響：[backlog「AI 規劃」](../../backlog.md#ai-規劃2026-10-11-起的專題討論)、[路線圖](../../roadmap.md#v1-開發前要做的事)、[R-009](../../research/software.md#r-009-notebooklm官網初查完成)。
+受影響：[backlog「AI 規劃」](../../backlog.md#ai-規劃2026-10-11-起的專題討論)、[路線圖](../roadmap-completed.md#v1-開發前要做的事)、[R-009](../../research/software.md#r-009-notebooklm官網初查完成)。
