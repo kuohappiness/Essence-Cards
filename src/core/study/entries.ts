@@ -6,7 +6,10 @@ export function encodeEntry(t: string, entry: NewEntry): string {
   if ('set' in entry) {
     return JSON.stringify({ t, set: entry.set, ...('deck' in entry ? { deck: entry.deck } : 'lt' in entry ? { lt: entry.lt } : {}), val: entry.val });
   }
-  return JSON.stringify({ t, lt: entry.lt, r: entry.r, ...('v' in entry ? { v: entry.v } : {}), ...('typed' in entry && entry.typed ? { typed: entry.typed } : {}), ...(entry.src ? { src: entry.src } : {}) });
+  // 欄位順序 t, lt, r, v, typed, retry, src（syntax.md §5）。
+  return JSON.stringify({ t, lt: entry.lt, r: entry.r, ...('v' in entry ? { v: entry.v } : {}),
+    ...('typed' in entry && entry.typed ? { typed: entry.typed } : {}), ...('retry' in entry && entry.retry ? { retry: entry.retry } : {}),
+    ...(entry.src ? { src: entry.src } : {}) });
 }
 
 /** 從完整 JSON 解析；壞 JSON 的尾段救回由 mergeHistory 處理並留下 problem。 */
