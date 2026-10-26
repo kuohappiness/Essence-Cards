@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeEntry, parseLine } from '../src/core/study/index.ts';
+import { encodeEntry, mergeHistory, parseLine } from '../src/core/study/index.ts';
 import type { Pick, Rating } from '../src/core/study/index.ts';
 import { createSession, RATE_DELAY } from '../src/review/index.ts';
 import type { Session, TypedView, View } from '../src/review/index.ts';
@@ -83,6 +83,20 @@ async function rateLater(h: Harness, session: Session, rating: Rating): Promise<
   session.rate(rating);
   await h.state.flush();
 }
+
+// Codex 格式查核 F6：沒打字（或只有空白）按確認什麼都不做，不會被當成「沒印象」，也不寫紀錄。
+void test('R5 空白輸入按確認：第 1 步、第 3 步都不動，不算沒印象', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  for (const text of ['', '   ']) { s.input(text); s.submit(); }
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).first, typed(s.view()).canSkip], [1, null, true]);
+  s.skip(); s.skip();
+  assert.equal(typed(s.view()).step, 3);
+  s.input('  '); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).finished, card(s.view()).allowed], [3, false, []]);
+  await h.state.flush();
+  assert.deepEqual(h.log(), []);
+});
 
 void test('R5 第 1 步拼對（大小寫、頭尾空白不算）：只能記住了／太簡單，紀錄 typed: right、沒有 retry', async t => {
   const h = await setup(t);
@@ -316,6 +330,27 @@ void test('R10 回看改評分：取消加新的一筆（lt、v、typed 相同�
   typedSession.rate('near');
   await e.state.flush();
   assert.equal(e.log().length, 1);
+});
+
+// Codex 格式查核 F5：改評分用的是這一次記下的 typed、retry（History 不讀 retry），改兩次每一行新的紀錄都留著證據。
+void test('R10 打字卡第 1 步拼錯、第 2 步拼對後改評分兩次：新的每一行都還有 typed: wrong、retry: right，取消的是前一筆', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  s.input('made up my mind'); s.submit();
+  s.input('made up his mind'); s.submit();
+  await rateLater(h, s, 'near');
+  s.back();
+  s.rate('miss');
+  s.rate('near');
+  await h.state.flush();
+  const raw = h.log().map(line => JSON.parse(line) as Record<string, unknown>);
+  assert.equal(raw.length, 5);
+  for (const i of [0, 2, 4]) assert.deepEqual([raw[i].lt, raw[i].typed, raw[i].retry], ['z1', 'wrong', 'right'], '第 ' + String(i + 1) + ' 行');
+  assert.deepEqual(raw.map(line => line.r ?? 'undo'), ['near', 'undo', 'miss', 'undo', 'near']);
+  assert.deepEqual([raw[1].undo, raw[3].undo], [raw[0].t, raw[2].t]);
+  // 增量（state 的 history）與全量（重新 mergeHistory）都只剩最後一筆有效的作答。
+  const full = mergeHistory([{ path: PC, text: h.log().join('\n') + '\n' }]);
+  for (const history of [h.state.history(), full]) assert.deepEqual(history.reviews.filter(e => e.lt === 'z1').map(e => [e.t, e.r, e.typed]), [[raw[4].t, 'near', 'wrong']]);
 });
 
 void test('R10 回看時目前這張還在第 2 步：回到目前時仍在第 2 步、輸入框是空的；一般卡翻面後回看，回來仍是翻面', async t => {

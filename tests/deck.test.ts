@@ -196,8 +196,30 @@ void test('R1 typed-answer-words 是 hint，訊息說畫線照第一個', () => 
   const parsed = parseDeck('- x 中翻英\n  - Q :: made up his mind | decided');
   assert.deepEqual(parsed.problems.map(p => [p.level, p.message, p.targetLine]), [['hint', '好幾個答案的字數不一樣，畫線照第一個', 0]]);
 });
-for (const answer of ['a | ', '| a', 'a | | b', 'a | 借']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {
+// Codex 格式查核的固定回歸基準：同一個答案格，W5（還沒拆 |）算出的指紋和 W6 相同，typed 照 | 拆開。
+for (const [answer, fingerprint, typed] of [
+  ['made up his mind | made his mind up', 'a5ec3d47', ['made up his mind', 'made his mind up']],
+  ['**made** up his mind | made his mind up', '81ac4269', ['made up his mind', 'made his mind up']],
+  ['**a | b**', '9ec1d1dc', ['a', 'b']],
+  ['==a | b==', '35b63e7f', ['a', 'b']],
+  ['a|b', 'd0d56a63', ['a', 'b']],
+  ['a | b', 'c42e51fa', ['a', 'b']],
+  ['a  |  b', 'c42e51fa', ['a', 'b']],
+  ['borrow', 'fa0de703', ['borrow']],
+] as const) void test('R1 指紋和 W5 相同：' + answer, () => {
+  const prompt = qa(parseDeck('- x 中翻英\n  - He has already ____ . :: ' + answer).targets[0].prompts[0]);
+  assert.deepEqual([prompt.fingerprint, prompt.typed], [fingerprint, typed]);
+});
+// 中文且字數不同（'a | 借 入'）也只報 invalid，不另給字數的 hint（Codex 格式查核 F2）。
+for (const answer of ['a | ', '| a', 'a | | b', 'a || b', 'a | 借', 'a | 借 入', 'a | ** **']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {
   const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
+  assert.equal(parsed.targets[0].ok, false);
+});
+// Codex 格式查核 F2：換行在拆開、trim 之前檢查（題目後面頂格的接續行會把換行帶進答案格）。
+for (const lines of [['a |', 'b'], ['a', '| b']]) void test('R1 分隔符號前後換行也是 typed-answer-invalid：' + JSON.stringify(lines.join('\n')), () => {
+  const parsed = parseDeck('- x 中翻英\n    - Q :: ' + lines[0] + '\n      ' + lines[1]);
+  assert.equal(qa(parsed.targets[0].prompts[0]).answer, lines.join('\n'));
   assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
   assert.equal(parsed.targets[0].ok, false);
 });

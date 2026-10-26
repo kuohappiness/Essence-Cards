@@ -160,8 +160,9 @@ export function parseDeck(text: string): Deck {
         let typed: readonly string[] | null = null;
         if (target.direction === 'zh-en') {
           // 好幾個正確答案用 | 分開（D-122）：每一段各自去掉格式與前後空白；`a|b` 也認得。指紋仍用整個答案格。
+          // 換行在拆開、trim 之前看整格（`a |` 的下一行是 `b` 時，trim 會把換行吃掉，Codex 格式查核 F2）。
           typed = answer.split('|').map(part => part.replace(/\*\*|\*|_|==/g, '').trim());
-          if (typed.some(part => !part || /[\r\n]|\p{Script=Han}/u.test(part))) {
+          if (/[\r\n]/.test(answer) || typed.some(part => !part || /\p{Script=Han}/u.test(part))) {
             addProblem(node, 'typed-answer-invalid', '中翻英的答案必須是單行英文單字或片語', 'error');
           } else if (new Set(typed.map(part => part.split(/\s+/).length)).size > 1) {
             addProblem(node, 'typed-answer-words', '好幾個答案的字數不一樣，畫線照第一個');
