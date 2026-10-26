@@ -8,7 +8,7 @@ Codex 對 W6 開工前的格式查核回報在 [`Claude Codex Discussion/2026-10
 
 - 先 `git pull`。基準是這份說明所在的 commit（`git log -1 --format=%h -- tasks/w6-format-review-fixes.md`）。
 - 改之前讀：Codex 的回報全文、`tasks/w6.md` 的 §0-1、§1、§2-1、§2-3、§2-5、§5 的 R1／R4／R5／R10、〈開工條件與基準〉、〈完成後〉；`docs/syntax.md` §2-3 與 §5 的欄位表。其他不用讀。
-- **F3 的決定**：採用 Codex 建議的 `retry: not-needed`（下面照這個寫）。使用者若在這份說明的 commit 之後另有決定，以使用者為準；F3 一節最後有「不採用時怎麼寫」。
+- **F3 的決定**：✅ 使用者 2026-10-26 確認採用 `retry: not-needed`（下面照這個寫）。F3 一節最後的「不採用時怎麼寫」只是備案，不用做。
 - 只 stage 自己改的檔案；commit 訊息 `docs: apply Codex's W6 format review (F1-F6)`。
 
 ## 逐項採用
