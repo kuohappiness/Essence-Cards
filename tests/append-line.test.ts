@@ -98,6 +98,21 @@ void test('T5 appendLine：seen 加上新一行的 lt（作答、變更、被取
   assert.deepEqual(history.seen, ['a00001', 'h2m8qd', 'k3m9x2', 'p7q2w8', 'zz0001']);
 });
 
+// Codex L2 的 F1：取消行多帶的 lt 在 appendLine 也算，和重新 mergeHistory 相同；同一行再加一次不改任何東西。
+void test('T5 appendLine：取消行多帶的 lt 加進 seen（一般與跳脫的鍵名），再加一次同一行不變', () => {
+  const lines = [
+    '{"t":"2026-10-24T19:00:00.000+08:00","undo":"not-present","lt":"undo01"}',
+    '{"t":"2026-10-24T19:00:01.000+08:00","\\u006ct":"undo02","undo":"2026-10-16T20:15:03.250+08:00"}',
+  ];
+  let history = mergeHistory([{ path: WINDOWS, text: windowsText }]);
+  for (const [i, line] of lines.entries()) {
+    history = appendLine(history, line);
+    assert.deepEqual(history, mergeHistory([{ path: WINDOWS, text: windowsText }, { path: IPHONE, text: lines.slice(0, i + 1).join('\n') + '\n' }]), line);
+    assert.equal(appendLine(history, line), history, line);
+  }
+  assert.deepEqual(history.seen, ['k3m9x2', 'undo01', 'undo02']);
+});
+
 // 固定種子的亂數（mulberry32）。
 function seeded(seed: number): () => number {
   return () => {

@@ -35,7 +35,8 @@ export interface State {
   /**
    * 第一次列出卡組與紀錄、能讀到的都讀完、排好今天就完成；之後每次呼叫回傳同一個 Promise。
    * 讀不到的那幾篇跳過、之後自己重試（unread()）。只有列不出來（list 失敗）才整個重試（1 秒起、每次加倍、最多 60 秒），
-   * 每次失敗交給 onError；只有 close() 會讓它 reject。
+   * 每次失敗交給 onError。files 的讀取與列出失敗不會讓它 reject，只有 close() 會；程式本身的錯（不是讀不到）
+   * 也會經過 onError(…, 'read') 並讓它 reject（Codex state-load L2 的對齊第 2 點）。
    */
   ready(): Promise<LoadTimings>;
   /**
@@ -180,6 +181,8 @@ export function createState(options: StateOptions): State {
     else noticed = true;
   }
   function schedule(wait = delay): void {
+    // onError 的監聽者可能在回呼裡 close()（Codex state-load L2 的 F2）：關閉之後不再排。
+    if (closed) return;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
@@ -296,7 +299,8 @@ export function createState(options: StateOptions): State {
         if (closed) throw error;
         failures++;
         report(error, 'read');
-        await pause(retryDelay());
+        // 回呼裡 close() 了就不等（Codex state-load L2 的 F2）；等的期間 close() 會提早叫醒。
+        if (!closed) await pause(retryDelay());
         if (closed) throw Error('state 已關閉，沒有讀完');
         continue;
       }

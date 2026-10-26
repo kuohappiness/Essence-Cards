@@ -140,6 +140,20 @@ void test('seen：每一行出現過的 lt（作答、變更、被取消的）�
   assert.deepEqual(mergeHistory([]).seen, []);
 });
 
+// Codex L2 的 F1：合法的取消行多帶一個 lt，也是紀錄裡出現過的 ID（D-134）；取消的意思不變。
+void test('seen：合法的取消行多帶的 lt 也算（一般與跳脫的鍵名），沒有 lt 的取消行不算', () => {
+  const lines = [
+    '{"t":"2026-10-24T12:00:00.000+08:00","undo":"not-present","lt":"undo01"}',
+    '{"t":"2026-10-24T12:00:01.000+08:00","\\u006ct":"undo02","undo":"also-not-present"}',
+    '{"t":"2026-10-24T12:00:02.000+08:00","undo":"2026-10-24T11:00:00.000+08:00"}',
+    '{"t":"2026-10-24T12:00:03.000+08:00","undo":"2026-10-24T11:00:01.000+08:00","lt":5}',
+  ];
+  const history = mergeHistory([{ path: 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl', text: lines.join('\n') + '\n' }]);
+  assert.deepEqual(history.seen, ['undo01', 'undo02']);
+  assert.deepEqual(history.cancelled, ['2026-10-24T11:00:00.000+08:00', '2026-10-24T11:00:01.000+08:00', 'also-not-present', 'not-present']);
+  assert.deepEqual(history.problems, []);
+});
+
 void test('取消找不到對象不算錯，不能取消變更或取消；同一 t 的所有作答都失效', () => {
   const t = '2026-10-16T20:00:00+08:00';
   const equivalent = '2026-10-16T12:00:00Z';

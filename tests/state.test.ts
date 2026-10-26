@@ -527,6 +527,39 @@ void test('S5 連續讀不到：等 1、2、4…秒，最多 60 秒；close() �
   assert.equal(h.reads.length, count);
 });
 
+/** 數還在等的計時：在假計時器外面再包一層（只在這個測試裡，結束時還原）。 */
+function countTimers(): { live: () => number; restore: () => void } {
+  const ids = new Set<unknown>();
+  const set = globalThis.setTimeout, clear = globalThis.clearTimeout;
+  globalThis.setTimeout = ((callback: () => void, ms?: number) => {
+    const id = set(() => { ids.delete(id); callback(); }, ms);
+    ids.add(id);
+    return id;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = ((id: ReturnType<typeof setTimeout> | undefined) => { ids.delete(id); clear(id); }) as typeof clearTimeout;
+  return { live: () => ids.size, restore: () => { globalThis.setTimeout = set; globalThis.clearTimeout = clear; } };
+}
+
+// Codex state-load L2 的 F2：onError 裡同步呼叫 close()（重入）時，回呼結束後不能再排重試，ready() 也不等下一次退避。
+for (const failure of ['read', 'list'] as const) void test('S5 onError 裡 close()：不留下重試的計時，ready() 不用推進時間就 reject：' + failure, async t => {
+  let closing: Promise<void> | undefined;
+  const h = await setup(t, { onError: () => { closing ??= h.state.close(); } });
+  const timers = countTimers();
+  try {
+    if (failure === 'read') h.failing.add(ENGLISH);
+    else h.control.failList = true;
+    let rejected = false;
+    void h.state.ready().then(() => {}, () => { rejected = true; });
+    await h.flush();
+    await closing;
+    await h.flush();
+    assert.equal(rejected, true);
+    assert.equal(timers.live(), 0);
+  } finally {
+    timers.restore();
+  }
+});
+
 for (const path of [ENGLISH, PHONE]) void test('S6 第一次載入和之後的變動一致：' + path, async t => {
   const first = await setup(t);
   first.failing.add(path);

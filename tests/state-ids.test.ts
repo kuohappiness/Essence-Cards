@@ -329,6 +329,11 @@ void test('F3 壞掉的行：救回的尾段與認不出的行裡的 lt 也避�
   assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaad\n    - QC :: AC\n');
 });
 
+void test('F3 合法的取消行多帶的 lt 也避開（Codex state-load L2 的 F1）', async t => {
+  const h = await setup(t, { [P]: B, [LOG]: '{"t":"2026-10-24T12:00:00.000+08:00","undo":"not-present","lt":"aaaaaa"}\n' });
+  assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+});
+
 for (const order of [['P', 'O'], ['O', 'P']]) void test('F5 同一批跨檔搬移不因通知順序誤報：' + order.join('→'), async t => {
   const O = OTHER;
   const h = await setup(t, { [P]: A, [O]: B });

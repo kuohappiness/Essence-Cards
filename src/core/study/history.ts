@@ -40,6 +40,10 @@ function looseLts(line: string): string[] {
   }
   return ids;
 }
+/** 合法的取消行多帶的 lt（parseLine 不讀它，取消的意思不變）也算出現過（Codex state-load L2 的 F1）。 */
+function undoLt(line: string): string | null {
+  try { return ltOf(JSON.parse(line)); } catch { return null; }
+}
 /** 照字串排序、不重複地加一個；已經有了就回傳同一個陣列。 */
 function withSeen(seen: string[], id: string | null): string[] {
   if (id === null) return seen;
@@ -85,8 +89,9 @@ export function mergeHistory(sources: readonly { path: string; text: string }[])
           history.problems.push({ path, line, message: entry ? '寫入中斷；已從行尾救回一筆紀錄' : '無法解析紀錄或缺少有效的必要欄位' });
         }
         if (!entry) continue;
+        const lt = entry.kind === 'undo' ? undoLt(raw) : entry.lt;
+        if (lt !== null) seen.add(lt);
         if (entry.kind === 'undo') { cancelled.add(entry.undo); continue; }
-        if (entry.lt !== null) seen.add(entry.lt);
         if (entry.kind === 'change') {
           const key = changeKey(entry);
           if (!seenChanges.has(key)) { seenChanges.add(key); history.changes.push(entry); }
@@ -125,16 +130,16 @@ function firstAfter(list: readonly { at: number }[], time: number): number {
 export function appendLine(history: History, line: string): History {
   const entry = parseLine(line);
   if (!entry) throw Error('不是合法的一行紀錄：' + line);
+  // 被取消或重複而不加進去的作答、取消行多帶的 lt，也算出現過（和 mergeHistory 相同）。
+  const seen = withSeen(history.seen, entry.kind === 'undo' ? undoLt(line) : entry.lt);
+  const base = seen === history.seen ? history : { ...history, seen };
   if (entry.kind === 'undo') {
     // mergeHistory 也取消所有檔案裡 t 相同的作答，包括之後才加進來的（記在 cancelled）。
     const known = history.cancelled.includes(entry.undo);
     const reviews = history.reviews.filter(review => review.t !== entry.undo);
-    if (known && reviews.length === history.reviews.length) return history;
-    return { ...history, reviews, cancelled: known ? history.cancelled : [...history.cancelled, entry.undo].sort() };
+    if (known && reviews.length === history.reviews.length) return base;
+    return { ...base, reviews, cancelled: known ? history.cancelled : [...history.cancelled, entry.undo].sort() };
   }
-  // 被取消或重複而不加進去的作答，lt 也算出現過（和 mergeHistory 相同）。
-  const seen = withSeen(history.seen, entry.lt);
-  const base = seen === history.seen ? history : { ...history, seen };
   if (entry.kind === 'change') {
     const key = changeKey(entry);
     if (history.changes.some(change => changeKey(change) === key)) return base;
