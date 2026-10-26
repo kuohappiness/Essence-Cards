@@ -16,7 +16,7 @@
 - 要知道某個決定或它的理由，先看 `docs/decisions.md` 開頭的索引，再讀那幾條；提出新決定前，也先用索引查有沒有相關的舊決定。
 - 做製卡規則、語法解析、資料格式相關的工作時，讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
 - 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 和該任務連到的說明就好（[D-065](docs/decisions.md#d-065-試作場)）。
-- `docs/archive/v0-planning/` 已被取代，不當作依據。`docs/archive/discussions/` 是過程紀錄：可以追溯當時的取捨，但不直接當規格；有些討論仍在進行，它們的未決問題與下一步一定也寫在 `backlog.md` 或 `roadmap.md`（[D-106](docs/decisions.md#d-106-claude-與-codex-的協作流程)）。
+- `docs/archive/v0-planning/` 已被取代，不當作依據。`docs/archive/discussions/` 是過程紀錄：可以追溯當時的取捨，但不直接當規格；有些討論仍在進行：從 roadmap 的狀態板或 backlog 找得到它，未決問題寫在它的主文（D-106、D-141）。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
 
 ## 文件分工
@@ -32,17 +32,21 @@
 | `docs/plans/` | 展開的主題細項規畫；一主題一份，從 backlog 引用，命名與維護見該目錄 README |
 | `docs/card-rules/` | 交給 AI 的製卡規則（未來外掛的內建預設） |
 | `docs/ai-models.md` | 現在推薦的 AI 服務與模型；新模型推出時更新 |
+| `docs/agents/` | 程式品質的專案設定：檢查指令、高風險範圍、卡關時的升級 |
 | `docs/research/` | 參考軟體研究 |
 | `docs/archive/` | 討論紀錄、v0 規劃（已取代）、路線圖較舊的已完成紀錄 |
+| `tasks/` | 交給實作或查核的任務說明與審查請求；標題下第一行寫狀態 |
 | `Claude Codex Discussion/` | Claude 與 Codex 的討論稿，一個議題一份 `YYYY-MM-DD-主題.md`；只在處理該議題時讀 |
 | `experiments/` | 試作場：樣式稿、試作外掛與測試結果 |
+| `src/`、`tests/`、`tools/` | 正式外掛的程式、測試與開發工具（D-110） |
 
-- 一件事只寫在一個地方，其他地方用連結引用。
+- **同一類資訊只維護一份**：現行規格依上表；同一個未決問題只有一份主文；試驗與審查證據留在原紀錄；入口（roadmap、backlog、討論索引）只寫狀態、下一步與連結。主文依序選：已交付實作且沒另開討論的 → `tasks/`；Claude 與 Codex 正在往返的 → 該討論稿；其他已展開的規畫 → `docs/plans/`；短點子 → backlog（[D-141](docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
 - 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。只有使用者明確同意才標 ✅；沒有反對不等於同意。
 - 有新決定時，在 `decisions.md` 新增條目（D-ID 不重用），再更新受影響的 product、architecture、roadmap。被取代的決定標「已取代 → D-xxx」，不刪除；被修改的舊決定，在標題下第一行寫「……見 D-xxx」。改完執行 `node experiments/tools/decisions-index.mjs` 更新索引，再補上新決定的一句話。
 - 新點子先記進 `backlog.md`，保留原意與來源，不要求先整理完整；只分 v1 任務與第二階段想做的事（D-130）。展開的細項搬到 `docs/plans/<主題>.md`，backlog 只留項目、狀態與引用；談定後引用 D-ID，不重複維護詳細內容。
 - 重要討論在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`，記錄決定、理由與未解問題，並更新該目錄的 README 索引。內容採摘要，不冒充逐字紀錄。
-- 階段或任務有變動時，更新 `roadmap.md` 的「現在在哪裡」。做完一件事時在「已完成」最上面加一行；超過 10 條就把最舊的搬到 `docs/archive/roadmap-completed.md` 的最上面。
+- roadmap 的「現在在哪裡」是狀態板：每件進行中或卡在某人身上的工作一列（狀態、下一步、等誰、入口），不寫經過。做完一件事在「已完成」最上面加一列，一句約 80 字加連結；超過 10 列把最舊的搬到 `docs/archive/roadmap-completed.md` 最上面，相對路徑改成以 `docs/archive/` 為基準。
+- 提到只在分支上的檔案時寫「分支 `x` 的 `path`（commit）」，不用相對連結。`node tools/check-docs.ts` 在每次 commit 時檢查連結、狀態板長度、已完成與檔頭狀態行。
 - 文件以繁體中文撰寫；英文名稱、程式識別字與必要引用保留原文。
 
 ## 討論方式
