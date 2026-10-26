@@ -12,6 +12,11 @@ function setTargetId(text: string, line: number, id: string | null) { deckCases.
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = [...syntax.slice(syntax.indexOf('### 2-2'), syntax.indexOf('### 2-3')).matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
+/** 文件裡縮排在清單項目底下的程式碼區塊：去掉共同的縮排。 */
+function indentedFences(text: string, lang = ''): string[] {
+  return [...text.matchAll(new RegExp('^( *)```' + lang + '\\r?\\n([\\s\\S]*?)\\r?\\n *```', 'gm'))]
+    .map(m => m[2].split('\n').map(line => line.startsWith(m[1]) ? line.slice(m[1].length) : line).join('\n'));
+}
 const emptyFields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
 const qa = (prompt: Prompt) => { assert.equal(prompt.kind, 'qa'); if (prompt.kind !== 'qa') throw Error(); return prompt; };
 const cloze = (prompt: Prompt) => { assert.equal(prompt.kind, 'cloze'); if (prompt.kind !== 'cloze') throw Error(); return prompt; };
@@ -57,7 +62,7 @@ void test('§2-2 英文完整例子：兩方向、typed、例句與記憶錨點'
   assert.deepEqual(parsed.problems, []);
   const rows = [
     ['b4rw7k', 'borrow 英翻中', 'en-zh', 'borrow', 'borrow', 'v. 借入、向別人借', ['例句：Can I borrow your pen? 我可以借你的筆嗎？'], [], null],
-    ['c9tn3e', 'borrow 中翻英', 'zh-en', 'borrow', 'Can I ＿＿ your pen?（借）', 'borrow', [], ['記憶錨點：易混淆 lend（借出：把東西借給別人）'], 'borrow'],
+    ['c9tn3e', 'borrow 中翻英', 'zh-en', 'borrow', 'Can I ＿＿ your pen?（借）', 'borrow', [], ['記憶錨點：易混淆 lend（借出：把東西借給別人）'], ['borrow']],
     ['u6vf2m', 'uniform 英翻中', 'en-zh', 'uniform', 'uniform', 'n. 制服', ['例句：We wear uniforms to school. 我們穿制服上學。'], [], null],
   ];
   assert.equal(parsed.targets.length, 3);
@@ -154,7 +159,54 @@ void test('D-089 #12 沒題目的一般筆記不產生目標或問題', () => {
 });
 void test('D-089 #13 typed 保留大小寫，僅清格式與頭尾空白', () => {
   const t = parseDeck('- Phrase 中翻英\n  - Q :: **Take** _a_ ==Break==').targets[0];
-  assert.equal(qa(t.prompts[0]).typed, 'Take a Break'); assert.equal(t.ok, true);
+  assert.deepEqual(qa(t.prompts[0]).typed, ['Take a Break']); assert.equal(t.ok, true);
+});
+
+// W6 §0-1（D-122）：中翻英的答案格照 | 拆開成好幾個正確答案；answer 與題目指紋照舊用整個答案格。
+void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案、answer 與指紋和拆開之前相同', () => {
+  const english = readFileSync(new URL('../docs/card-rules/english.md', import.meta.url), 'utf8');
+  const sources = [
+    ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown'),
+    ...indentedFences(english).filter(text => text.includes(' | ')),
+  ];
+  assert.equal(sources.length, 2);
+  for (const text of sources) {
+    const parsed = parseDeck(text);
+    assert.deepEqual(parsed.problems, []);
+    assert.deepEqual(parsed.targets.map(t => [t.name, t.direction, t.ok]), [["make up one's mind 中翻英", 'zh-en', true]]);
+    const [basic, both] = parsed.targets[0].prompts.map(qa);
+    assert.deepEqual([basic.answer, basic.typed, basic.fingerprint], ['make up your mind', ['make up your mind'], '8ae9acd7']);
+    assert.deepEqual([both.answer, both.typed, both.fingerprint], ['made up his mind | made his mind up', ['made up his mind', 'made his mind up'], '9938603d']);
+    assert.deepEqual(both.extras, ['詳解：made up his mind 和 made his mind up 都對，課本用前者']);
+  }
+});
+for (const [name, answer, typed, fingerprint, problems] of [
+  ['`a|b` 前後沒空格也認得', 'a|b', ['a', 'b'], '434fa34e', []],
+  ['只有一個答案', 'borrow', ['borrow'], 'cffabbc2', []],
+  ['每一段各自拿掉粗體', '**made** up his mind | made his mind up', ['made up his mind', 'made his mind up'], '01829f8b', []],
+  ['字數不一樣：提示、照樣出題', 'made up his mind | decided', ['made up his mind', 'decided'], 'cb4b5fb9', ['typed-answer-words']],
+] as const) void test('R1 ' + name, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  const prompt = qa(parsed.targets[0].prompts[0]);
+  assert.deepEqual([prompt.answer, prompt.typed, prompt.fingerprint], [answer, typed, fingerprint]);
+  assert.deepEqual(parsed.problems.map(p => p.code), problems);
+  assert.equal(parsed.targets[0].ok, true);
+});
+void test('R1 typed-answer-words 是 hint，訊息說畫線照第一個', () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: made up his mind | decided');
+  assert.deepEqual(parsed.problems.map(p => [p.level, p.message, p.targetLine]), [['hint', '好幾個答案的字數不一樣，畫線照第一個', 0]]);
+});
+for (const answer of ['a | ', '| a', 'a | | b', 'a | 借']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
+  assert.equal(parsed.targets[0].ok, false);
+});
+void test('R1 中翻英以外的問答題 typed 仍是 null，答案裡的 | 不拆', () => {
+  for (const text of ['- x 英翻中\n  - a | b :: 甲 | 乙', '- 目標\n  - Q :: a | b']) {
+    const prompt = qa(parseDeck(text).targets[0].prompts[0]);
+    assert.equal(prompt.typed, null);
+    assert.ok(prompt.answer.includes(' | '));
+  }
 });
 
 for (const [name, input, code] of [
@@ -172,7 +224,7 @@ void test('§2-10 縮排錯一層是不同結構，並非錯誤', () => {
 });
 void test('typed 以答案文字判斷行數，只有一個答案子項目仍是單行', () => {
   const parsed = parseDeck('- 字 中翻英\n  - Q ::\n    - word');
-  assert.deepEqual(parsed.problems, []); assert.equal(qa(parsed.targets[0].prompts[0]).typed, 'word');
+  assert.deepEqual(parsed.problems, []); assert.deepEqual(qa(parsed.targets[0].prompts[0]).typed, ['word']);
 });
 void test('中翻英填空只提示、不要求 typed', () => {
   const parsed = parseDeck('- 字 中翻英\n  - ==word==');

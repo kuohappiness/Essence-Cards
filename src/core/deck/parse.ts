@@ -157,11 +157,14 @@ export function parseDeck(text: string): Deck {
         const extras = multiline ? [] : children.map(child => markdown(child));
         if (!question) addProblem(node, 'empty-question', '這一題 :: 的左邊沒有題目', 'error');
         if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
-        let typed: string | null = null;
+        let typed: readonly string[] | null = null;
         if (target.direction === 'zh-en') {
-          typed = answer.replace(/\*\*|\*|_|==/g, '').trim();
-          if (!typed || /[\r\n]|\p{Script=Han}/u.test(typed)) {
+          // 好幾個正確答案用 | 分開（D-122）：每一段各自去掉格式與前後空白；`a|b` 也認得。指紋仍用整個答案格。
+          typed = answer.split('|').map(part => part.replace(/\*\*|\*|_|==/g, '').trim());
+          if (typed.some(part => !part || /[\r\n]|\p{Script=Han}/u.test(part))) {
             addProblem(node, 'typed-answer-invalid', '中翻英的答案必須是單行英文單字或片語', 'error');
+          } else if (new Set(typed.map(part => part.split(/\s+/).length)).size > 1) {
+            addProblem(node, 'typed-answer-words', '好幾個答案的字數不一樣，畫線照第一個');
           }
         }
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };

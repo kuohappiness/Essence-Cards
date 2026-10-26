@@ -339,6 +339,7 @@ void test('T12 打字卡：去掉頭尾空白、不分大小寫，其餘完全�
   const deck = deckEntry(ENGLISH, { 科目: '英文' }, [
     '- borrow 中翻英 ^z1', '    - 借入 :: borrow', '- look after 中翻英 ^z2', '    - 照顧 :: look after',
     '- borrow 英翻中 ^e1', '    - borrow :: 借入', '- after 中翻英 ^z3', '    - ==after== 之後',
+    "- make up one's mind 中翻英 ^z4", '    - 他已經下定決心。He has already ＿＿. :: made up his mind | made his mind up',
   ]);
   const prompt = (id: string): Prompt => {
     const found = deck.deck.targets.find(target => target.id === id);
@@ -352,6 +353,11 @@ void test('T12 打字卡：去掉頭尾空白、不分大小寫，其餘完全�
   assert.equal(checkTyped(prompt('z2'), 'look  after'), false);
   assert.throws(() => checkTyped(prompt('e1'), 'borrow'), TypeError);
   assert.throws(() => checkTyped(prompt('z3'), 'after'), TypeError);
+  // R3（D-122）：對中任何一個答案就算對；比對規則每一個都相同。
+  assert.equal(checkTyped(prompt('z4'), 'made up his mind'), true);
+  assert.equal(checkTyped(prompt('z4'), ' Made His Mind Up '), true);
+  assert.equal(checkTyped(prompt('z4'), 'made his mind  up'), false);
+  assert.equal(checkTyped(prompt('z4'), 'decided'), false);
   const state = input([deck], log(), at('10-24'));
   const typed = card(nextCard(planToday(state), state, { subject: '英文' }));
   assert.deepEqual([typed.lt, typed.typed, typed.isNew], ['z2', true, true]);
