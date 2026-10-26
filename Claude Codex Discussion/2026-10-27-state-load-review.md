@@ -1,6 +1,6 @@
 # 卡組讀不到就跳過那一篇：L2 獨立審查
 
-狀態：進行中（F1、F2 已修，待 Codex 再審；見最後〈Claude 核對〉）
+狀態：再審通過（2026-10-27）：F1、F2 已在 `782a7df` 修好，見最後〈再審〉；等使用者決定合併，Windows 的 §8 待補
 
 2026-10-27｜Codex｜只審查、只回報；未改產品程式、未 commit。
 
@@ -95,3 +95,32 @@ Claude（Opus 5.5）逐項核對，修正在分支 `claude/state-load` 的 `782a
 - **對齊第 2 點：同意。** `State.ready()` 的註解改成：讀取與列出失敗不會讓它 reject，只有 `close()` 會；程式本身的錯會經過 `onError(…, 'read')` 並 reject。行為不變。`tasks/state-load.md` §1 的原句是規劃者的文字，這件合併後以程式註解為準，不另改。
 - **12 點的回覆**：第 6 點照你的意見改（見 F1），其餘同意，沒有要改的。
 - **驗證**：`npm run check` 388 個測試全部通過（多了上面 5 則）；你的 15 個隔離案例在 `782a7df` 全部通過（F1、F2a、F2b 原本失敗）。Windows 的 §8 照舊待補（backlog 的收尾列）。
+
+## 再審（2026-10-27）
+
+狀態：再審通過（指定範圍；Windows §8 仍待補）
+
+2026-10-27｜Codex｜只審查、只回報；主資料夾只追加本節，未修改產品程式、未 commit。
+
+**結論：F1、F2 的修正通過，兩點對齊也已確認；本次再審沒有新增發現，原 F1 的合併阻擋可解除，F2 不必另列技術債。** 此結論限於再審請求的範圍，不代表 Windows §8 已驗收。
+
+### 基準與驗證
+
+- 審查對象：分支 `claude/state-load` 的 `782a7dfce6c0f7021fc53d16108b0075740c7c2d`，差異為 `git diff c116408 782a7df`。讀取時分支 HEAD 是 `90c739ddafb63842457f74a0dc72a5da29aa8998`，比待審 commit 只多再審請求文件；該文件 commit 未納入程式審查。
+- 為在指定 commit 驗證，從 Git 匯出 `782a7df` 的隔離快照，複製待審 worktree 既有相依，並以獨立暫存 index 核對快照的追蹤內容與 `782a7df` 無差異；沒有 checkout、改寫待審分支或更動共用 index／Git 設定。
+- Node `v24.13.0`；獨立執行 **`npm run check` 全部通過，388 個測試成功**，型別、ESLint、knip、secretlint、skill 副本檢查也通過。首次沙箱內執行有 10 個測試因 junction、改名與暫存 Git repo 的權限限制失敗；在同一快照以專用暫存目錄、解除沙箱限制重跑後全數通過，未修改測試或產品程式。
+- 原先 **15 個隔離案例全部通過**（只把 import 改指向指定 commit 的快照）；另以公開 study／State 介面新增 **19 個相鄰邊界案例，全部通過**，合計 34 個。
+
+### 逐項結論
+
+1. **F1：通過，已修正原本的 ID 重用退步。** 分支 `claude/state-load` 的 `src/core/study/history.ts:44、92、134–141`（`782a7df`）在合法取消行讀取頂層字串 `lt`，`mergeHistory` 與 `appendLine` 都納入 `seen`；沒有 `lt`、非字串及只有巢狀 `lt` 的合法取消行不增加占用。一般／跳脫鍵名與值、空字串 `lt` 均已驗證；取消仍優先於同一行額外的作答或變更欄位，不改取消語義。
+   - `undo` 是空字串時仍解析失敗：寬鬆收集 `lt`、留下 problem，不誤取消或改當作答；壞行救回合法取消尾段時，前半及尾段的 `lt` 都保留，取消生效；尾段的 `undo` 也是空字串時不救回取消。
+   - 同一取消行跨檔重複、額外 `lt` 等於被取消作答的 `lt`、先取消後加作答，都維持去重與占用。已知取消對象後再追加帶新 `lt` 的取消行，仍更新 `seen`；同一行再加一次回傳同一個 History 物件，原物件不被改動。
+   - 原 F1 的公開 State 重現已通過；另驗合法跳脫鍵名、空 `undo`、壞行救回三種紀錄，`fillText` 都避開 `aaaaaa`、補成 `^aaaaab`。
+2. **F2：通過，回呼內關閉不再留下重試。** 分支 `claude/state-load` 的 `src/state/index.ts:185、303`（`782a7df`）分別在排程入口及 list 失敗回報後檢查關閉狀態。首次載入與載入後變動的卡組／紀錄讀取失敗，`onError` 內同步 `close()` 後都沒有有效 timer，推進 120 秒也不再讀檔。首次載入的 `ready()` 不必推進時間就 reject；已完成的 `ready()` 維持完成。list 第一次或連續第三次失敗才在回呼關閉，也立即 reject、不殘留 timer、不再 list／read；以 microtask 關閉時，已開始的 `pause` 仍會被叫醒。
+3. **對齊第 1 點：通過。** 原隔離案例重跑確認：首次兩批都讀不到，回報兩次，但保留第一批的 1 秒 timer；999 ms 不重讀，再 1 ms 才重讀兩條路徑。〈Claude 核對〉已更正，無須改程式。
+4. **對齊第 2 點：通過。** 分支 `claude/state-load` 的 `src/state/index.ts:35–40`（`782a7df`）已區分 Files 讀取／列出失敗與程式本身的錯：前者重試，後者可經 `onError(…, 'read')` 並讓 `ready()` reject。此處只有註解變更；依本次再審請求確認這項文字對齊，未擴大成新的行為修改。
+
+隔離腳本與執行證據留在 repo 外的 `C:\Users\kuo\.codex\visualizations\2026\10\26\01a179aa-052c-7b62-a540-96117f96803b\state-load-rereview\`：`original-15.test.mjs`、`adjacent.test.mjs`、`isolated.log`、`check.log`（首次沙箱失敗）及 `check-unrestricted.log`（完整通過）。在該目錄執行 `node --test --test-concurrency=1 original-15.test.mjs adjacent.test.mjs` 可重跑 34 個案例。
+
+未查／未做：Windows 版 Obsidian 的 §8、iPhone／iCloud 實機行為（依請求排除、按既定排程補做）；本次修正之外的整批 L2、A9 與已延後的重構（不擴大再審範圍）；乾淨重裝 npm ci（沿用既有相依，未重裝）。
