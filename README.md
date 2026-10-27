@@ -25,28 +25,6 @@ Essence Cards 是一個 Obsidian 外掛：把筆記變成閃卡，讓學生用�
 | 過去的討論與舊規劃 | [封存區](docs/archive/README.md) |
 | AI 協作者的工作規則 | [AGENTS.md](AGENTS.md) |
 
-## 目錄
-
-```
-README.md        專案入口
-AGENTS.md        協作規則（CLAUDE.md 引用它）
-docs/
-├─ product.md        產品定義
-├─ architecture.md   架構
-├─ syntax.md         出題語法與資料格式
-├─ decisions.md      決策紀錄
-├─ roadmap.md        開發現況與路線圖
-├─ backlog.md        v1 任務與第二階段清單
-├─ plans/            主題細項規畫（由 backlog 引用）
-├─ card-rules/       交給 AI 的製卡規則
-├─ ai-models.md      AI 模型推薦
-├─ research/         參考軟體研究、舊外掛分析
-└─ archive/          歷史討論與 v0 規劃
-tasks/           交給 Codex 的任務說明
-Claude Codex Discussion/  Claude 與 Codex 的討論稿
-experiments/     試作場（試作外掛已停用；T4 小程式照常用）
-```
-
 正式外掛的程式放在 repo 最上層的 `src/`、`tests/`、`tools/`（[D-110](docs/decisions.md#d-110-v1-外掛的程式結構)）。
 
 ## 相關專案

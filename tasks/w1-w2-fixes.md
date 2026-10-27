@@ -1,5 +1,7 @@
 # W1～W2 合併前修正：任務說明（給 Codex）
 
+狀態：已合併（`91b3026`）
+
 遵守 repo 根目錄的 `AGENTS.md`。
 
 修正 Codex 審查報告的 F1、F2、F4，以及 Claude 核對時找到的 N1～N3，修完 `codex/w1-w2` 才合併。理由與重現範例見[討論稿](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md>) §2；使用者 2026-10-20 同意這個處理方式，也同意 syntax.md §2-3 名稱規則的釐清。

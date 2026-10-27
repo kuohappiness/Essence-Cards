@@ -45,13 +45,13 @@
 - [架構呈現方式 C-009](../consensus.md#c-009-以整體學習循環呈現架構已確認)
 - [已確認方向 C-008](../consensus.md#c-008-共用知識基礎與學習回饋循環已確認)
 - [學習循環與功能藍圖](../learning-blueprint.md)
-- [圖版重排與連線原則](../discussions/2026-10-06-diagram-layout.md)
-- [學習循環主軸討論](../discussions/2026-10-06-integrated-learning-cycle.md)
-- [手繪藍圖整合摘要](../discussions/2026-10-06-architecture-redraw.md)
+- [圖版重排與連線原則](../../discussions/2026-10-06-diagram-layout.md)
+- [學習循環主軸討論](../../discussions/2026-10-06-integrated-learning-cycle.md)
+- [手繪藍圖整合摘要](../../discussions/2026-10-06-architecture-redraw.md)
 
 ## 重新產生圖檔
 
-產生程式：[scripts/draw_architecture.py](../../scripts/draw_architecture.py)。需要 PyMuPDF、ReportLab、fontTools 與 DejaVu Sans 字型；中文字型取自 PyMuPDF 內建 CJK 字型。生成的 SVG 嵌入所需字型，文字仍可編輯。
+產生程式：[scripts/draw_architecture.py](../board/scripts/draw_architecture.py)。需要 PyMuPDF、ReportLab、fontTools 與 DejaVu Sans 字型；中文字型取自 PyMuPDF 內建 CJK 字型。生成的 SVG 嵌入所需字型，文字仍可編輯。
 
 ```sh
 python3 scripts/draw_architecture.py --output /tmp/essence-cards-diagram
@@ -73,7 +73,7 @@ python3 scripts/draw_architecture.py --output /tmp/essence-cards-diagram
 
 Git 設計保留：電腦限定、iCloud 同步／Git 歷史／GitHub 私人備份的分工、外部 .git、拉取策略、修改檢查點、個別回復與保護邊界。公開專案 repo 與個人私人筆記備份分開。
 
-新圖產生程式：[scripts/draw_technical_blueprints.py](../../scripts/draw_technical_blueprints.py)。沿用既有圖檔工具與內嵌字型，輸出 SVG、PNG 及 PDF；SVG 保存於本目錄並嵌入畫板。
+新圖產生程式：[scripts/draw_technical_blueprints.py](../board/scripts/draw_technical_blueprints.py)。沿用既有圖檔工具與內嵌字型，輸出 SVG、PNG 及 PDF；SVG 保存於本目錄並嵌入畫板。
 
 ```sh
 python3 scripts/draw_technical_blueprints.py --output /tmp/essence-cards-technical
@@ -85,7 +85,7 @@ python3 scripts/draw_technical_blueprints.py --output /tmp/essence-cards-technic
 
 - [registry.json](registry.json)：每張圖的 B-ID、文字／程式來源與產物；新增圖必須加入，SVG 漏登錄會失敗。
 - [review-state.json](review-state.json)：核對過的來源與產物 SHA-256；只記錄變更基線，不能證明語意正確。
-- [check_diagrams.py](../../scripts/check_diagrams.py)：檢查索引配對、路徑、漏登錄與快照；來源或圖檔變動會指出受影響的 B-ID。
+- [check_diagrams.py](../board/scripts/check_diagrams.py)：檢查索引配對、路徑、漏登錄與快照；來源或圖檔變動會指出受影響的 B-ID。
 
 維護順序：
 

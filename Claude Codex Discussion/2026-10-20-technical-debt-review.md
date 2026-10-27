@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：W1～W2 合併前的技術債審查
 
-日期：2026-10-20｜整理者：Claude｜狀態：**已結案**（2026-10-20，`codex/w1-w2` 合併進 main，merge commit `91b3026`；不另立 D-ID）。使用者同意 §3 的處理方式與 syntax.md §2-3 名稱規則的釐清；修正照[任務說明](../tasks/w1-w2-fixes.md)；F7 已由 Claude 修好 README。留下的 4 件事見 §5，也記在 [roadmap](../docs/roadmap.md#下一次對話從這裡開始)。
+日期：2026-10-20｜整理者：Claude｜狀態：**已結案**（2026-10-20，`codex/w1-w2` 合併進 main，merge commit `91b3026`；不另立 D-ID）。使用者同意 §3 的處理方式與 syntax.md §2-3 名稱規則的釐清；修正照[任務說明](../tasks/w1-w2-fixes.md)；F7 已由 Claude 修好 README。留下的 4 件事見 §5，也記在 [roadmap](../docs/archive/roadmap-completed.md#下一次對話從這裡開始)。
 
 ## 先讀這裡
 

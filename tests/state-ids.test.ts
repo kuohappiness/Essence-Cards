@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeEntry } from '../src/core/study/index.ts';
+import { encodeEntry, planToday } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { IdIssue, State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
@@ -26,17 +26,23 @@ interface Harness extends MemoryFiles {
   /** 讓 delay 過去並跑完排好的重讀。 */
   settle: () => Promise<void>;
   issues: (path?: string) => IdIssue[];
+  /** files.modify 的路徑，照呼叫順序。 */
+  modifies: string[];
 }
-async function setup(t: TestContext, vault: Record<string, string>, options: Partial<StateOptions> = {}): Promise<Harness> {
+/** unread：第一次載入時就讀不到的路徑（state-load 的 S7、S8）。 */
+async function setup(t: TestContext, vault: Record<string, string>, options: Partial<StateOptions> = {}, unread: string[] = []): Promise<Harness> {
   if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
   const memory = createMemoryFiles(vault);
-  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0,
+  for (const path of unread) memory.failing.add(path);
+  const modifies: string[] = [];
+  const files = { ...memory.files, modify: (path: string, edit: (text: string) => string) => { modifies.push(path); return memory.files.modify(path, edit); } };
+  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0,
     now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480, ...options });
   t.after(() => state.close());
   await state.ready();
   const settle = async () => { t.mock.timers.tick(DELAY + 1); await new Promise<void>(resolve => setImmediate(resolve)); };
   const edit = async (path: string, text: string) => { memory.write(path, text); await settle(); };
-  return { ...memory, state, read: path => memory.texts.get(path) ?? null, edit, settle, issues: (path = P) => state.deckStatus(path).issues };
+  return { ...memory, state, read: path => memory.texts.get(path) ?? null, edit, settle, issues: (path = P) => state.deckStatus(path).issues, modifies };
 }
 const plain = (issues: IdIssue[]) => issues.map(({ path, line, name, kind, restore }) => ({ path, line, name, kind, restore }));
 const share = (state: State) => state.today().share.map(item => item.lt);
@@ -323,6 +329,11 @@ void test('F3 壞掉的行：救回的尾段與認不出的行裡的 lt 也避�
   assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaad\n    - QC :: AC\n');
 });
 
+void test('F3 合法的取消行多帶的 lt 也避開（Codex state-load L2 的 F1）', async t => {
+  const h = await setup(t, { [P]: B, [LOG]: '{"t":"2026-10-24T12:00:00.000+08:00","undo":"not-present","lt":"aaaaaa"}\n' });
+  assert.equal(h.state.fillText(P, B + C), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+});
+
 for (const order of [['P', 'O'], ['O', 'P']]) void test('F5 同一批跨檔搬移不因通知順序誤報：' + order.join('→'), async t => {
   const O = OTHER;
   const h = await setup(t, { [P]: A, [O]: B });
@@ -376,4 +387,94 @@ for (const order of [['P', 'LOG'], ['LOG', 'P']]) void test('R2 同一批讀到�
   await h.settle();
   assert.equal(h.state.history().reviews.length, 1);
   assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+});
+
+// ---- 卡組讀不到就跳過那一篇（tasks/state-load.md §3、§7 的 S7～S8）：占用資訊不完整時，不把「不知道」當成「沒用過」 ----
+
+const samePlan = (state: State) => { assert.deepEqual(state.today(), planToday(state.input())); };
+
+void test('S7 有卡組讀不到時暫停配 ID 與還原；讀到之後照常，而且避開它裡面的 ID', async t => {
+  const lost = A.replace(' ^k3m9x2', '') + B + C;
+  // 別篇讀不到，裡面有 aaaaaa；random 固定時下一個配出的就是 aaaaaa。
+  const h = await setup(t, { [P]: A + B + C, [OTHER]: '- 別的 ^aaaaaa\n    - Q :: A\n' }, {}, [OTHER]);
+  assert.deepEqual(h.state.unread(), [OTHER]);
+  await h.edit(P, lost);
+  assert.deepEqual(plain(h.issues()), [{ path: P, line: 0, name: '能說明 A', kind: 'lost', restore: 'k3m9x2' }]);
+  assert.deepEqual(h.state.deckStatus(P).missing, 1);
+  assert.equal(h.state.fillText(P, lost), lost);
+  assert.equal(await h.state.fillIds(P), false);
+  assert.deepEqual(h.modifies, []);
+  assert.equal(h.read(P), lost);
+  const [issue] = h.issues();
+  assert.equal(h.state.resolveText(issue, 'new', lost), null);
+  assert.equal(h.state.resolveText(issue, 'restore', lost), null);
+  assert.deepEqual(h.issues(), [issue]);
+  assert.deepEqual(h.state.deckStatus(P).missing, 1);
+  samePlan(h.state);
+
+  h.failing.delete(OTHER);
+  h.notify(OTHER);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), []);
+  // lost 不因讀到而消失（不自動配回）；配新 ID 避開別篇的 aaaaaa。
+  assert.deepEqual(h.issues(), [issue]);
+  const filled = h.state.fillText(P, lost);
+  assert.equal(filled, A.replace(' ^k3m9x2', '') + B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+  assert.equal(h.state.resolveText(issue, 'restore', filled), A + B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+  assert.deepEqual(h.issues(), []);
+  samePlan(h.state);
+});
+
+void test('S7 自己作答的紀錄讀不到時也暫停：fillIds 不讀不寫；讀到之後照常補', async t => {
+  const OWN = 'Essence Cards/紀錄/2026-10 PC-test.jsonl';
+  const h = await setup(t, { [P]: B + C, [OWN]: review('2026-10-20T19:00:00.000+08:00', 'aaaaaa') + '\n' }, {}, [OWN]);
+  assert.deepEqual(h.state.unread(), [OWN]);
+  assert.equal(await h.state.fillIds(P), false);
+  assert.deepEqual(h.modifies, []);
+  h.failing.delete(OWN);
+  t.mock.timers.tick(1000);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(h.state.unread(), []);
+  assert.equal(await h.state.fillIds(P), true);
+  assert.equal(h.read(P), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
+});
+
+void test('S8 紀錄讀不到時換成那份紀錄裡的 ID：暫定的 changed，紀錄讀到後撤銷、目標回到今天的份', async t => {
+  const log = encodeEntry('2026-10-23T19:00:00.000+08:00', { lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n';
+  const swapped = A.replace('^k3m9x2', '^aaaaaa') + B;
+  const h = await setup(t, { [P]: A + B, [LOG]: log }, {}, [LOG]);
+  let changes = 0;
+  h.state.onChange(() => { changes++; });
+  await h.edit(P, swapped);
+  assert.deepEqual(plain(h.issues()), [{ path: P, line: 0, name: '能說明 A', kind: 'changed', restore: 'k3m9x2' }]);
+  assert.ok(!share(h.state).includes('aaaaaa'));
+  const before = changes;
+  h.failing.delete(LOG);
+  h.notify(LOG);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(h.issues(), []);
+  assert.equal(changes, before + 1);
+  assert.ok(share(h.state).includes('aaaaaa'), share(h.state).join());
+  samePlan(h.state);
+});
+
+void test('S8 對照：紀錄一開始就讀得到時不產生問題；讀不到時換成紀錄裡沒有的 ID，讀到後問題仍在', async t => {
+  const log = review('2026-10-23T19:00:00.000+08:00', 'aaaaaa') + '\n';
+  const readable = await setup(t, { [P]: A + B, [LOG]: log });
+  await readable.edit(P, A.replace('^k3m9x2', '^aaaaaa') + B);
+  assert.deepEqual(readable.issues(), []);
+  samePlan(readable.state);
+
+  const h = await setup(t, { [P]: A + B, [LOG]: log }, {}, [LOG]);
+  await h.edit(P, A.replace('^k3m9x2', '^bbbbbb') + B);
+  const [issue] = h.issues();
+  assert.deepEqual(plain([issue]), [{ path: P, line: 0, name: '能說明 A', kind: 'changed', restore: 'k3m9x2' }]);
+  h.failing.delete(LOG);
+  h.notify(LOG);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(h.issues(), [issue]);
+  assert.ok(!share(h.state).includes('bbbbbb'));
+  samePlan(h.state);
 });

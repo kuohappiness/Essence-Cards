@@ -1,5 +1,7 @@
 # W6 開工前的格式查核
 
+狀態：已處理（`7f6e7df`）
+
 2026-10-26｜Codex｜查核請求：[tasks/w6-format-review.md](../tasks/w6-format-review.md)
 
 2026-10-26 Claude 已核對，F1～F6 全部採用，改法見 [tasks/w6-format-review-fixes.md](../tasks/w6-format-review-fixes.md)；F3 採 `not-needed`。

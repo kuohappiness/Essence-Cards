@@ -106,4 +106,4 @@ Cards 的 AI 補強方向依 C-023 已確認，具體任務介面與轉接細節
 - [Obsidian Git](https://github.com/Vinzent03/obsidian-git)：版本歷史、commit／push／pull 與預設 commit-and-sync 行為。
 - [Git Getting Started](https://publish.obsidian.md/git-doc/Getting%20Started)：iCloud 與 `.git` 外部位置、手機 Git 不穩定。
 - [Git Tips and Tricks](https://publish.obsidian.md/git-doc/Tips-and-Tricks)：單裝置停用、忽略規則、其他同步服務的拉取策略。
-- [共識](consensus.md)、[目前任務](tasks.md)、[本次討論摘要](discussions/2026-10-06-technical-roadmap.md)。
+- [共識](consensus.md)、[目前任務](tasks.md)、[本次討論摘要](../discussions/2026-10-06-technical-roadmap.md)。

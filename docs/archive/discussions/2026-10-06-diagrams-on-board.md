@@ -8,4 +8,4 @@
 
 手機純靜態閱讀版繼續直接呈現完整圖，不依賴腳本。本次調整的是討論平台的呈現方式，技術選型、Git 策略及學習工具範圍未因此改變。
 
-相關：C-015、[畫板藍圖索引](../blueprints.md)、[最新共識](../consensus.md)。
+相關：C-015、[畫板藍圖索引](../v0-planning/blueprints.md)、[最新共識](../v0-planning/consensus.md)。

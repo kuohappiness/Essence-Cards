@@ -16,4 +16,4 @@
 
 使用者已明確提出協作偏好及品質期待，記為 C-021、P-001、Q-001、Q-002，寫入 AGENTS.md。具體精簡方法、效能門檻、裝置與資料規模仍待釐清，助理建議沒有升格為已採用方案。T-012 隨模組交付細化，未宣稱正式產品效能已驗證。
 
-文件：[開發原則與品質目標](../development-principles.md)、[共識](../consensus.md)、[任務](../tasks.md)。
+文件：[開發原則與品質目標](../v0-planning/development-principles.md)、[共識](../v0-planning/consensus.md)、[任務](../v0-planning/tasks.md)。

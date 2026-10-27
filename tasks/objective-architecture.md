@@ -1,5 +1,7 @@
 # 學習目標架構實驗（給 Codex）
 
+狀態：已完成（第一輪；結果見[討論稿〈第一輪結果〉](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md#第一輪結果claude-報告2026-10-22>)）
+
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（要查核兩家 API 的參數、接一條三步的流水線，最後還要獨立標註考題，需要判斷）。
 
 這個實驗回答：要讓 AI 做出最好的學習目標架構，該用哪種模型與流程。用真實段考題當尺，比較現行做法（Terra＋詳細規則）、兩個強模型（xhigh）配短規則、一條流水線（架構 → 出題 → 另一家審查）、Terra 配短規則。設計是 Claude 與 Codex 談定、使用者 2026-10-21 確認的〈結論〉，見[討論稿](<../Claude Codex Discussion/2026-10-21-learning-objective-architecture.md>)。這是實驗，不改產品，不擋 v1。

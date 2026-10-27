@@ -6,7 +6,7 @@
 更新日期：2026-10-07（Asia/Taipei）  
 目前階段：本 repo 聚焦輸出、檢核與選用 AI 學習輔助；輸入另開 repo，之後開發，初期保留可選交接
 
-這份文件保存目前有效的共識。討論經過見[討論紀錄](discussions/README.md)，執行進度見[目前任務](tasks.md)。
+這份文件保存目前有效的共識。討論經過見[討論紀錄](../discussions/README.md)，執行進度見[目前任務](tasks.md)。
 
 ## C-001 專案目標｜已確認
 
@@ -67,7 +67,7 @@
 
 ## C-007 固定步驟討論架構｜已取代
 
-目前的呈現方式由 C-009 取代。早期分類與當時理由保留於[原討論摘要](discussions/2026-10-06-learning-workflow.md)；不再列為畫板上的有效共識。
+目前的呈現方式由 C-009 取代。早期分類與當時理由保留於[原討論摘要](../discussions/2026-10-06-learning-workflow.md)；不再列為畫板上的有效共識。
 
 ## C-008 共用知識基礎與學習回饋循環｜已確認
 
@@ -84,7 +84,7 @@
 
 確認範圍：以上為架構方向；[重繪藍圖](diagrams/README.md)中的欄位、算法及自動化細節仍待討論。後續多情境介面方向見 C-011；各情境的具體入口與第一版範圍仍待確認；三模組與獨立使用方向見 C-020；平台方向見 C-014。
 
-討論摘要見[手繪架構整合與重繪](discussions/2026-10-06-architecture-redraw.md)。
+討論摘要見[手繪架構整合與重繪](../discussions/2026-10-06-architecture-redraw.md)。
 
 ## C-009 以整體學習循環呈現架構｜已確認
 
@@ -101,7 +101,7 @@
 
 理由：使用者認為早期步驟已整合到整個大流程中，實際活動也不限於原分類，提出取消固定流程數的說法，接著明確要求將「輸入、整理、學習、回饋」加入藍圖作為學習循環。
 
-[目前架構藍圖](diagrams/README.md)取消步驟編號；[本次討論摘要](discussions/2026-10-06-integrated-learning-cycle.md)保存調整脈絡。
+[目前架構藍圖](diagrams/README.md)取消步驟編號；[本次討論摘要](../discussions/2026-10-06-integrated-learning-cycle.md)保存調整脈絡。
 
 ## C-010 架構藍圖的繪製原則｜已確認
 
@@ -112,7 +112,7 @@
 
 理由：使用者指出原圖中部分線條有不必要的轉彎，並明確表示美觀及呈現軟體架構比固定尺寸比例更重要。
 
-[本次重排摘要](discussions/2026-10-06-diagram-layout.md)記錄版面與連線調整；功能方向及第一版範圍未因繪圖改變。
+[本次重排摘要](../discussions/2026-10-06-diagram-layout.md)記錄版面與連線調整；功能方向及第一版範圍未因繪圖改變。
 
 ## C-011 多情境介面共用概念筆記｜已確認
 
@@ -129,7 +129,7 @@
 
 確認範圍：本次確立產品形式與資料共用原則。前端與資料層的分工不預先指定雲端服務；儲存技術、資料欄位、同步方式、具體版面、各情境的具體入口與第一版功能範圍仍待細化；三模組方向見 C-020。現有 `index.html` 持續作為設計討論平台。
 
-[本次討論摘要](discussions/2026-10-06-shared-knowledge-workspace.md)記錄使用者確認與助理對回寫邊界的說明。
+[本次討論摘要](../discussions/2026-10-06-shared-knowledge-workspace.md)記錄使用者確認與助理對回寫邊界的說明。
 
 ## C-012 資料保存與同步的候選範圍｜已確認
 
@@ -142,13 +142,13 @@
 
 理由：使用者指出並非人人都有 NAS，明確要求主要考慮雲端與本機，同時保留 NAS 使用彈性。
 
-[本次討論摘要](discussions/2026-10-06-storage-options.md)記錄候選範圍與尚待細化的同步問題。
+[本次討論摘要](../discussions/2026-10-06-storage-options.md)記錄候選範圍與尚待細化的同步問題。
 
 ## C-013 專案協作的模型與任務分工｜已確認
 
 摘要：架構與重要判斷由使用者選擇的 Astra 極高處理；工作量足夠且範圍明確的執行任務可委派 6.1 Sol；短小的同步操作直接使用工具或腳本。
 
-- 使用者已授權依此規則委派，不必每次重新指定；具體協作規則保存於 [AGENTS.md](../AGENTS.md#模型與任務分工)。
+- 使用者已授權依此規則委派，不必每次重新指定；具體協作規則保存於 [AGENTS.md](../../../AGENTS.md#ai-協作分工)。
 - 使用者選擇 Astra 極高時，由主代理處理需求釐清、架構設計、複雜推理與重要取捨。
 - 按已確認結論進行大量文件整理、明確的程式修改及其他可獨立驗收的執行任務，可委派 `gpt-6.1-sol`，依難度指定低至中等推理強度。
 - GitHub 提交、推送與重新產生 HTML 等短小操作，直接執行工具或既有腳本；不因工作簡單就另開子代理。
@@ -157,7 +157,7 @@
 
 理由：使用者希望合理分配模型工作，並明確同意助理提出的分工。委派有額外交接與回報用量，不保證總 token、費用或訂閱額度一定下降。
 
-[本次討論摘要](discussions/2026-10-06-model-task-allocation.md)保存分工與設定方式的取捨。
+[本次討論摘要](../discussions/2026-10-06-model-task-allocation.md)保存分工與設定方式的取捨。
 
 ## C-014 第一版平台與跨裝置分工｜已確認
 
@@ -184,7 +184,7 @@
 
 理由：使用者明確要求如同知識學習藍圖，將技術架構與開發路線圖畫出並放入畫板與 GitHub，且保留未來 Git 設計重點。
 
-確認範圍：確認保存要求，不表示全部細節已定案或 Git／同步驗證已完成。見[技術架構與開發路線圖](technical-roadmap.md)及[討論摘要](discussions/2026-10-06-technical-roadmap.md)。
+確認範圍：確認保存要求，不表示全部細節已定案或 Git／同步驗證已完成。見[技術架構與開發路線圖](technical-roadmap.md)及[討論摘要](../discussions/2026-10-06-technical-roadmap.md)。
 
 ## C-016 以功能逐項細化藍圖｜已確認
 
@@ -200,7 +200,7 @@
 
 確認範圍：確認討論方式與起點；後續研究整合與 F-019 方向依 C-017 確認，其餘功能拆分、第一版候選優先級、來源格式與操作細節仍待逐項確認。
 
-[本輪討論摘要](discussions/2026-10-07-function-discussion-start.md)保存確認範圍與第一輪待回答問題。
+[本輪討論摘要](../discussions/2026-10-07-function-discussion-start.md)保存確認範圍與第一輪待回答問題。
 
 ## C-017 功能目錄的研究整合與跨功能細化｜已確認
 
@@ -218,7 +218,7 @@
 
 確認範圍：確認上述功能方向與討論安排；來源格式、欄位、狀態名稱、操作細節、算法、驗收門檻及第一版正式範圍仍未定案。沒有將研究的所有 A／U 候選全數採用，也沒有完成產品實作或真實裝置驗證。P0 與 Git 設計繼續保留。
 
-[功能目錄](function-discussions.md)、[研究統整](references/design-opportunities.md)與[本次討論摘要](discussions/2026-10-07-function-catalog-refinement.md)保存詳細內容。
+[功能目錄](function-discussions.md)、[研究統整](../../research/design-opportunities.md)與[本次討論摘要](../discussions/2026-10-07-function-catalog-refinement.md)保存詳細內容。
 
 ## C-018 自訂教材介面與可丟棄的最小驗證｜已確認
 
@@ -231,7 +231,7 @@
 
 理由：使用者明確提出必要介面能力，要求在繼續討論前先做盡量節省 token 的最小雙端測試，並允許完全重構。
 
-[驗證範圍與狀態](obsidian-ui-probe.md)、[操作步驟](../experiments/obsidian-ui-probe/README.md)；任務 T-011，保留 T-008。
+[驗證範圍與狀態](obsidian-ui-probe.md)、操作步驟（原檔已不存在，`a5b7c5f` 刪除）；任務 T-011，保留 T-008。
 
 ## C-019 架構圖互相參照與持續維護｜已確認
 
@@ -246,7 +246,7 @@
 
 確認範圍：確認圖表呈現與維護要求；分區、箭頭及同步檢查的具體作法是本輪實作，不將功能草案升格為正式範圍。T-011 最小雙端原型已依使用者回報通過；完整 P0 仍待驗證。
 
-[共用入口與維護方式](diagrams/README.md)、[功能 Mermaid 圖](diagrams/functions.md)、[討論摘要](discussions/2026-10-07-function-architecture.md)。
+[共用入口與維護方式](diagrams/README.md)、[功能 Mermaid 圖](diagrams/functions.md)、[討論摘要](../discussions/2026-10-07-function-architecture.md)。
 
 ## C-020 三個主要模組與獨立使用｜已確認
 
@@ -263,7 +263,7 @@
 
 確認範圍：確認模組方向與獨立使用要求；F-ID 的模組歸納、跨模組服務、檢核對象、YouTube 取得／整理方式及資料格式仍是助理提案或待議事項。沒有宣稱正式模組已完成，也沒有取消完整 P0。
 
-[三模組架構與交付](module-architecture.md)、[功能圖與候選映射](diagrams/functions.md)、[討論摘要](discussions/2026-10-07-three-modules.md)。
+[三模組架構與交付](module-architecture.md)、[功能圖與候選映射](diagrams/functions.md)、[討論摘要](../discussions/2026-10-07-three-modules.md)。
 
 ## C-021 開發協作與跨模組品質目標｜已確認
 
@@ -277,7 +277,7 @@
 
 理由：使用者明確要求助理可主動提出不同建議，並要求記下程式碼簡潔及跨裝置流暢的期待。
 
-確認範圍：確認協作方式、品質目標與保存需求，不表示具體精簡方法已採用或正式功能效能已通過。下一步由 T-012 與各模組交付一起細化。[討論摘要](discussions/2026-10-07-development-principles.md)保存本輪脈絡。
+確認範圍：確認協作方式、品質目標與保存需求，不表示具體精簡方法已採用或正式功能效能已通過。下一步由 T-012 與各模組交付一起細化。[討論摘要](../discussions/2026-10-07-development-principles.md)保存本輪脈絡。
 
 ## C-022 輸入另開 repo 與兩階段交付｜已確認
 
@@ -294,7 +294,7 @@
 
 確認範圍：repo、外掛與開發順序的邊界，以及可選交接與資料保護原則已確認；精確 schema、API、路徑、來源取得方式及 MVP 功能未定。C-011 的共用知識方向與完整 P0 保持有效，不表示正式模組或整合已完成。
 
-[三模組與兩階段交付](module-architecture.md)、[整合約定](integration-contract.md)、[最新討論摘要](discussions/2026-10-07-cards-capture-scope.md)；[前次兩階段討論](discussions/2026-10-07-two-stage-delivery.md)保留當時脈絡。
+[三模組與兩階段交付](module-architecture.md)、[整合約定](integration-contract.md)、[最新討論摘要](../discussions/2026-10-07-cards-capture-scope.md)；[前次兩階段討論](../discussions/2026-10-07-two-stage-delivery.md)保留當時脈絡。
 
 ## C-023 本 repo 範圍與選用 AI 學習輔助｜已確認
 
@@ -310,7 +310,7 @@
 
 確認範圍：確認非 AI 基礎、選用 AI、插拔與打包原則；筆記語法、卡型、演算法、具體 AI 任務、程式庫切分與設定 UX 尚待細化，未將既有 AI 層提案全部升格為實作規格。
 
-[模組與 repo 分工](module-architecture.md)、[討論摘要](discussions/2026-10-07-cards-capture-scope.md)。
+[模組與 repo 分工](module-architecture.md)、[討論摘要](../discussions/2026-10-07-cards-capture-scope.md)。
 
 ## 待決與待驗證事項
 
@@ -377,4 +377,4 @@
 | 2026-10-06 | 0.16 | 保存 Obsidian／既有 iCloud 的第一版方向，新增技術架構與開發路線圖及 Git 備份設計，區分提案與待驗證能力 |
 | 2026-10-06 | 0.17 | 依使用者要求將 diagrams 的三張藍圖直接顯示於看板與自由畫板，點圖可進入完整設計 |
 
-完整討論脈絡見 [討論紀錄索引](discussions/README.md)。過往文件版本保留於 Git 歷史。
+完整討論脈絡見 [討論紀錄索引](../discussions/README.md)。過往文件版本保留於 Git 歷史。

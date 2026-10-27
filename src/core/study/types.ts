@@ -55,6 +55,12 @@ export interface History {
    * appendLine 靠它讓取消之後才加進來的同一筆作答仍然取消，和重新 mergeHistory 相同（Codex 審查 W5 的 F2）。
    */
   cancelled: string[];
+  /**
+   * 原始紀錄每一行出現過的 lt（作答、變更都算，被取消的也算，取消行多帶的也算），照字串排序、不重複。配新 ID 時避開（D-134）。
+   * 壞掉的行（能救回的也一樣）整行寬鬆地找：救回的尾段、每一段 `{"t":` 開頭的尾段、`"lt": "…"` 的字串都算，
+   * 多避開幾個不會錯配（Codex 審查 W5 第二部分的 F3、R1）。
+   */
+  seen: string[];
 }
 
 export interface LogWriter {

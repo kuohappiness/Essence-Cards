@@ -127,7 +127,7 @@ void test('前一輪 drain 完成與背景 Promise 收尾之間 write，仍會�
 void test('寫檔後 readHistory 讀回；不存在回空，子資料夾與非 jsonl 都不讀', async () => {
   const memory = createMemoryFiles();
   const { files } = memory;
-  assert.deepEqual(await readHistory(files), { reviews: [], changes: [], problems: [], cancelled: [] });
+  assert.deepEqual(await readHistory(files), { reviews: [], changes: [], problems: [], cancelled: [], seen: [] });
   const writer = createLogWriter(files, { device: 'Phone-abcd', now: () => at, offset: () => 480 });
   const t1 = writer.write(answer);
   const t2 = writer.write(answer);

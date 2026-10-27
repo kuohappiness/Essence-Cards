@@ -26,4 +26,4 @@
 
 尚待處理：第一版支援來源／題型、事件格式與數量、附件策略、schema 遷移、首批模型、Git 設定與回復演練，以及 Windows／iPhone 實測結果。參考平台比較繼續收錄於研究專區，不因第一版選型而禁止未來重新評估。
 
-相關：I-012、I-013、I-014；T-005、T-006、T-008、T-009；[技術文件](../technical-roadmap.md)與[藍圖](../diagrams/README.md)。
+相關：I-012、I-013、I-014；T-005、T-006、T-008、T-009；[技術文件](../v0-planning/technical-roadmap.md)與[藍圖](../v0-planning/diagrams/README.md)。

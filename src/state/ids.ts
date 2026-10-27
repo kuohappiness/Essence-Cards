@@ -21,17 +21,22 @@ interface Pending {
   id: string | null;
   candidates: string[];
   fingerprints: string[];
+  /** 有卡組或紀錄讀不到時找到的：占用資訊不完整，等都讀到了再由 confirm() 核對（state-load §3-2）。 */
+  provisional: boolean;
 }
 
 export interface IdTrackerOptions {
   random?: () => number;
   /** 原始紀錄每一行出現過的 lt（包括被取消的作答）。 */
   logIds: () => ReadonlySet<string>;
+  /** 有卡組或紀錄讀不到（占用資訊不完整）：這時找到的問題是暫定的。 */
+  partial: () => boolean;
 }
 
 /**
  * 學習目標 ID 的保護（W5 §8-5、D-134）：記住這次載入裡每篇卡組的上一版，重讀時找出弄丟或改掉的 ID，
- * 讓那些目標待處理（不出題、不補、不移動），直到家長選了、那個目標被刪掉，或這次載入結束。不依內容猜身分：
+ * 讓那些目標待處理（不出題、不補、不移動），直到家長選了、那個目標被刪掉，或這次載入結束；有東西讀不到時找到的
+ * changed，讀到之後換成的 ID 出現在紀錄裡就撤銷（confirm）。不依內容猜身分：
  * 只有「這一版和上一版的 ID」當證據；名稱與指紋只用來在改動之間認出同一個待處理的目標，或判斷沒有 ID 的目標是不是上一版就在。
  */
 export function createIdTracker(options: IdTrackerOptions) {
@@ -63,7 +68,7 @@ export function createIdTracker(options: IdTrackerOptions) {
   const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every(id => b.includes(id));
   function make(path: string, target: Target, kind: IdIssueKind, restore: string | null): Pending {
     return { issue: { path, line: target.line, name: target.name, kind, restore: target.implicit ? null : restore },
-      id: target.id, candidates: target.idCandidates ?? [], fingerprints: target.prompts.map(p => p.fingerprint) };
+      id: target.id, candidates: target.idCandidates ?? [], fingerprints: target.prompts.map(p => p.fingerprint), provisional: options.partial() };
   }
   /** 這一版裡哪個目標是同一個待處理的目標：同樣的未知 ID、同樣的候選、同樣的名稱，或至少一題相同；平手取行號最近的。 */
   function match(item: Pending, targets: readonly Target[], used: ReadonlySet<Target>): Target | null {
@@ -107,7 +112,7 @@ export function createIdTracker(options: IdTrackerOptions) {
         && fingerprints.length === item.fingerprints.length && [...fingerprints].sort().join() === [...item.fingerprints].sort().join();
       const issue = same ? Object.assign(item.issue, { line: target.line }) : { ...item.issue, line: target.line, name: target.name };
       if (!same) revision++;
-      kept.push({ issue, id: target.id, candidates, fingerprints });
+      kept.push({ issue, id: target.id, candidates, fingerprints, provisional: item.provisional });
     }
     const fresh: Pending[] = [];
     for (const target of deck.targets) {
@@ -185,6 +190,20 @@ export function createIdTracker(options: IdTrackerOptions) {
       const text = texts.get(path);
       const missing = text === undefined ? 0 : assignIds(text, { taken: new Set(), skip: lines(path) }).assigned.length;
       return { missing, issues: (pending.get(path) ?? []).map(item => item.issue) };
+    },
+    /**
+     * 讀不到的卡組與紀錄都讀到了（state-load §3-2）：暫定的 changed 換成的 ID 現在出現在紀錄裡（那份紀錄讀不到時才被當成
+     * 沒見過），撤銷那個問題；其他的（lost、ambiguous、ID 仍沒見過的 changed）確定下來。不自動配回。
+     */
+    confirm(): void {
+      const logs = options.logIds();
+      for (const [path, items] of pending) {
+        const kept = items.filter(item => !(item.provisional && item.issue.kind === 'changed' && item.id !== null && logs.has(item.id)));
+        for (const item of kept) item.provisional = false;
+        if (kept.length === items.length) continue;
+        revision++;
+        if (kept.length) pending.set(path, kept); else pending.delete(path);
+      }
     },
     removed(ids: readonly string[]): void { for (const id of ids) removed.add(id); },
     restored(ids: readonly string[]): void { for (const id of ids) removed.delete(id); },

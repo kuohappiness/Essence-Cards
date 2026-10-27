@@ -14,4 +14,4 @@
 
 下一步（助理提案）：用同份繁體中文生物教材優先比較 RemNote、Anki、Mochi、Readwise Reader、NotebookLM、Recall；Memory Toast 另測手機拍照與複習。待實測、優先順序及是否採用仍開放討論。
 
-受影響文件：[研究清單](../references/software.md)、I-001、[任務完成紀錄](../tasks.md)。C-006、C-008、C-011、C-014 是研究比較依據；本輪沒有改變產品架構或新增功能共識。index.html 與 mobile.html 由同份 Markdown 重新生成。
+受影響文件：[研究清單](../../research/software.md)、I-001、[任務完成紀錄](../v0-planning/tasks.md)。C-006、C-008、C-011、C-014 是研究比較依據；本輪沒有改變產品架構或新增功能共識。index.html 與 mobile.html 由同份 Markdown 重新生成。

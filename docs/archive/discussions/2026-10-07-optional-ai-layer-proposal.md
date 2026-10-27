@@ -2,7 +2,7 @@
 
 - 日期：2026-10-07
 - 狀態：探索／助理提案，尚待使用者確認；未新增正式共識。
-- 相關文件：[模組架構](../module-architecture.md)、[功能討論目錄](../function-discussions.md)、[最新共識](../consensus.md)、[開發原則](../development-principles.md)。
+- 相關文件：[模組架構](../v0-planning/module-architecture.md)、[功能討論目錄](../v0-planning/function-discussions.md)、[最新共識](../v0-planning/consensus.md)、[開發原則](../v0-planning/development-principles.md)。
 - 相關項目：C-017、C-020、C-021、C-022；F-017；T-005、T-006、T-010、T-012。
 
 ## 使用者想法與限制

@@ -1,5 +1,7 @@
 # W6 交接單（Opus 5.5 → Fable 5.1，2026-10-27 凌晨）
 
+狀態：已完成：狀態層的排程已定（`main` 的 `tasks/state-load.md`），`claude/state-load` 已合併進 `main` 再合併進 `claude/w6`；W6 合併後刪掉
+
 遵守 repo 根目錄的 `AGENTS.md`。這份交接單請 Fable 決定兩件狀態層工作的排程（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：任務說明沒寫到、做了又很難收回的，Opus 停下來交給 Fable）。這兩件不擋 W6 的 L2，但擋 W6 的 iPhone 測試。建議推理等級：**high**。
 
 W6 全部做完、合併之後刪掉這份檔。

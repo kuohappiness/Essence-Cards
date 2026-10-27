@@ -20,6 +20,6 @@
 
 ## 相關紀錄
 
-- 共識：[C-004、C-006](../consensus.md)。
-- 研究點子：[I-001](../ideas.md)。
-- 任務：[目前任務與完成紀錄](../tasks.md)。
+- 共識：[C-004、C-006](../v0-planning/consensus.md)。
+- 研究點子：[I-001](../v0-planning/ideas.md)。
+- 任務：[目前任務與完成紀錄](../v0-planning/tasks.md)。

@@ -28,6 +28,6 @@
 
 受影響項目：C-007、C-008、T-005、T-006；I-002～I-009 的部分方向已確認，具體提案仍保留待釐清狀態。
 
-- [架構藍圖](../diagrams/README.md)
-- [最新共識](../consensus.md)
-- [目前任務](../tasks.md)
+- [架構藍圖](../v0-planning/diagrams/README.md)
+- [最新共識](../v0-planning/consensus.md)
+- [目前任務](../v0-planning/tasks.md)

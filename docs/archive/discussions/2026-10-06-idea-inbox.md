@@ -24,10 +24,10 @@
 
 ## 相關紀錄
 
-- 共識：[C-004、C-006](../consensus.md)。
-- 點子：[I-001](../ideas.md)。
-- 任務：[T-001、T-004](../tasks.md)。
-- 研究：[RemNote、Memory Toast](../references/software.md)。
+- 共識：[C-004、C-006](../v0-planning/consensus.md)。
+- 點子：[I-001](../v0-planning/ideas.md)。
+- 任務：[T-001、T-004](../v0-planning/tasks.md)。
+- 研究：[RemNote、Memory Toast](../../research/software.md)。
 
 ## 後續釐清（2026-10-06）
 

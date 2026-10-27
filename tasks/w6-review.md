@@ -1,5 +1,7 @@
 # W6 複習畫面：L2 獨立審查（給 Codex）
 
+狀態：審查中：L2 的 F1～F7 已修，五題的回覆（F4、S1、S2、第 10、22 點）除了 S1 都已實作；再審請求在最後一節，等 Codex
+
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（打字卡的三步流程、回看改評分、手勢與換卡互相牽動；解析器與紀錄欄位改了資料格式）。
 
 依 [D-131](../docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)、[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)，[W6 任務說明](w6.md)由 Claude 實作（Fable 5.1 做到畫面，Opus 5.5 接手 Windows 實測與修正）。這一批改了卡組解析（` | `）與複習紀錄的欄位（`retry`），屬於高風險範圍（[docs/agents/quality.md](../docs/agents/quality.md)），合併前請你做獨立審查。**只審查、只回報**，不改產品程式、不 commit；可以在隔離的暫存資料夾重現。要改的由 Claude 改。

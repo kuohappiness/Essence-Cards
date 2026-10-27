@@ -1,5 +1,7 @@
 # W5 第二部分：L2 獨立審查（給 Codex）
 
+狀態：已結案：三輪審查通過，W5 第二部分已合併（`4a7d522`）
+
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（編輯器鎖定的交易處理、弄丟偵測的證據規則要自己找反例；需要時可切到 xhigh）。
 
 依 [D-131](../docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)，[W5 任務說明 §8](w5.md#8-第二部分補-id-與-id-的保護)（補 ID 與 ID 的保護，[D-134](../docs/decisions.md#d-134-學習目標-id-的補上時機與保護)、[D-135](../docs/decisions.md#d-135-清單解析和-obsidian-對照後的處理) 的縮排改正）由 Claude 實作。這一批改卡組模組、寫回家長的筆記、在編輯器裡攔截修改，屬於高風險範圍（[docs/agents/quality.md](../docs/agents/quality.md)），合併前請你做獨立審查。**只審查、只回報**，不改產品程式、不 commit；可以在隔離的暫存資料夾重現。要改的由 Claude 改。

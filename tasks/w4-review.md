@@ -1,5 +1,7 @@
 # W4 今天的佇列：L2 獨立審查（給 Codex）
 
+狀態：已合併（`bc01b87`）
+
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（出卡順序、配對、再出時間與進度互相牽動，邊界例子要自己找新的組合）。
 
 依 [D-131](../docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)，[W4 任務說明](w4.md)改由 Claude 實作。排程與紀錄格式屬於高風險範圍（[docs/agents/quality.md](../docs/agents/quality.md)），合併前請你做獨立審查。**只審查、只回報**，不改產品程式、不 commit；可以在隔離的暫存資料夾重現。要改的由 Claude 改。

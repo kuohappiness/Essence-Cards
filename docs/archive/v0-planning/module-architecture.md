@@ -81,4 +81,4 @@ Essence Cards 保有學習端小核心，來源工具有自己的整理與保存
 
 以上是正式功能的設計要求；雙端最小 UI／讀寫原型已依使用者回報通過，完整 P0 與正式功能尚未完成。
 
-依據：[C-020／C-022／C-023](consensus.md)、[功能目錄](function-discussions.md)、[任務](tasks.md)、[整合約定](integration-contract.md)、[技術路線圖](technical-roadmap.md)、[最新範圍討論](discussions/2026-10-07-cards-capture-scope.md)。
+依據：[C-020／C-022／C-023](consensus.md)、[功能目錄](function-discussions.md)、[任務](tasks.md)、[整合約定](integration-contract.md)、[技術路線圖](technical-roadmap.md)、[最新範圍討論](../discussions/2026-10-07-cards-capture-scope.md)。

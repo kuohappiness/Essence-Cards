@@ -27,6 +27,6 @@
 
 受影響項目：C-007、C-008、C-009、T-005、T-006；I-002～I-010。
 
-- [目前有效共識](../consensus.md)
-- [學習循環與功能藍圖](../learning-blueprint.md)
-- [架構藍圖](../diagrams/README.md)
+- [目前有效共識](../v0-planning/consensus.md)
+- [學習循環與功能藍圖](../v0-planning/learning-blueprint.md)
+- [架構藍圖](../v0-planning/diagrams/README.md)

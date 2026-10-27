@@ -22,8 +22,43 @@ export function isLogPath(path: string): boolean {
   return name.endsWith('.jsonl') && !name.includes('/');
 }
 
+const ltOf = (value: unknown): string | null =>
+  value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string' ? (value as { lt: string }).lt : null;
+/**
+ * 壞掉的行裡寬鬆找到的 lt（History.seen）：整行照 JSON 讀（空白、跳脫的鍵名都算）、每一段 `{"t":` 開頭的尾段
+ * 照 JSON 讀（救回的就是最後一段）、再用 `"lt": "…"` 找字串。
+ */
+function looseLts(line: string): string[] {
+  const ids: string[] = [];
+  const add = (id: string | null): void => { if (id !== null) ids.push(id); };
+  try { add(ltOf(JSON.parse(line))); } catch { /* 寫入中斷的行：下面一段一段找 */ }
+  for (let at = line.indexOf('{"t":', 1); at > 0; at = line.indexOf('{"t":', at + 1)) {
+    try { add(ltOf(JSON.parse(line.slice(at)))); } catch { /* 這一段也壞了 */ }
+  }
+  for (const match of line.matchAll(/"lt"\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
+    try { add(JSON.parse('"' + match[1] + '"') as string); } catch { /* 字串本身壞了 */ }
+  }
+  return ids;
+}
+/** 合法的取消行多帶的 lt（parseLine 不讀它，取消的意思不變）也算出現過（Codex state-load L2 的 F1）。 */
+function undoLt(line: string): string | null {
+  try { return ltOf(JSON.parse(line)); } catch { return null; }
+}
+/** 照字串排序、不重複地加一個；已經有了就回傳同一個陣列。 */
+function withSeen(seen: string[], id: string | null): string[] {
+  if (id === null) return seen;
+  let low = 0, high = seen.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (seen[middle] < id) low = middle + 1;
+    else high = middle;
+  }
+  return seen[low] === id ? seen : [...seen.slice(0, low), id, ...seen.slice(low)];
+}
+
 export function mergeHistory(sources: readonly { path: string; text: string }[]): History {
-  const history: History = { reviews: [], changes: [], problems: [], cancelled: [] };
+  const history: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [] };
+  const seen = new Set<string>();
   const cancelled = new Set<string>();
   const seenReviews = new Map<string, ReviewEntry>();
   const collisions = new Map<string, ReviewEntry[]>();
@@ -46,6 +81,7 @@ export function mergeHistory(sources: readonly { path: string; text: string }[])
         if (!raw) continue;
         let entry = parseLine(raw);
         if (!entry) {
+          for (const id of looseLts(raw)) seen.add(id);
           try { JSON.parse(raw); } catch {
             const start = raw.lastIndexOf('{"t":');
             if (start > 0) entry = parseLine(raw.slice(start));
@@ -53,6 +89,8 @@ export function mergeHistory(sources: readonly { path: string; text: string }[])
           history.problems.push({ path, line, message: entry ? '寫入中斷；已從行尾救回一筆紀錄' : '無法解析紀錄或缺少有效的必要欄位' });
         }
         if (!entry) continue;
+        const lt = entry.kind === 'undo' ? undoLt(raw) : entry.lt;
+        if (lt !== null) seen.add(lt);
         if (entry.kind === 'undo') { cancelled.add(entry.undo); continue; }
         if (entry.kind === 'change') {
           const key = changeKey(entry);
@@ -74,6 +112,7 @@ export function mergeHistory(sources: readonly { path: string; text: string }[])
   history.reviews = history.reviews.filter(entry => !cancelled.has(entry.t)).sort((a, b) => a.at - b.at);
   history.changes.sort((a, b) => a.at - b.at);
   history.cancelled = [...cancelled].sort();
+  history.seen = [...seen].sort();
   return history;
 }
 
@@ -91,29 +130,32 @@ function firstAfter(list: readonly { at: number }[], time: number): number {
 export function appendLine(history: History, line: string): History {
   const entry = parseLine(line);
   if (!entry) throw Error('不是合法的一行紀錄：' + line);
+  // 被取消或重複而不加進去的作答、取消行多帶的 lt，也算出現過（和 mergeHistory 相同）。
+  const seen = withSeen(history.seen, entry.kind === 'undo' ? undoLt(line) : entry.lt);
+  const base = seen === history.seen ? history : { ...history, seen };
   if (entry.kind === 'undo') {
     // mergeHistory 也取消所有檔案裡 t 相同的作答，包括之後才加進來的（記在 cancelled）。
     const known = history.cancelled.includes(entry.undo);
     const reviews = history.reviews.filter(review => review.t !== entry.undo);
-    if (known && reviews.length === history.reviews.length) return history;
-    return { ...history, reviews, cancelled: known ? history.cancelled : [...history.cancelled, entry.undo].sort() };
+    if (known && reviews.length === history.reviews.length) return base;
+    return { ...base, reviews, cancelled: known ? history.cancelled : [...history.cancelled, entry.undo].sort() };
   }
   if (entry.kind === 'change') {
     const key = changeKey(entry);
-    if (history.changes.some(change => changeKey(change) === key)) return history;
+    if (history.changes.some(change => changeKey(change) === key)) return base;
     const changes = [...history.changes];
     changes.splice(firstAfter(changes, entry.at), 0, entry);
-    return { ...history, changes };
+    return { ...base, changes };
   }
-  if (history.cancelled.includes(entry.t)) return history;
+  if (history.cancelled.includes(entry.t)) return base;
   // t 相同時 at 也相同，只要看 at 相同的那一段。
   const end = firstAfter(history.reviews, entry.at);
   for (let i = end - 1; i >= 0 && history.reviews[i].at === entry.at; i--) {
-    if (history.reviews[i].t === entry.t && sameReview(history.reviews[i], entry)) return history;
+    if (history.reviews[i].t === entry.t && sameReview(history.reviews[i], entry)) return base;
   }
   const reviews = [...history.reviews];
   reviews.splice(end, 0, entry);
-  return { ...history, reviews };
+  return { ...base, reviews };
 }
 
 export async function readHistory(files: Files): Promise<History> {

@@ -12,4 +12,4 @@
 
 結果：保存 C-019 與共用圖表維護規則；功能草案未升格為正式範圍。T-011 的實機結果、完整 P0、欄位、算法及第一版交付仍未定案。
 
-依據：[功能目錄](../function-discussions.md)、[四張藍圖](../blueprints.md)、[圖表維護方式](../diagrams/README.md#圖表維護與同步)、[共識](../consensus.md)。
+依據：[功能目錄](../v0-planning/function-discussions.md)、[四張藍圖](../v0-planning/blueprints.md)、[圖表維護方式](../v0-planning/diagrams/README.md#圖表維護與同步)、[共識](../v0-planning/consensus.md)。
