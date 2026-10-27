@@ -8,7 +8,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| W6 複習畫面 | 分支 `claude/w6`：F1～F3、F5～F7 再審通過；五題（含 S1）都已實作，`main` 已合併進來（到 `11a3ef1`，516 個測試） | 把分支上 `tasks/w6-review.md` 最後一節（第二次再審）交給新的 Codex；通過後 iPhone 測試，再合併 | 使用者轉交 | [任務說明](../tasks/w6.md)、[審查報告](<../Claude Codex Discussion/2026-10-27-w6-review.md>) |
+| W6 複習畫面 | 分支 `claude/w6`：五題（含 S1）與合併 `main` 第二次再審通過；R1、R2 已修（`6f96883`，519 個測試） | 把分支上 `tasks/w6-review.md` 最後一節（第三次再審）交給新的 Codex；通過後 iPhone 測試，再合併 | 使用者轉交 | [任務說明](../tasks/w6.md)、[審查報告](<../Claude Codex Discussion/2026-10-27-w6-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 討論中：版本紀錄、考前提醒、更新前備份已有初步結論 | 使用者選第 3 題（內建規則改版）；之後和 Codex 討論，一致再寫成 D-ID | 使用者 | [規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7 已談定（7 見 [D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)）；環節 8 雙方一致 | 使用者決定電腦專用的主機接點（改 D-053）；環節 4、5、6、9、2、3 等 `state-load` 與 W6 合併後再談 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
