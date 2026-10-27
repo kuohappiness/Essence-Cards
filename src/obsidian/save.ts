@@ -21,8 +21,6 @@ export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
 };
 /** 離開筆記之後等多久才補（毫秒）。 */
 const LEAVE_DELAY = 1000;
-/** 多久看一次分頁、把開著的卡組記下來（毫秒）。 */
-const REMEMBER_EVERY = 2000;
 export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號' };
 
 export interface SaveHost {
@@ -98,7 +96,7 @@ export function wireSave(host: SaveHost): Saver {
   const { plugin } = host;
   const { app } = plugin;
   const buttons = new Map<MarkdownView, HTMLElement>();
-  /** 上一次知道開著的檔（離開筆記的備援用）；啟動後第一次事件之前是 null。 */
+  /** 上一次知道開著的檔（離開筆記的備援用）；start() 或第一次 layout-change 之前是 null。 */
   let open: Set<string> | null = null;
 
   function save(view: MarkdownView): void {
@@ -125,7 +123,6 @@ export function wireSave(host: SaveHost): Saver {
       const path = view.file?.path;
       if (!state || !path || !isDeckPath(path)) continue;
       seen.add(view);
-      open?.add(path);
       const look = buttonLook(state.deckStatus(path));
       let button = buttons.get(view);
       if (!button) {
@@ -153,7 +150,14 @@ export function wireSave(host: SaveHost): Saver {
   });
 
   // 離開筆記時的備援：上一次開著、這一次所有 Markdown 分頁都沒有開著的卡組，各補一次（只是切換焦點不算）。
-  // 第一次（啟動）只記下開著哪些，不補。open 在 wireSave 的開頭宣告，refresh 也會把看到的卡組記進去。
+  // 「開著哪些」有三個來源（技術債 A3；Windows 1.14.5 實測見外掛架構討論稿環節 1 的實機記錄與 A3 設計稿的 a3check）：
+  // 1. start()：layout ready 時記下 openPaths()，只記不補。接住 Obsidian 啟動時還原、還沒載入的分頁（openPaths 從 viewState 拿檔名），
+  //    以及重新啟用外掛時已經開著的分頁（Codex 第三次審查的 T1）。
+  // 2. layout-change：比對 openPaths() 和上一次，唯一會補的時機。開著的集合改變時 Obsidian 會送，送出時 getLeavesOfType 已經是新的：
+  //    背景與前景的開、關，同一個分頁換篇、改名、分割、側欄、疊放分頁、setViewState、版面切換、另一個視窗的開與關都測過；
+  //    只切換分頁時不送，集合也不變。
+  // 3. opened（main.ts 的 ViewPlugin，編輯器一建立就呼叫）：只記不補。開完馬上關（或開、換篇、關）時 Obsidian 只在關之後送一次
+  //    layout-change，那時卡組已經不在 openPaths() 裡，只有編輯器建立看得到它（a3check 的 C1、C3）。
   const openPaths = (): Set<string> => new Set(app.workspace.getLeavesOfType('markdown').map(fileOf).filter((path): path is string => !!path));
   function leave(): void {
     const now = openPaths();
@@ -173,18 +177,13 @@ export function wireSave(host: SaveHost): Saver {
     refresh();
   }
   plugin.registerEvent(app.workspace.on('layout-change', leave));
-  plugin.registerEvent(app.workspace.on('file-open', leave));
+  // 換到別的分頁時更新按鈕（只管按鈕，不記開著哪些）。
   plugin.registerEvent(app.workspace.on('active-leaf-change', refresh));
-  // 開到背景分頁時 Obsidian 不發 file-open（2026-10-26 實測），只開不改就關也要補（D-134，Codex 再審的 R3）：
-  // 編輯器一建立（main.ts 的 ViewPlugin 呼叫 opened）、在編輯器裡改過字、每 2 秒看一次分頁，都把開著的卡組記下來。
-  // 只是記下開著，補 ID 仍然只在「上一次開著、這一次沒有」時；還不知道誰開著（open 是 null）時不記。
-  const remember = (path: string | undefined): void => { if (open && path && isDeckPath(path)) open.add(path); };
-  plugin.registerEvent(app.workspace.on('editor-change', (_editor, info) => { remember(info.file?.path); }));
-  plugin.registerInterval(window.setInterval(() => { for (const path of openPaths()) remember(path); }, REMEMBER_EVERY));
-  // layout ready 時（包括 layout 已經 ready、外掛才重新啟用）先記下目前開著哪些，不補；
-  // 不然第一個事件就是關掉原本開著的卡組時，基準是空的，那篇就漏補（Codex 第三次審查的 T1）。
+  // 還不知道誰開著（open 是 null）時不記：之後的 start() 或第一次 layout-change 會從 openPaths() 算。
+  const opened = (path: string | undefined): void => { if (open && path && isDeckPath(path)) open.add(path); };
+  // 包括 layout 已經 ready、外掛才重新啟用；不然第一個事件就是關掉原本開著的卡組時，基準是空的，那篇就漏補。
   const start = (): void => { open ??= openPaths(); };
-  return { refresh, save, opened: remember, start };
+  return { refresh, save, opened, start };
 }
 
 /** 分頁開著的檔案；還沒載入的分頁從 viewState 拿。 */

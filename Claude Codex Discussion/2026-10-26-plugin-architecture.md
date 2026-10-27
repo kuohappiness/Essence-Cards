@@ -526,13 +526,14 @@ T1 的退步成立：`A/x.md → B/x.md` 同批搬資料夾又改目標名稱時
 三件事：
 
 1. **集合每次改變都有 `layout-change`。** 而且送出的當下，`getLeavesOfType('markdown')` 加上 viewState 已經是新的集合，17 步沒有例外。切換分頁不改變集合，也不送 `layout-change`。
+   - 2026-10-28 補：這 17 步每步之間隔 1.5 秒。開完馬上關（或開、換篇、關）時，Obsidian 只在關之後送一次 `layout-change`，那一刻看不到中間開過的卡組（A3 設計稿的 `a3check` C1、C3）。
 2. **真正的背景開檔與關檔只送 `layout-change`。** W5 第二部分記的「背景開檔不發 `file-open`」成立。但 R3 用替身重現時假設背景開檔「沒有任何事件」，這一點實機不成立。現在的 `leave()` 在 `layout-change` 時就會用 `openPaths()` 把背景分頁記進 `open`，所以後來補上的 `opened`、`editor-change` 與每 2 秒輪詢，接的都是實機沒有出現的情形。
 3. **編輯器建立（`ViewPlugin` 呼叫 `opened`）的時間不固定。** 有時在 `layout-change` 之前（步驟 1，早 16 ms），有時在之後（步驟 3，在第一個 `layout-change` 之後 45 ms）。不管哪一種，`layout-change` 時集合都已經含那一篇，`opened` 沒有提供額外的資訊。
 
 **沒有測到的**：
 
 - Workspaces 核心外掛切換版面、側欄裡的 Markdown 分頁、分割畫面、疊放分頁。
-- Obsidian 啟動時還原的未載入分頁：由 `start()` 的基準接住，W5 的 T1 已實測。
+- Obsidian 啟動時還原的未載入分頁：由 `start()` 的基準接住。W5 的 T1 實測的是已載入的分頁；未載入的那一種 2026-10-28 用冷啟動補測（A3 設計稿的〈Claude 回應 Codex〉）。
 - 在 Canvas 裡編輯卡組。
 - iPhone：`save.ts` 只在電腦接上。
 

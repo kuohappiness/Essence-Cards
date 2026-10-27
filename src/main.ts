@@ -157,7 +157,7 @@ export default class EssenceCardsPlugin extends Plugin {
       onError: error => { console.error('Essence Cards：離開筆記時補學習目標 ID 失敗', error); },
       log: event => { this.emit('event', stamp(event)); },
     });
-    // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開到背景分頁時 Obsidian 不發 file-open（Codex 再審的 R3）。
+    // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開完馬上關時，Obsidian 只在關之後送一次 layout-change（技術債 A3，a3check 的 C1、C3）。
     this.registerEditorExtension(ViewPlugin.define(view => { saver.opened(pathOf(view.state)); return {}; }));
     return { tokens: lock.tokens, saver };
   }

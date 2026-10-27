@@ -11,7 +11,7 @@ import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
-import { eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
+import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { awayCheck, deckHashes, openTimes, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
@@ -36,8 +36,8 @@ interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () =
  * root：結果寫到哪個資料夾（W6 的命令寫 Essence W6/，W6 §4）。
  */
 interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true; root?: string }
-/** 事件記錄用的：存檔備援的接線與外掛發出的紀錄（dev-events.ts）。 */
-const events = (host: Host): EventsHost => ({ app: host.app, saver: host.ids?.saver ?? null, log: listener => host.on('event', listener) });
+/** 事件記錄用的：存檔備援的接線、外掛的 state 與它發出的紀錄（dev-events.ts）。 */
+const events = (host: Host): EventsHost => ({ app: host.app, saver: host.ids?.saver ?? null, state: () => host.state, log: listener => host.on('event', listener) });
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -65,6 +65,10 @@ const commands: Record<string, DevCommand> = {
   events: { name: 'Essence 開發：記錄 workspace 與 vault 事件', run: host => eventsTest(events(host)), desktop: true },
   'record-start': { name: 'Essence 開發：開始記錄事件（之後在檔案總管操作）', run: host => recordStart(events(host)), desktop: true },
   'record-stop': { name: 'Essence 開發：停止記錄事件', run: host => recordStop(events(host)), desktop: true },
+  // A3 設計稿〈Codex 回應〉要的實測：快速開關、側欄、分割、疊放、setViewState、版面切換、按鈕、Canvas。
+  a3check: { name: 'Essence 開發：開著的卡組（A3 實測）', run: host => a3Check(events(host)), desktop: true },
+  // 重新載入整個 Obsidian 視窗（Obsidian 的「重新載入」命令）：冷啟動，背景分頁還原成未載入（t1prep → app-reload → t1close）。
+  'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
