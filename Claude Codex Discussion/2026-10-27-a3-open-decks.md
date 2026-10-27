@@ -6,7 +6,7 @@
 
 ## 先讀這裡
 
-- **基準**：分支 `claude/quizzical-euclid-f0564e` 上加了事件記錄命令的那個 commit（`feat(dev): record Obsidian workspace and vault events…`），從 `main` 的 `8124927` 開出來。這份稿只改文件，`save.ts` 還沒動。
+- **基準**：`73b4000`（分支 `claude/quizzical-euclid-f0564e`，從 `main` 的 `8124927` 開出來；加了事件記錄命令、契約 C15 與這份稿）。`save.ts` 還沒動，`npm run check` 521 個測試通過。
 - **必讀**：
   - 程式：`src/obsidian/save.ts`（全部）、`src/main.ts` 的 `wireIds` 與 `start`、`tests/save-wiring.test.ts`、`tests/main-wiring.test.ts`（`extensions()` 與 T1）、`src/obsidian/dev-ids.ts` 的 `saveTest` 第 8～10 段與 `t1Prep`／`t1Close`、`src/obsidian/dev-events.ts`。
   - 文件：環節 1 的實機記錄（上面的連結）、[D-134](../docs/decisions.md#d-134-學習目標-id-的補上時機與保護)、[W5 第二部分審查](2026-10-25-w5-ids-review.md)的 R3、T1。

@@ -8,7 +8,8 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| 第一個里程碑的品質檢查 | 回顧、安全檢查、Obsidian 改版說明都做完了：安全沒有發現；最重要的是 CI 在 main 紅了三天沒人發現（R1）。A1、A2 不用再請 Codex 核對，A3 要先在 Windows 記錄事件 | 使用者選 R1～R10 要做哪些 | 使用者 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
+| 第一個里程碑的品質檢查 | 回顧、安全檢查、Obsidian 改版說明都做完了：安全沒有發現；最重要的是 CI 在 main 紅了三天沒人發現（R1）。R5 的事件記錄、T3 與 state-load 收尾已做，A3 見下一列 | 使用者選其餘建議要做哪些 | 使用者 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
+| 存檔備援追蹤開著的卡組（A3） | Windows 事件記錄做完：集合每次改變都有 `layout-change`。設計稿把六個來源收成兩個 | Codex 查核設計稿，回覆後再改程式 | Codex | [設計稿](<../Claude Codex Discussion/2026-10-27-a3-open-decks.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 討論中：版本紀錄、考前提醒、更新前備份已有初步結論 | 使用者選第 3 題（內建規則改版）；之後和 Codex 討論，一致再寫成 D-ID | 使用者 | [規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7 已談定（7 見 [D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)）；環節 8 雙方一致 | 使用者決定電腦專用的主機接點（改 D-053）；`state-load` 與 W6 都已合併，環節 4、5、6、9、2、3 可以接著談 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
@@ -45,6 +46,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-27 | 里程碑報告的 R5（`73b4000`，[實機記錄](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)）：開發命令 `events` 記錄 Obsidian 事件；外部改名是 `create`＋`delete`，A2 不重開；資料夾刪除的契約 C15 通過；加 `unread` 命令 |
 | 2026-10-27 | 第一個里程碑的回顧與安全檢查（[報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)）：安全沒有發現、`npm audit` 0；十項建議，最重要的是 CI 在 main 紅了三天沒人發現，等使用者選 |
 | 2026-10-27 | W6 複習畫面合併進 `main`（`f136cf6`，[任務說明](../tasks/w6.md)、[iPhone 測試](../tasks/w6-iphone.md)）：W1～W6 打通，第一個里程碑達成。iPhone 第一次打開 259、223 ms，D-110 不加快取；使用者覺得鍵盤、朗讀、靜音與手勢都正常 |
 | 2026-10-27 | 歸檔原則補齊（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)，[任務說明](../tasks/archive-principles.md)）：文件檢查拿掉字數上限、plans 加狀態行；AGENTS 與 skill 寫明各類文件的終點，backlog 清掉已定案的項目 |
