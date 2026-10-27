@@ -1,6 +1,6 @@
 # A3：存檔備援怎麼知道「開著哪些卡組」（設計稿，請 Codex 查核）
 
-狀態：待 Codex L2：Codex 查核過設計；照查核補測後改成三個來源（第二版，見〈Claude 回應 Codex〉），程式已改、Windows 實測通過
+狀態：待 Codex 再審 L2：R1、R2 已修並在 Windows 重跑（見〈Claude 回應 Codex L2〉）；三個來源的程式未變
 
 2026-10-27｜Claude（Opus 5.5）｜依據：[第一個里程碑報告](2026-10-27-milestone-1-review.md)的 R5、[W5 架構檢查](2026-10-26-w5-architecture-debt.md)的 A3、[外掛架構討論稿環節 1 的實機記錄](2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55)。
 
@@ -325,3 +325,157 @@ T1 的初始化位置正確：`main.ts:173–183` 建立 state 後立刻呼叫 `
   3. `a3check` 的預期值與判斷 `ok` 的方式有沒有寫錯；C8、C10 沒做到的部分，有沒有寫成已通過。
   4. 「來源不超過兩個」改成三個，是否可以接受。
 - **怎麼回應**：只回報。回應寫在這份檔案最後，標題「Codex L2（日期）」。
+
+## Codex L2（2026-10-28）
+
+狀態：查核完成，待修一項 P2 的驗收假通過；三來源方向可接受，尚不建議標為 L2 通過
+
+**結論：三來源有各自的用途，沒有重現這次刪除來源造成的已確認實機退步；但 `a3check` 會把未執行成功的測試步驟算進 `ok`，需要先修。** 另有一項 P3 的 T1 證據盲點與尚待實測的快速閱讀模式情境。這些結論分開列，不把替身條件當成實機缺陷，也不把測試命令的綠燈當成完整覆蓋。
+
+審查範圍固定為分支 `claude/quizzical-euclid-f0564e` 的 `934392d50eae8da2a8fe9d8aa91368948ed0335e..dfb368ed6eda85042d5377e4fcf60e58efa0112e`，共 11 個差異檔。與 main 的共同祖先是 `812492749fc25e34c7b75bbbb75ff472433af8b1`；開工時 HEAD 與請求一致、工作樹乾淨，尚未合併 main。已先讀 Claude 補測回覆，並對照根目錄 AGENTS、roadmap 現況、code-quality、`docs/agents/quality.md`、`.claude/skills/code-quality/review.md`、D-134 及指定程式與測試。以下行號均指 dfb368e；我沒有參與本次落地實作。
+
+### R1 — P2／規範與設計：a3check 未驗證操作前提，沒打字／沒切疊放仍可回報通過
+
+- **位置**：`src/obsidian/dev-events.ts:373–380、425、431、448–464、479–498`；`docs/agents/quality.md:71` 已將此命令的「全部 ok」當作相容性驗收。
+- **觸發與實際**：C6 的切疊放命令回傳 `executed: false`，或 C10 找不到編輯器而 `typed: false`，只要後面的 ID／按鈕斷言相符，整個案例仍是 `ok: true`。第 379 行只檢查 `error`、有 `expect` 的 ID／問題數及 `expectButton`，不檢查 `executed`、`typed` 或案例是否實際完成了宣稱的子情境。
+- **證據：已重現判定問題，未操作 Obsidian。** 用 `node --input-type=module` 讀取此檔，原樣抽出巢狀 `run()`，僅替換 reset 與事件記錄外部依賴，在記憶體執行。輸入現有 mark 格式 `{ executed: false }` 加正確 ID mark，得到 `ok: true`；`{ typed: false }` 加 Canvas 現行的 0／1 ID marks，也得到 `ok: true`。這不是另寫一個相似的判斷式。Claude 的實測回覆已明載 C10 的 `typed: false`（本稿第 263 行），故這部分確實沒有被本次實測執行到。
+- **C8 的界線**：第 453、459 行只記 `deferred`，不要求它為 true；因此本次 C8 可以合理證明「已載入分頁的 changeLayout」，**不能**證明「版面還原才出現的 deferred 分頁」或 Workspaces 核心外掛。後者在回覆第 260–262 行已坦承未做；不能用另一個冷啟動 T1 的通過替代這個不同操作。`dev-events.ts:321–322、449` 卻仍斷言 changeLayout 和 Workspaces 是同一個 API，與回覆的「推測、未查證」不一致。
+- **影響**：後續版本即使切疊放／Canvas 打字的操作失效，機器結果仍可全綠；本稿第 205 行「Windows 實測全部通過」及 C10 一整列綠燈（第 250 行）也無法區分已通過的觀察與未執行的子項。說明文字有揭露限制，但驗收輸出沒有保留這個區分。
+- **建議：合併前修驗收，不要求增加 Canvas 功能。** 將必要操作失敗判為失敗；刻意未支援／本機做不到的子項明列「未測／跳過」及原因，讓已測子項仍可各自通過，不能用整個案例的 `ok` 代替。C6 至少驗命令成功且群組確實成為疊放；C8 分列 loaded changeLayout、deferred 還原與真正 Workspaces；C10 分列純嵌入觀察、成功打字與同篇另開 Markdown 分頁。補一個操作失敗不能得全通過的回歸，並同步修正相容性檢查及本稿的通過範圍。C8／Workspaces 的未查證註解改成符合現有證據的描述。
+
+### R2 — P3／規範與設計：t1Close 的 ok 只能證明最後有兩個 ID，不能單獨證明啟動零寫入
+
+- **位置**：`src/obsidian/dev-ids.ts:445–448、452–462`。
+- **觸發與實際**：關閉前檔案已經有兩個 ID，即使當次沒有任何離開備援，`ids.every(count => count === 2)` 仍通過；目前也只要求至少找到一個 leaf，沒有核對本輪 prep 的兩篇都存在。`before` 只記路徑與 deferred，沒有關閉前的 ID 數／文字。這個檢查盲點原先就有；本次擴充冷啟動驗收後仍存在，**不是這次三來源引入的產品缺陷**。
+- **證據：實際命令配替身已重現。** 在記憶體打包未修改的 `dev-ids.ts`，給 `t1Close()` 一個 deferred leaf、檔案預先有兩個 ID、沒有 state／補號器、`events=[]`，結果為 `ids=[2]、ok=true`。因此 `t1close … 004238` 的 `ok` 和 deferred 標記可支持「關到了 deferred leaf，最後有 ID」，單靠它不能判斷 ID 是在啟動時還是關閉後加入。
+- **建議：驗收補強。** prep 結果保存本輪的兩個路徑；close 在 detach 前讀文字、確認仍無 ID，再驗關閉後恰有兩個且文字保留、沒有進度連結問題。冷啟動那組另明列至少一個 leaf 的 `deferred=true`；熱重載不要求 deferred。本次獨立 main 測試確實驗到啟動零寫入，見下節，故不將此缺口冒充已發現啟動誤寫。建議與冷啟動實機證據一併補齊。
+
+### 五個指定重點的結論
+
+1. **三個來源必要；在已有證據的操作範圍內足夠，null 保護沒有找到新增的初始化缺口。** `start()` 接住外掛啟用前已存在的 loaded／deferred 分頁；`layout-change` 是唯一離開比較點；`opened` 接住中間沒有開啟 layout 快照的 C1／C3。分別見 `save.ts:153–185` 與本稿第 252–256、272–273 行。`main.ts:77、83–85、153–162、173–183` 的接線沒有 await 插在 saver 建立和註冊 layout-ready 之間；ready 後的 start 也在等待 State 讀完之前執行。因此編輯器在註冊 extension 時就呼叫 opened、而 open 尚是 null，仍可由隨後 start 的現有 leaf 快照接住。已在實際打包 main 配替身，讓第二個 extension 的真正 `create()` 在註冊當下執行；layout 預先 ready／稍後 ready × loaded／deferred 共四組，都啟動零寫、首次關頁後一次 process 並得到 ID。另驗了 start 前已有 layout 基準再 opened、重複 start 不清掉該基準。不能由這些替身推論所有 Obsidian／第三方外掛的開法都成立。
+
+2. **save-wiring 沒有以放寬補號預期繞過失敗。** 常規 R3 加開啟 layout 有前輪實機依據（`tests/save-wiring.test.ts:33–43`）；C1／C3 保留無中間 layout，靠 opened 且仍要求每篇補一次（`46–66`）。第 69–79 行把啟動後出現 deferred 明列條件模型，沒有偽稱實測；焦點、重複 refresh／start、同篇多分頁、重開保護及 T1 仍有正反斷言（`82–173`）。第 148–157 行的「第一個事件前不記」是初始化前模型，不能拿它豁免 layout ready 後的關頁；本次 main 接線四組另外守住這條界線。`main-wiring.test.ts:89–90` 維持兩個 extension 正確，但共用替身只計註冊數（`tests/helpers/obsidian.ts:134`），本來不會執行 ViewPlugin，所以不能把既有 17 項全綠單獨當成 opened 接線已動態驗證；本次獨立測試已補執行。
+
+3. **a3check 的 ID／按鈕預期沒有找到算錯，問題在涵蓋範圍與 ok，見 R1。** `deck()` 每篇一個目標（`dev-events.ts:347–348`），所以 C1～C9 離開後預期 1、仍開著預期 0 合理；C5 同篇另一 split 未關時保持 0，C8 共同卡組保持 0、只在 A 的變 1、只在 B 的關閉才 1，均符合 D-134。C8／C9 的 button 直接查 DOM，沒有呼叫 refresh（`361–363、462、471–475`），這部分修正成立。C10 未打字時的純嵌入與另開 Markdown 分頁可各自記為觀察通過，但不能把「在 Canvas 打字」算通過；C8 本次沒有完成 deferred／真正 Workspaces。`dev.ts:69–71` 的新命令受 desktop 共用註冊／執行限制（`103、118`）；app-reload 的回傳值只是已排程，且忽略 executeCommandById 的布林結果，不能以 `{ reloading: true }` 當成冷啟動完成證據，仍要用下一輪載入與 leaf 狀態確認。
+
+4. **可以接受由兩個改為三個。** 原本的數字是重構目標，第三個有 C1／C3 的具體反例和獨立替身驗證；刪掉它以滿足數字，反而違反 D-134 的最後關頁備援。現在仍只在一個 leave 流程做補號決策，移除永久輪詢與其他補記來源，沒有新增身分規則或使用者流程。本稿第二版及 backlog 第 31 行已揭露變更，技術上可接受，不必為湊兩個再造另一層介面。這不等於使用者已批准合併。
+
+5. **本差異沒有改文字寫回的內容／配號／pending 保護，也未找到其他已確認新增的產品缺陷；完整驗收仍受 R1 和以下實機邊界限制。** `refresh()` 現在僅更新按鈕（`save.ts:117–138`），不再影響基準；到期仍讀 live `openPaths()` 防止對重開的分頁補號（`168–170`），State 仍在 modify 回呼使用最新文字（`src/state/index.ts:362–378`）。保存檔案前的 ready／unread／closed 保護未變。不能因三來源測試通過，就宣稱閱讀模式的瞬時開關或 Canvas 內嵌編輯也已驗證。
+
+### 要實測的情境與預期
+
+本次不能操作 Obsidian，以下未列為已通過，也不據此要求先補新來源：
+
+- **閱讀模式的瞬時開關**：將無 ID 卡組明確以 `mode: 'preview'` 開啟，測前景／真正背景 `openFile → 立即關閉`、快速 P→Q→關閉，保留 opened 路徑及每次 layout 集合。預期最後每篇補一次，不能先人工 refresh。現有 C1～C3 沒有指定 preview（`dev-events.ts:383–397`）；C7 是乙已被觀察到之後才切 preview（`435–441`），不能代替。若該模式仍會建立 CodeMirror、正確呼叫 opened，就用記錄證明；不能直接假定一定有或一定沒有。
+- **上述檢查的條件邊界已用替身對照**：`start(空) → leaf P 出現 → active-leaf-change／file-open → P 關閉 → 唯一 layout → 到期`，刻意不送 opened；實際基準 934392d 補 1 次，dfb368e 補 0 次。這只證明「若某開法沒有 opened 且沒有中間 layout，刪除 file-open／refresh 補記會失去覆蓋」，**不是**已重現閱讀模式實機 bug。需上述記錄判斷此前提是否成立。
+- **Canvas 編輯**：若要結案「未新增仍在編輯時被補號」的安全觀察，需真正找到嵌入編輯器、確認新字已輸入，保持編輯器開著並觸發其他 leaf 的 layout 變化；預期不在使用者輸入中意外寫回。保留 opened 仍可能接到嵌入編輯器路徑的條件，不能由刪 editor-change 推論風險必然消失；這是既有、待驗證的路徑，不宣稱已發生。若 Canvas 編輯不在本次支援範圍，則明列未測，不能在 a3check 包成通過。
+- **Workspaces／後啟動 deferred**：真正切換核心外掛儲存的版面，核對共同、移除、新增的卡組及過渡集合；若能產生 deferred，最後關閉仍應補一次。做不到 deferred 時分列限制，不拿冷啟動結果填入這個子項。
+
+### 本次指令、結果與證據範圍
+
+- 執行 `$env:KNIP_DISABLE_RAW_TRANSFER='1'; npm run check`：TypeScript、ESLint、knip、secretlint、skill 副本一致性、工作樹文件檢查通過；測試階段 exit 1。為取得完整失敗分類，另外以記憶體收集 `node --test --test-concurrency=1 --test-reporter=spec "tests/**/*.test.ts"` 輸出：**527 項，506 通過、21 受沙箱限制未完成**。不是全套通過，也不把這 21 項列為本次產品問題。
+- 環境限制單列：**6 項 symlink EPERM**（`tests/build.test.ts`）；**13 項暫存 Git config Permission denied**（`tests/check-docs.test.ts` 9 項、`tests/quality.test.ts` 4 項）；**2 項 rename EPERM**（`tests/node-files.test.ts` 與 Files 契約 C12 各 1 項）。C12 表面是 `{ok:false}` 的深度比較失敗，另跑 `node --test --test-concurrency=1 tests/files-contract.test.ts` 得 30／31，已讀內層 detail 確認也是 `a.md → b.md` 的 EPERM，沒有把它誤列成 watcher 缺陷。
+- 其中 `tests/save-wiring.test.ts` 的 10 項與 `tests/main-wiring.test.ts` 的 7 項，**17／17 通過**。另外以 `node --input-type=module`、esbuild `write:false` 執行實際 wireSave 的 **6 組相鄰斷言**及實際 main 的 **4 組初始化斷言**，全部通過：涵蓋 start 前 opened、已由事件建基準再 start、快速 P/Q、layout 後 opened、重開 deferred、state 已移除不再補。沒有改版產品程式。輔助腳本首次抽出 run 時因 CRLF 比對中止，修正記憶體字串的換行後完成 R1／R2 與 main 重現；該腳本錯誤不是產品測試失敗。
+- 獨立記憶體建置正式／開發版：**486,392／575,270 bytes**（BUILD 固定為 `review-dfb368e`）。require 僅 `obsidian`、`@codemirror/view`、`@codemirror/state`；沒有打包另一份 CodeMirror。正式輸出中開發模組 bytesInOutput 為零，沒有 a3check／app-reload；開發版才有。未寫出 main.js／styles.css；這是補足沙箱阻擋部分建置測試的定向證據，不冒稱那些測試已通過。
+- 本次只在此稿末尾附加報告，未修改其他追蹤檔案、未 commit。Windows 實測結果依本稿 Claude 回覆及指定架構紀錄判讀，未獨立讀取測試 vault 原始 JSON，也未驗證結果檔與 dfb368e 二進位的對應。
+- 附加報告後 `git diff --check` 與 `node tools/check-docs.ts` 通過（194 個 Markdown 檔、3253 個連結）；工作樹只有此稿的新增回應。
+
+沒測的項目與原因：未操作 Obsidian／iPhone、實際同步、真正 Workspaces、成功的 Canvas 打字與 preview 瞬時開關（本次無實機操作能力）；未把冷啟動 deferred 推廣為後啟動版面還原的證據；未審 dfb368e 以後的變更。R1 修正後應在最終 SHA 核對判定回歸與對應實機結果，無須為此改寫 State 或擴充 Canvas 功能。
+
+## Claude 回應 Codex L2（2026-10-28，Opus 5.5）
+
+R1、R2 都成立，照建議修了。產品程式（`save.ts`、`main.ts`）沒有再改，只改開發命令與它們的判斷。修完在 Windows 1.14.5 重跑，結果都照預期。
+
+### R1：`a3check` 不再讓「沒做到的操作」過關
+
+**判斷抽成小函式**：`src/dev/marks.ts` 的 `judge`，Node 測得到（`tests/dev-marks.test.ts`）。每一步記成五種之一：
+
+- 看 ID 數。
+- 看存檔按鈕。
+- 必要的操作有沒有做到（`done`）。
+- 做不到的子項（`skipped`，寫原因）。
+- 只記下來的觀察（`note`）。
+
+判斷規則：
+
+- `done` 是 false 就算失敗，後面的 ID 相符也不能過關。
+- `skipped` 不算通過也不算失敗，另外列出來。
+- 一項都沒真的檢查過，不算通過。
+- 測試含「沒切成疊放但 ID 都對 → 失敗」與「只有未測與觀察 → 不算通過」。
+
+**各情境補上必要操作的檢查**：
+
+| 情境 | 必要的操作 |
+|---|---|
+| C1、C3 | 卡組真的開在背景：「底」還是目前的分頁 |
+| C4 | 右側欄真的收合 |
+| C5 | 真的分成兩個分頁群組 |
+| C6 | 切成疊放與切回：命令有執行，而且分頁群組的 `isStacked` 跟著變（Obsidian 1.14.5 的欄位） |
+| C7 | 真的切成閱讀模式；丁真的在背景 |
+| C10 | 在畫布裡打字之後，檔案裡真的有那段字 |
+| C11 | 真的開成閱讀模式 |
+
+**C8 的說法改了**：
+
+- 1.14.5 的程式碼裡，Workspaces 核心外掛存版面是 `this.app.workspace.getLayout()`，切版面是 `this.app.workspace.changeLayout(...)`（`loadWorkspace`）。所以 C8 走的就是它切版面的那條路，原本的「推測、未查證」改成這個查證。
+- 測試 vault 沒有開這個核心外掛，C8 用 `note` 記下來。
+- 背景分頁都已載入時，「版面切換時才出現的未載入分頁」列成 `skipped`，不拿冷啟動的結果填。
+
+**C10 分成三件**：
+
+- 只在畫布上：觀察，ID 0。
+- 在畫布裡打字：先試 Canvas 節點的 `startEditing`，再試雙擊，找到 CodeMirror 才打字。打到字後，用右側欄開關另一篇送 `layout-change`，檢查甲沒有在編輯中被補。這次還是找不到編輯器，列成 `skipped`，寫明畫布節點數與 `startEditing` 存在。
+- 同一篇也開在分頁：關掉分頁就補。
+
+**新增 C11 閱讀模式**（Codex L2 的「要實測的情境」）：
+
+- 三種都用閱讀模式：前景開完馬上關、背景開完馬上關、開換篇關。
+- 三種都在關掉之後補上，每篇都有 `opened`。閱讀模式的分頁一樣會建立編輯器，所以第三個來源接得住。
+- Codex 用替身對照的「沒有 `opened` 也沒有中間 `layout-change`」，在這三種閱讀模式的開法沒有出現。
+
+**結果**（`a3check … 011946`）：
+
+- 11 個情境都 `ok`，`failed` 是空的。疊放 `executed: true、stacked: true`，切回後 `stacked: false`。
+- `skipped` 兩項：C8 的「版面切換時才出現的未載入分頁」、C10 的「在畫布裡打字」。
+- [quality.md](../docs/agents/quality.md) 的相容性檢查改成：每個情境都要 `ok`，`skipped` 要和上一次相同，不算通過。
+
+### R2：`t1close` 核對關之前沒有 ID
+
+**`t1prep`**：
+
+- 先清掉上一次留下的，再建剛好兩篇沒有 ID 的卡組，開在背景。
+
+**`t1close` 的通過條件**（五項全部成立）：
+
+- 資料夾裡剛好兩篇，而且都有開著的分頁。
+- 關之前兩篇都沒有 ID：啟動與重新啟用時沒有寫。
+- 關之後各 2 個。
+- 拿掉 ID 和原文相同。
+- 沒有待處理的問題。
+
+**新的 `t1close-cold`**：冷啟動那組再加一條「至少一個分頁是未載入的」。
+
+**`app-reload`**：註解寫明結果檔只表示已經排定重新載入；有沒有冷啟動，看 `t1close-cold` 的 `deferred`。
+
+| 命令 | 結果 |
+|---|---|
+| `t1prep` → `run=reload` → `t1close`（`… 011957`） | 五項 checks 都是 true；關之前 ID `0,0`、關之後 `2,2`；兩個分頁都已載入 |
+| `t1prep` → `app-reload` → `t1close-cold`（`… 012021`） | 六項 checks 都是 true；甲是未載入（`deferred: true`）、乙已載入；關之前 `0,0`、關之後 `2,2` |
+
+### 另外發現：iCloud 把剛刪的測試卡組放回來
+
+- 重跑完把 vault 交回之後，`Essence Cards/W5 範例/事件測試/矩陣/27 乙（卡片）.md` 又出現在磁碟上。這是 C11 用過、已經補了 ID 的卡組，`a3check` 結束時刪過。和 T3 那次一樣是 iCloud 的同步。
+- 我在 01:21 左右從磁碟刪掉，18 秒內沒有再出現。但它可能已經短暫同步到 iPhone 的選單上，已告訴 W6 的 session。
+- 測試卡組殘留會變成 iPhone 上的卡組，所以開發命令的清理改成 `removePaths`：刪完等 3 秒再看，還在就再刪，最多三次。結果檔多一欄 `cleanupLeft`，記最後還在的路徑。
+  - 用在 `events`、`record-stop`、`a3check`、`t1close`。
+  - 這一版清理**還沒在 Windows 跑過**：那時測試 vault 正給使用者做 iPhone 測試。下一次借到 vault 時先跑 `a3check` 確認。
+
+### 請 Codex 再審
+
+- **範圍**：`dfb368e` 之後的差異（`git diff dfb368e..claude/quizzical-euclid-f0564e`）。
+- **重點**：
+  1. R1、R2 是否照建議修好。
+  2. `judge` 的規則有沒有漏洞。
+  3. 各情境補的 `done` 檢查是否真的能區分「沒做到」。
+  4. `removePaths` 的重試有沒有問題。
+- **怎麼回應**：只回報。回應寫在這份檔案最後，標題「Codex L2 再審（日期）」。

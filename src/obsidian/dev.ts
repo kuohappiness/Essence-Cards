@@ -48,8 +48,9 @@ const commands: Record<string, DevCommand> = {
   // 第二部分（W5 §8-7 的 I7、I8）。
   lock: { name: 'Essence 開發：鎖住 ID', run: (_host, ids) => lockTest(ids), desktop: true },
   save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
-  t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
-  t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: (_host, ids) => t1Close(ids), desktop: true },
+  t1prep: { name: 'Essence 開發：重新啟用前開兩篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
+  t1close: { name: 'Essence 開發：重新啟用後關掉那兩篇', run: (_host, ids) => t1Close(ids), desktop: true },
+  't1close-cold': { name: 'Essence 開發：冷啟動後關掉那兩篇', run: (_host, ids) => t1Close(ids, true), desktop: true },
   // W6 §4、§6。
   'review-script': { name: 'Essence 開發：自動複習', run: reviewScript, root: W6_ROOT },
   voices: { name: 'Essence 開發：系統語音', run: () => voices(), root: W6_ROOT },
@@ -67,7 +68,8 @@ const commands: Record<string, DevCommand> = {
   'record-stop': { name: 'Essence 開發：停止記錄事件', run: host => recordStop(events(host)), desktop: true },
   // A3 設計稿〈Codex 回應〉要的實測：快速開關、側欄、分割、疊放、setViewState、版面切換、按鈕、Canvas。
   a3check: { name: 'Essence 開發：開著的卡組（A3 實測）', run: host => a3Check(events(host)), desktop: true },
-  // 重新載入整個 Obsidian 視窗（Obsidian 的「重新載入」命令）：冷啟動，背景分頁還原成未載入（t1prep → app-reload → t1close）。
+  // 重新載入整個 Obsidian 視窗（Obsidian 的「重新載入」命令）：冷啟動，背景分頁還原成未載入（t1prep → app-reload → t1close-cold）。
+  // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。
   'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
 };
 

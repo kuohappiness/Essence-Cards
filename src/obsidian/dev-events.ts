@@ -3,6 +3,7 @@ import type { App, TAbstractFile, WorkspaceLeaf } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import type { State } from '../state/index.ts';
 import type { Saver } from './save.ts';
+import { judge, type Judged, type Mark } from '../dev/marks.ts';
 import { createObsidianFiles } from './files.ts';
 import { keepRendering } from './dev-review.ts';
 
@@ -111,12 +112,19 @@ async function writeFile(app: App, path: string, text: string): Promise<TFile> {
   if (found) { await app.vault.modify(found, text); return found; }
   return app.vault.create(path, text);
 }
-async function removeFolders(app: App): Promise<void> {
-  for (const path of [DECKS, SCRATCH]) {
-    const found = app.vault.getAbstractFileByPath(path);
-    if (found) await app.vault.delete(found, true);
+/**
+ * 刪掉測試建的資料夾。iCloud 偶爾會把剛刪的檔放回來（2026-10-27 的 T3、10-28 的 a3check 各一次），留下來就會變成 iPhone 上的卡組：
+ * 刪完等 3 秒再看，還在就再刪，最多三次。回傳最後還在的路徑。
+ */
+export async function removePaths(app: App, paths: string[]): Promise<string[]> {
+  const left = () => paths.filter(path => app.vault.getAbstractFileByPath(path));
+  for (let round = 0; round < 3 && left().length; round++) {
+    for (const path of left()) { const found = app.vault.getAbstractFileByPath(path); if (found) await app.vault.delete(found, true); }
+    await sleep(3000);
   }
+  return left();
 }
+const removeFolders = (app: App): Promise<string[]> => removePaths(app, [DECKS, SCRATCH]);
 /** 卡組都已經有 ID：關掉時備援不會寫檔，vault 的事件只有操作本身的。 */
 function deckText(name: string, id: string): string { return `- 能說明${name} ^${id}\n    - ${name}是什麼？ :: ${name}\n`; }
 const newId = (tag: string): string => 'v' + Date.now().toString(36).slice(-4) + tag;
@@ -259,15 +267,16 @@ export async function eventsTest(host: EventsHost): Promise<unknown> {
   const rendering = keepRendering();
   const rec = startRecording(host);
   const startedAt = new Date().toISOString();
+  let result: Record<string, unknown>, cleanupLeft: string[] = [];
   try {
     const a3Records = await a3(app, rec);
-    const t3Result = await t3(app, rec);
-    return { startedAt, visibilityBefore: rendering.before, a3: a3Records.map(show), t3: t3Result };
+    result = { startedAt, visibilityBefore: rendering.before, a3: a3Records.map(show), t3: await t3(app, rec) };
   } finally {
     rec.stop();
     rendering.restore();
-    await removeFolders(app);
+    cleanupLeft = await removeFolders(app);
   }
+  return { ...result, cleanupLeft };
 }
 
 // record-start 建好要操作的檔、開始記錄並交回完整路徑；AI 在 Windows 用檔案總管同一套 Shell 操作（改名、刪除；iCloud 的資料夾
@@ -292,18 +301,17 @@ export async function recordStop(host: EventsHost): Promise<unknown> {
   const { rec, startedAt } = manual;
   manual = null;
   const records = rec.stop();
-  try {
-    return {
-      startedAt, records: records.map(show),
-      rename: renameSeen(records, MANUAL.deck, MANUAL.renamed),
-      c15: await deletedSeen(host.app, records, folderFiles(MANUAL.folder)),
-    };
-  } finally { await removeFolders(host.app); }
+  const result = {
+    startedAt, records: records.map(show),
+    rename: renameSeen(records, MANUAL.deck, MANUAL.renamed),
+    c15: await deletedSeen(host.app, records, folderFiles(MANUAL.folder)),
+  };
+  return { ...result, cleanupLeft: await removeFolders(host.app) };
 }
 
-// ── a3check：Codex 查核 A3 設計稿要的實測（設計稿〈Codex 回應〉第 1、3、5 題） ──
-// 每個情境用沒有 ID 的卡組，記下事件與每次的集合，最後核對每篇補了幾個 ID、有沒有問題；不呼叫 saver.refresh。
-// 改 save.ts 之前跑一次當基準，改完再跑一次比對。
+// ── a3check：Codex 查核 A3 設計稿要的實測（設計稿〈Codex 回應〉第 1、3、5 題與〈Codex L2〉的 R1） ──
+// 每個情境用沒有 ID 的卡組，記下事件與每次的集合，核對每篇補了幾個 ID、有沒有問題；看按鈕時不呼叫 saver.refresh。
+// 必要的操作（切成疊放、開在背景、開成閱讀模式、在畫布裡打字）沒做到就算失敗；做不到的子項列成未測（src/dev/marks.ts 的 judge）。
 
 const MATRIX = `${DECKS}/矩陣`;
 const BASE = `${SCRATCH}/底.md`;
@@ -318,8 +326,8 @@ function firstTabs(node: LayoutNode): LayoutNode | null {
 }
 const leafId = (): string => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 /**
- * 以 base 的版面為底，主視窗只留一個分頁群組：anchor 在最前面（目前的分頁），後面依序是 files（背景，Obsidian 還原時不載入）。
- * 給 changeLayout 用，和 Workspaces 核心外掛切換版面走同一個 API。
+ * 以 base 的版面為底，主視窗只留一個分頁群組：anchor 在最前面（目前的分頁），後面依序是 files（背景）。給 changeLayout 用：
+ * Workspaces 核心外掛存版面就是 getLayout()、切版面就是 changeLayout()（Obsidian 1.14.5 的程式碼，2026-10-28 查過）。
  */
 function layoutWith(base: Record<string, unknown>, anchor: string, files: string[]): Record<string, unknown> {
   const layout = structuredClone(base) as Record<string, unknown> & { main: LayoutNode };
@@ -341,7 +349,7 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
   const original = workspace.getLayout();
   const sidebars = { left: workspace.leftSplit.collapsed, right: workspace.rightSplit.collapsed };
   const command = (id: string): boolean => (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById(id);
-  const cases: Record<string, unknown> = {};
+  const cases: Record<string, Judged & { marks: Mark[]; events: string[] }> = {};
   let made = 0;
   /** 一篇沒有 ID 的卡組（一個目標），等 state 讀到它再開始。 */
   const deck = async (name: string): Promise<TFile> => {
@@ -352,7 +360,11 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
   const ids = async (file: TFile): Promise<number> => ((await app.vault.read(file)).match(/ \^[a-z0-9]{6}$/gm) ?? []).length;
   const issues = (file: TFile): number => host.state()?.deckStatus(file.path).issues.length ?? -1;
   const leafOf = (file: TFile) => workspace.getLeavesOfType('markdown').find(leaf => leafPath(leaf) === file.path) ?? null;
-  const front = () => { const leaf = workspace.getLeavesOfType('markdown').find(l => leafPath(l) === BASE); if (leaf) workspace.setActiveLeaf(leaf, { focus: true }); };
+  const anchor = () => workspace.getLeavesOfType('markdown').find(leaf => leafPath(leaf) === BASE) ?? null;
+  const front = () => { const leaf = anchor(); if (leaf) workspace.setActiveLeaf(leaf, { focus: true }); };
+  /** 「底」還是目前的分頁（開在背景的檢查用）。 */
+  const anchorActive = (): boolean => { const leaf = anchor(); return !!leaf && workspace.getActiveViewOfType(MarkdownView)?.leaf === leaf; };
+  const stacked = (leaf: WorkspaceLeaf | null): boolean => (leaf?.parent as unknown as { isStacked?: boolean } | undefined)?.isStacked === true;
   /** 主視窗只剩「底」：每個情境從這裡開始。 */
   const reset = async () => { await workspace.changeLayout(layoutWith(original, BASE, [])); await sleep(SETTLE); };
   /** 一個空白的背景分頁（先開再切回「底」）。 */
@@ -363,26 +375,27 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
     return el ? ['done', 'missing', 'issues'].find(kind => el.hasClass('is-' + kind)) ?? 'other' : null;
   };
   /** expect 是這個時間點預期的 ID 數（0 表示還不該補）。 */
-  const check = async (marks: Record<string, unknown>[], at: string, file: TFile, expect: number) => {
+  const check = async (marks: Mark[], at: string, file: TFile, expect: number) => {
     marks.push({ at, deck: short(file.path), ids: await ids(file), expect, issues: issues(file) });
   };
   await writeFile(app, BASE, '「底」：一般筆記。\n');
   await writeFile(app, `${SCRATCH}/一般筆記.md`, '不是卡組。\n');
   const rendering = keepRendering();
   const rec = startRecording(host);
-  async function run(name: string, body: (marks: Record<string, unknown>[]) => Promise<void>): Promise<void> {
+  let cleanupLeft: string[] = [];
+  async function run(name: string, body: (marks: Mark[]) => Promise<void>): Promise<void> {
     await reset();
     const from = rec.records.length;
     rec.step(name);
-    const marks: Record<string, unknown>[] = [];
-    try { await body(marks); } catch (error) { marks.push({ error: error instanceof Error ? error.stack ?? error.message : String(error) }); }
-    const ok = marks.every(m => !('error' in m) && (m.expect === undefined || (m.ids === m.expect && m.issues === 0)) && (!('expectButton' in m) || m.button === m.expectButton));
-    cases[name] = { ok, marks, events: rec.records.slice(from).filter(r => r.kind !== 'files').map(show) };
+    const marks: Mark[] = [];
+    try { await body(marks); } catch (error) { marks.push({ at: '情境', error: error instanceof Error ? error.stack ?? error.message : String(error) }); }
+    cases[name] = { ...judge(marks), marks, events: rec.records.slice(from).filter(r => r.kind !== 'files').map(show) };
   }
   try {
     await run('C1 背景開完立即關', async marks => {
       const p = await deck('甲'), leaf = await blank();
       await leaf.openFile(p, { active: false });
+      marks.push({ at: '甲開在背景（「底」還是目前的分頁）', done: anchorActive() });
       leaf.detach();
       await sleep(FILL_WAIT); await check(marks, '關掉之後', p, 1);
     });
@@ -393,7 +406,9 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
     });
     await run('C3 背景快速開、換篇、關', async marks => {
       const p = await deck('甲'), q = await deck('乙'), leaf = await blank();
-      await leaf.openFile(p, { active: false }); await leaf.openFile(q, { active: false }); leaf.detach();
+      await leaf.openFile(p, { active: false }); await leaf.openFile(q, { active: false });
+      marks.push({ at: '開在背景（「底」還是目前的分頁）', done: anchorActive() });
+      leaf.detach();
       await sleep(FILL_WAIT); await check(marks, '關掉之後', p, 1); await check(marks, '關掉之後', q, 1);
     });
     await run('C4 側欄：右側開、收合、展開、換篇、關；左側開、關', async marks => {
@@ -401,7 +416,9 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       const right = workspace.getRightLeaf(false);
       if (!right) throw Error('右側欄開不出分頁');
       await right.openFile(p); await sleep(FILL_WAIT); await check(marks, '右側開著', p, 0);
-      workspace.rightSplit.collapse(); await sleep(FILL_WAIT); await check(marks, '右側收合', p, 0);
+      workspace.rightSplit.collapse(); await sleep(FILL_WAIT);
+      marks.push({ at: '右側收合', done: workspace.rightSplit.collapsed });
+      await check(marks, '右側收合', p, 0);
       workspace.rightSplit.expand(); await right.openFile(q); await sleep(FILL_WAIT); await check(marks, '右側換篇', p, 1);
       right.detach(); await sleep(FILL_WAIT); await check(marks, '右側關掉', q, 1);
       const left = workspace.getLeftLeaf(false);
@@ -413,6 +430,7 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       const p = await deck('甲'), q = await deck('乙');
       const a = workspace.getLeaf('tab'); await a.openFile(p);
       const b = workspace.getLeaf('split', 'vertical'); await b.openFile(p);
+      marks.push({ at: '分成兩個分頁群組', done: a.parent !== b.parent });
       await sleep(FILL_WAIT); await check(marks, '兩邊都開著', p, 0);
       await b.openFile(q); await sleep(FILL_WAIT); await check(marks, '一邊換成乙、另一邊還開著甲', p, 0);
       a.detach(); await sleep(FILL_WAIT); await check(marks, '關掉甲那一邊', p, 1);
@@ -422,13 +440,17 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       const p = await deck('甲'), q = await deck('乙');
       const a = workspace.getLeaf('tab'); await a.openFile(p);
       const b = workspace.getLeaf('tab'); await b.openFile(q);
-      marks.push({ at: '切成疊放', executed: command('workspace:toggle-stacked-tabs') });
+      const executed = command('workspace:toggle-stacked-tabs');
       await sleep(SETTLE);
+      marks.push({ at: '切成疊放', done: executed && stacked(a), detail: { executed, stacked: stacked(a) } });
       workspace.setActiveLeaf(a, { focus: true }); await sleep(FILL_WAIT);
       await check(marks, '切到甲', p, 0); await check(marks, '切到甲', q, 0);
       b.detach(); await sleep(FILL_WAIT); await check(marks, '關掉背景的乙', q, 1); await check(marks, '關掉背景的乙', p, 0);
       a.detach(); await sleep(FILL_WAIT); await check(marks, '關掉甲', p, 1);
-      front(); marks.push({ at: '切回不疊放', executed: command('workspace:toggle-stacked-tabs') });
+      front();
+      const back = command('workspace:toggle-stacked-tabs');
+      await sleep(300);
+      marks.push({ at: '切回不疊放', done: back && !stacked(anchor()), detail: { executed: back, stacked: stacked(anchor()) } });
     });
     await run('C7 setViewState：前景換檔、切模式、換成別種畫面；背景換檔', async marks => {
       const p = await deck('甲'), q = await deck('乙'), r = await deck('丙'), t = await deck('丁');
@@ -436,30 +458,33 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       await leaf.setViewState({ type: 'markdown', state: { file: q.path, mode: 'source' } });
       await sleep(FILL_WAIT); await check(marks, '前景甲換成乙', p, 1);
       await leaf.setViewState({ type: 'markdown', state: { file: q.path, mode: 'preview' } });
+      marks.push({ at: '乙切成閱讀模式', done: leaf.getViewState().state?.mode === 'preview' });
       await sleep(FILL_WAIT); await check(marks, '乙切成閱讀模式', q, 0);
       await leaf.setViewState({ type: 'empty' });
       await sleep(FILL_WAIT); await check(marks, '乙的分頁換成空白畫面', q, 1);
       const bg = await blank();
       await bg.openFile(r, { active: false }); await sleep(SETTLE);
       await bg.setViewState({ type: 'markdown', state: { file: t.path, mode: 'source' }, active: false });
+      marks.push({ at: '丁在背景（「底」還是目前的分頁）', done: anchorActive() });
       await sleep(FILL_WAIT); await check(marks, '背景丙換成丁', r, 1);
       bg.detach(); await sleep(FILL_WAIT); await check(marks, '關掉背景的丁', t, 1);
     });
-    // changeLayout 開出來的背景分頁在 1.14.5 都已載入（2026-10-28 實測）；未載入的分頁要冷啟動，見 t1prep 與 app-reload。
-    await run('C8 版面切換（changeLayout，和 Workspaces 同一個 API）', async marks => {
+    await run('C8 版面切換（Workspaces 核心外掛存與切版面用的 getLayout、changeLayout）', async marks => {
+      marks.push({ at: 'Workspaces 核心外掛本身', note: '測試 vault 沒有開；它存版面就是 getLayout()、切版面就是 changeLayout()（1.14.5 的程式碼）' });
       const common = await deck('共同'), onlyA = await deck('只在A'), later = await deck('A的背景'), onlyB = await deck('只在B');
       await workspace.changeLayout(layoutWith(original, BASE, [common.path, onlyA.path, later.path]));
       await sleep(FILL_WAIT);
-      marks.push({ at: '版面 A', deferred: [common, onlyA, later].map(file => ({ deck: short(file.path), deferred: leafOf(file)?.isDeferred ?? null })) });
+      const deferred = [common, onlyA, later].map(file => leafOf(file)?.isDeferred ?? null);
+      marks.push({ at: '版面 A 的背景分頁是不是未載入', note: deferred });
+      if (!deferred.some(Boolean)) marks.push({ at: '版面切換時才出現的未載入分頁', skipped: 'changeLayout 開出來的背景分頁都已載入（isDeferred 都是 false）；冷啟動的未載入分頁見 t1prep → app-reload → t1close-cold' });
       for (const file of [common, onlyA, later]) await check(marks, '版面 A', file, 0);
       await workspace.changeLayout(layoutWith(original, BASE, [common.path, onlyB.path]));
       await sleep(FILL_WAIT);
       await check(marks, '換成版面 B', common, 0); await check(marks, '換成版面 B', onlyA, 1); await check(marks, '換成版面 B', later, 1); await check(marks, '換成版面 B', onlyB, 0);
       const b = leafOf(onlyB);
-      marks.push({ at: '切到只在B之前', deferred: b?.isDeferred ?? null });
       if (b) workspace.setActiveLeaf(b, { focus: true });
       await sleep(FILL_WAIT);
-      marks.push({ at: '切到只在B之後（不呼叫 refresh）', deferred: leafOf(onlyB)?.isDeferred ?? null, button: button(leafOf(onlyB)), expectButton: 'missing' });
+      marks.push({ at: '切到只在B之後（不呼叫 refresh）', button: button(leafOf(onlyB)), expectButton: 'missing' });
       await reset(); await sleep(FILL_WAIT - SETTLE);
       await check(marks, '只剩底', common, 1); await check(marks, '只剩底', onlyB, 1);
     });
@@ -476,26 +501,58 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       leaf.detach(); await sleep(FILL_WAIT);
       await check(marks, '關掉之後', p, 1); await check(marks, '關掉之後', q, 1);
     });
-    await run('C10 Canvas：卡組只在畫布上、在畫布裡打字；另一篇也開在分頁', async marks => {
-      const p = await deck('甲'), q = await deck('乙');
+    await run('C10 Canvas：只在畫布上、在畫布裡打字時別處送 layout-change、同一篇也開在分頁', async marks => {
+      const p = await deck('甲'), q = await deck('乙'), r = await deck('丙');
       const canvas = await writeFile(app, `${SCRATCH}/畫布.canvas`, JSON.stringify({ nodes: [p, q].map((file, i) => ({ id: 'n' + i, type: 'file', file: file.path, x: i * 450, y: 0, width: 400, height: 300 })), edges: [] }));
       const leaf = workspace.getLeaf('tab'); await leaf.openFile(canvas); await sleep(FILL_WAIT);
-      marks.push({ at: '畫布開著', open: openNow(app).map(short) });
-      await check(marks, '畫布開著', p, 0);
-      // 雙擊甲的卡片進入編輯，用 CodeMirror 打一個新目標（盡力而為：找不到編輯器就記下來）。
-      leaf.view.containerEl.querySelector<HTMLElement>('.canvas-node')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
+      marks.push({ at: '畫布開著時的 Markdown 分頁', note: openNow(app).map(short) });
+      await check(marks, '只在畫布上', p, 0);
+      // 進入甲那張卡片的編輯：先試 Canvas 節點的 startEditing（未公開），再試雙擊；找到 CodeMirror 才打字。
+      type CanvasNode = { file?: TFile; startEditing?: () => void; contentEl?: HTMLElement; nodeEl?: HTMLElement };
+      const nodes = [...(leaf.view as unknown as { canvas?: { nodes?: Map<string, CanvasNode> } }).canvas?.nodes?.values() ?? []];
+      const node = nodes.find(n => n.file?.path === p.path);
+      node?.startEditing?.();
       await sleep(800);
-      const content = leaf.view.containerEl.querySelector<HTMLElement>('.canvas-node .cm-content');
+      const editor = () => (node?.contentEl ?? leaf.view.containerEl).querySelector<HTMLElement>('.cm-content');
+      if (!editor()) { (node?.nodeEl ?? leaf.view.containerEl.querySelector<HTMLElement>('.canvas-node'))?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window })); await sleep(800); }
+      const content = editor();
       const cm = content ? EditorView.findFromDOM(content) : null;
-      if (cm) cm.dispatch({ changes: { from: cm.state.doc.length, insert: '- 能說明畫布\n    - 畫布是什麼？ :: 畫布\n' }, userEvent: 'input.type' });
-      marks.push({ at: '在畫布裡打字', typed: !!cm });
-      await sleep(FILL_WAIT);
-      await check(marks, '畫布裡打完字、畫布還開著', p, 0);
+      if (!cm) marks.push({ at: '在畫布裡打字', skipped: `找不到甲那張卡片的編輯器（畫布節點 ${nodes.length} 個、找到甲：${String(!!node)}、startEditing：${typeof node?.startEditing}）` });
+      else {
+        cm.dispatch({ changes: { from: cm.state.doc.length, insert: '- 能說明畫布\n    - 畫布是什麼？ :: 畫布\n' }, userEvent: 'input.type' });
+        await sleep(SETTLE);
+        marks.push({ at: '在畫布裡打字', done: (await app.vault.read(p)).includes('能說明畫布') });
+        // 甲還在畫布裡編輯時，右側欄開關丙一次（送 layout-change，不搶走畫布的焦點）：不能在家長還在打字時補甲。
+        const side = workspace.getRightLeaf(false);
+        if (side) { await side.openFile(r, { active: false }); await sleep(SETTLE); side.detach(); }
+        await sleep(FILL_WAIT);
+        await check(marks, '畫布裡還在編輯、別處送了 layout-change', p, 0);
+        await check(marks, '右側欄開關的丙', r, 1);
+      }
       const tab = workspace.getLeaf('tab'); await tab.openFile(q); await sleep(SETTLE);
       tab.detach(); await sleep(FILL_WAIT);
       await check(marks, '乙也開在分頁、關掉分頁（畫布還開著）', q, 1);
       leaf.detach(); await sleep(FILL_WAIT);
-      marks.push({ at: '關掉畫布之後的甲', deck: short(p.path), ids: await ids(p), text: await app.vault.read(p) });
+      marks.push({ at: '關掉畫布之後的甲', note: { ids: await ids(p), text: await app.vault.read(p) } });
+    });
+    await run('C11 閱讀模式：開完馬上關、背景開完馬上關、開換篇關', async marks => {
+      const p = await deck('甲'), q = await deck('乙'), r = await deck('丙'), t = await deck('丁');
+      const preview = { mode: 'preview' };
+      let leaf = workspace.getLeaf('tab');
+      await leaf.openFile(p, { state: preview });
+      marks.push({ at: '甲開成閱讀模式', done: leaf.getViewState().state?.mode === 'preview' });
+      leaf.detach();
+      await sleep(FILL_WAIT); await check(marks, '前景閱讀模式開完馬上關', p, 1);
+      leaf = await blank();
+      await leaf.openFile(q, { active: false, state: preview });
+      marks.push({ at: '乙用閱讀模式開在背景', done: leaf.getViewState().state?.mode === 'preview' && anchorActive() });
+      leaf.detach();
+      await sleep(FILL_WAIT); await check(marks, '背景閱讀模式開完馬上關', q, 1);
+      leaf = workspace.getLeaf('tab');
+      await leaf.openFile(r, { state: preview }); await leaf.openFile(t, { state: preview });
+      marks.push({ at: '丁開成閱讀模式', done: leaf.getViewState().state?.mode === 'preview' });
+      leaf.detach();
+      await sleep(FILL_WAIT); await check(marks, '閱讀模式開、換篇、關（丙）', r, 1); await check(marks, '閱讀模式開、換篇、關（丁）', t, 1);
     });
   } finally {
     rec.stop();
@@ -503,7 +560,14 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
     if (sidebars.right) workspace.rightSplit.collapse(); else workspace.rightSplit.expand();
     await workspace.changeLayout(original);
     rendering.restore();
-    await removeFolders(app);
+    cleanupLeft = await removeFolders(app);
   }
-  return { ok: Object.fromEntries(Object.entries(cases).map(([name, value]) => [name, (value as { ok: boolean }).ok])), cases };
+  const entries = Object.entries(cases);
+  return {
+    cleanupLeft,
+    ok: Object.fromEntries(entries.map(([name, result]) => [name, result.ok])),
+    failed: Object.fromEntries(entries.filter(([, result]) => result.failed.length).map(([name, result]) => [name, result.failed])),
+    skipped: Object.fromEntries(entries.filter(([, result]) => result.skipped.length).map(([name, result]) => [name, result.skipped])),
+    cases,
+  };
 }
