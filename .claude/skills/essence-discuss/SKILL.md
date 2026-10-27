@@ -19,4 +19,4 @@ disable-model-invocation: true
 
 - 談定的題目：用 Skill tool 載入 "essence-decision" 寫成 D-ID。
 - 沒談完：在主文（討論稿或 `docs/plans/`）寫下還沒解的問題與目前傾向；roadmap 的狀態板只更新那一列的狀態與下一步。
-- 重要的討論：在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`（摘要，不冒充逐字紀錄），更新該目錄 README 的索引。
+- 沒有討論稿的重要討論：結束時在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`（摘要，不冒充逐字紀錄），更新該目錄 README 的索引；有討論稿的不另寫（D-106、D-143）。
