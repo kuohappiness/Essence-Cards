@@ -54,6 +54,7 @@ export function openReview(options: OpenOptions): ReviewHandle {
   // 切到背景（W6 §2-1、L2 的 F4）：朗讀立刻停；連續超過 60 秒才回來，目前這張未評分的卡從頭開始（Session 判斷）。
   // 桌面的 Obsidian 被別的視窗整個遮住也算 hidden（2026-10-26 實測），所以短的切換不重設。
   let hiddenAt: number | null = null;
+  let closed = false;
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') {
       speech.stop();
@@ -62,7 +63,9 @@ export function openReview(options: OpenOptions): ReviewHandle {
     } else if (hiddenAt !== null) {
       const ms = performance.now() - hiddenAt;
       hiddenAt = null;
-      options.onEvent?.({ kind: 'away', ms: Math.round(ms), restarted: session.resume() });
+      // 先重設再回報：沒有量測的 callback 時，可選呼叫連引數都不算，resume 會被跳過（Codex 第二次再審 R1）。
+      const restarted = session.resume();
+      options.onEvent?.({ kind: 'away', ms: Math.round(ms), restarted });
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
@@ -79,7 +82,9 @@ export function openReview(options: OpenOptions): ReviewHandle {
     if (!options.onEvent || !area || key === lastFit) return;
     lastFit = key;
     requestAnimationFrame(() => {
-      const shown = (selector: string): boolean | null => {
+      // 關閉前排好的不回報：closed 之後再來一筆 keyboard，開發的量測會把它算進下一次打開（Codex 第二次再審 R2）。
+      if (closed) return;
+      const shown =(selector: string): boolean | null => {
         const rect = element.querySelector(selector)?.getBoundingClientRect();
         return rect ? rect.top >= area.offsetTop - 1 && rect.bottom <= area.offsetTop + area.height + 1 : null;
       };
@@ -89,7 +94,6 @@ export function openReview(options: OpenOptions): ReviewHandle {
   viewport?.addEventListener('resize', fit);
   viewport?.addEventListener('scroll', fit);
   fit();
-  let closed = false;
   const handle: ReviewHandle = {
     session,
     close() {
