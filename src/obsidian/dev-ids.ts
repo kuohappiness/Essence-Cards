@@ -1,18 +1,19 @@
 import { MarkdownView, TFile } from 'obsidian';
-import type { App, Plugin, WorkspaceLeaf } from 'obsidian';
+import type { App, WorkspaceLeaf } from 'obsidian';
 import { StateEffect, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { EditorState } from '@codemirror/state';
 import { nameIds, parseDeck } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
-import { BUTTONS, MESSAGES, TIPS, type wireSave } from './save.ts';
+import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
 
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
 // 每一種操作都寫出操作後的文字或判斷，不只寫「通過」。
 
-interface DevLog { notices: string[]; events: string[]; removed: { path: string; ids: string[] }[]; tokens: ((state: EditorState) => IdToken[]) | null; save: ReturnType<typeof wireSave> | null }
-export interface IdsHost extends Plugin { state: State | null; devLog: DevLog }
+/** dev.ts 訂閱外掛的事件記下來的（技術債 A10）：提示、事件、編輯器拿掉的 ID，以及鎖定與存檔的接線。 */
+export interface DevLog { notices: string[]; events: string[]; removed: { path: string; ids: string[] }[]; tokens: ((state: EditorState) => IdToken[]) | null; save: Saver | null }
+export interface IdsHost { app: App; readonly state: State | null; devLog: DevLog }
 
 const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 async function until(check: () => boolean, ms = 8000): Promise<boolean> {

@@ -1,0 +1,100 @@
+/* 複習畫面（W6 §3）：版面、字級、間距照樣式稿 entry-and-reveal.html 與試作外掛的 Review.css；顏色與節奏用 tokens.css 的變數。 */
+.ec-fullscreen { position: fixed; inset: 0; z-index: 1000000; box-sizing: border-box; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); background: #FAFAF9; outline: none; }
+body.theme-dark .ec-fullscreen { background: #121314; }
+.ec-app { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: var(--ec-size-base)/1.5 var(--ec-font-ui); -webkit-tap-highlight-color: transparent; outline: none; }
+.ec-app * { box-sizing: border-box; }
+.ec-app button { font: inherit; color: inherit; cursor: pointer; box-shadow: none; -webkit-appearance: none; appearance: none; }
+.ec-app button:disabled { cursor: default; opacity: .3; }
+.ec-app :focus-visible { outline: 2px solid var(--ec-ink); outline-offset: -2px; }
+.ec-app .ec-ico { flex: none; width: var(--ec-touch); height: var(--ec-touch); display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: var(--ec-radius); background: none; color: var(--ec-muted); }
+.ec-app .ec-ico:not(:disabled):active { background: var(--ec-press); }
+.ec-app .ec-ico.sm { width: 40px; height: 40px; }
+
+/* 上方列：‹、還剩 N 張／回到目前 ›、自動朗讀、✕；底下一條細進度條 */
+.ec-top { flex: none; display: grid; grid-template-columns: var(--ec-touch) 1fr auto var(--ec-touch); align-items: center; padding: 6px 10px 0; }
+.ec-count { text-align: center; font-size: 14px; color: var(--ec-muted); font-variant-numeric: tabular-nums; }
+.ec-app .ec-return { justify-self: center; display: inline-flex; align-items: center; gap: 2px; min-height: var(--ec-touch); padding: 0 4px 0 10px; border: 0; background: none; color: var(--ec-ink); font-size: 14px; font-weight: 500; }
+.ec-auto { display: inline-flex; align-items: center; gap: 6px; min-height: var(--ec-touch); padding: 0 6px; font-size: var(--ec-size-meta); color: var(--ec-muted); cursor: pointer; position: relative; }
+.ec-auto input { position: absolute; opacity: 0; width: 0; height: 0; }
+.ec-auto i { display: inline-block; width: 30px; height: 18px; border-radius: 9px; background: var(--ec-line); position: relative; transition: background .2s; }
+.ec-auto i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--ec-page); transition: transform .2s; }
+.ec-auto input:checked + i { background: var(--ec-good); }
+.ec-auto input:checked + i::after { transform: translateX(12px); }
+.ec-auto input:focus-visible + i { outline: 2px solid var(--ec-ink); outline-offset: 2px; }
+.ec-prog { flex: none; height: 2px; margin-top: 6px; background: var(--ec-line); }
+.ec-prog i { display: block; height: 100%; background: var(--ec-muted); transition: width var(--ec-progress) ease; }
+
+/* 卡片 */
+.ec-stage { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--ec-gap-stage); touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.ec-body { max-width: 760px; margin: 0 auto; overflow-wrap: anywhere; }
+.ec-loading { color: var(--ec-muted); text-align: center; margin-top: 40px; }
+.ec-meta { display: flex; align-items: center; gap: 8px; font-size: var(--ec-size-small); color: var(--ec-muted); }
+.ec-new { padding: 1px 7px; border-radius: var(--ec-radius-small); background: color-mix(in srgb, var(--ec-new) 16%, var(--ec-page)); color: var(--ec-new); font-size: var(--ec-size-meta); font-weight: 600; }
+.ec-q { margin-top: var(--ec-gap-question); font-size: var(--ec-size-question); line-height: 1.55; font-weight: 500; text-wrap: pretty; font-family: var(--ec-font-text); }
+.ec-q .ec-markdown p { margin: 0 0 12px; }
+/* 喇叭排在那段文字的右邊（D-082「每一段英文旁邊」），和第一行對齊；Markdown 渲染出來的是區塊，所以用 flex 並排 */
+.ec-q, .ec-a, .ec-ex-item { display: flex; align-items: flex-start; }
+.ec-q > .ec-markdown-host, .ec-a > .ec-markdown-host, .ec-ex-item > .ec-markdown-host { flex: 0 1 auto; min-width: 0; }
+.ec-speakers { flex: none; display: inline-flex; margin: calc((1lh - 38px) / 2) 0 0 4px; }
+.ec-app .ec-say { width: 38px; height: 38px; border-radius: 10px; }
+
+/* 打字卡（D-066、D-121）：輸入框、第 2 步的提示、第 3 步的比對 */
+.ec-hint { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-top: 14px; font-size: var(--ec-size-extra); color: var(--ec-muted); }
+.ec-wrong { color: var(--ec-miss); font-weight: 600; }
+.ec-inrow { margin-top: 24px; border-bottom: 2px solid var(--ec-line); }
+.ec-inrow:focus-within { border-bottom-color: var(--ec-ink); }
+.ec-app .ec-input { width: 100%; min-width: 0; padding: 8px 2px; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--ec-ink); font-family: inherit; font-weight: 500; font-size: var(--ec-size-question); }
+.ec-app .ec-input:focus { outline: none; box-shadow: none; }
+.ec-input::placeholder { color: var(--ec-muted); font-size: 17px; font-weight: 400; }
+.ec-live { margin-top: 8px; font-size: var(--ec-size-answer); letter-spacing: .03em; min-height: 1.4em; }
+.ec-letters s { color: var(--ec-muted); text-decoration-thickness: 2px; }
+.ec-spell { display: grid; gap: 8px; margin-bottom: 20px; font-size: var(--ec-size-question); }
+.ec-spell-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ec-lab { flex: none; min-width: 4.5em; font-size: var(--ec-size-small); color: var(--ec-muted); }
+.ec-word, .ec-letters { min-width: 0; font-weight: 500; letter-spacing: .03em; overflow-wrap: anywhere; }
+.ec-ok { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); color: var(--ec-ink); }
+
+/* 背面：答案；和詳解之間拉開約 20px，中間一條 24px 的淡色短線（D-096） */
+.ec-answer { margin-top: var(--ec-gap-answer); padding-top: 22px; border-top: 1px solid var(--ec-line); font-size: var(--ec-size-answer); animation: ec-fade-in var(--ec-fade) ease-out both; font-family: var(--ec-font-text); }
+.ec-a { line-height: 1.75; }
+.ec-a .ec-markdown p { margin: 0 0 8px; }
+.ec-ex { position: relative; margin-top: var(--ec-gap-extra); padding-top: 16px; font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }
+.ec-ex::before { content: ""; position: absolute; top: 0; left: 0; width: 24px; border-top: 1px solid color-mix(in srgb, var(--ec-muted) 55%, transparent); }
+.ec-ex-item + .ec-ex-item { margin-top: 6px; }
+.ec-tools { display: flex; justify-content: flex-end; align-items: center; margin: 8px -10px 0 0; }
+.ec-srcw { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ec-app .ec-tip { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--ec-press); color: var(--ec-ink); font-size: var(--ec-size-small); }
+.ec-tip.is-text { background: none; color: var(--ec-muted); }
+
+/* 自評四鍵（D-062、D-070）：只有色點和文字，不顯示間隔；打字卡只顯示能按的那幾個 */
+.ec-actions { flex: none; border-top: 1px solid var(--ec-line); min-height: var(--ec-action-height); }
+.ec-app .ec-show { width: 100%; height: var(--ec-action-height); border: 0; border-radius: 0; background: none; color: var(--ec-ink); font-size: 17px; font-weight: 500; }
+.ec-app .ec-show:not(:disabled):active { background: var(--ec-press); }
+.ec-typed-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.ec-app .ec-skip { color: var(--ec-muted); }
+.ec-app .ec-skip::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--ec-new); vertical-align: middle; }
+.ec-typed-actions .ec-show + .ec-show { border-left: 1px solid var(--ec-line); }
+.ec-rates { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); animation: ec-fade-in var(--ec-fade) ease-out both; }
+.ec-app .ec-rate { height: var(--ec-action-height); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 4px; border: 0; border-radius: 0; background: none; color: var(--ec-ink); font-size: var(--ec-size-button); font-weight: 600; white-space: nowrap; }
+.ec-rate + .ec-rate { border-left: 1px solid var(--ec-line); }
+.ec-rate::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+.ec-app .ec-rate:not(:disabled):active, .ec-app .ec-rate[aria-pressed="true"] { background: var(--ec-press); }
+.ec-rate[aria-pressed="true"]::before { box-shadow: 0 0 0 3px color-mix(in srgb, var(--k) 30%, transparent); }
+.ec-rate[data-k="miss"] { --k: var(--ec-miss); }
+.ec-rate[data-k="near"] { --k: var(--ec-near); }
+.ec-rate[data-k="good"] { --k: var(--ec-good); }
+.ec-rate[data-k="easy"] { --k: var(--ec-easy); }
+
+/* 完成畫面 */
+.ec-done { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 56px 8px 0; text-align: center; }
+.ec-done-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); color: var(--ec-done); }
+.ec-done-mark svg { width: 30px; height: 30px; }
+.ec-done h2 { margin: 14px 0 0; font-size: var(--ec-size-title); font-weight: 600; text-wrap: balance; }
+.ec-done-sub { margin: 0; color: var(--ec-muted); font-variant-numeric: tabular-nums; }
+.ec-app .ec-start { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 50px; margin-top: 22px; padding: 0 20px; border: 1px solid var(--ec-ink); border-radius: 16px; background: var(--ec-ink); color: var(--ec-page); font-size: var(--ec-size-button); font-weight: 600; letter-spacing: .04em; }
+.ec-app .ec-start:active { opacity: .86; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ec-answer, .ec-rates, .ec-line.ec-filled .ec-line-word { animation: none; }
+  .ec-prog i, .ec-auto i, .ec-auto i::after { transition: none; }
+}

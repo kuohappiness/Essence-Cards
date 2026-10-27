@@ -32,7 +32,7 @@ export interface SaveHost {
   notify: (message: string) => void;
   /** 離開筆記時補 ID 失敗（例如寫不進去）。 */
   onError: (error: unknown) => void;
-  /** 開發版：記下離開筆記與補 ID 的時間點。 */
+  /** 記下離開筆記與補 ID 的時間點（main.ts 發成事件，開發命令訂閱；技術債 A10）。 */
   log?: (event: string) => void;
 }
 
@@ -163,12 +163,9 @@ export function wireSave(host: SaveHost): Saver {
       host.log?.('離開 ' + path);
       window.setTimeout(() => {
         if (openPaths().has(path)) { host.log?.('又打開了，不補 ' + path); return; }
-        host.state()?.fillIds(path).then(async changed => {
-          if (!host.log) return;
-          // 開發版：補完之後檔案裡有幾個 ID、state 怎麼看這一篇（查備援的時序用）。
-          const text = await app.vault.adapter.read(path).catch(() => null);
-          const ids = text === null ? '讀不到' : (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length + ' 個 ID';
-          host.log('補 ' + path + ' → ' + changed + '；檔案 ' + ids + '；' + JSON.stringify(host.state()?.deckStatus(path)));
+        host.state()?.fillIds(path).then(changed => {
+          // 補完之後 state 怎麼看這一篇（開發命令查備援的時序用）。
+          host.log?.('補 ' + path + ' → ' + String(changed) + '；' + JSON.stringify(host.state()?.deckStatus(path)));
         }, host.onError);
       }, LEAVE_DELAY);
     }

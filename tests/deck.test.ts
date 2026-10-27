@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDeck as parse, assignIds as assign, setTargetId as setId, blockIds } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign, setTargetId as setId, baseForm, blockIds } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
@@ -12,6 +12,11 @@ function setTargetId(text: string, line: number, id: string | null) { deckCases.
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = [...syntax.slice(syntax.indexOf('### 2-2'), syntax.indexOf('### 2-3')).matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
+/** 文件裡縮排在清單項目底下的程式碼區塊：去掉共同的縮排。 */
+function indentedFences(text: string, lang = ''): string[] {
+  return [...text.matchAll(new RegExp('^( *)```' + lang + '\\r?\\n([\\s\\S]*?)\\r?\\n *```', 'gm'))]
+    .map(m => m[2].split('\n').map(line => line.startsWith(m[1]) ? line.slice(m[1].length) : line).join('\n'));
+}
 const emptyFields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
 const qa = (prompt: Prompt) => { assert.equal(prompt.kind, 'qa'); if (prompt.kind !== 'qa') throw Error(); return prompt; };
 const cloze = (prompt: Prompt) => { assert.equal(prompt.kind, 'cloze'); if (prompt.kind !== 'cloze') throw Error(); return prompt; };
@@ -57,7 +62,7 @@ void test('§2-2 英文完整例子：兩方向、typed、例句與記憶錨點'
   assert.deepEqual(parsed.problems, []);
   const rows = [
     ['b4rw7k', 'borrow 英翻中', 'en-zh', 'borrow', 'borrow', 'v. 借入、向別人借', ['例句：Can I borrow your pen? 我可以借你的筆嗎？'], [], null],
-    ['c9tn3e', 'borrow 中翻英', 'zh-en', 'borrow', 'Can I ＿＿ your pen?（借）', 'borrow', [], ['記憶錨點：易混淆 lend（借出：把東西借給別人）'], 'borrow'],
+    ['c9tn3e', 'borrow 中翻英', 'zh-en', 'borrow', 'Can I ＿＿ your pen?（借）', 'borrow', [], ['記憶錨點：易混淆 lend（借出：把東西借給別人）'], ['borrow']],
     ['u6vf2m', 'uniform 英翻中', 'en-zh', 'uniform', 'uniform', 'n. 制服', ['例句：We wear uniforms to school. 我們穿制服上學。'], [], null],
   ];
   assert.equal(parsed.targets.length, 3);
@@ -154,7 +159,142 @@ void test('D-089 #12 沒題目的一般筆記不產生目標或問題', () => {
 });
 void test('D-089 #13 typed 保留大小寫，僅清格式與頭尾空白', () => {
   const t = parseDeck('- Phrase 中翻英\n  - Q :: **Take** _a_ ==Break==').targets[0];
-  assert.equal(qa(t.prompts[0]).typed, 'Take a Break'); assert.equal(t.ok, true);
+  assert.deepEqual(qa(t.prompts[0]).typed, ['Take a Break']); assert.equal(t.ok, true);
+});
+
+// W6 §0-1（D-122）：中翻英的答案格照 | 拆開成好幾個正確答案；answer 與題目指紋照舊用整個答案格。
+void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案、answer 與指紋和拆開之前相同', () => {
+  const english = readFileSync(new URL('../docs/card-rules/english.md', import.meta.url), 'utf8');
+  const sources = [
+    ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown'),
+    ...indentedFences(english).filter(text => text.includes(' | ')),
+  ];
+  assert.equal(sources.length, 2);
+  for (const text of sources) {
+    const parsed = parseDeck(text);
+    assert.deepEqual(parsed.problems, []);
+    assert.deepEqual(parsed.targets.map(t => [t.name, t.direction, t.ok]), [["make up one's mind 中翻英", 'zh-en', true]]);
+    const [basic, both] = parsed.targets[0].prompts.map(qa);
+    assert.deepEqual([basic.answer, basic.typed, basic.fingerprint], ['make up your mind', ['make up your mind'], '8ae9acd7']);
+    assert.deepEqual([both.answer, both.typed, both.fingerprint], ['made up his mind | made his mind up', ['made up his mind', 'made his mind up'], '9938603d']);
+    assert.deepEqual(both.extras, ['詳解：made up his mind 和 made his mind up 都對，課本用前者']);
+  }
+});
+for (const [name, answer, typed, fingerprint, problems] of [
+  ['`a|b` 前後沒空格也認得', 'a|b', ['a', 'b'], '434fa34e', []],
+  ['分隔前後多個空格也認得', 'a  |  b', ['a', 'b'], '03801974', []],
+  ['粗體跨過分隔', '**a | b**', ['a', 'b'], 'b284db9b', []],
+  ['螢光筆跨過分隔', '==a | b==', ['a', 'b'], 'b38b856f', []],
+  ['兩段各自的裝飾', '**a** | ==b==', ['a', 'b'], 'f6fd120c', []],
+  ['兩個答案字數不同只是 hint', 'a | two words', ['a', 'two words'], '03324c7c', ['typed-answer-words']],
+  ['只有一個答案', 'borrow', ['borrow'], 'cffabbc2', []],
+  ['每一段各自拿掉粗體', '**made** up his mind | made his mind up', ['made up his mind', 'made his mind up'], '01829f8b', []],
+  ['字數不一樣：提示、照樣出題', 'made up his mind | decided', ['made up his mind', 'decided'], 'cb4b5fb9', ['typed-answer-words']],
+] as const) void test('R1 ' + name, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  const prompt = qa(parsed.targets[0].prompts[0]);
+  assert.deepEqual([prompt.answer, prompt.typed, prompt.fingerprint], [answer, typed, fingerprint]);
+  assert.deepEqual(parsed.problems.map(p => p.code), problems);
+  assert.equal(parsed.targets[0].ok, true);
+});
+void test('R1 typed-answer-words 是 hint，訊息說畫線照第一個', () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: made up his mind | decided');
+  assert.deepEqual(parsed.problems.map(p => [p.level, p.message, p.targetLine]), [['hint', '好幾個答案的字數不一樣，畫線照第一個', 0]]);
+});
+// Codex 格式查核的固定回歸基準：同一個答案格，W5（還沒拆 |）算出的指紋和 W6 相同，typed 照 | 拆開。
+for (const [answer, fingerprint, typed] of [
+  ['made up his mind | made his mind up', 'a5ec3d47', ['made up his mind', 'made his mind up']],
+  ['**made** up his mind | made his mind up', '81ac4269', ['made up his mind', 'made his mind up']],
+  ['**a | b**', '9ec1d1dc', ['a', 'b']],
+  ['==a | b==', '35b63e7f', ['a', 'b']],
+  ['a|b', 'd0d56a63', ['a', 'b']],
+  ['a | b', 'c42e51fa', ['a', 'b']],
+  ['a  |  b', 'c42e51fa', ['a', 'b']],
+  ['borrow', 'fa0de703', ['borrow']],
+] as const) void test('R1 指紋和 W5 相同：' + answer, () => {
+  const prompt = qa(parseDeck('- x 中翻英\n  - He has already ____ . :: ' + answer).targets[0].prompts[0]);
+  assert.deepEqual([prompt.fingerprint, prompt.typed], [fingerprint, typed]);
+});
+// W6 §0-1（格式查核 F1）：整格有跳脫的管線、行內程式碼、公式、Obsidian 連結或嵌入、Markdown 連結時不拆開，typed 是 null。
+for (const answer of ['a \\| b', '`a | b`', '[[word|borrow]]', '![[pic.png|borrow]]', '[borrow](https://example.test/a|b)', '$a|b$']) void test('R1 整格不能當打字答案就是 typed-answer-invalid、不拆開：' + answer, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.level, p.message]), [['typed-answer-invalid', 'error', '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式']]);
+  assert.equal(qa(parsed.targets[0].prompts[0]).typed, null);
+  assert.equal(parsed.targets[0].ok, false);
+});
+// W6 §0-1 的 L2 後補（S1，2026-10-27 格式查核的邊界表）：任何位置有不分大小寫的 http(s)://、全形的｜、ASCII 的 [ ] < >
+// 都整格拒收：只有一個 error、沒有字數 hint、不拆開；答案格與指紋照舊（和同樣題目的英翻中相同）。
+for (const answer of [
+  'https://a.test/a|b', 'HTTPS://A.TEST', 'hTtP://', 'prefix http://a.test tail | b', '**https://a.test/a|b**', '<https://a.test/a|b>',
+  'a｜b', 'a ｜ b', 'a|b｜c', '｜', 'a | two｜words',
+  '<mailto:a@b.test>', '<a@b.test>', '<ftp://a.test/a|b>', '[word][ref] | b', '[word] | b',
+]) void test('R1 S1 網址、全形｜、括號就是 typed-answer-invalid：' + answer, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer + '\n\n[ref]: /target\n[word]: /target');
+  const prompt = qa(parsed.targets[0].prompts[0]);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.level, p.message]), [['typed-answer-invalid', 'error', '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式']]);
+  assert.deepEqual([prompt.typed, parsed.targets[0].ok, prompt.answer], [null, false, answer]);
+  assert.equal(prompt.fingerprint, qa(parseDeck('- x 英翻中\n  - Q :: ' + answer).targets[0].prompts[0]).fingerprint);
+});
+// 沒有 http(s):// 的網址不辨認（syntax.md §2-3）：照一般文字拆開，www.a.test/a|b 打 b 也算對，是已知的代價。
+for (const [answer, typed] of [
+  ['www.a.test', ['www.a.test']],
+  ['mailto:a@b.test', ['mailto:a@b.test']],
+  ['www.a.test/a|b', ['www.a.test/a', 'b']],
+  ['mailto:a@b.test|b', ['mailto:a@b.test', 'b']],
+] as const) void test('R1 S1 沒有 http(s):// 的網址照一般文字：' + answer, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual([qa(parsed.targets[0].prompts[0]).typed, parsed.targets[0].ok, parsed.problems], [typed, true, []]);
+});
+void test('R1 S1 一題是網址就整個目標停出（D-089 第 10 條），同篇其他目標照出', () => {
+  const parsed = parseDeck('- x 中翻英\n  - 好的 :: borrow\n  - 壞的 :: https://a.test\n- y 中翻英\n  - Q :: lend');
+  assert.deepEqual(parsed.targets.map(t => [t.name, t.ok, t.prompts.map(p => qa(p).typed)]), [['x 中翻英', false, [['borrow'], null]], ['y 中翻英', true, [['lend']]]]);
+  assert.deepEqual(parsed.problems.map(p => [p.line, p.targetLine, p.code]), [[2, 0, 'typed-answer-invalid']]);
+});
+void test('R1 S1 只看 :: 右邊的答案格：資料欄位、題幹、背面補充裡的｜與網址不影響', () => {
+  const parsed = parseDeck([
+    '- x 中翻英', '  - 出處：p.44｜類型：因果', '  - Q :: a | b',
+    '- y 中翻英', '  - 出處：https://a.test｜類型：因果', '  - 看 https://a.test ｜ [[note]] 再答 :: c', '    - 詳解：a｜b https://a.test <b>',
+  ].join('\n'));
+  assert.deepEqual(parsed.problems, []);
+  assert.deepEqual(parsed.targets.map(t => [t.ok, t.fields.sources, t.fields.type, t.prompts.map(p => [qa(p).answer, qa(p).typed])]), [
+    [true, ['p.44'], '因果', [['a | b', ['a', 'b']]]],
+    [true, ['https://a.test'], '因果', [['c', ['c']]]],
+  ]);
+});
+// 中文且字數不同（'a | 借 入'）也只報 invalid，不另給字數的 hint（Codex 格式查核 F2）。
+for (const answer of ['a | ', '| a', 'a | | b', 'a || b', 'a | 借', 'a | 借 入', 'a | ** **']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
+  assert.equal(parsed.targets[0].ok, false);
+});
+// Codex 格式查核 F2：換行在拆開、trim 之前檢查（題目後面頂格的接續行會把換行帶進答案格）。
+for (const lines of [['a |', 'b'], ['a', '| b']]) void test('R1 分隔符號前後換行也是 typed-answer-invalid：' + JSON.stringify(lines.join('\n')), () => {
+  const parsed = parseDeck('- x 中翻英\n    - Q :: ' + lines[0] + '\n      ' + lines[1]);
+  assert.equal(qa(parsed.targets[0].prompts[0]).answer, lines.join('\n'));
+  assert.deepEqual(parsed.problems.map(p => p.code), ['typed-answer-invalid']);
+  assert.equal(parsed.targets[0].ok, false);
+});
+// W6 §0-2（D-121、D-125）：原形提示 = 名稱去掉最後的「 中翻英」，再去掉最後一組全形括號；其他目標 null。
+for (const [name, expected] of [
+  ['borrow 中翻英', 'borrow'],
+  ["make up one's mind 中翻英", "make up one's mind"],
+  ['light（輕的） 中翻英', 'light'],
+  ['light（輕的）中翻英', 'light（輕的）中翻英'],
+  ['take（搭乘） a bus 中翻英', 'take（搭乘） a bus'],
+  ['light（輕的） 英翻中', null],
+  ['light 英翻中', null],
+  ['能說明擴散', null],
+] as const) void test('R2 原形 ' + JSON.stringify(name), () => {
+  const parsed = parseDeck('- ' + name + '\n  - Q :: light');
+  // 沒有「 中翻英」結尾的名稱不是中翻英目標，原形是 null（最後一行的例子只是一般目標）。
+  assert.equal(baseForm(parsed.targets[0]), expected === name ? null : expected);
+});
+void test('R1 中翻英以外的問答題 typed 仍是 null，答案裡的 | 不拆', () => {
+  for (const text of ['- x 英翻中\n  - a | b :: 甲 | 乙', '- 目標\n  - Q :: a | b']) {
+    const prompt = qa(parseDeck(text).targets[0].prompts[0]);
+    assert.equal(prompt.typed, null);
+    assert.ok(prompt.answer.includes(' | '));
+  }
 });
 
 for (const [name, input, code] of [
@@ -172,7 +312,7 @@ void test('§2-10 縮排錯一層是不同結構，並非錯誤', () => {
 });
 void test('typed 以答案文字判斷行數，只有一個答案子項目仍是單行', () => {
   const parsed = parseDeck('- 字 中翻英\n  - Q ::\n    - word');
-  assert.deepEqual(parsed.problems, []); assert.equal(qa(parsed.targets[0].prompts[0]).typed, 'word');
+  assert.deepEqual(parsed.problems, []); assert.deepEqual(qa(parsed.targets[0].prompts[0]).typed, ['word']);
 });
 void test('中翻英填空只提示、不要求 typed', () => {
   const parsed = parseDeck('- 字 中翻英\n  - ==word==');

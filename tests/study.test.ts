@@ -253,3 +253,22 @@ void test('T15 typed 欄位：寫在 v 後 src 前、往返相同、認不得的
   assert.deepEqual(history.problems, []);
   assert.deepEqual(history.reviews.map(entry => entry.typed), [null, 'right']);
 });
+
+// W6 §1（D-121 第 3 點、D-115）：retry 記打字卡第 2 步的結果；parseLine 不讀它，排程、佇列、去重都不看它。
+void test('R4 retry 欄位：寫在 typed 後 src 前、沒有就不寫；parseLine 讀到有 retry 的行和沒有的相同', () => {
+  const t = '2026-10-16T20:15:03.250+08:00';
+  const both = encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'wrong' });
+  assert.equal(both, '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"wrong"}');
+  assert.equal(encodeEntry(t, { lt: 'm7kp3q', r: 'miss', v: '3c9a01fe', typed: 'skip', retry: 'skip', src: 'check' }),
+    '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"miss","v":"3c9a01fe","typed":"skip","retry":"skip","src":"check"}');
+  assert.equal(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'right' }),
+    '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"right"}');
+  // 跳過第 2 步（原形是 null 或等於答案）寫 not-needed（格式查核 F3）。
+  assert.equal(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'not-needed' }),
+    '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"not-needed"}');
+  assert.deepEqual(parseLine(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong', retry: 'not-needed' })), parseLine(encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong' })));
+  const withoutRetry = encodeEntry(t, { lt: 'm7kp3q', r: 'near', v: '3c9a01fe', typed: 'wrong' });
+  assert.equal(withoutRetry, '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong"}');
+  assert.deepEqual(parseLine(both), parseLine(withoutRetry));
+  assert.ok(!('retry' in (parseLine(both) ?? {})));
+});

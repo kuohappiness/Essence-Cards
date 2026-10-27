@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deviceCode, isDeviceCode } from '../src/state/device.ts';
+import { deviceCode, isDeviceCode } from '../src/state/index.ts';
 
 void test('W5 裝置碼：平台加 4 個 0-9a-f，存著的有效碼沿用，無效的重新產生', () => {
   assert.equal(deviceCode(null, 'Windows', () => 0x7f3a), 'Windows-7f3a');

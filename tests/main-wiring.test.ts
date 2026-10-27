@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 
@@ -9,7 +10,7 @@ import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bundle = async (dev: boolean) => (await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022',
-  external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev) },
+  external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: '"0.0.1+test"' },
 })).outputFiles[0].text;
 const bundled = await bundle(false);
 /** 開發版（給 iPhone 的開發命令也在裡面）。 */
@@ -132,4 +133,22 @@ void test('接線：重新啟用外掛時已經開著的卡組，啟用時不寫
   await wait(1200);
   assert.deepEqual(h.writes, ['process ' + path]);
   assert.match(h.text(path) ?? '', /^- 新目標 \^[a-z0-9]{6}\n/);
+});
+
+// W6 §7 前提：「版本」命令顯示建置時寫進 main.js 的版本（manifest 的版本加 git commit），不在執行時讀 manifest。
+void test('W6 版本命令顯示建置版本', () => {
+  const h = host(deck);
+  h.plugin.onload();
+  h.commands.get('version')?.callback?.();
+  assert.deepEqual(h.notices, ['Essence Cards：0.0.1+test']);
+  h.plugin.onunload();
+});
+
+// 技術債 A10：開發版的接線集中在 dev 模組。main.ts 只在一處看 DEV（載入 dev 模組），提示、事件與鎖定的紀錄由 dev 模組訂閱。
+void test('A10 src/main.ts 只有一處 DEV（宣告之外），沒有 null as 的開發用欄位', async () => {
+  const source = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const uses = [...source.matchAll(/\bDEV\b/g)].length;
+  assert.equal(uses, 2, 'declare const DEV 加上一處 if (DEV)，實際 ' + String(uses));
+  assert.ok(!source.includes('null as'), 'main.ts 不該再有 null as 宣告的開發用欄位');
+  assert.ok(!source.includes('devLog'), 'devLog 搬到 dev 模組');
 });

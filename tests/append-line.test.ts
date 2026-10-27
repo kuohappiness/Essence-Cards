@@ -177,3 +177,21 @@ void test('T5 appendLine 性質：200 組隨機的自己的作答、取消、變
     assert.deepEqual(history.reviews.map(entry => entry.at), merged.reviews.map(entry => entry.at), 'round ' + String(round));
   }
 });
+
+// W6 §1：含 retry 的行依序 appendLine，和重新 mergeHistory 相同（retry 不影響去重與順序）。
+void test('R4 appendLine：含 retry 的行依序併入，和重新 mergeHistory 相同；同一筆只差 retry 不算兩筆', () => {
+  const lines = [
+    '{"t":"2026-10-16T20:15:03.250+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"wrong"}',
+    '{"t":"2026-10-16T20:15:21.804+08:00","lt":"m7kp3q","r":"miss","v":"3c9a01fe","typed":"skip","retry":"skip"}',
+    '{"t":"2026-10-16T20:15:40.112+08:00","undo":"2026-10-16T20:15:21.804+08:00"}',
+    '{"t":"2026-10-16T20:15:40.530+08:00","lt":"m7kp3q","r":"near","v":"3c9a01fe","typed":"wrong","retry":"right"}',
+  ];
+  let history = mergeHistory([{ path: WINDOWS, text: windowsText }]);
+  for (const line of lines) history = appendLine(history, line);
+  const both = mergeHistory([{ path: WINDOWS, text: windowsText }, { path: IPHONE, text: lines.join('\n') + '\n' }]);
+  assert.deepEqual(comparable(history), comparable(both));
+  assert.deepEqual(history.reviews.map(entry => [entry.lt, entry.r, entry.typed]), [['m7kp3q', 'near', 'wrong'], ['m7kp3q', 'near', 'wrong'], ['k3m9x2', 'miss', null]]);
+  // 衝突副本裡同一筆少了 retry：仍是同一筆。
+  const copy = lines[0].replace(',"retry":"wrong"', '');
+  assert.equal(appendLine(history, copy).reviews.length, history.reviews.length);
+});

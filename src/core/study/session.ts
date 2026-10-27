@@ -127,7 +127,9 @@ function compareSubject(a: string | null, b: string | null): number {
   return compareText(a, b);
 }
 
+/** 對中 prompt.typed 的任何一個就算對（D-122）：去掉頭尾空白、不分大小寫，其餘完全相同。不是打字題時丟出錯誤。 */
 export function checkTyped(prompt: Prompt, input: string): boolean {
   if (prompt.kind !== 'qa' || prompt.typed === null) throw TypeError('不是打字題');
-  return input.trim().toLowerCase() === prompt.typed.trim().toLowerCase();
+  const normalize = (text: string): string => text.trim().toLowerCase();
+  return prompt.typed.some(answer => normalize(input) === normalize(answer));
 }
