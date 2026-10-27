@@ -1,6 +1,6 @@
 # W6 複習畫面：L2 獨立審查（給 Codex）
 
-狀態：審查中：L2 的 F1～F7 已修，五題的回覆（F4、S1、S2、第 10、22 點）除了 S1 都已實作；再審請求在最後一節，等 Codex
+狀態：審查中：L2 的 F1～F7 已修，五題的回覆（F4、S1、S2、第 10、22 點）除了 S1 都已實作、`main` 已合併進來；S1 等格式查核，做完後再審請求（最後一節）交給 Codex
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（打字卡的三步流程、回看改評分、手勢與換卡互相牽動；解析器與紀錄欄位改了資料格式）。
 
@@ -209,6 +209,41 @@ Claude 跑過：
    - F5：子圖在第二份材料、精確的錨點在第三份；同一份材料同時有 `fig2-13` 與 `fig2-13a`。
    - F6：卡片內容有 Obsidian 的連結或音檔時的 Tab 順序；打字卡輸入框裡的 Tab、Shift+Tab；完成畫面。
    - F7：第 1 步按「沒印象」、第 2 步拼對。
-5. F4 等 Fable 決定後另外做，做完再請你看那一段（範圍小），不在這次。
+5. 下一節〈五題的回覆與合併 `main`〉的改動。
 
-回報接在第一次報告的最後，標題「再審（2026-10-27）」，格式同第一次；沒有問題就寫「F4 以外可以合併」（W6 的合併還要等 F4、`claude/state-load` 合併進來與 iPhone 測試）。只審查、只回報。
+### 五題的回覆與合併 `main`（2026-10-27 下午）
+
+使用者因額度改請 Codex（Astra，high）代 Fable 回答五題（問題清單與回覆在 `main` 的 `tasks/w6-l2-questions.md`），結論寫進 `main` 的 W6 說明（`7009ede`：§2-1、§0-1、§3-2、§3-4、§4、§6、§7 的 J7、J8）。
+
+| 項目 | 怎麼做 | 測試 | commit |
+|---|---|---|---|
+| F4 | `Session` 加 `pause()`、`resume()` 與 `AWAY_LIMIT`（60 秒）：`hidden` 連續超過 60 秒（剛好 60 秒不算）才讓目前這張未評分的卡從頭開始：一般卡回到正面、打字卡回到第 1 步，輸入與這一次的作答結果清空、`revealedAt` 歸零（0.3 秒重新算）；不寫紀錄；回看的位置與已評分的快照不動；回看中重設的，回到目前不補播自動朗讀；完成畫面不動。`CardView.shown` 每次從頭開始加一，畫面把它算進 `cardKey`（捲回最上面、收起出處、先停再念）。`host.tsx` 接 `visibilitychange`：`hidden` 時停朗讀並 `pause()`，回來時 `resume()`，量測記 `away`（毫秒與有沒有重設）；關掉畫面時拿掉監聽 | `tests/review-session.test.ts`「F4 切走超過 60 秒…」「F4 打字卡切走超過 60 秒…」「F4 回看時切走超過 60 秒…」「F4 英翻中切走超過 60 秒…」；`tests/review-ui.test.ts`「F4 切走超過 60 秒回來…」。都先失敗 | `d9e50e3` |
+| S2 | `src/review/keyboard.ts` 的 `keyboardFit`（純函式）：看得到的區域比 `innerHeight` 矮 1 px 以上、而且 `scale` 是 1 時，回傳要改成的上緣（`offsetTop`）與高度；系統已經縮小版面、放大、沒有 `visualViewport` 時是 null。`host.tsx` 在 `visualViewport` 的 `resize`、`scroll` 與打開時套用，null 時清掉（復原）；開發版量測記 `keyboard`：兩個高度、上緣、有沒有調整、`.ec-input` 與 `.ec-actions` 在不在看得到的區域（數字變了才記，最多 40 筆） | `tests/review.test.ts`「§3-2 鍵盤…」（先失敗）。實際有沒有擋住只能 iPhone 驗（J7） | `d9e50e3` |
+| 第 10 點 | 規格改成實作的樣子（評分後只滑入，回看才滑出；減少動態效果時兩種都直接換）；程式只改註解 | — | `d9e50e3` |
+| 第 22 點 | `openedAt` 改名 `pickedAt`、量測的 `openedMs` 改名 `fromPickMs`、`open-times` 的結果欄位同改；註明不含選單與 `state` 載入 | 型別檢查；開發命令的結果檔 | `d9e50e3` |
+| 合併 `main` | `claude/state-load`（卡組或紀錄讀不到就跳過那一篇）與文件檢查。衝突：`tests/helpers/memory-files.ts` 取 `main`（A9 的 cherry-pick 加 state-load 的改動）、`tests/helpers/obsidian.ts` 取 W6（`main` 在 A9 之後沒改過）；`tests/state*.test.ts`、`study-io.test.ts` 取 `main`（W6 這邊和 `main` 的 A9 cherry-pick `cdcb45a` 逐字相同）；`tests/boundaries.test.ts` 的 deck 匯出取聯集（`baseForm`、`listDeckPaths`）；`docs/backlog.md` 保留 W6 拿掉的 A7、A10。另外補了兩份分支上任務檔的狀態行（文件檢查要求） | `npm run check` 495 個通過 | `69dbda4` |
+| 開發命令 `away` | 送 `visibilitychange`（換成假的 `visibilityState`），5 秒與 61 秒後回來。原本用 Electron 把視窗最小化再還原，但這台 Windows 上 Obsidian 被別的視窗擋住也算 `hidden`，還原後一直沒變回 `visible`，命令卡在等畫面（那一次在約 120 秒的 `hidden` 之後回到 `visible`：卡回到正面、沒有新紀錄，是真的切換的證據） | 結果檔 `away … 123434` | `0416bac` |
+
+**S1 還沒做**：照 Codex 的提醒，先做格式查核（`main` 的 `tasks/w6-s1-format-review.md`），回來後實作，再補進這一節。
+
+Claude 跑過：
+
+- `npm run check` 495 個測試全部通過（`0416bac`；合併前 460 個，多的 35 個來自 `main`）。
+- `npm run build`：`main.js` 486,602 bytes（`69dbda4`），require 只有 `obsidian`、`@codemirror/state`、`@codemirror/view`；開發版 554,042 bytes。
+- Windows 版 Obsidian 1.14.5，開發版 `0.0.1+0416bac`（`open-times` 是 `69dbda4`、`away` 是同內容未 commit 時的建置）：
+  - `review-script`（`123703`）：`linesAsExpected: true`，`today`、`progress` 回到原樣，每一步和合併前（`022557`）相同。
+  - `ui`（`123815`）：56 步的畫面文字和合併前（`022718`）相同，沒有出錯；這次載入第一次打開（從選了科目）29 ms；按自評到下一張中位數 12 ms、最大 228 ms。
+  - `open-times`（`121758`）：從選了科目到第一張 32、32、31 ms。
+  - `away`（`123434`）：翻面後切走 5 秒回來仍是翻面、`restarted: false`；切走 61 秒回來回到正面、`restarted: true`；紀錄沒有多。
+  - `decks`（`123817`）：四篇範例卡組和 10-26 的基準相同；紀錄只在這台的那一個檔追加（全部互相取消）。
+  - `errors`（`123821`）：沒有 console 錯誤。
+  - 「按自評到下一張」偶爾有慢的一筆：5 次 `ui` 裡 2 次，551 ms（`022314`，第 7 次評分）、208 與 228 ms（`123815`，第 5、8 次），不是同一張卡，合併前後都有；其他 3 次最大 22～26 ms。W4 沒有最大值的門檻，iPhone 的 J1 超過 400 ms 要回報，那時再看。
+
+這一段請查：
+
+1. F4：`pause`／`resume` 的邊界（剛好 60 秒、重複 `pause`、沒有 `pause` 的 `resume`、載入中、完成畫面、回看中、動畫中）；`shown` 讓畫面換卡的副作用；`host.tsx` 的監聽與關掉時的清理；`main.ts` 原本的 `visibilitychange`（寫完排隊的紀錄）照舊。
+2. S2：`keyboardFit` 的條件夠不夠（1 px、`scale` 的容差、`offsetTop`）；`.ec-fullscreen` 是 `position: fixed; inset: 0`，同時設 `top` 與 `height` 時 `bottom` 被忽略，清掉時復原；量測會不會太多或漏掉鍵盤收起。
+3. 合併的衝突解法有沒有丟掉任何一邊的改動；state-load 的「讀不到就跳過」和複習畫面的交界，例如完成畫面上一篇卡組恢復讀得到（F2 會重新問 `next`，可能直接換成新卡）。
+4. 第 22 點的改名有沒有漏掉的地方（規格、程式、開發命令、驗收文字）。
+
+回報接在第一次報告的最後，標題「再審（2026-10-27）」，格式同第一次；沒有問題就寫「可以合併」（W6 的合併還要等 iPhone 測試，§7）。只審查、只回報。
