@@ -6,7 +6,7 @@
 
 Codex 對 W6 的 L2 審查（[報告](<../Claude Codex Discussion/2026-10-27-w6-review.md>)）裡，F1～F3、F5～F7 是照規格修的程式錯，Opus 正在 `claude/w6` 修。下面五題是**規格沒寫到、或規格和實作不一致**的地方，依 [D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 交給 Fable 決定；決定後請改 `main` 的 [tasks/w6.md](w6.md)（第 2 題另改 `docs/syntax.md` §2-3），Opus 再照著實作。第 1 題擋 W6 合併，其他四題不擋修正、但要在再審前定。
 
-這份檔在五題都定案、改進 W6 說明後刪掉。
+五題都定案、改進 W6 說明後，狀態改成已結案，檔案保留（D-143）。
 
 ## 1. F4：切到背景再回來，未評分的卡要不要重設
 
