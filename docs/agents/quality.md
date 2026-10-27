@@ -6,8 +6,8 @@
 
 | 角色 | 由誰擔任 |
 |---|---|
-| 規劃者 | Claude 的 Fable：任務說明、大的設計、L1 設計回顧（[D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核)） |
-| 實作者 | Claude 的 Opus（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex |
+| 規劃者 | Claude 的 Opus，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high |
+| 實作者 | Claude 的 Opus，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex |
 | 獨立審查者（L2） | 新開的 Codex session，不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude 的 Opus：L1 對照、核對 L2 的發現、合併 |
 
@@ -40,13 +40,13 @@
 
 ## 卡關時的升級
 
-[D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 3 點。同一個 bug 照 code-quality 的除錯做法，列出的假設都被推翻，或做不出能重現的指令時，依序：
+[D-140](../decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 3 點、[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)。卡關的 bug 與重大決策走同一條路線。bug 是照 code-quality 的除錯做法，列出的假設都被推翻，或做不出能重現的指令；重大決策是 D-140 第 2 點那幾類（資料格式、模組邊界、要新增決定、製卡規則或學習地圖的設計）。依序：
 
-1. **Opus 切到 xhigh**，從除錯做法的第 1 步再做一次。
-2. **新開的 Codex session 從頭查**（Sol，推理等級：xhigh）：只給重現指令（做不出來時給症狀與出現的條件）、錯誤訊息、相關檔案與基準 commit，**不給 Claude 的假設與推論**。Codex 只回報。
-3. **交給 Fable，或 Codex 的 Astra**（先開 Low 或 Medium）：附交接說明，寫目標、試過的做法、各自為什麼不對、目前的證據。
+1. **Opus xhigh**：bug 從除錯做法的第 1 步再做一次；決策寫出問題、選項與各自的代價。規劃型的對話一開始就開 xhigh，中途不切。
+2. **新開的 Codex session**：bug 從頭查（Sol，推理等級：xhigh），只給重現指令（做不出來時給症狀與出現的條件）、錯誤訊息、相關檔案與基準 commit，**不給 Claude 的假設與推論**，Codex 只回報；決策把第 1 步寫成 `Claude Codex Discussion/` 的討論稿（D-106），Codex 回應，雙方一致後交使用者確認。
+3. **Fable 5.1 high，或 Codex 的 Astra**（先開 Low 或 Medium）：前兩步都解不了，或兩家不一致又說不出誰對，才用；附交接說明，寫目標、試過的做法、各自為什麼不對、目前的證據。
 
-換模型與轉貼要使用者做，所以每升一級都先跟使用者說一聲。找到根因後，回到除錯做法的第 5 步，由 Opus 修。
+換模型與轉貼要使用者做，所以每升一級都先跟使用者說一聲。找到根因後，回到除錯做法的第 5 步，由 Opus 修；決策定了就寫成 D-ID 或任務說明。
 
 ## 本專案的做法
 
