@@ -222,6 +222,45 @@ for (const answer of ['a \\| b', '`a | b`', '[[word|borrow]]', '![[pic.png|borro
   assert.equal(qa(parsed.targets[0].prompts[0]).typed, null);
   assert.equal(parsed.targets[0].ok, false);
 });
+// W6 §0-1 的 L2 後補（S1，2026-10-27 格式查核的邊界表）：任何位置有不分大小寫的 http(s)://、全形的｜、ASCII 的 [ ] < >
+// 都整格拒收：只有一個 error、沒有字數 hint、不拆開；答案格與指紋照舊（和同樣題目的英翻中相同）。
+for (const answer of [
+  'https://a.test/a|b', 'HTTPS://A.TEST', 'hTtP://', 'prefix http://a.test tail | b', '**https://a.test/a|b**', '<https://a.test/a|b>',
+  'a｜b', 'a ｜ b', 'a|b｜c', '｜', 'a | two｜words',
+  '<mailto:a@b.test>', '<a@b.test>', '<ftp://a.test/a|b>', '[word][ref] | b', '[word] | b',
+]) void test('R1 S1 網址、全形｜、括號就是 typed-answer-invalid：' + answer, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer + '\n\n[ref]: /target\n[word]: /target');
+  const prompt = qa(parsed.targets[0].prompts[0]);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.level, p.message]), [['typed-answer-invalid', 'error', '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式']]);
+  assert.deepEqual([prompt.typed, parsed.targets[0].ok, prompt.answer], [null, false, answer]);
+  assert.equal(prompt.fingerprint, qa(parseDeck('- x 英翻中\n  - Q :: ' + answer).targets[0].prompts[0]).fingerprint);
+});
+// 沒有 http(s):// 的網址不辨認（syntax.md §2-3）：照一般文字拆開，www.a.test/a|b 打 b 也算對，是已知的代價。
+for (const [answer, typed] of [
+  ['www.a.test', ['www.a.test']],
+  ['mailto:a@b.test', ['mailto:a@b.test']],
+  ['www.a.test/a|b', ['www.a.test/a', 'b']],
+  ['mailto:a@b.test|b', ['mailto:a@b.test', 'b']],
+] as const) void test('R1 S1 沒有 http(s):// 的網址照一般文字：' + answer, () => {
+  const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
+  assert.deepEqual([qa(parsed.targets[0].prompts[0]).typed, parsed.targets[0].ok, parsed.problems], [typed, true, []]);
+});
+void test('R1 S1 一題是網址就整個目標停出（D-089 第 10 條），同篇其他目標照出', () => {
+  const parsed = parseDeck('- x 中翻英\n  - 好的 :: borrow\n  - 壞的 :: https://a.test\n- y 中翻英\n  - Q :: lend');
+  assert.deepEqual(parsed.targets.map(t => [t.name, t.ok, t.prompts.map(p => qa(p).typed)]), [['x 中翻英', false, [['borrow'], null]], ['y 中翻英', true, [['lend']]]]);
+  assert.deepEqual(parsed.problems.map(p => [p.line, p.targetLine, p.code]), [[2, 0, 'typed-answer-invalid']]);
+});
+void test('R1 S1 只看 :: 右邊的答案格：資料欄位、題幹、背面補充裡的｜與網址不影響', () => {
+  const parsed = parseDeck([
+    '- x 中翻英', '  - 出處：p.44｜類型：因果', '  - Q :: a | b',
+    '- y 中翻英', '  - 出處：https://a.test｜類型：因果', '  - 看 https://a.test ｜ [[note]] 再答 :: c', '    - 詳解：a｜b https://a.test <b>',
+  ].join('\n'));
+  assert.deepEqual(parsed.problems, []);
+  assert.deepEqual(parsed.targets.map(t => [t.ok, t.fields.sources, t.fields.type, t.prompts.map(p => [qa(p).answer, qa(p).typed])]), [
+    [true, ['p.44'], '因果', [['a | b', ['a', 'b']]]],
+    [true, ['https://a.test'], '因果', [['c', ['c']]]],
+  ]);
+});
 // 中文且字數不同（'a | 借 入'）也只報 invalid，不另給字數的 hint（Codex 格式查核 F2）。
 for (const answer of ['a | ', '| a', 'a | | b', 'a || b', 'a | 借', 'a | 借 入', 'a | ** **']) void test('R1 有一段是空的或含中文就是 typed-answer-invalid：' + JSON.stringify(answer), () => {
   const parsed = parseDeck('- x 中翻英\n  - Q :: ' + answer);
