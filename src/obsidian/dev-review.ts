@@ -373,7 +373,10 @@ function screen(): Record<string, unknown> {
     blanks: inOverlay('.ec-blank').length, blanksFilled: inOverlay('.ec-blank.ec-filled').map(text),
     hint: text(root.querySelector('.ec-hint')) || null,
     input: root.querySelector<HTMLInputElement>('.ec-input')?.placeholder ?? null,
+    // 輸入框在題目的空格裡（D-145）時，空格的寬度與高度（打字後跟著字變寬）。
+    inline: (() => { const slot = root.querySelector<HTMLElement>('.ec-slot:has(.ec-input)'); return slot ? { width: round(slot.getBoundingClientRect().width), height: round(slot.getBoundingClientRect().height) } : null; })(),
     live: text(root.querySelector('.ec-live')) || null,
+    also: inOverlay('.ec-also-row').map(text),
     spell: inOverlay('.ec-spell-row').map(text),
     answer: text(root.querySelector('.ec-a')).slice(0, 120) || null,
     extras: inOverlay('.ec-ex-item').map(el => text(el).slice(0, 60)),
@@ -531,6 +534,7 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
     await record('記住了', press('3'));
     await record('打字卡第 1 步', name(), '英文 打字 第1步');
     typeText('make up my mind');
+    await record('第 1 步打字中', name(), '英文 打字 第1步 打字中');
     await record('組字中的 Enter', press('Enter', { isComposing: true }));
     await record('Enter 確認（拼錯）', press('Enter'), '英文 打字 第2步');
     typeText('make up your mand');

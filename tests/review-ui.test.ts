@@ -207,6 +207,85 @@ void test('F5 出處的圖省略子圖字母：精確的錨點優先，沒有時
   assert.equal(resolve('p.43'), 'Essence Cards/材料/甲.md#^p43');
 });
 
+// D-145：在空格裡打字、打字卡不畫答案格、「也可以」、一行一個喇叭、照打的比對只在打錯時畫、沒有開關時 ✕ 不偏。
+interface Tree { type: string; props: Record<string, unknown>; children: (Tree | string)[] }
+const all = (node: Tree | string): Tree[] => typeof node === 'string' ? [] : [node, ...node.children.flatMap(all)];
+const ofType = (ui: ReviewUi, type: string): Tree[] => all(ui.root()).filter(node => node.type === type);
+const speakers = (ui: ReviewUi): unknown[] => ui.find('ec-say').map(button => button.props['aria-label']);
+const reviewed = (ids: readonly string[]): string => ids.map(id => encodeEntry('2026-10-10T19:00:00.000+08:00', { lt: id, r: 'easy', v: '12345678' })).join('\n') + '\n';
+
+void test('D-145 打字卡拼對：在空格裡打，翻面後不畫答案格，另一個答案寫成「也可以」，每一行一個喇叭', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3']) } });
+  assert.equal(lt(o.session), 'z1');
+  assert.equal(ofType(o.ui, 'portal').length, 1, '輸入框放進題目的空格');
+  assert.equal(o.ui.find('ec-blank-input').length, 1);
+  assert.deepEqual(o.ui.find('ec-inrow'), [], '題目下面沒有輸入框');
+  assert.deepEqual(speakers(o.ui), [], '中翻英在答案出現前沒有喇叭');
+  o.session.input('made his mind up'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-blank-input'), [], '三步走完，空格換回線上的答案');
+  assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, true);
+  assert.deepEqual(o.ui.find('ec-a'), [], '打字卡不畫答案格');
+  assert.deepEqual(o.ui.find('ec-also').map(o.ui.text), ['也可以：made up his mind'], '只列沒打的那一個，和「也可以：」同一行');
+  assert.deepEqual(speakers(o.ui), ['朗讀 He has already made his mind up to study abroad.', '朗讀 made his mind up', '朗讀 made up his mind']);
+});
+
+void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照著打，比對只在打錯字母時畫，走完才寫上答案', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3', 'z1']) } });
+  assert.equal(lt(o.session), 'z2');
+  o.session.input('borow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.step === 3, '原形就是答案：跳過第 2 步');
+  assert.equal(o.ui.find('ec-blank-input').length, 1, '第 3 步也在空格裡打');
+  assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, false, '照打時線上先不寫答案');
+  assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次']);
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你打的', '正確拼字']);
+  assert.deepEqual(o.ui.find('ec-a'), []);
+  assert.deepEqual(o.ui.find('ec-also'), [], '只有一個答案時沒有「也可以」');
+  assert.deepEqual(speakers(o.ui), ['朗讀 Can I borrow your pen?', '朗讀 borrow']);
+  o.session.input('borr');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-live'), [], '打的都對：不再顯示一次');
+  o.session.input('borx');
+  await o.ui.settle();
+  assert.equal(o.ui.find('ec-live').length, 1, '打錯字母時才畫比對');
+  o.session.input('borrow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-blank-input'), []);
+  assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, true);
+});
+
+void test('D-145 第 3 步照打的對象是「正確拼字」那一行（最接近的答案）：照打它不標錯，走完線上寫它', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3']) } });
+  assert.equal(lt(o.session), 'z1');
+  o.session.input('made his mind upp'); o.ui.key('Enter', 'input');
+  o.session.input('made his mind upp'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  let view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.step === 3);
+  assert.equal(view.card.typed.copy, 'made his mind up');
+  assert.deepEqual(o.ui.find('ec-also').map(o.ui.text), ['也可以：made up his mind']);
+  assert.equal(speakers(o.ui)[1], '朗讀 made his mind up', '「正確拼字」那一行的喇叭念它');
+  o.session.input('made his mind up');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-live'), []);
+  o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.finished);
+  assert.equal(view.card.typed.answer, 'made his mind up');
+});
+
+void test('D-145 自然卡（沒有自動朗讀開關）的上方列和英文卡一樣是四格，✕ 在最後一格', async t => {
+  const o = await open(t, { subject: '自然' });
+  const top = o.ui.find('ec-top')[0].children.filter((child): child is Tree => typeof child !== 'string');
+  assert.equal(top.length, 4);
+  assert.equal(top[3].props['aria-label'], '結束複習');
+  o.ui.key(' ');
+  assert.equal(o.ui.find('ec-a').length, 1, '一般的問答卡照舊畫答案格');
+});
+
 // Codex L2 F4：切走超過 60 秒回來，目前這張從頭開始，畫面當成換了一張（捲回最上面、收起出處、先停再念題目）。
 void test('F4 切走超過 60 秒回來：卡回到正面、捲回最上面，先停掉再重念英翻中的題目', async t => {
   const o = await open(t, { subject: '英文' }, { autoRead: true, texts: { [ENGLISH]: englishText } });

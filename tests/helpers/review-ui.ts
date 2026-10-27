@@ -26,13 +26,14 @@ let code: Promise<string> | null = null;
 function bundle(): Promise<string> {
   code ??= build({
     absWorkingDir: root, entryPoints: ['src/ui/Review.tsx'], bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
-    external: ['react', 'react/jsx-runtime', 'motion', 'obsidian'],
+    external: ['react', 'react/jsx-runtime', 'react-dom', 'motion', 'obsidian'],
     plugins: [{
       name: 'markdown-stub',
       setup(builder) {
         builder.onResolve({ filter: /\/Markdown\.tsx$/ }, () => ({ path: 'markdown', namespace: 'stub' }));
+        // 打字卡的空格（onSlot）當作已經渲染好：交回同一個假的元素，輸入框就畫進空格（createPortal 的替身原地畫成 'portal'）。
         builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-          contents: "import { jsx } from 'react/jsx-runtime'; export function Markdown(props) { return jsx('markdown', props); }", loader: 'js',
+          contents: "import { jsx } from 'react/jsx-runtime'; const slot = { slot: true }; export function Markdown(props) { props.onSlot?.(slot); return jsx('markdown', props); }", loader: 'js',
         }));
       },
     }],
@@ -122,6 +123,7 @@ export async function renderReview(props: ReviewProps): Promise<ReviewUi> {
     if (name === 'react') return react;
     if (name === 'react/jsx-runtime') return runtime;
     if (name === 'motion') return motion;
+    if (name === 'react-dom') return { createPortal: (children: unknown) => jsx('portal', { children }) };
     throw Error('畫面替身沒有這個模組：' + name);
   }, module, module.exports, doc, { setTimeout, clearTimeout }, () => ({ transform: 'none' }), class { m41 = 0; },
   (callback: (time: number) => void) => setImmediate(() => { callback(performance.now()); }), undefined);

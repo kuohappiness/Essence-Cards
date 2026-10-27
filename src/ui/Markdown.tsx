@@ -5,6 +5,7 @@ import { BLANK } from '../review/index.ts';
 // 卡片的內容交給 Obsidian 渲染（D-052、D-109、W6 §3-3）：圖片、公式、音檔照樣呈現；sourcePath 是卡組的路徑。
 // 填空題：渲染後把 <mark> 換成空格（一條底線，翻面後答案在同一條線上淡入）。
 // 打字卡：題目裡第一處 ＿＿ 換成幾條一樣長的線，條數是答案的字數（D-122）；翻面後答案的字照順序寫在線上。
+// 線包在 .ec-slot 裡，打字時輸入框放進同一格（D-145：在空格裡直接打字），由 onSlot 交給複習畫面。
 
 export interface MarkdownProps {
   app: App;
@@ -22,10 +23,12 @@ export interface MarkdownProps {
   /** 渲染好（第一張卡畫好的量測用）。 */
   onReady?: () => void;
   className?: string;
+  /** 打字卡渲染好：空格（.ec-slot）交給複習畫面放輸入框；題目裡找不到 ＿＿ 時是 null。 */
+  onSlot?: (slot: HTMLElement | null) => void;
 }
 
-/** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線。 */
-function insertLines(container: HTMLElement, lines: number): void {
+/** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線；回傳放線的那一格，找不到 ＿＿ 時是 null。 */
+function insertLines(container: HTMLElement, lines: number): HTMLElement | null {
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node.textContent ?? '';
@@ -41,11 +44,15 @@ function insertLines(container: HTMLElement, lines: number): void {
       line.append(word);
       blanks.append(line);
     }
+    const slot = document.createElement('span');
+    slot.className = 'ec-slot';
+    slot.append(blanks);
     const after = node.splitText(match.index);
     after.textContent = text.slice(match.index + match[0].length);
-    node.parentNode?.insertBefore(blanks, after);
-    return;
+    node.parentNode?.insertBefore(slot, after);
+    return slot;
   }
+  return null;
 }
 
 function applyState(container: HTMLElement, props: MarkdownProps): void {
@@ -91,8 +98,9 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
             mark.replaceWith(blank);
           }
         }
-        if (mode === 'typed') insertLines(container, lines);
+        const slot = mode === 'typed' ? insertLines(container, lines) : null;
         applyState(container, latest.current);
+        if (mode === 'typed') latest.current.onSlot?.(slot);
         latest.current.onReady?.();
       } catch (error) {
         console.error('Essence Cards：卡片顯示不出來', sourcePath, error);

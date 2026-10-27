@@ -7,6 +7,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app button:disabled { cursor: default; opacity: .3; }
 .ec-app :focus-visible { outline: 2px solid var(--ec-ink); outline-offset: -2px; }
 .ec-app .ec-ico { flex: none; width: var(--ec-touch); height: var(--ec-touch); display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: var(--ec-radius); background: none; color: var(--ec-muted); }
+/* 只在按著的時候有底色（D-145）：滑鼠移過、按完留下的焦點都不留底色 */
+.ec-app .ec-ico:hover, .ec-app .ec-ico:focus { background: none; }
 .ec-app .ec-ico:not(:disabled):active { background: var(--ec-press); }
 .ec-app .ec-ico.sm { width: 40px; height: 40px; }
 
@@ -32,7 +34,7 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-new { padding: 1px 7px; border-radius: var(--ec-radius-small); background: color-mix(in srgb, var(--ec-new) 16%, var(--ec-page)); color: var(--ec-new); font-size: var(--ec-size-meta); font-weight: 600; }
 .ec-q { margin-top: var(--ec-gap-question); font-size: var(--ec-size-question); line-height: 1.55; font-weight: 500; text-wrap: pretty; font-family: var(--ec-font-text); }
 .ec-q .ec-markdown p { margin: 0 0 12px; }
-/* 喇叭排在那段文字的右邊（D-082「每一段英文旁邊」），和第一行對齊；Markdown 渲染出來的是區塊，所以用 flex 並排 */
+/* 喇叭排在那一行的右邊，一行最多一個（D-082、D-145），和第一行對齊；Markdown 渲染出來的是區塊，所以用 flex 並排 */
 .ec-q, .ec-a, .ec-ex-item { display: flex; align-items: flex-start; }
 .ec-q > .ec-markdown-host, .ec-a > .ec-markdown-host, .ec-ex-item > .ec-markdown-host { flex: 0 1 auto; min-width: 0; }
 .ec-speakers { flex: none; display: inline-flex; margin: calc((1lh - 38px) / 2) 0 0 4px; }
@@ -53,13 +55,17 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-lab { flex: none; min-width: 4.5em; font-size: var(--ec-size-small); color: var(--ec-muted); }
 .ec-word, .ec-letters { min-width: 0; font-weight: 500; letter-spacing: .03em; overflow-wrap: anywhere; }
 .ec-ok { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); color: var(--ec-ink); }
+.ec-spell-row .ec-speakers, .ec-also-row .ec-speakers { margin: 0 0 0 -4px; }
+/* 其他正確答案（D-145）：「也可以：」小一號的灰字，緊接在打勾或「正確拼字」那一行下面 */
+.ec-also { display: grid; gap: 2px; margin: -12px 0 20px; font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }
+.ec-also-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ec-also-word { min-width: 0; overflow-wrap: anywhere; }
 
-/* 背面：答案；和詳解之間拉開約 20px，中間一條 24px 的淡色短線（D-096） */
-.ec-answer { margin-top: var(--ec-gap-answer); padding-top: 22px; border-top: 1px solid var(--ec-line); font-size: var(--ec-size-answer); animation: ec-fade-in var(--ec-fade) ease-out both; font-family: var(--ec-font-text); }
+/* 背面：答案；不畫分隔線，和題目、詳解之間只靠留白（D-145，修改 D-096 的短線），詳解是小一號的灰字 */
+.ec-answer { margin-top: var(--ec-gap-answer); font-size: var(--ec-size-answer); animation: ec-fade-in var(--ec-fade) ease-out both; font-family: var(--ec-font-text); }
 .ec-a { line-height: 1.75; }
 .ec-a .ec-markdown p { margin: 0 0 8px; }
-.ec-ex { position: relative; margin-top: var(--ec-gap-extra); padding-top: 16px; font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }
-.ec-ex::before { content: ""; position: absolute; top: 0; left: 0; width: 24px; border-top: 1px solid color-mix(in srgb, var(--ec-muted) 55%, transparent); }
+.ec-ex { margin-top: var(--ec-gap-extra); font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }
 .ec-ex-item + .ec-ex-item { margin-top: 6px; }
 .ec-tools { display: flex; justify-content: flex-end; align-items: center; margin: 8px -10px 0 0; }
 .ec-srcw { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }

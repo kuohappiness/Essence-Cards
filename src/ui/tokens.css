@@ -31,7 +31,8 @@
 
   --ec-gap-stage: 30px 26px 16px;
   --ec-gap-question: 18px;
-  --ec-gap-answer: 26px;
+  /* 題目和答案之間：不畫線，只靠留白分開（D-145；原本 26px 加線下的 22px） */
+  --ec-gap-answer: 48px;
   --ec-gap-extra: 20px;
   --ec-radius: 12px;
   --ec-radius-small: 6px;

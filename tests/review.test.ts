@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, keyboardFit, lockAxis, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -63,6 +63,19 @@ void test('R8 英文的部分：例句只念英文；＿＿ 填入答案；單�
   assert.deepEqual(englishParts('例句：We wear uniforms to school. 我們穿制服上學。'), ['We wear uniforms to school.']);
   assert.equal(fillBlank('借入', 'borrow'), null);
   assert.deepEqual(englishParts(PHRASE), ['He has already ＿＿ to study abroad.']);
+});
+
+void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只念一次；「也可以」列結果那一行沒寫的答案', () => {
+  assert.deepEqual(lineSpeech('記憶錨點：go 的過去式不規則：go → went → gone'), ['go', 'went', 'gone']);
+  assert.deepEqual(lineSpeech('v. 借入、向別人借'), []);
+  assert.deepEqual(lineSpeech('例句：Can I borrow your pen? 我可以借你的筆嗎？'), ['Can I borrow your pen?']);
+  assert.deepEqual(lineSpeech('記憶錨點：易混淆 lend（借出：把東西借給別人）'), ['lend']);
+  assert.deepEqual(lineSpeech('Go 和 go 不分大小寫：GO'), ['Go']);
+  assert.deepEqual(otherAnswers(TWO, 'made up his mind'), ['made his mind up']);
+  assert.deepEqual(otherAnswers(TWO, ' MADE HIS MIND UP '), ['made up his mind'], '大小寫與前後空白不算');
+  assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
+  assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
+  assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
 });
 
 void test('R9 手勢：先鎖方向，垂直捲動後不改判；短的水平移動彈回；沒有上一張往右彈回；不在回看往左彈回', () => {

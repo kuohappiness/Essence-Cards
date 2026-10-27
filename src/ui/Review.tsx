@@ -1,8 +1,9 @@
 import type { App } from 'obsidian';
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { animate } from 'motion';
 import type { Rating } from '../core/study/index.ts';
-import { blankCount, englishParts, fillBlank, gesture, lockAxis, RATING_LABELS, RATINGS, sourceLinks } from '../review/index.ts';
+import { blankCount, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLinks } from '../review/index.ts';
 import type { Axis, CardView, DoneView, Gesture, Session, Spelling } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
 import { firstMaterial, resolveSource } from './sources.ts';
@@ -60,10 +61,14 @@ function Letters({ letters, mode }: { letters: Spelling['typed']; mode: 'typed' 
     : <span key={index}>{letter.char}</span>)}</span>;
 }
 
-function Speakers({ texts, say }: { texts: readonly string[]; say: (text: string) => void }): React.JSX.Element | null {
+/** 一行最多一個喇叭（D-145）：按下去依序念這一行的英文（lineSpeech）。 */
+function Speaker({ texts, say }: { texts: readonly string[]; say: (texts: readonly string[]) => void }): React.JSX.Element | null {
   if (!texts.length) return null;
-  return <span className="ec-speakers">{texts.map((text, index) => <button key={index} type="button" className="ec-ico ec-say" aria-label={'朗讀 ' + text} onClick={() => { say(text); }}><Icon type="speaker" /></button>)}</span>;
+  return <span className="ec-speakers"><button type="button" className="ec-ico ec-say" aria-label={'朗讀 ' + texts.join('、')} onClick={() => { say(texts); }}><Icon type="speaker" /></button></span>;
 }
+
+/** 拼字比對裡的答案（「正確拼字」那一行寫的字）。 */
+const spelled = (letters: Spelling['expected']): string => letters.map(letter => letter.char).join('');
 
 export function Review(props: ReviewProps): React.JSX.Element {
   const { app, session, speech } = props;
@@ -83,9 +88,13 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const spoken = useRef<readonly string[] | null>(null);
   const opened = useRef(false);
   const pendingNext = useRef<number | null>(null);
+  // 打字卡題目裡的空格（D-145）：題目渲染好後由 Markdown 交回；換了一張就不算（undefined 是還沒渲染好，null 是題目沒有 ＿＿）。
+  const [slot, setSlot] = useState<{ key: string; el: HTMLElement | null } | null>(null);
 
   // 換卡、回看、切走超過 60 秒回來從頭開始（shown 加一，L2 的 F4）都算換了一張。
   const cardKey = view.kind === 'card' ? [view.card.card.lt, view.card.card.prompt.fingerprint, view.card.viewing?.index ?? -1, view.card.shown].join(':') : view.kind;
+  const cardSlot = slot?.key === cardKey ? slot.el : undefined;
+  const onSlot = (el: HTMLElement | null): void => { setSlot(old => old?.key === cardKey && old.el === el ? old : { key: cardKey, el }); };
   const focusApp = (): void => { appEl.current?.focus({ preventScroll: true }); };
 
   useEffect(() => () => { alive.current = false; }, []);
@@ -108,10 +117,10 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (autoOn) speech.say(texts);
   }, [view, autoOn, speech]);
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
-  // 打字卡：輸入框自動取得焦點。
+  // 打字卡：輸入框自動取得焦點（在空格裡打字時，題目渲染好、輸入框放進空格之後）。
   useEffect(() => {
     if (view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
-  }, [cardKey, view]);
+  }, [cardKey, view, cardSlot]);
 
   async function slide(direction: number, change: () => void): Promise<void> {
     if (busy.current) return;
@@ -236,7 +245,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
       {top.viewing
         ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
         : <span className="ec-count" aria-live="polite">{view.kind === 'done' ? '' : top.center}</span>}
-      {english && <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label>}
+      {/* 沒有開關時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
+      {english ? <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label> : <span aria-hidden="true" />}
       <button type="button" className="ec-ico" aria-label="結束複習" onClick={props.close}><Icon type="close" /></button>
     </div>
     <div className="ec-prog" aria-hidden="true"><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
@@ -248,7 +258,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} session={session} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} onPainted={painted} onFail={side => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); }} />}
+        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} session={session} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onPainted={painted} onFail={side => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); }} />}
       </div>
     </div>
     <div className="ec-actions">
@@ -291,50 +301,70 @@ interface CardProps {
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  /** 題目裡的空格：undefined 是題目還沒渲染好，null 是題目沒有 ＿＿（輸入框放在題目下面）。 */
+  slot: HTMLElement | null | undefined;
+  onSlot: (slot: HTMLElement | null) => void;
   onPainted: () => void;
   onFail: (side: 'front' | 'back') => void;
 }
-function Card({ view, app, session, speech, materials, openLink, tipOpen, setTipOpen, inputRef, onPainted, onFail }: CardProps): React.JSX.Element {
+function Card({ view, app, session, speech, materials, openLink, tipOpen, setTipOpen, inputRef, slot, onSlot, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
   const prompt = card.prompt;
   const question = prompt.kind === 'qa' ? prompt.question : prompt.text;
   const answer = prompt.kind === 'qa' ? prompt.answer : null;
   const extras = [...prompt.extras, ...card.target.shared];
-  const say = (text: string): void => { speech.say([text]); };
+  const say = (texts: readonly string[]): void => { speech.say(texts); };
+  const speak = (text: string): string[] => view.speakable ? lineSpeech(text) : [];
   const spokenQuestion = typed && revealed ? fillBlank(question, typed.answer) ?? question : question;
-  const questionParts = view.speakable ? englishParts(spokenQuestion) : [];
+  const lines = typed ? blankCount(question, prompt.kind === 'qa' ? prompt.typed : null) : 0;
+  // 三步還沒走完（不是回看）：題目有 ＿＿ 時在空格裡打（D-145），渲染後找不到空格才放在題目下面。
+  const typing = typed !== null && !typed.finished && !view.viewing ? typed : null;
+  const inline = typing !== null && lines > 0 && slot !== null;
   const sources = sourceLinks(card.target.fields.sources);
   const deckMaterials = materials(card.deck);
   const links = sources.map(item => ({ ...item, target: resolveSource(app, card.deck, deckMaterials, item.link) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
-  const stepText = typed && !typed.finished && typed.step === 2 ? <div className="ec-hint">{typed.notice && <span className="ec-wrong">不對</span>}<span>提示：<span lang="en">{typed.hint}</span></span></div> : null;
+  const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-wrong">不對</span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
+    : inline && typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span></div> : null;
+  const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { session.input(event.currentTarget.value); }}
+    placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
+    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />;
+  // 拼對（第 1 步，或目前這張的第 2 步，Codex L2 F7）：打勾加答案。回看時照第 1 步（§2-5），第 1 步拼錯的顯示當時的比對。
+  const right = typed !== null && (typed.first === 'right' || (!view.viewing && typed.second === 'right') || (view.viewing && !typed.attempt));
+  const shown = typed && !right && typed.attempt ? spelled(typed.attempt.expected) : typed?.answer ?? '';
+  const others = typed && prompt.kind === 'qa' && prompt.typed ? otherAnswers(prompt.typed, shown) : [];
   return <article className={'ec-card' + (view.english ? ' is-english' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
     <div className="ec-q">
-      <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed}
-        lines={typed ? blankCount(question, prompt.kind === 'qa' ? prompt.typed : null) : 0} words={typed && revealed ? typed.answer.split(/\s+/) : []}
+      {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
+      <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed && !inline}
+        lines={lines} words={typed && revealed ? typed.answer.split(/\s+/) : []} onSlot={lines > 0 ? onSlot : undefined}
         onReady={onPainted} onFail={() => { onFail('front'); }} />
-      <Speakers texts={questionParts} say={say} />
+      <Speaker texts={speak(spokenQuestion)} say={say} />
     </div>
+    {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
+    {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}
     {stepText}
-    {typed && !typed.finished && !view.viewing && <div className="ec-inrow">
-      <input ref={inputRef} className="ec-input" type="text" lang="en" value={typed.input} onChange={event => { session.input(event.currentTarget.value); }}
-        placeholder={typed.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typed.step === 3 ? '照著打一次' : '輸入英文'}
-        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />
-    </div>}
-    {/* 照打的即時比對：還沒打字時不畫（不然只有一條「—」） */}
-    {typed && typed.step === 3 && !typed.finished && typed.live && <div className="ec-live">{typed.live.typed.length > 0 && <Letters letters={typed.live.typed} mode="typed" />}</div>}
+    {!inline && input && <div className="ec-inrow">{input}</div>}
+    {/* 照打的即時比對：只在打錯字母時畫（D-145），打的都對時不再重複一次 */}
+    {typing?.step === 3 && typing.live?.typed.some(letter => letter.bad) && <div className="ec-live"><Letters letters={typing.live.typed} mode="typed" /></div>}
     {revealed && <div className="ec-answer">
-      {/* 拼對（第 1 步，或目前這張的第 2 步，Codex L2 F7）：打勾加答案。回看時照第 1 步（§2-5），第 1 步拼錯的顯示當時的比對。 */}
-      {typed && (typed.first === 'right' || (!view.viewing && typed.second === 'right') || (view.viewing && !typed.attempt)
-        ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span></div></div>
+      {typed && (right
+        ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span><Speaker texts={speak(typed.answer)} say={say} /></div></div>
         : typed.attempt && <div className="ec-spell">
           <div className="ec-spell-row"><span className="ec-lab">你打的</span><Letters letters={typed.attempt.typed} mode="typed" /></div>
-          <div className="ec-spell-row"><span className="ec-lab">正確拼字</span><Letters letters={typed.attempt.expected} mode="expected" /></div>
+          <div className="ec-spell-row"><span className="ec-lab">正確拼字</span><Letters letters={typed.attempt.expected} mode="expected" /><Speaker texts={speak(shown)} say={say} /></div>
         </div>)}
-      {answer !== null && <div className="ec-a"><Markdown app={app} text={answer} sourcePath={card.deck} revealed onFail={() => { onFail('back'); }} /><Speakers texts={view.speakable ? englishParts(answer) : []} say={say} /></div>}
-      {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => <div key={index} className="ec-ex-item"><Markdown app={app} text={extra} sourcePath={card.deck} revealed /><Speakers texts={view.speakable ? englishParts(extra) : []} say={say} /></div>)}</div>}
+      {/* 其他正確答案（D-145）：一個時和「也可以：」同一行，兩個以上每個一行 */}
+      {others.length > 0 && <div className="ec-also">
+        {others.length === 1
+          ? <div className="ec-also-row"><span lang="zh-Hant">也可以：</span><span className="ec-also-word" lang="en">{others[0]}</span><Speaker texts={speak(others[0])} say={say} /></div>
+          : <><div className="ec-also-row" lang="zh-Hant">也可以：</div>{others.map(other => <div key={other} className="ec-also-row"><span className="ec-also-word" lang="en">{other}</span><Speaker texts={speak(other)} say={say} /></div>)}</>}
+      </div>}
+      {/* 打字卡的答案已經寫在線上與上面那一行，不再畫答案格（D-145） */}
+      {answer !== null && !typed && <div className="ec-a"><Markdown app={app} text={answer} sourcePath={card.deck} revealed onFail={() => { onFail('back'); }} /><Speaker texts={speak(answer)} say={say} /></div>}
+      {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => <div key={index} className="ec-ex-item"><Markdown app={app} text={extra} sourcePath={card.deck} revealed /><Speaker texts={speak(extra)} say={say} /></div>)}</div>}
       {hasSource && <div className="ec-tools">
         <span className={'ec-srcw' + (tipOpen ? ' is-tip' : '')}>
           <button type="button" className="ec-ico sm" aria-label="出處" onClick={() => { setTipOpen(!tipOpen); }}><Icon type="book" /></button>

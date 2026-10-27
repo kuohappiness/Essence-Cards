@@ -36,7 +36,9 @@ export interface TypedView {
   answer: string;
   /** 第 3 步：最後一次打的字和最接近的答案逐字比對（拼錯的字母標出）；其他步 null。 */
   attempt: Spelling | null;
-  /** 第 3 步照打：目前輸入和線上答案照位置的即時比對（copying）；其他步 null。 */
+  /** 第 3 步照打的對象：「正確拼字」那一行的答案（和最後一次打的字最接近的那個，D-145）；其他步與回看是 null。 */
+  copy: string | null;
+  /** 第 3 步照打：目前輸入和照打的對象照位置的即時比對（copying）；其他步 null。 */
   live: Spelling | null;
   /** 第 1 步拼錯或按「沒印象」時打的字和最接近答案的比對（回看時顯示）；拼對是 null。 */
   firstAttempt: Spelling | null;
@@ -203,7 +205,7 @@ export function createSession(options: SessionOptions): Session {
   function present(card: Card, shown: number): Current {
     const english = card.target.direction !== null;
     const typed: TypedView | null = card.typed ? {
-      step: 1, first: null, second: null, notice: false, hint: null, answer: answersOf(card)[0] ?? '', attempt: null, live: null, firstAttempt: null, input: '', finished: false, canSkip: true,
+      step: 1, first: null, second: null, notice: false, hint: null, answer: answersOf(card)[0] ?? '', attempt: null, copy: null, live: null, firstAttempt: null, input: '', finished: false, canSkip: true,
     } : null;
     // 英翻中的題目一出現就念英文（D-116）。
     const question = card.prompt.kind === 'qa' ? card.prompt.question : card.prompt.text;
@@ -240,7 +242,7 @@ export function createSession(options: SessionOptions): Session {
     if (viewing !== null) {
       const entry = done[viewing];
       const typedView: TypedView | null = entry.answer !== null ? {
-        step: 3, first: entry.typed, second: entry.retry, notice: false, hint: null, answer: entry.answer ?? '', attempt: entry.firstCompare, live: null, firstAttempt: entry.firstCompare, input: entry.firstInput ?? '', finished: true, canSkip: false,
+        step: 3, first: entry.typed, second: entry.retry, notice: false, hint: null, answer: entry.answer ?? '', attempt: entry.firstCompare, copy: null, live: null, firstAttempt: entry.firstCompare, input: entry.firstInput ?? '', finished: true, canSkip: false,
       } : null;
       return {
         kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: entry.changeable, pressed: entry.rating,
@@ -293,7 +295,7 @@ export function createSession(options: SessionOptions): Session {
     spoken();
     const typed = current.typed;
     typed.input = text;
-    if (typed.step === 3) typed.live = copying(text, typed.answer);
+    if (typed.step === 3) typed.live = copying(text, typed.copy ?? typed.answer);
     notify();
   }
 
@@ -304,8 +306,9 @@ export function createSession(options: SessionOptions): Session {
     typed.hint = null;
     typed.notice = false;
     typed.answer = answers[0] ?? '';
-    typed.attempt = spelling(lastInput, closest(lastInput, answers));
-    typed.live = copying('', typed.answer);
+    typed.copy = closest(lastInput, answers);
+    typed.attempt = spelling(lastInput, typed.copy);
+    typed.live = copying('', typed.copy);
     typed.input = '';
     typed.canSkip = false;
     revealNow();
@@ -337,8 +340,9 @@ export function createSession(options: SessionOptions): Session {
     const text = typed.input;
     if (typed.step === 3) {
       if (!text.trim()) return;
-      typed.live = copying(text, typed.answer);
-      if (checkTyped(card.prompt, text)) finish(typed, card, typed.answer, false);
+      typed.live = copying(text, typed.copy ?? typed.answer);
+      // 照打任何一個答案都能結束；線上寫學生照打的那一個（拼對時寫對中的那一個，W6 §3-4）。
+      if (checkTyped(card.prompt, text)) finish(typed, card, answers.find(answer => normalize(answer) === normalize(text)) ?? typed.answer, false);
       notify();
       return;
     }
