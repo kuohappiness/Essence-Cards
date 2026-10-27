@@ -15,10 +15,12 @@
 
 ## 檢查指令
 
-- `npm run check`：型別、ESLint（含模組邊界）、knip、secretlint、skill 副本一致性、文件檢查、測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。W3 第 0 步裝好之前，用 `npm run typecheck`、`npm test` 和 `node tools/check-skill-mirror.ts`。
+- `npm run check`：型別、ESLint（含模組邊界）、knip、secretlint、skill 副本一致性、文件檢查、測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。
 - 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 - 自動執行的地方：`.githooks/pre-commit`、`.github/workflows/check.yml`。
-- knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：在指令前加 `KNIP_DISABLE_RAW_TRANSFER=1` 再跑（commit 時也一樣加在 `git commit` 前面），檢查項目不變（2026-10-27 W6 合併時遇到）。
+- CI 的結果：每個 Claude session 開始時，`.claude/hooks/ci-status.mjs` 會查 `main` 最近一次跑完的 GitHub Actions，沒通過就提醒；看到提醒先用 `gh run view <id> --log-failed` 找原因，能修就修，不能修就告訴使用者。本機是 Windows、CI 是 Linux，只在一邊壞的問題 pre-commit 擋不到（2026-10 曾紅了三天沒人發現，[第一個里程碑的檢查](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) R1）。
+- knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：`npm run knip`（`tools/knip.mjs`）已經自動加上 `KNIP_DISABLE_RAW_TRANSFER=1`，檢查項目不變；直接跑 `npx knip` 時要自己加（2026-10-27 W6 合併時遇到）。
+- Codex 審查時：完整的 `npm run check` 要在沙箱外跑。沙箱裡會有 10～11 項環境造成的固定失敗（symlink、改名的 EPERM、git config；W5 第二部分三輪都是這樣）；沒辦法解除沙箱時，回報裡逐項列出失敗的測試，並說明哪些是環境造成的。審查請求的「驗證方式」連到這一點。
 - 建置：`npm run build`，`main.js` 只能 require Obsidian 提供的 `obsidian`、`@codemirror/state`、`@codemirror/view`（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護) 的編輯器鎖定），不能把另一份 CodeMirror 打包進去（`tools/build.mjs` 會擋）。
 
 ## 規格來源
@@ -55,6 +57,8 @@
 - 只在 Node 驗過的檔案存取，接上 Obsidian 前要在 Windows 版 Obsidian 對照一次（D-110）。
 - 測試只用 syntax.md 的例子或自編的內容；課本、學生資料不進 repo。
 - 要用 iPhone 實機的測試集中成一次（[D-065](../decisions.md#d-065-試作場)）。
+- Obsidian 畫面的截圖用開發版的 `ui` 命令（Electron 的 `capturePage()`），不要用 computer-use：它會截到舊畫面，還會讓 Obsidian 被當成隱藏而停止繪製，計時器和 `requestAnimationFrame` 也跟著變慢（W6 的 Windows 實測）。
+- 測試不改全域的 `node:fs` 等 Node 內建模組：Node 自己的實作也會呼叫它們，換掉之後結果會隨 Node 的版本改變。要模擬失敗，就把替身直接交給要測的函式（例如 `createNodeFiles` 的 `seams`）。
 
 ## 技術債清單
 

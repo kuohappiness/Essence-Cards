@@ -1,6 +1,6 @@
 # 第一個里程碑的品質檢查（W1～W6）
 
-狀態：待使用者選擇：建議 R1～R10 要做哪些
+狀態：處理中：R1～R4、R7、R8 已在 `main` 做完（〈[處理紀錄](#處理紀錄2026-10-28)〉）；R5 在分支 `claude/quizzical-euclid-f0564e`（`934392d`）做完，還沒合併；R6、R9 等觸發點；R10 記下即可
 
 2026-10-27｜檢查者：Claude（Opus 5.5）｜性質：code-quality 的[里程碑回顧與安全檢查](../.claude/skills/code-quality/milestone.md)（[D-117](../docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)、[D-119](../docs/decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)），L1。審查紀錄分三段交給子代理整理，安全檢查照 `security-review` 的流程交給子代理；兩者的關鍵說法 Claude 都抽查過。只提建議，改哪些由使用者決定。
 
@@ -37,7 +37,7 @@ Codex 一共找到約 50 項。看得出三件事：
 - **原因**：
   - 這個測試把全域的 `fs.readdirSync` 換成會丟 EPERM 的版本。
   - runner 的 Node 24.21.0 在 Linux 用 JS 實作遞迴 `fs.watch`，它也呼叫 `fs.readdirSync`。CI 的堆疊顯示 `node:internal/fs/recursive_watch` 呼叫到測試換上的函式，於是丟出沒人攔截的錯誤。
-  - runner 換成 24.22.1 之後就通過了，推測是 Node 改了內部實作。
+  - runner 換成 24.22.1 之後就通過了，推測是 Node 改了內部實作。但 runner 的 Node 版本不固定：10-27 15:14 推的 `8124927`（這份報告）又分到 24.21.0，同一個測試又失敗。所以它不是「自己好了」，是看分到哪一台 runner。
   - 本機是 Windows、Node 24.13，一直通過，pre-commit 擋不到。
 - **影響**：這三天裡 CI 等於沒有作用，那段時間如果有真的只在 Linux 才壞的問題，也會被蓋住。D-117 的 L0 有接上，失敗卻沒有傳到任何人。
 - **建議**：
@@ -152,6 +152,29 @@ Codex 一共找到約 50 項。看得出三件事：
   - 和本專案有關的是 smart list 的改動：搬動、縮排巢狀項目時會帶著子項目。卡組是清單，這和 D-134 的 ID 鎖定、`fixIndent` 有關。
   - `cm-formatting-*-end` 類別、Mermaid 換成 Pele，本專案都沒用到。
   - 等它公開時照 [D-138](../docs/decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查) 做三層檢查，第 2 層要多跑「清單搬動」的鎖定情境。
+
+## 處理紀錄（2026-10-28）
+
+使用者選了：R1～R4、R7、R8 在這裡做；R5 另開任務；R6、R9 等觸發點到了再說。
+
+- **R1**（`fb95339`）：
+  - `createNodeFiles` 多收一個只給測試用的 `seams`（`readdirSync`、`watch`），EPERM 的測試把替身直接交給它，不再改全域的 `fs`。
+  - ESLint 在 `tests/` 擋 `syncBuiltinESMExports`，以及對 `fs`、`path`、`os` 等成員的指定；`tests/quality.test.ts` 有正反例。拿修改前的測試檔去跑，兩處都會被擋下。
+  - 加了一個 SessionStart hook（`.claude/hooks/ci-status.mjs`）：`main` 最近一次跑完沒通過就提醒；gh 不能用時安靜結束。
+  - `.node-version` 沒有做（c 是可選的）：測試不再依賴 Node 的內部實作之後，固定版本的好處不大。
+- **T2**（`105fd3e`）：改 `tools/node-files.ts` 正好碰到它的觸發點，就一起做了。沒有檔名的事件，下一次比對成功時把已知的檔全部通知重讀；比對暫時失敗時這個需求留著。測試在拿掉修正時會失敗。
+- **R2**（測試 `44b4526`）：
+  - `tests/study.test.ts` 加了 `seen` 的性質測試：200 組隨機紀錄，種下的 `lt` 都要在 `seen`，涵蓋作答、變更、取消行、評分不對的行；空白、跳脫的鍵名、欄位順序；寫入中斷。
+  - `tests/state-ids.test.ts` 加了三個情境，同一批通知照所有排列跑，結果要相同。
+  - 確認測試有效：把 `history.ts` 的三條規則（取消行多帶的 `lt`、救回的尾段、寬鬆比對的空白）各拿掉一次，`seen` 的性質測試都會失敗；把紀錄拿出同一批，順序測試也會失敗。
+  - code-quality 的「測試」加上「一個 commit 只實作一個決定或一項審查發現」。
+- **R3**：`review.md` 的審查請求範本加「實作者自己選的做法」。
+- **R4**：code-quality 的「寫規格」加「引用別的模組的行為或已有的驗證時附上證據；找不到就寫成待驗證」。
+- **R7**（knip `3c9551f`）：
+  - `npm run knip` 改走 `tools/knip.mjs`，自動加上 `KNIP_DISABLE_RAW_TRANSFER=1`。
+  - quality.md 刪掉過期的「W3 第 0 步」，加上 Obsidian 截圖的做法，以及「測試不改全域的 Node 內建模組」。
+- **R8**：quality.md 的「檢查指令」寫明 Codex 審查時完整檢查要在沙箱外跑；跑不了時要逐項列出失敗、說明哪些是環境造成的。
+- **技術債清單**：F3 已經修好，刪掉；F5 只留「下一次 T4 用 `parseDeck` 對照題數」；T2 做完，刪掉。
 
 ## 驗證紀錄
 
