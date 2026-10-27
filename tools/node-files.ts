@@ -90,7 +90,9 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
       let retry: ReturnType<typeof setTimeout> | null = null;
       let wait = 50;
       const named = new Set<string>();
-      /** 和上一次的清單比對，通知不同的路徑；暫時列不到時保留舊清單，稍後自己再比一次。 */
+      // 收到沒有檔名的事件：不知道哪一篇的內容改了，下一次比對成功時已知的檔全部通知重讀（T2）。
+      let everything = false;
+      /** 和上一次的清單比對，通知不同的路徑；暫時列不到時保留舊清單與要重讀的路徑，稍後自己再比一次。 */
       function rescan(): void {
         let now: Set<string>;
         try { now = snapshot(); } catch (error) {
@@ -104,7 +106,9 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
         const changed = new Set([...known].filter(path => !now.has(path)));
         for (const path of now) if (!known.has(path)) changed.add(path);
         for (const path of named) if (known.has(path) || now.has(path)) changed.add(path);
+        if (everything) for (const path of now) changed.add(path);
         named.clear();
+        everything = false;
         known = now;
         for (const path of changed) onChange(path);
       }
@@ -112,6 +116,7 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
         // 重新列出 rename 前後的檔案，也能通知資料夾改名內的舊、新路徑。
         if (event === 'rename' || filename === null) {
           if (filename) named.add(filename.toString().split(sep).join('/'));
+          else everything = true;
           rescan();
         } else {
           const path = filename.toString().split(sep).join('/');

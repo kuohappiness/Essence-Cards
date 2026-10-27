@@ -181,6 +181,53 @@ void test('Files.watch 列資料夾暫時回 EPERM：恢復後自己重新比對
   assert.equal(list.calls, before);
   assert.deepEqual(seen, []);
 });
+// 外掛架構檢查環節 1 的 T2：fs.watch 有時不給檔名。用假的 watch 送出 filename 是 null 的事件。
+void test('T2 Files.watch 收到沒有檔名的事件：既有檔改了內容、新檔出現都通知；比對暫時失敗時保留，恢復後補送；停止後不再通知', async t => {
+  const { root, files } = await fixture(t);
+  await files.append('a.md', 'a');
+  await files.append('deep/b.md', 'b');
+  const list = flakyList();
+  const fake = { emit: (() => {}) as (event: string, filename: string | null) => void, closed: false };
+  const watch = ((_path: string, _options: unknown, listener: typeof fake.emit) => {
+    fake.emit = listener;
+    return { close() { fake.closed = true; } };
+  }) as unknown as typeof fs.watch;
+  const events: string[] = [];
+  const stop = createNodeFiles(root, { readdirSync: list.readdirSync, watch }).watch(path => { events.push(path); });
+  t.after(() => stop());
+
+  // 既有檔改了內容：檔名集合沒變，不知道是哪一篇，已知的全部通知。
+  await files.modify('deep/b.md', old => old + '!');
+  fake.emit('change', null);
+  assert.deepEqual(events.sort(), ['a.md', 'deep/b.md']);
+  events.length = 0;
+  await files.append('c.md', 'c');
+  fake.emit('change', null);
+  assert.deepEqual(events.sort(), ['a.md', 'c.md', 'deep/b.md']);
+  events.length = 0;
+
+  // 比對暫時失敗：這次的重讀需求留著，恢復後自己補送。
+  list.failing = true;
+  await files.modify('a.md', old => old + '!');
+  fake.emit('change', null);
+  assert.deepEqual(events, []);
+  list.failing = false;
+  const deadline = performance.now() + 3000;
+  while (events.length === 0 && performance.now() < deadline) await setTimeout(10);
+  assert.deepEqual(events.sort(), ['a.md', 'c.md', 'deep/b.md']);
+  events.length = 0;
+
+  // 停止監看：排好的重試取消，之後不再通知。
+  list.failing = true;
+  fake.emit('change', null);
+  stop();
+  assert.ok(fake.closed);
+  list.failing = false;
+  const before = list.calls;
+  await setTimeout(300);
+  assert.equal(list.calls, before);
+  assert.deepEqual(events, []);
+});
 void test('Files.watch 能監看既有深層檔案', async t => {
   const { files } = await fixture(t);
   await files.append('deep/old.md', 'before');
