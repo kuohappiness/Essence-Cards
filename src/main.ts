@@ -107,10 +107,10 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
   startReview(pick: Pick): ReviewHandle | null {
     if (!this.state) return null;
-    const openedAt = performance.now();
+    const pickedAt = performance.now();
     this.review?.close();
     this.review = openReview({
-      app: this.app, state: this.state, pick, openedAt,
+      app: this.app, state: this.state, pick, pickedAt,
       onEvent: event => { this.emit('review', event); },
       onClose: () => { this.review = null; },
     });

@@ -16,6 +16,8 @@ export type ReviewEvent =
   | { kind: 'next'; ms: number }
   | { kind: 'gesture'; outcome: Gesture; axis: Axis; dx: number; dy: number; ms: number; sidebarOpened: boolean }
   | { kind: 'render-failed'; lt: string; side: 'front' | 'back' }
+  | { kind: 'away'; ms: number; restarted: boolean }
+  | { kind: 'keyboard'; innerHeight: number; height: number; offsetTop: number; adjusted: boolean; input: boolean | null; actions: boolean | null }
   | { kind: 'closed' };
 
 export interface ReviewProps {
@@ -29,8 +31,8 @@ export interface ReviewProps {
   speech: Speech;
   autoRead: { get(): boolean; set(on: boolean): void };
   onEvent?: (event: ReviewEvent) => void;
-  /** 命令按下的時間（performance.now）：第一張卡畫好時量「從命令到畫好」。 */
-  openedAt: number;
+  /** 選了科目的時間（performance.now）：第一張卡畫好時量「從選了科目到畫好」，不含選單與 state 載入（L2 自選第 22 點）。 */
+  pickedAt: number;
 }
 
 function Icon({ type }: { type: 'book' | 'speaker' | 'check' | 'back' | 'close' | 'forward' }): React.JSX.Element {
@@ -82,7 +84,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const opened = useRef(false);
   const pendingNext = useRef<number | null>(null);
 
-  const cardKey = view.kind === 'card' ? view.card.card.lt + ':' + view.card.card.prompt.fingerprint + ':' + String(view.card.viewing?.index ?? -1) : view.kind;
+  // 換卡、回看、切走超過 60 秒回來從頭開始（shown 加一，L2 的 F4）都算換了一張。
+  const cardKey = view.kind === 'card' ? [view.card.card.lt, view.card.card.prompt.fingerprint, view.card.viewing?.index ?? -1, view.card.shown].join(':') : view.kind;
   const focusApp = (): void => { appEl.current?.focus({ preventScroll: true }); };
 
   useEffect(() => () => { alive.current = false; }, []);
@@ -140,7 +143,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
     pendingNext.current = performance.now();
     const accepted = session.rate(rating);
     if (!accepted) { pendingNext.current = null; return; }
-    // 已經換成下一張；滑出用舊畫面不可能了，所以只做滑入。
+    // 已經換成下一張：評分後只做滑入，回看的換卡才有滑出（§3-4、L2 自選第 10 點）。
     const el = body.current;
     if (el && !reducedMotion()) void animate(el, { opacity: [0, 1], x: [-35, 0] }, { duration: 0.16 });
     focusApp();
@@ -218,7 +221,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const painted = (): void => {
     void nextFrame().then(() => {
       if (!alive.current) return;
-      if (!opened.current) { opened.current = true; props.onEvent?.({ kind: 'opened', ms: performance.now() - props.openedAt }); }
+      if (!opened.current) { opened.current = true; props.onEvent?.({ kind: 'opened', ms: performance.now() - props.pickedAt }); }
       if (pendingNext.current !== null) { props.onEvent?.({ kind: 'next', ms: performance.now() - pendingNext.current }); pendingNext.current = null; }
     });
   };

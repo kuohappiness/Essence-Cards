@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, lockAxis, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, keyboardFit, lockAxis, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -143,4 +143,15 @@ void test('§2-6 完成畫面：N 是今天的作答筆數（錯題補強不算�
   assert.deepEqual(doneView({ more: true }, progress([['自然', 3, 3]]), { count: 12, minutes: 7 }), {
     title: '又多複習了一些', detail: '今天複習了 12 張・約 7 分鐘', buttons: [{ kind: 'close', label: '結束複習' }],
   });
+});
+
+// Codex L2 的 S2（2026-10-27 定，W6 §3-2）：看得到的區域比版面矮、而且不是縮放造成的時，全螢幕改成看得到的那一塊；
+// 系統已經縮小版面（兩個高度一樣）時不再縮。只看高度不能保證對，iPhone 的 J7 才是驗收。
+void test('§3-2 鍵盤：系統沒縮小版面時改成看得到的那一塊（含上緣位置）；系統已縮小、縮放或沒有鍵盤時不調整', () => {
+  assert.deepEqual(keyboardFit(844, { height: 508, offsetTop: 0, scale: 1 }), { top: 0, height: 508 });
+  assert.deepEqual(keyboardFit(844, { height: 508, offsetTop: 120.4, scale: 1 }), { top: 120.4, height: 508 }, '看得到的區域被捲下去了');
+  assert.equal(keyboardFit(508, { height: 508, offsetTop: 0, scale: 1 }), null, '系統已經縮小版面：不再縮一次');
+  assert.equal(keyboardFit(844, { height: 843.5, offsetTop: 0, scale: 1 }), null, '小於 1 px 的差不算');
+  assert.equal(keyboardFit(844, { height: 422, offsetTop: 0, scale: 2 }), null, '放大造成的不是鍵盤');
+  assert.equal(keyboardFit(844, null), null, '沒有 visualViewport');
 });

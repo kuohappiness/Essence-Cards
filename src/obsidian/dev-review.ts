@@ -41,26 +41,30 @@ const round = (ms: number) => Math.round(ms);
 // ── 自動量測（§4 的「自動」）：每次打開複習畫面記下打開、換卡、手勢與渲染失敗，關掉時寫一個檔 ──
 
 let opens = 0;
-interface Measure { open: number; openedMs: number | null; next: number[]; gestures: unknown[]; failed: unknown[] }
+interface Measure { open: number; fromPickMs: number | null; next: number[]; gestures: unknown[]; failed: unknown[]; away: unknown[]; keyboard: unknown[] }
 /** 一次打開的量測；ui 命令自己開的畫面也用它。 */
 function measurer(): { onEvent: (event: ReviewEvent) => void; result: () => unknown } {
   let current: Measure | null = null;
-  const start = (): Measure => current ??= { open: ++opens, openedMs: null, next: [], gestures: [], failed: [] };
+  const start = (): Measure => current ??= { open: ++opens, fromPickMs: null, next: [], gestures: [], failed: [], away: [], keyboard: [] };
   return {
     onEvent(event) {
       const m = start();
-      if (event.kind === 'opened') m.openedMs = event.ms;
+      // 從選了科目到第一張卡畫好（不含選單與 state 載入，L2 自選第 22 點）。
+      if (event.kind === 'opened') m.fromPickMs = event.ms;
       else if (event.kind === 'next') m.next.push(event.ms);
       else if (event.kind === 'gesture') m.gestures.push({ ...event, dx: round(event.dx), dy: round(event.dy), ms: round(event.ms) });
       else if (event.kind === 'render-failed') m.failed.push(event);
+      // 切走再回來（§7 的 J8）與鍵盤（J7）。
+      else if (event.kind === 'away') m.away.push(event);
+      else if (event.kind === 'keyboard' && m.keyboard.length < 40) m.keyboard.push(event);
     },
     result() {
       const m = start();
       return {
-        open: m.open, openedMs: m.openedMs === null ? null : round(m.openedMs),
+        open: m.open, fromPickMs: m.fromPickMs === null ? null : round(m.fromPickMs),
         next: { count: m.next.length, median: m.next.length ? round(median(m.next) ?? 0) : null, max: m.next.length ? round(Math.max(...m.next)) : null, all: m.next.map(round) },
         gestures: m.gestures, sidebarOpened: m.gestures.filter(g => (g as { sidebarOpened: boolean }).sidebarOpened).length,
-        renderFailed: m.failed,
+        renderFailed: m.failed, away: m.away, keyboard: m.keyboard,
       };
     },
   };
@@ -307,10 +311,10 @@ export async function deckHashes(host: ReviewHost): Promise<unknown> {
   return { decks: out, logs: Object.fromEntries([...(await logLines(host.app))].map(([path, lines]) => [path, lines.length])) };
 }
 
-// ── 打開三次（W6 §6 的 W4）──
+// ── 打開三次（W6 §6 的 W4）：從選了科目到第一張卡畫好 ──
 
 export async function openTimes(host: ReviewHost): Promise<unknown> {
-  const results: { open: number; ms: number | null }[] = [];
+  const results: { open: number; fromPickMs: number | null }[] = [];
   const rendering = keepRendering();
   await sleep(300);
   try { for (let i = 0; i < 3; i++) {
@@ -321,11 +325,11 @@ export async function openTimes(host: ReviewHost): Promise<unknown> {
     await until(() => ms !== null);
     off();
     handle.close();
-    results.push({ open: opens, ms: ms === null ? null : round(ms) });
+    results.push({ open: opens, fromPickMs: ms === null ? null : round(ms) });
     await sleep(500);
   } } finally { rendering.restore(); }
   const [first, ...rest] = results;
-  return { visibilityBefore: rendering.before, results, firstOk: first.open !== 1 ? '這次載入不是第一次打開' : (first.ms ?? Infinity) <= 1000, laterOk: rest.every(r => (r.ms ?? Infinity) <= 400) };
+  return { visibilityBefore: rendering.before, results, firstOk: first.open !== 1 ? '這次載入不是第一次打開' : (first.fromPickMs ?? Infinity) <= 1000, laterOk: rest.every(r => (r.fromPickMs ?? Infinity) <= 400) };
 }
 
 // ── 畫面與鍵盤（W6 §6 的 W2、W3、W4）：真的打開複習畫面，用鍵盤與點擊操作、截圖 ──
@@ -335,11 +339,13 @@ interface Contents {
   setBackgroundThrottling?(allowed: boolean): void;
   sendInputEvent?(event: { type: 'keyDown' | 'keyUp'; keyCode: string; modifiers?: string[] }): void;
 }
-function webContents(): Contents | null {
+interface Win { minimize(): void; restore(): void }
+function remote(): { getCurrentWebContents(): Contents; getCurrentWindow(): Win } | null {
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
-  const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
-  return electron?.remote?.getCurrentWebContents() ?? null;
+  const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents; getCurrentWindow(): Win } } | undefined;
+  return electron?.remote ?? null;
 }
+function webContents(): Contents | null { return remote()?.getCurrentWebContents() ?? null; }
 /**
  * 量測與截圖的期間照常繪製：Windows 判斷視窗被遮住時（例如 computer-use 的提示框蓋在上面，2026-10-26 實測），
  * Chromium 停止繪製、requestAnimationFrame 不跑、計時器被放慢。回傳恢復原狀的函式。
@@ -576,4 +582,41 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
   await base.close();
   const freshAfter = await freshSnapshot(host);
   return { capture: !!contents, visibilityBefore: rendering.before, steps, measure: measure.result(), wrote, undo, logAdded: added(logBefore, await logLines(host.app)), todaySame: freshAfter === freshBefore };
+}
+
+// ── 切走再回來（L2 的 F4，W6 §2-1）：把 Obsidian 的視窗真的最小化（visibilityState 變 hidden），5 秒與 61 秒後還原 ──
+
+export async function awayCheck(host: ReviewHost): Promise<unknown> {
+  const win = remote()?.getCurrentWindow();
+  if (!win) return { error: '沒有 Electron 的視窗' };
+  const state = await examplesState(host);
+  const logBefore = await logLines(host.app);
+  const events: ReviewEvent[] = [];
+  const steps: { step: string; result?: unknown }[] = [];
+  let handle: ReviewHandle | null = null;
+  const revealed = () => { const v = handle?.session.view(); return v?.kind === 'card' ? v.card.revealed : null; };
+  const away = async (ms: number) => {
+    win.minimize();
+    const hidden = await until(() => document.visibilityState === 'hidden');
+    await sleep(ms);
+    win.restore();
+    const visible = await until(() => document.visibilityState === 'visible', 10_000);
+    await frames(); await sleep(300);
+    return { hidden, visible, revealed: revealed(), event: events.filter(e => e.kind === 'away').at(-1) ?? null };
+  };
+  try {
+    handle = openReview({ app: host.app, state, pick: { subject: '自然' }, onEvent: event => { events.push(event); } });
+    await until(() => !!overlay()?.querySelector('.ec-q .ec-markdown'));
+    press(' ');
+    await frames();
+    steps.push({ step: '翻面', result: { revealed: revealed() } });
+    steps.push({ step: '切走 5 秒', result: await away(5_000) });
+    steps.push({ step: '切走 61 秒', result: await away(61_000) });
+  } catch (error) {
+    steps.push({ step: '出錯', result: error instanceof Error ? error.stack ?? error.message : String(error) });
+  }
+  handle?.close();
+  await state.flush();
+  await state.close();
+  return { steps, logAdded: added(logBefore, await logLines(host.app)) };
 }

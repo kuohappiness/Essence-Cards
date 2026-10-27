@@ -3,7 +3,7 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry } from '../src/core/study/index.ts';
 import type { Pick } from '../src/core/study/index.ts';
-import { createSession, RATE_DELAY, sourceLinks } from '../src/review/index.ts';
+import { AWAY_LIMIT, createSession, RATE_DELAY, sourceLinks } from '../src/review/index.ts';
 import type { Session } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { App } from 'obsidian';
@@ -46,7 +46,7 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
     app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [],
     speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
-    openedAt: performance.now(),
+    pickedAt: performance.now(),
   });
   t.after(() => { ui.unmount(); session.close(); });
   return { ui, session, clock, speech, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
@@ -205,4 +205,22 @@ void test('F5 出處的圖省略子圖字母：精確的錨點優先，沒有時
   assert.equal(resolve('圖 2-16'), 'Essence Cards/材料/甲.md', '完全不存在：打開第一份材料');
   assert.equal(resolve('圖 2-1'), 'Essence Cards/材料/甲.md', '2-1 不會對到 2-12 或 2-13a');
   assert.equal(resolve('p.43'), 'Essence Cards/材料/甲.md#^p43');
+});
+
+// Codex L2 F4：切走超過 60 秒回來，目前這張從頭開始，畫面當成換了一張（捲回最上面、收起出處、先停再念題目）。
+void test('F4 切走超過 60 秒回來：卡回到正面、捲回最上面，先停掉再重念英翻中的題目', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: true, texts: { [ENGLISH]: englishText } });
+  await o.ui.settle();
+  o.ui.key(' ');
+  const stage = o.ui.find('ec-stage')[0].props.ref as { current: { scrollTop: number } };
+  stage.current.scrollTop = 120;
+  const before = o.speech.length;
+  o.session.pause();
+  o.clock.now += AWAY_LIMIT + 1;
+  assert.equal(o.session.resume(), true);
+  await o.ui.settle();
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && !view.card.revealed);
+  assert.equal(stage.current.scrollTop, 0);
+  assert.deepEqual(o.speech.slice(before).map(call => call.split(' ')[0]), ['stop', 'say']);
 });

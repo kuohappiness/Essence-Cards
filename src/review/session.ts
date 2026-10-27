@@ -14,6 +14,8 @@ export const RATINGS: readonly Rating[] = ['miss', 'near', 'good', 'easy'];
 export const RATING_LABELS: Record<Rating, string> = { miss: '沒印象', near: '差一點', good: '記住了', easy: '太簡單' };
 /** 翻面後多少毫秒內的自評不算（D-096）。 */
 export const RATE_DELAY = 300;
+/** 切到背景連續超過這麼久，回來時目前這張從頭開始（W6 §2-1、L2 的 F4；操作上的折衷，不是驗證過的記憶門檻）。 */
+export const AWAY_LIMIT = 60_000;
 
 export type StepResult = 'right' | 'wrong' | 'skip';
 /** 第 2 步的結果；原形是 null 或等於某一個答案而跳過第 2 步時是 not-needed（syntax.md §5 的 retry）。 */
@@ -83,6 +85,8 @@ export interface CardView {
   autoRead: readonly string[] | null;
   /** 回看第幾張（0 起）與這一次做過幾張；目前這張是 null。 */
   viewing: { index: number; total: number } | null;
+  /** 這一張第幾次從頭出現：切走超過 60 秒回來重新開始時加一（畫面用它換卡）；回看的卡是 0。 */
+  shown: number;
 }
 interface TopView {
   /** 中間的文字：「還剩 N 張」或「再複習一些」。 */
@@ -119,6 +123,10 @@ export interface Session {
   toCurrent(): void;
   /** 完成畫面的按鈕：再複習一些或接著做某一科。 */
   continueWith(pick: Pick): void;
+  /** 切到背景（visibilityState 變 hidden）：記下時間。 */
+  pause(): void;
+  /** 回到前景：離開超過 AWAY_LIMIT 時，目前這張未評分的卡從頭開始（不寫紀錄）；回傳有沒有重設。 */
+  resume(): boolean;
   /** 關掉畫面：清掉這一次做過的卡，不寫任何紀錄。 */
   close(): void;
   /** 這一次做過的卡（測試與開發命令用）。 */
@@ -141,6 +149,7 @@ interface Current {
   typed: TypedView | null;
   /** 英文的部分（題目）：喇叭與自動朗讀用。 */
   autoRead: readonly string[] | null;
+  shown: number;
 }
 
 const normalize = (text: string): string => text.trim().toLowerCase();
@@ -171,6 +180,7 @@ export function createSession(options: SessionOptions): Session {
   let viewing: number | null = null;
   let loaded = false;
   let closed = false;
+  let pausedAt: number | null = null;
   /** view() 的快取：同一個狀態回傳同一個物件（React 的 useSyncExternalStore 靠它判斷有沒有變）。 */
   let cached: View | null = null;
 
@@ -187,11 +197,10 @@ export function createSession(options: SessionOptions): Session {
   /** 從 state 拿下一張；done 就是完成畫面（文字在 compute 照當下的 progress 算，不留舊的）。 */
   function load(): void {
     const next = state.next(pick);
-    if (next.kind !== 'card') {
-      current = null;
-      return;
-    }
-    const card = next.card;
+    current = next.kind === 'card' ? present(next.card, 0) : null;
+  }
+  /** 一張卡從題目開始：一般卡在正面，打字卡在第 1 步。 */
+  function present(card: Card, shown: number): Current {
     const english = card.target.direction !== null;
     const typed: TypedView | null = card.typed ? {
       step: 1, first: null, second: null, notice: false, hint: null, answer: answersOf(card)[0] ?? '', attempt: null, live: null, firstAttempt: null, input: '', finished: false, canSkip: true,
@@ -199,7 +208,7 @@ export function createSession(options: SessionOptions): Session {
     // 英翻中的題目一出現就念英文（D-116）。
     const question = card.prompt.kind === 'qa' ? card.prompt.question : card.prompt.text;
     const autoRead = english && card.target.direction === 'en-zh' ? englishParts(question) : null;
-    current = { card, crumb: crumbOf(card), revealed: false, revealedAt: null, typed, autoRead: autoRead?.length ? autoRead : null };
+    return { card, crumb: crumbOf(card), revealed: false, revealedAt: null, typed, autoRead: autoRead?.length ? autoRead : null, shown };
   }
 
   const readyPromise = state.ready().then(() => {
@@ -235,7 +244,7 @@ export function createSession(options: SessionOptions): Session {
       } : null;
       return {
         kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: entry.changeable, pressed: entry.rating,
-        english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length },
+        english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length }, shown: 0,
       };
     }
     if (!current) return null;
@@ -246,7 +255,7 @@ export function createSession(options: SessionOptions): Session {
     const english = card.target.direction !== null;
     return {
       kind: 'card', card, crumb: current.crumb, revealed, typed, allowed: canRate ? allowedFor(typed ? typed.first : null) : [],
-      pressed: null, english, speakable: english && (card.target.direction === 'en-zh' || revealed), autoRead: current.autoRead, viewing: null,
+      pressed: null, english, speakable: english && (card.target.direction === 'en-zh' || revealed), autoRead: current.autoRead, viewing: null, shown: current.shown,
     };
   }
 
@@ -431,6 +440,20 @@ export function createSession(options: SessionOptions): Session {
     notify();
   }
 
+  // 切走再回來（W6 §2-1、L2 的 F4）：連續超過 60 秒，目前這張未評分的卡從頭開始；剛好 60 秒不動。回看的位置與已評分的
+  // 快照不動；回看中重設的，回到目前時不補播自動朗讀（D-084）。
+  function pause(): void { pausedAt ??= now(); }
+  function resume(): boolean {
+    if (pausedAt === null) return false;
+    const away = now() - pausedAt;
+    pausedAt = null;
+    if (away <= AWAY_LIMIT || !current) return false;
+    current = present(current.card, current.shown + 1);
+    if (viewing !== null) current.autoRead = null;
+    notify();
+    return true;
+  }
+
   function continueWith(next: Pick): void {
     if (!loaded || current) return;
     pick = next;
@@ -441,7 +464,7 @@ export function createSession(options: SessionOptions): Session {
   return {
     view, ready: () => readyPromise,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    reveal, input, submit, skip, rate, back, forward, toCurrent, continueWith,
+    reveal, input, submit, skip, rate, back, forward, toCurrent, continueWith, pause, resume,
     close() { closed = true; unsubscribe(); done.length = 0; current = null; listeners.clear(); },
     history: () => done,
     pick: () => pick,

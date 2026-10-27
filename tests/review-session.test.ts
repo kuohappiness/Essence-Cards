@@ -3,7 +3,7 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry, mergeHistory, parseLine } from '../src/core/study/index.ts';
 import type { Pick, Rating } from '../src/core/study/index.ts';
-import { createSession, RATE_DELAY } from '../src/review/index.ts';
+import { AWAY_LIMIT, createSession, RATE_DELAY } from '../src/review/index.ts';
 import type { Session, TypedView, View } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State } from '../src/state/index.ts';
@@ -536,4 +536,82 @@ void test('R10 回看改評分時目前有一張還沒作答的卡：目前這�
   s.rate('miss');
   s.toCurrent();
   assert.deepEqual([lt(s.view()), card(s.view()).revealed], ['a2', true]);
+});
+
+// Codex L2 F4（2026-10-27 定，W6 §2-1）：切到背景連續超過 60 秒才重設目前這張未評分的卡；剛好 60 秒不重設；不寫紀錄。
+void test('F4 切走超過 60 秒：翻面的一般卡回到正面；剛好 60 秒不動；不寫紀錄，0.3 秒的規則重新算', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  s.reveal();
+  s.pause(); h.clock.now += AWAY_LIMIT;
+  assert.equal(s.resume(), false, '剛好 60 秒不重設');
+  assert.equal(card(s.view()).revealed, true);
+  s.pause(); h.clock.now += AWAY_LIMIT + 1;
+  assert.equal(s.resume(), true);
+  assert.deepEqual([lt(s.view()), card(s.view()).revealed, card(s.view()).allowed], ['a1', false, []]);
+  assert.equal(s.resume(), false, '沒有 pause 的 resume 不動');
+  s.reveal();
+  s.rate('good');
+  assert.equal(lt(s.view()), 'a1', '重新翻面後 0.3 秒內的自評不算');
+  await rateLater(h, s, 'good');
+  assert.equal(h.log().length, 1, '只有這一次按的自評');
+});
+
+void test('F4 打字卡切走超過 60 秒：回到第 1 步，清空輸入與這一次的作答結果；之後照常寫 typed、retry', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  s.input('made up my mind'); s.submit();
+  s.input('made up h');
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).first], [2, 'wrong']);
+  s.pause(); h.clock.now += 5 * 60_000;
+  assert.equal(s.resume(), true);
+  const view = typed(s.view());
+  assert.deepEqual([view.step, view.first, view.second, view.notice, view.hint, view.input, view.attempt, view.firstAttempt, view.finished, view.canSkip],
+    [1, null, null, false, null, '', null, null, false, true]);
+  assert.equal(card(s.view()).revealed, false);
+  s.input('made up his mind'); s.submit();
+  await rateLater(h, s, 'good');
+  assert.deepEqual(h.log().map(line => [parseLine(line)?.kind, line.includes('"typed":"right"'), line.includes('retry')]), [['review', true, false]], '這一次拼對：typed: right、沒有 retry');
+});
+
+void test('F4 回看時切走超過 60 秒：回看的位置與已評分的快照不動，回到目前時那張在正面；完成畫面不動', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  s.reveal(); await rateLater(h, s, 'good');
+  s.reveal();
+  s.back();
+  s.pause(); h.clock.now += AWAY_LIMIT + 1;
+  assert.equal(s.resume(), true);
+  assert.deepEqual([lt(s.view()), card(s.view()).viewing, card(s.view()).pressed], ['a1', { index: 0, total: 1 }, 'good']);
+  s.toCurrent();
+  assert.deepEqual([lt(s.view()), card(s.view()).revealed], ['a2', false]);
+  await rateLater(h, s, 'good');
+  s.reveal(); await rateLater(h, s, 'good');
+  assert.equal(s.view().kind, 'done');
+  const before = s.view();
+  s.pause(); h.clock.now += AWAY_LIMIT + 1;
+  assert.equal(s.resume(), false, '完成畫面沒有可以重設的卡');
+  assert.equal(s.view(), before);
+  assert.equal(h.log().length, 2);
+});
+
+void test('F4 英翻中切走超過 60 秒：重新開始時題目照樣自動朗讀；回看中重設的，回到目前不補播', async t => {
+  const h = await setup(t, { [ENGLISH]: englishText });
+  const s = await h.open({ subject: '英文' });
+  const question = card(s.view()).autoRead;
+  assert.ok(question?.length);
+  const shown = card(s.view()).shown;
+  s.reveal();
+  assert.equal(card(s.view()).autoRead, null);
+  s.pause(); h.clock.now += AWAY_LIMIT + 1; s.resume();
+  assert.deepEqual(card(s.view()).autoRead, question);
+  assert.notEqual(card(s.view()).shown, shown, '從頭出現：畫面用 shown 換卡（停掉舊的朗讀、收起出處）');
+  s.reveal(); await rateLater(h, s, 'good');
+  const second = lt(s.view());
+  assert.ok(second?.startsWith('e'), '第二張也是英翻中（會自動朗讀的卡），才測得出不補播：' + String(second));
+  s.reveal(); s.back();
+  assert.ok(card(s.view()).viewing);
+  s.pause(); h.clock.now += AWAY_LIMIT + 1; s.resume();
+  s.toCurrent();
+  assert.deepEqual([lt(s.view()), card(s.view()).revealed, card(s.view()).autoRead], [second, false, null]);
 });

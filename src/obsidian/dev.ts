@@ -11,7 +11,7 @@ import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
-import { deckHashes, openTimes, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
+import { awayCheck, deckHashes, openTimes, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -54,6 +54,7 @@ const commands: Record<string, DevCommand> = {
   decks: { name: 'Essence 開發：卡組內容', run: deckHashes, root: W6_ROOT },
   'open-times': { name: 'Essence 開發：打開三次', run: openTimes, root: W6_ROOT },
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
   errors: { name: 'Essence 開發：錯誤紀錄', run: () => Promise.resolve({ visibility: document.visibilityState, errors: errors.slice(-50) }), root: W6_ROOT },
 };
 
