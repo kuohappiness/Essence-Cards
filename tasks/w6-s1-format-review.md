@@ -1,6 +1,6 @@
 # W6 的 S1：中翻英答案格多拒收兩種寫法（格式查核，給 Codex）
 
-狀態：進行中：等 Codex 查核
+狀態：已完成：Codex 的[回報](<../Claude Codex Discussion/2026-10-27-w6-s1-format-review.md>) F1～F3 都採用，寫進 [W6 說明 §0-1](w6.md#0-1-中翻英的答案格拆開-d-122) 與 syntax.md §2-3
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
