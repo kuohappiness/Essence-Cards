@@ -1,7 +1,7 @@
 import { MarkdownView, Notice, type App, type Plugin } from 'obsidian';
 import { isDeckPath } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
-import { encodeEntry, type NewEntry, type Pick } from '../core/study/index.ts';
+import { encodeEntry, isLogPath, LOG_FOLDER, type NewEntry, type Pick } from '../core/study/index.ts';
 import { createSession, RATE_DELAY, type View } from '../review/index.ts';
 import { createState, type State } from '../state/index.ts';
 import { openReview, type ReviewEvent, type ReviewHandle } from '../ui/index.ts';
@@ -124,10 +124,39 @@ function snapshot(state: State): string {
   const today = state.today();
   return JSON.stringify({ day: today.day, share: today.share.map(i => i.lt + ':' + i.lane), more: today.more.map(i => i.lt + ':' + i.lane), progress: state.progress() });
 }
-async function examplesState(host: ReviewHost): Promise<State> {
-  const state = createState({ files: onlyExamples(createObsidianFiles(host.app)), device: host.device, fillIds: false });
+/**
+ * 紀錄換成記憶體裡的空白紀錄：讀不到真正的作答、也不寫進真正的紀錄檔。ui 截圖用，每次都從新卡開始，
+ * 畫面不受範例卡組在別台裝置做過的影響（2026-10-28：iPhone 前一天做完範例，ui 只截到完成畫面）。
+ */
+function blankHistory(files: Files): Files {
+  const logs = new Map<string, string>();
+  return {
+    list: async folder => folder === LOG_FOLDER ? [...logs.keys()].sort() : (await files.list(folder)).filter(path => !isLogPath(path)),
+    read: async path => isLogPath(path) ? logs.get(path) ?? null : files.read(path),
+    modify: (path, edit) => files.modify(path, edit),
+    append: async (path, line) => {
+      if (!isLogPath(path)) return files.append(path, line);
+      logs.set(path, (logs.get(path) ?? '') + line + '\n');
+    },
+    watch: onChange => files.watch(path => { if (!isLogPath(path)) onChange(path); }),
+  };
+}
+async function examplesState(host: ReviewHost, blank = false): Promise<State> {
+  const files = onlyExamples(createObsidianFiles(host.app));
+  const state = createState({ files: blank ? blankHistory(files) : files, device: host.device, fillIds: false });
   await state.ready();
   return state;
+}
+/**
+ * 範例從頭練（D-145 的 iPhone 實測）：W6 範例卡組配記憶體裡的空白紀錄，每張都是新卡、隨時可以測，
+ * 作答不寫進真正的紀錄檔，關掉就丟。先做英文，完成畫面可以接著做自然。
+ */
+export async function practice(host: ReviewHost): Promise<unknown> {
+  const state = await examplesState(host, true);
+  const handle = openReview({ app: host.app, state, pick: { subject: '英文' }, onClose: () => { void state.close(); } });
+  // 外掛停用或重新載入時一起關掉（和正式的複習畫面一樣）。
+  host.register(() => { handle.close(); });
+  return { today: JSON.parse(snapshot(state)) as unknown };
 }
 /** 新建一個 state 讀今天的份：answer 不重排，所以「回到原樣」要用新讀的比。 */
 async function freshSnapshot(host: ReviewHost): Promise<string> {
@@ -377,6 +406,19 @@ function screen(): Record<string, unknown> {
     inline: (() => { const slot = root.querySelector<HTMLElement>('.ec-slot:has(.ec-input)'); return slot ? { width: round(slot.getBoundingClientRect().width), height: round(slot.getBoundingClientRect().height) } : null; })(),
     live: text(root.querySelector('.ec-live')) || null,
     also: inOverlay('.ec-also-row').map(text),
+    // 題目和答案之間不畫線（D-145）：答案區塊上框與題目下框的寬度，以及載入了幾份含 .ec-answer 的樣式。
+    divider: (() => {
+      const answer = root.querySelector<HTMLElement>('.ec-answer');
+      if (!answer) return null;
+      const css = getComputedStyle(answer);
+      const above = answer.previousElementSibling;
+      return {
+        answerTop: css.borderTopWidth + ' ' + css.borderTopStyle, paddingTop: css.paddingTop, marginTop: css.marginTop, boxShadow: css.boxShadow,
+        above: above ? above.className + ' ' + getComputedStyle(above).borderBottomWidth + ' ' + getComputedStyle(above).borderBottomStyle : null,
+        sheets: Array.from(document.styleSheets).filter(sheet => { try { return Array.from(sheet.cssRules).some(rule => rule.cssText.includes('.ec-answer')); } catch { return false; } }).map(sheet => (sheet.ownerNode as HTMLElement | null)?.id || (sheet.ownerNode as HTMLElement | null)?.tagName || '?'),
+        rules: Array.from(document.styleSheets).flatMap(sheet => { try { return Array.from(sheet.cssRules).filter(rule => rule.cssText.includes('ec-answer') && rule.cssText.includes('border')).map(rule => rule.cssText.slice(0, 160)); } catch { return []; } }),
+      };
+    })(),
     spell: inOverlay('.ec-spell-row').map(text),
     answer: text(root.querySelector('.ec-a')).slice(0, 120) || null,
     extras: inOverlay('.ec-ex-item').map(el => text(el).slice(0, 60)),
@@ -413,7 +455,7 @@ function typeText(value: string): boolean {
 export async function uiShots(host: ReviewHost, folder: string): Promise<unknown> {
   const contents = webContents();
   const rendering = keepRendering();
-  const base = await examplesState(host);
+  const base = await examplesState(host, true);
   const { state, written } = recording(base);
   const freshBefore = await freshSnapshot(host);
   const logBefore = await logLines(host.app);

@@ -221,6 +221,11 @@ void test('D-145 打字卡拼對：在空格裡打，翻面後不畫答案格，
   assert.equal(o.ui.find('ec-blank-input').length, 1);
   assert.deepEqual(o.ui.find('ec-inrow'), [], '題目下面沒有輸入框');
   assert.deepEqual(speakers(o.ui), [], '中翻英在答案出現前沒有喇叭');
+  const inputRef = o.ui.find('ec-blank-input')[0].props.ref as { current: { focus: () => void } };
+  let focused = 0;
+  inputRef.current.focus = () => { focused++; };
+  o.ui.click(o.ui.find('ec-stage')[0]);
+  assert.equal(focused, 1, '點卡片任何地方都叫出鍵盤');
   o.session.input('made his mind up'); o.ui.key('Enter', 'input');
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-blank-input'), [], '三步走完，空格換回線上的答案');

@@ -251,9 +251,10 @@ export function Review(props: ReviewProps): React.JSX.Element {
     </div>
     <div className="ec-prog" aria-hidden="true"><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
     <div className="ec-stage" ref={stage} onClick={event => {
-      if (view.kind !== 'card' || view.card.typed || view.card.revealed || view.card.viewing) return;
-      if (performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
-      reveal();
+      if (view.kind !== 'card' || view.card.viewing || performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
+      // 打字卡：點卡片任何地方都叫出鍵盤（D-145：輸入框在空格裡，點得到的範圍比原本那一整行小）。
+      if (view.card.typed) { if (!view.card.typed.finished) inputEl.current?.focus({ preventScroll: true }); return; }
+      if (!view.card.revealed) reveal();
     }}>
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
