@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkDocs, formatProblem, DONE_CELL, DONE_ROWS, NOW_LIMIT, ROADMAP } from '../tools/check-docs.ts';
+import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../tools/check-docs.ts';
 
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
 for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
@@ -142,11 +142,11 @@ void test('--staged 讀暫存區：沒 stage 的檔案與修改不算，已 stag
   assert.deepEqual(run(true), ['a.md:3  target.md  找不到檔案', 'a.md:3  gone.md  找不到檔案']);
 });
 
-const roadmap = (now: string, rows: string[]) => [
+const roadmap = (rows: string[]) => [
   '# 路線圖',
   '',
   '## 現在在哪裡',
-  now,
+  '',
   '## 已完成',
   '',
   '| 日期 | 工作 |',
@@ -155,45 +155,32 @@ const roadmap = (now: string, rows: string[]) => [
   '',
 ].join('\n');
 
-// 標題行與換行之外，以「字」補到指定長度。
-const nowOf = (length: number) => '字'.repeat(length - '## 現在在哪裡\n'.length);
-
-void test('「現在在哪裡」以碼點計、CRLF 當一個換行：2,500 通過、2,501 要報', async t => {
-  const { add, run } = await repo(t);
-  await add(ROADMAP, roadmap(nowOf(NOW_LIMIT), []));
-  assert.deepEqual(run(), []);
-  await add(ROADMAP, roadmap(nowOf(NOW_LIMIT), []).replaceAll('\n', '\r\n'));
-  assert.deepEqual(run(), []);
-  await add(ROADMAP, roadmap(nowOf(NOW_LIMIT - 1) + '😀', []));
-  assert.deepEqual(run(), []);
-  await add(ROADMAP, roadmap(nowOf(NOW_LIMIT + 1), []));
-  assert.deepEqual(run(), [`${ROADMAP}:3  ## 現在在哪裡  2,501 碼點，上限 2,500`]);
-});
-
-void test('已完成：10 列通過、11 列要報；「工作」欄只算可見文字，150 通過、151 要報', async t => {
+void test('已完成：10 列通過、11 列要報', async t => {
   const { add, run } = await repo(t);
   const rows = (n: number) => Array.from({ length: n }, (_, i) => `第 ${i + 1} 件`);
-  await add(ROADMAP, roadmap('', rows(DONE_ROWS)));
+  await add(ROADMAP, roadmap(rows(DONE_ROWS)));
   assert.deepEqual(run(), []);
-  await add(ROADMAP, roadmap('', rows(DONE_ROWS + 1)));
+  await add(ROADMAP, roadmap(rows(DONE_ROWS + 1)));
   assert.deepEqual(run(), [`${ROADMAP}:19  ## 已完成  11 列，上限 10`]);
-  // 連結只算連結文字，網址不算；行內程式碼算內容。
-  const visible = (length: number) => `[D-141](#現在在哪裡)、\`x\`${'字'.repeat(length - 7)}`;
-  await add(ROADMAP, roadmap('', [visible(DONE_CELL), visible(DONE_CELL + 1)]));
-  assert.deepEqual(run(), [`${ROADMAP}:10  ## 已完成  「工作」欄 151 碼點，上限 150`]);
 });
 
-void test('tasks 與討論稿第一層的檔案，標題下第一個非空行要有狀態；子資料夾與其他資料夾不查', async t => {
+void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一個非空行要有狀態；README、子資料夾與其他資料夾不查', async t => {
   const { add, run } = await repo(t);
   await add('tasks/ok.md', '# 任務\n\n狀態：進行中\n');
   await add('tasks/inline.md', '# 任務\n日期：2026-10-27｜整理者：Claude｜狀態：已結案 → D-141\n');
   await add('tasks/missing.md', '# 任務\n\n建議模型：Opus\n\n狀態：進行中\n');
   await add('tasks/no-title.md', '狀態：進行中\n');
   await add('Claude Codex Discussion/2026-10-27-x.md', '# 討論\n\n日期：2026-10-27\n');
+  await add('docs/plans/x.md', '# 主題\n\n[第二階段清單](../../a.md)\n\n狀態：規畫中\n');
   await add('tasks/sub/deep.md', '# 不查\n');
+  await add('docs/plans/sub/y.md', '# 不查\n');
+  await add('docs/plans/README.md', '# 不查\n');
+  await add('tasks/README.md', '# 不查\n');
   await add('docs/x.md', '# 不查\n');
+  await add('a.md', '# A\n');
   assert.deepEqual(run(), [
     'Claude Codex Discussion/2026-10-27-x.md:3  狀態：  標題下第一個非空行沒有狀態',
+    'docs/plans/x.md:3  狀態：  標題下第一個非空行沒有狀態',
     'tasks/missing.md:3  狀態：  標題下第一個非空行沒有狀態',
     'tasks/no-title.md:1  # 標題  沒有一級標題',
   ]);
