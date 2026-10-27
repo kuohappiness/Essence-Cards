@@ -54,6 +54,22 @@ export function fillBlank(question: string, answer: string): string | null {
   return part ? part.replace(BLANK, answer) : null;
 }
 
+/** 中文字與全形標點。 */
+const CJK = /[\p{Script=Han}　-〿＀-￯]/u;
+/**
+ * 空格前面那段文字裡，英文句子從哪裡換行（D-145：中文句子後面接英文句子時，英文換到下一行）：
+ * 最後一個中文字或全形標點的後面（UTF-16 位置）；沒有中文時 null（英文在前、中文提示在後的不換行）。
+ */
+export function englishBreak(text: string): number | null {
+  let end: number | null = null;
+  let index = 0;
+  for (const char of text) {
+    index += char.length;
+    if (CJK.test(char)) end = index;
+  }
+  return end;
+}
+
 /** 打字卡要畫幾條線：題目裡有 ＿＿ 時是第一個答案的字數（照空白切，D-122）；沒有 ＿＿ 時 0 條。 */
 export function blankCount(question: string, typed: readonly string[] | null): number {
   if (!typed?.length || !BLANK.test(question)) return 0;

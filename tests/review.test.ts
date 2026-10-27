@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, fillBlank, gesture, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -76,6 +76,16 @@ void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只
   assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
   assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
   assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
+});
+
+void test('D-145 中文句子後面的英文換到下一行：斷在最後一個中文字或全形標點後面；英文在前的不斷', () => {
+  assert.equal(englishBreak('我昨天去了公園。I '), '我昨天去了公園。'.length);
+  assert.equal(englishBreak('他已經下定決心要出國讀書。He has already '), '他已經下定決心要出國讀書。'.length);
+  assert.equal(englishBreak('離開時請關燈。'), '離開時請關燈。'.length, '空格緊接在中文後面：斷在空格前');
+  assert.equal(englishBreak('（借）Can I '), 3, '全形括號也算');
+  assert.equal(englishBreak('Can I '), null);
+  assert.equal(englishBreak('This box is very '), null);
+  assert.equal(englishBreak('𠮷。I '), 3, '補充平面的中文字照 UTF-16 長度算');
 });
 
 void test('R9 手勢：先鎖方向，垂直捲動後不改判；短的水平移動彈回；沒有上一張往右彈回；不在回看往左彈回', () => {

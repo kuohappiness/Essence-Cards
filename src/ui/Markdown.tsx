@@ -1,6 +1,6 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { BLANK } from '../review/index.ts';
+import { BLANK, englishBreak } from '../review/index.ts';
 
 // 卡片的內容交給 Obsidian 渲染（D-052、D-109、W6 §3-3）：圖片、公式、音檔照樣呈現；sourcePath 是卡組的路徑。
 // 填空題：渲染後把 <mark> 換成空格（一條底線，翻面後答案在同一條線上淡入）。
@@ -56,19 +56,14 @@ function insertLines(container: HTMLElement, lines: number): HTMLElement | null 
   return null;
 }
 
-/** 中文字與全形標點。 */
-const CJK = /[\p{Script=Han}　-〿＀-￯]/u;
 /**
  * 中文句子後面接英文句子時，英文換到下一行（D-145，使用者 2026-10-28）：在空格前面那段文字裡最後一個中文字或全形標點後面斷行。
  * 例如「我昨天去了公園。I ＿＿ to the park yesterday.」；英文在前、中文提示在後的（Can I ＿＿ your pen?（借））不斷行。
  */
 function breakBeforeEnglish(node: Text): void {
-  const text = node.textContent ?? '';
-  const chars = [...text];
-  let last = -1;
-  for (let i = chars.length - 1; i >= 0; i--) if (CJK.test(chars[i])) { last = i; break; }
-  if (last < 0) return;
-  const english = node.splitText(chars.slice(0, last + 1).join('').length);
+  const at = englishBreak(node.textContent ?? '');
+  if (at === null) return;
+  const english = node.splitText(at);
   english.textContent = (english.textContent ?? '').trimStart();
   const br = document.createElement('br');
   br.className = 'ec-break';
