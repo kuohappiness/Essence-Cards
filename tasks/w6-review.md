@@ -1,6 +1,6 @@
 # W6 複習畫面：L2 獨立審查（給 Codex）
 
-狀態：審查中：F1～F3、F5～F7 在 `3af5c41` 再審通過；五題的回覆（F4、S1、S2、第 10、22 點）都已實作、`main` 已合併進來（`11a3ef1`），等 Codex 第二次再審（最後一節）
+狀態：審查中：F1～F3、F5～F7 在 `3af5c41` 再審通過；五題的回覆與兩次合併在 `11a3ef1` 第二次再審通過，只有 R1、R2 要修；已修（`75683b6`、`6f96883`），等 Codex 第三次再審（最後一節）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（打字卡的三步流程、回看改評分、手勢與換卡互相牽動；解析器與紀錄欄位改了資料格式）。
 
@@ -215,6 +215,8 @@ Claude 跑過：
 
 ## 第二次再審：五題的回覆、S1 與合併 `main`（2026-10-27 下午）
 
+**結果**：`main` 的[報告](<../Claude Codex Discussion/2026-10-27-w6-review.md>)〈第二次再審（2026-10-27）〉：指定範圍通過，另有 R1（P2）、R2（P3）兩項要在合併前修，見下一節。
+
 使用者因額度改請 Codex（Astra，high）代 Fable 回答五題（問題清單與回覆在 `main` 的 `tasks/w6-l2-questions.md`），結論寫進 `main` 的 W6 說明（`7009ede`：§2-1、§0-1、§3-2、§3-4、§4、§6、§7 的 J7、J8）。S1 照 D-140 先做格式查核（[回報](<../Claude Codex Discussion/2026-10-27-w6-s1-format-review.md>)），F1～F3 都採用，寫進 W6 說明 §0-1 與 syntax.md §2-3（`main` 的 `3ea96de`）。
 
 - 待審：分支 `claude/w6` 的 `11a3ef1`（含這一節的文件 commit 在它之後）。上一次再審的 `3af5c41` 之後，程式只有 `d9e50e3`、`0416bac`、`c886425` 三個 commit 與兩次合併 `main`：`git show d9e50e3 0416bac c886425`；合併的衝突解法用 `git show --remerge-diff 69dbda4`（`11a3ef1` 沒有衝突，remerge-diff 是空的）。`main` 那邊的程式（state-load）已在 `main` 上審過，不用重審，只看交界。
@@ -262,3 +264,36 @@ Claude 跑過：
 6. 真的 React／DOM（你上次再審第 3 點）：F4 的畫面測試用的是替身，`away` 命令在 Obsidian 只看「有沒有翻面」。請用你上次的無頭 Chrome（真的 React 19）驗 F4 換 `cardKey` 之後：捲回最上面、出處收起、焦點在 `.ec-app` 或新的輸入框、先 `stop` 再念英翻中的題目；打字卡回到第 1 步時輸入框是空的。
 
 回報接在第一次報告的最後，標題「第二次再審（2026-10-27）」，格式同第一次；沒有問題就寫「可以合併」（W6 的合併還要等 iPhone 測試，§7）。只審查、只回報。
+
+## 第三次再審：R1、R2 的修正（2026-10-27 晚上）
+
+第二次再審的 R1、R2 都照建議修，先寫會失敗的測試。R2 的同一類問題 `Review` 裡還有一處：手勢量測 0.5 秒後才回報（`Review.tsx` 的 `window.setTimeout`），在這 0.5 秒內關閉也會晚到；所以不在每個地方各自檢查，改成 `host.tsx` 統一把關。
+
+- 待審：分支 `claude/w6` 的 `6f96883`（含這一節的文件 commit 在它之後）。只有兩個 commit：`git show 75683b6 6f96883`，改的是 `src/ui/host.tsx` 與新的 `tests/review-host.test.ts`。
+- 不用重審第二次再審已通過的部分。
+
+| 項目 | 怎麼做 | 測試 | commit |
+|---|---|---|---|
+| R1 | 回到前景時先 `const restarted = session.resume()`，再回報 `away`；重設不再靠量測的 callback | `tests/review-host.test.ts`「R1 離開超過 60 秒回來…」有、沒有 `onEvent` 各跑一次：5 秒、剛好 60 秒不重設，60 秒又 1 ms 回到正面（`shown` 1），每次切走都停朗讀，不寫紀錄；沒有 `onEvent` 時畫面拿到的 `onEvent` 也是 `undefined`。沒有 `onEvent` 的那次先失敗 | `75683b6` |
+| R2 | `host.tsx` 做一個 `report`：關閉後丟掉所有量測，`closed` 本身在關閉時直接送出、仍是最後一筆。`away`、鍵盤量測（下一幀）與交給 `Review` 的 `onEvent`（換卡在兩幀後、手勢在 0.5 秒後）都經過它；沒有 `onEvent` 時 `report` 是 `undefined`，`Review` 照舊不量。沒有存 rAF ID 取消：同一幀排了好幾筆也由同一個檢查擋住。`75683b6` 先在 rAF 裡檢查 `closed`，`6f96883` 換成統一把關 | 「R2 關閉之後不再回報已經排好的量測…」：鍵盤升起時照常量（`adjusted` 先 false 後 true）、畫面的量測照常；同一幀裡鍵盤收起又升起之後關閉，再送晚到的手勢，最後一筆仍是 `closed`；關閉後的 viewport、visibility 事件也不回報；兩次打開共用一個收集器（像 `watchReview`），第二次只有自己的樣本。鍵盤那段在 `75683b6` 之前失敗（多出 `keyboard 844`、`keyboard 480`），手勢那段在 `6f96883` 之前失敗（多出 `gesture`） | `75683b6`、`6f96883` |
+
+`tests/review-host.test.ts` 用 esbuild 把 `host.tsx` 包成 CommonJS，`Review`、`react-dom/client`、`obsidian` 換成替身，`document`、`visualViewport`、`requestAnimationFrame` 由測試控制，`Date` 用 node:test 的假時鐘，`Session` 與 `state` 是真的（記憶體 Files）。它只驗 host 的接線；你上次指出的替身限制（snapshot、ref、焦點）不在這兩項的路徑上。
+
+Claude 跑過：
+
+- `npm run check` 519 個測試全部通過（`6f96883`）。這台的記憶體這次不夠 knip 的解析器配置大塊緩衝區（`RangeError: Array buffer allocation failed`，和你第二次再審遇到的一樣），完整檢查與 pre-commit 都用 knip 內建的 `KNIP_DISABLE_RAW_TRANSFER=1` 跑，只換解析器的傳輸方式。
+- `npm run build`：`main.js` 486,608 bytes，require 只有 `obsidian`、`@codemirror/state`、`@codemirror/view`；開發版 554,048 bytes。
+- Windows 版 Obsidian 1.14.5，開發版 `0.0.1+6f96883`（`75683b6` 也跑過一輪，結果相同）：
+  - `review-script`（`180755`）：`linesAsExpected: true`，和 `150842` 相同（不算時間）。
+  - `ui`（`180907`）：56 步和 `151017` 相同；從選了科目到第一張 39 ms；按自評到下一張中位數 12 ms、最大 16 ms；鍵盤量測一筆（桌面沒有鍵盤，`adjusted: false`）。
+  - `decks`（`180909`）：和 `151018` 相同，只有這台的紀錄檔行數變多（全部互相取消）。
+  - `errors`（`180912`）：沒有 console 錯誤。
+  - `away`（`181022`）：5 秒回來仍是翻面、`restarted: false`；61 秒回來回到正面、`restarted: true`；沒有新紀錄。
+
+這一段請查：
+
+1. R1：量測的 callback 是否還控制任何功能（`host.tsx` 裡 `onEvent`、`report` 用到的每一處；`fit` 沒有 `report` 時提早返回，只跳過量測，版面調整在它之前）。
+2. R2：關閉後還有沒有任何量測會送出（host 的 rAF、`Review` 的兩幀後與 0.5 秒後的回報、`render-failed`）；`closed` 是不是一定是最後一筆；沒有 `onEvent` 時 `Review` 的行為和以前一樣。
+3. 用你上次的真實 Chrome driver 重跑名稱以 ISSUE 開頭的兩組，確認現在是正確行為。
+
+回報接在報告最後，標題「第三次再審（2026-10-27）」，格式同前；沒有問題就寫「可以合併」（W6 的合併還要等 iPhone 測試，§7）。只審查、只回報。
