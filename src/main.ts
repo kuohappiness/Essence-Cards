@@ -178,7 +178,8 @@ export default class EssenceCardsPlugin extends Plugin {
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
     this.state.onChange(() => { this.ids?.saver.refresh(); });
-    // 讀不到時 ready() 自己重試（每次失敗都經過 onError）；只有停用外掛會讓它 reject。
+    // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
+    // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。
     this.state.ready().then(() => { this.ids?.saver.refresh(); }, () => {});
   }
 }

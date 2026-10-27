@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 
 /**
- * Files 的契約檢查（W5 說明 §2 的 C1～C14）。Node 的測試與 Obsidian 的開發命令跑同一份；
+ * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3）。Node 的測試與 Obsidian 的開發命令跑同一份；
  * 改名與刪除不在 Files 介面裡，由兩邊各自提供（Node 用 node:fs，Obsidian 用 vault.rename、vault.delete）。
  */
 export interface ContractOps {
@@ -189,6 +189,20 @@ export const contractCases: readonly ContractCase[] = [
       }
     },
   },
+  {
+    // 外掛架構檢查環節 1 的 T3：Obsidian 刪資料夾時子檔各收不收得到通知，只在實機知道；只要求最後每個檔都通知過，不管次數。
+    code: 'C15', title: '刪掉整個資料夾，裡面每個檔（含子資料夾）都收到通知，read 回 null',
+    async run({ files, ops, dir, wait }) {
+      const paths = [`${dir}/f/1.md`, `${dir}/f/sub/2.md`];
+      for (const path of paths) await files.modify(path, () => 'x');
+      const watch = record(files, wait);
+      try {
+        await ops.remove(`${dir}/f`);
+        await watch.until(paths, '刪除資料夾');
+      } finally { watch.stop(); }
+      for (const path of paths) same(await files.read(path), null, `刪除資料夾後 read(${path})`);
+    },
+  },
 ];
 
 /** 跑一個例子；每個例子用 dir 底下自己代號的資料夾，彼此不共用檔案。 */
@@ -202,7 +216,7 @@ export async function runContractCase(item: ContractCase, files: Files, ops: Con
   }
 }
 
-/** 依序跑 C1～C14；dir 要是空的（或不存在）。 */
+/** 依序跑 C1～C15；dir 要是空的（或不存在）。 */
 export async function runFilesContract(files: Files, ops: ContractOps, dir: string, wait: ContractWait): Promise<ContractResult[]> {
   const results: ContractResult[] = [];
   for (const item of contractCases) results.push(await runContractCase(item, files, ops, dir, wait));

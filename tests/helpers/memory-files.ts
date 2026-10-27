@@ -2,7 +2,7 @@ import type { Files } from '../../src/core/files.ts';
 import type { ContractOps } from '../../src/dev/files-contract.ts';
 
 /**
- * 記憶體裡的 Files（技術債 A9）：給 state 與接線的測試用，取代真檔案加輪詢。照 src/core/files.ts 的契約（C1～C14 在
+ * 記憶體裡的 Files（技術債 A9）：給 state 與接線的測試用，取代真檔案加輪詢。照 src/core/files.ts 的契約（C1～C15 在
  * tests/files-contract.test.ts 驗過）：通知在寫入的當下同步送出，所以測試不用等檔案系統；`write`、`remove`、`rename`
  * 是「別台裝置或家長在 Obsidian 以外改檔」，`notify` 只送通知（控制同一批裡的順序）。
  */

@@ -348,7 +348,7 @@ function webContents(): Contents | null {
  * 量測與截圖的期間照常繪製：Windows 判斷視窗被遮住時（例如 computer-use 的提示框蓋在上面，2026-10-26 實測），
  * Chromium 停止繪製、requestAnimationFrame 不跑、計時器被放慢。回傳恢復原狀的函式。
  */
-function keepRendering(): { before: string; restore: () => void } {
+export function keepRendering(): { before: string; restore: () => void } {
   const contents = webContents();
   const before = document.visibilityState;
   contents?.setBackgroundThrottling?.(false);

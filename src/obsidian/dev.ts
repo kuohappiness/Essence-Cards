@@ -11,6 +11,7 @@ import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
+import { eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { awayCheck, deckHashes, openTimes, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
@@ -35,6 +36,8 @@ interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () =
  * root：結果寫到哪個資料夾（W6 的命令寫 Essence W6/，W6 §4）。
  */
 interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true; root?: string }
+/** 事件記錄用的：存檔備援的接線與外掛發出的紀錄（dev-events.ts）。 */
+const events = (host: Host): EventsHost => ({ app: host.app, saver: host.ids?.saver ?? null, log: listener => host.on('event', listener) });
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -56,6 +59,12 @@ const commands: Record<string, DevCommand> = {
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
   errors: { name: 'Essence 開發：錯誤紀錄', run: () => Promise.resolve({ visibility: document.visibilityState, errors: errors.slice(-50) }), root: W6_ROOT },
+  // 卡組讀不到就跳過那一篇的收尾（state-load §6、§9）：現在有哪些讀不到、自己隔一段時間重試。不等 ready()：列不出來時它不會完成。
+  unread: { name: 'Essence 開發：讀不到的卡組與紀錄', run: host => Promise.resolve(host.state ? { unread: host.state.unread(), decks: host.state.decks().length } : { state: null }) },
+  // 第一個里程碑報告 R5（技術債 A3、T3）：直接訂閱 workspace 與 vault 的事件。
+  events: { name: 'Essence 開發：記錄 workspace 與 vault 事件', run: host => eventsTest(events(host)), desktop: true },
+  'record-start': { name: 'Essence 開發：開始記錄事件（之後在檔案總管操作）', run: host => recordStart(events(host)), desktop: true },
+  'record-stop': { name: 'Essence 開發：停止記錄事件', run: host => recordStop(events(host)), desktop: true },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
@@ -318,7 +327,7 @@ async function reading(app: App, text: string, path: string): Promise<string[]> 
   } finally { component.unload(); }
 }
 
-/** §2：在 Essence W5/暫存/ 跑 C1～C14；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+/** §2：在 Essence W5/暫存/ 跑 C1～C15；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
 async function filesContract(app: App): Promise<unknown> {
   const dir = root + '/暫存';
   const old = app.vault.getAbstractFileByPath(dir);
