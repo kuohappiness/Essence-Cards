@@ -29,6 +29,15 @@ const viewNames = {
   importNames: ['readDecks', 'parseDeck', 'readHistory', 'mergeHistory', 'appendLine', 'createLogWriter', 'planToday', 'nextCard', 'progress', 'replay', 'review'],
   message: '畫面只透過 state 拿資料：讀檔、排程、寫紀錄的函式不能在 ui 與 review 用。',
 };
+// 測試不改全域的 Node 內建模組（第一個里程碑回顧的 R1）：Node 自己的實作也呼叫它們，換掉的結果隨 Node 版本改變。
+const builtinPatch = {
+  group: ['node:module', 'module'], importNames: ['syncBuiltinESMExports'],
+  message: '測試不改全域的 Node 內建模組：把替身直接交給要測的函式（docs/agents/quality.md〈本專案的做法〉）。',
+};
+const builtinAssign = {
+  selector: "AssignmentExpression > MemberExpression.left[object.name=/^(fs|fsPromises|path|os|childProcess|child_process)$/]",
+  message: builtinPatch.message,
+};
 const restricted = (patterns) => ['error', { patterns }];
 const fsrs = { group: ['ts-fsrs', 'ts-fsrs/*'], message: 'ts-fsrs 只由 study/fsrs.ts 包裝。' };
 const localDate = /^(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)$|^to(Locale.*)?(Date|Time)?String$|^getYear$|^setYear$/;
@@ -151,6 +160,13 @@ export default tseslint.config(
       coreEntry,
       stateEntry,
     ]) },
+  },
+  {
+    files: ['tests/**/*.{ts,tsx,mjs}'],
+    rules: {
+      'no-restricted-imports': restricted([fsrs, coreEntry, stateEntry, builtinPatch]),
+      'no-restricted-syntax': ['error', builtinAssign],
+    },
   },
   {
     files: state,

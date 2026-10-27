@@ -5,7 +5,12 @@ import type { Files } from '../src/core/files.ts';
 
 const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
-export function createNodeFiles(root: string): Files {
+/**
+ * seams 只給測試換掉監看用的列資料夾與 fs.watch。不要改全域的 node:fs：Linux 上 Node 自己的遞迴監看也呼叫
+ * fs.readdirSync，換掉它會打到 Node 內部（2026-10 CI 連續失敗三天，第一個里程碑回顧的 R1）。
+ */
+export function createNodeFiles(root: string, seams: { readdirSync?: typeof readdirSync; watch?: typeof watchFs } = {}): Files {
+  const { readdirSync: listSync = readdirSync, watch: watchTree = watchFs } = seams;
   const base = resolve(root);
   const pending = new Map<string, Promise<void>>();
   function location(path: string): string {
@@ -70,7 +75,7 @@ export function createNodeFiles(root: string): Files {
         const files = new Set<string>();
         function visit(path: string): void {
           try {
-            for (const entry of readdirSync(path, { withFileTypes: true })) {
+            for (const entry of listSync(path, { withFileTypes: true })) {
               const child = resolve(path, entry.name);
               if (entry.isDirectory()) visit(child);
               else if (entry.isFile()) files.add(portable(child));
@@ -103,7 +108,7 @@ export function createNodeFiles(root: string): Files {
         known = now;
         for (const path of changed) onChange(path);
       }
-      const watcher = watchFs(base, { recursive: true }, (event, filename) => {
+      const watcher = watchTree(base, { recursive: true }, (event, filename) => {
         // 重新列出 rename 前後的檔案，也能通知資料夾改名內的舊、新路徑。
         if (event === 'rename' || filename === null) {
           if (filename) named.add(filename.toString().split(sep).join('/'));
