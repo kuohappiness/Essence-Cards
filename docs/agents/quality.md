@@ -18,6 +18,7 @@
 - `npm run check`：型別、ESLint（含模組邊界）、knip、secretlint、skill 副本一致性、文件檢查、測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。W3 第 0 步裝好之前，用 `npm run typecheck`、`npm test` 和 `node tools/check-skill-mirror.ts`。
 - 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
 - 自動執行的地方：`.githooks/pre-commit`、`.github/workflows/check.yml`。
+- knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：在指令前加 `KNIP_DISABLE_RAW_TRANSFER=1` 再跑（commit 時也一樣加在 `git commit` 前面），檢查項目不變（2026-10-27 W6 合併時遇到）。
 - 建置：`npm run build`，`main.js` 只能 require Obsidian 提供的 `obsidian`、`@codemirror/state`、`@codemirror/view`（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護) 的編輯器鎖定），不能把另一份 CodeMirror 打包進去（`tools/build.mjs` 會擋）。
 
 ## 規格來源
@@ -63,7 +64,7 @@
 
 [D-138](../decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)：Obsidian 出新的次版本（例如 1.14 → 1.15）時做一次，由 AI 做。
 
-- **目前驗證過的版本**：Windows 1.14.5（2026-10-26，W5 第二部分的開發命令）；iPhone 還沒有用正式程式驗過（W5 說明寫的是 1.14.5），W6 的 iPhone 測試之後補上。
+- **目前驗證過的版本**：Windows 1.14.5（2026-10-26，W5 第二部分的開發命令）；iPhone 1.14.5（2026-10-27，[W6 的 iPhone 測試](../../tasks/w6-iphone.md)）。
 - **怎麼發現新版**：開發命令的結果檔會記 Obsidian 的版本（`obsidian` 欄位），AI 在 Windows 版 Obsidian 跑開發命令時看到比上面新的次版本就做；每個里程碑結束時也查一次 Obsidian 的改版說明。
 - **三層**：
   1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `package.json` 的開發相依改成一樣，跑 `npm run check`。
