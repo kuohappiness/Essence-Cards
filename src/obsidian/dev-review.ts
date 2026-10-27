@@ -452,9 +452,11 @@ function typeText(value: string): boolean {
   return true;
 }
 
-export async function uiShots(host: ReviewHost, folder: string): Promise<unknown> {
+export async function uiShots(host: ReviewHost, folder: string, phoneWidth = false): Promise<unknown> {
   const contents = webContents();
   const rendering = keepRendering();
+  // 手機寬度（2026-10-28）：複習畫面縮成 390px 寬貼在左邊，看句子在手機上怎麼換行；結束時拿掉。
+  const narrow = phoneWidth ? document.head.appendChild(Object.assign(document.createElement('style'), { textContent: '.ec-fullscreen { right: auto !important; width: 390px !important; }' })) : null;
   const base = await examplesState(host, true);
   const { state, written } = recording(base);
   const freshBefore = await freshSnapshot(host);
@@ -619,6 +621,7 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
   }
   // 出錯也一樣：關掉畫面、把這次寫進去的全部取消。
   handle?.close();
+  narrow?.remove();
   rendering.restore();
   await state.flush();
   const wrote = written.map(w => w.line);

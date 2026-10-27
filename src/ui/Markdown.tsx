@@ -50,9 +50,29 @@ function insertLines(container: HTMLElement, lines: number): HTMLElement | null 
     const after = node.splitText(match.index);
     after.textContent = text.slice(match.index + match[0].length);
     node.parentNode?.insertBefore(slot, after);
+    breakBeforeEnglish(node);
     return slot;
   }
   return null;
+}
+
+/** 中文字與全形標點。 */
+const CJK = /[\p{Script=Han}　-〿＀-￯]/u;
+/**
+ * 中文句子後面接英文句子時，英文換到下一行（D-145，使用者 2026-10-28）：在空格前面那段文字裡最後一個中文字或全形標點後面斷行。
+ * 例如「我昨天去了公園。I ＿＿ to the park yesterday.」；英文在前、中文提示在後的（Can I ＿＿ your pen?（借））不斷行。
+ */
+function breakBeforeEnglish(node: Text): void {
+  const text = node.textContent ?? '';
+  const chars = [...text];
+  let last = -1;
+  for (let i = chars.length - 1; i >= 0; i--) if (CJK.test(chars[i])) { last = i; break; }
+  if (last < 0) return;
+  const english = node.splitText(chars.slice(0, last + 1).join('').length);
+  english.textContent = (english.textContent ?? '').trimStart();
+  const br = document.createElement('br');
+  br.className = 'ec-break';
+  node.parentNode?.insertBefore(br, english);
 }
 
 function applyState(container: HTMLElement, props: MarkdownProps): void {

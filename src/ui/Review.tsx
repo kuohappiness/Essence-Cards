@@ -338,11 +338,12 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   return <article className={'ec-card' + (view.english ? ' is-english' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
     <div className="ec-q">
+      {/* 題目的喇叭浮在第一行右邊（排在前面），下面幾行用整個寬度：手機上空格那一行不會因為喇叭出現而斷開 */}
+      <Speaker texts={speak(spokenQuestion)} say={say} />
       {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
       <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed && !inline}
         lines={lines} words={typed && revealed ? typed.answer.split(/\s+/) : []} onSlot={lines > 0 ? onSlot : undefined}
         onReady={onPainted} onFail={() => { onFail('front'); }} />
-      <Speaker texts={speak(spokenQuestion)} say={say} />
     </div>
     {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
     {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}

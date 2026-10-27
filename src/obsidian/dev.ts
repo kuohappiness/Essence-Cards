@@ -54,6 +54,7 @@ const commands: Record<string, DevCommand> = {
   decks: { name: 'Essence 開發：卡組內容', run: deckHashes, root: W6_ROOT },
   'open-times': { name: 'Essence 開發：打開三次', run: openTimes, root: W6_ROOT },
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  'ui-phone': { name: 'Essence 開發：畫面與鍵盤（手機寬度）', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 手機寬度 ${stampOf(new Date())}`, true), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
   // D-145 的 iPhone 實測：iPhone 也能用。
   practice: { name: 'Essence 開發：範例從頭練（不記紀錄）', run: practice, root: W6_ROOT },

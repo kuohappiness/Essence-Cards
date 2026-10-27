@@ -32,12 +32,14 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-loading { color: var(--ec-muted); text-align: center; margin-top: 40px; }
 .ec-meta { display: flex; align-items: center; gap: 8px; font-size: var(--ec-size-small); color: var(--ec-muted); }
 .ec-new { padding: 1px 7px; border-radius: var(--ec-radius-small); background: color-mix(in srgb, var(--ec-new) 16%, var(--ec-page)); color: var(--ec-new); font-size: var(--ec-size-meta); font-weight: 600; }
-.ec-q { margin-top: var(--ec-gap-question); font-size: var(--ec-size-question); line-height: 1.55; font-weight: 500; text-wrap: pretty; font-family: var(--ec-font-text); }
+.ec-q { display: flow-root; margin-top: var(--ec-gap-question); font-size: var(--ec-size-question); line-height: 1.55; font-weight: 500; text-wrap: pretty; font-family: var(--ec-font-text); }
 .ec-q .ec-markdown p { margin: 0 0 12px; }
 /* 喇叭排在那一行的右邊，一行最多一個（D-082、D-145），和第一行對齊；Markdown 渲染出來的是區塊，所以用 flex 並排 */
-.ec-q, .ec-a, .ec-ex-item { display: flex; align-items: flex-start; }
-.ec-q > .ec-markdown-host, .ec-a > .ec-markdown-host, .ec-ex-item > .ec-markdown-host { flex: 0 1 auto; min-width: 0; }
+.ec-a, .ec-ex-item { display: flex; align-items: flex-start; }
+.ec-a > .ec-markdown-host, .ec-ex-item > .ec-markdown-host { flex: 0 1 auto; min-width: 0; }
 .ec-speakers { flex: none; display: inline-flex; margin: calc((1lh - 38px) / 2) 0 0 4px; }
+/* 題目的喇叭浮在第一行右邊，下面幾行（手機上的空格那一行）用整個寬度 */
+.ec-q > .ec-speakers { float: right; margin: calc((1lh - 38px) / 2) -6px 0 8px; }
 .ec-app .ec-say { width: 38px; height: 38px; border-radius: 10px; }
 
 /* 打字卡（D-066、D-121）：輸入框、第 2 步的提示、第 3 步的比對 */
@@ -50,7 +52,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-input::placeholder { color: var(--ec-muted); font-size: 17px; font-weight: 400; }
 .ec-live { margin-top: 8px; font-size: var(--ec-size-answer); letter-spacing: .03em; min-height: 1.4em; }
 .ec-letters s { color: var(--ec-muted); text-decoration-thickness: 2px; }
-.ec-spell { display: grid; gap: 8px; margin-bottom: 20px; font-size: var(--ec-size-question); }
+/* 拼字比對和答案同一個字級：手機上片語（make up your mind）排得下一行（2026-10-28，原本是題目的字級） */
+.ec-spell { display: grid; gap: 8px; margin-bottom: 20px; font-size: var(--ec-size-answer); }
 .ec-spell-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .ec-lab { flex: none; min-width: 4.5em; font-size: var(--ec-size-small); color: var(--ec-muted); }
 .ec-word, .ec-letters { min-width: 0; font-weight: 500; letter-spacing: .03em; overflow-wrap: anywhere; }

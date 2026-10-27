@@ -24,7 +24,8 @@
 
 /* 在空格裡直接打字（D-145）：線、撐開寬度的隱形文字、輸入框疊在同一格（寬度取最寬的那個，最寬到題目的寬度）。
    打字前看得到線（字數）；有字後線藏起來，換成輸入框自己的一條底線，跟著字變寬。 */
-.ec-slot { display: inline-grid; max-width: 100%; margin: 0 .15em; vertical-align: baseline; }
+/* 空格自己佔一行時（手機上的片語），下面那一行的字不貼著底線：空格下方多留一點（使用者 2026-10-28） */
+.ec-slot { display: inline-grid; max-width: 100%; margin: 0 .15em .35em; vertical-align: baseline; }
 .ec-slot > * { grid-area: 1 / 1; min-width: 0; }
 .ec-slot > .ec-lines { margin: 0; }
 .ec-mirror { visibility: hidden; justify-self: start; overflow: hidden; padding: 0 .2em; white-space: pre; line-height: 1.3; }
