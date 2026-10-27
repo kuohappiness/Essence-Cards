@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { App } from 'obsidian';
 import { AWAY_LIMIT } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
-import type { ReviewEvent } from '../src/ui/Review.tsx';
+import type { ReviewEvent, ReviewProps } from '../src/ui/Review.tsx';
 import type { OpenOptions, ReviewHandle } from '../src/ui/host.tsx';
 import type { Speech } from '../src/ui/speech.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
@@ -58,6 +58,8 @@ interface Page {
   viewport(height: number): void;
   /** 跑完排好的 requestAnimationFrame。 */
   frame(): void;
+  /** 最近一次交給畫面（Review）的 props。 */
+  review(): ReviewProps;
 }
 interface Harness { memory: MemoryFiles; speech: Speech & { stopped: number }; page: Page }
 
@@ -75,12 +77,13 @@ async function setup(t: TestContext): Promise<Harness> {
   });
   const viewport = Object.assign(new Target(), { height: HEIGHT, offsetTop: 0, scale: 1 });
   const frames: (() => void)[] = [];
+  let rendered: ReviewProps | null = null;
   const module = { exports: {} as { openReview: (options: OpenOptions) => ReviewHandle } };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const run = new Function('require', 'module', 'exports', 'document', 'window', 'performance', 'requestAnimationFrame', 'HTMLElement', source) as (...args: unknown[]) => void;
   run((name: string) => {
     if (name === 'obsidian') return { Notice: class {} };
-    if (name === 'react-dom/client') return { createRoot: () => ({ render() {}, unmount() {} }) };
+    if (name === 'react-dom/client') return { createRoot: () => ({ render(element: { props: ReviewProps }) { rendered = element.props; }, unmount() {} }) };
     if (name === 'react/jsx-runtime') return { jsx: (type: unknown, props: unknown) => ({ type, props }) };
     throw Error('host 替身沒有這個模組：' + name);
   }, module, module.exports, doc, { innerHeight: HEIGHT, visualViewport: viewport }, { now: () => Date.now() },
@@ -96,6 +99,7 @@ async function setup(t: TestContext): Promise<Harness> {
       show: () => { visibility('visible'); },
       viewport(height) { viewport.height = height; viewport.dispatch('resize'); },
       frame() { for (const callback of frames.splice(0)) callback(); },
+      review() { if (!rendered) throw Error('還沒畫'); return rendered; },
     },
   };
 }
@@ -107,6 +111,7 @@ for (const measured of [false, true]) {
     const handle = h.page.open({ pick: { subject: '自然' }, speech: h.speech, ...(measured ? { onEvent: event => { events.push(event); } } : {}) });
     t.after(() => { handle.close(); });
     await handle.session.ready();
+    assert.equal(h.page.review().onEvent === undefined, !measured, '沒有量測時畫面也不量');
     const card = () => {
       const view = handle.session.view();
       if (view.kind !== 'card') throw Error('不是卡片：' + view.kind);
@@ -126,7 +131,7 @@ for (const measured of [false, true]) {
   });
 }
 
-void test('R2 關閉之後不再回報已經排好的鍵盤量測；下一次打開只有自己的量測', async t => {
+void test('R2 關閉之後不再回報已經排好的量測（鍵盤、畫面的手勢）；下一次打開只有自己的量測', async t => {
   const h = await setup(t);
   // 開發的量測收集器（dev-review 的 watchReview）是同一個事件來源，兩次打開共用。
   const events: ReviewEvent[] = [];
@@ -139,17 +144,22 @@ void test('R2 關閉之後不再回報已經排好的鍵盤量測；下一次打
   h.page.frame();
   assert.deepEqual(kinds(), [`keyboard ${String(HEIGHT)}`, 'keyboard 500'], '量測照常');
   assert.deepEqual(events.map(event => event.kind === 'keyboard' && event.adjusted), [false, true], '鍵盤升起時才調整');
+  // 畫面（Review）的量測走同一個出口：換卡在兩幀後、手勢在 0.5 秒後才回報。
+  const late = h.page.review().onEvent;
+  late?.({ kind: 'next', ms: 3 });
+  assert.equal(events.at(-1)?.kind, 'next', '畫面的量測照常');
   // 同一幀裡鍵盤收起又升起（排了兩筆），還沒畫就關掉。
   h.page.viewport(HEIGHT);
   h.page.viewport(480);
   first.close();
   h.page.frame();
-  assert.deepEqual(kinds(), [`keyboard ${String(HEIGHT)}`, 'keyboard 500', 'closed'], '關閉前排好的量測不回報');
+  late?.({ kind: 'gesture', outcome: 'bounce', axis: 'horizontal', dx: 30, dy: 0, ms: 120, sidebarOpened: false });
+  assert.deepEqual(kinds(), [`keyboard ${String(HEIGHT)}`, 'keyboard 500', 'next', 'closed'], '關閉前排好的量測不回報');
   h.page.viewport(500);
   h.page.hide();
   h.page.show();
   h.page.frame();
-  assert.equal(events.length, 3, '關閉後的事件也不回報');
+  assert.equal(events.length, 4, '關閉後的事件也不回報');
 
   h.page.viewport(HEIGHT);
   const second = h.page.open({ pick: { subject: '自然' }, speech: h.speech, onEvent });
@@ -157,5 +167,5 @@ void test('R2 關閉之後不再回報已經排好的鍵盤量測；下一次打
   h.page.frame();
   second.close();
   h.page.frame();
-  assert.deepEqual(kinds().slice(3), [`keyboard ${String(HEIGHT)}`, 'closed'], '第二次打開沒有上一次的樣本');
+  assert.deepEqual(kinds().slice(4), [`keyboard ${String(HEIGHT)}`, 'closed'], '第二次打開沒有上一次的樣本');
 });

@@ -51,10 +51,14 @@ export function openReview(options: OpenOptions): ReviewHandle {
   const session = createSession({ state, pick: options.pick });
   const speech = options.speech ?? createSpeech(() => { new Notice(NO_ENGLISH_VOICE); });
   const root = createRoot(element);
+  // 量測（開發版的 onEvent）只回報到關閉為止（Codex 第二次再審 R2）：鍵盤量測排在下一幀、畫面的手勢 0.5 秒後才回報，
+  // 關閉後才到的一筆，開發的量測會把它算進下一次打開。沒有 onEvent 就是 undefined，畫面也不量。
+  let closed = false;
+  const onEvent = options.onEvent;
+  const report = onEvent && ((event: ReviewEvent): void => { if (!closed) onEvent(event); });
   // 切到背景（W6 §2-1、L2 的 F4）：朗讀立刻停；連續超過 60 秒才回來，目前這張未評分的卡從頭開始（Session 判斷）。
   // 桌面的 Obsidian 被別的視窗整個遮住也算 hidden（2026-10-26 實測），所以短的切換不重設。
   let hiddenAt: number | null = null;
-  let closed = false;
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') {
       speech.stop();
@@ -65,7 +69,7 @@ export function openReview(options: OpenOptions): ReviewHandle {
       hiddenAt = null;
       // 先重設再回報：沒有量測的 callback 時，可選呼叫連引數都不算，resume 會被跳過（Codex 第二次再審 R1）。
       const restarted = session.resume();
-      options.onEvent?.({ kind: 'away', ms: Math.round(ms), restarted });
+      report?.({ kind: 'away', ms: Math.round(ms), restarted });
     }
   };
   document.addEventListener('visibilitychange', onVisibility);
@@ -79,16 +83,14 @@ export function openReview(options: OpenOptions): ReviewHandle {
     element.style.top = target ? `${String(target.top)}px` : '';
     element.style.height = target ? `${String(target.height)}px` : '';
     const key = [window.innerHeight, area?.height, area?.offsetTop, !!target].map(n => typeof n === 'number' ? Math.round(n) : String(n)).join(' ');
-    if (!options.onEvent || !area || key === lastFit) return;
+    if (!report || !area || key === lastFit) return;
     lastFit = key;
     requestAnimationFrame(() => {
-      // 關閉前排好的不回報：closed 之後再來一筆 keyboard，開發的量測會把它算進下一次打開（Codex 第二次再審 R2）。
-      if (closed) return;
-      const shown =(selector: string): boolean | null => {
+      const shown = (selector: string): boolean | null => {
         const rect = element.querySelector(selector)?.getBoundingClientRect();
         return rect ? rect.top >= area.offsetTop - 1 && rect.bottom <= area.offsetTop + area.height + 1 : null;
       };
-      options.onEvent?.({ kind: 'keyboard', innerHeight: Math.round(window.innerHeight), height: Math.round(area.height), offsetTop: Math.round(area.offsetTop), adjusted: !!target, input: shown('.ec-input'), actions: shown('.ec-actions') });
+      report({ kind: 'keyboard', innerHeight: Math.round(window.innerHeight), height: Math.round(area.height), offsetTop: Math.round(area.offsetTop), adjusted: !!target, input: shown('.ec-input'), actions: shown('.ec-actions') });
     });
   };
   viewport?.addEventListener('resize', fit);
@@ -107,12 +109,12 @@ export function openReview(options: OpenOptions): ReviewHandle {
       element.remove();
       session.close();
       previous?.focus({ preventScroll: true });
-      options.onEvent?.({ kind: 'closed' });
+      onEvent?.({ kind: 'closed' });
       options.onClose?.();
     },
   };
   root.render(<Review
-    app={app} session={session} speech={speech} pickedAt={pickedAt} onEvent={options.onEvent}
+    app={app} session={session} speech={speech} pickedAt={pickedAt} onEvent={report}
     close={() => { handle.close(); }}
     openLink={(linktext, sourcePath) => { handle.close(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}
