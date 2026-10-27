@@ -1,4 +1,4 @@
-// 文件檢查（D-141）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、roadmap「現在在哪裡」的長度、「已完成」的列數與每列長度、任務與討論稿的檔頭狀態行。
+// 文件檢查（D-141、D-143）：Git 追蹤的 Markdown 裡本機可判定的連結與錨點、roadmap 有「現在在哪裡」一節、「已完成」的列數、任務、討論稿與 plans 的檔頭狀態行。
 // 用法：node tools/check-docs.ts [--staged] [--root <repo>]（--root 給測試用）
 //   預設：檔案清單取 Git 追蹤的檔案，內容讀工作樹（npm run check 與 CI 用）。
 //   --staged：清單與內容都讀暫存區（pre-commit 用）。
@@ -11,10 +11,8 @@ import MarkdownIt, { type Token } from 'markdown-it';
 import GithubSlugger from 'github-slugger';
 
 export const ROADMAP = 'docs/roadmap.md';
-export const NOW_LIMIT = 2500;
 export const DONE_ROWS = 10;
-export const DONE_CELL = 150;
-export const STATUS_DIRS = ['tasks', 'Claude Codex Discussion'];
+export const STATUS_DIRS = ['tasks', 'Claude Codex Discussion', 'docs/plans'];
 
 export interface Exception { file: string; target: string; reason: string }
 
@@ -163,54 +161,29 @@ function checkLink(from: string, href: string, tree: Tree, docs: Map<string, Doc
   return { target };
 }
 
-interface Section { start: number; end: number; open: number; close: number }
+interface Section { open: number; close: number }
 
-// 二級標題的範圍：行號從 0 起算，end 是下一個二級標題（或檔尾）；open／close 是 tokens 的索引。
+// 二級標題的範圍：open 是標題、close 是下一個二級標題（或檔尾）在 tokens 的索引。
 function section(doc: Doc, title: string): Section | undefined {
   const headings = doc.tokens.flatMap((token, i) => token.type === 'heading_open' && token.tag === 'h2' ? [i] : []);
   const at = headings.findIndex(i => plainText(doc.tokens[i + 1].children ?? []).trim() === title);
   if (at < 0) return undefined;
-  const open = headings[at];
-  const close = headings[at + 1] ?? doc.tokens.length;
-  return { start: doc.tokens[open].map![0], end: doc.tokens[close]?.map?.[0] ?? doc.lines.length, open, close };
+  return { open: headings[at], close: headings[at + 1] ?? doc.tokens.length };
 }
-
-const count = (text: string) => Array.from(text).length;
-const number = (n: number) => n.toLocaleString('en-US');
 
 function checkRoadmap(doc: Doc): Problem[] {
   const problems: Problem[] = [];
   const add = (line: number, target: string, reason: string) => problems.push({ file: doc.file, line, target, reason });
-  const now = section(doc, '現在在哪裡');
-  if (!now) add(1, '## 現在在哪裡', '找不到這一節');
-  else {
-    const length = count(doc.lines.slice(now.start, now.end).join('\n'));
-    if (length > NOW_LIMIT) add(now.start + 1, '## 現在在哪裡', `${number(length)} 碼點，上限 ${number(NOW_LIMIT)}`);
-  }
+  if (!section(doc, '現在在哪裡')) add(1, '## 現在在哪裡', '找不到這一節');
   const done = section(doc, '已完成');
   if (!done) return problems;
   const tokens = doc.tokens.slice(done.open, done.close);
   const table = tokens.findIndex(token => token.type === 'table_open');
   if (table < 0) return problems;
   const tableEnd = tokens.findIndex((token, i) => i > table && token.type === 'table_close');
-  const rows: { line: number; cells: string[] }[] = [];
-  let header: string[] = [];
-  for (let i = table; i < tableEnd; i++) {
-    const token = tokens[i];
-    if (token.type === 'tr_open') rows.push({ line: token.map![0] + 1, cells: [] });
-    else if (token.type === 'inline') rows.at(-1)!.cells.push(plainText(token.children ?? []).trim());
-    else if (token.type === 'thead_close') header = rows.pop()!.cells;
-  }
-  if (rows.length > DONE_ROWS) add(rows[DONE_ROWS].line, '## 已完成', `${rows.length} 列，上限 ${DONE_ROWS}`);
-  const column = header.indexOf('工作');
-  if (column < 0) {
-    add(doc.tokens[done.open].map![0] + 1, '## 已完成', '表格沒有「工作」欄');
-    return problems;
-  }
-  for (const row of rows) {
-    const length = count(row.cells[column] ?? '');
-    if (length > DONE_CELL) add(row.line, '## 已完成', `「工作」欄 ${length} 碼點，上限 ${DONE_CELL}`);
-  }
+  const head = tokens.findIndex((token, i) => i > table && token.type === 'thead_close');
+  const rows = tokens.slice(head, tableEnd).filter(token => token.type === 'tr_open');
+  if (rows.length > DONE_ROWS) add(rows[DONE_ROWS].map![0] + 1, '## 已完成', `${rows.length} 列，上限 ${DONE_ROWS}`);
   return problems;
 }
 
@@ -241,7 +214,7 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
       else problems.push({ file: doc.file, line, target, reason });
     }
     if (doc.file === ROADMAP) problems.push(...checkRoadmap(doc));
-    if (STATUS_DIRS.includes(posix.dirname(doc.file))) problems.push(...checkStatus(doc));
+    if (STATUS_DIRS.includes(posix.dirname(doc.file)) && posix.basename(doc.file) !== 'README.md') problems.push(...checkStatus(doc));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
   return { problems, files: docs.size, links };
