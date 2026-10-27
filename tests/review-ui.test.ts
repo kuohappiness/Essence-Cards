@@ -282,6 +282,16 @@ void test('D-145 第 3 步照打的對象是「正確拼字」那一行（最接
   assert.equal(view.card.typed.answer, 'made his mind up');
 });
 
+void test('D-145 題目沒有 ＿＿ 的打字卡：輸入框照舊在題目下面', async t => {
+  const deck = ['---', '科目: 英文', '單元: L1', '---', '- borrow 中翻英 ^z9', '    - 借入、向別人借（v.） :: borrow', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  assert.equal(lt(o.session), 'z9');
+  assert.deepEqual(ofType(o.ui, 'portal'), []);
+  assert.deepEqual(o.ui.find('ec-blank-input'), []);
+  assert.equal(o.ui.find('ec-inrow').length, 1);
+  assert.equal(o.ui.find('ec-input')[0].props.placeholder, '輸入英文');
+});
+
 void test('D-145 自然卡（沒有自動朗讀開關）的上方列和英文卡一樣是四格，✕ 在最後一格', async t => {
   const o = await open(t, { subject: '自然' });
   const top = o.ui.find('ec-top')[0].children.filter((child): child is Tree => typeof child !== 'string');
