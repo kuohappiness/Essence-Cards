@@ -339,13 +339,11 @@ interface Contents {
   setBackgroundThrottling?(allowed: boolean): void;
   sendInputEvent?(event: { type: 'keyDown' | 'keyUp'; keyCode: string; modifiers?: string[] }): void;
 }
-interface Win { minimize(): void; restore(): void }
-function remote(): { getCurrentWebContents(): Contents; getCurrentWindow(): Win } | null {
+function webContents(): Contents | null {
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
-  const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents; getCurrentWindow(): Win } } | undefined;
-  return electron?.remote ?? null;
+  const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
+  return electron?.remote?.getCurrentWebContents() ?? null;
 }
-function webContents(): Contents | null { return remote()?.getCurrentWebContents() ?? null; }
 /**
  * 量測與截圖的期間照常繪製：Windows 判斷視窗被遮住時（例如 computer-use 的提示框蓋在上面，2026-10-26 實測），
  * Chromium 停止繪製、requestAnimationFrame 不跑、計時器被放慢。回傳恢復原狀的函式。
@@ -584,39 +582,44 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
   return { capture: !!contents, visibilityBefore: rendering.before, steps, measure: measure.result(), wrote, undo, logAdded: added(logBefore, await logLines(host.app)), todaySame: freshAfter === freshBefore };
 }
 
-// ── 切走再回來（L2 的 F4，W6 §2-1）：把 Obsidian 的視窗真的最小化（visibilityState 變 hidden），5 秒與 61 秒後還原 ──
+// ── 切走再回來（L2 的 F4，W6 §2-1）：送 visibilitychange，5 秒與 61 秒後回來 ──
+// 這台 Windows 上 Obsidian 被別的視窗擋住也算 hidden，最小化再還原不一定變回 visible（2026-10-27 實測，命令卡在等畫面），
+// 所以這裡把 visibilityState 換成假的值再送事件：測的是外掛的接線（停朗讀、Session 的 pause／resume、量測）。
+// 真的切換：同一天卡住的那一次在約 120 秒的 hidden 之後回到 visible，卡回到正面、沒有新紀錄；iPhone 的 J8 再驗。
 
 export async function awayCheck(host: ReviewHost): Promise<unknown> {
-  const win = remote()?.getCurrentWindow();
-  if (!win) return { error: '沒有 Electron 的視窗' };
+  const rendering = keepRendering();
   const state = await examplesState(host);
   const logBefore = await logLines(host.app);
   const events: ReviewEvent[] = [];
   const steps: { step: string; result?: unknown }[] = [];
   let handle: ReviewHandle | null = null;
+  let fake: DocumentVisibilityState | null = null;
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => fake ?? 'visible' });
   const revealed = () => { const v = handle?.session.view(); return v?.kind === 'card' ? v.card.revealed : null; };
   const away = async (ms: number) => {
-    win.minimize();
-    const hidden = await until(() => document.visibilityState === 'hidden');
+    fake = 'hidden'; document.dispatchEvent(new Event('visibilitychange'));
     await sleep(ms);
-    win.restore();
-    const visible = await until(() => document.visibilityState === 'visible', 10_000);
-    await frames(); await sleep(300);
-    return { hidden, visible, revealed: revealed(), event: events.filter(e => e.kind === 'away').at(-1) ?? null };
+    fake = 'visible'; document.dispatchEvent(new Event('visibilitychange'));
+    await sleep(300);
+    return { revealed: revealed(), event: events.filter(e => e.kind === 'away').at(-1) ?? null };
   };
   try {
     handle = openReview({ app: host.app, state, pick: { subject: '自然' }, onEvent: event => { events.push(event); } });
     await until(() => !!overlay()?.querySelector('.ec-q .ec-markdown'));
     press(' ');
-    await frames();
+    await sleep(100);
     steps.push({ step: '翻面', result: { revealed: revealed() } });
     steps.push({ step: '切走 5 秒', result: await away(5_000) });
     steps.push({ step: '切走 61 秒', result: await away(61_000) });
   } catch (error) {
     steps.push({ step: '出錯', result: error instanceof Error ? error.stack ?? error.message : String(error) });
+  } finally {
+    delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+    rendering.restore();
   }
   handle?.close();
   await state.flush();
   await state.close();
-  return { steps, logAdded: added(logBefore, await logLines(host.app)) };
+  return { steps, visibilityAfter: document.visibilityState, logAdded: added(logBefore, await logLines(host.app)) };
 }
