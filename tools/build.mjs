@@ -15,7 +15,9 @@ const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
  */
 export async function buildVersion(root = defaultRoot) {
   const manifest = JSON.parse(await readFile(resolve(root, 'manifest.json'), 'utf8'));
-  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  // 拿掉繼承來的 GIT_*：在 git hook 裡跑時 GIT_DIR 指著呼叫的 repo，會讀到別的 repo 的 commit（tools/install.ts 的 git）。
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const git = args => execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   let commit = '';
   try { commit = git(['rev-parse', '--short', 'HEAD']) + (git(['status', '--porcelain', '--untracked-files=no']) ? '.dirty' : ''); } catch { /* 不在 git 裡（測試的暫存專案） */ }
   return manifest.version + (commit ? '+' + commit : '');
