@@ -368,11 +368,11 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
-  // 照打：「照著打一次」後面接即時比對（現在打的字，打錯的字母畫刪除線），只在有打錯的字母時才出現（D-145，iPhone 回饋）；
-  // 放在同一行，打錯時不多冒出一行把下面往鍵盤後推。
-  const liveWrong = typing?.step === 3 && typing.live?.typed.some(letter => letter.bad) ? typing.live : null;
+  // 照打：「照著打一次」後面接即時比對，打了字就顯示現在打的字（打對的照常顯示、打錯的字母畫刪除線，D-145，使用者 2026-10-28）；
+  // 放在同一行，打字時不多冒出一行把下面往鍵盤後推。
+  const live = typing?.step === 3 && typing.live?.typed.length ? typing.live : null;
   const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
-    : typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span>{liveWrong && <span className="ec-live"><Letters letters={liveWrong.typed} mode="typed" /></span>}</div> : null;
+    : typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span>{live && <span className="ec-live"><Letters letters={live.typed} mode="typed" /></span>}</div> : null;
   const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { session.input(event.currentTarget.value); }}
     placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
     autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />;

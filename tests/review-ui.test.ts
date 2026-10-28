@@ -253,10 +253,10 @@ void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照
   assert.deepEqual(speakers(o.ui), ['朗讀 Can I borrow your pen?', '朗讀 borrow']);
   o.session.input('borr');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-live'), [], '打的都對：不再顯示一次');
+  assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次borr'], '打的都對也即時顯示');
   o.session.input('borx');
   await o.ui.settle();
-  assert.equal(o.ui.find('ec-live').length, 1, '打錯字母時才畫比對');
+  assert.equal(o.ui.find('ec-live').length, 1, '打錯字母時照樣顯示，錯的字母畫刪除線');
   assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次borx'], '比對接在「照著打一次」後面同一行');
   o.session.input('borrow'); o.ui.key('Enter', 'input');
   await o.ui.settle();
@@ -333,7 +333,8 @@ void test('D-145 第 3 步照打的對象是「正確拼字」那一行（最接
   assert.equal(speakers(o.ui)[1], '朗讀 made his mind up', '「正確拼字」那一行的喇叭念它');
   o.session.input('made his mind up');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-live'), []);
+  view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.live?.typed.every(letter => !letter.bad), '照打「正確拼字」那一個答案：沒有字母被標錯');
   o.ui.key('Enter', 'input');
   await o.ui.settle();
   view = o.session.view();
