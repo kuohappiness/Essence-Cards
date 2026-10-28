@@ -52,8 +52,7 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-ex-label { font-size: var(--ec-size-small); }
 
 /* 打字卡（D-066、D-121）：輸入框、第 2 步的提示、第 3 步的比對 */
-.ec-hint { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-top: 14px; font-size: var(--ec-size-extra); color: var(--ec-muted); }
-.ec-wrong { color: var(--ec-miss); font-weight: 600; }
+.ec-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; font-size: var(--ec-size-extra); color: var(--ec-muted); }
 .ec-inrow { margin-top: 24px; border-bottom: 2px solid var(--ec-line); }
 .ec-inrow:focus-within { border-bottom-color: var(--ec-ink); }
 .ec-app .ec-input { width: 100%; min-width: 0; padding: 8px 2px; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--ec-ink); font-family: inherit; font-weight: 500; font-size: var(--ec-size-question); }
@@ -67,6 +66,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-lab { flex: none; min-width: 4.5em; font-size: var(--ec-size-small); color: var(--ec-muted); }
 .ec-word, .ec-letters { min-width: 0; font-weight: 500; letter-spacing: .03em; overflow-wrap: anywhere; }
 .ec-ok { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); color: var(--ec-ink); }
+/* 拼錯：和拼對的打勾同一個圓，換成打叉；紅色調淡、混一點灰，不搶眼（D-145，使用者 2026-10-28） */
+.ec-ok.is-no { background: color-mix(in srgb, var(--ec-miss) 13%, var(--ec-page)); color: color-mix(in srgb, var(--ec-miss) 72%, var(--ec-muted)); }
 .ec-spell-row .ec-speakers, .ec-also-row .ec-speakers { margin: 0 0 0 -4px; }
 /* 其他正確答案（D-145）：「也可以：」小一號的灰字，緊接在打勾或「正確拼字」那一行下面 */
 .ec-also { display: grid; gap: 2px; margin: -12px 0 20px; font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }
