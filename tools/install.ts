@@ -43,7 +43,7 @@ function git(root: string, args: string[]): string {
  * 本機紀錄的資料夾：主資料夾（git 的共用目錄所在的那一個）的 .local/，各個 worktree 共用同一份登錄與正式產物。
  * 不在 git 裡時用 root/.local/。
  */
-function localFolder(root = defaultRoot): string {
+export function localFolder(root = defaultRoot): string {
   try { return join(dirname(git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir'])), '.local'); }
   catch { return join(root, '.local'); }
 }
@@ -53,7 +53,7 @@ async function realOrNull(path: string): Promise<string | null> {
 }
 
 /** 登錄過的測試 vault（.local/test-vaults.json 存實際路徑）；比對時兩邊都先 realpath，不存在的登錄略過。 */
-async function isTestVault(vault: string, local: string): Promise<boolean> {
+export async function isTestVault(vault: string, local: string): Promise<boolean> {
   let saved: unknown;
   try { saved = JSON.parse(await readFile(join(local, 'test-vaults.json'), 'utf8')); } catch { return false; }
   const list = (saved as { vaults?: unknown }).vaults;
@@ -85,7 +85,7 @@ export async function registerTestVault(vault: string, local = localFolder()): P
  * 正式版的條件（D-149 第 4 點）：工作樹乾淨（含未追蹤的檔，.gitignore 的除外）、HEAD 正好是 tag v<manifest 的版號>、
  * package.json 的版號相同。不符就丟錯，列出全部原因。
  */
-async function releaseProblems(root = defaultRoot): Promise<{ version: string; commit: string; problems: string[] }> {
+export async function releaseProblems(root = defaultRoot): Promise<{ version: string; commit: string; problems: string[] }> {
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: string };
   const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as { version: string };
   const problems: string[] = [];
