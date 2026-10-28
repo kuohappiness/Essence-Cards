@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-27 | 文件架構整理第二部分（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）：決策索引分八個主題，加 `decisions-index.mjs D-xxx` 唯讀查詢原文與後續條目 |
 | 2026-10-27 | 卡組讀不到就跳過那一篇的 L2 修正（分支 `claude/state-load` 的 `782a7df`，[報告](<../../Claude Codex Discussion/2026-10-27-state-load-review.md>)）：取消行多帶的 `lt` 也避開、`onError` 裡關閉不留重試；388 個測試通過，Codex 再審通過 |
 | 2026-10-27 | 文件架構整理第一部分（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）：狀態板、主文規則、檔頭狀態行，文件檢查接上每次 commit |
 | 2026-10-27 | W6 的 L2 審查處理（Claude Opus 5.5，分支 `claude/w6`）：Codex 的[報告](<../../Claude Codex Discussion/2026-10-27-w6-review.md>)找到 5 項 P2、2 項 P3 與兩項規格疑義。F1（回看換卡動畫中按數字鍵改到舊卡的評分）、F2（完成畫面固定成舊的樣子，同步或改成沒印象後仍說完成）、F3（英翻中的自動朗讀被換卡的停止取消）、F5（出處省略子圖字母時沒跳到第一張子圖）、F7（第 2 步拼對沒有打勾）都先寫失敗測試再修，畫面元件的時序用新的 hook／Motion／語音替身跑真的 `Review.tsx`；F6（Tab 跑出全螢幕）在 Windows 版 Obsidian 用 Electron 送真的 Tab 鍵重現後修。`npm run check` 454 個通過、`main.js` 484,671 bytes；`review-script`、`ui`、`decks` 重跑通過。再審請求已寫；F4（切到背景再回來要不要重設，Windows 被遮住也算切走）、S1、S2 與自選第 10、22 點交給 Fable（[問題清單](../../tasks/w6-l2-questions.md)）。未合併 |

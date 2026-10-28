@@ -1,6 +1,6 @@
 # A3：存檔備援怎麼知道「開著哪些卡組」（設計稿，請 Codex 查核）
 
-狀態：L2 通過，待使用者決定合併：Codex 第三次 L2（`f0ffdcf`）沒有新的需修項目；還沒在 Windows 跑過的錯誤路徑列在〈Codex L2 第三次〉最後
+狀態：已結案：2026-10-28 合併進 `main`（實作 `dfb368e`，Codex 第三次 L2 在 `f0ffdcf` 通過）；還沒在 Windows 跑過的兩條開發命令錯誤路徑列在〈Codex L2 第三次〉最後
 
 2026-10-27｜Claude（Opus 5.5）｜依據：[第一個里程碑報告](2026-10-27-milestone-1-review.md)的 R5、[W5 架構檢查](2026-10-26-w5-architecture-debt.md)的 A3、[外掛架構討論稿環節 1 的實機記錄](2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55)。
 
