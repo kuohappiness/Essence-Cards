@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { isPlainPath, PLUGIN_MANIFEST } from '../src/core/backup/index.ts';
@@ -59,10 +59,28 @@ export function readError(path: string, error: unknown): Error {
 }
 
 /**
+ * vault 相對路徑 rel 的每一段（含 rel 本身）都不是符號連結或 junction；還不存在的部分不用看。過渡工具不跟著連結走：
+ * 不然會備份或改寫到 vault 外（Codex 中途查核 F3）。是連結就丟錯。
+ */
+export async function assertNoLinks(vault: string, rel: string): Promise<void> {
+  const parts = rel.split('/');
+  for (let i = 1; i <= parts.length; i++) {
+    const prefix = parts.slice(0, i).join('/');
+    let info;
+    try { info = await lstat(join(vault, prefix)); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw readError(prefix, error);
+    }
+    if (info.isSymbolicLink()) throw Error(`${prefix}：是連結（符號連結或 junction），過渡工具不跟著連結讀寫`);
+  }
+}
+
+/**
  * vault 裡 folder 底下的所有檔案（vault 相對路徑、`/` 分隔、照字元碼排序）；folder 不存在時是空的。
- * 遇到符號連結或 junction 就停：過渡工具不跟著連結走，也不能略過它（略過就少備份了）。
+ * 遇到符號連結或 junction 就停（folder 本身與上層也算）：過渡工具不跟著連結走，也不能略過它（略過就少備份了）。
  */
 export async function listTree(vault: string, folder: string): Promise<string[]> {
+  await assertNoLinks(vault, folder);
   const found: string[] = [];
   async function visit(rel: string): Promise<void> {
     let entries;

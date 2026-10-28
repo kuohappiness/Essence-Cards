@@ -6,7 +6,7 @@ import { ESSENCE_ROOT, PLUGIN_DATA, hashBytes, openBackup, planRestore, restoreL
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
-import { listTree, platformName, pluginConfig, readError, sameFileKey } from './vault-io.ts';
+import { assertNoLinks, listTree, platformName, pluginConfig, readError, sameFileKey } from './vault-io.ts';
 
 export const CLOSE_OBSIDIAN = '這台電腦的 Obsidian 要先關掉：過渡的還原工具不處理開著的編輯器與補 ID 的計時器（外掛內的還原才處理）。';
 const PLAN_KIND = 'essence-cards-restore-plan';
@@ -181,11 +181,16 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     if (file.action === 'blocked') { outcome('擋住', file.reasons.join('；')); continue; }
     if (file.action !== 'restore' || file.target === null) { outcome('跳過', '現在和備份相同'); continue; }
     if ((old.current?.sha256 ?? null) !== (file.current?.sha256 ?? null)) { outcome('跳過', '計畫之後改過；重跑 --plan 看新的差異'); continue; }
-    const target = join(vault, file.current?.path ?? file.target);
+    const rel = file.current?.path ?? file.target;
+    const folder = rel.slice(0, rel.lastIndexOf('/'));
+    const target = join(vault, rel);
     const bytes = loaded.backup.files.get(file.path)!;
     let temporary: string | null = null;
     try {
+      // 路徑上有連結就不寫：建資料夾前後、改名前各查一次，中途被換成連結也擋得到（Codex 中途查核 F3）。
+      await assertNoLinks(vault, folder);
       await mkdir(dirname(target), { recursive: true });
+      await assertNoLinks(vault, folder);
       // 暫存檔用獨占建立；撞到已有的檔（別的程序或先前留下的）就換名字，不動它（Codex 中途查核 F5）。
       for (let i = 0; i < 20 && temporary === null; i++) {
         const candidate = target + '.' + random() + '.restore-tmp';
@@ -198,6 +203,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
         temporary = candidate;
       }
       if (temporary === null) throw Error('找不到沒用過的暫存檔名');
+      await assertNoLinks(vault, folder);
       await rename(temporary, target);
       temporary = null;
       if (hashBytes(new Uint8Array(await readFile(target))) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');
@@ -215,14 +221,18 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     const path = LOG_FOLDER + '/' + name;
     names.add(same(path));
     const bytes = new TextEncoder().encode(log.lines.join('\n') + '\n');
+    // 試過獨占建立才可能有這次的檔：EEXIST 是別人的，連結檢查失敗時還沒寫，都不刪。
+    let attempted = false;
     try {
+      await assertNoLinks(vault, LOG_FOLDER);
       await mkdir(join(vault, LOG_FOLDER), { recursive: true });
-      await write(join(vault, path), bytes, 'wx');
+      await assertNoLinks(vault, LOG_FOLDER);
+      try { await write(join(vault, path), bytes, 'wx'); } finally { attempted = true; }
       if (hashBytes(new Uint8Array(await readFile(join(vault, path)))) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的內容不同');
       result.logs.push({ source: log.source, path, lines: log.lines.length, outcome: '已還原', reason: '' });
     } catch (error) {
       // 寫了一半的還原檔不留著：重跑時這些行仍算缺，會寫成新的還原檔。
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') await unlink(join(vault, path)).catch(() => {});
+      if (attempted && (error as NodeJS.ErrnoException).code !== 'EEXIST') await unlink(join(vault, path)).catch(() => {});
       result.logs.push({ source: log.source, path, lines: log.lines.length, outcome: '失敗', reason: (error as Error).message });
     }
   }

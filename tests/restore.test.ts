@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFile, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, lstat, readdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readDecks } from '../src/core/deck/index.ts';
 import { dueAt, readHistory, replay } from '../src/core/study/index.ts';
@@ -176,6 +176,35 @@ void test('備份：暫存檔被別的程序搶先建立時失敗，不刪那個
     write: async path => { await writeFile(path, 'other'); throw Object.assign(Error('exists'), { code: 'EEXIST' }); },
   } }), /exists/);
   assert.deepEqual(await readdir(to), ['Essence Cards 備份 2026-10-29 200000 未知 aaaa.zip.tmp']);
+});
+
+void test('Essence Cards 本身是連結時備份與計畫都拒絕；計畫之後子資料夾被換成連結時不寫，vault 外的檔不動（Codex 中途查核 F3）', async t => {
+  const vault = await makeVault(t, { 'Essence Cards/子/A.md': goal('aaa111') });
+  const zip = await backup(t, vault);
+  const outside = await tempFolder(t, 'essence-outside-');
+  await put(outside, '子/A.md', goal('aaa111', '外面的'));
+  await rename(join(vault, 'Essence Cards'), join(vault, '移開'));
+  await symlink(outside, join(vault, 'Essence Cards'), 'junction');
+  await assert.rejects(backupVault({ vault, to: await tempFolder(t), by: 'backup', ...fixed }), /Essence Cards：是連結/);
+  await assert.rejects(makePlan({ vault, backup: zip, ...fixed, random: counter() }), /Essence Cards：是連結/);
+  await unlink(join(vault, 'Essence Cards'));
+  await rename(join(vault, '移開'), join(vault, 'Essence Cards'));
+  // 計畫之後，Essence Cards/子 被換成連到外面的 junction。
+  await put(vault, 'Essence Cards/子/A.md', goal('aaa111', '改過'));
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path } = await makePlan(options);
+  const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+    // 檢查過路徑、寫暫存檔的那一刻換掉（最晚的中途置換）：改名前的檢查要擋住，不能寫到外面的 A.md。
+    if (file.endsWith('.restore-tmp') && !(await lstat(join(vault, 'Essence Cards/子'))).isSymbolicLink()) {
+      await rename(join(vault, 'Essence Cards/子'), join(vault, '子移開'));
+      await symlink(join(outside, '子'), join(vault, 'Essence Cards/子'), 'junction');
+    }
+    await writeFile(file, bytes, { flag });
+  };
+  const result = await applyPlan({ ...options, plan: path, seams: { write } });
+  assert.deepEqual(result.files.map(file => file.outcome), ['失敗']);
+  assert.match(result.files[0].reason, /Essence Cards\/子：是連結/);
+  assert.equal(await read(outside, '子/A.md'), goal('aaa111', '外面的'));
 });
 
 void test('還原：計畫之後被改過的檔在 --apply 時跳過，不蓋掉', async t => {
