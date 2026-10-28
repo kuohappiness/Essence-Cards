@@ -6,3 +6,4 @@ export { backupName, logSource, readBuild, restoreLogName } from './names.ts';
 export { missingLogLines } from './logs.ts';
 export { planRestore } from './plan.ts';
 export type { PlannedFile, RestorePlan } from './plan.ts';
+export { lastVersions } from './versions.ts';

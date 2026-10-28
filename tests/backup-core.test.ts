@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Zip, ZipPassThrough, strToU8 } from 'fflate';
-import { backupName, hashBytes, logSource, missingLogLines, openBackup, planRestore, readBuild, readManifest, restoreLogName, writeZip } from '../src/core/backup/index.ts';
+import { backupName, hashBytes, lastVersions, logSource, missingLogLines, openBackup, planRestore, readBuild, readManifest, restoreLogName, writeZip } from '../src/core/backup/index.ts';
 import type { BackupManifest, PlannedFile } from '../src/core/backup/index.ts';
 import { isDeviceCode } from '../src/state/index.ts';
 import { sameFileKey } from '../tools/vault-io.ts';
-import { goal } from './helpers/vault.ts';
+import { goal, review } from './helpers/vault.ts';
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 const NOW = Date.UTC(2026, 10, 2, 12, 15, 3, 250);
@@ -264,4 +264,30 @@ void test('全庫 ID 檢查：照選擇還原後的所有卡組；同一篇裡�
   assert.deepEqual(summary(both.files), [
     'Essence Cards/A.md missing blocked：學習目標 ID aaa111 還原的「Essence Cards/B.md」也有',
     'Essence Cards/B.md missing blocked：學習目標 ID aaa111 還原的「Essence Cards/A.md」也有']);
+});
+
+void test('每台裝置最後回報的版本：從帶來源的原始行算，兩台時間與值相同也各列一台；同來源同時間不同值是不確定；衝突副本與還原檔另標', () => {
+  const app = (t: string, val: string): string => JSON.stringify({ t, set: 'app', val });
+  const L = 'Essence Cards/紀錄/';
+  const T1 = '2026-10-28T10:00:00.000+08:00', T2 = '2026-11-02T09:00:00.000+08:00';
+  const rows = lastVersions([
+    // Codex 第一次回應的探針：兩台裝置同一刻回報同一個版本，合併後的 changes 只剩一筆，這裡要有兩台。
+    { path: L + '2026-10 iPhone-7f3a.jsonl', text: app(T1, '0.1.0+1a2b3c4') + '\n' + review(T1, 'abc123') + '\n' },
+    { path: L + '2026-10 Windows-2c9e.jsonl', text: app(T1, '0.1.0+1a2b3c4') + '\n{"t":"壞掉\n' },
+    // 下個月的檔更新：取最晚的。
+    { path: L + '2026-11 Windows-2c9e.jsonl', text: app(T2, '0.1.1+9f8e7d6') + '\n' },
+    { path: L + '2026-10 iPad-0000.jsonl', text: app(T1, '0.1.0+1a2b3c4') + '\n' + app(T1, '0.0.1+5d357fa') + '\n' },
+    { path: L + '2026-10 iPhone-7f3a 2.jsonl', text: app(T2, '0.1.1+9f8e7d6') + '\n' },
+    { path: L + '2026-10 iPhone-7f3a 還原 2026-11-02 Windows-2c9e.jsonl', text: app(T2, '0.0.1+0000000') + '\n' },
+    { path: L + '子資料夾/2026-10 Mac-1111.jsonl', text: app(T1, '9.9.9') + '\n' },
+  ]);
+  assert.deepEqual(rows.map(row => [row.device, row.build, row.t, row.note]), [
+    ['Windows-2c9e', '0.1.1+9f8e7d6', T2, null],
+    ['iPad-0000', null, T1, '不確定'],
+    ['iPhone-7f3a', '0.1.0+1a2b3c4', T1, null],
+    ['iPhone-7f3a', '0.1.1+9f8e7d6', T2, '衝突副本'],
+    ['iPhone-7f3a', '0.0.1+0000000', T2, '還原檔'],
+  ]);
+  assert.equal(rows[0].source, L + '2026-11 Windows-2c9e.jsonl');
+  assert.equal(rows[4].source, L + '2026-10 iPhone-7f3a 還原 2026-11-02 Windows-2c9e.jsonl');
 });
