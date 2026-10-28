@@ -60,6 +60,11 @@ export type ErrorSource = 'write' | 'read' | 'listener';
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
 
+/**
+ * 各方法在 ready 之前與 close() 之後的行為集中寫在這裡（技術債 A11），各方法的註解不再重複：
+ * - 還沒 ready：input、today、next、progress、answer 丟錯；deckStatus 回空；save、resolve 回 blocked loading；fillIds 回 false。
+ * - close() 之後：save、resolve 回 blocked closed；fillIds 回 false；不再通知 onChange 的監聽者；其他方法照常。
+ */
 export interface State {
   /**
    * 第一次列出卡組與紀錄、能讀到的都讀完、排好今天就完成；之後每次呼叫回傳同一個 Promise。

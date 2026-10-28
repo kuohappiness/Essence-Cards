@@ -574,3 +574,32 @@ void test('S28 卡住時 close()：逾時之後完成', async t => {
   await closing;
   assert.equal((await stuck).kind, 'failed');
 });
+
+// ---- 技術債 A12：小視窗拿到的問題物件用身分認出；排隊與等待讀取都不複製它 ----
+
+void test('S26 A12：問題物件拿到之後重讀一次內容沒變，用同一個物件還原是 done；名稱改了是 stale、問題保留', async t => {
+  const h = await setup(t, { [P]: K });
+  h.write(P, Kbare);
+  await h.settle();
+  const [shown] = h.state.deckStatus(P).issues;
+  h.notify(P);
+  await h.settle();
+  assert.equal(h.state.deckStatus(P).issues[0], shown);
+  assert.deepEqual(await h.state.resolve(shown, 'restore', createMemoryEditor(h, P, Kbare)), { kind: 'done', added: 0 });
+  assert.equal(h.texts.get(P), K);
+  h.clean();
+
+  const renamed = await setup(t, { [P]: K });
+  renamed.write(P, Kbare);
+  await renamed.settle();
+  const [old] = renamed.state.deckStatus(P).issues;
+  const edited = Kbare.replace('能說明 K', '能說明 K 改名');
+  renamed.write(P, edited);
+  await renamed.settle();
+  assert.deepEqual(await renamed.state.resolve(old, 'restore', createMemoryEditor(renamed, P, edited)), { kind: 'stale' });
+  const issues = renamed.state.deckStatus(P).issues;
+  assert.equal(issues.length, 1);
+  assert.notEqual(issues[0], old);
+  assert.equal(renamed.texts.get(P), edited);
+  renamed.samePlan();
+});

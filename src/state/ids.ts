@@ -2,6 +2,10 @@ import { assignIds, blockIds, parseDeck, setTargetId } from '../core/deck/index.
 import type { Deck, Target } from '../core/deck/index.ts';
 
 export type IdIssueKind = 'lost' | 'changed' | 'ambiguous';
+/**
+ * 待處理的問題。state 用物件身分認出是哪一個問題（技術債 A12）：畫面不能複製這個物件，要把拿到的同一個物件交回 resolve。
+ * 內容沒變的重讀原地更新行號、保留同一個物件；內容改過就換一個新物件，舊的不能再寫回（D-134）。
+ */
 export interface IdIssue {
   path: string;
   /** 那個目標現在的行號。 */
