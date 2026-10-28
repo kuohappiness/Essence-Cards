@@ -137,7 +137,8 @@ const LINK_GROUP_MAX = 24;
 /**
  * 準備接在最後一個字後面的那一格（.ec-tail），喇叭放進去（D-145 第 6 點：和最後一個字一起換行，不會單獨掉到下一行）。
  * - 最後是一般文字：最後一個字（中文兩個字）和喇叭包在一起（white-space: nowrap）。
- * - 最後的字在連結裡：整個連結和喇叭包在一起，喇叭在連結外面（按喇叭不會開連結，Codex 審查 F5）；連結很長時接在連結後面。
+ * - 最後的字在連結裡（連結裡的程式碼、圖片也算，Codex 再查 R3）：整個連結和喇叭包在一起，喇叭在連結外面（按喇叭不會開連結，
+ *   Codex 審查 F5）；連結很長時接在連結後面。
  * - 最後是圖、公式、嵌入、空格：原樣不動，喇叭接在它後面（Codex 審查 F3）。
  */
 function attachTail(container: HTMLElement): HTMLElement {
@@ -145,14 +146,14 @@ function attachTail(container: HTMLElement): HTMLElement {
   tail.className = 'ec-tail';
   const last = lastContent(container);
   if (last === null) { container.append(tail); return tail; }
-  if (last instanceof Element) { last.after(tail); return tail; }
-  const link = last.parentElement?.closest('a');
+  const link = (last instanceof Text ? last.parentElement : last)?.closest('a');
   if (link && container.contains(link)) {
     if ((link.textContent ?? '').length > LINK_GROUP_MAX) { link.after(tail); return tail; }
     link.before(tail);
     tail.append(link);
     return tail;
   }
+  if (last instanceof Element) { last.after(tail); return tail; }
   const rest = last.splitText(tailStart(last.textContent ?? ''));
   rest.replaceWith(tail);
   tail.append(rest);
