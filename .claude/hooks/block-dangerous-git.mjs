@@ -1,4 +1,4 @@
-// Claude Code PreToolUse hook：擋下會誤 commit 別人修改或毀掉工作的 git 指令（D-053、AGENTS.md「實作與 Git」）。
+// Claude Code PreToolUse hook：擋下會誤 commit 別人修改或毀掉工作的 git 指令（D-053、AGENTS.md「底線」）。
 // 讀 stdin 的 JSON，命中時以 exit code 2 結束，stderr 的訊息會回給 Claude。
 let input = '';
 process.stdin.setEncoding('utf8');
@@ -18,7 +18,7 @@ process.stdin.on('end', () => {
   ];
   for (const [pattern, reason] of rules) {
     if (pattern.test(command)) {
-      console.error(`已擋下：${reason}。同一個資料夾可能有其他 AI session 正在工作（AGENTS.md「實作與 Git」）。真的需要的話，請使用者自己在終端機執行。`);
+      console.error(`已擋下：${reason}。同一個資料夾可能有其他 AI session 正在工作（AGENTS.md「底線」）。真的需要的話，請使用者自己在終端機執行。`);
       process.exit(2);
     }
   }

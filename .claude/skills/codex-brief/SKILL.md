@@ -35,7 +35,7 @@ v1 程式的任務放在 `tasks/`（例如 `tasks/w3.md`），試作場的放在
 - **建議推理等級**：照規格寫程式通常用中等；有演算法或除錯成分的用高。說明理由一句。
 - **一段可以直接貼給 Codex 的訊息**：指向 TASK.md 的路徑，加上個人路徑等不進 repo 的資訊。
 
-然後照 `AGENTS.md` 的 Git 規則 commit TASK.md（只 stage 自己的檔案）。
+然後 commit TASK.md。
 
 ## Codex 完成後檢查
 
