@@ -1,6 +1,6 @@
 # 更新防線第一部分：審查請求（給 Codex）
 
-狀態：待審：第一輪（1-1 備份、1-2 還原，分支 `claude/update-safeguards-1` 的 `4dbb395`）；1-3～1-5 做完後另寫第二輪
+狀態：待再查：第一輪的 F1～F6 已修（分支 `claude/update-safeguards-1` 的 `c4a93c6`，[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)），請照文末〈第一輪修正的再查〉；1-3～1-5 做完後另寫第二輪
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（寫進使用者 vault 的還原、紀錄的還原檔與合併順序、備份格式的讀取檢查，屬於 [quality.md](../docs/agents/quality.md) 的高風險範圍）。
 
@@ -74,3 +74,17 @@
 - 依嚴重程度排序。每項寫：哪一軸（規格／規範與設計）、觸發條件、預期／實際、影響、位置、證據（已重現／靜態推斷／待驗證），以及建議（合併前修／記進技術債並寫觸發點與完成條件／加檢查規則）。
 - 「請特別看」的 7 點逐點寫結論；「Claude 自己選了做法的地方」的 15 點逐點回覆：同意，或建議的做法與理由。
 - 最後一行寫沒查的項目與原因。不貼整份執行紀錄。
+
+## 第一輪修正的再查
+
+你的第一輪回報（F1～F6 與第 7 點）Claude 全部接受、已修，處理與 commit 寫在[回報](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)最後的〈Claude 回應〉。請照你在〈交回 Claude〉寫的，針對改過的解析邊界與還原的寫入順序再查。
+
+- **範圍**：`git diff 7b2a0459425354cb90a75cdb6815e6c2f46f24ad c4a93c6ad80d5d4b174fb93c9c996aa2524e9378`（7 個 commit：`ccd7ad6` F4、`bdb7264` F6、`813c9be` F5、`b210348` F3、`7515798` F1、`3084f62` F2、`c4a93c6` 第 7 點）。分支上中間的 `de7627b`（1-4）與 `7b2a045`（pre-commit 拿掉 git 環境變數）不在這一次，放在第一部分最後的 L2。
+- **請特別看**：
+  1. `plan.ts` 的 `orderWrites` 與 `planRestore` 的迴圈：三篇以上的鏈與環、擋住一篇之後 ID 檢查與順序再算會不會漏、`after` 只看「加回的 ID 現在在別篇」夠不夠（例如一篇同時釋放又加回、data.json 或圖片和卡組混在一起）。
+  2. `restore.ts` 的 `applyPlan`：計畫之後改過的檔先排除再重算、照 `order` 寫、前面的沒寫成就跳過、寫前與改名前重讀；結果的「跳過／擋住／失敗」理由是否正確，重跑能不能續做。
+  3. `zip.ts` 的 `strictNames`：自己讀中央目錄的寫法（找 EOCD、ZIP64 拒絕、註解欄、名稱和 fflate 讀到的一一比對）有沒有能混過去或誤擋正常備份的 zip。
+  4. `vault-io.ts` 的 `assertNoLinks` 與還原寫入、還原檔寫入的檢查位置；設定資料夾是連結時，讀 data.json 照常、寫 data.json 擋住，這個不對稱是否可以。
+  5. F5 的暫存檔所有權：備份與還原兩邊。
+- **驗證**：照上面〈驗證方式〉另開 worktree（`git worktree add --detach <暫存資料夾> c4a93c6`）；Claude 在 `c4a93c6` 跑過 `npm run check`，602 項全過。
+- **回報**：接在同一份回報的最後，標題「Codex 再查（日期）」；照上面〈回報〉的格式，每項標明是新發現還是第一輪項目沒修好。
