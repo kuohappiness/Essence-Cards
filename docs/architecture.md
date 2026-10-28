@@ -132,7 +132,7 @@ flowchart TB
 - 獨立 App 已列入未來開發計畫（[D-129](decisions.md#d-129-獨立-app-列入未來開發計畫)）；同步與成本邊界沿用 [D-128](decisions.md#d-128-通用軟體使用者自備同步空間)，具體平台與接法待設計。
 - 2026-10-07 可丟棄原型已通過 Windows 與 iPhone 的最小實機驗證：自訂介面、筆記讀寫、iCloud 往返。原型程式已從 main 刪除，保留在 git 歷史（見 [archive](archive/README.md)）。
 - 限制：
-  - 手機外掛不能使用 Node.js／Electron。
+  - 手機外掛不能使用 Node.js／Electron；電腦才需要的（背景製卡、vault 外備份）只放在一個電腦專用、判斷是電腦才載入的資料夾（[D-148](decisions.md#d-148-電腦專用的主機接點)）。
   - Vault 不是資料庫，跨裝置同時寫入沒有保證。
   - Obsidian 官方指出 Windows 上的 iCloud 可能造成檔案重複或損壞。
 - 介面技術：複習相關的畫面用 React 加 Motion；卡組筆記的樣式、設定頁用 Obsidian 內建的方式（[D-051](decisions.md#d-051-複習畫面用-react)）。複習畫面是蓋住 Obsidian 上下欄的全螢幕畫面，攔截觸控事件以免滑開 Obsidian 的側欄（[D-109](decisions.md#d-109-複習畫面原型的實測結論)）。樣式用純 CSS，建立 Essence 自己的設計規範（[D-052](decisions.md#d-052-樣式用純-css)）。
