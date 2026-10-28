@@ -43,9 +43,11 @@ body.theme-dark .ec-fullscreen { background: #121314; }
    沒捲動時的位置和原本一樣。捲上來的字在題目下緣淡出，不畫線。 */
 .ec-q.is-sticky { position: sticky; top: calc(-1 * var(--ec-stage-top)); z-index: 1; margin-top: 0; padding: var(--ec-gap-question) 0 4px; background: var(--ec-page); }
 .ec-q.is-sticky::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 20px; background: linear-gradient(var(--ec-page), transparent); pointer-events: none; }
-/* 喇叭接在那一行最後一個字後面，一行最多一個（D-082、D-145）：Markdown.tsx 把最後一個字和喇叭包進 .ec-tail，
-   一起換行，喇叭不會單獨掉到下一行；上下的負邊距讓 38px 的喇叭不把那一行撐高 */
+/* 喇叭接在那一行最後一個字後面，一行最多一個（D-082、D-145）：rendered.ts 把最後一個字和喇叭包進 .ec-tail，
+   一起換行，喇叭不會單獨掉到下一行；上下的負邊距讓 38px 的喇叭不把那一行撐高。
+   最後的字在連結裡時整個連結在 .ec-tail 裡：最後一個字以外的文字（.ec-tail-wrap）照常換行（Codex 再查 R4） */
 .ec-tail { white-space: nowrap; }
+.ec-tail-wrap { white-space: normal; }
 .ec-speakers { display: inline-flex; vertical-align: middle; margin: -10px 0 -8px 4px; white-space: normal; }
 .ec-app .ec-say { width: 38px; height: 38px; border-radius: 10px; }
 /* 背面補充的名稱（記憶錨點、例句、詳解）自己一行 */

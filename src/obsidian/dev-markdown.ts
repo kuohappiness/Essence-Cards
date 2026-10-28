@@ -17,8 +17,16 @@ const together = (r: Row): boolean => r.sameLine === true && r.overflow === fals
 const untouched = (count: number) => (r: Row): boolean => r.protectedSame && r.protectedCount === count && !r.tailInProtected;
 
 const IMAGE = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><rect width="120" height="40" fill="#ccc"/></svg>');
-// 再查 R4：長連結自己可以換行，最後一個字和喇叭照樣同一行；換幾種行寬讓行尾剩下的空間不一樣。
-const LONG_LINKS = ['Read [information about photosynthesis](https://example.com)', 'Read [a very long link text that goes on](https://example.com)', '請看[光合作用需要陽光、水和二氧化碳的說明](https://example.com)'];
+// 再查 R4：長連結自己可以換行，最後一個字和喇叭照樣同一行；換幾種行寬讓行尾剩下的空間不一樣（每 12px 一格，比喇叭窄，
+// 行尾剩下的空間一定會有一格落在「放得下字、放不下喇叭」）。iPhone 也跑一次：WebKit 斷行的規則可能和 Chromium 不同。
+// 最後一個字加喇叭比一整行還寬時，一般文字也會超出（Windows 版 photosynthesis 約 230px 以下），所以那一個從 250px 起量。
+const sweep = (from: number, to: number, step: number): number[] => Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => from + i * step);
+const LONG_LINKS: [string, number[]][] = [
+  ['Read [information about photosynthesis](https://example.com)', [250, 270, 290, 310]],
+  ['Read [the story of how a tiny seed grows into a tall tree](https://example.com)', sweep(150, 330, 12)],
+  ['Read [a very long link text that goes on](https://example.com)', [150, 176, 210, 250]],
+  ['請看[光合作用需要陽光、水和二氧化碳的說明](https://example.com)', [150, 176, 210, 250]],
+];
 const CASES: Case[] = [
   // F3：圖、公式、嵌入的內容原樣不動，喇叭接在後面。
   { name: 'SVG 結尾', text: '圖中的字：\n\n<svg width="140" height="50"><text x="5" y="30">Hello</text></svg>', expect: untouched(1) },
@@ -36,7 +44,7 @@ const CASES: Case[] = [
   // 再查 R3：連結裡最後是程式碼或圖片，原樣不動，喇叭照樣在連結外面。
   { name: '連結裡的程式碼結尾', text: 'Read [`borrow`](https://example.com)', expect: r => together(r) && untouched(1)(r) },
   { name: '連結裡的圖片結尾', text: `看圖：[![](${IMAGE})](https://example.com)`, expect: r => together(r) && untouched(1)(r) },
-  ...LONG_LINKS.flatMap((text, index) => [150, 176, 210, 250].map(width => ({ name: `長連結 ${String(index + 1)} ${String(width)}px`, text, width, expect: together }))),
+  ...LONG_LINKS.flatMap(([text, widths], index) => widths.map(width => ({ name: `長連結 ${String(index + 1)} ${String(width)}px`, text, width, expect: together }))),
   { name: '英文結尾 150px', text: 'He has already made up his mind to study abroad.', width: 150, english: true, expect: r => r.sameLine === true && !r.overflow },
   { name: '中文結尾 150px', text: '光合作用需要陽光、水和二氧化碳。', width: 150, expect: r => r.sameLine === true && !r.overflow },
 ];
