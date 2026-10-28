@@ -150,7 +150,8 @@ export interface ApplyResult {
 
 /**
  * `--apply`：先做一份現況的備份（失敗就什麼都不寫）；重新讀現況，排除計畫之後改過的檔，照實際要寫的檔重算計畫
- * （全庫 ID 檢查與寫入順序）；照順序寫，要先釋放 ID 的檔沒寫成就不寫等它的檔；寫還原檔（一次寫完、不覆寫）；最後列出每個檔的結果。
+ * （全庫 ID 檢查與寫入順序）；照順序寫，要先釋放 ID 的檔沒寫成就不寫等它的檔；每個檔寫之前、改名之前都重新確認
+ * 現在的還是計畫裡的那一份，不是就跳過；寫還原檔（一次寫完、不覆寫）；最後列出每個檔的結果。
  * 中途失敗後重跑 --plan 就是續做：寫成的檔已經相同、補過的行已經在還原檔裡。
  */
 export async function applyPlan(options: RestoreOptions & { plan: string; files?: readonly string[] }): Promise<ApplyResult> {
@@ -201,9 +202,12 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     const rel = file.current?.path ?? file.target!;
     const folder = rel.slice(0, rel.lastIndexOf('/'));
     const target = join(vault, rel);
+    const expected = file.current?.sha256 ?? null;
     const bytes = loaded.backup.files.get(file.path)!;
     let temporary: string | null = null;
     try {
+      // 寫之前、改名之前各重新讀一次：還原期間才到的修改（iCloud、別的編輯器）不能蓋掉（Codex 中途查核 F2）。
+      if (await shaOf(target) !== expected) { outcome(file, '跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 路徑上有連結就不寫：建資料夾前後、改名前各查一次，中途被換成連結也擋得到（Codex 中途查核 F3）。
       await assertNoLinks(vault, folder);
       await mkdir(dirname(target), { recursive: true });
@@ -221,6 +225,12 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       }
       if (temporary === null) throw Error('找不到沒用過的暫存檔名');
       await assertNoLinks(vault, folder);
+      if (await shaOf(target) !== expected) {
+        await unlink(temporary).catch(() => {});
+        temporary = null;
+        outcome(file, '跳過', '還原期間改過；重跑 --plan 看新的差異');
+        continue;
+      }
       await rename(temporary, target);
       temporary = null;
       if (await shaOf(target) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');

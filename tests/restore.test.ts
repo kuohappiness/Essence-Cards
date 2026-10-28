@@ -175,6 +175,34 @@ for (const [releases, adds] of [['A', 'B'], ['B', 'A']]) {
   });
 }
 
+void test('還原（Codex 中途查核 F2）：寫入期間才到的修改不蓋掉——別的檔在前一個檔寫入時被改、這個檔在暫存檔寫好後改名前被改，都跳過', async t => {
+  const { vault, zip, A, B } = await drill(t);
+  let step = 0;
+  const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+    await writeFile(file, bytes, { flag });
+    // 順序是 B 再 A：寫 B 的暫存檔時改了 B（改名前的檢查要擋），之後 A 的寫入照常。
+    if (file.includes('B.md.') && step++ === 0) await put(vault, B, goal('ccc333') + goal('bbb222') + goal('new999'));
+  };
+  const result = await applyPlan({ vault, backup: zip, ...fixed, random: counter(), plan: (await makePlan({ vault, backup: zip, ...fixed, random: counter() })).path, seams: { write } });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome, file.reason]), [
+    [A, '跳過', '要先還原「' + B + '」才不會讓學習目標 ID 重複，它這次沒有還原成'], [B, '跳過', '還原期間改過；重跑 --plan 看新的差異']]);
+  assert.equal(await read(vault, B), goal('ccc333') + goal('bbb222') + goal('new999'));
+  assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), []);
+  // 寫 A 之前另一篇被改：A 照常（只看 A 自己），被改的那一篇是別的檔，不在這次還原裡。
+  const other = await drill(t);
+  const options = { vault: other.vault, backup: other.zip, ...fixed, random: counter() };
+  const { path } = await makePlan({ ...options, random: counter() });
+  let once = true;
+  const late = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+    // 寫 B 的暫存檔時，A 才被同步改掉：輪到 A 時寫之前的重讀要擋住。
+    if (file.includes('B.md.') && once) { once = false; await put(other.vault, other.A, goal('aaa111', '同步來的新字')); }
+    await writeFile(file, bytes, { flag });
+  };
+  const second = await applyPlan({ ...options, plan: path, seams: { write: late } });
+  assert.deepEqual(second.files.map(file => [file.path, file.outcome]), [[other.A, '跳過'], [other.B, '已還原']]);
+  assert.equal(await read(other.vault, other.A), goal('aaa111', '同步來的新字'));
+});
+
 void test('還原：還原檔寫到一半空間不足時列為失敗、不留半個檔，重跑仍算缺', async t => {
   const { vault, zip } = await drill(t);
   const write = async (path: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
