@@ -29,14 +29,17 @@
   --ec-size-button: 16px;
   --ec-size-title: 22px;
 
-  --ec-gap-stage: 30px 26px 16px;
+  --ec-stage-top: 30px;
+  --ec-gap-stage: var(--ec-stage-top) 26px 16px;
   --ec-gap-question: 18px;
-  --ec-gap-answer: 26px;
+  /* 題目和答案之間：不畫線，只靠留白分開（D-145；原本 26px 加線下的 22px） */
+  --ec-gap-answer: 48px;
   --ec-gap-extra: 20px;
   --ec-radius: 12px;
   --ec-radius-small: 6px;
   --ec-touch: 44px;
-  --ec-action-height: 64px;
+  /* 底部那一排按鈕（自評、顯示答案）：使用者 2026-10-28 要減 20%（原本 64px），仍大於 44 點的觸控範圍 */
+  --ec-action-height: 52px;
 
   --ec-fade: 0.18s;
   --ec-slide-out: 0.11s;

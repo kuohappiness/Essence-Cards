@@ -22,6 +22,16 @@
 .ec-line-word { display: inline-block; padding: 0 .2em; font-weight: 700; }
 .ec-line.ec-filled .ec-line-word { animation: ec-fade-in var(--ec-fade) ease-out both; }
 
+/* 在空格裡直接打字（D-145）：線、撐開寬度的隱形文字、輸入框疊在同一格（寬度取最寬的那個，最寬到題目的寬度）。
+   打字前看得到線（字數）；有字後線藏起來，換成輸入框自己的一條底線，跟著字變寬。 */
+.ec-slot { display: inline-grid; max-width: 100%; margin: 0 .15em; vertical-align: baseline; }
+.ec-slot > * { grid-area: 1 / 1; min-width: 0; }
+.ec-slot > .ec-lines { margin: 0; }
+.ec-mirror { visibility: hidden; justify-self: start; overflow: hidden; padding: 0 .2em; white-space: pre; line-height: 1.3; }
+.ec-app .ec-q input.ec-blank-input { width: 100%; min-width: 0; height: auto; margin: 0; padding: 0 .2em; border: 0; border-bottom: 2px solid transparent; border-radius: 0; box-shadow: none; outline: none; background: transparent; color: var(--ec-ink); caret-color: var(--ec-ink); font: inherit; line-height: 1.3; }
+.ec-app .ec-q input.ec-blank-input:not(:placeholder-shown) { border-bottom-color: var(--ec-ink); }
+.ec-slot:has(.ec-blank-input:not(:placeholder-shown)) > .ec-lines { visibility: hidden; }
+
 /* 答案的粗體重點：粗體加一條細的紫色底線（D-068、D-070） */
 .ec-a strong, .ec-a .ec-blank-answer, .ec-mark { background: none; color: inherit; font-weight: 700; text-decoration-line: underline; text-decoration-color: var(--ec-key); text-decoration-thickness: 2px; text-underline-offset: .32em; text-decoration-skip-ink: none; }
 .ec-mark { color: var(--ec-key); }

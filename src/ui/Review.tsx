@@ -1,9 +1,10 @@
 import type { App } from 'obsidian';
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { animate } from 'motion';
 import type { Rating } from '../core/study/index.ts';
-import { blankCount, englishParts, fillBlank, gesture, lockAxis, RATING_LABELS, RATINGS, sourceLinks } from '../review/index.ts';
-import type { Axis, CardView, DoneView, Gesture, Session, Spelling } from '../review/index.ts';
+import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLinks } from '../review/index.ts';
+import type { Axis, CardView, DoneView, Gesture, Session, Spelling, TypedView } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
 import { firstMaterial, resolveSource } from './sources.ts';
 import type { Speech } from './speech.ts';
@@ -52,7 +53,7 @@ const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMe
 const sidebars = (app: App): boolean | null => app.workspace.leftSplit?.collapsed ?? null;
 const nextFrame = (): Promise<void> => new Promise(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); });
 
-/** 字母的比對：拼錯的畫刪除線（你打的）或紫色（正確拼字）。 */
+/** 字母的比對：拼錯的畫刪除線（你拼的、照著打一次）或紫色（正確拼字）。 */
 function Letters({ letters, mode }: { letters: Spelling['typed']; mode: 'typed' | 'expected' }): React.JSX.Element {
   if (!letters.length) return <span className="ec-letters">—</span>;
   return <span className="ec-letters" lang="en">{letters.map((letter, index) => letter.bad
@@ -60,10 +61,17 @@ function Letters({ letters, mode }: { letters: Spelling['typed']; mode: 'typed' 
     : <span key={index}>{letter.char}</span>)}</span>;
 }
 
-function Speakers({ texts, say }: { texts: readonly string[]; say: (text: string) => void }): React.JSX.Element | null {
+/**
+ * 一行最多一個喇叭（D-145）：按下去依序念這一行的英文（lineSpeech）。
+ * 題目、答案、背面補充的喇叭交給 Markdown 的 tail，接在最後一個字後面、和它一起換行。
+ */
+function Speaker({ texts, say }: { texts: readonly string[]; say: (texts: readonly string[]) => void }): React.JSX.Element | null {
   if (!texts.length) return null;
-  return <span className="ec-speakers">{texts.map((text, index) => <button key={index} type="button" className="ec-ico ec-say" aria-label={'朗讀 ' + text} onClick={() => { say(text); }}><Icon type="speaker" /></button>)}</span>;
+  return <span className="ec-speakers"><button type="button" className="ec-ico ec-say" aria-label={'朗讀 ' + texts.join('、')} onClick={() => { say(texts); }}><Icon type="speaker" /></button></span>;
 }
+
+/** 拼字比對裡的答案（「正確拼字」那一行寫的字）。 */
+const spelled = (letters: Spelling['expected']): string => letters.map(letter => letter.char).join('');
 
 export function Review(props: ReviewProps): React.JSX.Element {
   const { app, session, speech } = props;
@@ -83,9 +91,16 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const spoken = useRef<readonly string[] | null>(null);
   const opened = useRef(false);
   const pendingNext = useRef<number | null>(null);
+  // 打字卡題目裡的空格（D-145）：題目渲染好後由 Markdown 交回；換了一張就不算（undefined 是還沒渲染好，null 是題目沒有 ＿＿）。
+  const [slot, setSlot] = useState<{ key: string; el: HTMLElement | null } | null>(null);
+  // 題目固定在上方、只捲答案（D-145，iPhone 回饋）；題目比畫面的三分之一高（例如有圖）時不固定，免得答案只剩一小塊。
+  const questionEl = useRef<HTMLDivElement>(null);
+  const [stickyQuestion, setStickyQuestion] = useState(false);
 
   // 換卡、回看、切走超過 60 秒回來從頭開始（shown 加一，L2 的 F4）都算換了一張。
   const cardKey = view.kind === 'card' ? [view.card.card.lt, view.card.card.prompt.fingerprint, view.card.viewing?.index ?? -1, view.card.shown].join(':') : view.kind;
+  const cardSlot = slot?.key === cardKey ? slot.el : undefined;
+  const onSlot = (el: HTMLElement | null): void => { setSlot(old => old?.key === cardKey && old.el === el ? old : { key: cardKey, el }); };
   const focusApp = (): void => { appEl.current?.focus({ preventScroll: true }); };
 
   useEffect(() => () => { alive.current = false; }, []);
@@ -97,6 +112,16 @@ export function Review(props: ReviewProps): React.JSX.Element {
   });
   // 換卡、回看：捲回最上面，收起出處提示。
   useEffect(() => { if (stage.current) stage.current.scrollTop = 0; setTipOpen(false); }, [cardKey]);
+  // 題目的高度（圖片載入、換行）或畫面大小變了就重新判斷要不要固定。
+  useEffect(() => {
+    const question = questionEl.current, area = stage.current;
+    if (!question || !area || typeof ResizeObserver !== 'function') return;
+    const check = (): void => { setStickyQuestion(question.offsetHeight <= area.clientHeight / 3); };
+    const observer = new ResizeObserver(check);
+    observer.observe(question);
+    observer.observe(area);
+    return () => { observer.disconnect(); };
+  }, [cardKey]);
   // 自動朗讀（D-116）：同一個時刻只念一次；換卡、回看、關掉開關都立刻停。換卡的停止要排在念新題目之前（effect 照宣告順序跑），
   // 不然英翻中的題目剛念就被停掉（Codex L2 F3）。
   useEffect(() => { speech.stop(); }, [cardKey, speech]);
@@ -108,10 +133,20 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (autoOn) speech.say(texts);
   }, [view, autoOn, speech]);
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
-  // 打字卡：輸入框自動取得焦點。
+  // 只剩一個自評時（打字卡第 1 步按了「沒印象」），三步走完就自動記下、換下一張（D-145，iPhone 回饋）。
+  // 正在念答案與例句時等念完（答錯後的回饋，D-116）；語音沒回報念完時，底下那一顆「沒印象」照樣能按。
+  // 每次畫面更新都重新等（同一題重出、回看後回來、切走再回來都會再自動，Codex 審查 F2），條件不成立或卸載時取消；
+  // 關掉畫面、切到背景時 Speech.stop 取消等待、不算念完，所以中斷不會被記成作答（Codex 審查 F1）。切到背景時不等。
+  // 換卡動畫期間不等，動畫結束才等：回到目前那張時沒在念，whenIdle 馬上回報，那時動畫還沒結束（Codex 再查 R1）。
+  useEffect(() => {
+    if (animating || view.kind !== 'card' || view.card.viewing || !view.card.typed?.finished || view.card.allowed.length !== 1) return;
+    if (document.visibilityState === 'hidden') return;
+    return speech.whenIdle(() => { if (alive.current && !busy.current) commit(() => session.rateOnly()); });
+  }, [view, autoOn, animating, speech, session]);
+  // 打字卡：輸入框自動取得焦點（在空格裡打字時，題目渲染好、輸入框放進空格之後）。
   useEffect(() => {
     if (view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
-  }, [cardKey, view]);
+  }, [cardKey, view, cardSlot]);
 
   async function slide(direction: number, change: () => void): Promise<void> {
     if (busy.current) return;
@@ -139,15 +174,19 @@ export function Review(props: ReviewProps): React.JSX.Element {
     const current = latest.current;
     if (current.kind !== 'card' || !current.card.allowed.includes(rating)) return;
     if (current.card.viewing) { session.rate(rating); return; }
+    commit(() => session.rate(rating));
+  };
+  /** 記下這一張、換下一張（手按的自評與只剩一個時的自動記下共用）。 */
+  function commit(accept: () => boolean): void {
     // 先確定這一次自評算數（0.3 秒的規則在 review 裡），再換卡：寫紀錄在背景（D-074）。
     pendingNext.current = performance.now();
-    const accepted = session.rate(rating);
+    const accepted = accept();
     if (!accepted) { pendingNext.current = null; return; }
     // 已經換成下一張：評分後只做滑入，回看的換卡才有滑出（§3-4、L2 自選第 10 點）。
     const el = body.current;
     if (el && !reducedMotion()) void animate(el, { opacity: [0, 1], x: [-35, 0] }, { duration: 0.16 });
     focusApp();
-  };
+  }
   const back = (): void => { if (latest.current.top.canBack) void slide(1, () => { session.back(); }); };
   const forward = (): void => { if (latest.current.top.viewing) void slide(-1, () => { session.forward(); }); };
   const toCurrent = (): void => { if (latest.current.top.viewing) void slide(-1, () => { session.toCurrent(); }); };
@@ -230,43 +269,53 @@ export function Review(props: ReviewProps): React.JSX.Element {
 
   const top = view.top;
   const english = view.kind === 'card' && view.card.english;
+  const typing = view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing ? view.card.typed : null;
   return <div className="ec-app" ref={appEl} tabIndex={-1} onKeyDown={onKey}>
     <div className="ec-top">
       <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>
       {top.viewing
         ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
         : <span className="ec-count" aria-live="polite">{view.kind === 'done' ? '' : top.center}</span>}
-      {english && <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label>}
+      {/* 沒有開關時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
+      {english ? <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label> : <span aria-hidden="true" />}
       <button type="button" className="ec-ico" aria-label="結束複習" onClick={props.close}><Icon type="close" /></button>
     </div>
     <div className="ec-prog" aria-hidden="true"><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
-    <div className="ec-stage" ref={stage} onClick={event => {
-      if (view.kind !== 'card' || view.card.typed || view.card.revealed || view.card.viewing) return;
-      if (performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
-      reveal();
+    <div className={'ec-stage' + (typing ? ' is-typing' : '')} ref={stage} onClick={event => {
+      if (view.kind !== 'card' || view.card.viewing || performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
+      // 打字卡：點卡片任何地方都叫出鍵盤（D-145：輸入框在空格裡，點得到的範圍比原本那一整行小）。
+      if (view.card.typed) { if (!view.card.typed.finished) inputEl.current?.focus({ preventScroll: true }); return; }
+      if (!view.card.revealed) reveal();
     }}>
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} session={session} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} onPainted={painted} onFail={side => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); }} />}
+        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} session={session} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot}
+          qRef={questionEl} sticky={stickyQuestion} actions={typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />}
+          onPainted={painted} onFail={side => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); }} />}
       </div>
     </div>
-    <div className="ec-actions">
+    {/* 打字中沒有底部那一排：「沒印象」「確認」在題目正下方（TypedActions） */}
+    {!typing && <div className="ec-actions">
       {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>結束複習</button>}
-      {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} submit={submit} skip={skip} />}
-    </div>
+      {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} />}
+    </div>}
   </div>;
 }
 
-interface ActionsProps { view: CardView; animating: boolean; reveal: () => void; rate: (r: Rating) => void; submit: () => void; skip: () => void }
-function Actions({ view, animating, reveal, rate, submit, skip }: ActionsProps): React.JSX.Element {
-  const typed = view.typed;
-  if (!view.viewing && typed && !typed.finished) {
-    return <div className="ec-typed-actions">
-      {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{RATING_LABELS.miss}</button>}
-      <button type="button" className="ec-show ec-confirm" disabled={animating || !typed.input.trim()} onClick={submit}>確認</button>
-    </div>;
-  }
+/**
+ * 打字中的「沒印象」與「確認」（D-145，iPhone 回饋）：放在題目正下方，不放在畫面最底下。
+ * iPhone 的 Obsidian 開鍵盤時不縮畫面（W6 的 J7），最底下那一排會被鍵盤蓋住。
+ */
+function TypedActions({ typed, animating, submit, skip }: { typed: TypedView; animating: boolean; submit: () => void; skip: () => void }): React.JSX.Element {
+  return <div className="ec-typed-actions">
+    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{RATING_LABELS.miss}</button>}
+    <button type="button" className="ec-show ec-confirm" disabled={animating || !typed.input.trim()} onClick={submit}>確認</button>
+  </div>;
+}
+
+interface ActionsProps { view: CardView; animating: boolean; reveal: () => void; rate: (r: Rating) => void }
+function Actions({ view, animating, reveal, rate }: ActionsProps): React.JSX.Element {
   if (!view.viewing && !view.revealed) return <button type="button" className="ec-show" disabled={animating} onClick={reveal}>顯示答案</button>;
   const shown = view.viewing ? (view.typed && view.allowed.length === 0 ? [view.pressed].filter((r): r is Rating => r !== null) : (view.typed ? view.allowed : RATINGS)) : view.allowed;
   return <div className="ec-rates">
@@ -291,50 +340,87 @@ interface CardProps {
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  /** 題目裡的空格：undefined 是題目還沒渲染好，null 是題目沒有 ＿＿（輸入框放在題目下面）。 */
+  slot: HTMLElement | null | undefined;
+  onSlot: (slot: HTMLElement | null) => void;
+  qRef: React.RefObject<HTMLDivElement | null>;
+  /** 題目固定在上方（不太高的題目）。 */
+  sticky: boolean;
+  /** 打字中的「沒印象」「確認」：排在題目、提示與比對下面。 */
+  actions: React.ReactNode;
   onPainted: () => void;
   onFail: (side: 'front' | 'back') => void;
 }
-function Card({ view, app, session, speech, materials, openLink, tipOpen, setTipOpen, inputRef, onPainted, onFail }: CardProps): React.JSX.Element {
+function Card({ view, app, session, speech, materials, openLink, tipOpen, setTipOpen, inputRef, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
   const prompt = card.prompt;
   const question = prompt.kind === 'qa' ? prompt.question : prompt.text;
   const answer = prompt.kind === 'qa' ? prompt.answer : null;
   const extras = [...prompt.extras, ...card.target.shared];
-  const say = (text: string): void => { speech.say([text]); };
+  const say = (texts: readonly string[]): void => { speech.say(texts); };
+  const speak = (text: string): string[] => view.speakable ? lineSpeech(text) : [];
   const spokenQuestion = typed && revealed ? fillBlank(question, typed.answer) ?? question : question;
-  const questionParts = view.speakable ? englishParts(spokenQuestion) : [];
+  const lines = typed ? blankCount(question, prompt.kind === 'qa' ? prompt.typed : null) : 0;
+  // 三步還沒走完（不是回看）：題目有 ＿＿ 時在空格裡打（D-145），渲染後找不到空格才放在題目下面。
+  const typing = typed !== null && !typed.finished && !view.viewing ? typed : null;
+  const inline = typing !== null && lines > 0 && slot !== null;
   const sources = sourceLinks(card.target.fields.sources);
   const deckMaterials = materials(card.deck);
   const links = sources.map(item => ({ ...item, target: resolveSource(app, card.deck, deckMaterials, item.link) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
-  const stepText = typed && !typed.finished && typed.step === 2 ? <div className="ec-hint">{typed.notice && <span className="ec-wrong">不對</span>}<span>提示：<span lang="en">{typed.hint}</span></span></div> : null;
-  return <article className={'ec-card' + (view.english ? ' is-english' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
+  // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
+  // 照打：「照著打一次」後面接即時比對，打了字就顯示現在打的字（打對的照常顯示、打錯的字母畫刪除線，D-145，使用者 2026-10-28）；
+  // 放在同一行，打字時不多冒出一行把下面往鍵盤後推。
+  const live = typing?.step === 3 && typing.live?.typed.length ? typing.live : null;
+  const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
+    : typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span>{live && <span className="ec-live"><Letters letters={live.typed} mode="typed" /></span>}</div> : null;
+  const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { session.input(event.currentTarget.value); }}
+    placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
+    autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />;
+  // 拼對（第 1 步，或目前這張的第 2 步，Codex L2 F7）：打勾加答案。回看時照第 1 步（§2-5），第 1 步拼錯的顯示當時的比對。
+  const right = typed !== null && (typed.first === 'right' || (!view.viewing && typed.second === 'right') || (view.viewing && !typed.attempt));
+  const shown = typed && !right && typed.attempt ? spelled(typed.attempt.expected) : typed?.answer ?? '';
+  const others = typed && prompt.kind === 'qa' && prompt.typed ? otherAnswers(prompt.typed, shown) : [];
+  const copying = typing?.step === 3;
+  return <article className={'ec-card' + (view.english ? ' is-english' : '') + (copying ? ' is-copying' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
-    <div className="ec-q">
-      <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed}
-        lines={typed ? blankCount(question, prompt.kind === 'qa' ? prompt.typed : null) : 0} words={typed && revealed ? typed.answer.split(/\s+/) : []}
-        onReady={onPainted} onFail={() => { onFail('front'); }} />
-      <Speakers texts={questionParts} say={say} />
+    <div className={'ec-q' + (lines > 0 ? ' has-blank' : '') + (sticky ? ' is-sticky' : '')} ref={qRef}>
+      {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
+      {/* 喇叭接在最後一個字後面（D-145，iPhone 回饋），不放在第一行右邊 */}
+      <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed && !inline}
+        lines={lines} words={typed && revealed ? typed.answer.split(/\s+/) : []} onSlot={lines > 0 ? onSlot : undefined}
+        english={view.english} tail={<Speaker texts={speak(spokenQuestion)} say={say} />} onReady={onPainted} onFail={() => { onFail('front'); }} />
     </div>
+    {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
+    {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}
     {stepText}
-    {typed && !typed.finished && !view.viewing && <div className="ec-inrow">
-      <input ref={inputRef} className="ec-input" type="text" lang="en" value={typed.input} onChange={event => { session.input(event.currentTarget.value); }}
-        placeholder={typed.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typed.step === 3 ? '照著打一次' : '輸入英文'}
-        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />
-    </div>}
-    {/* 照打的即時比對：還沒打字時不畫（不然只有一條「—」） */}
-    {typed && typed.step === 3 && !typed.finished && typed.live && <div className="ec-live">{typed.live.typed.length > 0 && <Letters letters={typed.live.typed} mode="typed" />}</div>}
+    {!inline && input && <div className="ec-inrow">{input}</div>}
+    {!copying && actions}
     {revealed && <div className="ec-answer">
-      {/* 拼對（第 1 步，或目前這張的第 2 步，Codex L2 F7）：打勾加答案。回看時照第 1 步（§2-5），第 1 步拼錯的顯示當時的比對。 */}
-      {typed && (typed.first === 'right' || (!view.viewing && typed.second === 'right') || (view.viewing && !typed.attempt)
-        ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span></div></div>
+      {typed && (right
+        ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span><Speaker texts={speak(typed.answer)} say={say} /></div></div>
         : typed.attempt && <div className="ec-spell">
-          <div className="ec-spell-row"><span className="ec-lab">你打的</span><Letters letters={typed.attempt.typed} mode="typed" /></div>
-          <div className="ec-spell-row"><span className="ec-lab">正確拼字</span><Letters letters={typed.attempt.expected} mode="expected" /></div>
+          {/* 沒打字直接按「沒印象」：不畫「你拼的」那一行（D-145，iPhone 回饋）；「你拼的」是進入照打前拼錯的那一次 */}
+          {typed.attempt.typed.length > 0 && <div className="ec-spell-row"><span className="ec-lab">你拼的</span><Letters letters={typed.attempt.typed} mode="typed" /></div>}
+          <div className="ec-spell-row"><span className="ec-lab">正確拼字</span><Letters letters={typed.attempt.expected} mode="expected" /><Speaker texts={speak(shown)} say={say} /></div>
         </div>)}
-      {answer !== null && <div className="ec-a"><Markdown app={app} text={answer} sourcePath={card.deck} revealed onFail={() => { onFail('back'); }} /><Speakers texts={view.speakable ? englishParts(answer) : []} say={say} /></div>}
-      {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => <div key={index} className="ec-ex-item"><Markdown app={app} text={extra} sourcePath={card.deck} revealed /><Speakers texts={view.speakable ? englishParts(extra) : []} say={say} /></div>)}</div>}
+      {/* 其他正確答案（D-145）：一個時和「也可以：」同一行，兩個以上每個一行 */}
+      {others.length > 0 && <div className="ec-also">
+        {others.length === 1
+          ? <div className="ec-also-row"><span lang="zh-Hant">也可以：</span><span className="ec-also-word" lang="en">{others[0]}</span><Speaker texts={speak(others[0])} say={say} /></div>
+          : <><div className="ec-also-row" lang="zh-Hant">也可以：</div>{others.map(other => <div key={other} className="ec-also-row"><span className="ec-also-word" lang="en">{other}</span><Speaker texts={speak(other)} say={say} /></div>)}</>}
+      </div>}
+      {/* 打字卡的答案已經寫在線上與上面那一行，不再畫答案格（D-145） */}
+      {answer !== null && !typed && <div className="ec-a"><Markdown app={app} text={answer} sourcePath={card.deck} revealed tail={<Speaker texts={speak(answer)} say={say} />} onFail={() => { onFail('back'); }} /></div>}
+      {/* 背面補充開頭的「記憶錨點：」「例句：」這類名稱自己一行，內容從下一行開始（D-145，iPhone 回饋） */}
+      {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => {
+        const { label, body } = extraLabel(extra);
+        return <div key={index} className="ec-ex-item">
+          {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
+          <div className="ec-ex-row"><Markdown app={app} text={body} sourcePath={card.deck} revealed tail={<Speaker texts={speak(body)} say={say} />} /></div>
+        </div>;
+      })}</div>}
       {hasSource && <div className="ec-tools">
         <span className={'ec-srcw' + (tipOpen ? ' is-tip' : '')}>
           <button type="button" className="ec-ico sm" aria-label="出處" onClick={() => { setTipOpen(!tipOpen); }}><Icon type="book" /></button>
@@ -344,6 +430,8 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
         </span>
       </div>}
     </div>}
+    {/* 照打時「確認」排在最後（鍵盤的 ✓ 也是確認），正確拼字、也可以、記憶錨點往上排，不被鍵盤蓋住（D-145，iPhone 回饋） */}
+    {copying && actions}
   </article>;
 }
 

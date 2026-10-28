@@ -4,7 +4,8 @@ import type { ReviewProps } from '../../src/ui/Review.tsx';
 
 /**
  * 複習畫面元件的替身（Codex L2 審查 F1、F3、F7 的做法）：esbuild 把 src/ui/Review.tsx 包成 CommonJS，react、react/jsx-runtime、
- * motion 換成這裡的替身，./Markdown.tsx 換成不畫東西的元件（Obsidian 的渲染不在 Node）。只跑一個根元件：useState、useRef、
+ * motion 換成這裡的替身，./Markdown.tsx 換成只把 tail（喇叭）畫在自己底下、打字卡交出一個假的空格（onSlot）的元件（Obsidian 的
+ * 渲染不在 Node；渲染後的處理在 Obsidian 用開發命令 md-cases 驗）。只跑一個根元件：useState、useRef、
  * useEffect、useLayoutEffect、useSyncExternalStore 照 React 的規則（effect 照宣告順序、deps 沒變不跑、先跑全部的 cleanup 再跑
  * 新的），子元件（Card、Actions、Done…）沒有 hook，直接展開成樹。
  * 不是瀏覽器：沒有 DOM、版面、焦點移動與真的動畫；那些在 Windows 版 Obsidian 用開發命令 ui 驗。
@@ -26,13 +27,14 @@ let code: Promise<string> | null = null;
 function bundle(): Promise<string> {
   code ??= build({
     absWorkingDir: root, entryPoints: ['src/ui/Review.tsx'], bundle: true, format: 'cjs', platform: 'browser', write: false, logLevel: 'silent',
-    external: ['react', 'react/jsx-runtime', 'motion', 'obsidian'],
+    external: ['react', 'react/jsx-runtime', 'react-dom', 'motion', 'obsidian'],
     plugins: [{
       name: 'markdown-stub',
       setup(builder) {
         builder.onResolve({ filter: /\/Markdown\.tsx$/ }, () => ({ path: 'markdown', namespace: 'stub' }));
+        // 打字卡的空格（onSlot）當作已經渲染好：交回同一個假的元素，輸入框就畫進空格（createPortal 的替身原地畫成 'portal'）。
         builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-          contents: "import { jsx } from 'react/jsx-runtime'; export function Markdown(props) { return jsx('markdown', props); }", loader: 'js',
+          contents: "import { jsx } from 'react/jsx-runtime'; const slot = { slot: true }; export function Markdown(props) { props.onSlot?.(slot); return jsx('markdown', { ...props, children: props.tail }); }", loader: 'js',
         }));
       },
     }],
@@ -122,6 +124,7 @@ export async function renderReview(props: ReviewProps): Promise<ReviewUi> {
     if (name === 'react') return react;
     if (name === 'react/jsx-runtime') return runtime;
     if (name === 'motion') return motion;
+    if (name === 'react-dom') return { createPortal: (children: unknown) => jsx('portal', { children }) };
     throw Error('畫面替身沒有這個模組：' + name);
   }, module, module.exports, doc, { setTimeout, clearTimeout }, () => ({ transform: 'none' }), class { m41 = 0; },
   (callback: (time: number) => void) => setImmediate(() => { callback(performance.now()); }), undefined);

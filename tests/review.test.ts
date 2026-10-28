@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishParts, fillBlank, gesture, keyboardFit, lockAxis, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -63,6 +63,60 @@ void test('R8 英文的部分：例句只念英文；＿＿ 填入答案；單�
   assert.deepEqual(englishParts('例句：We wear uniforms to school. 我們穿制服上學。'), ['We wear uniforms to school.']);
   assert.equal(fillBlank('借入', 'borrow'), null);
   assert.deepEqual(englishParts(PHRASE), ['He has already ＿＿ to study abroad.']);
+});
+
+void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只念一次；「也可以」列結果那一行沒寫的答案', () => {
+  assert.deepEqual(lineSpeech('記憶錨點：go 的過去式不規則：go → went → gone'), ['go', 'went', 'gone']);
+  assert.deepEqual(lineSpeech('v. 借入、向別人借'), []);
+  assert.deepEqual(lineSpeech('例句：Can I borrow your pen? 我可以借你的筆嗎？'), ['Can I borrow your pen?']);
+  assert.deepEqual(lineSpeech('記憶錨點：易混淆 lend（借出：把東西借給別人）'), ['lend']);
+  assert.deepEqual(lineSpeech('Go 和 go 不分大小寫：GO'), ['Go']);
+  assert.deepEqual(otherAnswers(TWO, 'made up his mind'), ['made his mind up']);
+  assert.deepEqual(otherAnswers(TWO, ' MADE HIS MIND UP '), ['made up his mind'], '大小寫與前後空白不算');
+  assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
+  assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
+  assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
+});
+
+void test('D-145 背面補充的名稱自己一行：一到六個字、不含空白，緊接全形冒號；其他照原文', () => {
+  assert.deepEqual(extraLabel('記憶錨點：go 的過去式不規則：go → went → gone'), { label: '記憶錨點', body: 'go 的過去式不規則：go → went → gone' });
+  assert.deepEqual(extraLabel('例句：Can I borrow your pen? 我可以借你的筆嗎？'), { label: '例句', body: 'Can I borrow your pen? 我可以借你的筆嗎？' });
+  assert.deepEqual(extraLabel('詳解：made up his mind 和 made his mind up 都對'), { label: '詳解', body: 'made up his mind 和 made his mind up 都對' });
+  assert.deepEqual(extraLabel('記憶錨點：易混淆 lend（借出：把東西借給別人）'), { label: '記憶錨點', body: '易混淆 lend（借出：把東西借給別人）' });
+  assert.deepEqual(extraLabel('go 的過去式不規則：go → went'), { label: null, body: 'go 的過去式不規則：go → went' }, '名稱裡有空白：不是名稱');
+  assert.deepEqual(extraLabel('![[W6 擴散示意圖.svg]]'), { label: null, body: '![[W6 擴散示意圖.svg]]' });
+  assert.deepEqual(extraLabel('**記憶錨點**：粗體'), { label: null, body: '**記憶錨點**：粗體' }, '有 Markdown 記號：照原文');
+  assert.deepEqual(extraLabel('記憶錨點：'), { label: null, body: '記憶錨點：' }, '冒號後面沒有內容：照原文');
+});
+
+void test('D-145 冠詞和後面的字連在一起換行：a、an、the 後面的空白換成不斷行空白', () => {
+  assert.equal(glueArticles('Please switch off the lights when you leave.'), 'Please switch off the lights when you leave.');
+  assert.equal(glueArticles('I have a pen and an apple.'), 'I have a pen and an apple.');
+  assert.equal(glueArticles('The box is very light.'), 'The box is very light.', '大寫也算');
+  assert.equal(glueArticles('data base, area code'), 'data base, area code', '字中間的 a 不算');
+  assert.equal(glueArticles('I went to the '), 'I went to the ', '後面沒有字（接著是空格）不改');
+});
+
+void test('D-145 喇叭和最後一個字一起換行：最後一個英文字連同標點，或最後兩個中文字與全形標點', () => {
+  const tail = (text: string): string => text.slice(tailStart(text));
+  assert.equal(tail('go 的過去式不規則：go → went → gone'), 'gone');
+  assert.equal(tail('Can I borrow your pen? 我可以借你的筆嗎？'), '嗎？');
+  assert.equal(tail('I went to the park yesterday.'), 'yesterday.');
+  assert.equal(tail('易混淆 lend（借出：把東西借給別人）'), '人）');
+  assert.equal(tail('borrow '), 'borrow ', '結尾的空白算在那一段裡');
+  assert.equal(tail('.'), '.');
+  assert.equal(tail(''), '');
+  assert.equal(tail('the 𠮷'), '𠮷', '補充平面的中文字照 UTF-16 長度算');
+});
+
+void test('D-145 中文句子後面的英文換到下一行：斷在最後一個中文字或全形標點後面；英文在前的不斷', () => {
+  assert.equal(englishBreak('我昨天去了公園。I '), '我昨天去了公園。'.length);
+  assert.equal(englishBreak('他已經下定決心要出國讀書。He has already '), '他已經下定決心要出國讀書。'.length);
+  assert.equal(englishBreak('離開時請關燈。'), '離開時請關燈。'.length, '空格緊接在中文後面：斷在空格前');
+  assert.equal(englishBreak('（借）Can I '), 3, '全形括號也算');
+  assert.equal(englishBreak('Can I '), null);
+  assert.equal(englishBreak('This box is very '), null);
+  assert.equal(englishBreak('𠮷。I '), 3, '補充平面的中文字照 UTF-16 長度算');
 });
 
 void test('R9 手勢：先鎖方向，垂直捲動後不改判；短的水平移動彈回；沒有上一張往右彈回；不在回看往左彈回', () => {

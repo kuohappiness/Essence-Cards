@@ -10,6 +10,7 @@ import type { App } from 'obsidian';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
 import { resolveSource } from '../src/ui/sources.ts';
+import { createSpeech, type Speech } from '../src/ui/speech.ts';
 
 // 複習畫面元件（src/ui/Review.tsx）的時序：Codex L2 審查的 F1（動畫期間的按鍵）、F3（自動朗讀被換卡停掉）、F7（第 2 步拼對的打勾）；
 // 最後是 F5（出處的子圖，src/ui/sources.ts）。
@@ -31,8 +32,9 @@ const englishText = [
   '',
 ].join('\n');
 
-interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void> }
-async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string> } = {}): Promise<Opened> {
+interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void>; idle: (() => void)[] }
+/** holdSpeech：語音替身的 whenIdle 先不回報（當作還在念），測試呼叫 idle 裡的 callback 才算念完。speech：改用這個（真的 createSpeech）。 */
+async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; holdSpeech?: boolean; speech?: Speech } = {}): Promise<Opened> {
   const memory = createMemoryFiles(options.texts ?? { [NATURAL]: naturalText, [ENGLISH]: englishText });
   const clock = { now: START };
   const state = createState({ files: memory.files, device: 'PC-test', delay: 30, fillIds: false, now: () => clock.now, offset: () => 480 });
@@ -41,15 +43,16 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   const session = createSession({ state, pick, now: () => clock.now });
   await session.ready();
   const speech: string[] = [];
+  const idle: (() => void)[] = [];
   let autoOn = options.autoRead ?? false;
   const ui = await renderReview({
     app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [],
-    speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); } },
+    speech: options.speech ?? { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); idle.length = 0; }, whenIdle: callback => { if (!options.holdSpeech) { callback(); return () => {}; } idle.push(callback); return () => { const at = idle.indexOf(callback); if (at >= 0) idle.splice(at, 1); }; } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
     pickedAt: performance.now(),
   });
   t.after(() => { ui.unmount(); session.close(); });
-  return { ui, session, clock, speech, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
+  return { ui, session, clock, speech, idle, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
 }
 const lt = (session: Session): string | null => { const view = session.view(); return view.kind === 'card' ? view.card.card.lt : null; };
 /** 翻面（Space），過 0.3 秒按數字鍵自評。 */
@@ -172,14 +175,14 @@ void test('F7 第 2 步拼對：打勾與答案（寫在線上的那一個）；
   const ok = o.ui.find('ec-ok');
   assert.equal(ok.length, 1, '第 2 步拼對有打勾');
   assert.deepEqual(o.ui.find('ec-word').map(o.ui.text), ['made his mind up']);
-  assert.deepEqual(o.ui.find('ec-lab'), [], '沒有「你打的／正確拼字」');
+  assert.deepEqual(o.ui.find('ec-lab'), [], '沒有「你拼的／正確拼字」');
   o.clock.now += RATE_DELAY;
   o.ui.key('2');
   await o.ui.settle();
   o.ui.key('ArrowLeft');
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-ok'), [], '回看：第 1 步拼錯，不畫打勾');
-  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你打的', '正確拼字']);
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你拼的', '正確拼字']);
 });
 
 // Codex L2 F5：出處寫 `圖 2-13`、材料只有 `^fig2-13a`、`^fig2-13b` 時連到第一張子圖（D-094、syntax.md §2-5）。
@@ -205,6 +208,253 @@ void test('F5 出處的圖省略子圖字母：精確的錨點優先，沒有時
   assert.equal(resolve('圖 2-16'), 'Essence Cards/材料/甲.md', '完全不存在：打開第一份材料');
   assert.equal(resolve('圖 2-1'), 'Essence Cards/材料/甲.md', '2-1 不會對到 2-12 或 2-13a');
   assert.equal(resolve('p.43'), 'Essence Cards/材料/甲.md#^p43');
+});
+
+// D-145：在空格裡打字、打字卡不畫答案格、「也可以」、一行一個喇叭、照打的比對只在打錯時畫、沒有開關時 ✕ 不偏。
+interface Tree { type: string; props: Record<string, unknown>; children: (Tree | string)[] }
+const all = (node: Tree | string): Tree[] => typeof node === 'string' ? [] : [node, ...node.children.flatMap(all)];
+const ofType = (ui: ReviewUi, type: string): Tree[] => all(ui.root()).filter(node => node.type === type);
+const speakers = (ui: ReviewUi): unknown[] => ui.find('ec-say').map(button => button.props['aria-label']);
+const reviewed = (ids: readonly string[]): string => ids.map(id => encodeEntry('2026-10-10T19:00:00.000+08:00', { lt: id, r: 'easy', v: '12345678' })).join('\n') + '\n';
+
+void test('D-145 打字卡拼對：在空格裡打，翻面後不畫答案格，另一個答案寫成「也可以」，每一行一個喇叭', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3']) } });
+  assert.equal(lt(o.session), 'z1');
+  assert.equal(ofType(o.ui, 'portal').length, 1, '輸入框放進題目的空格');
+  assert.equal(o.ui.find('ec-blank-input').length, 1);
+  assert.deepEqual(o.ui.find('ec-inrow'), [], '題目下面沒有輸入框');
+  assert.deepEqual(speakers(o.ui), [], '中翻英在答案出現前沒有喇叭');
+  const inputRef = o.ui.find('ec-blank-input')[0].props.ref as { current: { focus: () => void } };
+  let focused = 0;
+  inputRef.current.focus = () => { focused++; };
+  o.ui.click(o.ui.find('ec-stage')[0]);
+  assert.equal(focused, 1, '點卡片任何地方都叫出鍵盤');
+  o.session.input('made his mind up'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-blank-input'), [], '三步走完，空格換回線上的答案');
+  assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, true);
+  assert.deepEqual(o.ui.find('ec-a'), [], '打字卡不畫答案格');
+  assert.deepEqual(o.ui.find('ec-also').map(o.ui.text), ['也可以：made up his mind'], '只列沒打的那一個，和「也可以：」同一行');
+  assert.deepEqual(speakers(o.ui), ['朗讀 He has already made his mind up to study abroad.', '朗讀 made his mind up', '朗讀 made up his mind']);
+});
+
+void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照著打，比對只在打錯字母時畫，走完才寫上答案', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3', 'z1']) } });
+  assert.equal(lt(o.session), 'z2');
+  o.session.input('borow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.step === 3, '原形就是答案：跳過第 2 步');
+  assert.equal(o.ui.find('ec-blank-input').length, 1, '第 3 步也在空格裡打');
+  assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, false, '照打時線上先不寫答案');
+  assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次']);
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你拼的', '正確拼字']);
+  assert.deepEqual(o.ui.find('ec-a'), []);
+  assert.deepEqual(o.ui.find('ec-also'), [], '只有一個答案時沒有「也可以」');
+  assert.deepEqual(speakers(o.ui), ['朗讀 Can I borrow your pen?', '朗讀 borrow']);
+  o.session.input('borr');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次borr'], '打的都對也即時顯示');
+  o.session.input('borx');
+  await o.ui.settle();
+  assert.equal(o.ui.find('ec-live').length, 1, '打錯字母時照樣顯示，錯的字母畫刪除線');
+  assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次borx'], '比對接在「照著打一次」後面同一行');
+  o.session.input('borrow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-blank-input'), []);
+  assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, true);
+});
+
+void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面），不在最底下那一排；沒打字按「沒印象」不畫「你拼的」', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3', 'z1']) } });
+  assert.equal(lt(o.session), 'z2');
+  assert.deepEqual(o.ui.find('ec-actions'), [], '打字中沒有最底下那一排');
+  const card = o.ui.find('ec-card')[0];
+  assert.deepEqual(all(card).filter(node => node.props.className === 'ec-typed-actions').length, 1, '在卡片裡');
+  assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['沒印象', '確認']);
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['正確拼字'], '沒打字：只有「正確拼字」');
+  assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['確認'], '第 3 步只有確認，也在卡片裡');
+  const order = o.ui.find('ec-card')[0].children.filter((child): child is Tree => typeof child !== 'string').map(child => child.props.className);
+  assert.ok(order.indexOf('ec-answer') < order.indexOf('ec-typed-actions'), '照打時「確認」排在答案（正確拼字、補充）後面：' + order.join(', '));
+  o.session.input('borrow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  // 第 1 步按了「沒印象」只剩一個自評：照打完就自動記下、換下一張（D-145），不用再按底下的「沒印象」。
+  assert.deepEqual(o.session.history().map(entry => [entry.card.lt, entry.rating]), [['z2', 'miss']]);
+  const next = o.session.view();
+  assert.ok(next.kind !== 'card' || (next.card.typed?.step === 1 && !next.card.typed.finished), '換到下一張（只剩這一張時是重新出的 z2，從第 1 步開始）');
+});
+
+void test('D-145 只剩一個自評時自動換下一張：正在念答案時等念完；第 1 步拼錯的（還有兩個可選）不自動', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off | switch off', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { autoRead: true, holdSpeech: true, texts: { [ENGLISH]: deck } });
+  assert.equal(lt(o.session), 'g1');
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.second === 'right', '看了原形提示後打對');
+  assert.equal(o.speech.at(-1), 'say went / I went to the park yesterday.', '先念答案與例句');
+  assert.equal(lt(o.session), 'g1', '還在念：先不換');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(o.session.history().map(entry => [entry.card.lt, entry.rating]), [['g1', 'miss']], '念完：自動記下沒印象');
+  assert.equal(lt(o.session), 't1');
+  o.session.input('turn of'); o.ui.key('Enter', 'input');
+  o.session.input('turn of'); o.ui.key('Enter', 'input');
+  o.session.input('turn off'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.equal(lt(o.session), 't1', '第 1 步拼錯：還有差一點與沒印象可選，不自動');
+  assert.equal(o.session.history().length, 1);
+});
+
+// Codex 審查 F1、F2（2026-10-28）：自動換卡的等待在畫面關掉、切到背景時取消；同一題重出、回看後回來、切走不到 60 秒回來都會再等。
+const autoDeck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off', ''].join('\n');
+/** 第 1 步按「沒印象」、照打正確答案，走完三步（只剩一個自評）。 */
+async function skipAndCopy(o: Opened, answer: string): Promise<void> {
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  o.session.input(answer); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+}
+const ratings = (o: Opened): string[][] => o.session.history().map(entry => [entry.card.lt, entry.rating]);
+/** 真的 createSpeech 底下的系統語音替身：念的每一段記在回傳的陣列，測試呼叫 onend 才算念完。 */
+function fakeVoices(t: TestContext): { onend: (() => void) | null }[] {
+  const spoken: { onend: (() => void) | null }[] = [];
+  const scope = globalThis as unknown as { window?: unknown; SpeechSynthesisUtterance?: unknown };
+  scope.window = { speechSynthesis: { cancel() {}, speak(u: { onend: (() => void) | null }) { spoken.push(u); }, getVoices: () => [{ lang: 'en-US' }] } };
+  scope.SpeechSynthesisUtterance = class { lang = ''; onend: (() => void) | null = null; onerror: (() => void) | null = null; };
+  t.after(() => { delete scope.window; delete scope.SpeechSynthesisUtterance; });
+  return spoken;
+}
+
+void test('F1 等念完時關掉畫面：取消等待，不記下沒印象', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: true, holdSpeech: true, texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  assert.equal(o.idle.length, 1, '正在念：等著');
+  o.ui.unmount();
+  assert.equal(o.idle.length, 0, '關掉畫面：等待取消');
+  assert.deepEqual(ratings(o), []);
+});
+
+void test('F1 真的 createSpeech：念答案時切到背景（stop）不記，被停掉的段落晚回報也不算；不到 60 秒回來、沒在念就記下', async t => {
+  const spoken = fakeVoices(t);
+  const speech = createSpeech(() => {});
+  const o = await open(t, { subject: '英文' }, { autoRead: true, speech, texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  assert.equal(spoken.length, 2, '念答案與例句');
+  speech.stop(); o.session.pause(); // 外殼切到背景時的順序（host.tsx）
+  for (const u of spoken) u.onend?.();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [], '切走：不記');
+  o.clock.now += 10_000;
+  assert.equal(o.session.resume(), false);
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss']], '回來：沒在念，記下');
+});
+
+void test('F2 同一題重出、回看後回來、切走不到 60 秒回來：都會再自動記下', async t => {
+  const one = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: autoDeck.split('- turn off')[0] } });
+  await skipAndCopy(one, 'went');
+  assert.deepEqual(ratings(one), [['g1', 'miss']]);
+  assert.equal(lt(one.session), 'g1', '只剩這一張：重出');
+  await skipAndCopy(one, 'went');
+  assert.deepEqual(ratings(one), [['g1', 'miss'], ['g1', 'miss']], '重出的同一題也自動');
+
+  const o = await open(t, { subject: '英文' }, { holdSpeech: true, texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.equal(lt(o.session), 't1');
+  await skipAndCopy(o, 'turn off');
+  assert.equal(o.idle.length, 1);
+  o.session.back();
+  await o.ui.settle();
+  assert.equal(o.idle.length, 0, '回看：不等');
+  o.session.toCurrent();
+  await o.ui.settle();
+  assert.equal(o.idle.length, 1, '回到目前這張：再等');
+  o.session.pause();
+  o.idle.length = 0; // 外殼切到背景時 speech.stop()：等待全部取消
+  o.clock.now += 10_000;
+  assert.equal(o.session.resume(), false);
+  await o.ui.settle();
+  assert.equal(o.idle.length, 1, '不到 60 秒回來：再等');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']]);
+});
+
+// Codex 再查 R1（2026-10-28）：走畫面的換卡動畫回到目前那張，沒在念時 whenIdle 馬上回報，那時動畫還沒結束；要等動畫結束再等一次。
+void test('R1 等念完時按 ← 回看、再按「回到目前」（有換卡動畫）：動畫結束後沒在念，記下', async t => {
+  const spoken = fakeVoices(t);
+  const o = await open(t, { subject: '英文' }, { autoRead: true, speech: createSpeech(() => {}), texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  for (const u of spoken.splice(0)) u.onend?.();
+  await o.ui.settle();
+  assert.equal(lt(o.session), 't1');
+  await skipAndCopy(o, 'turn off');
+  assert.equal(spoken.length, 2, '念答案與例句：等著');
+  o.ui.key('ArrowLeft');
+  await o.ui.settle();
+  assert.ok(o.session.view().top.viewing, '回看上一張');
+  o.ui.click(o.ui.find('ec-return')[0]);
+  await o.ui.settle();
+  assert.ok(o.ui.motion.calls > 0, '有跑換卡動畫');
+  assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']]);
+});
+
+void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文（重複的只念一次）', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 記憶錨點：go 的過去式不規則：go → went → gone', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['記憶錨點']);
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).at(-1), 'go 的過去式不規則：go → went → gone');
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone']);
+});
+
+void test('D-145 第 3 步照打的對象是「正確拼字」那一行（最接近的答案）：照打它不標錯，走完線上寫它', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3']) } });
+  assert.equal(lt(o.session), 'z1');
+  o.session.input('made his mind upp'); o.ui.key('Enter', 'input');
+  o.session.input('made his mind upp'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  let view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.step === 3);
+  assert.equal(view.card.typed.copy, 'made his mind up');
+  assert.deepEqual(o.ui.find('ec-also').map(o.ui.text), ['也可以：made up his mind']);
+  assert.equal(speakers(o.ui)[1], '朗讀 made his mind up', '「正確拼字」那一行的喇叭念它');
+  o.session.input('made his mind up');
+  await o.ui.settle();
+  view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.live?.typed.every(letter => !letter.bad), '照打「正確拼字」那一個答案：沒有字母被標錯');
+  o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.finished);
+  assert.equal(view.card.typed.answer, 'made his mind up');
+});
+
+void test('D-145 題目沒有 ＿＿ 的打字卡：輸入框照舊在題目下面', async t => {
+  const deck = ['---', '科目: 英文', '單元: L1', '---', '- borrow 中翻英 ^z9', '    - 借入、向別人借（v.） :: borrow', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  assert.equal(lt(o.session), 'z9');
+  assert.deepEqual(ofType(o.ui, 'portal'), []);
+  assert.deepEqual(o.ui.find('ec-blank-input'), []);
+  assert.equal(o.ui.find('ec-inrow').length, 1);
+  assert.equal(o.ui.find('ec-input')[0].props.placeholder, '輸入英文');
+});
+
+void test('D-145 自然卡（沒有自動朗讀開關）的上方列和英文卡一樣是四格，✕ 在最後一格', async t => {
+  const o = await open(t, { subject: '自然' });
+  const top = o.ui.find('ec-top')[0].children.filter((child): child is Tree => typeof child !== 'string');
+  assert.equal(top.length, 4);
+  assert.equal(top[3].props['aria-label'], '結束複習');
+  o.ui.key(' ');
+  assert.equal(o.ui.find('ec-a').length, 1, '一般的問答卡照舊畫答案格');
 });
 
 // Codex L2 F4：切走超過 60 秒回來，目前這張從頭開始，畫面當成換了一張（捲回最上面、收起出處、先停再念題目）。

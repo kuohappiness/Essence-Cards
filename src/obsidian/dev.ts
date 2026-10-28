@@ -12,7 +12,8 @@ import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
-import { awayCheck, deckHashes, openTimes, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
+import { markdownCases } from './dev-markdown.ts';
+import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -58,7 +59,12 @@ const commands: Record<string, DevCommand> = {
   decks: { name: 'Essence 開發：卡組內容', run: deckHashes, root: W6_ROOT },
   'open-times': { name: 'Essence 開發：打開三次', run: openTimes, root: W6_ROOT },
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  'ui-phone': { name: 'Essence 開發：畫面與鍵盤（手機寬度）', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 手機寬度 ${stampOf(new Date())}`, true), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
+  // D-145 的 iPhone 實測：iPhone 也能用。
+  practice: { name: 'Essence 開發：範例從頭練（不記紀錄）', run: practice, root: W6_ROOT },
+  // Codex 審查 F3～F5：卡片內容的後處理在 Obsidian 真的渲染結果上（圖、公式、粗體、連結）。
+  'md-cases': { name: 'Essence 開發：卡片內容的後處理', run: host => markdownCases(host.app), root: W6_ROOT },
   errors: { name: 'Essence 開發：錯誤紀錄', run: () => Promise.resolve({ visibility: document.visibilityState, errors: errors.slice(-50) }), root: W6_ROOT },
   // 卡組讀不到就跳過那一篇的收尾（state-load §6、§9）：現在有哪些讀不到、自己隔一段時間重試。不等 ready()：列不出來時它不會完成。
   unread: { name: 'Essence 開發：讀不到的卡組與紀錄', run: host => Promise.resolve(host.state ? { unread: host.state.unread(), decks: host.state.decks().length } : { state: null }) },

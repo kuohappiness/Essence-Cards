@@ -1,7 +1,7 @@
 import { MarkdownView, Notice, type App, type Plugin } from 'obsidian';
 import { isDeckPath } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
-import { encodeEntry, type NewEntry, type Pick } from '../core/study/index.ts';
+import { encodeEntry, isLogPath, type NewEntry, type Pick } from '../core/study/index.ts';
 import { createSession, RATE_DELAY, type View } from '../review/index.ts';
 import { createState, type State } from '../state/index.ts';
 import { openReview, type ReviewEvent, type ReviewHandle } from '../ui/index.ts';
@@ -9,7 +9,8 @@ import { createSpeech } from '../ui/speech.ts';
 import { createObsidianFiles } from './files.ts';
 
 // W6 的開發命令（§4）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，結果寫到 Essence W6/結果/。
-// 會作答的命令都用只看得到 W6 範例卡組的 state，寫進這台裝置真正的紀錄檔，最後把這次寫的全部取消。
+// 會作答的命令都用只看得到 W6 範例卡組的 state。review-script、away 寫進這台裝置真正的紀錄檔，最後把這次寫的全部取消；
+// ui、ui-phone、practice 用記憶體裡的空白紀錄（blankHistory），不讀也不寫真正的紀錄檔。
 
 export const W6_ROOT = 'Essence W6';
 const EXAMPLES = 'Essence Cards/W6 範例/';
@@ -124,10 +125,48 @@ function snapshot(state: State): string {
   const today = state.today();
   return JSON.stringify({ day: today.day, share: today.share.map(i => i.lt + ':' + i.lane), more: today.more.map(i => i.lt + ':' + i.lane), progress: state.progress() });
 }
-async function examplesState(host: ReviewHost): Promise<State> {
-  const state = createState({ files: onlyExamples(createObsidianFiles(host.app)), device: host.device, fillIds: false });
+/**
+ * 紀錄換成記憶體裡的空白紀錄：讀不到真正的作答、也不寫進真正的紀錄檔（紀錄的 list、read、modify、append 都只看記憶體）。
+ * ui 截圖與 practice 用，每次都從新卡開始，畫面不受範例卡組在別台裝置做過的影響（2026-10-28：iPhone 前一天做完範例，ui 只截到完成畫面）。
+ * 不是完整的 Files：寫記憶體裡的紀錄不送 watch 通知（state 不看自己紀錄的通知，Codex 審查 F7）；拿去別的用途前先補齊。
+ */
+function blankHistory(files: Files): Files {
+  const logs = new Map<string, string>();
+  return {
+    list: async folder => {
+      const prefix = folder ? folder.replace(/\/$/u, '') + '/' : '';
+      return [...(await files.list(folder)).filter(path => !isLogPath(path)), ...[...logs.keys()].filter(path => path.startsWith(prefix))].sort();
+    },
+    read: async path => isLogPath(path) ? logs.get(path) ?? null : files.read(path),
+    modify: async (path, edit) => {
+      if (!isLogPath(path)) return files.modify(path, edit);
+      const before = logs.get(path) ?? '';
+      const after = edit(before);
+      if (after !== before) logs.set(path, after);
+    },
+    append: async (path, line) => {
+      if (!isLogPath(path)) return files.append(path, line);
+      logs.set(path, (logs.get(path) ?? '') + line + '\n');
+    },
+    watch: onChange => files.watch(path => { if (!isLogPath(path)) onChange(path); }),
+  };
+}
+async function examplesState(host: ReviewHost, blank = false): Promise<State> {
+  const files = onlyExamples(createObsidianFiles(host.app));
+  const state = createState({ files: blank ? blankHistory(files) : files, device: host.device, fillIds: false });
   await state.ready();
   return state;
+}
+/**
+ * 範例從頭練（D-145 的 iPhone 實測）：W6 範例卡組配記憶體裡的空白紀錄，每張都是新卡、隨時可以測，
+ * 作答不寫進真正的紀錄檔，關掉就丟。先做英文，完成畫面可以接著做自然。
+ */
+export async function practice(host: ReviewHost): Promise<unknown> {
+  const state = await examplesState(host, true);
+  const handle = openReview({ app: host.app, state, pick: { subject: '英文' }, onClose: () => { void state.close(); } });
+  // 外掛停用或重新載入時一起關掉（和正式的複習畫面一樣）。
+  host.register(() => { handle.close(); });
+  return { today: JSON.parse(snapshot(state)) as unknown };
 }
 /** 新建一個 state 讀今天的份：answer 不重排，所以「回到原樣」要用新讀的比。 */
 async function freshSnapshot(host: ReviewHost): Promise<string> {
@@ -373,7 +412,23 @@ function screen(): Record<string, unknown> {
     blanks: inOverlay('.ec-blank').length, blanksFilled: inOverlay('.ec-blank.ec-filled').map(text),
     hint: text(root.querySelector('.ec-hint')) || null,
     input: root.querySelector<HTMLInputElement>('.ec-input')?.placeholder ?? null,
+    // 輸入框在題目的空格裡（D-145）時，空格的寬度與高度（打字後跟著字變寬）。
+    inline: (() => { const slot = root.querySelector<HTMLElement>('.ec-slot:has(.ec-input)'); return slot ? { width: round(slot.getBoundingClientRect().width), height: round(slot.getBoundingClientRect().height) } : null; })(),
     live: text(root.querySelector('.ec-live')) || null,
+    also: inOverlay('.ec-also-row').map(text),
+    // 題目和答案之間不畫線（D-145）：答案區塊上框與題目下框的寬度，以及載入了幾份含 .ec-answer 的樣式。
+    divider: (() => {
+      const answer = root.querySelector<HTMLElement>('.ec-answer');
+      if (!answer) return null;
+      const css = getComputedStyle(answer);
+      const above = answer.previousElementSibling;
+      return {
+        answerTop: css.borderTopWidth + ' ' + css.borderTopStyle, paddingTop: css.paddingTop, marginTop: css.marginTop, boxShadow: css.boxShadow,
+        above: above ? above.className + ' ' + getComputedStyle(above).borderBottomWidth + ' ' + getComputedStyle(above).borderBottomStyle : null,
+        sheets: Array.from(document.styleSheets).filter(sheet => { try { return Array.from(sheet.cssRules).some(rule => rule.cssText.includes('.ec-answer')); } catch { return false; } }).map(sheet => (sheet.ownerNode as HTMLElement | null)?.id || (sheet.ownerNode as HTMLElement | null)?.tagName || '?'),
+        rules: Array.from(document.styleSheets).flatMap(sheet => { try { return Array.from(sheet.cssRules).filter(rule => rule.cssText.includes('ec-answer') && rule.cssText.includes('border')).map(rule => rule.cssText.slice(0, 160)); } catch { return []; } }),
+      };
+    })(),
     spell: inOverlay('.ec-spell-row').map(text),
     answer: text(root.querySelector('.ec-a')).slice(0, 120) || null,
     extras: inOverlay('.ec-ex-item').map(el => text(el).slice(0, 60)),
@@ -381,7 +436,7 @@ function screen(): Record<string, unknown> {
     math: inOverlay('.ec-markdown mjx-container, .ec-markdown .math').length,
     speakers: inOverlay('.ec-say').length, source: !!root.querySelector('.ec-srcw'), tips: inOverlay('.ec-tip').map(text),
     done: text(root.querySelector('.ec-done h2')) || null, doneSub: text(root.querySelector('.ec-done-sub')) || null,
-    buttons: inOverlay<HTMLButtonElement>('.ec-actions button, .ec-done button').map(b => text(b) + (b.disabled ? '（不能按）' : '') + (b.getAttribute('aria-pressed') === 'true' ? '（當時按的）' : '')),
+    buttons: inOverlay<HTMLButtonElement>('.ec-actions button, .ec-typed-actions button, .ec-done button').map(b => text(b) + (b.disabled ? '（不能按）' : '') + (b.getAttribute('aria-pressed') === 'true' ? '（當時按的）' : '')),
     focus, failed: inOverlay('.ec-render-failed').length,
   };
 }
@@ -407,10 +462,23 @@ function typeText(value: string): boolean {
   return true;
 }
 
-export async function uiShots(host: ReviewHost, folder: string): Promise<unknown> {
-  const contents = webContents();
+export async function uiShots(host: ReviewHost, folder: string, phoneWidth = false): Promise<unknown> {
   const rendering = keepRendering();
-  const base = await examplesState(host);
+  // 手機寬度（2026-10-28）：複習畫面縮成 390px 寬貼在左邊，看句子在手機上怎麼換行；結束時拿掉。
+  const narrow = phoneWidth ? document.head.appendChild(Object.assign(document.createElement('style'), { textContent: '.ec-fullscreen { right: auto !important; width: 390px !important; }' })) : null;
+  // 準備階段出錯也一樣（Codex 審查 F6）：拿掉手機寬度、恢復繪製、關掉 state；各自收，一項失敗不跳過其他項。
+  try {
+    const base = await examplesState(host, true);
+    try { return await shootUi(host, folder, base, rendering.before); } finally { await base.close(); }
+  } finally {
+    narrow?.remove();
+    rendering.restore();
+  }
+}
+
+/** uiShots 的劇本：base 由 uiShots 建立與關閉。 */
+async function shootUi(host: ReviewHost, folder: string, base: State, visibilityBefore: string): Promise<unknown> {
+  const contents = webContents();
   const { state, written } = recording(base);
   const freshBefore = await freshSnapshot(host);
   const logBefore = await logLines(host.app);
@@ -531,6 +599,7 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
     await record('記住了', press('3'));
     await record('打字卡第 1 步', name(), '英文 打字 第1步');
     typeText('make up my mind');
+    await record('第 1 步打字中', name(), '英文 打字 第1步 打字中');
     await record('組字中的 Enter', press('Enter', { isComposing: true }));
     await record('Enter 確認（拼錯）', press('Enter'), '英文 打字 第2步');
     typeText('make up your mand');
@@ -543,9 +612,8 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
     await record('鍵盤 2（差一點）', press('2'));
     await record('light：沒印象', click('沒印象'), '英文 打字 原形等於答案');
     typeText('light');
-    await record('照打', press('Enter'));
-    await sleep(RATE_DELAY);
-    await record('鍵盤 1（沒印象）', press('1'));
+    // 按了「沒印象」只剩一個自評：照打完就自動記下、換下一張（D-145），不用再按 1。
+    await record('照打（自動換下一張）', { key: press('Enter'), next: name() });
     typeText('went');
     await record('go 第 1 步拼對', press('Enter'), '英文 打字 拼對');
     await sleep(RATE_DELAY);
@@ -571,15 +639,13 @@ export async function uiShots(host: ReviewHost, folder: string): Promise<unknown
   } catch (error) {
     steps.push({ step: '出錯', result: error instanceof Error ? error.stack ?? error.message : String(error), screen: screen() });
   }
-  // 出錯也一樣：關掉畫面、把這次寫進去的全部取消。
-  handle?.close();
-  rendering.restore();
+  // 出錯也一樣：關掉畫面、把這次寫進記憶體紀錄的全部取消（照樣跑 undoAll 看取消的寫法；真正的紀錄檔本來就沒寫）。
+  try { handle?.close(); } catch (error) { steps.push({ step: '關掉畫面出錯', result: error instanceof Error ? error.stack ?? error.message : String(error), screen: screen() }); }
   await state.flush();
   const wrote = written.map(w => w.line);
   const undo = await undoAll(state, written);
-  await base.close();
   const freshAfter = await freshSnapshot(host);
-  return { capture: !!contents, visibilityBefore: rendering.before, steps, measure: measure.result(), wrote, undo, logAdded: added(logBefore, await logLines(host.app)), todaySame: freshAfter === freshBefore };
+  return { capture: !!contents, visibilityBefore, steps, measure: measure.result(), wrote, undo, logAdded: added(logBefore, await logLines(host.app)), todaySame: freshAfter === freshBefore };
 }
 
 // ── 切走再回來（L2 的 F4，W6 §2-1）：送 visibilitychange，5 秒與 61 秒後回來 ──

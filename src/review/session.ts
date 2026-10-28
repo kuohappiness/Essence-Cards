@@ -28,15 +28,17 @@ export interface TypedView {
   first: StepResult | null;
   /** 第 2 步的結果；跳過第 2 步是 not-needed，還沒到或第 1 步拼對是 null。 */
   second: RetryResult | null;
-  /** 第 2 步要說「不對」（第 1 步拼錯進來；按「沒印象」進來不說）。 */
+  /** 第 2 步標「錯誤」（打叉的圖示，D-145）：第 1 步拼錯進來才標，按「沒印象」進來不標。 */
   notice: boolean;
   /** 第 2 步的原形提示；其他步 null。 */
   hint: string | null;
-  /** 寫在線上的答案：拼對時是對中的那一個，其他情況是第一個（課本用的）。 */
+  /** 寫在線上的答案：走完時是對中或照打的那一個（照打「正確拼字」那一行就寫它，D-145）；還沒走完是第一個（課本用的）。 */
   answer: string;
   /** 第 3 步：最後一次打的字和最接近的答案逐字比對（拼錯的字母標出）；其他步 null。 */
   attempt: Spelling | null;
-  /** 第 3 步照打：目前輸入和線上答案照位置的即時比對（copying）；其他步 null。 */
+  /** 第 3 步照打的對象：「正確拼字」那一行的答案（和最後一次打的字最接近的那個，D-145）；其他步與回看是 null。 */
+  copy: string | null;
+  /** 第 3 步照打：目前輸入和照打的對象照位置的即時比對（copying）；其他步 null。 */
   live: Spelling | null;
   /** 第 1 步拼錯或按「沒印象」時打的字和最接近答案的比對（回看時顯示）；拼對是 null。 */
   firstAttempt: Spelling | null;
@@ -118,6 +120,11 @@ export interface Session {
   skip(): void;
   /** 自評；回看時是改評分。回傳有沒有真的算數（0.3 秒內、不能按的評分不算）。 */
   rate(rating: Rating): boolean;
+  /**
+   * 只剩一個自評可選時（打字卡第 1 步按了「沒印象」，三步走完）直接記下（D-145）：答案已經看過、打過，不受翻面後 0.3 秒的限制。
+   * 其他情況（還沒走完、有兩個以上可選、回看中）不記，回傳 false。
+   */
+  rateOnly(): boolean;
   back(): void;
   forward(): void;
   toCurrent(): void;
@@ -125,7 +132,7 @@ export interface Session {
   continueWith(pick: Pick): void;
   /** 切到背景（visibilityState 變 hidden）：記下時間。 */
   pause(): void;
-  /** 回到前景：離開超過 AWAY_LIMIT 時，目前這張未評分的卡從頭開始（不寫紀錄）；回傳有沒有重設。 */
+  /** 回到前景：離開超過 AWAY_LIMIT 時，目前這張未評分的卡從頭開始（不寫紀錄）；有卡但沒重設時也通知畫面一次。回傳有沒有重設。 */
   resume(): boolean;
   /** 關掉畫面：清掉這一次做過的卡，不寫任何紀錄。 */
   close(): void;
@@ -203,7 +210,7 @@ export function createSession(options: SessionOptions): Session {
   function present(card: Card, shown: number): Current {
     const english = card.target.direction !== null;
     const typed: TypedView | null = card.typed ? {
-      step: 1, first: null, second: null, notice: false, hint: null, answer: answersOf(card)[0] ?? '', attempt: null, live: null, firstAttempt: null, input: '', finished: false, canSkip: true,
+      step: 1, first: null, second: null, notice: false, hint: null, answer: answersOf(card)[0] ?? '', attempt: null, copy: null, live: null, firstAttempt: null, input: '', finished: false, canSkip: true,
     } : null;
     // 英翻中的題目一出現就念英文（D-116）。
     const question = card.prompt.kind === 'qa' ? card.prompt.question : card.prompt.text;
@@ -240,7 +247,7 @@ export function createSession(options: SessionOptions): Session {
     if (viewing !== null) {
       const entry = done[viewing];
       const typedView: TypedView | null = entry.answer !== null ? {
-        step: 3, first: entry.typed, second: entry.retry, notice: false, hint: null, answer: entry.answer ?? '', attempt: entry.firstCompare, live: null, firstAttempt: entry.firstCompare, input: entry.firstInput ?? '', finished: true, canSkip: false,
+        step: 3, first: entry.typed, second: entry.retry, notice: false, hint: null, answer: entry.answer ?? '', attempt: entry.firstCompare, copy: null, live: null, firstAttempt: entry.firstCompare, input: entry.firstInput ?? '', finished: true, canSkip: false,
       } : null;
       return {
         kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: entry.changeable, pressed: entry.rating,
@@ -293,7 +300,7 @@ export function createSession(options: SessionOptions): Session {
     spoken();
     const typed = current.typed;
     typed.input = text;
-    if (typed.step === 3) typed.live = copying(text, typed.answer);
+    if (typed.step === 3) typed.live = copying(text, typed.copy ?? typed.answer);
     notify();
   }
 
@@ -304,8 +311,9 @@ export function createSession(options: SessionOptions): Session {
     typed.hint = null;
     typed.notice = false;
     typed.answer = answers[0] ?? '';
-    typed.attempt = spelling(lastInput, closest(lastInput, answers));
-    typed.live = copying('', typed.answer);
+    typed.copy = closest(lastInput, answers);
+    typed.attempt = spelling(lastInput, typed.copy);
+    typed.live = copying('', typed.copy);
     typed.input = '';
     typed.canSkip = false;
     revealNow();
@@ -337,8 +345,9 @@ export function createSession(options: SessionOptions): Session {
     const text = typed.input;
     if (typed.step === 3) {
       if (!text.trim()) return;
-      typed.live = copying(text, typed.answer);
-      if (checkTyped(card.prompt, text)) finish(typed, card, typed.answer, false);
+      typed.live = copying(text, typed.copy ?? typed.answer);
+      // 照打任何一個答案都能結束；線上寫學生照打的那一個（拼對時寫對中的那一個，W6 §3-4）。
+      if (checkTyped(card.prompt, text)) finish(typed, card, answers.find(answer => normalize(answer) === normalize(text)) ?? typed.answer, false);
       notify();
       return;
     }
@@ -406,6 +415,14 @@ export function createSession(options: SessionOptions): Session {
     return true;
   }
 
+  function rateOnly(): boolean {
+    if (!current?.typed?.finished || viewing !== null) return false;
+    const allowed = allowedFor(current.typed.first);
+    if (allowed.length !== 1) return false;
+    current.revealedAt = null;
+    return rate(allowed[0]);
+  }
+
   /**
    * 回看時改評分（D-084）：取消原本那一筆，再寫同樣的 lt、v、typed、retry 加新的評分。目前有一張還沒作答的卡時不換它；
    * 在完成畫面時重新問 next，改成沒印象或差一點的那張回到目前時就出（Codex L2 F2）。
@@ -447,7 +464,9 @@ export function createSession(options: SessionOptions): Session {
     if (pausedAt === null) return false;
     const away = now() - pausedAt;
     pausedAt = null;
-    if (away <= AWAY_LIMIT || !current) return false;
+    if (!current) return false;
+    // 沒超過 60 秒也通知一次：畫面重新判斷（例如只剩一個自評、切走前已走完的那張要自動換下一張，D-145）。
+    if (away <= AWAY_LIMIT) { notify(); return false; }
     current = present(current.card, current.shown + 1);
     if (viewing !== null) current.autoRead = null;
     notify();
@@ -464,7 +483,7 @@ export function createSession(options: SessionOptions): Session {
   return {
     view, ready: () => readyPromise,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    reveal, input, submit, skip, rate, back, forward, toCurrent, continueWith, pause, resume,
+    reveal, input, submit, skip, rate, rateOnly, back, forward, toCurrent, continueWith, pause, resume,
     close() { closed = true; unsubscribe(); done.length = 0; current = null; listeners.clear(); },
     history: () => done,
     pick: () => pick,
