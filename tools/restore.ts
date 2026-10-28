@@ -97,7 +97,10 @@ function report(result: PlanFile, loaded: Loaded): string {
   if (result.files.length === 0) out.push('和現在相同，沒有要還原的檔。');
   else {
     out.push('| 檔案 | 狀況 | 處理 | 說明 |', '|---|---|---|---|');
-    for (const file of result.files) out.push(`| ${file.path}${file.target !== null && file.target !== file.path ? ' → ' + file.target : ''} | ${KIND[file.kind]} | ${ACTION[file.action]} | ${file.reasons.join('；')} |`);
+    for (const file of result.files) {
+      const notes = [...file.reasons, ...file.after.length ? ['要在「' + file.after.join('」、「') + '」之後寫（先釋放學習目標 ID）'] : []];
+      out.push(`| ${file.path}${file.target !== null && file.target !== file.path ? ' → ' + file.target : ''} | ${KIND[file.kind]} | ${ACTION[file.action]} | ${notes.join('；')} |`);
+    }
   }
   for (const file of result.files.filter(file => file.kind === 'changed')) {
     const before = loaded.current.get(file.current!.path)!, after = loaded.backup.files.get(file.path)!;
@@ -146,8 +149,8 @@ export interface ApplyResult {
 }
 
 /**
- * `--apply`：先做一份現況的備份（失敗就什麼都不寫）；重新讀現況、照這次的選擇重算計畫（全庫 ID 檢查也重做）；
- * 每個檔寫之前確認現在的還是計畫裡的那一份，不是就跳過；寫還原檔（一次寫完、不覆寫）；最後列出每個檔的結果。
+ * `--apply`：先做一份現況的備份（失敗就什麼都不寫）；重新讀現況，排除計畫之後改過的檔，照實際要寫的檔重算計畫
+ * （全庫 ID 檢查與寫入順序）；照順序寫，要先釋放 ID 的檔沒寫成就不寫等它的檔；寫還原檔（一次寫完、不覆寫）；最後列出每個檔的結果。
  * 中途失敗後重跑 --plan 就是續做：寫成的檔已經相同、補過的行已經在還原檔裡。
  */
 export async function applyPlan(options: RestoreOptions & { plan: string; files?: readonly string[] }): Promise<ApplyResult> {
@@ -157,7 +160,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
   const write = options.seams?.write ?? ((path: string, bytes: Uint8Array, flag: 'w' | 'wx') => writeFile(path, bytes, { flag }));
   // 過渡工具讀不到 Obsidian 存的裝置碼：平台名稱加隨機 4 碼，這次還原寫的還原檔都用它（syntax §5-3）。
   const device = platformName() + '-' + random();
-  const saved =JSON.parse(await readFile(options.plan, 'utf8')) as PlanFile;
+  const saved = JSON.parse(await readFile(options.plan, 'utf8')) as PlanFile;
   if (saved.kind !== PLAN_KIND || saved.version !== 1) throw Error('不是還原計畫：' + options.plan);
   const vault = await realpath(options.vault);
   const same = sameFileKey();
@@ -172,16 +175,30 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
 
   const before = await backupVault({ vault, to: dirname(options.backup), config: options.config, by: 'restore', now: options.now, offset: options.offset });
   const loaded = await load({ ...options, vault });
-  const fresh = plan(loaded, chosen);
   const result: ApplyResult = { backup: before.path, files: [], logs: [] };
-  for (const file of fresh.files) {
-    if (!chosen.has(file.path)) continue;
-    const old = planned.get(file.path)!;
-    const outcome = (kind: Outcome, reason: string): void => { result.files.push({ path: file.path, target: file.target, outcome: kind, reason }); };
-    if (file.action === 'blocked') { outcome('擋住', file.reasons.join('；')); continue; }
-    if (file.action !== 'restore' || file.target === null) { outcome('跳過', '現在和備份相同'); continue; }
-    if ((old.current?.sha256 ?? null) !== (file.current?.sha256 ?? null)) { outcome('跳過', '計畫之後改過；重跑 --plan 看新的差異'); continue; }
-    const rel = file.current?.path ?? file.target;
+  const outcome = (file: { path: string; target: string | null }, kind: Outcome, reason: string): void => {
+    result.files.push({ path: file.path, target: file.target, outcome: kind, reason });
+  };
+  // 計畫之後改過的檔先排除，再用實際要寫的檔重算全庫 ID 檢查與寫入順序（Codex 中途查核 F1）。
+  const changed = new Set<string>();
+  for (const file of plan(loaded, chosen).files) {
+    if (chosen.has(file.path) && (planned.get(file.path)!.current?.sha256 ?? null) !== (file.current?.sha256 ?? null)) changed.add(file.path);
+  }
+  const fresh = plan(loaded, new Set([...chosen].filter(path => !changed.has(path))));
+  const byPath = new Map(fresh.files.map(file => [file.path, file]));
+  for (const path of chosen) {
+    const file = byPath.get(path);
+    if (!file) outcome({ path, target: planned.get(path)!.target }, '跳過', '現在和備份相同');
+    else if (changed.has(path)) outcome(file, '跳過', '計畫之後改過；重跑 --plan 看新的差異');
+    else if (file.action === 'blocked') outcome(file, '擋住', file.reasons.join('；'));
+  }
+  // 照順序寫：要先釋放 ID 的檔沒寫成，等它的就不寫，不留下重複的 ID。
+  const written = new Set<string>();
+  for (const path of fresh.order) {
+    const file = byPath.get(path)!;
+    const waiting = file.after.filter(other => !written.has(other));
+    if (waiting.length) { outcome(file, '跳過', '要先還原「' + waiting.join('」、「') + '」才不會讓學習目標 ID 重複，它這次沒有還原成'); continue; }
+    const rel = file.current?.path ?? file.target!;
     const folder = rel.slice(0, rel.lastIndexOf('/'));
     const target = join(vault, rel);
     const bytes = loaded.backup.files.get(file.path)!;
@@ -206,13 +223,15 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       await assertNoLinks(vault, folder);
       await rename(temporary, target);
       temporary = null;
-      if (hashBytes(new Uint8Array(await readFile(target))) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');
-      outcome('已還原', '');
+      if (await shaOf(target) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');
+      written.add(path);
+      outcome(file, '已還原', '');
     } catch (error) {
       if (temporary !== null) await unlink(temporary).catch(() => {});
-      outcome('失敗', (error as Error).message);
+      outcome(file, '失敗', (error as Error).message);
     }
   }
+  result.files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
   const date = formatTime(now, offset).slice(0, 10);
   const names = new Set([...loaded.current.keys()].map(path => same(path)));
@@ -237,6 +256,14 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     }
   }
   return result;
+}
+
+/** 檔案內容的雜湊；不存在是 null。 */
+async function shaOf(path: string): Promise<string | null> {
+  try { return hashBytes(new Uint8Array(await readFile(path))); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
 }
 
 async function exists(path: string): Promise<boolean> {

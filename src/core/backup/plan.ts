@@ -25,6 +25,11 @@ export interface PlannedFile {
   backup: FileInfo | null;
   /** 現在的檔；path 是現在的寫法（在不分大小寫的電腦上可能和 target 的大小寫不同）。 */
   current: (FileInfo & { path: string }) | null;
+  /**
+   * 要先寫成的還原檔（備份裡的路徑）：這一篇要加回的學習目標 ID 現在還在它們裡面，先釋放、再加入，中間才不會重複。
+   * 它們有一個沒寫成，這一篇就不寫（Codex 中途查核 F1）。
+   */
+  after: string[];
 }
 export interface RestorePlan {
   files: PlannedFile[];
@@ -32,6 +37,8 @@ export interface RestorePlan {
   logs: MissingLines[];
   /** 來源（清單的 vault.config）與目的（這個 vault 現在的設定資料夾；確定不了是 null）。 */
   config: { source: string; target: string | null };
+  /** action 是 restore 的檔，照寫入的順序（每個檔的 after 都排在它前面）。 */
+  order: string[];
 }
 interface PlanInput {
   manifest: BackupManifest;
@@ -77,7 +84,7 @@ export function planRestore(input: PlanInput): RestorePlan {
     const bytes = backup.get(path)!;
     const target = targetOf(path);
     if (target === null) {
-      files.push({ path, target, kind: 'unmapped', action: 'blocked', backup: info(bytes), current: null,
+      files.push({ path, target, kind: 'unmapped', action: 'blocked', backup: info(bytes), current: null, after: [],
         reasons: ['這個 vault 現在的設定資料夾確定不了（裡面要有 plugins/essence-cards/manifest.json），不推定成 .obsidian'] });
       continue;
     }
@@ -92,20 +99,60 @@ export function planRestore(input: PlanInput): RestorePlan {
     const reasons: string[] = [];
     if (others.length) reasons.push('和「' + others.join('」、「') + '」在這台電腦會寫到同一個檔，兩個都不還原');
     if (kind === 'changed' && path.startsWith(LOG_FOLDER + '/')) reasons.push('紀錄裡的檔只補不見的：同名但內容不同，列成衝突');
-    files.push({ path, target, kind, action: reasons.length ? 'blocked' : 'restore', reasons, backup: mine, current: now });
+    files.push({ path, target, kind, action: reasons.length ? 'blocked' : 'restore', reasons, backup: mine, current: now, after: [] });
   }
   for (const path of [...current.keys()].sort(byText)) {
     if (isLogPath(path) || matched.has(path)) continue;
-    files.push({ path, target: path, kind: 'added', action: 'keep', reasons: [], backup: null, current: { path, ...info(current.get(path)!) } });
+    files.push({ path, target: path, kind: 'added', action: 'keep', reasons: [], backup: null, current: { path, ...info(current.get(path)!) }, after: [] });
   }
   for (const file of files) {
     if (file.action === 'restore' && input.selection && !input.selection.has(file.path)) file.action = 'skip';
   }
-  checkIds(files, input);
+  // 擋住交換 ID 這類排不出順序的檔之後，還原的集合變了，ID 要再查一次。
+  let order: string[];
+  for (;;) {
+    checkIds(files, input);
+    const ordered = orderWrites(files, input);
+    order = ordered.order;
+    if (ordered.stuck.length === 0) break;
+    for (const { file, waits } of ordered.stuck) {
+      file.action = 'blocked';
+      file.reasons.push('要先還原「' + waits.join('」、「') + '」，讓它們釋放這一篇加回的學習目標 ID，但彼此互相等待（例如交換了目標），不能逐檔安全還原');
+    }
+  }
 
   const logs = (map: ReadonlyMap<string, Uint8Array>): { path: string; text: string }[] =>
     [...map].filter(([path]) => isLogPath(path)).map(([path, bytes]) => ({ path, text: text(bytes) }));
-  return { files, logs: missingLogLines(logs(backup), logs(current)), config: { source: manifest.vault.config, target: config } };
+  return { files, logs: missingLogLines(logs(backup), logs(current)), config: { source: manifest.vault.config, target: config }, order };
+}
+
+/**
+ * 寫入順序（Codex 中途查核 F1）：還原卡組 f 要加回的 ID（備份有、f 現在沒有）現在在另一篇要還原的卡組 g 裡，g 就排在 f 前面，
+ * 記在 f.after。排不出來的（互相等待）回傳在 stuck。
+ */
+function orderWrites(files: PlannedFile[], { backup, current }: PlanInput): { order: string[]; stuck: { file: PlannedFile; waits: string[] }[] } {
+  for (const file of files) file.after = [];
+  const restoring = files.filter(file => file.action === 'restore');
+  const decks = restoring.filter(file => file.target !== null && isDeckPath(file.target));
+  const now = new Map(decks.map(file => [file, new Set(file.current ? deckIds(current.get(file.current.path)!) : [])]));
+  for (const file of restoring) {
+    const mine = now.get(file);
+    if (!mine) continue;
+    const adds = deckIds(backup.get(file.path)!).filter(id => !mine.has(id));
+    file.after = decks.filter(other => other !== file && adds.some(id => now.get(other)!.has(id))).map(other => other.path);
+  }
+  const done = new Set<string>();
+  const order: string[] = [];
+  for (let moved = true; moved;) {
+    moved = false;
+    for (const file of restoring) {
+      if (done.has(file.path) || file.after.some(path => !done.has(path))) continue;
+      done.add(file.path);
+      order.push(file.path);
+      moved = true;
+    }
+  }
+  return { order, stuck: restoring.filter(file => !done.has(file.path)).map(file => ({ file, waits: file.after.filter(path => !done.has(path)) })) };
 }
 
 interface Occurrence { shown: string; restored: PlannedFile | null }

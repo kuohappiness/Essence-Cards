@@ -249,6 +249,17 @@ void test('全庫 ID 檢查：照選擇還原後的所有卡組；同一篇裡�
   assert.deepEqual(summary(plan({ 'Essence Cards/A.md': ambiguous }, { 'Essence Cards/B.md': goal('bcd345') }).files), [
     'Essence Cards/A.md missing blocked：學習目標 ID bcd345 現在在「Essence Cards/B.md」', 'Essence Cards/B.md added keep']);
   assert.deepEqual(summary(plan({ 'Essence Cards/A.md': ambiguous }, {}).files), ['Essence Cards/A.md missing restore']);
+  // 寫入順序（Codex 中途查核 F1）：加回的 ID 現在在另一篇裡，那一篇先寫；兩篇交換了目標就排不出來，兩篇都擋住。
+  const moved = plan({ 'Essence Cards/A.md': goal('aaa111') + goal('bbb222'), 'Essence Cards/B.md': goal('ccc333') },
+    { 'Essence Cards/A.md': goal('aaa111'), 'Essence Cards/B.md': goal('ccc333') + goal('bbb222') });
+  assert.deepEqual([moved.order, moved.files.map(file => file.after)], [['Essence Cards/B.md', 'Essence Cards/A.md'], [['Essence Cards/B.md'], []]]);
+  const swapped = plan({ 'Essence Cards/A.md': goal('aaa111'), 'Essence Cards/B.md': goal('bbb222'), 'Essence Cards/C.md': goal('ccc333') },
+    { 'Essence Cards/A.md': goal('bbb222'), 'Essence Cards/B.md': goal('aaa111') });
+  assert.deepEqual(summary(swapped.files), [
+    'Essence Cards/A.md changed blocked：要先還原「Essence Cards/B.md」，讓它們釋放這一篇加回的學習目標 ID，但彼此互相等待（例如交換了目標），不能逐檔安全還原',
+    'Essence Cards/B.md changed blocked：要先還原「Essence Cards/A.md」，讓它們釋放這一篇加回的學習目標 ID，但彼此互相等待（例如交換了目標），不能逐檔安全還原',
+    'Essence Cards/C.md missing restore']);
+  assert.deepEqual(swapped.order, ['Essence Cards/C.md']);
   const both = plan({ 'Essence Cards/A.md': goal('aaa111'), 'Essence Cards/B.md': goal('aaa111', '另一篇') }, {});
   assert.deepEqual(summary(both.files), [
     'Essence Cards/A.md missing blocked：學習目標 ID aaa111 還原的「Essence Cards/B.md」也有',

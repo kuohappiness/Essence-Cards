@@ -127,21 +127,53 @@ void test('還原演練：只選 A 會讓搬走的 bbb222 重複，A 擋住、�
   assert.equal(result.logs.length, 1);
 });
 
-void test('還原：中途寫入失敗時列為失敗；重跑 --plan 只剩沒寫成的檔，再 --apply 就完成', async t => {
+const ids = async (vault: string): Promise<(string | null)[]> =>
+  (await readDecks(createNodeFiles(vault))).flatMap(entry => entry.deck.targets.map(target => target.id)).sort();
+
+void test('還原：中途寫入失敗時列為失敗，等它釋放 ID 的檔也不寫、ID 不重複；重跑 --plan 再 --apply 就完成', async t => {
   const { vault, zip, A, B, before } = await drill(t);
   const write = async (path: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
     if (path.includes('B.md')) throw Object.assign(Error('寫入失敗'), { code: 'EIO' });
     await writeFile(path, bytes, { flag });
   };
-  const { result } = await restore(vault, zip, { seams: { write } });
-  assert.deepEqual(result.files.map(file => [file.path, file.outcome, file.reason]), [[A, '已還原', ''], [B, '失敗', '寫入失敗']]);
+  const { plan: first, result } = await restore(vault, zip, { seams: { write } });
+  // A 要加回 bbb222，它現在在 B：B 先寫（Codex 中途查核 F1）。
+  assert.deepEqual([first.order, first.files.map(file => file.after)], [[B, A], [[B], []]]);
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome, file.reason]),
+    [[A, '跳過', '要先還原「' + B + '」才不會讓學習目標 ID 重複，它這次沒有還原成'], [B, '失敗', '寫入失敗']]);
+  assert.deepEqual(await ids(vault), ['aaa111', 'bbb222', 'ccc333']);
   assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), []);
   const { plan, result: second } = await restore(vault, zip);
-  assert.deepEqual(plan.files.map(file => file.path), [B]);
+  assert.deepEqual(plan.files.map(file => file.path), [A, B]);
   assert.deepEqual(plan.logs, []);
-  assert.deepEqual(second.files.map(file => [file.path, file.outcome]), [[B, '已還原']]);
-  assert.equal(await read(vault, B), before[B]);
+  assert.deepEqual(second.files.map(file => [file.path, file.outcome]), [[A, '已還原'], [B, '已還原']]);
+  assert.deepEqual([await read(vault, A), await read(vault, B)], [before[A], before[B]]);
 });
+
+for (const [releases, adds] of [['A', 'B'], ['B', 'A']]) {
+  void test(`還原（Codex 中途查核 F1）：${releases} 釋放 ID、${adds} 加回；${releases} 計畫之後改過或寫入失敗時，${adds} 都不寫、ID 不重複`, async t => {
+    // 備份：釋放的那篇只有 aaa111，加回的那篇有 bbb222；計畫時 bbb222 在釋放的那篇裡。
+    const R = `Essence Cards/${releases}.md`, D = `Essence Cards/${adds}.md`;
+    for (const branch of ['changed', 'failed'] as const) {
+      const vault = await makeVault(t, { [R]: goal('aaa111'), [D]: goal('bbb222') });
+      const zip = await backup(t, vault);
+      await put(vault, R, goal('aaa111') + goal('bbb222'));
+      await put(vault, D, goal('ccc333'));
+      const options = { vault, backup: zip, ...fixed, random: counter() };
+      const { plan, path } = await makePlan(options);
+      assert.deepEqual(plan.order, [R, D]);
+      if (branch === 'changed') await put(vault, R, goal('aaa111', '計畫之後改字') + goal('bbb222'));
+      const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+        if (branch === 'failed' && file.includes(releases + '.md.')) throw Object.assign(Error('no space left on device'), { code: 'ENOSPC' });
+        await writeFile(file, bytes, { flag });
+      };
+      const result = await applyPlan({ ...options, plan: path, seams: { write } });
+      const outcomes = Object.fromEntries(result.files.map(file => [file.path, file.outcome]));
+      assert.deepEqual([outcomes[R], outcomes[D]], [branch === 'changed' ? '跳過' : '失敗', branch === 'changed' ? '擋住' : '跳過'], branch);
+      assert.deepEqual(await ids(vault), ['aaa111', 'bbb222', 'ccc333'], branch);
+    }
+  });
+}
 
 void test('還原：還原檔寫到一半空間不足時列為失敗、不留半個檔，重跑仍算缺', async t => {
   const { vault, zip } = await drill(t);
