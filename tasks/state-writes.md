@@ -91,7 +91,11 @@ export interface State {
   save(editor: EditorHandle): Promise<WriteResult>;
   /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
   resolve(issue: IdIssue, choice: 'restore' | 'new', editor: EditorHandle): Promise<WriteResult>;
-  /** 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補；核對後確實補上了才回傳 true。不存在時不建立。 */
+  /**
+   * 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補。不存在時不建立。
+   * done 回傳 true；saved（已寫進檔、核對還沒讀到）也回傳 true，和原本「有改字回傳 true」相同；unchanged、blocked、stale 回傳 false；
+   * modify 失敗與 writeTimeout 逾時都 reject（leave() 照舊交給 host.onError）。（2026-10-29 Claude 確認）
+   */
   fillIds(path: string): Promise<boolean>;
 }
 ```
@@ -191,7 +195,7 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
 | S13 | **H4-1 別篇**（Codex 第 6 題）：ready 時只有 A（一個沒有 ID 的目標）；外部建立 B（含 `^aaaaaa`）並通知，還沒讀；立刻存 A | A 配到 `aaaaab`；之後沒有重複 ID、沒有問題 |
 | S14 | **本篇的兩組輸入**（Codex 第二輪第 3 點）：(a) 磁碟是 C 且待讀，編輯器文字是 B `^aaaaaa` 加上沒有 ID 的 C；(b) 磁碟已改成 B `^aaaaaa` 加 C 並通知，編輯器文字仍只有 C | 兩組的 C 都配到 `aaaaab`。(b) 結束時磁碟沒有 B：那是編輯器沒收到外部的修改、存檔時把它蓋掉，屬於 Obsidian 編輯器那一層，在 V6 觀察；這個測試只斷言 C 的 ID 和沒有假的問題 |
 | S15 | **連續兩份寫入與舊成功回報**（Codex 第 2 題）：`fillIds(P)` 的 modify 寫完但延遲回傳；這時存檔 P（編輯器的文字是 `fillIds` 寫成後的內容再加上目標 B） | 第二份等第一份結束才開始；最後磁碟與 `decks()` 都有 A、B 和各自的 ID；過程中 `decks()` 不會退回只有 A |
-| S16 | **寫入失敗**：`persist` reject；另一例 `modify` 失敗（`failModify`） | `failed`（`fillIds` 回 `false`）；`deckStatus(P).missing` 不變；下一次存檔配到 `aaaaab`，不重用 `aaaaaa`；state 沒有改編輯器的文字 |
+| S16 | **寫入失敗**：`persist` reject；另一例 `modify` 失敗（`failModify`） | `failed`（`fillIds` 照舊 reject，2026-10-29 Claude 確認：§1 簽名不變、限制 3 既有測試的預期不改）；`deckStatus(P).missing` 不變；下一次存檔配到 `aaaaab`，不重用 `aaaaaa`；state 沒有改編輯器的文字 |
 | S17 | **no-op**：沒有要改的；另一例編輯器文字比磁碟新但沒有要補的 | `unchanged`；兩例都有 persist 與核對讀取，之後磁碟和 state 一致、沒有問題 |
 | S18 | **已保存、核對讀不到**：`persist` 成功後讓 P 讀不到 | `saved`；`unread()` 含 P，另一篇的存檔回 `blocked unread`；恢復、推進重試：照核對採用，沒有問題、`onChange` 一次。還原版：延後的記錄在讀到時才套用，不出現被換掉的 ID 造成的 `lost` |
 | S19 | **等待中換篇、改名、刪除後重建**：(a) 輪到時編輯器已換篇；(b) `persist` 延遲時把 P 改名成 Q；(c) 再建一個內容不同的新 P | (a) `stale`，沒有交易、沒有 persist。(b) 結果不是 `done`；Q 照一般讀取處理，沒有問題。(c) 新的 P 沒有被 Cards 寫入；舊的工作不會把 ID 寫到新的 P |

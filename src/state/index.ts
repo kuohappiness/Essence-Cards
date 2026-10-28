@@ -107,8 +107,8 @@ export interface State {
   /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
   resolve(issue: IdIssue, choice: 'restore' | 'new', editor: EditorHandle): Promise<WriteResult>;
   /**
-   * 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補；核對後確實補上了才回傳 true。不存在時不建立。
-   * 寫不進去時 reject（已配出的 ID 保留、不重用）。
+   * 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補；不存在時不建立。核對後補上了（done）或已寫進檔、核對還沒讀到（saved）
+   * 回傳 true；沒有要改、門檻沒過、途中變了（stale）回傳 false；寫不進去或逾時 reject（已配出的 ID 保留、不重用）。
    */
   fillIds(path: string): Promise<boolean>;
   /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
@@ -298,7 +298,8 @@ export function createState(options: StateOptions): State {
         // 讀不到的留著等重試；讀得到的照常處理，不被它擋住。
         pending.add(path);
         unread.add(path);
-        checks.get(path)?.settle({ kind: 'saved' });
+        const check = checks.get(path);
+        check?.settle(check.output === null ? check.fallback : { kind: 'saved' });
         failure ??= { error: result.reason };
         continue;
       }
@@ -502,8 +503,10 @@ export function createState(options: StateOptions): State {
    */
   const prepare = (path: string, text: string): Prepared => track(path, () => tracker.fill(path, text));
   /** 第 6、7 步：登記這份寫入的核對，等核對讀取（end 已經排好）。 */
-  function verify(path: string, original: string, prepared: Prepared | null, fallback: WriteResult): Promise<WriteResult> {
+  function verify(path: string, original: string, prepared: Prepared | null, fallback: WriteResult): Promise<WriteResult> | WriteResult {
     const output = prepared && prepared.text !== original ? prepared.text : null;
+    // 關閉時在寫的：等到結果明確了，不登記核對、不採用（§5）；有改字是 saved。
+    if (closed) return output === null ? fallback : { kind: 'saved' };
     return new Promise(settle => { checks.set(path, { output, prepared, fallback, settle }); });
   }
   /** 離開筆記（沒開著的檔）：在 modify 的回呼裡對最新的原文準備（W5 §8-2 第 4 點）。 */
@@ -528,8 +531,7 @@ export function createState(options: StateOptions): State {
           prepared = prepare(path, text);
           return prepared.text;
         }));
-        // 關閉時在寫的：等結果明確，不登記核對、不採用（§5）。
-        outcome = gate ?? (again ? null : closed ? { kind: 'saved' } : verify(path, original, prepared, { kind: 'unchanged' }));
+        outcome = gate ?? (again ? null : verify(path, original, prepared, { kind: 'unchanged' }));
       } catch (error) {
         // 寫不進去：不登記核對；已配出的 ID 留在 seen、不重用。
         outcome = error instanceof NothingToFill ? { kind: 'unchanged' } : { kind: 'failed', error };
@@ -558,8 +560,7 @@ export function createState(options: StateOptions): State {
       if (prepared && prepared.text !== text && !editor.apply(text, prepared.text)) return { kind: 'stale' };
       // 沒有改字也要 persist：觀察過的編輯器文字可能比磁碟新，要讓磁碟追上，核對讀取才有依據。
       await persist(editor.persist());
-      // 關閉時在寫的：等結果明確，不登記核對、不採用（§5）。
-      outcome = closed ? { kind: 'saved' } : verify(path, text, prepared, fallback);
+      outcome = verify(path, text, prepared, fallback);
     } catch (error) {
       // 寫不進去：不登記核對，不把 Editor 改回去，已配出的 ID 留在 seen、不重用。這時磁碟可能比觀察過的編輯器文字舊，
       // 接著的那次讀取可能出現和 N1 一樣的假問題，等下一次存檔成功或 Obsidian 的自動存檔追上後消失（保存失敗時的代價）。
@@ -584,7 +585,8 @@ export function createState(options: StateOptions): State {
       const result = await enqueue(() => fillFile(path));
       // 寫不進去時照舊 reject（呼叫端交給 onError）；已配出的 ID 留在 seen、不重用。
       if (result.kind === 'failed') throw result.error;
-      return result.kind === 'done';
+      // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
+      return result.kind === 'done' || result.kind === 'saved';
     },
     removedInEditor(_path, ids) { tracker.removed(ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },
@@ -629,7 +631,7 @@ export function createState(options: StateOptions): State {
       unwatch?.();
       unwatch = null;
       // 寫成、等核對的工作回 saved（已寫進磁碟的內容下次載入照實讀回）；在寫的那一份等結果明確，最多 writeTimeout（§5）。
-      for (const check of checks.values()) check.settle({ kind: 'saved' });
+      for (const check of checks.values()) check.settle(check.output === null ? check.fallback : { kind: 'saved' });
       checks.clear();
       await active;
       await processing;

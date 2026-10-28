@@ -176,14 +176,14 @@ void test('§4 fillIds 核對：寫成後家長又打了別的字，預期的 ID
   lost.samePlan();
 });
 
-void test('S18 fillIds 版：寫成後核對讀不到，先回 false；讀到時照核對採用，沒有問題', async t => {
+void test('S18 fillIds 版：寫成後核對讀不到也回 true（已寫進檔）；讀到時照核對採用，沒有問題', async t => {
   const h = await setup(t, { [P]: C, [A]: C });
   const held = h.holdModify(P);
   const filling = h.state.fillIds(P);
   await h.flush();
   h.failing.add(P);
   held.release();
-  assert.equal(await filling, false);
+  assert.equal(await filling, true);
   assert.deepEqual(h.state.unread(), [P]);
   assert.equal(await h.state.fillIds(A), false, '讀不到時門檻擋住其他寫入');
   assert.equal(h.texts.get(A), C);
@@ -602,4 +602,23 @@ void test('S26 A12：問題物件拿到之後重讀一次內容沒變，用同�
   assert.notEqual(issues[0], old);
   assert.equal(renamed.texts.get(P), edited);
   renamed.samePlan();
+});
+
+void test('fillIds 的結果對應（2026-10-29 確認）：沒有要改的核對讀不到仍是 false；逾時 reject', async t => {
+  const h = await setup(t, { [P]: Ca });
+  const held = h.holdModify(P);
+  const filling = h.state.fillIds(P);
+  await h.flush();
+  h.failing.add(P);
+  held.release();
+  assert.equal(await filling, false);
+  h.failing.delete(P);
+  await h.settle(1000);
+
+  const stuck = await setup(t, { [P]: C });
+  stuck.holdModify(P);
+  const timing = stuck.state.fillIds(P);
+  await stuck.flush();
+  t.mock.timers.tick(10_000);
+  await assert.rejects(timing, /逾時/);
 });
