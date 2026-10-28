@@ -1,12 +1,13 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BLANK, englishBreak, glueArticles, tailStart } from '../review/index.ts';
+import { postProcess } from './rendered.ts';
 
 // 卡片的內容交給 Obsidian 渲染（D-052、D-109、W6 §3-3）：圖片、公式、音檔照樣呈現；sourcePath 是卡組的路徑。
 // 填空題：渲染後把 <mark> 換成空格（一條底線，翻面後答案在同一條線上淡入）。
 // 打字卡：題目裡第一處 ＿＿ 換成幾條一樣長的線，條數是答案的字數（D-122）；翻面後答案的字照順序寫在線上。
 // 線包在 .ec-slot 裡，打字時輸入框放進同一格（D-145：在空格裡直接打字），由 onSlot 交給複習畫面。
+// 渲染後的處理（空格、換行、冠詞、喇叭的位置）在 rendered.ts。
 
 export interface MarkdownProps {
   app: App;
@@ -30,83 +31,6 @@ export interface MarkdownProps {
   tail?: React.ReactNode;
   /** 英文卡的題目：冠詞和後面的字連在一起換行（glueArticles）。 */
   english?: boolean;
-}
-
-/** 文字節點裡的冠詞接上不斷行空白（空格、填空裡的不改）。 */
-function glueText(container: HTMLElement): void {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node.parentElement?.closest('.ec-slot, .ec-blank')) continue;
-    const text = node.textContent ?? '';
-    const glued = glueArticles(text);
-    if (glued !== text) node.textContent = glued;
-  }
-}
-
-/**
- * 最後一段文字（空格、填空裡的不算）的最後一個字包進 .ec-tail，tail 放進同一格；沒有文字時接在最後面。
- * 最後的字在連結裡時接在連結後面（不放進連結，免得按喇叭也開了連結）。
- */
-function attachTail(container: HTMLElement): HTMLElement {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  let last: Text | null = null;
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node instanceof Text && node.textContent?.trim() && !node.parentElement?.closest('.ec-slot, .ec-blank')) last = node;
-  }
-  const tail = document.createElement('span');
-  tail.className = 'ec-tail';
-  const link = last?.parentElement?.closest('a');
-  if (!last || link) {
-    if (link) link.after(tail); else (container.lastElementChild ?? container).append(tail);
-    return tail;
-  }
-  const rest = last.splitText(tailStart(last.textContent ?? ''));
-  rest.replaceWith(tail);
-  tail.append(rest);
-  return tail;
-}
-
-/** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線；回傳放線的那一格，找不到 ＿＿ 時是 null。 */
-function insertLines(container: HTMLElement, lines: number): HTMLElement | null {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent ?? '';
-    const match = BLANK.exec(text);
-    if (!match || !(node instanceof Text)) continue;
-    const blanks = document.createElement('span');
-    blanks.className = 'ec-lines';
-    for (let i = 0; i < Math.max(1, lines); i++) {
-      const line = document.createElement('span');
-      line.className = 'ec-line';
-      const word = document.createElement('span');
-      word.className = 'ec-line-word';
-      line.append(word);
-      blanks.append(line);
-    }
-    const slot = document.createElement('span');
-    slot.className = 'ec-slot';
-    slot.append(blanks);
-    const after = node.splitText(match.index);
-    after.textContent = text.slice(match.index + match[0].length);
-    node.parentNode?.insertBefore(slot, after);
-    breakBeforeEnglish(node);
-    return slot;
-  }
-  return null;
-}
-
-/**
- * 中文句子後面接英文句子時，英文換到下一行（D-145，使用者 2026-10-28）：在空格前面那段文字裡最後一個中文字或全形標點後面斷行。
- * 例如「我昨天去了公園。I ＿＿ to the park yesterday.」；英文在前、中文提示在後的（Can I ＿＿ your pen?（借））不斷行。
- */
-function breakBeforeEnglish(node: Text): void {
-  const at = englishBreak(node.textContent ?? '');
-  if (at === null) return;
-  const english = node.splitText(at);
-  english.textContent = (english.textContent ?? '').trimStart();
-  const br = document.createElement('br');
-  br.className = 'ec-break';
-  node.parentNode?.insertBefore(br, english);
 }
 
 function applyState(container: HTMLElement, props: MarkdownProps): void {
@@ -142,22 +66,10 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       try {
         await MarkdownRenderer.render(app, text, container, sourcePath, component);
         if (!active) return;
-        if (mode === 'cloze') {
-          for (const mark of Array.from(container.querySelectorAll('mark'))) {
-            const blank = document.createElement('span');
-            blank.className = 'ec-blank';
-            const answer = document.createElement('span');
-            answer.className = 'ec-blank-answer';
-            answer.textContent = mark.textContent;
-            blank.append(answer);
-            mark.replaceWith(blank);
-          }
-        }
-        const slot = mode === 'typed' ? insertLines(container, lines) : null;
-        if (latest.current.english) glueText(container);
+        const { slot, tail } = postProcess(container, { mode, lines, english: !!latest.current.english });
         applyState(container, latest.current);
         // 一律先包好最後一個字：英翻中的喇叭在翻面前就有，中翻英的在答案出現後才有，不用為此重新渲染。
-        setTailEl(attachTail(container));
+        setTailEl(tail);
         if (mode === 'typed') latest.current.onSlot?.(slot);
         latest.current.onReady?.();
       } catch (error) {

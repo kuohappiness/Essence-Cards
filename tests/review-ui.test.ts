@@ -10,6 +10,7 @@ import type { App } from 'obsidian';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
 import { resolveSource } from '../src/ui/sources.ts';
+import { createSpeech, type Speech } from '../src/ui/speech.ts';
 
 // 複習畫面元件（src/ui/Review.tsx）的時序：Codex L2 審查的 F1（動畫期間的按鍵）、F3（自動朗讀被換卡停掉）、F7（第 2 步拼對的打勾）；
 // 最後是 F5（出處的子圖，src/ui/sources.ts）。
@@ -32,8 +33,8 @@ const englishText = [
 ].join('\n');
 
 interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void>; idle: (() => void)[] }
-/** holdSpeech：語音替身的 whenIdle 先不回報（當作還在念），測試呼叫 idle 裡的 callback 才算念完。 */
-async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; holdSpeech?: boolean } = {}): Promise<Opened> {
+/** holdSpeech：語音替身的 whenIdle 先不回報（當作還在念），測試呼叫 idle 裡的 callback 才算念完。speech：改用這個（真的 createSpeech）。 */
+async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; holdSpeech?: boolean; speech?: Speech } = {}): Promise<Opened> {
   const memory = createMemoryFiles(options.texts ?? { [NATURAL]: naturalText, [ENGLISH]: englishText });
   const clock = { now: START };
   const state = createState({ files: memory.files, device: 'PC-test', delay: 30, fillIds: false, now: () => clock.now, offset: () => 480 });
@@ -46,7 +47,7 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   let autoOn = options.autoRead ?? false;
   const ui = await renderReview({
     app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [],
-    speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); }, whenIdle: callback => { if (options.holdSpeech) idle.push(callback); else callback(); } },
+    speech: options.speech ?? { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); idle.length = 0; }, whenIdle: callback => { if (!options.holdSpeech) { callback(); return () => {}; } idle.push(callback); return () => { const at = idle.indexOf(callback); if (at >= 0) idle.splice(at, 1); }; } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
     pickedAt: performance.now(),
   });
@@ -308,6 +309,77 @@ void test('D-145 只剩一個自評時自動換下一張：正在念答案時等
   await o.ui.settle();
   assert.equal(lt(o.session), 't1', '第 1 步拼錯：還有差一點與沒印象可選，不自動');
   assert.equal(o.session.history().length, 1);
+});
+
+// Codex 審查 F1、F2（2026-10-28）：自動換卡的等待在畫面關掉、切到背景時取消；同一題重出、回看後回來、切走不到 60 秒回來都會再等。
+const autoDeck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off', ''].join('\n');
+/** 第 1 步按「沒印象」、照打正確答案，走完三步（只剩一個自評）。 */
+async function skipAndCopy(o: Opened, answer: string): Promise<void> {
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  o.session.input(answer); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+}
+const ratings = (o: Opened): string[][] => o.session.history().map(entry => [entry.card.lt, entry.rating]);
+
+void test('F1 等念完時關掉畫面：取消等待，不記下沒印象', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: true, holdSpeech: true, texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  assert.equal(o.idle.length, 1, '正在念：等著');
+  o.ui.unmount();
+  assert.equal(o.idle.length, 0, '關掉畫面：等待取消');
+  assert.deepEqual(ratings(o), []);
+});
+
+void test('F1 真的 createSpeech：念答案時切到背景（stop）不記，被停掉的段落晚回報也不算；不到 60 秒回來、沒在念就記下', async t => {
+  const spoken: { onend: (() => void) | null }[] = [];
+  const scope = globalThis as unknown as { window?: unknown; SpeechSynthesisUtterance?: unknown };
+  scope.window = { speechSynthesis: { cancel() {}, speak(u: { onend: (() => void) | null }) { spoken.push(u); }, getVoices: () => [{ lang: 'en-US' }] } };
+  scope.SpeechSynthesisUtterance = class { lang = ''; onend: (() => void) | null = null; onerror: (() => void) | null = null; };
+  t.after(() => { delete scope.window; delete scope.SpeechSynthesisUtterance; });
+  const speech = createSpeech(() => {});
+  const o = await open(t, { subject: '英文' }, { autoRead: true, speech, texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  assert.equal(spoken.length, 2, '念答案與例句');
+  speech.stop(); o.session.pause(); // 外殼切到背景時的順序（host.tsx）
+  for (const u of spoken) u.onend?.();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [], '切走：不記');
+  o.clock.now += 10_000;
+  assert.equal(o.session.resume(), false);
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss']], '回來：沒在念，記下');
+});
+
+void test('F2 同一題重出、回看後回來、切走不到 60 秒回來：都會再自動記下', async t => {
+  const one = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: autoDeck.split('- turn off')[0] } });
+  await skipAndCopy(one, 'went');
+  assert.deepEqual(ratings(one), [['g1', 'miss']]);
+  assert.equal(lt(one.session), 'g1', '只剩這一張：重出');
+  await skipAndCopy(one, 'went');
+  assert.deepEqual(ratings(one), [['g1', 'miss'], ['g1', 'miss']], '重出的同一題也自動');
+
+  const o = await open(t, { subject: '英文' }, { holdSpeech: true, texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.equal(lt(o.session), 't1');
+  await skipAndCopy(o, 'turn off');
+  assert.equal(o.idle.length, 1);
+  o.session.back();
+  await o.ui.settle();
+  assert.equal(o.idle.length, 0, '回看：不等');
+  o.session.toCurrent();
+  await o.ui.settle();
+  assert.equal(o.idle.length, 1, '回到目前這張：再等');
+  o.session.pause();
+  o.idle.length = 0; // 外殼切到背景時 speech.stop()：等待全部取消
+  o.clock.now += 10_000;
+  assert.equal(o.session.resume(), false);
+  await o.ui.settle();
+  assert.equal(o.idle.length, 1, '不到 60 秒回來：再等');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']]);
 });
 
 void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文（重複的只念一次）', async t => {

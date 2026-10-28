@@ -135,12 +135,13 @@ export function Review(props: ReviewProps): React.JSX.Element {
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
   // 只剩一個自評時（打字卡第 1 步按了「沒印象」），三步走完就自動記下、換下一張（D-145，iPhone 回饋）。
   // 正在念答案與例句時等念完（答錯後的回饋，D-116）；語音沒回報念完時，底下那一顆「沒印象」照樣能按。
-  const autoRated = useRef<string | null>(null);
+  // 每次畫面更新都重新等（同一題重出、回看後回來、切走再回來都會再自動，Codex 審查 F2），條件不成立或卸載時取消；
+  // 關掉畫面、切到背景時 Speech.stop 取消等待、不算念完，所以中斷不會被記成作答（Codex 審查 F1）。切到背景時不等。
   useEffect(() => {
-    if (view.kind !== 'card' || view.card.viewing || !view.card.typed?.finished || view.card.allowed.length !== 1 || autoRated.current === cardKey) return;
-    autoRated.current = cardKey;
-    speech.whenIdle(() => { if (alive.current && !busy.current) commit(() => session.rateOnly()); });
-  }, [view, cardKey, speech, session]);
+    if (view.kind !== 'card' || view.card.viewing || !view.card.typed?.finished || view.card.allowed.length !== 1) return;
+    if (document.visibilityState === 'hidden') return;
+    return speech.whenIdle(() => { if (alive.current && !busy.current) commit(() => session.rateOnly()); });
+  }, [view, autoOn, speech, session]);
   // 打字卡：輸入框自動取得焦點（在空格裡打字時，題目渲染好、輸入框放進空格之後）。
   useEffect(() => {
     if (view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });

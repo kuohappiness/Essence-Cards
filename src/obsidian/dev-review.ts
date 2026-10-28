@@ -1,7 +1,7 @@
 import { MarkdownView, Notice, type App, type Plugin } from 'obsidian';
 import { isDeckPath } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
-import { encodeEntry, isLogPath, LOG_FOLDER, type NewEntry, type Pick } from '../core/study/index.ts';
+import { encodeEntry, isLogPath, type NewEntry, type Pick } from '../core/study/index.ts';
 import { createSession, RATE_DELAY, type View } from '../review/index.ts';
 import { createState, type State } from '../state/index.ts';
 import { openReview, type ReviewEvent, type ReviewHandle } from '../ui/index.ts';
@@ -9,7 +9,8 @@ import { createSpeech } from '../ui/speech.ts';
 import { createObsidianFiles } from './files.ts';
 
 // W6 的開發命令（§4）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，結果寫到 Essence W6/結果/。
-// 會作答的命令都用只看得到 W6 範例卡組的 state，寫進這台裝置真正的紀錄檔，最後把這次寫的全部取消。
+// 會作答的命令都用只看得到 W6 範例卡組的 state。review-script、away 寫進這台裝置真正的紀錄檔，最後把這次寫的全部取消；
+// ui、ui-phone、practice 用記憶體裡的空白紀錄（blankHistory），不讀也不寫真正的紀錄檔。
 
 export const W6_ROOT = 'Essence W6';
 const EXAMPLES = 'Essence Cards/W6 範例/';
@@ -125,15 +126,24 @@ function snapshot(state: State): string {
   return JSON.stringify({ day: today.day, share: today.share.map(i => i.lt + ':' + i.lane), more: today.more.map(i => i.lt + ':' + i.lane), progress: state.progress() });
 }
 /**
- * 紀錄換成記憶體裡的空白紀錄：讀不到真正的作答、也不寫進真正的紀錄檔。ui 截圖用，每次都從新卡開始，
- * 畫面不受範例卡組在別台裝置做過的影響（2026-10-28：iPhone 前一天做完範例，ui 只截到完成畫面）。
+ * 紀錄換成記憶體裡的空白紀錄：讀不到真正的作答、也不寫進真正的紀錄檔（紀錄的 list、read、modify、append 都只看記憶體）。
+ * ui 截圖與 practice 用，每次都從新卡開始，畫面不受範例卡組在別台裝置做過的影響（2026-10-28：iPhone 前一天做完範例，ui 只截到完成畫面）。
+ * 不是完整的 Files：寫記憶體裡的紀錄不送 watch 通知（state 不看自己紀錄的通知，Codex 審查 F7）；拿去別的用途前先補齊。
  */
 function blankHistory(files: Files): Files {
   const logs = new Map<string, string>();
   return {
-    list: async folder => folder === LOG_FOLDER ? [...logs.keys()].sort() : (await files.list(folder)).filter(path => !isLogPath(path)),
+    list: async folder => {
+      const prefix = folder ? folder.replace(/\/$/u, '') + '/' : '';
+      return [...(await files.list(folder)).filter(path => !isLogPath(path)), ...[...logs.keys()].filter(path => path.startsWith(prefix))].sort();
+    },
     read: async path => isLogPath(path) ? logs.get(path) ?? null : files.read(path),
-    modify: (path, edit) => files.modify(path, edit),
+    modify: async (path, edit) => {
+      if (!isLogPath(path)) return files.modify(path, edit);
+      const before = logs.get(path) ?? '';
+      const after = edit(before);
+      if (after !== before) logs.set(path, after);
+    },
     append: async (path, line) => {
       if (!isLogPath(path)) return files.append(path, line);
       logs.set(path, (logs.get(path) ?? '') + line + '\n');
@@ -453,11 +463,22 @@ function typeText(value: string): boolean {
 }
 
 export async function uiShots(host: ReviewHost, folder: string, phoneWidth = false): Promise<unknown> {
-  const contents = webContents();
   const rendering = keepRendering();
   // 手機寬度（2026-10-28）：複習畫面縮成 390px 寬貼在左邊，看句子在手機上怎麼換行；結束時拿掉。
   const narrow = phoneWidth ? document.head.appendChild(Object.assign(document.createElement('style'), { textContent: '.ec-fullscreen { right: auto !important; width: 390px !important; }' })) : null;
-  const base = await examplesState(host, true);
+  // 準備階段出錯也一樣（Codex 審查 F6）：拿掉手機寬度、恢復繪製、關掉 state；各自收，一項失敗不跳過其他項。
+  try {
+    const base = await examplesState(host, true);
+    try { return await shootUi(host, folder, base, rendering.before); } finally { await base.close(); }
+  } finally {
+    narrow?.remove();
+    rendering.restore();
+  }
+}
+
+/** uiShots 的劇本：base 由 uiShots 建立與關閉。 */
+async function shootUi(host: ReviewHost, folder: string, base: State, visibilityBefore: string): Promise<unknown> {
+  const contents = webContents();
   const { state, written } = recording(base);
   const freshBefore = await freshSnapshot(host);
   const logBefore = await logLines(host.app);
@@ -618,16 +639,13 @@ export async function uiShots(host: ReviewHost, folder: string, phoneWidth = fal
   } catch (error) {
     steps.push({ step: '出錯', result: error instanceof Error ? error.stack ?? error.message : String(error), screen: screen() });
   }
-  // 出錯也一樣：關掉畫面、把這次寫進去的全部取消。
-  handle?.close();
-  narrow?.remove();
-  rendering.restore();
+  // 出錯也一樣：關掉畫面、把這次寫進記憶體紀錄的全部取消（照樣跑 undoAll 看取消的寫法；真正的紀錄檔本來就沒寫）。
+  try { handle?.close(); } catch (error) { steps.push({ step: '關掉畫面出錯', result: error instanceof Error ? error.stack ?? error.message : String(error), screen: screen() }); }
   await state.flush();
   const wrote = written.map(w => w.line);
   const undo = await undoAll(state, written);
-  await base.close();
   const freshAfter = await freshSnapshot(host);
-  return { capture: !!contents, visibilityBefore: rendering.before, steps, measure: measure.result(), wrote, undo, logAdded: added(logBefore, await logLines(host.app)), todaySame: freshAfter === freshBefore };
+  return { capture: !!contents, visibilityBefore, steps, measure: measure.result(), wrote, undo, logAdded: added(logBefore, await logLines(host.app)), todaySame: freshAfter === freshBefore };
 }
 
 // ── 切走再回來（L2 的 F4，W6 §2-1）：送 visibilitychange，5 秒與 61 秒後回來 ──

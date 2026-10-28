@@ -4,7 +4,8 @@ import type { ReviewProps } from '../../src/ui/Review.tsx';
 
 /**
  * 複習畫面元件的替身（Codex L2 審查 F1、F3、F7 的做法）：esbuild 把 src/ui/Review.tsx 包成 CommonJS，react、react/jsx-runtime、
- * motion 換成這裡的替身，./Markdown.tsx 換成不畫東西的元件（Obsidian 的渲染不在 Node）。只跑一個根元件：useState、useRef、
+ * motion 換成這裡的替身，./Markdown.tsx 換成只把 tail（喇叭）畫在自己底下、打字卡交出一個假的空格（onSlot）的元件（Obsidian 的
+ * 渲染不在 Node；渲染後的處理在 Obsidian 用開發命令 md-cases 驗）。只跑一個根元件：useState、useRef、
  * useEffect、useLayoutEffect、useSyncExternalStore 照 React 的規則（effect 照宣告順序、deps 沒變不跑、先跑全部的 cleanup 再跑
  * 新的），子元件（Card、Actions、Done…）沒有 hook，直接展開成樹。
  * 不是瀏覽器：沒有 DOM、版面、焦點移動與真的動畫；那些在 Windows 版 Obsidian 用開發命令 ui 驗。

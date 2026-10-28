@@ -28,11 +28,11 @@ export interface TypedView {
   first: StepResult | null;
   /** 第 2 步的結果；跳過第 2 步是 not-needed，還沒到或第 1 步拼對是 null。 */
   second: RetryResult | null;
-  /** 第 2 步要說「不對」（第 1 步拼錯進來；按「沒印象」進來不說）。 */
+  /** 第 2 步標「錯誤」（打叉的圖示，D-145）：第 1 步拼錯進來才標，按「沒印象」進來不標。 */
   notice: boolean;
   /** 第 2 步的原形提示；其他步 null。 */
   hint: string | null;
-  /** 寫在線上的答案：拼對時是對中的那一個，其他情況是第一個（課本用的）。 */
+  /** 寫在線上的答案：走完時是對中或照打的那一個（照打「正確拼字」那一行就寫它，D-145）；還沒走完是第一個（課本用的）。 */
   answer: string;
   /** 第 3 步：最後一次打的字和最接近的答案逐字比對（拼錯的字母標出）；其他步 null。 */
   attempt: Spelling | null;
@@ -132,7 +132,7 @@ export interface Session {
   continueWith(pick: Pick): void;
   /** 切到背景（visibilityState 變 hidden）：記下時間。 */
   pause(): void;
-  /** 回到前景：離開超過 AWAY_LIMIT 時，目前這張未評分的卡從頭開始（不寫紀錄）；回傳有沒有重設。 */
+  /** 回到前景：離開超過 AWAY_LIMIT 時，目前這張未評分的卡從頭開始（不寫紀錄）；有卡但沒重設時也通知畫面一次。回傳有沒有重設。 */
   resume(): boolean;
   /** 關掉畫面：清掉這一次做過的卡，不寫任何紀錄。 */
   close(): void;
@@ -464,7 +464,9 @@ export function createSession(options: SessionOptions): Session {
     if (pausedAt === null) return false;
     const away = now() - pausedAt;
     pausedAt = null;
-    if (away <= AWAY_LIMIT || !current) return false;
+    if (!current) return false;
+    // 沒超過 60 秒也通知一次：畫面重新判斷（例如只剩一個自評、切走前已走完的那張要自動換下一張，D-145）。
+    if (away <= AWAY_LIMIT) { notify(); return false; }
     current = present(current.card, current.shown + 1);
     if (viewing !== null) current.autoRead = null;
     notify();
