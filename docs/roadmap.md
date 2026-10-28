@@ -8,6 +8,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
+| 精簡 AGENTS.md | [D-147](decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關) 定案：底線放最上、刪掉與 skill 重複的、新增規則先過五關 | 本機 session 照任務說明重寫兩個 repo 的 AGENTS.md、刪 skill 裡的重複 | 本機 session | [任務說明](../tasks/agents-md-rewrite.md) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | W6 iPhone 測試後的畫面修改 | [D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 實作完（分支 `claude/w6-polish` 的 `2ad863b`），三次 iPhone 測試的回饋都已改，只剩按鈕樣式與打叉要在 iPhone 看一眼 | 使用者要求合併前請 Codex 審查這一輪的程式；之後照回報修、合併進 `main` | 使用者（轉給 Codex） | [任務說明](../tasks/w6-polish.md)、[審查請求](../tasks/w6-polish-review.md) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
