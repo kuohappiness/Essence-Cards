@@ -69,7 +69,8 @@ const commands: Record<string, DevCommand> = {
   // A3 設計稿〈Codex 回應〉要的實測：快速開關、側欄、分割、疊放、setViewState、版面切換、按鈕、Canvas。
   a3check: { name: 'Essence 開發：開著的卡組（A3 實測）', run: host => a3Check(events(host)), desktop: true },
   // 重新載入整個 Obsidian 視窗（Obsidian 的「重新載入」命令）：冷啟動，背景分頁還原成未載入（t1prep → app-reload → t1close-cold）。
-  // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。
+  // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。t1prep 之後至少等 10 秒再執行，讓 Obsidian 先存好版面
+  // （2026-10-28 只等 5 秒時有一次重新載入後沒有還原那兩個分頁）。
   'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
 };
 

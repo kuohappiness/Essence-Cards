@@ -3,6 +3,7 @@ import type { App, TAbstractFile, WorkspaceLeaf } from 'obsidian';
 import { EditorView } from '@codemirror/view';
 import type { State } from '../state/index.ts';
 import type { Saver } from './save.ts';
+import { removePaths } from '../dev/cleanup.ts';
 import { judge, type Judged, type Mark } from '../dev/marks.ts';
 import { createObsidianFiles } from './files.ts';
 import { keepRendering } from './dev-review.ts';
@@ -112,19 +113,23 @@ async function writeFile(app: App, path: string, text: string): Promise<TFile> {
   if (found) { await app.vault.modify(found, text); return found; }
   return app.vault.create(path, text);
 }
-/**
- * 刪掉測試建的資料夾。iCloud 偶爾會把剛刪的檔放回來（2026-10-27 的 T3、10-28 的 a3check 各一次），留下來就會變成 iPhone 上的卡組：
- * 刪完等 3 秒再看，還在就再刪，最多三次。回傳最後還在的路徑。
- */
-export async function removePaths(app: App, paths: string[]): Promise<string[]> {
-  const left = () => paths.filter(path => app.vault.getAbstractFileByPath(path));
-  for (let round = 0; round < 3 && left().length; round++) {
-    for (const path of left()) { const found = app.vault.getAbstractFileByPath(path); if (found) await app.vault.delete(found, true); }
-    await sleep(3000);
-  }
-  return left();
+/** 刪掉測試建的資料夾，回傳最後還在的路徑（src/dev/cleanup.ts：Obsidian 的快取或磁碟任一邊還有就再刪，最多三輪）。 */
+export function removeTestPaths(app: App, paths: string[]): Promise<string[]> {
+  const { vault } = app;
+  return removePaths({
+    cached: path => !!vault.getAbstractFileByPath(path),
+    exists: path => vault.adapter.exists(path),
+    async remove(path, cached) {
+      const found = vault.getAbstractFileByPath(path);
+      if (cached && found) { await vault.delete(found, true); return; }
+      const stat = await vault.adapter.stat(path);
+      if (stat?.type === 'folder') await vault.adapter.rmdir(path, true);
+      else if (stat) await vault.adapter.remove(path);
+    },
+    wait: sleep,
+  }, paths);
 }
-const removeFolders = (app: App): Promise<string[]> => removePaths(app, [DECKS, SCRATCH]);
+const removeFolders = (app: App): Promise<string[]> => removeTestPaths(app, [DECKS, SCRATCH]);
 /** 卡組都已經有 ID：關掉時備援不會寫檔，vault 的事件只有操作本身的。 */
 function deckText(name: string, id: string): string { return `- 能說明${name} ^${id}\n    - ${name}是什麼？ :: ${name}\n`; }
 const newId = (tag: string): string => 'v' + Date.now().toString(36).slice(-4) + tag;
@@ -474,12 +479,16 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       const common = await deck('共同'), onlyA = await deck('只在A'), later = await deck('A的背景'), onlyB = await deck('只在B');
       await workspace.changeLayout(layoutWith(original, BASE, [common.path, onlyA.path, later.path]));
       await sleep(FILL_WAIT);
+      // 版面裡的每一篇都要真的開出來：沒有分頁（null）不能當成已載入，共同的卡組也要在兩個版面都開著（Codex L2 再審的 S2）。
+      const opened = (files: TFile[]) => files.map(file => ({ deck: short(file.path), leaf: !!leafOf(file) }));
+      marks.push({ at: '版面 A 開著共同、只在A、A的背景', done: [common, onlyA, later].every(file => leafOf(file)), detail: opened([common, onlyA, later]) });
       const deferred = [common, onlyA, later].map(file => leafOf(file)?.isDeferred ?? null);
       marks.push({ at: '版面 A 的背景分頁是不是未載入', note: deferred });
-      if (!deferred.some(Boolean)) marks.push({ at: '版面切換時才出現的未載入分頁', skipped: 'changeLayout 開出來的背景分頁都已載入（isDeferred 都是 false）；冷啟動的未載入分頁見 t1prep → app-reload → t1close-cold' });
+      if (deferred.every(value => value === false)) marks.push({ at: '版面切換時才出現的未載入分頁', skipped: 'changeLayout 開出來的背景分頁都已載入（isDeferred 都是 false）；冷啟動的未載入分頁見 t1prep → app-reload → t1close-cold' });
       for (const file of [common, onlyA, later]) await check(marks, '版面 A', file, 0);
       await workspace.changeLayout(layoutWith(original, BASE, [common.path, onlyB.path]));
       await sleep(FILL_WAIT);
+      marks.push({ at: '版面 B 開著共同、只在B，不再開著只在A、A的背景', done: [common, onlyB].every(file => leafOf(file)) && ![onlyA, later].some(file => leafOf(file)), detail: opened([common, onlyB, onlyA, later]) });
       await check(marks, '換成版面 B', common, 0); await check(marks, '換成版面 B', onlyA, 1); await check(marks, '換成版面 B', later, 1); await check(marks, '換成版面 B', onlyB, 0);
       const b = leafOf(onlyB);
       if (b) workspace.setActiveLeaf(b, { focus: true });
@@ -549,8 +558,12 @@ export async function a3Check(host: EventsHost): Promise<unknown> {
       leaf.detach();
       await sleep(FILL_WAIT); await check(marks, '背景閱讀模式開完馬上關', q, 1);
       leaf = workspace.getLeaf('tab');
-      await leaf.openFile(r, { state: preview }); await leaf.openFile(t, { state: preview });
-      marks.push({ at: '丁開成閱讀模式', done: leaf.getViewState().state?.mode === 'preview' });
+      // 丙開好就看模式，不另外等，才不會改變「快速」的情境（Codex L2 再審的 S2）。
+      await leaf.openFile(r, { state: preview });
+      const modeR = leaf.getViewState().state?.mode;
+      await leaf.openFile(t, { state: preview });
+      const modeT = leaf.getViewState().state?.mode;
+      marks.push({ at: '丙、丁都開成閱讀模式', done: modeR === 'preview' && modeT === 'preview', detail: { 丙: modeR, 丁: modeT } });
       leaf.detach();
       await sleep(FILL_WAIT); await check(marks, '閱讀模式開、換篇、關（丙）', r, 1); await check(marks, '閱讀模式開、換篇、關（丁）', t, 1);
     });

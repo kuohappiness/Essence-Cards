@@ -7,7 +7,7 @@ import { nameIds, parseDeck } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
-import { leafPath, removePaths } from './dev-events.ts';
+import { leafPath, removeTestPaths } from './dev-events.ts';
 
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
 // 每一種操作都寫出操作後的文字或判斷，不只寫「通過」。
@@ -459,7 +459,8 @@ export async function t1Close(host: IdsHost, cold = false): Promise<unknown> {
   const files = app.vault.getFiles().map(file => file.path).filter(path => path.startsWith(T1_FOLDER + '/')).sort();
   const leaves = t1Leaves(app);
   const before = leaves.map(leaf => ({ path: leafPath(leaf) ?? '', deferred: leaf.isDeferred }));
-  if (!before.length) throw Error('找不到 t1prep 開的分頁');
+  // 找不到分頁時也先清掉這次建的卡組，不留在 vault 裡變成 iPhone 上的卡組。
+  if (!before.length) throw Error('找不到 t1prep 開的分頁；還留著的路徑：' + JSON.stringify(await removeTestPaths(app, [T1_FOLDER])));
   const count = (text: string) => (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length;
   const idsBefore = await Promise.all(files.map(async path => count(await app.vault.adapter.read(path))));
   const events = host.devLog.events.length;
@@ -479,6 +480,6 @@ export async function t1Close(host: IdsHost, cold = false): Promise<unknown> {
     noIssues: result.issues.every(n => n === 0),
     ...(cold ? { deferred: before.some(leaf => leaf.deferred) } : {}),
   };
-  const cleanupLeft = await removePaths(app, [T1_FOLDER]);
+  const cleanupLeft = await removeTestPaths(app, [T1_FOLDER]);
   return { ...result, checks, cleanupLeft, ok: Object.values(checks).every(Boolean) };
 }
