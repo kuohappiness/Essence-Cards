@@ -7,6 +7,7 @@ import { nameIds, parseDeck } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
+import { leafPath, removeTestPaths } from './dev-events.ts';
 
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
 // 每一種操作都寫出操作後的文字或判斷，不只寫「通過」。
@@ -434,28 +435,51 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
 }
 
 // Codex 第三次審查的 T1：layout 已經 ready 時重新啟用外掛，第一個事件就是關掉原本開著的卡組。
-// 分兩個命令，中間用 URI 的 reload 重新啟用外掛：t1prep 建一篇沒有 ID 的卡組開在分頁（不改字），t1close 直接關掉它。
+// 分兩個命令，中間重新啟用外掛（URI 的 reload）或重新載入整個 Obsidian 視窗（app-reload，冷啟動）：t1prep 建兩篇沒有 ID 的卡組
+// 開在背景分頁（不改字）；t1close 直接關掉它們，包括冷啟動後還沒載入的分頁，記下每個分頁關掉前是不是未載入（A3 設計稿〈Codex 回應〉第 3 題）。
 const T1_FOLDER = 'Essence Cards/W5 範例/重新啟用測試';
+const t1Leaves = (app: App) => app.workspace.getLeavesOfType('markdown').filter(leaf => leafPath(leaf)?.startsWith(T1_FOLDER + '/'));
 export async function t1Prep(host: IdsHost): Promise<unknown> {
   const { app } = host;
-  const path = `${T1_FOLDER}/重新啟用 ${Date.now().toString(36)}（卡片）.md`;
-  const file = await writeFile(app, path, TRIAL_TEXT);
-  if (host.state) await until(() => host.state!.deckStatus(path).missing === 2);
-  const leaf = app.workspace.getLeaf('tab');
-  await leaf.openFile(file, { active: false });
-  return { path, text: await app.vault.read(file) };
+  // 上一次沒跑 t1close 留下的先清掉，t1close 才能核對「剛好是這次建的兩篇」。
+  const old = app.vault.getAbstractFileByPath(T1_FOLDER);
+  if (old) await app.vault.delete(old, true);
+  const stamp = Date.now().toString(36);
+  const files = await Promise.all(['甲', '乙'].map(name => writeFile(app, `${T1_FOLDER}/重新啟用 ${name} ${stamp}（卡片）.md`, TRIAL_TEXT)));
+  if (host.state) await until(() => files.every(file => host.state!.deckStatus(file.path).missing === 2));
+  for (const file of files) await app.workspace.getLeaf('tab').openFile(file, { active: false });
+  return { leaves: t1Leaves(app).map(leaf => ({ path: leafPath(leaf), deferred: leaf.isDeferred })), texts: await Promise.all(files.map(file => app.vault.read(file))) };
 }
-export async function t1Close(host: IdsHost): Promise<unknown> {
+/**
+ * cold：冷啟動那一組（app-reload 之後），至少要有一個分頁是未載入的。通過要全部成立（Codex L2 的 R2）：t1prep 建的兩篇都還開著、
+ * 關之前都沒有 ID（啟動與重新啟用時沒有寫）、關之後各補 2 個、拿掉 ID 和原文相同、沒有待處理的問題。
+ */
+export async function t1Close(host: IdsHost, cold = false): Promise<unknown> {
   const { app } = host;
-  const leaves = app.workspace.getLeavesOfType('markdown').filter(leaf => leaf.view instanceof MarkdownView && leaf.view.file?.path.startsWith(T1_FOLDER + '/'));
-  const paths = leaves.map(leaf => (leaf.view as MarkdownView).file!.path);
-  if (!paths.length) throw Error('找不到 t1prep 開的分頁');
+  const files = app.vault.getFiles().map(file => file.path).filter(path => path.startsWith(T1_FOLDER + '/')).sort();
+  const leaves = t1Leaves(app);
+  const before = leaves.map(leaf => ({ path: leafPath(leaf) ?? '', deferred: leaf.isDeferred }));
+  // 找不到分頁時也先清掉這次建的卡組，不留在 vault 裡變成 iPhone 上的卡組。
+  if (!before.length) throw Error('找不到 t1prep 開的分頁；還留著的路徑：' + JSON.stringify(await removeTestPaths(app, [T1_FOLDER])));
+  const count = (text: string) => (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length;
+  const idsBefore = await Promise.all(files.map(async path => count(await app.vault.adapter.read(path))));
   const events = host.devLog.events.length;
   for (const leaf of leaves) leaf.detach();
   await sleep(2500);
-  const texts = await Promise.all(paths.map(path => app.vault.adapter.read(path)));
-  const result = { paths, ids: texts.map(text => (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).length), events: host.devLog.events.slice(events) };
-  const folder = app.vault.getAbstractFileByPath(T1_FOLDER);
-  if (folder) await app.vault.delete(folder, true);
-  return { ...result, ok: result.ids.every(count => count === 2) };
+  const texts = await Promise.all(files.map(path => app.vault.adapter.read(path)));
+  const result = {
+    files, leaves: before, idsBefore, ids: texts.map(count),
+    issues: files.map(path => host.state?.deckStatus(path).issues.length ?? -1),
+    events: host.devLog.events.slice(events),
+  };
+  const checks = {
+    twoDecksOpen: files.length === 2 && files.every(path => before.some(leaf => leaf.path === path)),
+    noWriteBeforeClose: idsBefore.every(n => n === 0),
+    filled: result.ids.every(n => n === 2),
+    textKept: texts.every(text => text.replace(/ \^[a-z0-9]{6}$/gm, '') === TRIAL_TEXT),
+    noIssues: result.issues.every(n => n === 0),
+    ...(cold ? { deferred: before.some(leaf => leaf.deferred) } : {}),
+  };
+  const cleanupLeft = await removeTestPaths(app, [T1_FOLDER]);
+  return { ...result, checks, cleanupLeft, ok: Object.values(checks).every(Boolean) };
 }

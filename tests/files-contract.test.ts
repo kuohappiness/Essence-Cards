@@ -8,7 +8,7 @@ import type { Files } from '../src/core/files.ts';
 import { createNodeFiles } from '../tools/node-files.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
-// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C14；每個例子一個新的暫存 vault。
+// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C15；每個例子一個新的暫存 vault。
 for (const item of contractCases) {
   void test(`Files 契約 ${item.code}：${item.title}`, async t => {
     const root = await mkdtemp(join(tmpdir(), 'essence-contract-'));
@@ -39,6 +39,8 @@ void test('Files 契約抓得到壞掉的實作', async t => {
     C11: { ...good, append: (path, line) => good.read(path).then(text => good.modify(path, () => (text ?? '') + line + '\n')) },
     C12: { ...good, watch: () => () => {} },
     C14: { ...good, read: path => good.read(path.replace(/^(\.\.\/)+|^\//, '')) },
+    // 刪資料夾時只通知第一層的檔（Obsidian 若只對資料夾發一次事件、子資料夾已經不在，就會像這樣）。
+    C15: { ...good, watch: onChange => good.watch(path => { if (!path.includes('/sub/')) onChange(path); }) },
   };
   let run = 0;
   for (const [code, files] of Object.entries(broken)) {

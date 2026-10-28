@@ -10,7 +10,7 @@ import type { LoadTimings, State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
 
 // W5 說明 §7：+08:00、now 由測試控制、delay 很小；只透過公開介面測。
-// 技術債 A9：用記憶體 Files（契約 C1～C14 驗過，通知在寫入當下同步送出）加 node:test 的假計時器：
+// 技術債 A9：用記憶體 Files（契約 C1～C15 驗過，通知在寫入當下同步送出）加 node:test 的假計時器：
 // `settle()` 讓 delay 過去並跑完排好的處理，所以不用等真的檔案系統，也沒有固定時間的 wait()。
 const DELAY = 50;
 const at = (text: string) => Date.parse(text);

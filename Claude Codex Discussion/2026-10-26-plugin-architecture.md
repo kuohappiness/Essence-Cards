@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：外掛架構的逐環節檢視
 
-狀態：進行中：環節 1、7 已談定（7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)），環節 8 雙方一致、等使用者決定電腦專用的主機接點；其餘等 `claude/state-load` 與 W6 合併後再談
+狀態：進行中：環節 1、7 已談定（7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)），環節 1 的 T3 已在 Windows 做完（外部改名是 `delete`＋`create`，P1 不重開；C15 通過），環節 8 雙方一致、等使用者決定電腦專用的主機接點；其餘等 `claude/state-load` 與 W6 合併後再談
 
 2026-10-26 起。使用者開了專案討論串「優化外掛架構」，由 Claude（Fable）逐環節找問題、寫提案，每個環節先請 Codex 看過，雙方一致後才進下一個環節；談定的結論之後整理成給 Opus 的任務說明（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)）。**這一串只討論，不改程式。**
 
@@ -462,6 +462,82 @@ T1 的退步成立：`A/x.md → B/x.md` 同批搬資料夾又改目標名稱時
 - **A2 維持未解**：現行的檔名／內容猜配對有已重現的誤配與漏報（第一輪反例 1、2，第三輪分批時待處理丟失），不標成已解決。backlog 的 A2 改寫這些證據，觸發點加上「T3 發現外部改名也送 `rename`」與「實際碰到一次誤配或漏報」。之後要動它時，前三輪的 (a)～(f)、S1～S5、第三輪的退步表都是驗收的起點，要同時攤開「減少錯誤移植」與「新增漏報」兩面。
 
 **狀態：環節 1 已談定（待執行）。** T2、T3 登錄進 backlog 的技術債，由本機排程；這份稿不寫任務說明。
+
+### 實機記錄：T3 與 A3（2026-10-27，Opus 5.5）
+
+照[第一個里程碑報告](2026-10-27-milestone-1-review.md)的 R5 做，T3 做完；A3 的事件記錄也放在這裡，改法另寫成 [A3 設計稿](2026-10-27-a3-open-decks.md)。
+
+- **工具**：開發命令 `events` 與 `record-start`／`record-stop`（`src/obsidian/dev-events.ts`，只在 `--dev` 建置）。直接訂閱 workspace 的 `layout-change`、`file-open`、`active-leaf-change`、`editor-change`、`window-open`、`window-close`，以及 vault 的 `create`、`delete`、`rename`、`modify`。另外記下 `Files.watch` 的通知與存檔備援的紀錄。每筆有毫秒與順序，workspace 事件另記當下所有 Markdown 分頁開著哪些檔。
+- **環境**：Windows 版 Obsidian 1.14.5、測試 vault（在 iCloud 資料夾裡）、分支 `claude/quizzical-euclid-f0564e` 的開發版。
+- **結果檔**：在測試 vault 的 `Essence W5/結果/`。`events … 233603` 是第三次、最後一版情境，下面的表引用它；`events … 233105`、`… 233254` 是前兩版。另有 `record-stop … 233733`、`… 233806`、`… 233854`，以及 `files … 233909`。
+
+#### T3-1：Obsidian 以外的改名，送的是 `delete`＋`create`
+
+| 操作 | Obsidian 送的 vault 事件 | 順序與間隔 |
+|---|---|---|
+| 檔案總管同一套的 Shell 改名（`Shell.Application` 的 `FolderItem.Name`），2 次 | 新路徑的 `create`、舊路徑的 `delete` | `create` 先到，`delete` 晚 112 ms（兩次相同） |
+| Node 的 `fs.rename`，3 次 | 同上 | `create` 先到，`delete` 晚 103～106 ms |
+| 對照：Obsidian 裡改名（`vault.rename`） | 一次 `rename`，帶舊路徑 | — |
+
+- **結論**：第二輪理由 1 的前提，在這個環境成立。A2 的重開條件「外部改名也送 `rename`」沒有發生，**P1 不重開**。照 Codex 第三輪，這只能代表 Windows 檔案總管與 `fs.rename` 這兩種來源，不能代表 iCloud 同步、其他編輯器或 Claude Code。
+- **順序**：先到的是新路徑。`state` 收到通知後，每次重新計時 500 ms，所以相隔約 110 ms 的兩個通知會落在同一批，`apply` 的配對照舊。
+
+#### T3-2：C15，刪掉整個資料夾
+
+用 `f/1.md` 與 `f/sub/2.md`：
+
+| 刪法 | Obsidian 送的 vault 事件 | `Files.watch` | `read` |
+|---|---|---|---|
+| `vault.delete(f, true)`，2 次 | 每個檔與每個資料夾各一次 `delete`，依序是 `f/1.md`、`f/sub`（當下 children 還有 1）、`f/sub/2.md`、`f`（children 0） | 兩個檔都通知 | 都是 `null` |
+| Node 的 `fs.rm` 遞迴刪除，2 次 | 每個檔、子資料夾、資料夾各一次 `delete`；資料夾的事件送出時 children 都已經是 0 | 都通知 | 都是 `null` |
+| 檔案總管同一套的 Shell 永久刪除（`FileSystem.DeleteDirectory`），2 次 | 同上 | 都通知 | 一次都是 `null`；另一次 `f/sub/2.md` 在刪除後 0.5 秒又出現（見下） |
+| 移到資源回收筒 | iCloud 的資料夾不支援：Windows 回「The operation is not supported by the cloud sync provider」，檔案沒有刪掉。Electron 的 `shell.trashItem` 在 renderer 也失敗 | — | — |
+
+- **結論：C15 在 Obsidian 通過。** Obsidian 對資料夾裡的每個檔各送一次 `delete`，而且檔案自己的事件都比資料夾的先到。所以 `src/obsidian/files.ts` 的 `inside()` 就算碰到 children 已經清空的資料夾也不會漏。
+- **契約**：C15 已經加進 `src/dev/files-contract.ts`，Node、記憶體與 Obsidian 跑同一份。開發命令 `files` 的 C1～C15 是 15／15（`files … 233909`）。故意弄壞的實作（漏掉子資料夾的通知）會讓 C15 失敗。
+- **刪了又出現的那一次**：Obsidian 依序收到 `f`、`f/sub`、`f/sub/2.md` 的 `create`。那時磁碟上真的又有這個檔，所以 `Files` 的通知與 `read` 都是對的；之後用 `vault.delete` 清掉了。第三次重做時，刪除後每 100 ms 看一次磁碟，3 秒內都沒有再出現。推測是 iCloud 的同步把剛上傳的檔放了回來。
+  - 對家長的影響：在檔案總管刪掉剛建立的卡組，可能幾秒後又出現。外掛照檔案的真實狀態處理，不用改。
+- **iPhone**：照 Codex 第一輪第 3 題，iPhone 併入下一次實機測試的檔案存取驗證，不另開流程。
+
+#### A3：開檔、關檔、改名、另一個視窗各送哪些 workspace 事件
+
+「底」是一般筆記，用閱讀模式開在主視窗；甲、乙、丙是有 ID 的卡組。「背景開檔」的做法：先開一個空白分頁、切回「底」，再用 `openFile(…, { active: false })` 把檔案載入那個背景分頁。測試 vault 的 `app.json` 是空的，「總是切到新分頁」用預設值（開著）。
+
+| 步驟 | 開著的集合 | 依序收到的 workspace 事件 |
+|---|---|---|
+| 0 「底」開在前景 | 變（多了底） | `active-leaf-change`、`file-open`、`layout-change` |
+| 1 背景開檔 | 變（多了甲） | **只有 `layout-change`** |
+| 2 關掉背景分頁 | 變（少了甲） | **只有 `layout-change`** |
+| 3 中鍵點「底」裡的連結 | 變（多了丙，新分頁成為目前的分頁） | `active-leaf-change`、`file-open`、`layout-change`、`active-leaf-change`、`layout-change` |
+| 4 關掉目前的分頁 | 變 | `active-leaf-change`、`file-open`、`layout-change` |
+| 5 Ctrl＋點連結 | 變 | 同步驟 3 |
+| 6 關掉目前的分頁 | 變 | 同步驟 4 |
+| 7 前景開檔 | 變 | 同步驟 3 |
+| 8 同一個分頁換成另一篇 | 變（乙換成丙） | `active-leaf-change`、`file-open`、`layout-change` |
+| 9、10 切換分頁 | **不變** | `active-leaf-change`、`file-open`；**沒有** `layout-change` |
+| 11 改名開著的卡組（`vault.rename`） | 變（換成新路徑） | vault 的 `rename`，接著 `layout-change` |
+| 12 關掉改名後的分頁 | 變 | 同步驟 4 |
+| 13 開到另一個視窗（`openPopoutLeaf`） | 變 | `window-open`、`layout-change`、`layout-change`、`active-leaf-change`、`file-open` |
+| 14 關掉另一個視窗裡的分頁 | 變 | `window-close`、`active-leaf-change`、`file-open`、`layout-change` |
+| 15 分頁移到另一個視窗（`moveLeafToPopout`） | 變 | `active-leaf-change`、`file-open`、`layout-change`、`window-open`、`active-leaf-change`、`layout-change` |
+| 16 用關閉鈕關掉另一個視窗（`window.close()`） | 變 | `window-close`、`active-leaf-change`、`file-open`、`layout-change` |
+| 17 關掉最後一個分頁 | 變（空了） | `active-leaf-change`（null）、`file-open`（null）、`layout-change` |
+
+三件事：
+
+1. **集合每次改變都有 `layout-change`。** 而且送出的當下，`getLeavesOfType('markdown')` 加上 viewState 已經是新的集合，17 步沒有例外。切換分頁不改變集合，也不送 `layout-change`。
+   - 2026-10-28 補：這 17 步每步之間隔 1.5 秒。開完馬上關（或開、換篇、關）時，Obsidian 只在關之後送一次 `layout-change`，那一刻看不到中間開過的卡組（A3 設計稿的 `a3check` C1、C3）。
+2. **真正的背景開檔與關檔只送 `layout-change`。** W5 第二部分記的「背景開檔不發 `file-open`」成立。但 R3 用替身重現時假設背景開檔「沒有任何事件」，這一點實機不成立。現在的 `leave()` 在 `layout-change` 時就會用 `openPaths()` 把背景分頁記進 `open`，所以後來補上的 `opened`、`editor-change` 與每 2 秒輪詢，接的都是實機沒有出現的情形。
+3. **編輯器建立（`ViewPlugin` 呼叫 `opened`）的時間不固定。** 有時在 `layout-change` 之前（步驟 1，早 16 ms），有時在之後（步驟 3，在第一個 `layout-change` 之後 45 ms）。不管哪一種，`layout-change` 時集合都已經含那一篇，`opened` 沒有提供額外的資訊。
+
+**沒有測到的**：
+
+- Workspaces 核心外掛切換版面、側欄裡的 Markdown 分頁、分割畫面、疊放分頁。
+- Obsidian 啟動時還原的未載入分頁：由 `start()` 的基準接住。W5 的 T1 實測的是已載入的分頁；未載入的那一種 2026-10-28 用冷啟動補測（A3 設計稿的〈Claude 回應 Codex〉）。
+- 在 Canvas 裡編輯卡組。
+- iPhone：`save.ts` 只在電腦接上。
+
+這些寫進 [A3 設計稿](2026-10-27-a3-open-decks.md)的「請 Codex 查核」。
 
 ---
 

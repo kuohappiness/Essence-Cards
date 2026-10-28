@@ -11,6 +11,7 @@ import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
+import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
@@ -35,6 +36,8 @@ interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () =
  * root：結果寫到哪個資料夾（W6 的命令寫 Essence W6/，W6 §4）。
  */
 interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true; root?: string }
+/** 事件記錄用的：存檔備援的接線、外掛的 state 與它發出的紀錄（dev-events.ts）。 */
+const events = (host: Host): EventsHost => ({ app: host.app, saver: host.ids?.saver ?? null, state: () => host.state, log: listener => host.on('event', listener) });
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -45,8 +48,9 @@ const commands: Record<string, DevCommand> = {
   // 第二部分（W5 §8-7 的 I7、I8）。
   lock: { name: 'Essence 開發：鎖住 ID', run: (_host, ids) => lockTest(ids), desktop: true },
   save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
-  t1prep: { name: 'Essence 開發：重新啟用前開一篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
-  t1close: { name: 'Essence 開發：重新啟用後關掉那一篇', run: (_host, ids) => t1Close(ids), desktop: true },
+  t1prep: { name: 'Essence 開發：重新啟用前開兩篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
+  t1close: { name: 'Essence 開發：重新啟用後關掉那兩篇', run: (_host, ids) => t1Close(ids), desktop: true },
+  't1close-cold': { name: 'Essence 開發：冷啟動後關掉那兩篇', run: (_host, ids) => t1Close(ids, true), desktop: true },
   // W6 §4、§6。
   'review-script': { name: 'Essence 開發：自動複習', run: reviewScript, root: W6_ROOT },
   voices: { name: 'Essence 開發：系統語音', run: () => voices(), root: W6_ROOT },
@@ -59,6 +63,18 @@ const commands: Record<string, DevCommand> = {
   // D-145 的 iPhone 實測：iPhone 也能用。
   practice: { name: 'Essence 開發：範例從頭練（不記紀錄）', run: practice, root: W6_ROOT },
   errors: { name: 'Essence 開發：錯誤紀錄', run: () => Promise.resolve({ visibility: document.visibilityState, errors: errors.slice(-50) }), root: W6_ROOT },
+  // 卡組讀不到就跳過那一篇的收尾（state-load §6、§9）：現在有哪些讀不到、自己隔一段時間重試。不等 ready()：列不出來時它不會完成。
+  unread: { name: 'Essence 開發：讀不到的卡組與紀錄', run: host => Promise.resolve(host.state ? { unread: host.state.unread(), decks: host.state.decks().length } : { state: null }) },
+  // 第一個里程碑報告 R5（技術債 A3、T3）：直接訂閱 workspace 與 vault 的事件。
+  events: { name: 'Essence 開發：記錄 workspace 與 vault 事件', run: host => eventsTest(events(host)), desktop: true },
+  'record-start': { name: 'Essence 開發：開始記錄事件（之後在檔案總管操作）', run: host => recordStart(events(host)), desktop: true },
+  'record-stop': { name: 'Essence 開發：停止記錄事件', run: host => recordStop(events(host)), desktop: true },
+  // A3 設計稿〈Codex 回應〉要的實測：快速開關、側欄、分割、疊放、setViewState、版面切換、按鈕、Canvas。
+  a3check: { name: 'Essence 開發：開著的卡組（A3 實測）', run: host => a3Check(events(host)), desktop: true },
+  // 重新載入整個 Obsidian 視窗（Obsidian 的「重新載入」命令）：冷啟動，背景分頁還原成未載入（t1prep → app-reload → t1close-cold）。
+  // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。t1prep 之後至少等 10 秒再執行，讓 Obsidian 先存好版面
+  // （2026-10-28 只等 5 秒時有一次重新載入後沒有還原那兩個分頁）。
+  'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
@@ -321,7 +337,7 @@ async function reading(app: App, text: string, path: string): Promise<string[]> 
   } finally { component.unload(); }
 }
 
-/** §2：在 Essence W5/暫存/ 跑 C1～C14；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+/** §2：在 Essence W5/暫存/ 跑 C1～C15；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
 async function filesContract(app: App): Promise<unknown> {
   const dir = root + '/暫存';
   const old = app.vault.getAbstractFileByPath(dir);

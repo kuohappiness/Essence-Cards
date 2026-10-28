@@ -1,6 +1,6 @@
 # 第一個里程碑的品質檢查（W1～W6）
 
-狀態：處理中：R1～R4、R7、R8 已在 `main` 做完（〈[處理紀錄](#處理紀錄2026-10-28)〉）；R5 在分支 `claude/quizzical-euclid-f0564e`（`934392d`）做完，還沒合併；R6、R9 等觸發點；R10 記下即可
+狀態：處理中：R1～R5、R7、R8 已在 `main` 做完（〈[處理紀錄](#處理紀錄2026-10-28)〉）；R6、R9 等觸發點；R10 記下即可
 
 2026-10-27｜檢查者：Claude（Opus 5.5）｜性質：code-quality 的[里程碑回顧與安全檢查](../.claude/skills/code-quality/milestone.md)（[D-117](../docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)、[D-119](../docs/decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)），L1。審查紀錄分三段交給子代理整理，安全檢查照 `security-review` 的流程交給子代理；兩者的關鍵說法 Claude 都抽查過。只提建議，改哪些由使用者決定。
 
@@ -175,6 +175,11 @@ Codex 一共找到約 50 項。看得出三件事：
   - quality.md 刪掉過期的「W3 第 0 步」，加上 Obsidian 截圖的做法，以及「測試不改全域的 Node 內建模組」。
 - **R8**：quality.md 的「檢查指令」寫明 Codex 審查時完整檢查要在沙箱外跑；跑不了時要逐項列出失敗、說明哪些是環境造成的。
 - **技術債清單**：F3 已經修好，刪掉；F5 只留「下一次 T4 用 `parseDeck` 對照題數」；T2 做完，刪掉。
+- **R5**（分支 `claude/quizzical-euclid-f0564e`，2026-10-28 合併進 `main`）：
+  - 開發命令 `events` 直接記錄 Obsidian 的事件（`73b4000`）。
+  - T3：外部改名是 `create`＋`delete`，A2 不重開；資料夾刪除的契約 C15 通過。結果在[外掛架構討論稿環節 1](<2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。
+  - state-load 收尾：`unread` 開發命令與 `main.ts` 的註解。
+  - A3：存檔備援只從三個來源追蹤開著的卡組（`dfb368e`）。原本預計兩個，實測發現開完馬上關時只有編輯器建立看得到那一篇。Codex 查核設計後做了三輪 L2，找到的都在實測命令的判斷與清理，已修；見 [A3 設計稿](2026-10-27-a3-open-decks.md)。
 
 ## 驗證紀錄
 
