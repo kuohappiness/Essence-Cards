@@ -11,6 +11,8 @@
     "test": "node --test --test-concurrency=1 \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "install-vault": "node tools/install-vault.mjs",
+    "backup": "node tools/backup.ts",
+    "restore": "node tools/restore.ts",
     "lint": "eslint src tools tests",
     "knip": "node tools/knip.mjs",
     "secretlint": "node --input-type=module -e \"import {execFileSync} from 'node:child_process'; import {runSecretLint} from 'secretlint'; const files=execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\\0').filter(p=>p&&!p.split('/').includes('node_modules')&&p!=='main.js'); const r=await runSecretLint({cliOptions:{cwd:process.cwd(),filePathOrGlobList:files,noGlob:true},engineOptions:{formatter:'stylish',color:false,maskSecrets:true}}); if(r.stdout) console.log(r.stdout); if(r.stderr) console.error(r.stderr); process.exitCode=r.exitStatus;\"",
@@ -24,6 +26,7 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
+    "fflate": "0.8.3",
     "motion": "^12.23.24",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

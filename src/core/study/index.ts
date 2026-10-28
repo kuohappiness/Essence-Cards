@@ -1,4 +1,4 @@
-export { formatTime, dayOf, dayStart } from './time.ts';
+export { formatTime, dayOf, dayStart, parseTime } from './time.ts';
 export { encodeEntry, parseLine } from './entries.ts';
 export { LOG_FOLDER, logPath, createLogWriter } from './log.ts';
 export { appendLine, isLogPath, mergeHistory, readHistory } from './history.ts';
