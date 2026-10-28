@@ -101,6 +101,14 @@ void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或
   assert.deepEqual(imports.filter(entry => entry.external), []);
 });
 
+// 之後外掛內的備份直接用 src/core/backup（D-150、任務說明 §1）：連同 fflate 要能在手機上載入（Codex 中途查核第 7 點）。
+void test('backup 連同 fflate 與 SHA-256 可直接建成 browser bundle，不需要 Node', async () => {
+  const result = await build({ absWorkingDir: root, entryPoints: ['src/core/backup/index.ts'], bundle: true, platform: 'browser', format: 'esm', write: false, metafile: true });
+  const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
+  assert.deepEqual(imports.filter(entry => entry.external), []);
+  assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('node_modules/fflate/')));
+});
+
 void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱、對照與契約檢查、複習畫面的量測與劇本', async t => {
   const dir = await project(t, {});
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
