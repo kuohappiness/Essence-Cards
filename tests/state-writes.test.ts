@@ -46,20 +46,32 @@ async function setup(t: TestContext, vault: Record<string, string>, options: Par
   };
 }
 
-// ---- §2 讀取那一側：跨過 Cards I/O 的讀取結果整份不用（離開筆記的 fillIds） ----
+// ---- §2、§3：寫入先讀完已知的待讀；讀取不跨過 Cards I/O（離開筆記的 fillIds） ----
 
-for (const landed of ['舊文字', 'null', 'reject'] as const) void test('M1 fillIds：寫入前開始的讀取在寫成後才落地，結果整份不用、重讀，不出現 lost：' + landed, async t => {
+for (const landed of ['舊文字', 'null', 'reject'] as const) void test('M1 fillIds：讀取停在半路時離開筆記，寫入等它落地才開始，不出現 lost：' + landed, async t => {
   const h = await setup(t, { [P]: C });
   h.notify(P);
   const held = h.holdRead(P);
   t.mock.timers.tick(DELAY + 1);
   await held.started;
-  assert.equal(await h.state.fillIds(P), true);
-  assert.equal(h.texts.get(P), Ca);
+  const filling = h.state.fillIds(P);
+  await h.flush();
+  assert.equal(h.texts.get(P), C, '讀取還沒落地就寫了');
+  // reject：之後的重試也讀不到，直到拿掉 failing。
+  if (landed === 'reject') h.failing.add(P);
   held.release(landed === '舊文字' ? undefined : landed === 'null' ? null : Error('讀不到'));
+  if (landed === 'reject') {
+    assert.equal(await filling, false);
+    assert.equal(h.texts.get(P), C);
+    assert.deepEqual(h.state.unread(), [P]);
+    h.failing.delete(P);
+    await h.settle(1000);
+    assert.deepEqual(h.state.unread(), []);
+    assert.equal(await h.state.fillIds(P), true);
+  } else assert.equal(await filling, true);
+  assert.equal(h.texts.get(P), Ca);
   await h.flush();
   h.clean();
-  assert.deepEqual(h.state.unread(), []);
   assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
   await h.settle();
   h.clean();
@@ -85,4 +97,49 @@ void test('S20 fillIds 版：寫入有結果之前不讀這一篇；有結果之
   await h.settle();
   assert.deepEqual(h.reads.slice(reads), [P]);
   h.samePlan();
+});
+
+const A = 'Essence Cards/A.md';
+const B = 'Essence Cards/B.md';
+
+void test('S13 fillIds 版：別篇收到通知還沒讀，先讀完再配號，不撞號', async t => {
+  const h = await setup(t, { [A]: C });
+  h.write(B, Ca);
+  assert.equal(await h.state.fillIds(A), true);
+  assert.equal(h.texts.get(A), C.replace('能說明 C', '能說明 C ^aaaaab'));
+  await h.settle();
+  h.clean(A);
+  h.clean(B);
+  h.samePlan();
+});
+
+void test('S21 fillIds 版：門檻在輪到時重查；前一份寫入時另一篇變成讀不到，後一份 blocked、不改字', async t => {
+  const h = await setup(t, { [A]: C, [B]: C });
+  const held = h.holdModify(A);
+  const first = h.state.fillIds(A);
+  await h.flush();
+  const second = h.state.fillIds(B);
+  h.failing.add(P);
+  h.write(P, C);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), [P]);
+  held.release();
+  assert.equal(await first, true);
+  assert.equal(await second, false);
+  assert.equal(h.texts.get(B), C);
+  h.clean(A);
+});
+
+void test('S22 fillIds 版：一直有新的待讀時，第 5 輪後放棄（不寫），不會一直等下去', async t => {
+  if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
+  const memory = createMemoryFiles({ [A]: C, [P]: C });
+  const files = { ...memory.files, read: (path: string) => { const result = memory.files.read(path); if (path === P) memory.notify(P); return result; } };
+  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0 });
+  t.after(() => state.close());
+  await state.ready();
+  memory.notify(P);
+  const reads = memory.reads.length;
+  assert.equal(await state.fillIds(A), false);
+  assert.equal(memory.texts.get(A), C);
+  assert.equal(memory.reads.slice(reads).length, 5);
 });
