@@ -483,3 +483,94 @@ void test('S23 連按：同一個編輯器連續兩次 save，第一份 done、�
   h.clean();
   h.samePlan();
 });
+
+// ---- §5 關閉、§3 最後一段寫入卡住 ----
+
+void test('S24 關閉：排隊中的回 blocked closed；persist 延遲中 close() 等它結束，之後不採用、不通知；新的 state 讀到寫進去的 ID', async t => {
+  const h = await setup(t, { [P]: C, [A]: C });
+  const editor = createMemoryEditor(h, P, C);
+  const held = editor.hold();
+  const first = h.state.save(editor);
+  await held.started;
+  const queued = h.state.save(createMemoryEditor(h, A, C));
+  const changes = h.changed();
+  let closed = false;
+  const closing = h.state.close().then(() => { closed = true; });
+  await h.flush();
+  assert.equal(closed, false, 'persist 還沒結束 close() 就完成了');
+  held.release();
+  await closing;
+  assert.deepEqual(await first, { kind: 'saved' });
+  assert.deepEqual(await queued, { kind: 'blocked', reason: 'closed' });
+  assert.equal(h.texts.get(A), C);
+  assert.equal(h.texts.get(P), Ca);
+  await h.settle();
+  assert.equal(h.changed(), changes, '關閉之後通知了監聽者');
+  const again = createState({ files: h.files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0 });
+  t.after(() => again.close());
+  await again.ready();
+  assert.deepEqual(again.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(again.decks().find(entry => entry.path === P)?.deck.targets.map(target => target.id), ['aaaaaa']);
+});
+
+void test('S24 還沒 ready 與關閉之後：save、resolve 回 blocked loading／closed，fillIds 回 false，不讀不寫', async t => {
+  if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
+  const memory = createMemoryFiles({ [P]: C });
+  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0 });
+  const issue = { path: P, line: 0, name: '能說明 C', kind: 'lost' as const, restore: null };
+  const editor = createMemoryEditor(memory, P, C);
+  assert.deepEqual(await state.save(editor), { kind: 'blocked', reason: 'loading' });
+  assert.deepEqual(await state.resolve(issue, 'new', editor), { kind: 'blocked', reason: 'loading' });
+  assert.equal(await state.fillIds(P), false);
+  assert.throws(() => state.today());
+  assert.deepEqual(state.deckStatus(P), { missing: 0, issues: [] });
+  await state.ready();
+  await state.close();
+  assert.deepEqual(await state.save(editor), { kind: 'blocked', reason: 'closed' });
+  assert.deepEqual(await state.resolve(issue, 'new', editor), { kind: 'blocked', reason: 'closed' });
+  assert.equal(await state.fillIds(P), false);
+  assert.deepEqual([editor.applies, editor.persists], [0, 0]);
+  assert.equal(memory.texts.get(P), C);
+});
+
+void test('S28 寫入卡住：persist 一直不回來，逾時後 failed、放行另一篇；之後才完成也不採用、不通知，照一般讀取沒有假的 lost', async t => {
+  const h = await setup(t, { [P]: C, [A]: C });
+  const editor = createMemoryEditor(h, P, C);
+  const held = editor.hold();
+  const stuck = h.state.save(editor);
+  await held.started;
+  const next = h.state.save(createMemoryEditor(h, A, C));
+  await h.flush();
+  t.mock.timers.tick(10_000);
+  const result = await stuck;
+  assert.equal(result.kind, 'failed');
+  assert.match(String((result as { error: unknown }).error), /逾時/);
+  assert.deepEqual(await next, { kind: 'done', added: 1 });
+  assert.equal(h.texts.get(A), C.replace('能說明 C', '能說明 C ^aaaaab'));
+  await h.flush();
+  const changes = h.changed();
+  held.release();
+  await h.flush();
+  assert.equal(h.texts.get(P), Ca);
+  assert.equal(h.changed(), changes, '逾時的那一份完成時呼叫了監聽者');
+  await h.settle();
+  h.clean();
+  h.clean(A);
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  h.samePlan();
+});
+
+void test('S28 卡住時 close()：逾時之後完成', async t => {
+  const h = await setup(t, { [P]: C });
+  const editor = createMemoryEditor(h, P, C);
+  editor.hold();
+  const stuck = h.state.save(editor);
+  await h.flush();
+  let closed = false;
+  const closing = h.state.close().then(() => { closed = true; });
+  await h.flush();
+  assert.equal(closed, false);
+  t.mock.timers.tick(10_000);
+  await closing;
+  assert.equal((await stuck).kind, 'failed');
+});

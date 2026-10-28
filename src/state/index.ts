@@ -53,6 +53,8 @@ export interface StateOptions {
   fillIds: boolean;
   /** 傳給 assignIds，測試用。 */
   random?: () => number;
+  /** 等一次寫進磁碟（編輯器的 persist、modify）最多多久（毫秒），預設 10_000；超過就當成失敗、放行後面的寫入。 */
+  writeTimeout?: number;
 }
 export type ErrorSource = 'write' | 'read' | 'listener';
 /** 毫秒。 */
@@ -126,6 +128,7 @@ export function createState(options: StateOptions): State {
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
   const settings = options.settings ?? DEFAULT_SETTINGS;
   const delay = options.delay ?? 500;
+  const writeTimeout = options.writeTimeout ?? 10_000;
   const report = (error: unknown, source: ErrorSource): void => {
     try { options.onError?.(error, source); } catch { /* 回呼的錯誤不影響狀態。 */ }
   };
@@ -169,6 +172,8 @@ export function createState(options: StateOptions): State {
   const checks = new Map<string, { output: string | null; prepared: Prepared | null; fallback: WriteResult; settle: (result: WriteResult) => void }>();
   /** Cards 改卡組的那一列（§3）：一次只做一份；卡住的寫入只擋後面的寫入，不擋讀檔與複習。 */
   let writes: Promise<unknown> = Promise.resolve();
+  /** 正在等的那一次寫進磁碟（已經限時）；close() 等它的結果明確。 */
+  let active: Promise<void> | null = null;
   let unwatch: (() => void) | null = null;
   // 連續讀不到的次數；決定下一次重試要等多久（Codex 審查 W5 的 F3：不能只等下一次通知）。
   let failures = 0;
@@ -201,6 +206,7 @@ export function createState(options: StateOptions): State {
   }
   function replan(): void {
     current = planToday(input());
+    if (closed) return;
     for (const listener of [...listeners]) {
       try { listener(); } catch (error) { report(error, 'listener'); }
     }
@@ -442,7 +448,8 @@ export function createState(options: StateOptions): State {
     const early = writable(path);
     if (early && !(early.kind === 'blocked' && early.reason === 'unread')) return early;
     while (waiting()) {
-      if (rounds.count >= DRAIN_ROUNDS) return closed ? { kind: 'blocked', reason: 'closed' } : { kind: 'stale' };
+      if (closed) return { kind: 'blocked', reason: 'closed' };
+      if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
       rounds.count++;
       // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
       await readNow();
@@ -453,6 +460,22 @@ export function createState(options: StateOptions): State {
   function begin(path: string): void {
     busy.add(path);
     bump(path);
+  }
+  /**
+   * 第 5 步等一次寫進磁碟（§3 最後一段）：最多等 writeTimeout，超過就當成失敗（錯誤寫明逾時），照第 6 步結束 I/O、放行後面的寫入。
+   * 它之後才完成，也不採用這份工作的輸出；寫進磁碟的內容會送通知，照一般的讀取處理（配出的 ID 已在 seen，不會被當成換了 ID）。
+   * 代價：還原或當成新的在逾時之後才寫成時，可能多出一個待處理問題，要家長再選一次。
+   */
+  function persist(work: Promise<void>): Promise<void> {
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      id = setTimeout(() => { reject(Error(`寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`)); }, writeTimeout);
+    });
+    const guarded = Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
+    const settled = guarded.then(() => {}, () => {});
+    active = settled;
+    void settled.then(() => { if (active === settled) active = null; });
+    return guarded;
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
@@ -485,10 +508,12 @@ export function createState(options: StateOptions): State {
       const stop = await admit(path, rounds);
       if (stop) return stop;
       begin(path);
-      let prepared: Prepared | null = null, original = '', again = false, gate: WriteResult | null = null;
+      let prepared: Prepared | null = null, original = '', again = false, gate: WriteResult | null = null, live = true;
       let outcome: WriteResult | Promise<WriteResult> | null;
       try {
-        await files.modify(path, text => {
+        await persist(files.modify(path, text => {
+          // 逾時之後才輪到回呼：這份工作已經結束，不改字。
+          if (!live) return text;
           if (text === '') throw new NothingToFill();
           original = text;
           // 回呼拿到的是最新的原文：重查門檻與待讀（這一篇自己除外，它最新的內容就是這份原文）；有新的待讀就不改，回到第 2 步。
@@ -497,12 +522,14 @@ export function createState(options: StateOptions): State {
           if (waiting(path)) { again = true; return text; }
           prepared = prepare(path, text);
           return prepared.text;
-        });
-        outcome = gate ?? (again ? null : verify(path, original, prepared, { kind: 'unchanged' }));
+        }));
+        // 關閉時在寫的：等結果明確，不登記核對、不採用（§5）。
+        outcome = gate ?? (again ? null : closed ? { kind: 'saved' } : verify(path, original, prepared, { kind: 'unchanged' }));
       } catch (error) {
         // 寫不進去：不登記核對；已配出的 ID 留在 seen、不重用。
         outcome = error instanceof NothingToFill ? { kind: 'unchanged' } : { kind: 'failed', error };
       } finally {
+        live = false;
         end(path);
       }
       if (outcome) return outcome;
@@ -525,8 +552,9 @@ export function createState(options: StateOptions): State {
       const prepared = plan(text);
       if (prepared && prepared.text !== text && !editor.apply(text, prepared.text)) return { kind: 'stale' };
       // 沒有改字也要 persist：觀察過的編輯器文字可能比磁碟新，要讓磁碟追上，核對讀取才有依據。
-      await editor.persist();
-      outcome = verify(path, text, prepared, fallback);
+      await persist(editor.persist());
+      // 關閉時在寫的：等結果明確，不登記核對、不採用（§5）。
+      outcome = closed ? { kind: 'saved' } : verify(path, text, prepared, fallback);
     } catch (error) {
       // 寫不進去：不登記核對，不把 Editor 改回去，已配出的 ID 留在 seen、不重用。這時磁碟可能比觀察過的編輯器文字舊，
       // 接著的那次讀取可能出現和 N1 一樣的假問題，等下一次存檔成功或 Obsidian 的自動存檔追上後消失（保存失敗時的代價）。
@@ -595,6 +623,10 @@ export function createState(options: StateOptions): State {
       wake?.();
       unwatch?.();
       unwatch = null;
+      // 寫成、等核對的工作回 saved（已寫進磁碟的內容下次載入照實讀回）；在寫的那一份等結果明確，最多 writeTimeout（§5）。
+      for (const check of checks.values()) check.settle({ kind: 'saved' });
+      checks.clear();
+      await active;
       await processing;
       await writer.flush();
     },
