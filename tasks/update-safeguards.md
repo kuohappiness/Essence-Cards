@@ -1,6 +1,6 @@
 # 更新防線（給 Claude，本機執行）
 
-狀態：未開工：先做第 0 步的格式修改與 Codex 格式查核
+狀態：進行中：第 0 步的格式已寫進 `docs/syntax.md`，等 Codex 格式查核（[查核請求](update-safeguards-format-review.md)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-ID 與討論稿做完，這份是執行）。改到紀錄格式、`src/state/` 與安裝流程，屬於高風險範圍：第 0 步先請 Codex 查核格式（D-140 第 4 點），兩個部分各自在合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
