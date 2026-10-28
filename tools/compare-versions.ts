@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { exec, execFile, execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -11,6 +11,7 @@ import { diffSnapshots } from './compare/snapshot.ts';
 import type { AdapterResult } from './compare/snapshot.ts';
 
 const run = promisify(execFile);
+const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
 // 拿掉繼承來的 GIT_*：在 git hook 裡跑時 GIT_DIR 指著呼叫的 repo（tools/install.ts 的 git）。
@@ -38,7 +39,7 @@ export interface CompareResult { report: string; zip: string; old: Side; new: Si
 
 const npmCi = async (dir: string): Promise<void> => {
   // --ignore-scripts：prepare 會改 git 設定，這裡只要相依套件。
-  await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: dir, env: env(), shell: process.platform === 'win32' });
+  await shell('npm ci --ignore-scripts --no-audit --no-fund', { cwd: dir, env: env() });
 };
 
 /** 一個版本：開 worktree、裝相依、在自己的 Node 程序跑轉接器；結束後拿掉 worktree。接不上就是 ok: false。 */

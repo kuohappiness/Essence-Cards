@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { exec, execFileSync } from 'node:child_process';
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,7 @@ import type { Reminder } from './exam-reminder.ts';
 import { installVault, isTestVault, localFolder, releaseProblems } from './install.ts';
 import { listTree, pluginConfig } from './vault-io.ts';
 
-const run = promisify(execFile);
+const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 // 拿掉繼承來的 GIT_*：在 git hook 裡跑時 GIT_DIR 指著呼叫的 repo（tools/install.ts 的 git）。
 const env = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
@@ -55,7 +55,7 @@ export interface CheckResult extends Omit<CheckRecord, 'created'> {
 
 const npmCheck = async (root: string): Promise<void> => {
   try {
-    await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check'], { cwd: root, env: env(), shell: process.platform === 'win32', maxBuffer: 64 * 1024 * 1024 });
+    await shell('npm run check', { cwd: root, env: env(), maxBuffer: 64 * 1024 * 1024 });
   } catch (error) {
     const out = String((error as { stdout?: string }).stdout ?? '') + String((error as { stderr?: string }).stderr ?? '');
     throw Error('npm run check 沒有通過：\n' + out.split('\n').slice(-40).join('\n'));
