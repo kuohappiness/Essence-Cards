@@ -88,12 +88,15 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-actions { flex: none; border-top: 1px solid var(--ec-line); min-height: var(--ec-action-height); }
 .ec-app .ec-show { width: 100%; height: var(--ec-action-height); border: 0; border-radius: 0; background: none; color: var(--ec-ink); font-size: 17px; font-weight: 500; }
 .ec-app .ec-show:not(:disabled):active { background: var(--ec-press); }
-/* 打字中的「沒印象」「確認」在題目正下方（D-145，iPhone 回饋：鍵盤會蓋住畫面最底下）：左邊沒印象、右邊確認 */
-.ec-typed-actions { display: flex; justify-content: space-between; align-items: center; margin: 20px -12px 0; }
-.ec-app .ec-typed-actions .ec-show { width: auto; height: var(--ec-touch); padding: 0 12px; border-radius: var(--ec-radius); font-size: var(--ec-size-button); }
-.ec-app .ec-typed-actions .ec-confirm { margin-left: auto; }
-.ec-app .ec-skip { color: var(--ec-muted); }
-.ec-app .ec-skip::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--ec-new); vertical-align: middle; }
+/* 打字中的「沒印象」「確認」在題目正下方（D-145，iPhone 回饋：鍵盤會蓋住畫面最底下）。
+   兩顆同一種樣式：置中並排的細框膠囊，沒有底色（使用者 2026-10-28 從四種樣式選的）；還沒打字時「確認」變淡。
+   選擇器寫得比較長，連滑鼠移過、焦點都明確不畫底色：iPhone 上 Obsidian 給按鈕的底色不會蓋過來。 */
+.ec-typed-actions { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 24px; }
+.ec-app .ec-card .ec-typed-actions .ec-show,
+.ec-app .ec-card .ec-typed-actions .ec-show:hover,
+.ec-app .ec-card .ec-typed-actions .ec-show:focus { width: auto; min-width: 96px; height: 40px; padding: 0 18px; border: 1px solid var(--ec-line); border-radius: 20px; background: transparent; box-shadow: none; color: var(--ec-ink); font-size: 15px; font-weight: 500; letter-spacing: .04em; }
+.ec-app .ec-card .ec-typed-actions .ec-show:not(:disabled):active { background: color-mix(in srgb, var(--ec-ink) 6%, transparent); }
+.ec-app .ec-card .ec-typed-actions .ec-show:disabled { opacity: .35; }
 .ec-rates { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); animation: ec-fade-in var(--ec-fade) ease-out both; }
 .ec-app .ec-rate { height: var(--ec-action-height); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 4px; border: 0; border-radius: 0; background: none; color: var(--ec-ink); font-size: var(--ec-size-button); font-weight: 600; white-space: nowrap; }
 .ec-rate + .ec-rate { border-left: 1px solid var(--ec-line); }
