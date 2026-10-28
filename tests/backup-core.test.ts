@@ -214,6 +214,13 @@ void test('全庫 ID 檢查：照選擇還原後的所有卡組；同一篇裡�
     'Essence Cards/A.md changed blocked：學習目標 ID aaa111 現在在「Essence Cards/C.md」',
     'Essence Cards/B.md changed blocked：學習目標 ID eee555 現在在「Essence Cards/A.md」',
     'Essence Cards/C.md added keep']);
+  // ambiguous 目標的候選 ID 也算占用（同 state 的 targetIds；Codex 中途查核 F4），現在的與備份的都算，同一個目標只算一次。
+  const ambiguous = '- 能說明 ^abc234 及其他 ^bcd345\n    - 題目 :: 答案\n';
+  assert.deepEqual(summary(plan({ 'Essence Cards/A.md': goal('abc234') }, { 'Essence Cards/B.md': ambiguous }).files), [
+    'Essence Cards/A.md missing blocked：學習目標 ID abc234 現在在「Essence Cards/B.md」', 'Essence Cards/B.md added keep']);
+  assert.deepEqual(summary(plan({ 'Essence Cards/A.md': ambiguous }, { 'Essence Cards/B.md': goal('bcd345') }).files), [
+    'Essence Cards/A.md missing blocked：學習目標 ID bcd345 現在在「Essence Cards/B.md」', 'Essence Cards/B.md added keep']);
+  assert.deepEqual(summary(plan({ 'Essence Cards/A.md': ambiguous }, {}).files), ['Essence Cards/A.md missing restore']);
   const both = plan({ 'Essence Cards/A.md': goal('aaa111'), 'Essence Cards/B.md': goal('aaa111', '另一篇') }, {});
   assert.deepEqual(summary(both.files), [
     'Essence Cards/A.md missing blocked：學習目標 ID aaa111 還原的「Essence Cards/B.md」也有',

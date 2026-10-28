@@ -110,11 +110,16 @@ export function planRestore(input: PlanInput): RestorePlan {
 
 interface Occurrence { shown: string; restored: PlannedFile | null }
 
+/** 一篇卡組占用的學習目標 ID：每個目標的 ID，ambiguous 的目標是它的候選（同 state 的 targetIds、D-134），同一個目標只算一次。 */
+function deckIds(bytes: Uint8Array): string[] {
+  return parseDeck(text(bytes)).targets.flatMap(target => [...new Set([...target.id === null ? [] : [target.id], ...target.idCandidates ?? []])]);
+}
+
 function checkIds(files: PlannedFile[], { backup, current, sameFile }: PlanInput): void {
   const ids = new Map<string, string[]>();
   const idsOf = (key: string, bytes: Uint8Array): string[] => {
     let found = ids.get(key);
-    if (!found) ids.set(key, found = parseDeck(text(bytes)).targets.flatMap(target => target.id === null ? [] : [target.id]));
+    if (!found) ids.set(key, found = deckIds(bytes));
     return found;
   };
   for (;;) {
