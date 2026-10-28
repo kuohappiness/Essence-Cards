@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
-| W6 iPhone 測試後的畫面修改 | [D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 實作完（分支 `claude/w6-polish` 的 `d7d5079`），兩次 iPhone 測試的回饋都已改、Windows 手機寬度通過 | 使用者照任務說明最後一節在 iPhone 再測一次（第三次）；通過後合併 | 使用者 | [任務說明](../tasks/w6-polish.md) |
+| W6 iPhone 測試後的畫面修改 | [D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 實作完（分支 `claude/w6-polish` 的 `030b3b3`），三次 iPhone 測試的回饋都已改，只剩按鈕樣式要在 iPhone 看一眼 | 使用者在 iPhone 看「沒印象」「確認」的樣式；通過後合併進 `main` | 使用者 | [任務說明](../tasks/w6-polish.md) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 討論中：版本紀錄、考前提醒、更新前備份已有初步結論 | 使用者選第 3 題（內建規則改版）；之後和 Codex 討論，一致再寫成 D-ID | 使用者 | [規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7 已談定（7 見 [D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)）；環節 8 雙方一致 | 使用者決定電腦專用的主機接點（改 D-053）；`state-load` 與 W6 都已合併，環節 4、5、6、9、2、3 可以接著談 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
