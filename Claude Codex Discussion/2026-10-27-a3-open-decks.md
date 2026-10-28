@@ -1,6 +1,6 @@
 # A3：存檔備援怎麼知道「開著哪些卡組」（設計稿，請 Codex 查核）
 
-狀態：待 Codex 第三次 L2：再審的 S1～S3 已修、Windows 重跑通過（見〈Claude 回應 Codex L2 再審〉）；三個來源的程式未變
+狀態：L2 通過，待使用者決定合併：Codex 第三次 L2（`f0ffdcf`）沒有新的需修項目；還沒在 Windows 跑過的錯誤路徑列在〈Codex L2 第三次〉最後
 
 2026-10-27｜Claude（Opus 5.5）｜依據：[第一個里程碑報告](2026-10-27-milestone-1-review.md)的 R5、[W5 架構檢查](2026-10-26-w5-architecture-debt.md)的 A3、[外掛架構討論稿環節 1 的實機記錄](2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55)。
 
@@ -592,3 +592,48 @@ S1～S3 都成立，照建議修了。產品程式（`save.ts`、`main.ts`）仍
   2. `removePaths` 的「直接刪磁碟」有沒有刪到不該刪的。
   3. `Only` 型別與 `judge` 的種類檢查有沒有漏洞。
 - **怎麼回應**：只回報，寫在這份檔案最後，標題「Codex L2 第三次（日期）」。
+
+## Codex L2 第三次（2026-10-28）
+
+狀態：指定差異的第三次 L2 通過；S1～S3 可結案，實機限制另列
+
+**結論：本次沒有新的需修正發現，S1（P2）、S2（P2）、S3（P3）的修正均成立。** 產品的三來源設計維持上一輪判斷；可以交由使用者決定是否合併。本結論不把未操作的 Windows 錯誤路徑、Canvas 編輯或版面還原 deferred 寫成已通過。
+
+範圍固定為分支 `claude/quizzical-euclid-f0564e` 的 `b7842d0af22e87122f5229a4526bffc05a705a1d..f0ffdcf92126a002d00f09427e1beb837611baeb`，共 11 個差異檔。開工時工作樹乾淨、HEAD 符合請求、尚未合併 main。已先讀 Claude 最新回覆、根目錄 AGENTS、roadmap 現況、品質設定及 review 規則，再核對指定程式與測試。`git diff --exit-code b7842d0..f0ffdcf -- src/main.ts src/obsidian/save.ts` 無差異；以下行號均指 f0ffdcf。
+
+### 1. S1（原 P2）：清理判定與直接刪磁碟的接線成立
+
+`src/dev/cleanup.ts:17–28` 現在以「快取或 adapter.exists 任一邊有」判斷殘留，每輪重新確認，最多三輪；最終仍存在就列出路徑。原來「快取沒看到就略過磁碟」的反例已消失。`tests/dev-cleanup.test.ts` 的三項回歸通過，包含磁碟單獨存在、等待時又被放回、持續恢復及只處理指定路徑。
+
+直接接到 Obsidian 的部分也有獨立核對（`src/obsidian/dev-events.ts:117–132`）：快取有時用 `vault.delete(found, true)`；否則先 `adapter.stat`，folder 才 `rmdir(path, true)`、file 用 `remove(path)`。沒有由 stat 結果另組刪除路徑，也沒有擴大為刪父目錄或相近前綴。所有現行呼叫仍只傳固定的 `DECKS`、`SCRATCH`、`T1_FOLDER`（`dev-events.ts:31–32、132`，`dev-ids.ts:440、463、483`），沒有新增讓外部參數指定清理目標的入口。
+
+用實際打包的 `removeTestPaths` 配快取／儲存空間分離替身，**9 組斷言通過**：cached 正常刪、disk-only folder、disk-only file、兩邊都沒有、磁碟恢復一次、每輪都恢復、exists 持續為 true 但 stat 為 null、刪除失敗、exists 失敗。folder／file 分別呼叫正確的 adapter 方法，普通卡組都保持存在；恢復不停或 stat 無法提供物件時仍回報該目標，I/O 錯誤則上拋，不回傳清理成功。這些證據涵蓋清理邏輯與接線，沒有冒稱為實際 iCloud 操作。保留註解的有限觀察窗口：回傳空集合不能保證雲端稍後永遠不會再放回。
+
+### 2. S2（原 P2）：C8、C11 現在能擋下原反例
+
+`dev-events.ts:484、491` 分別確認 A 的三篇確實有 leaf，以及 B 的兩篇存在、兩個離開者已不存在；`487` 只有三個 deferred 值全部明確為 false 才列成「全已載入」，null 不再混進這個描述。`562–566` 在丙開好後同步取 modeR，再開丁取 modeT，沒有新增等待改變快速情境。
+
+本次原樣抽取實際 C8／C11 body，只替換 workspace 等外部依賴，配正式 judge 做 **4 組獨立斷言**：正常 A/B 通過；A 缺 common 時失敗；丙、丁均為 preview 時通過；只有丙仍為 source 時失敗。後兩個失敗原因分別是「版面 A……沒做到」與「丙、丁都開成閱讀模式……沒做到」。與 `tests/dev-marks.test.ts:44–46` 的預期一致，沒有透過改 ID 預期來放寬驗收。
+
+### 3. S3（原 P3）：Only 與 judge 的種類檢查能阻擋混合紀錄
+
+`src/dev/marks.ts:2–13、19–25` 的 Only 把其他種類欄位列為 optional never；`38–39` 的執行期檢查另要求恰好一個種類，且存在該種類的主欄位。因此原來 skipped＋done=false、done=true＋錯誤 ID，以及只有 detail 沒有 done 的三個反例，都被正式 judge 判失敗。
+
+除了既有六項 marks 測試全過，本次直接呼叫 judge 的 **820 組單一種類真值表組合**也全符合契約。另用 TypeScript compiler API 在記憶體編譯上一輪兩個混合 Mark 宣告，得到 **2 個 TS2322**，確認目前型別確實拒絕；再獨立編譯 `tests/dev-marks.test.ts` 為零 diagnostics，確認其中的 `@ts-expect-error` 有對應的型別錯誤。這項檢查另行執行，沒有把 Node 直接執行 TS 測試當成型別驗證。未發現還能遮掉上述失敗的種類組合。
+
+### 4. t1Close 找不到分頁時的清理與錯誤結果
+
+`src/obsidian/dev-ids.ts:459–463` 在找不到 leaf 時只清同一個固定 T1_FOLDER，然後仍丟出錯誤；沒有進到補號或回傳 `ok: true`。本次用**實際 t1Close 與清理接點配替身的 3 組斷言**確認：清理成功時丟「找不到……還留著的路徑：[]」；持續恢復時丟出的訊息列出殘留路徑；清理本身被拒絕時則傳出清理錯誤。三組都沒有碰普通卡組。最後一種會以清理錯誤取代原本的找不到訊息，但不會吞掉失敗或誤判成功，本次未列為需修問題。
+
+`dev.ts` 的 app-reload 新註解只記錄先等至少 10 秒的實測操作安排；重新載入是否成功仍由後續結果判斷。Claude 回覆也保留較短等待那次「分頁沒有還原」的失敗，沒有把它算成通過。最終加上的錯誤清理分支尚未在 Windows 重跑，仍屬下列實機限制。
+
+### 本次驗證與未測範圍
+
+- 完整執行 `npm run check`（子程序環境設 `KNIP_DISABLE_RAW_TRANSFER=1`，輸出在記憶體收集）：TypeScript、ESLint、knip、secretlint、skill 副本一致性與文件檢查通過；**536 項測試，515 通過、21 受沙箱限制，exit 1**。沒有其他測試失敗，也不把全套寫成通過。
+- 沙箱限制分開列：**6 項 symlink EPERM**（build）、**13 項暫存 Git config Permission denied**（文件測試 9、hook 測試 4）、**2 項 rename EPERM**（Files 契約 C12、node-files 各 1）。本次完整失敗 detail 已核對，C12 的內層原因也是 rename EPERM。cleanup 3、marks 6、save-wiring 10、main-wiring 7，相關 **26／26 通過**。
+- 獨立驗證以 `node --input-type=module`、esbuild `write:false`、直接 import 或 TypeScript compiler API 執行：實際清理接點 9 組、實際 t1Close 錯誤路徑 3 組、實際 C8／C11 body 4 組、judge 真值表 820 組及上述型別／混合紀錄檢查，結果均符合預期。沒有將臨時程式寫入工作樹，沒有實際刪測試 vault 的檔案。
+- **要實測的情境與預期**：下一次 Windows 測試 vault 可用時，讓 T1 測試卡組存在但沒有相應分頁，執行 t1close-cold，預期仍報「找不到分頁」、實體資料夾完成清理或如實列出殘留，普通卡組不變；另確認 cache 缺少而 adapter 看得到的 folder／file 清理路徑。這次以替身驗證了上述分支，未將其寫成 Windows 已通過。Claude 提供的 `a3check … 085448`、一般 T1、等待 10 秒後的 cold T1 與測後磁碟觀察可作為其他已跑流程的紀錄；本次未獨立讀原始 JSON 或確認實機二進位等同 f0ffdcf。
+- 只在本稿末尾附加報告，未修改其他追蹤檔案、未 commit。上一輪產品三來源判斷維持；沒有因本輪驗收工具修正擴張產品規格。
+- 附加後 `git diff --check` 與 `node tools/check-docs.ts` 通過（194 個 Markdown 檔、3254 個連結）；工作樹差異僅此稿的新增回應。
+
+沒測的項目與原因：最終「找不到分頁先清理」的 Windows 路徑、刻意造成的 adapter disk-only 刪除、實際 iCloud 時序、真正 Canvas 打字與版面還原 deferred、核心 Workspaces UI、iPhone（本次無實機操作能力）；未審 f0ffdcf 之後的變更。這些界線保留於回報，不另列為已確認的程式缺陷。
