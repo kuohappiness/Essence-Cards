@@ -8,6 +8,7 @@ import { seeded } from './helpers/seeded.ts';
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = syntax.slice(syntax.indexOf('## 5.'), syntax.indexOf('## 6.')).split(/\r?\n/).filter(line => line.startsWith('{"t":'));
 const rows: { t: string; entry: NewEntry; kind: string }[] = [
+  { t: '2026-10-16T20:14:58.031+08:00', entry: { set: 'app', val: '0.1.0+1a2b3c4' }, kind: 'change' },
   { t: '2026-10-16T20:15:03.250+08:00', entry: { lt: 'k3m9x2', r: 'good', v: 'a1b2c3d4' }, kind: 'review' },
   { t: '2026-10-16T20:15:21.804+08:00', entry: { lt: 'p7q2w8', r: 'miss', v: '9f0e1d2c' }, kind: 'review' },
   { t: '2026-10-16T20:15:40.112+08:00', entry: { undo: '2026-10-16T20:15:21.804+08:00' }, kind: 'undo' },
@@ -16,10 +17,12 @@ const rows: { t: string; entry: NewEntry; kind: string }[] = [
   { t: '2026-10-20T19:00:00.120+08:00', entry: { set: 'status', deck: 'Essence Cards/國二上/自然/2-3 濃度.md', val: '啟用' }, kind: 'change' },
   { t: '2026-10-22T21:02:40.006+08:00', entry: { set: 'cap', val: 20 }, kind: 'change' },
   { t: '2026-10-21T19:02:11.020+08:00', entry: { lt: 'k3m9x2', r: 'miss', src: 'mistake' }, kind: 'review' },
+  // §5-1 版本行的例子。
+  { t: '2026-11-02T20:15:03.250+08:00', entry: { set: 'app', val: '0.1.0+1a2b3c4' }, kind: 'change' },
 ];
 
-void test('syntax §5 的八行逐欄解析，寫回和原文完全相同', () => {
-  assert.equal(examples.length, 8);
+void test('syntax §5 的十行逐欄解析，寫回和原文完全相同', () => {
+  assert.equal(examples.length, 10);
   rows.forEach(({ t, entry, kind }, index) => {
     const stamp = { t, at: Date.parse(t), offset: 480 };
     const defaults = kind === 'review' ? { v: null, typed: null, src: null } : kind === 'change' ? { deck: null, lt: null } : {};
@@ -105,7 +108,7 @@ void test('合併兩台裝置交錯排序，同時照路徑再照行號；相同
 });
 
 void test('空白 CRLF 與 BOM 不算問題，壞行尾端救回，只在 JSON.parse 失敗時救', () => {
-  const good = examples[0];
+  const good = examples[1];
   const raw = '\uFEFF \r\n\r\n壞掉的行\r\n{"t":"中斷' + good + '\r\n' + good + '\r\n' + JSON.stringify({ nested: JSON.parse(good) as unknown }) + '\r\n';
   const history = mergeHistory([{ path: 'broken', text: raw }]);
   assert.deepEqual(history.reviews, [parseLine(good)]);
