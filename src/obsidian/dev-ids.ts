@@ -8,6 +8,8 @@ import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
 import { leafPath, removeTestPaths } from './dev-events.ts';
+import { keepRendering } from './dev-review.ts';
+import { createObsidianFiles } from './files.ts';
 
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
 // 每一種操作都寫出操作後的文字或判斷，不只寫「通過」。
@@ -488,4 +490,238 @@ export async function t1Close(host: IdsHost, cold = false): Promise<unknown> {
   };
   const cleanupLeft = await removeTestPaths(app, [T1_FOLDER]);
   return { ...result, checks, cleanupLeft, ok: Object.values(checks).every(Boolean) };
+}
+
+// ── save-flow：tasks/state-writes.md §9 的 Windows 實測（V1～V7）：存檔排進寫入的那一列、view.save() 加核對讀取 ──
+// 每個情境一篇新的、沒有 ID 的卡組；每一步記下磁碟的文字（Files.read）、編輯器的文字、deckStatus，以及這段時間的 vault 事件與
+// Files 通知，在存檔的 Promise 完成前、後各記一次。V6 的 B 被蓋掉、或 persist 完成時磁碟還不是編輯器的內容，結果檔標出來，由 AI 停下來回報。
+
+const FLOW_FOLDER = 'Essence Cards/W5 範例/存檔流程';
+const FLOW_TEXT = '- 能說明擴散\n    - 擴散是什麼？ :: 粒子由濃度高往濃度低移動\n- 能說明溶解\n    - 溶解是什麼？ :: 溶質均勻分散在溶劑中\n';
+const FLOW_B = '- 能說明蒸發 ^vflowb\n    - 蒸發是什麼？ :: 液體表面變成氣體\n';
+
+/** 這段時間的 vault 事件與 Files 通知（只記這個資料夾的）。 */
+function flowRecorder(app: App): { take: () => string[]; stop: () => void } {
+  const started = performance.now();
+  let list: string[] = [];
+  const push = (line: string, path: string) => { if (path.startsWith(FLOW_FOLDER)) list.push(`${String(Math.round(performance.now() - started))} ${line} ${path.slice(FLOW_FOLDER.length + 1)}`); };
+  const refs = [
+    app.vault.on('create', file => { push('create', file.path); }),
+    app.vault.on('modify', file => { push('modify', file.path); }),
+    app.vault.on('delete', file => { push('delete', file.path); }),
+    app.vault.on('rename', (file, from) => { push('rename ← ' + from.slice(FLOW_FOLDER.length + 1), file.path); }),
+  ];
+  const stopFiles = createObsidianFiles(app).watch(path => { push('notify', path); });
+  return {
+    take: () => { const taken = list; list = []; return taken; },
+    stop: () => { for (const ref of refs) app.vault.offref(ref); stopFiles(); },
+  };
+}
+
+export async function saveFlow(host: IdsHost): Promise<unknown> {
+  const { app } = host;
+  const state = host.state, saver = host.devLog.save;
+  if (!state || !saver) throw Error('state 或存檔接線還沒建立');
+  await state.ready();
+  const files = createObsidianFiles(app);
+  const rendering = keepRendering();
+  const rec = flowRecorder(app);
+  const stamp = Date.now().toString(36);
+  let count = 0;
+  const out: Record<string, unknown> = { renderingBefore: rendering.before };
+  const ids = (text: string | null) => (text?.match(/ \^[a-z0-9]{6}$/gm) ?? []).length;
+  async function fresh(text = FLOW_TEXT): Promise<{ file: TFile; path: string }> {
+    const path = `${FLOW_FOLDER}/流程 ${stamp}-${String(++count)}（卡片）.md`;
+    const file = await writeFile(app, path, text);
+    await until(() => state?.deckStatus(path).missing === 2);
+    return { file, path };
+  }
+  const t0 = performance.now();
+  async function snap(step: string, path: string, view: MarkdownView | null): Promise<Record<string, unknown>> {
+    return { step, ms: Math.round(performance.now() - t0), disk: await files.read(path), editor: view && view.file?.path === path ? view.editor.getValue() : null,
+      status: state?.deckStatus(path), events: rec.take() };
+  }
+  /** persist 完成那一刻的磁碟與編輯器（包住這個 view 的 save）。 */
+  function watchPersist(view: MarkdownView, path: string): { at: { disk: string | null; editor: string; same: boolean }[]; restore: () => void } {
+    const at: { disk: string | null; editor: string; same: boolean }[] = [];
+    const original = view.save.bind(view);
+    view.save = async (clear?: boolean) => {
+      await original(clear);
+      const disk = await files.read(path), editor = view.editor.getValue();
+      at.push({ disk, editor, same: disk === editor });
+    };
+    return { at, restore: () => { view.save = original; } };
+  }
+  const notices = () => host.devLog.notices.length;
+  try {
+    // V1 一般的存檔。
+    {
+      const { file, path } = await fresh();
+      const { leaf, view } = await open(app, file);
+      await sleep(500);
+      const persist = watchPersist(view, path);
+      const before = notices();
+      const steps = [await snap('按下前', path, view)];
+      const started = performance.now();
+      const saving = saver.save(view);
+      steps.push(await snap('按下後（Promise 完成前）', path, view));
+      await saving;
+      const ms = Math.round(performance.now() - started);
+      steps.push(await snap('Promise 完成後', path, view));
+      persist.restore();
+      out.V1 = { ms, persisted: persist.at, notices: host.devLog.notices.slice(before), steps };
+      leaf.detach();
+    }
+    // V2 N1：打一個字，等到這篇的 modify 事件（自動存檔）後 100 ms 內按存檔；之後 3 秒每 50 ms 看一次 deckStatus。
+    {
+      const { file, path } = await fresh();
+      const { leaf, view } = await open(app, file);
+      await sleep(500);
+      rec.take();
+      let modified = 0;
+      const ref = app.vault.on('modify', changed => { if (changed.path === path) modified = performance.now(); });
+      view.editor.replaceRange('，', { line: 1, ch: view.editor.getLine(1).length });
+      await until(() => modified > 0, 5000);
+      const gap = Math.round(performance.now() - modified);
+      const steps = [await snap('自動存檔之後', path, view)];
+      const saving = saver.save(view);
+      const seen: string[] = [];
+      const polling = (async () => {
+        const end = performance.now() + 3000;
+        while (performance.now() < end) {
+          const issues = state.deckStatus(path).issues;
+          if (issues.length) seen.push(`${String(Math.round(performance.now() - t0))} ${JSON.stringify(issues.map(issue => ({ ...issue })))}`);
+          await sleep(50);
+        }
+      })();
+      await saving;
+      steps.push(await snap('Promise 完成後', path, view));
+      await polling;
+      app.vault.offref(ref);
+      steps.push(await snap('3 秒後', path, view));
+      out.V2 = { autosaveSeen: modified > 0, msAfterAutosave: gap, issuesSeen: seen, steps };
+      leaf.detach();
+    }
+    // V3 同一個 tick 連按兩次按鈕。
+    {
+      const { file, path } = await fresh();
+      const { leaf, view } = await open(app, file);
+      await until(() => { saver.refresh(); return !!view.containerEl.querySelector('.essence-cards-save'); });
+      const button = view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
+      const before = notices();
+      button?.click();
+      button?.click();
+      await saver.save(view);
+      await sleep(300);
+      out.V3 = { ids: ids(view.editor.getValue()), notices: host.devLog.notices.slice(before), steps: [await snap('之後', path, view)] };
+      leaf.detach();
+    }
+    // V4 兩個分頁開同一篇，在其中一個按存檔。
+    {
+      const { file, path } = await fresh();
+      const one = await open(app, file);
+      const two = await open(app, file);
+      await sleep(500);
+      const saving = saver.save(one.view);
+      const steps = [await snap('Promise 完成前', path, one.view)];
+      await saving;
+      await sleep(300);
+      steps.push(await snap('Promise 完成後', path, one.view));
+      const disk = await files.read(path);
+      out.V4 = { editorsAndDiskSame: one.view.editor.getValue() === disk && two.view.editor.getValue() === disk, second: two.view.editor.getValue(), steps };
+      one.leaf.detach();
+      two.leaf.detach();
+    }
+    // V5 按下後同一個 tick 換篇；另一次按下後立刻改名。
+    {
+      const { file, path } = await fresh();
+      const other = await fresh();
+      const { leaf, view } = await open(app, file);
+      await sleep(500);
+      const before = notices();
+      const saving = saver.save(view);
+      const switching = leaf.openFile(other.file);
+      await saving;
+      await switching;
+      await sleep(1500);
+      const otherDisk = await files.read(other.path);
+      out.V5switch = { notices: host.devLog.notices.slice(before), otherUntouched: otherDisk === FLOW_TEXT,
+        steps: [await snap('之後（原本那篇）', path, null), await snap('之後（換到的那篇）', other.path, view)] };
+      leaf.detach();
+      const renamed = await fresh();
+      const tab = await open(app, renamed.file);
+      await sleep(500);
+      const newPath = renamed.path.replace('（卡片）', ' 改名（卡片）');
+      const listed = (await files.list(FLOW_FOLDER)).length;
+      const renameNotices = notices();
+      const savingRename = saver.save(tab.view);
+      const renaming = app.vault.rename(renamed.file, newPath);
+      await savingRename;
+      await renaming;
+      await sleep(1500);
+      out.V5rename = { notices: host.devLog.notices.slice(renameNotices), filesBefore: listed, filesAfter: (await files.list(FLOW_FOLDER)).length,
+        oldPathIssues: state.deckStatus(renamed.path).issues.length, steps: [await snap('之後（新路徑）', newPath, tab.view)] };
+      tab.leaf.detach();
+    }
+    // V6 外部用 adapter.write 把 B（含 ID）加進開著的這一篇：同一個 tick、50 ms 後、200 ms 後各按一次存檔。
+    {
+      const results: Record<string, unknown>[] = [];
+      for (const wait of [0, 50, 200]) {
+        const { file, path } = await fresh();
+        const { leaf, view } = await open(app, file);
+        await sleep(500);
+        rec.take();
+        const written = app.vault.adapter.write(path, FLOW_TEXT + FLOW_B);
+        if (wait) await sleep(wait);
+        const saving = saver.save(view);
+        await written;
+        await saving;
+        await sleep(2500);
+        const disk = await files.read(path);
+        results.push({ wait, diskHasB: !!disk?.includes('能說明蒸發'), editorHasB: view.editor.getValue().includes('能說明蒸發'), steps: [await snap('2.5 秒後', path, view)] });
+        leaf.detach();
+      }
+      out.V6 = results;
+    }
+    // V7 保存失敗：試著讓檔案暫時唯讀。
+    {
+      const { file, path } = await fresh();
+      const { leaf, view } = await open(app, file);
+      await sleep(500);
+      const load = (window as unknown as { require?: (name: string) => unknown }).require;
+      const fs = load?.('fs') as { chmodSync(path: string, mode: number): void } | undefined;
+      const full = (app.vault.adapter as unknown as { getFullPath(path: string): string }).getFullPath(path);
+      const before = notices();
+      let made = false;
+      try { fs?.chmodSync(full, 0o444); made = !!fs; } catch { made = false; }
+      const persist = watchPersist(view, path);
+      await saver.save(view);
+      const whileReadOnly = { notices: host.devLog.notices.slice(before), persisted: persist.at.slice(), steps: [await snap('唯讀時存檔之後', path, view)] };
+      try { fs?.chmodSync(full, 0o666); } catch { /* 下面的結果看得出來 */ }
+      const again = notices();
+      await saver.save(view);
+      persist.restore();
+      out.V7 = { readOnlyMade: made, whileReadOnly, afterWritable: { notices: host.devLog.notices.slice(again), steps: [await snap('恢復可寫後再存一次', path, view)] } };
+      leaf.detach();
+    }
+  } finally {
+    rec.stop();
+    rendering.restore();
+  }
+  await sleep(2500);
+  out.cleanupLeft = await removeTestPaths(app, [FLOW_FOLDER]);
+  const v1 = out.V1 as { persisted: { same: boolean }[]; ms: number; notices: string[] };
+  const v2 = out.V2 as { issuesSeen: string[]; autosaveSeen: boolean };
+  const v3 = out.V3 as { ids: number; notices: string[] };
+  const v5 = out.V5rename as { filesBefore: number; filesAfter: number; oldPathIssues: number };
+  out.checks = {
+    V1persistSame: v1.persisted.length > 0 && v1.persisted.every(each => each.same), V1oneNotice: v1.notices.length === 1, V1ms: v1.ms,
+    V2noIssues: v2.autosaveSeen && !v2.issuesSeen.length,
+    V3: v3.ids === 2 && v3.notices.length === 1,
+    V4: (out.V4 as { editorsAndDiskSame: boolean }).editorsAndDiskSame,
+    V5switchOtherUntouched: (out.V5switch as { otherUntouched: boolean }).otherUntouched,
+    V5rename: v5.filesBefore === v5.filesAfter && v5.oldPathIssues === 0,
+    V6bKept: (out.V6 as { diskHasB: boolean }[]).map(each => each.diskHasB),
+  };
+  return out;
 }
