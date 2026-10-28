@@ -2,7 +2,7 @@ import { builtinModules } from 'node:module';
 import { posix } from 'node:path';
 import tseslint from 'typescript-eslint';
 
-const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tests/**/*.ts'];
+const source = ['src/**/*.{ts,tsx}', 'tools/*.ts', 'tools/compare/*.ts', 'tests/**/*.ts'];
 const core = ['src/core/**/*.{ts,tsx}'];
 // state、dev 與 review（複習畫面的狀態，W6 §2）和核心一樣不碰畫面、Obsidian 與 Node，才能在 Node 直接測。
 const state = ['src/state/**/*.{ts,tsx}'];
@@ -116,7 +116,7 @@ export default tseslint.config(
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: { parserOptions: {
       projectService: {
-        allowDefaultProject: ['tools/*.ts', 'tests/*.ts', 'tests/helpers/*.ts'],
+        allowDefaultProject: ['tools/*.ts', 'tools/compare/*.ts', 'tests/*.ts', 'tests/helpers/*.ts'],
         maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 60,
       },
       tsconfigRootDir: import.meta.dirname,
