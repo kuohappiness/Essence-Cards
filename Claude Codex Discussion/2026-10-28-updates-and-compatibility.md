@@ -1,6 +1,6 @@
 # 更新與相容：初步結論與技術規則（請 Codex 查核）
 
-狀態：已結案：2026-10-28 寫成 [D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)、[D-150](../docs/decisions.md#d-150-備份與還原)、[D-151](../docs/decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)；實作見 [tasks/update-safeguards.md](../tasks/update-safeguards.md)｜2026-10-29 格式查核已處理，R2 等使用者確認
+狀態：已結案：2026-10-28 寫成 [D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)、[D-150](../docs/decisions.md#d-150-備份與還原)、[D-151](../docs/decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)；實作見 [tasks/update-safeguards.md](../tasks/update-safeguards.md)｜2026-10-29 格式查核已處理，R2 使用者選延後、不擋作答（D-149 補充）
 
 2026-10-28｜Claude（Opus 5.5）｜依據：[更新與相容的規畫](../docs/plans/updates.md)；使用者 2026-10-26 要求四題有初步結論後，連同技術規則先和 Codex 討論，雙方一致再交使用者確認、寫成 D-ID（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）
 
