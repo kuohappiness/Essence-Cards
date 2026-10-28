@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendLine, encodeEntry, formatTime, isLogPath, mergeHistory, parseLine } from '../src/core/study/index.ts';
 import type { History, NewEntry, Rating } from '../src/core/study/index.ts';
+import { seeded } from './helpers/seeded.ts';
 
 // syntax.md §5 的例子。
 const IPHONE = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
@@ -113,15 +114,6 @@ void test('T5 appendLine：取消行多帶的 lt 加進 seen（一般與跳脫�
   assert.deepEqual(history.seen, ['k3m9x2', 'undo01', 'undo02']);
 });
 
-// 固定種子的亂數（mulberry32）。
-function seeded(seed: number): () => number {
-  return () => {
-    seed = seed + 0x6d2b79f5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
 const multiset = (history: History) => history.reviews.map(entry => JSON.stringify(entry)).sort();
 
 void test('T5 appendLine 性質：200 組隨機的自己的作答、取消、變更，和重新 mergeHistory 相同', () => {

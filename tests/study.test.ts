@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { formatTime, dayOf, dayStart, encodeEntry, parseLine, mergeHistory, replay } from '../src/core/study/index.ts';
 import type { NewEntry } from '../src/core/study/index.ts';
+import { seeded } from './helpers/seeded.ts';
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = syntax.slice(syntax.indexOf('## 5.'), syntax.indexOf('## 6.')).split(/\r?\n/).filter(line => line.startsWith('{"t":'));
@@ -152,6 +153,64 @@ void test('seen：合法的取消行多帶的 lt 也算（一般與跳脫的鍵�
   assert.deepEqual(history.seen, ['undo01', 'undo02']);
   assert.deepEqual(history.cancelled, ['2026-10-24T11:00:00.000+08:00', '2026-10-24T11:00:01.000+08:00', 'also-not-present', 'not-present']);
   assert.deepEqual(history.problems, []);
+});
+
+/** 自己組一行 JSON：可以加空白、把 lt 的鍵名寫成跳脫字元、打亂欄位順序（寫紀錄的程式不會這樣寫，別的工具或手改可能會）。 */
+function encodeLoose(fields: [string, unknown][], style: { space: boolean; escape: boolean }): string {
+  const gap = style.space ? ' ' : '';
+  const key = (name: string) => style.escape && name === 'lt' ? '"\\u006ct"' : JSON.stringify(name);
+  return '{' + gap + fields.map(([name, value]) => key(name) + gap + ':' + gap + JSON.stringify(value)).join(',' + gap) + gap + '}';
+}
+// 第一個里程碑回顧的 R2：「紀錄裡出現過的 lt」前後漏了四次（被取消的作答、JSON 的空白、救回的尾段用跳脫的鍵名、取消行多帶的 lt）。
+// 種下的 lt 由產生的方式知道（獨立的預期）：不管這一行合不合法、有沒有被取消、是不是寫入中斷，都要在 seen 裡。
+void test('seen 性質：200 組隨機的紀錄，每一行種下的 lt 都在 seen（作答、變更、取消行、評分不對的行；空白、跳脫的鍵名、欄位順序；寫入中斷）', () => {
+  for (let round = 0; round < 200; round++) {
+    const random = seeded(round + 1);
+    const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
+    let tick = 0, serial = 0;
+    const time = () => formatTime(Date.parse('2026-10-24T10:00:00+08:00') + 1000 * tick++, 480);
+    const planted: string[] = [], answered: string[] = [];
+    function fields(lt: string): [string, unknown][] {
+      const t = time();
+      switch (pick(['review', 'change', 'undo', 'rejected'])) {
+        case 'review': answered.push(t); return [['t', t], ['lt', lt], ['r', pick(['easy', 'good', 'near', 'miss'])], ['v', '12345678']];
+        case 'change': return [['t', t], ['set', 'status'], ['lt', lt], ['val', '暫停']];
+        case 'undo': return [['t', t], ['undo', answered.length ? pick(answered) : time()], ['lt', lt]];
+        default: return [['t', t], ['lt', lt], ['r', 'bad'], ['v', '12345678']];
+      }
+    }
+    const shuffle = <T>(list: T[]): T[] => list.map(item => ({ item, key: random() })).sort((a, b) => a.key - b.key).map(({ item }) => item);
+    const lines: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const lt = 'r' + String(round) + 'n' + String(serial++);
+      const style = { space: random() < 0.4, escape: random() < 0.4 };
+      const form = random();
+      if (form < 0.5) {
+        // 完整的一行，格式隨意。
+        const own = fields(lt);
+        lines.push(encodeLoose(random() < 0.3 ? shuffle(own) : own, style));
+      } else if (form < 0.7) {
+        // 只寫了一段、後面沒有接別的行：lt 的值已經寫完（鍵名沒跳脫，寬鬆的字串比對找得到，可以有空白）。
+        const line = encodeLoose(fields(lt), { space: style.space, escape: false });
+        const end = line.indexOf(JSON.stringify(lt)) + JSON.stringify(lt).length;
+        lines.push(line.slice(0, end + Math.floor(random() * (line.length - end - 1))));
+      } else {
+        // 寫入中斷：前一筆只寫了一段（它的 lt 不一定完整，不算種下），後面接寫紀錄的程式寫的一整行（`{"t":` 開頭、沒有空白）。
+        const head = encodeLoose(fields('cut' + String(serial)), { space: random() < 0.5, escape: random() < 0.5 });
+        lines.push(head.slice(0, 1 + Math.floor(random() * (head.length - 2))) + encodeLoose(fields(lt), { space: false, escape: style.escape }));
+      }
+      planted.push(lt);
+      // 有時取消一筆作答（被取消的作答也算出現過）。
+      if (answered.length && random() < 0.2) lines.push(encodeEntry(time(), { undo: pick(answered) }));
+    }
+    const split = Math.floor(random() * lines.length);
+    const history = mergeHistory([
+      { path: 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl', text: lines.slice(0, split).join('\n') + '\n' },
+      { path: 'Essence Cards/紀錄/2026-10 PC-2c9e.jsonl', text: lines.slice(split).join('\n') },
+    ]);
+    for (const lt of planted) assert.ok(history.seen.includes(lt), 'round ' + String(round) + ' 漏了 ' + lt + '：\n' + lines.join('\n'));
+    assert.deepEqual(history.seen, [...new Set(history.seen)].sort(), 'round ' + String(round));
+  }
 });
 
 void test('取消找不到對象不算錯，不能取消變更或取消；同一 t 的所有作答都失效', () => {

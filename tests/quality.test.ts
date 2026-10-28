@@ -242,6 +242,22 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
 });
 
 // 技術債 A7：state 和核心一樣只能透過 index.ts 使用（state 裡面互相 import 照舊）。
+// 第一個里程碑回顧的 R1：tests/node-files.test.ts 換掉全域的 fs.readdirSync，Linux 上 Node 自己的遞迴監看也被換掉，CI 紅了三天。
+void test('R1 測試不能改全域的 Node 內建模組：syncBuiltinESMExports 與指定 fs 的成員都擋，呼叫照常', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [code, rule] of [
+    ["import { syncBuiltinESMExports } from 'node:module';\nsyncBuiltinESMExports();", 'no-restricted-imports'],
+    ["import fs from 'node:fs';\nfs.readdirSync = () => [];", 'no-restricted-syntax'],
+    ["import * as path from 'node:path';\npath.join = () => '';", 'no-restricted-syntax'],
+    ["import fs from 'node:fs';\nconsole.log(fs.readdirSync('.'));", null],
+    ["import { createRequire } from 'node:module';\nconsole.log(createRequire);", null],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: 'tests/example.test.ts' });
+    const rules = result.messages.map(message => message.ruleId);
+    assert.deepEqual(rules, rule === null ? [] : [rule], code);
+  }
+});
+
 void test('A7 src/state/ 只能透過 index.ts 使用，涵蓋 import、export、動態 import 與 require', async () => {
   const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
   for (const [path, name, blocked] of [

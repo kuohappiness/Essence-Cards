@@ -13,6 +13,7 @@
 | AI 製卡接法驗證、規則更新與題目池補題等待決事項 | 見[待決問題](#待決問題)；未決範圍不因放在本區就算已採用 |
 | 國小社會的製卡規則（[D-137](decisions.md#d-137-國小社會放進-v1)） | 三～六年級、不限版本；預設的內容（學習地圖怎麼畫）在專案討論串「制定國小社會學習目標地圖」談（[討論紀錄](archive/discussions/2026-10-25-elementary-social-map.md)）。[草稿 v0](card-rules/elementary-social.md) 已寫，提問方向與跨年級的做法已定（[D-139](decisions.md#d-139-國小社會的學習地圖四個提問方向道理不綁地方)），其他做法是 Claude 與 Codex 一致的提案。2026-10-26 用康軒五上 2-1、2-2 第一次試用（[試用紀錄](card-rules/trials.md)），Claude 自己製卡與檢查；下一步：使用者決定地名配特色要不要出卡與四點規則修改，改成 v0.2，再用 Sol 跑一次對照，通過才開放；製卡用 R3 加這份預設、驗收不變（使用者已同意） |
 | 學習地圖（[D-136](decisions.md#d-136-學習地圖課本是起點加深可以超出課本)） | v1 只改加深，寫進 AI 製卡模組；通用規則 F 節等第三輪結束、重整製卡規則時一起改。存地圖、提示加深、顯示到了第幾層在第二階段 |
+| 卡組筆記的「全部卡」按鈕與第一次的提醒（[D-146](decisions.md#d-146-卡組筆記的全部卡按鈕與第一次的提醒)） | 和範圍與目錄模組一起做，共用全部卡的出題順序 |
 | 更新與相容（使用者 2026-10-25 開題） | 💬 討論中，[規畫](plans/updates.md)：程式怎麼送到電腦與 iPhone、更新時資料相容與進度不丟、內建規則改版。提案的 v1 部分要在 W6 合併後、學生開始每天使用前做好；說明書的更新教學已定（D-048 補充） |
 | v1 驗收與真實使用驗證 | 依[路線圖](roadmap.md#路線圖)與 D-075；沿用一位學生、一次考試的驗證，不作為第三種功能階段 |
 
@@ -22,12 +23,10 @@
 
 | 項目與影響 | 觸發點 | 完成條件 | 來源 |
 |---|---|---|---|
-| F3：`validateOut` 只檢查目前與主工作樹，私人輸出可能寫進其他 worktree | 下一次跑 T4 前 | 用 `git worktree list --porcelain` 比對所有 worktree 的真實路徑，並有測試 | 同上 |
-| F5：`check-syntax.mjs` 的分類順序和 W2 不同，還留著每頁 6 個目標的上限 | 下一次跑 T4 前 | 分類順序和 W2 一致、拿掉上限；那次 T4 用 W2 的 `parseDeck` 對照題數 | 同上 |
+| F5 的收尾：`check-syntax.mjs` 的分類順序與每頁 6 個目標的上限已在 `738bd29` 改好，還沒用 W2 的 `parseDeck` 對照過題數 | 下一次跑 T4 時 | 那次 T4 用 W2 的 `parseDeck` 對照題數，一致就刪掉這一列 | [W1～W2 審查](<../Claude Codex Discussion/2026-10-20-technical-debt-review.md>) F5 |
 | 一字多義的名稱 `light（輕的） 英翻中`（D-125）：找已學過的字時對不到 `light`（原形提示那一半 W6 §0-2 已做：卡組模組的 `baseForm`） | 寫 AI 製卡模組時 | 找已學過的字時名稱去掉方向與最後的全形括號再比對（可以直接用 `baseForm` 同一條規則）；syntax.md §2-3 的例子有測試 | [D-125](decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
 | 卡組讀不到就跳過那一篇（[tasks/state-load.md](../tasks/state-load.md)）的畫面：讀不到時畫面只有「暫時讀不到，會自動再試」的提示，不說是哪幾篇（§8 實測時，選單上那一科只是少了幾張）。開發命令 `unread` 看得到是哪幾篇（2026-10-27，`73b4000`） | 寫入口畫面時 | 決定畫面要不要列出讀不到的卡組 | state-load §6、§9 |
 | A2：`Files.watch` 把改名攤成舊、新兩個路徑，`state` 用「內容相同、否則檔名相同」猜哪篇改成哪篇（`apply` 的 `gone` 配對）。Codex 已重現的問題：獨立刪掉舊篇、另建同內容的新篇，舊的還原選項被移植；改名同時改名稱又拿掉 ID、檔名也不同時漏報遺失、直接配新 ID；刪除與新增分兩批時待處理丟失。外掛架構檢查環節 1 談過三輪，決定**暫不改**：`watch` 帶 `from` 的整套改造成本高、只拿掉檔名退路會讓搬資料夾的情形退步（[討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)） | 寫範圍與目錄模組（要追蹤單元檔案）時；或實際碰到一次改名後誤配或漏報。T3 已在 Windows 實測：檔案總管與 `fs.rename` 的改名，Obsidian 送的是 `create`＋`delete`，不是 `rename`，這條重開條件沒有發生（[討論稿環節 1 的實機記錄](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)） | 不能只驗一面：同時攤開「減少錯誤移植」與「新增漏報」，討論稿環節 1 三輪的 (a)～(f)、S1～S5、第三輪的退步表都要有測試；改 `Files` 介面時 Node 版不送假配對、契約分共同條件與改名條件 | [W5 架構檢查](<../Claude Codex Discussion/2026-10-26-w5-architecture-debt.md>) A2；外掛架構檢查環節 1 |
-| T2：Node 版 `Files.watch` 收到沒有檔名的事件時只比對檔名集合，既有檔的內容改了不會通知（Codex 注入測試重現；只影響測試與工具） | 下一次改 `tools/node-files.ts`，或測試出現 watch 漏通知時 | 保留 rescan，另把已知路徑全部當成要重讀；重掃暫時失敗時保留這次的失效需求、恢復後補通知；測試含既有檔修改、新檔出現、重掃暫敗後恢復、取消監看後不再通知 | 外掛架構檢查環節 1 |
 | A3：「現在開著哪些卡組」有六個來源在維護同一個集合（`save.ts` 的 `start()` 基準、`layout-change`／`file-open`、`refresh()` 順便記、`ViewPlugin` 的 `opened`、`editor-change`、每 2 秒輪詢），是 R3 到 T1 逐輪貼上去的；正式版在電腦永久每 2 秒掃分頁 | 已到（第一個里程碑回顧）。分支 `claude/quizzical-euclid-f0564e` 已改成三個來源（`start()`、`layout-change`、`opened`），Windows 實測通過；Codex 第三次 L2 通過（`f0ffdcf`），等使用者決定合併 | 照 [A3 設計稿](<../Claude Codex Discussion/2026-10-27-a3-open-decks.md>)第二版：原本的「不超過兩個」改成三個，因為開完馬上關時只有編輯器建立看得到那一篇（`a3check` 的 C1、C3）；每個來源註明接住的實測情境 | [W5 架構檢查](<../Claude Codex Discussion/2026-10-26-w5-architecture-debt.md>) A3 |
 | A8：`deckStatus()` 每次呼叫跑一次完整的 `assignIds`（含 `fixIndent` 的兩次 `parseDeck`），`save.ts` 的 `refresh()` 在 `active-leaf-change` 與每次 `onChange` 對每個開著的卡組呼叫；卡組幾十個目標時是毫秒級，介面沒寫成本 | W6 畫面若對每張卡呼叫 `deckStatus`，或卡組超過數百個目標 | `tracker` 以 `text` 為 key 快取 `status`，同一份文字第二次呼叫不重新解析，有測試；或在 `State.deckStatus` 註明成本 | [W5 架構檢查](<../Claude Codex Discussion/2026-10-26-w5-architecture-debt.md>) A8 |
 | 跨單元的出處在複習畫面只顯示文字、不能點（例如 `出處：1-3 p.20`、`國一下 L5`、只寫 `L3`）：W6 只找得到同一篇卡組的材料（[W6 任務說明 §3-8](../tasks/w6.md#3-8-出處)）。使用者 2026-10-25：知識不應該硬性受限於某單元章節，有了範圍與目錄之後**必須能點** | 寫範圍與目錄模組時 | 跨單元、跨學期、只寫單元的出處都能點，跳到那個單元卡組的材料裡的錨點（[syntax.md §2-5](syntax.md#2-5-出處)）；找不到錨點時打開那個單元的第一份材料；有測試；W6 的照文字顯示拿掉 | W6 任務說明〈待使用者回答〉第 2 題 |

@@ -389,6 +389,47 @@ for (const order of [['P', 'LOG'], ['LOG', 'P']]) void test('R2 同一批讀到�
   assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
 });
 
+// ---- 同一批通知的順序不影響結果（第一個里程碑回顧的 R2：F5 與 R2 都是「同一批的順序」，R2 是 F5 的修正帶進來的） ----
+
+function orders<T>(items: readonly T[]): T[][] {
+  if (items.length <= 1) return [[...items]];
+  return items.flatMap((item, i) => orders([...items.slice(0, i), ...items.slice(i + 1)]).map(rest => [item, ...rest]));
+}
+const D = '- 能說明 D ^d23456\n    - QD :: AD\n';
+const Q = 'Essence Cards/Q.md';
+const t1 = '2026-10-24T12:00:00.000+08:00';
+/** 每個情境：開始的 vault、同一批改成的內容（null 是刪掉）、要看的卡組，以及照任何順序都該得到的結果。 */
+const batches: { name: string; vault: Record<string, string>; batch: Record<string, string | null>; decks: string[];
+  expected: { missing: number; issues: ReturnType<typeof plain> }[]; reviews: number }[] = [
+  { name: '搬出搬入＋換成同一批紀錄裡的 ID',
+    vault: { [P]: A + B, [OTHER]: D, [LOG]: '' },
+    batch: { [P]: B.replace('^b23456', '^aaaaaa'), [OTHER]: D + A, [LOG]: review(t1, 'aaaaaa') + '\n' },
+    decks: [P, OTHER], expected: [{ missing: 0, issues: [] }, { missing: 0, issues: [] }], reviews: 1 },
+  { name: '交換兩篇的目標、搬出同時新增、紀錄取消一筆',
+    vault: { [P]: A, [OTHER]: B, [LOG]: review(t1, 'k3m9x2') + '\n' },
+    batch: { [P]: B + C, [OTHER]: A, [LOG]: review(t1, 'k3m9x2') + '\n' + encodeEntry('2026-10-24T12:00:05.000+08:00', { undo: t1 }) + '\n' },
+    decks: [P, OTHER], expected: [{ missing: 1, issues: [] }, { missing: 0, issues: [] }], reviews: 0 },
+  { name: '刪掉一篇、另一個路徑出現同樣內容（Obsidian 以外的改名）、紀錄加一筆',
+    vault: { [P]: A + B, [LOG]: '' },
+    batch: { [P]: null, [Q]: A + B, [LOG]: review(t1, 'b23456') + '\n' },
+    decks: [Q], expected: [{ missing: 0, issues: [] }], reviews: 1 },
+];
+for (const scenario of batches) void test('同一批通知照任何順序結果都相同：' + scenario.name, async t => {
+  for (const order of orders(Object.keys(scenario.batch))) {
+    const h = await setup(t, scenario.vault);
+    for (const path of order) {
+      const text = scenario.batch[path];
+      if (text === null) h.texts.delete(path);
+      else h.texts.set(path, text);
+    }
+    h.notify(...order);
+    await h.settle();
+    const status = scenario.decks.map(path => { const { missing, issues } = h.state.deckStatus(path); return { missing, issues: plain(issues) }; });
+    assert.deepEqual(status, scenario.expected, order.join(' → '));
+    assert.equal(h.state.history().reviews.length, scenario.reviews, order.join(' → '));
+  }
+});
+
 // ---- 卡組讀不到就跳過那一篇（tasks/state-load.md §3、§7 的 S7～S8）：占用資訊不完整時，不把「不知道」當成「沒用過」 ----
 
 const samePlan = (state: State) => { assert.deepEqual(state.today(), planToday(state.input())); };

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
 import { mkdtemp, mkdir, writeFile, stat, utimes, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -136,47 +135,98 @@ void test('Files.watch 監看中的資料夾被刪掉時不丟出未攔截的錯
     stop();
   }
 });
+/** 監看用的列資料夾替身：failing 時回 EPERM，模擬 Windows 刪除中的資料夾。只交給 createNodeFiles，不改全域的 node:fs。 */
+function flakyList() {
+  const list = {
+    failing: false, calls: 0,
+    readdirSync: ((...args: Parameters<typeof fs.readdirSync>) => {
+      list.calls++;
+      if (list.failing) throw Object.assign(Error('EPERM: operation not permitted, scandir'), { code: 'EPERM' });
+      return fs.readdirSync(...args);
+    }) as typeof fs.readdirSync,
+  };
+  return list;
+}
 // Codex 審查 W5 的 F4：列資料夾暫時失敗後，不能等下一次通知；恢復後要補送刪除。
 void test('Files.watch 列資料夾暫時回 EPERM：恢復後自己重新比對，補送刪除的路徑；停止監看就不再重試', async t => {
   const { root, files } = await fixture(t);
   await files.append('folder/a.md', 'a');
   await files.append('folder/b.md', 'b');
-  // 換掉 node:fs 的 readdirSync（named import 也跟著換），模擬 Windows 刪除中的資料夾。
-  const original = fs.readdirSync;
-  let failing = false, calls = 0;
-  const replace = (fn: typeof fs.readdirSync) => { fs.readdirSync = fn; syncBuiltinESMExports(); };
-  t.after(() => { replace(original); });
-  replace(((...args: Parameters<typeof fs.readdirSync>) => {
-    calls++;
-    if (failing) throw Object.assign(Error('EPERM: operation not permitted, scandir'), { code: 'EPERM' });
-    return original(...args);
-  }) as typeof fs.readdirSync);
+  const list = flakyList();
   const events: string[] = [];
-  const stopFirst = files.watch(path => { events.push(path); });
-  failing = true;
+  const stopFirst = createNodeFiles(root, list).watch(path => { events.push(path); });
+  t.after(() => stopFirst());
+  list.failing = true;
   await rm(join(root, 'folder/a.md'));
   // 檔案系統的通知都送完了（這段期間每次比對都失敗），之後不會再有新的通知。
   await setTimeout(300);
   assert.deepEqual(events, []);
-  failing = false;
+  list.failing = false;
   const deadline = performance.now() + 3000;
   while (!events.includes('folder/a.md') && performance.now() < deadline) await setTimeout(10);
   assert.deepEqual(events, ['folder/a.md']);
   stopFirst();
 
   // 停止監看之後，排好的重試也取消。
-  const second = createNodeFiles(root);
   const seen: string[] = [];
-  const stop = second.watch(path => { seen.push(path); });
-  failing = true;
+  const stop = createNodeFiles(root, list).watch(path => { seen.push(path); });
+  t.after(() => stop());
+  list.failing = true;
   await rm(join(root, 'folder/b.md'));
   await setTimeout(300);
   stop();
-  failing = false;
-  const before = calls;
+  list.failing = false;
+  const before = list.calls;
   await setTimeout(1500);
-  assert.equal(calls, before);
+  assert.equal(list.calls, before);
   assert.deepEqual(seen, []);
+});
+// 外掛架構檢查環節 1 的 T2：fs.watch 有時不給檔名。用假的 watch 送出 filename 是 null 的事件。
+void test('T2 Files.watch 收到沒有檔名的事件：既有檔改了內容、新檔出現都通知；比對暫時失敗時保留，恢復後補送；停止後不再通知', async t => {
+  const { root, files } = await fixture(t);
+  await files.append('a.md', 'a');
+  await files.append('deep/b.md', 'b');
+  const list = flakyList();
+  const fake = { emit: (() => {}) as (event: string, filename: string | null) => void, closed: false };
+  const watch = ((_path: string, _options: unknown, listener: typeof fake.emit) => {
+    fake.emit = listener;
+    return { close() { fake.closed = true; } };
+  }) as unknown as typeof fs.watch;
+  const events: string[] = [];
+  const stop = createNodeFiles(root, { readdirSync: list.readdirSync, watch }).watch(path => { events.push(path); });
+  t.after(() => stop());
+
+  // 既有檔改了內容：檔名集合沒變，不知道是哪一篇，已知的全部通知。
+  await files.modify('deep/b.md', old => old + '!');
+  fake.emit('change', null);
+  assert.deepEqual(events.sort(), ['a.md', 'deep/b.md']);
+  events.length = 0;
+  await files.append('c.md', 'c');
+  fake.emit('change', null);
+  assert.deepEqual(events.sort(), ['a.md', 'c.md', 'deep/b.md']);
+  events.length = 0;
+
+  // 比對暫時失敗：這次的重讀需求留著，恢復後自己補送。
+  list.failing = true;
+  await files.modify('a.md', old => old + '!');
+  fake.emit('change', null);
+  assert.deepEqual(events, []);
+  list.failing = false;
+  const deadline = performance.now() + 3000;
+  while (events.length === 0 && performance.now() < deadline) await setTimeout(10);
+  assert.deepEqual(events.sort(), ['a.md', 'c.md', 'deep/b.md']);
+  events.length = 0;
+
+  // 停止監看：排好的重試取消，之後不再通知。
+  list.failing = true;
+  fake.emit('change', null);
+  stop();
+  assert.ok(fake.closed);
+  list.failing = false;
+  const before = list.calls;
+  await setTimeout(300);
+  assert.equal(list.calls, before);
+  assert.deepEqual(events, []);
 });
 void test('Files.watch 能監看既有深層檔案', async t => {
   const { files } = await fixture(t);
