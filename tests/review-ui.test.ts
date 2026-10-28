@@ -320,6 +320,15 @@ async function skipAndCopy(o: Opened, answer: string): Promise<void> {
   await o.ui.settle();
 }
 const ratings = (o: Opened): string[][] => o.session.history().map(entry => [entry.card.lt, entry.rating]);
+/** 真的 createSpeech 底下的系統語音替身：念的每一段記在回傳的陣列，測試呼叫 onend 才算念完。 */
+function fakeVoices(t: TestContext): { onend: (() => void) | null }[] {
+  const spoken: { onend: (() => void) | null }[] = [];
+  const scope = globalThis as unknown as { window?: unknown; SpeechSynthesisUtterance?: unknown };
+  scope.window = { speechSynthesis: { cancel() {}, speak(u: { onend: (() => void) | null }) { spoken.push(u); }, getVoices: () => [{ lang: 'en-US' }] } };
+  scope.SpeechSynthesisUtterance = class { lang = ''; onend: (() => void) | null = null; onerror: (() => void) | null = null; };
+  t.after(() => { delete scope.window; delete scope.SpeechSynthesisUtterance; });
+  return spoken;
+}
 
 void test('F1 等念完時關掉畫面：取消等待，不記下沒印象', async t => {
   const o = await open(t, { subject: '英文' }, { autoRead: true, holdSpeech: true, texts: { [ENGLISH]: autoDeck } });
@@ -331,11 +340,7 @@ void test('F1 等念完時關掉畫面：取消等待，不記下沒印象', asy
 });
 
 void test('F1 真的 createSpeech：念答案時切到背景（stop）不記，被停掉的段落晚回報也不算；不到 60 秒回來、沒在念就記下', async t => {
-  const spoken: { onend: (() => void) | null }[] = [];
-  const scope = globalThis as unknown as { window?: unknown; SpeechSynthesisUtterance?: unknown };
-  scope.window = { speechSynthesis: { cancel() {}, speak(u: { onend: (() => void) | null }) { spoken.push(u); }, getVoices: () => [{ lang: 'en-US' }] } };
-  scope.SpeechSynthesisUtterance = class { lang = ''; onend: (() => void) | null = null; onerror: (() => void) | null = null; };
-  t.after(() => { delete scope.window; delete scope.SpeechSynthesisUtterance; });
+  const spoken = fakeVoices(t);
   const speech = createSpeech(() => {});
   const o = await open(t, { subject: '英文' }, { autoRead: true, speech, texts: { [ENGLISH]: autoDeck } });
   await skipAndCopy(o, 'went');
@@ -379,6 +384,25 @@ void test('F2 同一題重出、回看後回來、切走不到 60 秒回來：�
   assert.equal(o.idle.length, 1, '不到 60 秒回來：再等');
   for (const callback of o.idle.splice(0)) callback();
   await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']]);
+});
+
+// Codex 再查 R1（2026-10-28）：走畫面的換卡動畫回到目前那張，沒在念時 whenIdle 馬上回報，那時動畫還沒結束；要等動畫結束再等一次。
+void test('R1 等念完時按 ← 回看、再按「回到目前」（有換卡動畫）：動畫結束後沒在念，記下', async t => {
+  const spoken = fakeVoices(t);
+  const o = await open(t, { subject: '英文' }, { autoRead: true, speech: createSpeech(() => {}), texts: { [ENGLISH]: autoDeck } });
+  await skipAndCopy(o, 'went');
+  for (const u of spoken.splice(0)) u.onend?.();
+  await o.ui.settle();
+  assert.equal(lt(o.session), 't1');
+  await skipAndCopy(o, 'turn off');
+  assert.equal(spoken.length, 2, '念答案與例句：等著');
+  o.ui.key('ArrowLeft');
+  await o.ui.settle();
+  assert.ok(o.session.view().top.viewing, '回看上一張');
+  o.ui.click(o.ui.find('ec-return')[0]);
+  await o.ui.settle();
+  assert.ok(o.ui.motion.calls > 0, '有跑換卡動畫');
   assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']]);
 });
 
