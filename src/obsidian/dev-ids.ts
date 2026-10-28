@@ -278,6 +278,8 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const selectedBefore = { text: editor.getSelection(), from: editor.getCursor('from'), to: editor.getCursor('to') };
   const notices = host.devLog.notices.length;
   button(first.view)?.click();
+  // 按鈕的存檔要等寫進磁碟、核對讀取之後才有結果（tasks/state-writes.md §7）：同一篇還沒結束時 save 回傳同一個 Promise。
+  await host.devLog.save?.save(first.view);
   const filled = editor.getValue();
   out.filled = filled;
   out.notice = host.devLog.notices.slice(notices);
@@ -304,6 +306,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   out.beforeClick = { editorReloaded: !editor.getValue().includes(id), editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })) };
   out.issuesExpected = TIPS.issues(1);
   button(first.view)?.click();
+  await host.devLog.save?.save(first.view);
   await sleep(300);
   out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
   const modal = Array.from(document.querySelectorAll('.modal-container .essence-cards-issue')).at(-1);
@@ -339,6 +342,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const stale = await open(app, file);
   await until(() => { host.devLog.save?.refresh(); return !!button(stale.view); });
   button(stale.view)?.click();
+  await host.devLog.save?.save(stale.view);
   await sleep(2500);
   const staleFilled = stale.view.editor.getValue();
   const staleId = /能說明蒸發 \^([a-z0-9]{6})/.exec(staleFilled)?.[1] ?? '';
@@ -346,6 +350,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   await until(() => state.deckStatus(trial).issues.length === 1);
   await until(() => !stale.view.editor.getValue().includes(staleId), 3000);
   button(stale.view)?.click();
+  await host.devLog.save?.save(stale.view);
   await sleep(300);
   const oldButton = restoreButton();
   const edited = staleFilled.replace(' ^' + staleId, '').replace('水變成水蒸氣叫什麼？', '水加熱變成水蒸氣叫什麼？');
@@ -365,6 +370,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   addTarget(typed.view);
   const typedNotices = host.devLog.notices.length;
   button(typed.view)?.click();
+  await host.devLog.save?.save(typed.view);
   out.typedNotice = host.devLog.notices.slice(typedNotices);
   typed.leaf.detach();
   await sleep(2500);

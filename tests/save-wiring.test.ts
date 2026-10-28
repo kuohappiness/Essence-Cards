@@ -172,3 +172,38 @@ void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不�
     assert.deepEqual(h.fills, [DECK]);
   }
 });
+
+// S27（tasks/state-writes.md §7）：存檔交給 state 的 EditorHandle 照按下時的那一篇；按鈕連按只排一份。
+void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同時 apply 回傳 false、persist 呼叫 view.save()；連按只排一份', async () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  interface Handle { path: string; text(): string | null; apply(before: string, after: string): boolean; persist(): Promise<void> }
+  const handles: Handle[] = [];
+  let finish: () => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [] }), onChange: () => () => {},
+    save: (editor: Handle) => { handles.push(editor); return new Promise(resolve => { finish = () => { resolve({ kind: 'unchanged' }); }; }); },
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  const view = stub.leaf(DECK).view as { file: { path: string } | null; value: string; saves: number };
+  view.value = '- 能說明 C\n';
+  const first = saver.save(view), second = saver.save(view);
+  assert.equal(first, second, '同一篇還沒結束時回傳同一個 Promise');
+  assert.equal(handles.length, 1);
+  const [handle] = handles;
+  assert.equal(handle.path, DECK);
+  assert.equal(handle.text(), '- 能說明 C\n');
+  assert.equal(handle.apply('別的內容', '- 能說明 C ^aaaaaa\n'), false);
+  assert.equal(handle.apply('- 能說明 C\n', '- 能說明 C ^aaaaaa\n'), true);
+  await handle.persist();
+  assert.equal(view.saves, 1);
+  view.file = { path: 'Essence Cards/Q.md' };
+  assert.equal(handle.text(), null, '換篇之後');
+  assert.equal(handle.path, DECK);
+  finish();
+  await first;
+  view.file = { path: DECK };
+  void saver.save(view);
+  assert.equal(handles.length, 2, '上一份結束之後再按，排新的一份');
+});

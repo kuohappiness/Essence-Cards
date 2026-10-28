@@ -7,6 +7,33 @@ export type { IdIssue, IdIssueKind } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 
+/** 開著的筆記的編輯器（tasks/state-writes.md §1）。由 Obsidian 層實作，state 不 import Obsidian。 */
+export interface EditorHandle {
+  /** 這次寫入的對象。建立時就固定：之後換篇、改名，都照這個路徑處理，不跟著畫面走。 */
+  readonly path: string;
+  /** 編輯器現在的全文；這個編輯器已經不是 path 那一篇（換篇、改名、關掉）時回傳 null。 */
+  text(): string | null;
+  /** 一次同步的 Editor 交易，把 before 改成 after（只改有變的部分）；內容已經不是 before 時不改，回傳 false。 */
+  apply(before: string, after: string): boolean;
+  /** 等編輯器把目前的內容寫進磁碟（TextFileView.save）；寫不進去就 reject。 */
+  persist(): Promise<void>;
+}
+
+/** Cards 改卡組的結果。 */
+export type WriteResult =
+  /** 核對讀取確認寫成了。added：這次新配上 ID 的目標數（還原、當成新的不算）。 */
+  | { kind: 'done'; added: number }
+  /** 沒有要改的（含不是卡組）。 */
+  | { kind: 'unchanged' }
+  /** 門檻沒過，沒有改字。 */
+  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' }
+  /** 途中換了篇、內容被改掉、問題已經不成立，或一直有新的變動：沒有採用，要再存一次。 */
+  | { kind: 'stale' }
+  /** 寫不進磁碟：輸出沒有採用，已配出的 ID 保留、不重用。 */
+  | { kind: 'failed'; error: unknown }
+  /** 已寫進磁碟，但核對時讀不到：state 自己重試，讀到後照核對採用。 */
+  | { kind: 'saved' };
+
 export interface StateOptions {
   files: Files;
   /** 例如 'iPhone-7f3a'；紀錄的檔名用它。 */
@@ -41,8 +68,8 @@ export interface State {
   ready(): Promise<LoadTimings>;
   /**
    * 列出來或通知過、但最近一次讀不到的路徑（卡組與紀錄），照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
-   * 不是空的時候占用資訊不完整，補 ID、還原、當成新的都暫停（fillText 回傳原文、fillIds 回傳 false、resolveText
-   * 回傳 null；D-134 不能把「不知道」當成「沒用過」）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
+   * 不是空的時候占用資訊不完整，補 ID、還原、當成新的都暫停（save、resolve 回 blocked unread，fillIds 回傳 false；
+   * D-134 不能把「不知道」當成「沒用過」）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
    * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
    */
   unread(): readonly string[];
@@ -68,12 +95,15 @@ export interface State {
   close(): Promise<void>;
   /** 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。 */
   deckStatus(path: string): { missing: number; issues: IdIssue[] };
-  /** 存檔（開著的筆記）：回傳補 ID、歸位之後的文字；沒有要改、手機、不是卡組時回傳原文。 */
-  fillText(path: string, text: string): string;
-  /** 離開筆記時（沒開著的檔）：讀檔、照 fillText 寫回；不存在時不建立。有改字回傳 true。 */
+  /** 存檔（開著的筆記）：排進寫入的那一列，補 ID、歸位、改縮排，寫進磁碟並核對後才採用。 */
+  save(editor: EditorHandle): Promise<WriteResult>;
+  /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
+  resolve(issue: IdIssue, choice: 'restore' | 'new', editor: EditorHandle): Promise<WriteResult>;
+  /**
+   * 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補；核對後確實補上了才回傳 true。不存在時不建立。
+   * 寫不進去時 reject（已配出的 ID 保留、不重用）。
+   */
   fillIds(path: string): Promise<boolean>;
-  /** 家長選了之後：回傳寫回後的文字；證據不再成立時回傳 null，問題保留。 */
-  resolveText(issue: IdIssue, choice: 'restore' | 'new', text: string): string | null;
   /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
   removedInEditor(path: string, ids: readonly string[]): void;
   /** 這台電腦的編輯器裡 Undo／Redo 或貼上讓這些 ID 回來了：之後再弄丟就照常算弄丟。 */
@@ -83,14 +113,6 @@ export interface State {
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
 
-/** Cards 改卡組的結果（tasks/state-writes.md §1）。 */
-type WriteResult =
-  | { kind: 'done'; added: number }
-  | { kind: 'unchanged' }
-  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' }
-  | { kind: 'stale' }
-  | { kind: 'failed'; error: unknown }
-  | { kind: 'saved' };
 /** 先讀完待讀最多幾輪（§3 第 2 步）。 */
 const DRAIN_ROUNDS = 5;
 
@@ -487,12 +509,32 @@ export function createState(options: StateOptions): State {
       rounds.count++;
     }
   }
-  /** 開著的筆記：呼叫端馬上用 Editor 的交易寫回，所以直接採用。 */
-  function fillText(path: string, text: string): string {
-    if (writable(path)) return text;
-    const prepared = prepare(path, text);
-    track(path, () => { tracker.wrote(path, prepared.text); });
-    return prepared.text;
+  /**
+   * 開著的筆記（save、resolve）：第 4、5 步從 admit 的最後一次檢查到 apply 之間沒有 await。plan 對編輯器最新的文字準備
+   * （先把它當成新版本比對、觀察到的原文照常採用）；回傳 null 時沒有要寫的，照樣 persist、等核對讀取，回 fallback。
+   */
+  async function edit(editor: EditorHandle, plan: (text: string) => Prepared | null, fallback: WriteResult): Promise<WriteResult> {
+    const path = editor.path;
+    const stop = await admit(path, { count: 0 });
+    if (stop) return stop;
+    begin(path);
+    let outcome: WriteResult | Promise<WriteResult>;
+    try {
+      const text = editor.text();
+      if (text === null) return { kind: 'stale' };
+      const prepared = plan(text);
+      if (prepared && prepared.text !== text && !editor.apply(text, prepared.text)) return { kind: 'stale' };
+      // 沒有改字也要 persist：觀察過的編輯器文字可能比磁碟新，要讓磁碟追上，核對讀取才有依據。
+      await editor.persist();
+      outcome = verify(path, text, prepared, fallback);
+    } catch (error) {
+      // 寫不進去：不登記核對，不把 Editor 改回去，已配出的 ID 留在 seen、不重用。這時磁碟可能比觀察過的編輯器文字舊，
+      // 接著的那次讀取可能出現和 N1 一樣的假問題，等下一次存檔成功或 Obsidian 的自動存檔追上後消失（保存失敗時的代價）。
+      outcome = { kind: 'failed', error };
+    } finally {
+      end(path);
+    }
+    return outcome;
   }
 
   return {
@@ -502,22 +544,14 @@ export function createState(options: StateOptions): State {
     },
     unread: () => [...unread].sort(),
     deckStatus: path => loaded ? tracker.status(path) : { missing: 0, issues: [] },
-    fillText,
+    save: editor => enqueue(() => edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
+    // 問題已經跟著改名搬到別的路徑：不是這個編輯器的那一篇，不準備（stale）。
+    resolve: (issue, choice, editor) => enqueue(() => edit(editor, text => issue.path === editor.path ? track(editor.path, () => tracker.resolve(issue, choice, text)) : null, { kind: 'stale' })),
     async fillIds(path) {
       const result = await enqueue(() => fillFile(path));
       // 寫不進去時照舊 reject（呼叫端交給 onError）；已配出的 ID 留在 seen、不重用。
       if (result.kind === 'failed') throw result.error;
       return result.kind === 'done';
-    },
-    resolveText(issue, choice, text) {
-      if (writable(issue.path)) return null;
-      return track(issue.path, () => {
-        const prepared = tracker.resolve(issue, choice, text);
-        if (!prepared) return null;
-        prepared.record?.();
-        tracker.wrote(issue.path, prepared.text);
-        return prepared.text;
-      });
     },
     removedInEditor(_path, ids) { tracker.removed(ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },

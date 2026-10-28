@@ -26,9 +26,13 @@ interface Command { id: string; name?: string; callback?: () => void; checkCallb
 
 class FakeMarkdownView {
   file: { path: string } | null;
-  editor = { getValue: () => '', transaction() {}, offsetToPos: () => ({ line: 0, ch: 0 }) };
+  /** 編輯器的文字（transaction 不改它）；save() 被呼叫的次數。 */
+  value = '';
+  saves = 0;
+  editor = { getValue: () => this.value, transaction() {}, offsetToPos: () => ({ line: 0, ch: 0 }) };
   containerEl = { querySelector: () => null };
   constructor(path: string | null) { this.file = path ? { path } : null; }
+  save() { this.saves++; return Promise.resolve(); }
   addAction() { return { addClass() {}, setAttribute() {}, toggleClass() {}, remove() {} }; }
 }
 
