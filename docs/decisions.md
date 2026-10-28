@@ -3674,7 +3674,7 @@
 
 **理由**：
 
-- AGENTS.md 每個 session 都整份讀（約 9,800 字元），其中「討論方式」整段和 essence-discuss 幾乎一字不差，寫決定的步驟和 essence-decision 重複，模型分工和 `quality.md` 的角色表重複。同一條規則寫兩處，改一邊就對不上。
+- AGENTS.md 每個 session 都整份讀（約 4,800 字），其中「討論方式」整段和 essence-discuss 幾乎一字不差，寫決定的步驟和 essence-decision 重複，模型分工和 `quality.md` 的角色表重複。同一條規則寫兩處，改一邊就對不上。
 - D-143 只寫了「只放每個 session 都需要的規則」，沒寫由誰、怎麼判斷；文件檢查與 hook 都不看 AGENTS.md，任何 session 都能直接加，等於沒有煞車。
 - 全域規則藏在 skill 裡，只有觸發那個 skill 的 session 才讀得到，Codex 讀的又是另一份副本，容易漏。
 - 底線放最上面：讀的人最先看到、最不容易被長段落淹沒。
