@@ -9,7 +9,6 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
-| W6 iPhone 測試後的畫面修改 | [D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 實作完，Codex 審查的 F1～F8 已修（分支 `claude/w6-polish` 的 `888075a`） | 決定請 Codex 再查修正或直接合併進 `main` | 使用者 | [任務說明](../tasks/w6-polish.md)、[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 討論中：版本紀錄、考前提醒、更新前備份已有初步結論 | 使用者選第 3 題（內建規則改版）；之後和 Codex 討論，一致再寫成 D-ID | 使用者 | [規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7 已談定（7 見 [D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)）；環節 8 雙方一致 | 使用者決定電腦專用的主機接點（改 D-053）；`state-load` 與 W6 都已合併，環節 4、5、6、9、2、3 可以接著談 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
@@ -46,6 +45,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-28 | W6 iPhone 回饋的畫面修改合併進 `main`（`7d09247`，[D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)，[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)）：Codex 兩輪的 F1～F8、R1～R4 都已修；iPhone 待驗語音念完、切 App 回來換卡、細框按鈕與 `md-cases` |
 | 2026-10-28 | AGENTS.md 重寫（[D-147](decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)，[任務說明](../tasks/agents-md-rewrite.md)）：底線放最上、加新增規則的五關，約 4,800 字減到 3,100 字；skill 刪掉重複的句子，`essence-discuss` 改成 AI 能自己載入，也不再依賴不存在的 grilling；Capture 的底線也搬到最上 |
 | 2026-10-28 | A3 合併進 `main`（實作 `dfb368e`，[設計稿](<../Claude Codex Discussion/2026-10-27-a3-open-decks.md>)）：存檔備援只從 `start()`、`layout-change`、編輯器建立三處追蹤開著的卡組，拿掉每 2 秒掃分頁；Windows 實測 `a3check` 11 項與冷啟動都通過，Codex 三輪 L2 通過 |
 | 2026-10-28 | W6 iPhone 測試後的建議定案：複習畫面拿掉分隔線、打字卡不重複顯示答案、一行一個喇叭、試做在空格裡打字（[D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)）；卡組筆記的「全部卡」按鈕與第一次的提醒（[D-146](decisions.md#d-146-卡組筆記的全部卡按鈕與第一次的提醒)） |
@@ -55,4 +55,3 @@ flowchart LR
 | 2026-10-27 | W6 複習畫面合併進 `main`（`f136cf6`，[任務說明](../tasks/w6.md)、[iPhone 測試](../tasks/w6-iphone.md)）：W1～W6 打通，第一個里程碑達成。iPhone 第一次打開 259、223 ms，D-110 不加快取；使用者覺得鍵盤、朗讀、靜音與手勢都正常 |
 | 2026-10-27 | 歸檔原則補齊（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)，[任務說明](../tasks/archive-principles.md)）：文件檢查拿掉字數上限、plans 加狀態行；AGENTS 與 skill 寫明各類文件的終點，backlog 清掉已定案的項目 |
 | 2026-10-27 | 任務分配微調（[D-144](decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)，修改 D-140）：規劃型對話開 Opus xhigh、執行型 high，重大決策先和 Codex 討論，Fable 只在解不了的時候 |
-| 2026-10-27 | 歸檔原則定案（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)，修改 D-141）：不設字數上限，改成每類文件都有終點 |

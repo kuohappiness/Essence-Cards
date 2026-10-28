@@ -1,6 +1,6 @@
 # W6 iPhone 測試後的畫面修改（給 Claude，本機執行）
 
-狀態：進行中：實作完，四次 iPhone 測試的回饋都已改；Codex 審查的 F1～F8 已修（分支 `claude/w6-polish` 的 `888075a`，[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)），等使用者決定再查或合併（2026-10-28）
+狀態：已完成（2026-10-28 合併進 `main`，`7d09247`；Codex 兩輪審查的 F1～F8、R1～R4 都已修，見[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（執行型，D-144）。照 [D-145](../docs/decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 改複習畫面；[D-146](../docs/decisions.md#d-146-卡組筆記的全部卡按鈕與第一次的提醒) 的卡組筆記按鈕不在這一批，和範圍與目錄模組一起做。
 

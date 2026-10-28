@@ -1,6 +1,6 @@
 # W6 iPhone 測試後的畫面修改：審查請求（給 Codex）
 
-狀態：Codex 已回報，Claude 已修（[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)，2026-10-28）
+狀態：已完成（Codex 兩輪回報都已修，分支合併進 `main` 的 `7d09247`；[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)，2026-10-28）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（畫面的 DOM 後處理與 React portal、自動換下一張會寫紀錄、語音的結束回報，三件互相牽動）。
 
