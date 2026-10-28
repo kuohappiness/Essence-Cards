@@ -1,6 +1,6 @@
 # 重寫 AGENTS.md（D-147）（給 Claude，本機執行）
 
-狀態：待執行
+狀態：已完成（`d8047a2`～`d5cde3f`；Essence Capture `6f65691`）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（判斷已在 D-147 做完，這裡照著換文字、刪 skill 裡的重複）。請新開一個 session，同時加入 Essence Cards 與 Essence Capture 兩個資料夾。
 
