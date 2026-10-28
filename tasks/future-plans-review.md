@@ -1,6 +1,6 @@
 # 未來規畫統整的審閱（給 Claude，本機執行）
 
-狀態：已完成（`0756315`～`8798c90`）；等使用者決定 1 題（第 1、2 題已決），見[交接稿的審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)
+狀態：已完成（`0756315`～`8798c90`）；只剩 C-009 等使用者決定（其餘已決），見[交接稿的審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。這份工作主要是逐項比對；v1／第二階段的界線只找出疑點，不改，交給使用者決定。請新開一個 session。
 

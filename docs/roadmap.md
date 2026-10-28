@@ -12,7 +12,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線第 0 步的格式已寫進 [syntax.md](syntax.md)（§0-1、§5-1～5-3、§8） | 新的 Codex session（推理等級高）做格式查核，一致後本機開第一部分；做完更新防線才裝下一版到正式使用的 vault | 使用者（開 Codex session） | [任務說明](../tasks/update-safeguards.md)、[查核請求](../tasks/update-safeguards-format-review.md)、[規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、4、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4 的施工記進 [backlog 技術債](backlog.md#技術債)） | `state` 讀寫協調的[任務說明](../tasks/state-writes.md)已寫好，等使用者排開工時間；Claude 接著寫環節 5 | 使用者、Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
-| 未來規畫統整的審閱 | Claude 審完：122 項，遺漏 1 項、原意與來源 4 處已修，身分沒有被改 | 使用者決定第 3 題：三項舊共識要結案還是列進第二階段（第 1、2 題已決：Capture 開工前的研究放 v1、真實驗證不算 v1） | 使用者 | [請使用者決定](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)、[任務說明](../tasks/future-plans-review.md) |
+| 未來規畫統整的審閱 | Claude 審完：122 項，遺漏 1 項、原意與來源 4 處已修，身分沒有被改 | 使用者決定 C-009 要不要結案（其餘已決：Capture 開工前的研究放 v1、真實驗證不算 v1、C-017 列進第二階段、C-011 → D-152） | 使用者 | [請使用者決定](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)、[任務說明](../tasks/future-plans-review.md) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
 | 英文一字多義 | 規則已改（D-125） | 有多義字的真實教材時試用 | 新教材 | [D-125](decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
@@ -46,6 +46,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-29 | 教材不限課本、補充筆記另外放（[D-152](decisions.md#d-152-教材是針對考試範圍的文件補充筆記另外放)）：針對考試範圍的學校講義、補習班教材算課內，延伸改從「教材以外」算，不一致時學校的優先；舊共識 C-011 結案（[統整審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)） |
 | 2026-10-28 | 更新與相容定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)、[D-150](decisions.md#d-150-備份與還原)、[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)，[討論稿](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md>)）：每台裝置記版本、讀不懂就停、正式 vault 只裝正式版；外掛自己備份（每月一次、隨時手動），紀錄只補不刪；內建規則跟著外掛、改了就是自訂版 |
 | 2026-10-28 | W6 iPhone 回饋的畫面修改合併進 `main`（`7d09247`，[D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)，[審查與回應](<../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)）：Codex 兩輪的 F1～F8、R1～R4 都已修；iPhone 待驗語音念完、切 App 回來換卡、細框按鈕與 `md-cases` |
 | 2026-10-28 | AGENTS.md 重寫（[D-147](decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)，[任務說明](../tasks/agents-md-rewrite.md)）：底線放最上、加新增規則的五關，約 4,800 字減到 3,100 字；skill 刪掉重複的句子，`essence-discuss` 改成 AI 能自己載入，也不再依賴不存在的 grilling；Capture 的底線也搬到最上 |
@@ -55,4 +56,3 @@ flowchart LR
 | 2026-10-27 | 里程碑報告的 R5（`73b4000`，[實機記錄](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)）：開發命令 `events` 記錄 Obsidian 事件；外部改名是 `create`＋`delete`，A2 不重開；資料夾刪除的契約 C15 通過；加 `unread` 命令 |
 | 2026-10-27 | 第一個里程碑的回顧與安全檢查（[報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)）：安全沒有發現、`npm audit` 0；十項建議，最重要的是 CI 在 main 紅了三天沒人發現，等使用者選 |
 | 2026-10-27 | W6 複習畫面合併進 `main`（`f136cf6`，[任務說明](../tasks/w6.md)、[iPhone 測試](../tasks/w6-iphone.md)）：W1～W6 打通，第一個里程碑達成。iPhone 第一次打開 259、223 ms，D-110 不加快取；使用者覺得鍵盤、朗讀、靜音與手勢都正常 |
-| 2026-10-27 | 歸檔原則補齊（[D-143](decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)，[任務說明](../tasks/archive-principles.md)）：文件檢查拿掉字數上限、plans 加狀態行；AGENTS 與 skill 寫明各類文件的終點，backlog 清掉已定案的項目 |
