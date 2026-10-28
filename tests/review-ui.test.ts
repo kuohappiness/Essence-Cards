@@ -261,6 +261,33 @@ void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照
   assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, true);
 });
 
+void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面），不在最底下那一排；沒打字按「沒印象」不畫「你打的」', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3', 'z1']) } });
+  assert.equal(lt(o.session), 'z2');
+  assert.deepEqual(o.ui.find('ec-actions'), [], '打字中沒有最底下那一排');
+  const card = o.ui.find('ec-card')[0];
+  assert.deepEqual(all(card).filter(node => node.props.className === 'ec-typed-actions').length, 1, '在卡片裡');
+  assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['沒印象', '確認']);
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['正確拼字'], '沒打字：只有「正確拼字」');
+  assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['確認'], '第 3 步只有確認，也在卡片裡');
+  o.session.input('borrow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.equal(o.ui.find('ec-actions').length, 1, '三步走完：自評在最底下');
+  assert.deepEqual(o.ui.find('ec-typed-actions'), []);
+});
+
+void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文（重複的只念一次）', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 記憶錨點：go 的過去式不規則：go → went → gone', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['記憶錨點']);
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).at(-1), 'go 的過去式不規則：go → went → gone');
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone']);
+});
+
 void test('D-145 第 3 步照打的對象是「正確拼字」那一行（最接近的答案）：照打它不標錯，走完線上寫它', async t => {
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3']) } });
   assert.equal(lt(o.session), 'z1');

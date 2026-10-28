@@ -29,7 +29,8 @@
   --ec-size-button: 16px;
   --ec-size-title: 22px;
 
-  --ec-gap-stage: 30px 26px 16px;
+  --ec-stage-top: 30px;
+  --ec-gap-stage: var(--ec-stage-top) 26px 16px;
   --ec-gap-question: 18px;
   /* 題目和答案之間：不畫線，只靠留白分開（D-145；原本 26px 加線下的 22px） */
   --ec-gap-answer: 48px;

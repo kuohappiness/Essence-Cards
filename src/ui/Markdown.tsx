@@ -1,6 +1,7 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
-import { useEffect, useLayoutEffect, useRef } from 'react';
-import { BLANK, englishBreak } from '../review/index.ts';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { BLANK, englishBreak, tailStart } from '../review/index.ts';
 
 // 卡片的內容交給 Obsidian 渲染（D-052、D-109、W6 §3-3）：圖片、公式、音檔照樣呈現；sourcePath 是卡組的路徑。
 // 填空題：渲染後把 <mark> 換成空格（一條底線，翻面後答案在同一條線上淡入）。
@@ -25,6 +26,31 @@ export interface MarkdownProps {
   className?: string;
   /** 打字卡渲染好：空格（.ec-slot）交給複習畫面放輸入框；題目裡找不到 ＿＿ 時是 null。 */
   onSlot?: (slot: HTMLElement | null) => void;
+  /** 接在最後一個字後面的東西（喇叭，D-145）：和最後一個字包在一起，換行時不會單獨掉到下一行。 */
+  tail?: React.ReactNode;
+}
+
+/**
+ * 最後一段文字（空格、填空裡的不算）的最後一個字包進 .ec-tail，tail 放進同一格；沒有文字時接在最後面。
+ * 最後的字在連結裡時接在連結後面（不放進連結，免得按喇叭也開了連結）。
+ */
+function attachTail(container: HTMLElement): HTMLElement {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let last: Text | null = null;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node instanceof Text && node.textContent?.trim() && !node.parentElement?.closest('.ec-slot, .ec-blank')) last = node;
+  }
+  const tail = document.createElement('span');
+  tail.className = 'ec-tail';
+  const link = last?.parentElement?.closest('a');
+  if (!last || link) {
+    if (link) link.after(tail); else (container.lastElementChild ?? container).append(tail);
+    return tail;
+  }
+  const rest = last.splitText(tailStart(last.textContent ?? ''));
+  rest.replaceWith(tail);
+  tail.append(rest);
+  return tail;
 }
 
 /** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線；回傳放線的那一格，找不到 ＿＿ 時是 null。 */
@@ -88,6 +114,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef(props);
   latest.current = props;
+  const [tailEl, setTailEl] = useState<HTMLElement | null>(null);
   const { app, text, sourcePath, mode = 'plain', lines = 0 } = props;
   useEffect(() => {
     const element = host.current;
@@ -115,6 +142,8 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
         }
         const slot = mode === 'typed' ? insertLines(container, lines) : null;
         applyState(container, latest.current);
+        // 一律先包好最後一個字：英翻中的喇叭在翻面前就有，中翻英的在答案出現後才有，不用為此重新渲染。
+        setTailEl(attachTail(container));
         if (mode === 'typed') latest.current.onSlot?.(slot);
         latest.current.onReady?.();
       } catch (error) {
@@ -133,6 +162,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       component.unload();
       for (const audio of Array.from(container.querySelectorAll('audio'))) audio.pause();
       container.remove();
+      setTailEl(null);
     };
   }, [app, text, sourcePath, mode, lines]);
   // 翻面：不重新渲染，只切換空格與線上的字。
@@ -140,5 +170,8 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
     const container = host.current?.querySelector<HTMLElement>('.ec-markdown');
     if (container) applyState(container, props);
   }, [props.revealed, props.words, props]);
-  return <div className={'ec-markdown-host' + (props.className ? ' ' + props.className : '')} ref={host} />;
+  return <>
+    <div className={'ec-markdown-host' + (props.className ? ' ' + props.className : '')} ref={host} />
+    {tailEl && props.tail ? createPortal(props.tail, tailEl) : null}
+  </>;
 }

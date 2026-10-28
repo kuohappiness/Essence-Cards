@@ -33,7 +33,7 @@ function bundle(): Promise<string> {
         builder.onResolve({ filter: /\/Markdown\.tsx$/ }, () => ({ path: 'markdown', namespace: 'stub' }));
         // 打字卡的空格（onSlot）當作已經渲染好：交回同一個假的元素，輸入框就畫進空格（createPortal 的替身原地畫成 'portal'）。
         builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-          contents: "import { jsx } from 'react/jsx-runtime'; const slot = { slot: true }; export function Markdown(props) { props.onSlot?.(slot); return jsx('markdown', props); }", loader: 'js',
+          contents: "import { jsx } from 'react/jsx-runtime'; const slot = { slot: true }; export function Markdown(props) { props.onSlot?.(slot); return jsx('markdown', { ...props, children: props.tail }); }", loader: 'js',
         }));
       },
     }],

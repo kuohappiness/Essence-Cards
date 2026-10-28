@@ -70,6 +70,19 @@ export function englishBreak(text: string): number | null {
   return end;
 }
 
+/**
+ * 接在文字後面的喇叭和哪一段綁在一起換行（D-145：喇叭不單獨掉到下一行）：最後一個英文字（連同標點），
+ * 或最後兩個中文字與全形標點；回傳那一段開始的位置（UTF-16），結尾的空白算在那一段裡。
+ */
+export function tailStart(text: string): number {
+  const trimmed = text.replace(/\s+$/u, '');
+  const chars = [...trimmed];
+  const last = chars.at(-1);
+  if (last === undefined) return 0;
+  if (CJK.test(last)) return trimmed.length - chars.slice(-2).join('').replace(/^\s+/u, '').length;
+  return /\S+$/u.exec(trimmed)?.index ?? trimmed.length;
+}
+
 /** 打字卡要畫幾條線：題目裡有 ＿＿ 時是第一個答案的字數（照空白切，D-122）；沒有 ＿＿ 時 0 條。 */
 export function blankCount(question: string, typed: readonly string[] | null): number {
   if (!typed?.length || !BLANK.test(question)) return 0;

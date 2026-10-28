@@ -426,7 +426,7 @@ function screen(): Record<string, unknown> {
     math: inOverlay('.ec-markdown mjx-container, .ec-markdown .math').length,
     speakers: inOverlay('.ec-say').length, source: !!root.querySelector('.ec-srcw'), tips: inOverlay('.ec-tip').map(text),
     done: text(root.querySelector('.ec-done h2')) || null, doneSub: text(root.querySelector('.ec-done-sub')) || null,
-    buttons: inOverlay<HTMLButtonElement>('.ec-actions button, .ec-done button').map(b => text(b) + (b.disabled ? '（不能按）' : '') + (b.getAttribute('aria-pressed') === 'true' ? '（當時按的）' : '')),
+    buttons: inOverlay<HTMLButtonElement>('.ec-actions button, .ec-typed-actions button, .ec-done button').map(b => text(b) + (b.disabled ? '（不能按）' : '') + (b.getAttribute('aria-pressed') === 'true' ? '（當時按的）' : '')),
     focus, failed: inOverlay('.ec-render-failed').length,
   };
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, fillBlank, gesture, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -76,6 +76,29 @@ void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只
   assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
   assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
   assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
+});
+
+void test('D-145 背面補充的名稱自己一行：一到六個字、不含空白，緊接全形冒號；其他照原文', () => {
+  assert.deepEqual(extraLabel('記憶錨點：go 的過去式不規則：go → went → gone'), { label: '記憶錨點', body: 'go 的過去式不規則：go → went → gone' });
+  assert.deepEqual(extraLabel('例句：Can I borrow your pen? 我可以借你的筆嗎？'), { label: '例句', body: 'Can I borrow your pen? 我可以借你的筆嗎？' });
+  assert.deepEqual(extraLabel('詳解：made up his mind 和 made his mind up 都對'), { label: '詳解', body: 'made up his mind 和 made his mind up 都對' });
+  assert.deepEqual(extraLabel('記憶錨點：易混淆 lend（借出：把東西借給別人）'), { label: '記憶錨點', body: '易混淆 lend（借出：把東西借給別人）' });
+  assert.deepEqual(extraLabel('go 的過去式不規則：go → went'), { label: null, body: 'go 的過去式不規則：go → went' }, '名稱裡有空白：不是名稱');
+  assert.deepEqual(extraLabel('![[W6 擴散示意圖.svg]]'), { label: null, body: '![[W6 擴散示意圖.svg]]' });
+  assert.deepEqual(extraLabel('**記憶錨點**：粗體'), { label: null, body: '**記憶錨點**：粗體' }, '有 Markdown 記號：照原文');
+  assert.deepEqual(extraLabel('記憶錨點：'), { label: null, body: '記憶錨點：' }, '冒號後面沒有內容：照原文');
+});
+
+void test('D-145 喇叭和最後一個字一起換行：最後一個英文字連同標點，或最後兩個中文字與全形標點', () => {
+  const tail = (text: string): string => text.slice(tailStart(text));
+  assert.equal(tail('go 的過去式不規則：go → went → gone'), 'gone');
+  assert.equal(tail('Can I borrow your pen? 我可以借你的筆嗎？'), '嗎？');
+  assert.equal(tail('I went to the park yesterday.'), 'yesterday.');
+  assert.equal(tail('易混淆 lend（借出：把東西借給別人）'), '人）');
+  assert.equal(tail('borrow '), 'borrow ', '結尾的空白算在那一段裡');
+  assert.equal(tail('.'), '.');
+  assert.equal(tail(''), '');
+  assert.equal(tail('the 𠮷'), '𠮷', '補充平面的中文字照 UTF-16 長度算');
 });
 
 void test('D-145 中文句子後面的英文換到下一行：斷在最後一個中文字或全形標點後面；英文在前的不斷', () => {
