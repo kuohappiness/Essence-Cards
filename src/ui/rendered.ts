@@ -22,6 +22,12 @@ function textNodes(root: Node): Text[] {
   return out;
 }
 
+/** node 在 root 裡的受保護內容裡面（嵌入筆記自己的螢光筆不是本題的填空，Codex 再查 R2）。 */
+function guarded(node: Node, root: Node): boolean {
+  for (let el = node.parentElement; el && el !== root; el = el.parentElement) if (el.matches(PROTECTED)) return true;
+  return false;
+}
+
 const blockOf = (node: Node, container: HTMLElement): Element => node.parentElement?.closest(BLOCK) ?? container;
 
 /**
@@ -31,6 +37,7 @@ const blockOf = (node: Node, container: HTMLElement): Element => node.parentElem
 export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed'; lines: number; english: boolean }): { slot: HTMLElement | null; tail: HTMLElement } {
   if (options.mode === 'cloze') {
     for (const mark of Array.from(container.querySelectorAll('mark'))) {
+      if (guarded(mark, container)) continue;
       const blank = document.createElement('span');
       blank.className = 'ec-blank';
       const answer = document.createElement('span');
