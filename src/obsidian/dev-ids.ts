@@ -725,3 +725,56 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
   };
   return out;
 }
+
+/**
+ * save-flow-v6：V6 的對照實驗。外部用 adapter.write 把 B（含 ID）加進開著的這一篇，同一個 tick 做下面三種事之一，每種 5 次，
+ * 3 秒後看磁碟與編輯器有沒有 B：
+ * - new：這個分支的存檔（state.save：Editor 交易後立刻 view.save()）；
+ * - old：舊流程的模擬（只用 Editor 交易在第一個目標行尾加 ID，不呼叫 view.save()，等 Obsidian 約 2 秒後的自動存檔）；
+ * - none：對照，什麼都不做（只看 Obsidian 自己怎麼接外部修改）。
+ */
+export async function saveFlowV6(host: IdsHost): Promise<unknown> {
+  const { app } = host;
+  const state = host.state, saver = host.devLog.save;
+  if (!state || !saver) throw Error('state 或存檔接線還沒建立');
+  await state.ready();
+  const files = createObsidianFiles(app);
+  const rendering = keepRendering();
+  const stamp = Date.now().toString(36);
+  let count = 0;
+  const rows: { mode: string; run: number; diskHasB: boolean; editorHasB: boolean; diskHasEdit: boolean; issues: number }[] = [];
+  try {
+    for (const mode of ['new', 'old', 'none'] as const) {
+      for (let run = 1; run <= 5; run++) {
+        const path = `${FLOW_FOLDER}/對照 ${stamp}-${String(++count)}（卡片）.md`;
+        const file = await writeFile(app, path, FLOW_TEXT);
+        await until(() => state.deckStatus(path).missing === 2);
+        const { leaf, view } = await open(app, file);
+        await sleep(500);
+        const mark = ` ^vold${String(count).padStart(2, '0')}`;
+        const written = app.vault.adapter.write(path, FLOW_TEXT + FLOW_B);
+        let saving: Promise<void> = Promise.resolve();
+        if (mode === 'new') saving = saver.save(view);
+        else if (mode === 'old') view.editor.replaceRange(mark, { line: 0, ch: view.editor.getLine(0).length });
+        await written;
+        await saving;
+        await sleep(3000);
+        const disk = await files.read(path) ?? '';
+        rows.push({ mode, run, diskHasB: disk.includes('能說明蒸發'), editorHasB: view.editor.getValue().includes('能說明蒸發'),
+          diskHasEdit: mode === 'new' ? / \^[a-z0-9]{6}$/m.test(disk.split('\n')[0]) : mode === 'old' ? disk.includes(mark) : true,
+          issues: state.deckStatus(path).issues.length });
+        leaf.detach();
+        await sleep(300);
+      }
+    }
+  } finally {
+    rendering.restore();
+  }
+  await sleep(2500);
+  const cleanupLeft = await removeTestPaths(app, [FLOW_FOLDER]);
+  const summary = Object.fromEntries((['new', 'old', 'none'] as const).map(mode => {
+    const mine = rows.filter(row => row.mode === mode);
+    return [mode, { bKept: mine.filter(row => row.diskHasB).length, editKept: mine.filter(row => row.diskHasEdit).length, issues: mine.reduce((n, row) => n + row.issues, 0), of: mine.length }];
+  }));
+  return { summary, rows, cleanupLeft };
+}

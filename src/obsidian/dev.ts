@@ -10,7 +10,7 @@ import type { IdsWiring, PluginEvent, PluginEvents } from '../main.ts';
 import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
-import { lockTest, saveFlow, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
+import { lockTest, saveFlow, saveFlowV6, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
@@ -51,6 +51,7 @@ const commands: Record<string, DevCommand> = {
   save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
   // tasks/state-writes.md §9：存檔排進寫入的那一列、view.save() 加核對讀取（V1～V7）。
   'save-flow': { name: 'Essence 開發：存檔流程', run: (_host, ids) => saveFlow(ids), desktop: true },
+  'save-flow-v6': { name: 'Essence 開發：存檔流程 V6 對照', run: (_host, ids) => saveFlowV6(ids), desktop: true },
   t1prep: { name: 'Essence 開發：重新啟用前開兩篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },
   t1close: { name: 'Essence 開發：重新啟用後關掉那兩篇', run: (_host, ids) => t1Close(ids), desktop: true },
   't1close-cold': { name: 'Essence 開發：冷啟動後關掉那兩篇', run: (_host, ids) => t1Close(ids, true), desktop: true },
