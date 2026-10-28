@@ -4,7 +4,7 @@ import type { Deck } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
 import type { IdIssue } from './ids.ts';
 export type { IdIssue, IdIssueKind } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 
 export interface StateOptions {
@@ -55,7 +55,10 @@ export interface State {
   /** nextCard；不會回傳 'stale'。 */
   next(pick: Pick): Next;
   progress(): Progress;
-  /** 寫一行紀錄（背景）、併進 history，回傳 t；不重排。 */
+  /**
+   * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。取消的那一筆早於今天的份的開始（例如複習到 03:59、過了 04:00 回看改評分）時，
+   * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
+   */
   answer(entry: NewEntry): string;
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫。 */
   onChange(listener: () => void): () => void;
@@ -412,6 +415,7 @@ export function createState(options: StateOptions): State {
       const path = logPath(device, stamp.at, stamp.offset);
       sources.set(path, (sources.get(path) ?? '') + line + '\n');
       history = appendLine(history, line);
+      if (stamp.kind === 'undo' && current && Date.parse(stamp.undo) < dayStart(current.day, current.offset)) current = null;
       return t;
     },
     onChange(listener) {
