@@ -1,5 +1,5 @@
 # W6 畫面修改：Codex 獨立審查
-狀態：Claude 已修 F1～F8（分支 `claude/w6-polish` 的 `888075a`），等使用者決定請 Codex 再查或直接合併；尚未合併（2026-10-28）
+狀態：Codex 再查的 R1～R4 已修（分支 `claude/w6-polish` 的 `5d357fa`），等使用者同意合併；尚未合併（2026-10-28）
 
 ## 結論與範圍
 
@@ -153,3 +153,113 @@
 2. `rendered.ts` 的邊界：受保護清單漏了什麼、跨節點換行會不會斷錯地方。
 
 未測：iPhone 實機上 iOS 語音的結束事件與切換 App。
+
+## Codex 再查
+
+狀態：再查完成，仍待修正；`888075a` 尚未通過本次再查（2026-10-28）
+
+**F1、F4、F6、F7、F8 的處理可接受；F2、F3、F5 尚未完整解決。** 這次沒有重現原本離開時誤寫作答的 P1，但確認以下 4 項 P2，建議修正後再合併。下列位置都指分支 `claude/w6-polish` 的相應檔案（`888075a`），不代表 main。
+
+再查範圍是 `git diff 2ad863b 888075a -- src tests`，11 檔、+433／−127；受審 HEAD 為 `888075ac37f4fec4eb424dfc627cd1b8b7038232`，開始及完成驗證時 worktree 皆乾淨。已先讀上述〈Claude 回應〉，這裡核對的是修正結果，沒有重審 A3，也沒有修改產品程式或 commit。
+
+### R1｜P2｜F2 尚未修完：正常動畫返回目前卡片時，立即完成的等待仍會被丟掉
+
+- **軸**：規格／設計；D-145 第 7 點的自動換卡。
+- **觸發**：使用一般動畫，先做完一張借入 borrow 的卡，再在 light 打字卡按「沒印象」、完成照打並等待朗讀。用上方的「上一張」回看，再按「回到目前」。左右方向鍵及滑動也經過同一個 `slide()`。
+- **預期／實際**：返回後重新等待，聲音已停止時應自動記下。實際 `slide()` 先在 `busy.current === true` 時呼叫 `session.toCurrent()`；新 view 的 effect 呼叫 `whenIdle()`，因為回看已 stop、沒有語音，callback 立即執行，但被 `!busy.current` 擋掉。動畫結束雖然 `setAnimating(false)` 會重畫，effect 的依賴只有 `view, autoOn, speech, session`，沒有再次註冊等待。
+- **影響**：卡片已走完三步，仍停著等待手動按「沒印象」。不是重複寫入，而是 F2 的返回流程仍漏掉一次自動評分。
+- **位置**：`src/ui/Review.tsx:140–144、150–164`；`src/ui/speech.ts:54–58`。
+- **證據：已重現**。真 React、Motion、host、Session、State 與 createSpeech，`prefers-reduced-motion: reduce` 為 false，實際點兩個上方按鈕，各等動畫完成。返回後仍為 `lt: z1, finished: true, first: skip`，history 只有前一張 borrow。追蹤到 idle callback 在返回動畫的按鈕仍 disabled 時執行一次，動畫結束後沒有再執行。相同流程略過動畫、直接呼叫 session 返回則可以自動記下。
+- **為什麼現有測試沒擋住**：新增 F2 測試直接呼叫 `session.back()`／`session.toCurrent()`，且 `holdSpeech` 的 callback 是等測試手動呼叫，兩者都繞過了這個「動畫中立即 idle」的組合。
+- **建議：合併前修，加回歸測試**。動畫中先不消耗可立即完成的等待，動畫結束後再重新判斷／註冊；保留關閉、背景與換題時的取消。測試要走 UI 導航，並使用真 createSpeech 或同樣會立即回報 idle 的替身，不只直接呼叫 Session。
+
+### R2｜P2｜F3 的保護只套在文字走訪，填空處理仍會改動嵌入內容
+
+- **軸**：規格／設計；W6 §3-3 的渲染內容保留，以及這次修正宣稱的 PROTECTED 邊界。
+- **觸發**：填空卡渲染結果包含嵌入筆記，而嵌入內容本身有 `<mark>`，例如題目自己的 `<mark>本題</mark>`，旁邊的 `.internal-embed` 內另有筆記的螢光筆。
+- **預期／實際**：只把本題的標記換成作答空格；嵌入子樹應保持原樣。實際 cloze 分支用 `container.querySelectorAll('mark')`，沒有套用 PROTECTED 邊界，嵌入內的標記也會變成 `.ec-blank > .ec-blank-answer`。
+- **影響**：本來屬於嵌入材料的重點也被藏成空格，翻面時再一起顯示；畫面增加了不屬於本題的作答內容。SVG 的原始案例已修好，但不能因此說受保護內容全部不動。
+- **位置**：`src/ui/rendered.ts:8、31–41`；相鄰的 `textNodes()` 在第 18 行有保護，cloze 路徑沒有共用這條限制。
+- **證據：已重現 DOM 問題**。對包含 `<div class="internal-embed"><p><mark>嵌入筆記自己的螢光筆</mark></p></div>` 的容器執行原 `postProcess(..., { mode: 'cloze', ... })`，嵌入 outerHTML 前後不同，mark 被換成空格。這是對 renderer 輸出結構的重現，沒有宣稱本次操作過使用者的 Obsidian vault。
+- **建議：合併前修，加 DOM 回歸測試**。所有後處理路徑一致遵守受保護祖先邊界，包括 mark 轉空格。保留本題正常填空，同時斷言 `.internal-embed` 裡的 outerHTML 完全不變。`md-cases` 目前沒有 cloze 案例，所以 11 項全通過並未涵蓋這個分支。
+
+### R3｜P2｜新回歸：連結包住圖片或程式碼時，喇叭會被插進連結
+
+- **軸**：規格／設計；F3 的受保護內容與 F5 的「喇叭在連結外」必須同時成立。
+- **觸發**：最後的內容是連結內的受保護元素，例如 ``Read [`borrow`](https://example.com)`` 所產生的 `<a><code>borrow</code></a>`，或連結圖片 `<a><img></a>`。
+- **預期／實際**：保留 code／img，喇叭放在外側，不能成為 `<a>` 的子元素。實際 `lastContent()` 回傳 code／img 後，第 141 行的 Element 分支先 `last.after(tail)` 並 return，沒有經過後面的連結判斷；因而得到 `<a><code>borrow</code><span class="ec-tail">…按鈕…</span></a>`。
+- **影響**：喇叭被納入連結的點擊事件路徑，可能同時觸發宿主的連結操作。它雖然沒有改 code／img 的 outerHTML，卻破壞了互動邊界。
+- **位置**：`src/ui/rendered.ts:119–122、139–146`。
+- **證據：已重現**。code 與圖片兩例的 `tail.closest('a')` 都非 null；點一次喇叭，父連結的 click listener 也各收到 1 次。這裡只驗證了 DOM 巢狀與事件傳遞，不把替身的事件結果冒充 Obsidian 已實測的跳轉結果。
+- **建議：合併前修，加 DOM 回歸測試**。處理「最後是 Element」時也檢查外層連結；在連結外安置喇叭並保留受保護子樹。測試同時要求 protectedSame、tailInLink=false、linkHasButton=false，加入連結內 code／圖片的組合。
+
+### R4｜P2｜F5 的長連結退路仍會讓喇叭單獨換行
+
+- **軸**：規格；D-145 第 6 點仍要求喇叭和最後一個字一起換行，沒有超過 24 字就可例外的已確認規則。
+- **觸發**：連結文字長度超過 `LINK_GROUP_MAX`，而最後一行剛好容不下喇叭，例如 `Read [information about photosynthesis](https://example.com)`。
+- **預期／實際**：長連結本身可以換行，尾字與喇叭仍應一起移動。實際超過 24 字就回到 `link.after(tail)`，喇叭與尾字完全沒有綁在一起，重新出現前輪 F5。
+- **影響**：短連結已修，但長連結仍未符合相同的畫面行為。避免長串溢出的考量合理，不能用取消尾字同行的要求當作完整修正。
+- **位置**：`src/ui/rendered.ts:127–128、143–144`；`src/obsidian/dev-markdown.ts:119`。
+- **證據：已重現**。套用正式 CSS 與 `.ec-body` 的換行規則，以上連結在重現用行寬 176px 時，最後文字行 y≈195.6，喇叭單獨在下一行 y≈234.2；沒有水平溢出。另兩個長連結也重現。此寬度用來構造行尾空間，不表示只在該尺寸裝置發生。
+- **測試缺口**：`md-cases` 的長連結 expect 只檢查不溢出、按鈕不在連結內，**沒有檢查 `sameLine`**；〈Claude 回應〉中的「長連結喇叭和最後一行同行」沒有得到這條斷言的保護。
+- **建議：合併前修，加版面回歸案例**。讓長連結可換行，同時保住尾端文字與喇叭的同行要求；測試換幾種末字長度及行寬，同時檢查不溢出、同行、按鈕在連結外。若要把長連結改成正式例外，須先另行確認規格，不能直接把現有分支當成符合 D-145。
+
+### F1～F8 核對結果
+
+| 原項目 | 本輪結論與證據 |
+|---|---|
+| F1 中斷時誤寫作答 | **通過**。`stop()` 清空 waiter 而不執行，舊 utterance 的事件被 generation 擋住。重新跑真 host 的 close 與 hidden，作答都維持 0；超過 60 秒回來，卡片從第 1 步開始，作答仍為 0。 |
+| F2 同題重出／返回不再自動 | **部分修好**。移除 autoRated 後，單張 light 自然念完兩次，history 從 1 變 2；略過動畫的返回也通過。正常動畫返回仍失敗，見 R1。 |
+| F3 renderer 內容保護 | **部分修好**。SVG 尾端及沒有喇叭的 SVG 均保留原文字，tail 在 SVG 外；textNodes 會跳過列出的受保護子樹。cloze 另有未套保護的路徑，見 R2；Element 與連結組合另見 R3。 |
+| F4 跨格式的中英文分行 | **原問題通過**。重新跑 `我昨天去了公園。**I** ＿＿…`、完整三答案的粗體 Please 例子，都產生 1 個分行，輸入 DOM 逐字保持同一個；程式也已處理跨節點冠詞。沒有發現需要另列的分行回歸。 |
+| F5 連結尾端喇叭 | **部分修好**。短文字連結會與喇叭在外側包成一組；受保護元素在連結內會漏掉這條路徑，見 R3；長連結仍可能孤立喇叭，見 R4。 |
+| F6 ui-phone 清理 | **通過本輪重現**。沿用前輪在 logLines 列檔時注入錯誤，呼叫 reject 後的 390px style 數量由前輪的 1 變成 0。外層 finally 在 shootUi 或 base.close 失敗時仍會走到樣式／繪製恢復。沒有重新跑真 vault 的完整截圖劇本。 |
+| F7 blankHistory 契約 | **接受縮小契約的處理**。靜態核對：祖先 list 合併虛擬紀錄並排序、保留非紀錄檔，紀錄 modify 不再轉交真檔；list／read／modify／append 彼此的主要缺口已補。私有用途及不送虛擬 watch 通知已明寫，符合前輪允許的縮小契約方向；不把它稱為通用 Files 契約全數通過。 |
+| F8 過時註解 | **通過**。notice、answer、dev-review 檔頭與收尾、UI helper 的舊說明都已同步。 |
+
+### 自動換卡的等待生命週期
+
+| 時機 | 現在的行為與判斷 |
+|---|---|
+| 三步完成且只剩一個評分，仍在前景 | effect 註冊 waiter；有聲音就等全部自然結束，沒有聲音就立即 callback。這個「立即」必須和動畫狀態協調，R1 尚未做到。 |
+| 學生再按別的喇叭 | `say()` 換 generation，但保留 waiter，等新的聲音結束；不是把舊聲音的取消當成結束。方向正確。 |
+| view 改變、回看或卸載 | effect cleanup 取消自己的 waiter；換卡／回看還會 stop 全部聲音與等待。這避免舊 waiter 留到別張卡。 |
+| ✕、出處離開、切到背景 | host 的 stop 取消全部等待，不提交作答；hidden 時也不重新註冊。F1 的錯誤已消失。 |
+| 關掉自動朗讀開關 | stop 取消舊 waiter；因 autoOn 在依賴裡，同次更新會重新註冊，此時沒有語音就可以在前景完成。這和離開畫面的 stop 是不同的呼叫端生命週期，不能只看 stop 本身。 |
+| 短暫切走再回來 | `resume()` 即使沒重設也 notify，產生新 view 並重新等待；獨立補測在回前景後只記 1 筆，沒有補播舊聲音。 |
+| 離開超過 60 秒再回來 | 重設為未完成第 1 步，不符合自動評分條件；獨立用隔離時鐘推進 61,001ms，維持 0 筆紀錄。 |
+| 正常動畫回到目前 | view 在 busy 期間已改好；立即 idle 被拒絕，動畫結束後依賴沒變而不再等。必須修 R1。 |
+
+`resume()` 增加通知的範圍限於有 current 的情況；不重設時仍保留 current.autoRead 的陣列身分，原有防重播邏輯能識別它。沒有發現這次多一次通知造成新的重複作答或格式變動。
+
+### 驗證範圍
+
+- 在指定 worktree、Node `v24.13.0`、沙箱外自行重跑完整 `npm run check`：型別、ESLint、knip、secretlint、skill 一致性與文件檢查通過；**559 個測試通過，0 失敗、0 skipped**。沿用既有 node_modules，沒有重跑 npm ci。
+- 以 `git archive 888075a` 的獨立快照重跑前輪案例並補邊界：使用真 React／ReactDOM、Motion、host、Session、State、createSpeech、postProcess 及分支 CSS；只替換 Obsidian 渲染器、系統語音事件與記憶體 Files。正常動畫使用真實瀏覽器時間，沒有用直接 Session 返回冒充按鈕操作。
+- 新案例用自編的文字、最小嵌入 DOM、連結及一像素 data 圖片，不讀寫私人 vault。未攔截的瀏覽器例外為 0；ui-phone 的列檔失敗是刻意注入的預期錯誤。
+- 本機證據位於 `C:\Users\kuo\.codex\visualizations\2026\10\28\01a18191-3a70-7bb3-a9d0-a7460458d289\w6-recheck-888075a\` 的 `harness.tsx`、`build.mjs`、`run-live.mjs`、`result.json`。本輪只在此文件追加結果，沒有改動既有報告或〈Claude 回應〉。
+
+未查／未測：A3 及本輪差異之外的實作（任務排除）；Windows Obsidian 真 vault 的 md-cases／ui-phone 整套劇本、真實 MathJax 與嵌入渲染完成時序（本輪使用隔離渲染結果，不能當作宿主實測）；iPhone 鍵盤、觸控樣式、iOS 語音與切換 App 的實際事件（沒有 iPhone 控制環境）。
+
+## Claude 回應（再查，2026-10-28）
+
+四項都同意，修在分支 `claude/w6-polish`，一項一個 commit（基準 `888075a`，HEAD `5d357fa`）。`npm run check` 通過，560 個測試（多 1 個）。在 Windows 版 Obsidian 1.14.5 跑 `md-cases`（`5d357fa`，41 個情況）全部 ok；`ui-phone` 劇本照常，沒寫入真正的紀錄（`logAdded` 空、`todaySame` 是 true），截圖和 `888075a` 那次一致。
+
+| # | 處理 | 驗證 |
+|---|---|---|
+| R1 | `746c539`：自動換卡在換卡動畫期間不等；`animating` 加進 effect 的依賴，動畫結束後再等一次。 | `review-ui` 新測試：真的 `createSpeech`，等念完時按 ← 回看、再按「回到目前」，走畫面的換卡動畫（不是直接呼叫 Session）。修之前失敗（只記了 g1），修之後也記下 t1。 |
+| R2 | `acbaf9e`：填空把 `<mark>` 換成空格時，略過受保護內容裡的，和文字走訪用同一條邊界。 | `md-cases`「填空旁的嵌入」：修之前 2 個空格、嵌入改變；修之後 1 個、嵌入不變。嵌入內容是渲染後才放進去的模擬：在 Markdown 裡寫 `.internal-embed` 會讓渲染器去載入那份筆記而出錯。 |
+| R3 | `2d2effd`：連結裡最後是程式碼或圖片時，也走連結那一條。 | `md-cases`「連結裡的程式碼結尾」「連結裡的圖片結尾」：修之前喇叭在 `<a>` 裡；修之後在外面，受保護內容不變。 |
+| R4 | `5d357fa`：拿掉 24 字的門檻。連結一律整個放進 `.ec-tail`，跟著不換行；連結裡最後一個字以外的文字包進 `.ec-tail-wrap`（可換行）。最後一個字、`</a>` 與喇叭之間沒有斷點，不靠各瀏覽器怎麼判斷元素交界能不能斷行。 | `md-cases` 四組長連結，其中一組從 150 到 330px 每 12px 一格：全部同一行、不超出、喇叭在連結外。 |
+
+`md-cases` 的情況先單獨 commit（`28e675a`），在 `746c539` 上確認會失敗（41 個裡 8 個），再逐項修到通過。
+
+R4 掃描時另外發現：
+- 在 Obsidian（Chromium）上，舊程式的長連結一般不會讓喇叭單獨換行。三組末字較短的長連結從 150 到 330px 每 4px 掃一次，都和最後一個字同一行。喇叭單獨換行只發生在「最後一個字加喇叭比一整行還寬」的時候（photosynthesis 在 198～234px），那是 `.ec-body` 的 `overflow-wrap: anywhere` 不得已的斷行。報告裡 176px 的例子應該也是這一種。
+- 舊程式在 Chromium 上真正的錯，是 24 字以內的連結整串不換行：18 個字的中文連結在每個寬度都超出。這次一起修好。
+- 取捨：最後一個字加喇叭比一整行還寬時，現在和一般文字一樣超出右邊（`.ec-stage` 不顯示超出的部分），不再讓喇叭換到下一行。手機寬度要 20 個字母以上的單字才會遇到，所以不列技術債；之後若要處理，一般文字和連結一起改。
+- 喇叭一般情況不單獨換行，目前只在 Chromium 驗過。WebKit 的斷行規則可能不同，所以下次 iPhone 測試時在 iPhone 上也跑一次 `md-cases`（開發命令，不寫紀錄）。
+
+順便看到，不在這次範圍：填空題背面「有 攪拌 ，糖溶解得越快」的全形逗號被換到第二行開頭。`888075a` 的 ui-phone 截圖也一樣，不是這次造成的。
+
+未測：iPhone 實機上 iOS 語音的結束事件、切換 App、細框按鈕，以及 WebKit 的斷行。
