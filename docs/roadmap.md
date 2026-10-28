@@ -10,7 +10,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 |---|---|---|---|---|
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
-| 更新與相容 | 討論中：版本紀錄、考前提醒、更新前備份已有初步結論 | 使用者選第 3 題（內建規則改版）；之後和 Codex 討論，一致再寫成 D-ID | 使用者 | [規畫](plans/updates.md) |
+| 更新與相容 | 四題都有初步結論，技術規則寫成討論稿 | Codex 第一次回應；一致後交使用者確認、寫成 D-ID | Codex（使用者轉交） | [討論稿](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md>)、[規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)） | 接著談環節 4（`state` 資料狀態層），再 5、6、9、2、3 | Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 未來規畫統整的審閱 | Codex 2026-10-23 交接，未審 | Claude 審閱，或使用者決定結掉 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
