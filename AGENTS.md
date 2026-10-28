@@ -1,23 +1,31 @@
 # Essence Cards 協作規則
 
-本文件給所有 AI 協作者（Claude、ChatGPT 等）共同使用。
+本文件給所有 AI 協作者（Claude、Codex 等）共同使用；`CLAUDE.md` 只有一行 `@AGENTS.md`。
+
+## 底線
+
+- 不提交 API 金鑰、登入憑證、私人學習資料或未獲授權的教材（例如出版社課本 PDF）。
+- 不 force push。
+- 不用 `--no-verify` 跳過 pre-commit；沒通過就修到通過（[D-117](docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。
+- 不用 `git add -A`：commit 前看 `git status`，只 stage 自己改過的檔案，不動別人未提交的修改。
+- 使用者沒有明確同意就不標 ✅；沒有反對不等於同意。
+- 任務說明沒寫到、做了又很難收回的步驟，停下來問使用者。
+- 沒做完的功能不寫成已可使用；學習效果寫成待驗證的目標。
 
 ## 北極星
 
-**最高目的**：透過程式讓知識從「獲取」到「深化」形成完美閉環，提高知識增長的效率，並幫助學生在學業表現上進步。
-
-任何新提案都要先說明它如何服務北極星，也就是縮短複習時間、加深記憶或提升學業表現。說明不了的列為範圍外，只記入 backlog，不升格為決定。
-
-**核心差異**：以學習目標為單位貫穿整個流程（[D-114](docs/decisions.md#d-114-產品核心以學習目標為單位回饋先找原因)）。會讓學習目標變模糊的提案，例如一張卡測好幾個目標、改用卡片排程，再方便也不做。
+- 最高目的：讓知識從獲取到深化形成閉環，縮短複習時間、加深記憶、提升學業表現。
+- 新提案先說明它怎麼服務北極星；說明不了的只記進 backlog，不升格為決定。
+- 以學習目標為單位貫穿整個流程（[D-114](docs/decisions.md#d-114-產品核心以學習目標為單位回饋先找原因)）：不做一張卡測好幾個目標，不改用卡片排程。
 
 ## 開始工作前
 
-- 先讀 `docs/roadmap.md` 的「現在在哪裡」：現況、下一步與進行中的專題討論（[D-099](docs/decisions.md#d-099-文件精簡)）。其他文件看任務需要再讀，用下面的「文件分工」找。
-- 要知道某個決定：已知 D-ID 用 `node experiments/tools/decisions-index.mjs D-xxx` 印出原文與後續條目；不知道時讀索引裡相關的主題。提出新決定前，也先查相關主題有沒有舊決定。
-- 做製卡規則、語法解析、資料格式相關的工作時，讀 `docs/syntax.md`；製卡規則的輸出格式要和它一致。
-- 只在試作場（`experiments/`）做測試時，讀 `experiments/README.md` 和該任務連到的說明就好（[D-065](docs/decisions.md#d-065-試作場)）。
-- `docs/archive/v0-planning/` 已被取代，不當作依據。`docs/archive/discussions/` 是過程紀錄：可以追溯當時的取捨，但不直接當規格；有些討論仍在進行：從 roadmap 的狀態板或 backlog 找得到它，未決問題寫在它的主文（D-106、D-141）。
+- 先讀 `docs/roadmap.md` 的「現在在哪裡」（[D-099](docs/decisions.md#d-099-文件精簡)）；其他文件看任務需要，用下面的對照表找。
+- 查決定：已知 D-ID 用 `node experiments/tools/decisions-index.mjs D-xxx`；不知道時讀索引裡相關的主題。
+- 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
+- `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
+- 先載入對應的 skill：設計討論用 `essence-discuss`、寫 D-ID 用 `essence-decision`、寫或審程式用 `code-quality`、交給 Codex 用 `codex-brief`。
 
 ## 文件分工
 
@@ -40,38 +48,28 @@
 | `experiments/` | 試作場：樣式稿、試作外掛與測試結果 |
 | `src/`、`tests/`、`tools/` | 正式外掛的程式、測試與開發工具（D-110） |
 
-- **同一類資訊只維護一份**：現行規格依上表；同一個未決問題只有一份主文；試驗與審查證據留在原紀錄；入口（roadmap、backlog、討論索引）只寫狀態、下一步與連結。主文依序選：已交付實作且沒另開討論的 → `tasks/`；Claude 與 Codex 正在往返的 → 該討論稿；其他已展開的規畫 → `docs/plans/`；短點子 → backlog（[D-141](docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
-- 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。只有使用者明確同意才標 ✅；沒有反對不等於同意。
-- 有新決定時，在 `decisions.md` 新增條目（D-ID 不重用），再更新受影響的 product、architecture、roadmap。被取代的決定標「已取代 → D-xxx」，不刪除；被修改的舊決定，在標題下第一行寫「……見 D-xxx」。改完執行 `node experiments/tools/decisions-index.mjs` 更新索引，再補上新決定的一句話。
-- 新點子先記進 `backlog.md`，保留原意與來源，不要求先整理完整；只分 v1 任務與第二階段想做的事（D-130）。展開的細項搬到 `docs/plans/<主題>.md`，backlog 只留項目、狀態與引用。待決的題目定案就從 backlog 移除，任務與技術債做完就移除；定案但還沒做的，任務表留一行並連 D-ID，不抄內容。repo 裡連到被移除項目的連結改連 D-ID 或結果（[D-143](docs/decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
-- 沒有討論稿的重要討論，結束（定案或擱置）時在 `docs/archive/discussions/` 新增 `YYYY-MM-DD-主題.md`，記錄決定、理由與當時沒解的問題，並更新該目錄的 README 索引；未決問題的主文另在 plans 或 backlog，摘要只連過去。有討論稿的不另寫摘要（D-106）。內容採摘要，不冒充逐字紀錄。
-- roadmap 的「現在在哪裡」是狀態板：每件進行中或卡在某人身上的工作一列（狀態、下一步、等誰、入口），不寫經過。做完一件事在「已完成」最上面加一列，一句約 80 字加連結；超過 10 列把最舊的搬到 `docs/archive/roadmap-completed.md` 最上面，相對路徑改成以 `docs/archive/` 為基準。
-- 做完的任務、討論稿與 plans 不刪不搬，只改標題下的狀態行；`docs/plans/` 也在標題下第一行寫狀態（D-143）。
-- 提到只在分支上的檔案時寫「分支 `x` 的 `path`（commit）」，不用相對連結。`node tools/check-docs.ts` 在每次 commit 時檢查連結、已完成的列數與檔頭狀態行。
-- `AGENTS.md` 只放每個 session 都需要的規則與指向；只有某類工作才需要的細節，寫在那類工作的文件或 skill（D-143）。
+- 同一類資訊只維護一份，其他地方用連結（[D-141](docs/decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)）。
+- 製卡規則的輸出格式要和 `docs/syntax.md` 一致。
+- 狀態標示：✅ 已確認｜🔁 舊共識，待重新確認｜💬 待討論｜💡 助理提案。
+- 新點子先記進 `docs/backlog.md`，保留原意與來源。
+- roadmap 的「現在在哪裡」每件進行中的工作一列，不寫經過。
+- 做完的任務、討論稿與 plans 不刪不搬，只改標題下的狀態行（[D-143](docs/decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
+- 提到只在分支上的檔案時寫「分支 `x` 的 `path`（commit）」，不用相對連結。
 - 文件以繁體中文撰寫；英文名稱、程式識別字與必要引用保留原文。
-
-## 討論方式
-
-- 一次聚焦一個問題，用真實教材例子驗證抽象設計。
-- 助理可以主動提出不同建議，但要說明理由與影響；提案不直接變成決定。
-- **優先刪減**：每輪結束時，檢查有哪些東西可以移出 v1，而不是持續增加抽象層。
-- **參考既有實作時先想最佳解**（例如使用者的舊外掛）：先以第一原理想出最好的做法；想不出更好的，才沿用既有做法；不為了給答案而硬湊。
 
 ## AI 協作分工
 
-- 主要由 Claude 處理架構判斷、文件維護與實作：規格清楚的程式與機械式工作（例如試作場的測試程式、腳手架、批次整理）也由 Claude 在同一個 session 做完（[D-131](docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)）。
-- Claude 用 Opus：規劃型的對話（任務說明、決定、架構檢查）開 xhigh，執行型的開 high；任務說明沒寫到、做了又很難收回的步驟停下來，重大決策點先寫討論稿和 Codex 討論，卡關或解不了時照 `docs/agents/quality.md` 依序升級，Fable 是最後一步（[D-140](docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)、[D-144](docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。
-- Codex 是關鍵點的查核者：高風險改動合併前的獨立審查（L2，範圍見 `docs/agents/quality.md`）、改存檔格式的任務開工前的格式查核（D-140）、實驗產物交出前的查核、里程碑回顧與安全檢查、盲評的第二家評分者。請 Codex 查核時，Claude 寫明查什麼、讀哪些檔案、基準 commit 與驗收標準；Codex 只回報，修改由 Claude 做。
-- Claude 的額度仍有上限。大量機械式整理、Claude 正忙的獨立工作，或適合在 ChatGPT 進行的長篇發想，助理可以建議轉交 Codex 或 ChatGPT，並附上可以直接貼上的任務說明與建議的推理等級；這是例外，不是預設。
-- Claude 和 Codex 要討論時，在 `Claude Codex Discussion/` 的討論稿輪流回覆，雙方一致後才交給使用者；請使用者決定時，分別說明 Claude 和 Codex 各自的考量與不採用的代價。結案時在檔頭標「已結案」並連到 D-ID，不另寫摘要（D-106）。
-- 由不同 AI 接手時，同樣遵守本文件。
+- Claude 做架構判斷、文件維護與實作，包含規格清楚的機械式工作（[D-131](docs/decisions.md#d-131-claude-實作codex-在關鍵點查核)）。
+- 模型、推理等級、什麼時候請 Codex 查核、卡關時怎麼升級，照 `docs/agents/quality.md`（[D-140](docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)、[D-144](docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。
+- 重大決策點先在 `Claude Codex Discussion/` 寫討論稿和 Codex 輪流回覆，雙方一致才交給使用者。
+- Codex 只查核與回報，修改由 Claude 做。
 
 ## 實作與 Git
 
-- 不提交 API 金鑰、登入憑證、私人學習資料或未獲授權的教材（例如出版社課本 PDF）。
-- 尚未完成的功能標示為規劃中，不宣稱已可使用；學習效果是待驗證的目標。
-- AI 能測的由 AI 測；要請使用者測之前，先說明 AI 為什麼測不了。需要 iPhone 實機的測試集中成一次（D-065）。
-- 規劃階段的文件修改直接 commit 到 `main` 並 push；開始寫程式後，較大的程式改動再開分支。commit 訊息要清楚，並保留其他協作者的修改；不使用 force push。
-- 改程式的 commit 會由 pre-commit hook 自動跑 `npm run check`（[D-117](docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）；沒通過就修到通過，不用 `--no-verify` 跳過。
-- 可能有多個 AI session 同時在同一個資料夾工作：commit 前先看 `git status`，只 stage 自己改過的檔案，不用 `git add -A`；別人未提交的修改不要動。
+- AI 能測的由 AI 測；請使用者測之前，先說明 AI 為什麼測不了；需要 iPhone 實機的測試集中成一次。
+- 規劃文件直接 commit 到 `main` 並 push；較大的程式改動開分支。
+
+## 改這份檔案
+
+- 新增規則前要過五關（[D-147](docs/decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)）：① 是整個專案的重大決定（附 D-ID），或同一個錯已犯兩三次（附實例）；② 每個 session 都用得到；③ 一句話、一個具體動作；④ 一條規則只放一處：每個 session 都要的放這裡，只有某類工作用的放 skill 或 `docs/agents/`，skill 裡全域適用的搬上來並從 skill 刪掉；⑤ 使用者明確同意。
+- 每加一條，同時檢查有沒有過時或用不到、可以刪的。
