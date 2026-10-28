@@ -118,6 +118,15 @@ export function createState(options: StateOptions): State {
   let noticed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let processing: Promise<void> = Promise.resolve();
+  /**
+   * 讀寫的先後（tasks/state-writes.md §2）：每篇卡組一個失效序號，取自全域遞增的計數，紀錄不刪（刪掉、改名後重建的路徑不會撞回舊的號碼）。
+   * 這篇的 Cards I/O 開始與結束、讀到它被刪掉、改名配對的兩邊都讓它前進；一份讀取開始與落地時序號不同，那篇的結果整份不用。
+   */
+  let sequence = 0;
+  const marks = new Map<string, number>();
+  const bump = (path: string): void => { marks.set(path, ++sequence); };
+  /** 正在做 Cards I/O 的卡組（寫進磁碟還沒有結果）：不開始讀，留在 pending，I/O 結束時立刻讀。 */
+  const busy = new Set<string>();
   let unwatch: (() => void) | null = null;
   // 連續讀不到的次數；決定下一次重試要等多久（Codex 審查 W5 的 F3：不能只等下一次通知）。
   let failures = 0;
@@ -199,11 +208,15 @@ export function createState(options: StateOptions): State {
     return next;
   }
   async function apply(): Promise<void> {
-    if (closed || !pending.size) return;
-    const paths = [...pending];
-    pending.clear();
+    if (closed) return;
+    // 正在 I/O 的那一篇不讀，留在 pending（§2 第 2 點）；讀取開始後才到的通知留著等下一批（第 4 點）。
+    const paths = [...pending].filter(path => !busy.has(path));
+    if (!paths.length) return;
+    for (const path of paths) pending.delete(path);
     await read(paths);
   }
+  /** 不等 delay，排一批讀取（I/O 結束後、寫入前先讀完待讀）；錯誤已經在 queue 交給 onError。 */
+  const readNow = (): Promise<void> => queue(apply).catch(() => {});
 
   /**
    * 讀一批路徑（§2-2）：第一次載入的卡組、紀錄各一批，之後每次檔案變動一批，成功與失敗都只在這裡處理。
@@ -213,6 +226,7 @@ export function createState(options: StateOptions): State {
    */
   async function read(paths: readonly string[]): Promise<void> {
     if (closed) return;
+    const at = paths.map(path => marks.get(path));
     const results = await Promise.allSettled(paths.map(path => files.read(path)));
     if (closed) return;
     let decksChanged = false, logsChanged = false;
@@ -221,6 +235,11 @@ export function createState(options: StateOptions): State {
     const texts = new Map<string, string | null>(), logs = new Map<string, string | null>();
     for (const [i, path] of paths.entries()) {
       const result = results[i];
+      // 跨過這篇的 I/O（§2 第 3 點）：文字、null、reject 都不用，放回 pending；I/O 結束時已經（或會）排一批讀取。
+      if (marks.get(path) !== at[i] || busy.has(path)) {
+        pending.add(path);
+        continue;
+      }
       if (result.status === 'rejected') {
         // 讀不到的留著等重試；讀得到的照常處理，不被它擋住。
         pending.add(path);
@@ -253,13 +272,20 @@ export function createState(options: StateOptions): State {
       if (text === null || tracker.text(path) !== undefined || !gone.length) continue;
       const same = gone.findIndex(old => tracker.text(old) === text);
       const from = same >= 0 ? same : gone.findIndex(old => name(old) === name(path));
-      if (from >= 0) tracker.move(gone.splice(from, 1)[0], path);
+      if (from < 0) continue;
+      const old = gone.splice(from, 1)[0];
+      tracker.move(old, path);
+      bump(old);
+      bump(path);
     }
     // 和上一版比對弄丟的 ID（W5 §8-5；第一次讀到的那一篇沒有上一版，不偵測）：刪掉的先忘掉，改到的同一批一起比
     // （Codex 審查第二部分的 F5）；自己剛寫回或存檔時已經比對過的同一份文字不再比。
     const changed: { path: string; text: string; deck: Deck }[] = [];
     for (const [path, text] of texts) {
-      if (text === null) tracker.forget(path);
+      if (text === null) {
+        tracker.forget(path);
+        bump(path);
+      }
       else if (tracker.text(path) !== text) changed.push({ path, text, deck: parseDeck(text) });
     }
     tracker.observe(changed, true);
@@ -365,6 +391,9 @@ export function createState(options: StateOptions): State {
     async fillIds(path) {
       if (!writable() || !isDeckPath(path)) return false;
       let fill: ReturnType<typeof prepare> = null, changed = false;
+      // 這篇的 I/O 開始（§2 第 1 點）：寫進磁碟有結果之前不讀它，之前開始的讀取結果不用。
+      busy.add(path);
+      bump(path);
       try {
         // 在 modify 的回呼裡對最新的文字重新計算（W5 §8-2 第 4 點）。
         await files.modify(path, text => {
@@ -376,6 +405,11 @@ export function createState(options: StateOptions): State {
       } catch (error) {
         if (error instanceof NothingToFill) return false;
         throw error;
+      } finally {
+        busy.delete(path);
+        bump(path);
+        pending.add(path);
+        void readNow();
       }
       // 寫成了才採用（Codex 審查第二部分第 14 點）。
       (fill as ReturnType<typeof prepare>)?.commit();
