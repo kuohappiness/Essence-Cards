@@ -274,6 +274,8 @@ void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['正確拼字'], '沒打字：只有「正確拼字」');
   assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['確認'], '第 3 步只有確認，也在卡片裡');
+  const order = o.ui.find('ec-card')[0].children.filter((child): child is Tree => typeof child !== 'string').map(child => child.props.className);
+  assert.ok(order.indexOf('ec-answer') < order.indexOf('ec-typed-actions'), '照打時「確認」排在答案（正確拼字、補充）後面：' + order.join(', '));
   o.session.input('borrow'); o.ui.key('Enter', 'input');
   await o.ui.settle();
   // 第 1 步按了「沒印象」只剩一個自評：照打完就自動記下、換下一張（D-145），不用再按底下的「沒印象」。

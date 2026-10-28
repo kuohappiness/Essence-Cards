@@ -76,6 +76,11 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 
 /* 背面：答案；不畫分隔線，和題目、詳解之間只靠留白（D-145，修改 D-096 的短線），詳解是小一號的灰字 */
 .ec-answer { margin-top: var(--ec-gap-answer); font-size: var(--ec-size-answer); animation: ec-fade-in var(--ec-fade) ease-out both; font-family: var(--ec-font-text); }
+/* 照打時鍵盤開著（iPhone 的 Obsidian 不縮畫面）：答案往上靠一點，正確拼字、也可以、記憶錨點盡量排在鍵盤上方；
+   「確認」排在最後（D-145，iPhone 回饋） */
+.ec-card.is-copying .ec-answer { margin-top: 24px; }
+/* 手機打字時，捲動區底下多留一段：內容比鍵盤上方的空間長時，可以往上捲出來看（題目固定在上方，空格不會捲走） */
+@media (pointer: coarse) { .ec-stage.is-typing { padding-bottom: 50vh; } }
 .ec-a { line-height: 1.75; }
 .ec-a .ec-markdown p { margin: 0 0 8px; }
 .ec-ex { margin-top: var(--ec-gap-extra); font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }

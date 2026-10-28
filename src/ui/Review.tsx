@@ -279,7 +279,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <button type="button" className="ec-ico" aria-label="結束複習" onClick={props.close}><Icon type="close" /></button>
     </div>
     <div className="ec-prog" aria-hidden="true"><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
-    <div className="ec-stage" ref={stage} onClick={event => {
+    <div className={'ec-stage' + (typing ? ' is-typing' : '')} ref={stage} onClick={event => {
       if (view.kind !== 'card' || view.card.viewing || performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
       // 打字卡：點卡片任何地方都叫出鍵盤（D-145：輸入框在空格裡，點得到的範圍比原本那一整行小）。
       if (view.card.typed) { if (!view.card.typed.finished) inputEl.current?.focus({ preventScroll: true }); return; }
@@ -377,7 +377,8 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   const right = typed !== null && (typed.first === 'right' || (!view.viewing && typed.second === 'right') || (view.viewing && !typed.attempt));
   const shown = typed && !right && typed.attempt ? spelled(typed.attempt.expected) : typed?.answer ?? '';
   const others = typed && prompt.kind === 'qa' && prompt.typed ? otherAnswers(prompt.typed, shown) : [];
-  return <article className={'ec-card' + (view.english ? ' is-english' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
+  const copying = typing?.step === 3;
+  return <article className={'ec-card' + (view.english ? ' is-english' : '') + (copying ? ' is-copying' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
     <div className={'ec-q' + (lines > 0 ? ' has-blank' : '') + (sticky ? ' is-sticky' : '')} ref={qRef}>
       {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
@@ -392,7 +393,7 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
     {!inline && input && <div className="ec-inrow">{input}</div>}
     {/* 照打的即時比對：只在打錯字母時畫（D-145），打的都對時不再重複一次 */}
     {typing?.step === 3 && typing.live?.typed.some(letter => letter.bad) && <div className="ec-live"><Letters letters={typing.live.typed} mode="typed" /></div>}
-    {actions}
+    {!copying && actions}
     {revealed && <div className="ec-answer">
       {typed && (right
         ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span><Speaker texts={speak(typed.answer)} say={say} /></div></div>
@@ -426,6 +427,8 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
         </span>
       </div>}
     </div>}
+    {/* 照打時「確認」排在最後（鍵盤的 ✓ 也是確認），正確拼字、也可以、記憶錨點往上排，不被鍵盤蓋住（D-145，iPhone 回饋） */}
+    {copying && actions}
   </article>;
 }
 
