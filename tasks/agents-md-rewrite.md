@@ -49,6 +49,7 @@
 - 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
+- 先載入對應的 skill：設計討論用 `essence-discuss`、寫 D-ID 用 `essence-decision`、寫或審程式用 `code-quality`、交給 Codex 用 `codex-brief`。
 
 ## 文件分工
 
@@ -107,6 +108,8 @@
 - `essence-discuss` 第 4 點：只留「你的建議標 💡」，刪掉「只有使用者明確同意才算談定，沒有反對不等於同意」（AGENTS.md 底線已有）。
 - `essence-decision` 開頭的「只寫使用者明確同意的內容；沒有反對不等於同意」：保留「只寫使用者明確同意的內容，不確定時先問一句」，刪掉「沒有反對不等於同意」。
 - `essence-decision` 第 5 步最後加一句：「要改 `AGENTS.md` 時，先照它最後一節的五關檢查。」
+- `essence-discuss`：拿掉 frontmatter 的 `disable-model-invocation: true`（AI 才能自己載入），description 改成「和使用者一次討論一個 Essence 專案的設計問題，直到談定或明確擱置。Use when the user wants to discuss, decide or rethink a design question, product scope or workflow, or when a thread is about a 💬 open question.」
+- 其他 skill 的 description 都要有「Use when」；沒有就補。
 - 再把 `.claude/skills/`、`.agents/skills/` 每個 skill 讀一遍：和新 AGENTS.md 重複的句子刪掉；看起來全域適用、AGENTS.md 卻沒有的，**不要自己搬**，列在完成回報裡請使用者決定。
 
 ## 4. Essence Capture 的 `AGENTS.md`
@@ -120,4 +123,4 @@
 - `npm run check` 通過（skill 有改）。
 - roadmap：拿掉狀態板「精簡 AGENTS.md」那一列；在「已完成」最上面加一列，超過 10 列照規則搬封存。
 - 這份說明的狀態行改成「已完成（commit 範圍）」。
-- 回報：新 AGENTS.md 的字數（基準約 4,800 字；照上面的全文估計約 3,000 字）、§2 補了哪些、§3 列出的待決候選。
+- 回報：新 AGENTS.md 的字數（基準約 4,800 字；照上面的全文估計約 3,100 字）、§2 補了哪些、§3 列出的待決候選。
