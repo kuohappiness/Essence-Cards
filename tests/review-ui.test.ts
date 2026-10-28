@@ -174,14 +174,14 @@ void test('F7 第 2 步拼對：打勾與答案（寫在線上的那一個）；
   const ok = o.ui.find('ec-ok');
   assert.equal(ok.length, 1, '第 2 步拼對有打勾');
   assert.deepEqual(o.ui.find('ec-word').map(o.ui.text), ['made his mind up']);
-  assert.deepEqual(o.ui.find('ec-lab'), [], '沒有「你打的／正確拼字」');
+  assert.deepEqual(o.ui.find('ec-lab'), [], '沒有「你拼的／正確拼字」');
   o.clock.now += RATE_DELAY;
   o.ui.key('2');
   await o.ui.settle();
   o.ui.key('ArrowLeft');
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-ok'), [], '回看：第 1 步拼錯，不畫打勾');
-  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你打的', '正確拼字']);
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你拼的', '正確拼字']);
 });
 
 // Codex L2 F5：出處寫 `圖 2-13`、材料只有 `^fig2-13a`、`^fig2-13b` 時連到第一張子圖（D-094、syntax.md §2-5）。
@@ -247,7 +247,7 @@ void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照
   assert.equal(o.ui.find('ec-blank-input').length, 1, '第 3 步也在空格裡打');
   assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, false, '照打時線上先不寫答案');
   assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次']);
-  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你打的', '正確拼字']);
+  assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你拼的', '正確拼字']);
   assert.deepEqual(o.ui.find('ec-a'), []);
   assert.deepEqual(o.ui.find('ec-also'), [], '只有一個答案時沒有「也可以」');
   assert.deepEqual(speakers(o.ui), ['朗讀 Can I borrow your pen?', '朗讀 borrow']);
@@ -257,13 +257,14 @@ void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照
   o.session.input('borx');
   await o.ui.settle();
   assert.equal(o.ui.find('ec-live').length, 1, '打錯字母時才畫比對');
+  assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次borx'], '比對接在「照著打一次」後面同一行');
   o.session.input('borrow'); o.ui.key('Enter', 'input');
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-blank-input'), []);
   assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, true);
 });
 
-void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面），不在最底下那一排；沒打字按「沒印象」不畫「你打的」', async t => {
+void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面），不在最底下那一排；沒打字按「沒印象」不畫「你拼的」', async t => {
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3', 'z1']) } });
   assert.equal(lt(o.session), 'z2');
   assert.deepEqual(o.ui.find('ec-actions'), [], '打字中沒有最底下那一排');

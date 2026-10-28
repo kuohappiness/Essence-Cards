@@ -53,7 +53,7 @@ const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMe
 const sidebars = (app: App): boolean | null => app.workspace.leftSplit?.collapsed ?? null;
 const nextFrame = (): Promise<void> => new Promise(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); });
 
-/** 字母的比對：拼錯的畫刪除線（你打的）或紫色（正確拼字）。 */
+/** 字母的比對：拼錯的畫刪除線（你拼的、照著打一次）或紫色（正確拼字）。 */
 function Letters({ letters, mode }: { letters: Spelling['typed']; mode: 'typed' | 'expected' }): React.JSX.Element {
   if (!letters.length) return <span className="ec-letters">—</span>;
   return <span className="ec-letters" lang="en">{letters.map((letter, index) => letter.bad
@@ -368,8 +368,11 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
+  // 照打：「照著打一次」後面接即時比對（現在打的字，打錯的字母畫刪除線），只在有打錯的字母時才出現（D-145，iPhone 回饋）；
+  // 放在同一行，打錯時不多冒出一行把下面往鍵盤後推。
+  const liveWrong = typing?.step === 3 && typing.live?.typed.some(letter => letter.bad) ? typing.live : null;
   const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
-    : inline && typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span></div> : null;
+    : typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span>{liveWrong && <span className="ec-live"><Letters letters={liveWrong.typed} mode="typed" /></span>}</div> : null;
   const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { session.input(event.currentTarget.value); }}
     placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
     autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />;
@@ -391,15 +394,13 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
     {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}
     {stepText}
     {!inline && input && <div className="ec-inrow">{input}</div>}
-    {/* 照打的即時比對：只在打錯字母時畫（D-145），打的都對時不再重複一次 */}
-    {typing?.step === 3 && typing.live?.typed.some(letter => letter.bad) && <div className="ec-live"><Letters letters={typing.live.typed} mode="typed" /></div>}
     {!copying && actions}
     {revealed && <div className="ec-answer">
       {typed && (right
         ? <div className="ec-spell"><div className="ec-spell-row"><span className="ec-ok"><Icon type="check" /></span><span className="ec-word" lang="en">{typed.answer}</span><Speaker texts={speak(typed.answer)} say={say} /></div></div>
         : typed.attempt && <div className="ec-spell">
-          {/* 沒打字直接按「沒印象」：不畫「你打的」那一行（D-145，iPhone 回饋） */}
-          {typed.attempt.typed.length > 0 && <div className="ec-spell-row"><span className="ec-lab">你打的</span><Letters letters={typed.attempt.typed} mode="typed" /></div>}
+          {/* 沒打字直接按「沒印象」：不畫「你拼的」那一行（D-145，iPhone 回饋）；「你拼的」是進入照打前拼錯的那一次 */}
+          {typed.attempt.typed.length > 0 && <div className="ec-spell-row"><span className="ec-lab">你拼的</span><Letters letters={typed.attempt.typed} mode="typed" /></div>}
           <div className="ec-spell-row"><span className="ec-lab">正確拼字</span><Letters letters={typed.attempt.expected} mode="expected" /><Speaker texts={speak(shown)} say={say} /></div>
         </div>)}
       {/* 其他正確答案（D-145）：一個時和「也可以：」同一行，兩個以上每個一行 */}

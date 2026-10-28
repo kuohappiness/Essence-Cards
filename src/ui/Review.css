@@ -58,7 +58,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app .ec-input { width: 100%; min-width: 0; padding: 8px 2px; border: 0; border-radius: 0; box-shadow: none; background: transparent; color: var(--ec-ink); font-family: inherit; font-weight: 500; font-size: var(--ec-size-question); }
 .ec-app .ec-input:focus { outline: none; box-shadow: none; }
 .ec-input::placeholder { color: var(--ec-muted); font-size: 17px; font-weight: 400; }
-.ec-live { margin-top: 8px; font-size: var(--ec-size-answer); letter-spacing: .03em; min-height: 1.4em; }
+/* 照打的即時比對接在「照著打一次」後面同一行（D-145）：比題目小、和提示差不多大，打錯的字母畫刪除線 */
+.ec-live { color: var(--ec-ink); font-size: 17px; letter-spacing: .03em; }
 .ec-letters s { color: var(--ec-muted); text-decoration-thickness: 2px; }
 /* 拼字比對和答案同一個字級：手機上片語（make up your mind）排得下一行（2026-10-28，原本是題目的字級） */
 .ec-spell { display: grid; gap: 8px; margin-bottom: 20px; font-size: var(--ec-size-answer); }
