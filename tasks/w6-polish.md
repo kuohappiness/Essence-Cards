@@ -1,6 +1,6 @@
 # W6 iPhone 測試後的畫面修改（給 Claude，本機執行）
 
-狀態：進行中：實作完（分支 `claude/w6-polish` 的 `c5b445d`，已合併 `main` 的 A3），Windows 版 Obsidian 通過，等使用者在 iPhone 測（2026-10-28）
+狀態：進行中：實作完（分支 `claude/w6-polish` 的 `4dc6041`，已合併 `main` 的 A3），Windows 版 Obsidian 通過，等使用者在 iPhone 測（2026-10-28）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（執行型，D-144）。照 [D-145](../docs/decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 改複習畫面；[D-146](../docs/decisions.md#d-146-卡組筆記的全部卡按鈕與第一次的提醒) 的卡組筆記按鈕不在這一批，和範圍與目錄模組一起做。
 
