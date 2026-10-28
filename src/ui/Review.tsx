@@ -367,8 +367,8 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   const links = sources.map(item => ({ ...item, target: resolveSource(app, card.deck, deckMaterials, item.link) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
-  // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體照樣念「不對」。
-  const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="不對"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
+  // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
+  const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
     : inline && typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span></div> : null;
   const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { session.input(event.currentTarget.value); }}
     placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
