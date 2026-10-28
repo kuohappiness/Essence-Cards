@@ -133,6 +133,14 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (autoOn) speech.say(texts);
   }, [view, autoOn, speech]);
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
+  // 只剩一個自評時（打字卡第 1 步按了「沒印象」），三步走完就自動記下、換下一張（D-145，iPhone 回饋）。
+  // 正在念答案與例句時等念完（答錯後的回饋，D-116）；語音沒回報念完時，底下那一顆「沒印象」照樣能按。
+  const autoRated = useRef<string | null>(null);
+  useEffect(() => {
+    if (view.kind !== 'card' || view.card.viewing || !view.card.typed?.finished || view.card.allowed.length !== 1 || autoRated.current === cardKey) return;
+    autoRated.current = cardKey;
+    speech.whenIdle(() => { if (alive.current && !busy.current) commit(() => session.rateOnly()); });
+  }, [view, cardKey, speech, session]);
   // 打字卡：輸入框自動取得焦點（在空格裡打字時，題目渲染好、輸入框放進空格之後）。
   useEffect(() => {
     if (view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
@@ -164,15 +172,19 @@ export function Review(props: ReviewProps): React.JSX.Element {
     const current = latest.current;
     if (current.kind !== 'card' || !current.card.allowed.includes(rating)) return;
     if (current.card.viewing) { session.rate(rating); return; }
+    commit(() => session.rate(rating));
+  };
+  /** 記下這一張、換下一張（手按的自評與只剩一個時的自動記下共用）。 */
+  function commit(accept: () => boolean): void {
     // 先確定這一次自評算數（0.3 秒的規則在 review 裡），再換卡：寫紀錄在背景（D-074）。
     pendingNext.current = performance.now();
-    const accepted = session.rate(rating);
+    const accepted = accept();
     if (!accepted) { pendingNext.current = null; return; }
     // 已經換成下一張：評分後只做滑入，回看的換卡才有滑出（§3-4、L2 自選第 10 點）。
     const el = body.current;
     if (el && !reducedMotion()) void animate(el, { opacity: [0, 1], x: [-35, 0] }, { duration: 0.16 });
     focusApp();
-  };
+  }
   const back = (): void => { if (latest.current.top.canBack) void slide(1, () => { session.back(); }); };
   const forward = (): void => { if (latest.current.top.viewing) void slide(-1, () => { session.forward(); }); };
   const toCurrent = (): void => { if (latest.current.top.viewing) void slide(-1, () => { session.toCurrent(); }); };
@@ -366,12 +378,12 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   const others = typed && prompt.kind === 'qa' && prompt.typed ? otherAnswers(prompt.typed, shown) : [];
   return <article className={'ec-card' + (view.english ? ' is-english' : '')} lang={view.english ? 'en' : 'zh-Hant'}>
     <div className="ec-meta">{card.isNew && <span className="ec-new">新</span>}<span lang="zh-Hant">{view.crumb}</span></div>
-    <div className={'ec-q' + (sticky ? ' is-sticky' : '')} ref={qRef}>
+    <div className={'ec-q' + (lines > 0 ? ' has-blank' : '') + (sticky ? ' is-sticky' : '')} ref={qRef}>
       {/* 在空格裡打字時，線上先不寫答案（第 3 步照著下面「正確拼字」那一行打）；三步走完才寫上去 */}
       {/* 喇叭接在最後一個字後面（D-145，iPhone 回饋），不放在第一行右邊 */}
       <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed && !inline}
         lines={lines} words={typed && revealed ? typed.answer.split(/\s+/) : []} onSlot={lines > 0 ? onSlot : undefined}
-        tail={<Speaker texts={speak(spokenQuestion)} say={say} />} onReady={onPainted} onFail={() => { onFail('front'); }} />
+        english={view.english} tail={<Speaker texts={speak(spokenQuestion)} say={say} />} onReady={onPainted} onFail={() => { onFail('front'); }} />
     </div>
     {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
     {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}

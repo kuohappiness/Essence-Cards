@@ -7,6 +7,8 @@ export interface Speech {
   /** 依序念這幾段英文；先停掉正在念的。 */
   say(texts: readonly string[]): void;
   stop(): void;
+  /** 沒在念的時候呼叫 callback：正在念就等念完或被停掉，沒在念就馬上（D-145：念完答案再換下一張）。 */
+  whenIdle(callback: () => void): void;
 }
 
 export const NO_ENGLISH_VOICE = 'Essence Cards：這台電腦沒有英文語音，可以在系統設定加入英文語音';
@@ -19,24 +21,36 @@ function hasEnglishVoice(voices: readonly { lang: string }[]): boolean {
 /** onMissing：找不到英文語音時提示一次（Notice），不用中文語音硬念。 */
 export function createSpeech(onMissing: () => void): Speech {
   let warned = false;
+  // 還沒念完的段數：每次 say 或 stop 換一代，被取消的舊段落回報結束時不算。
+  let generation = 0;
+  let pending = 0;
+  const waiting: (() => void)[] = [];
+  const settle = (): void => { if (pending === 0) for (const callback of waiting.splice(0)) callback(); };
   const synth = (): SpeechSynthesis | null => typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
   return {
     say(texts) {
       const engine = synth();
-      if (!engine) return;
+      const mine = ++generation;
+      pending = 0;
+      if (!engine) { settle(); return; }
       engine.cancel();
       if (!hasEnglishVoice(engine.getVoices())) {
         if (!warned) { warned = true; onMissing(); }
+        settle();
         return;
       }
       for (const text of texts) {
         if (!text.trim()) continue;
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US';
+        utterance.onend = utterance.onerror = () => { if (mine === generation && pending > 0) { pending--; settle(); } };
+        pending++;
         engine.speak(utterance);
       }
+      settle();
     },
-    stop() { synth()?.cancel(); },
+    stop() { generation++; pending = 0; synth()?.cancel(); settle(); },
+    whenIdle(callback) { waiting.push(callback); settle(); },
   };
 }
 

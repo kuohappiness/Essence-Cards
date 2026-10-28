@@ -120,6 +120,11 @@ export interface Session {
   skip(): void;
   /** 自評；回看時是改評分。回傳有沒有真的算數（0.3 秒內、不能按的評分不算）。 */
   rate(rating: Rating): boolean;
+  /**
+   * 只剩一個自評可選時（打字卡第 1 步按了「沒印象」，三步走完）直接記下（D-145）：答案已經看過、打過，不受翻面後 0.3 秒的限制。
+   * 其他情況（還沒走完、有兩個以上可選、回看中）不記，回傳 false。
+   */
+  rateOnly(): boolean;
   back(): void;
   forward(): void;
   toCurrent(): void;
@@ -410,6 +415,14 @@ export function createSession(options: SessionOptions): Session {
     return true;
   }
 
+  function rateOnly(): boolean {
+    if (!current?.typed?.finished || viewing !== null) return false;
+    const allowed = allowedFor(current.typed.first);
+    if (allowed.length !== 1) return false;
+    current.revealedAt = null;
+    return rate(allowed[0]);
+  }
+
   /**
    * 回看時改評分（D-084）：取消原本那一筆，再寫同樣的 lt、v、typed、retry 加新的評分。目前有一張還沒作答的卡時不換它；
    * 在完成畫面時重新問 next，改成沒印象或差一點的那張回到目前時就出（Codex L2 F2）。
@@ -468,7 +481,7 @@ export function createSession(options: SessionOptions): Session {
   return {
     view, ready: () => readyPromise,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    reveal, input, submit, skip, rate, back, forward, toCurrent, continueWith, pause, resume,
+    reveal, input, submit, skip, rate, rateOnly, back, forward, toCurrent, continueWith, pause, resume,
     close() { closed = true; unsubscribe(); done.length = 0; current = null; listeners.clear(); },
     history: () => done,
     pick: () => pick,

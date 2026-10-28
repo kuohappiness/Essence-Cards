@@ -31,8 +31,9 @@ const englishText = [
   '',
 ].join('\n');
 
-interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void> }
-async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string> } = {}): Promise<Opened> {
+interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void>; idle: (() => void)[] }
+/** holdSpeech：語音替身的 whenIdle 先不回報（當作還在念），測試呼叫 idle 裡的 callback 才算念完。 */
+async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; holdSpeech?: boolean } = {}): Promise<Opened> {
   const memory = createMemoryFiles(options.texts ?? { [NATURAL]: naturalText, [ENGLISH]: englishText });
   const clock = { now: START };
   const state = createState({ files: memory.files, device: 'PC-test', delay: 30, fillIds: false, now: () => clock.now, offset: () => 480 });
@@ -41,15 +42,16 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   const session = createSession({ state, pick, now: () => clock.now });
   await session.ready();
   const speech: string[] = [];
+  const idle: (() => void)[] = [];
   let autoOn = options.autoRead ?? false;
   const ui = await renderReview({
     app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [],
-    speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); } },
+    speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); }, whenIdle: callback => { if (options.holdSpeech) idle.push(callback); else callback(); } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
     pickedAt: performance.now(),
   });
   t.after(() => { ui.unmount(); session.close(); });
-  return { ui, session, clock, speech, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
+  return { ui, session, clock, speech, idle, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
 }
 const lt = (session: Session): string | null => { const view = session.view(); return view.kind === 'card' ? view.card.card.lt : null; };
 /** 翻面（Space），過 0.3 秒按數字鍵自評。 */
@@ -274,8 +276,35 @@ void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面
   assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['確認'], '第 3 步只有確認，也在卡片裡');
   o.session.input('borrow'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  assert.equal(o.ui.find('ec-actions').length, 1, '三步走完：自評在最底下');
-  assert.deepEqual(o.ui.find('ec-typed-actions'), []);
+  // 第 1 步按了「沒印象」只剩一個自評：照打完就自動記下、換下一張（D-145），不用再按底下的「沒印象」。
+  assert.deepEqual(o.session.history().map(entry => [entry.card.lt, entry.rating]), [['z2', 'miss']]);
+  const next = o.session.view();
+  assert.ok(next.kind !== 'card' || (next.card.typed?.step === 1 && !next.card.typed.finished), '換到下一張（只剩這一張時是重新出的 z2，從第 1 步開始）');
+});
+
+void test('D-145 只剩一個自評時自動換下一張：正在念答案時等念完；第 1 步拼錯的（還有兩個可選）不自動', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off | switch off', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { autoRead: true, holdSpeech: true, texts: { [ENGLISH]: deck } });
+  assert.equal(lt(o.session), 'g1');
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.second === 'right', '看了原形提示後打對');
+  assert.equal(o.speech.at(-1), 'say went / I went to the park yesterday.', '先念答案與例句');
+  assert.equal(lt(o.session), 'g1', '還在念：先不換');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(o.session.history().map(entry => [entry.card.lt, entry.rating]), [['g1', 'miss']], '念完：自動記下沒印象');
+  assert.equal(lt(o.session), 't1');
+  o.session.input('turn of'); o.ui.key('Enter', 'input');
+  o.session.input('turn of'); o.ui.key('Enter', 'input');
+  o.session.input('turn off'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.equal(lt(o.session), 't1', '第 1 步拼錯：還有差一點與沒印象可選，不自動');
+  assert.equal(o.session.history().length, 1);
 });
 
 void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文（重複的只念一次）', async t => {

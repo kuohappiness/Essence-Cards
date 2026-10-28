@@ -34,6 +34,10 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-new { padding: 1px 7px; border-radius: var(--ec-radius-small); background: color-mix(in srgb, var(--ec-new) 16%, var(--ec-page)); color: var(--ec-new); font-size: var(--ec-size-meta); font-weight: 600; }
 .ec-q { margin-top: var(--ec-gap-question); font-size: var(--ec-size-question); line-height: 1.55; font-weight: 500; text-wrap: pretty; font-family: var(--ec-font-text); }
 .ec-q .ec-markdown p { margin: 0 0 12px; }
+/* 英文題目照一般的方式換行（每行排滿再換）：iPhone 的 text-wrap: pretty 會為了最後一行不太短，把 the 和 park 拆開（使用者 2026-10-28）。
+   有空格的題目整句的行距加大，底線不貼著下一行，各行的間距也一樣（取代原本只在空格下方多留的距離）。 */
+.ec-card.is-english .ec-q { text-wrap: wrap; }
+.ec-q.has-blank { line-height: 1.8; }
 /* 題目固定在上方、只捲答案（D-145，iPhone 回饋）；題目太高時不加 is-sticky（Review.tsx 量）。
    固定時貼齊捲動區的最上緣（蓋住上方的留白，捲上去的字不會從題目上面露出來）；和麵包屑之間的距離改用自己的上邊距，
    沒捲動時的位置和原本一樣。捲上來的字在題目下緣淡出，不畫線。 */
@@ -87,8 +91,7 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 /* 打字中的「沒印象」「確認」在題目正下方（D-145，iPhone 回饋：鍵盤會蓋住畫面最底下）：左邊沒印象、右邊確認 */
 .ec-typed-actions { display: flex; justify-content: space-between; align-items: center; margin: 20px -12px 0; }
 .ec-app .ec-typed-actions .ec-show { width: auto; height: var(--ec-touch); padding: 0 12px; border-radius: var(--ec-radius); font-size: var(--ec-size-button); }
-.ec-app .ec-typed-actions .ec-confirm { margin-left: auto; min-width: 96px; background: var(--ec-press); }
-.ec-app .ec-typed-actions .ec-confirm:disabled { background: none; }
+.ec-app .ec-typed-actions .ec-confirm { margin-left: auto; }
 .ec-app .ec-skip { color: var(--ec-muted); }
 .ec-app .ec-skip::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--ec-new); vertical-align: middle; }
 .ec-rates { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); animation: ec-fade-in var(--ec-fade) ease-out both; }

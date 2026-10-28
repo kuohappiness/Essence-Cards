@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -87,6 +87,14 @@ void test('D-145 背面補充的名稱自己一行：一到六個字、不含空
   assert.deepEqual(extraLabel('![[W6 擴散示意圖.svg]]'), { label: null, body: '![[W6 擴散示意圖.svg]]' });
   assert.deepEqual(extraLabel('**記憶錨點**：粗體'), { label: null, body: '**記憶錨點**：粗體' }, '有 Markdown 記號：照原文');
   assert.deepEqual(extraLabel('記憶錨點：'), { label: null, body: '記憶錨點：' }, '冒號後面沒有內容：照原文');
+});
+
+void test('D-145 冠詞和後面的字連在一起換行：a、an、the 後面的空白換成不斷行空白', () => {
+  assert.equal(glueArticles('Please switch off the lights when you leave.'), 'Please switch off the lights when you leave.');
+  assert.equal(glueArticles('I have a pen and an apple.'), 'I have a pen and an apple.');
+  assert.equal(glueArticles('The box is very light.'), 'The box is very light.', '大寫也算');
+  assert.equal(glueArticles('data base, area code'), 'data base, area code', '字中間的 a 不算');
+  assert.equal(glueArticles('I went to the '), 'I went to the ', '後面沒有字（接著是空格）不改');
 });
 
 void test('D-145 喇叭和最後一個字一起換行：最後一個英文字連同標點，或最後兩個中文字與全形標點', () => {

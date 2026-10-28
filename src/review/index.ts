@@ -8,7 +8,7 @@ export type { Spelling } from './spelling.ts';
 export { lockAxis, gesture } from './gesture.ts';
 export { keyboardFit } from './keyboard.ts';
 export type { Axis, Gesture } from './gesture.ts';
-export { englishParts, lineSpeech, otherAnswers, englishBreak, tailStart, fillBlank, blankCount, BLANK } from './english.ts';
+export { englishParts, lineSpeech, otherAnswers, englishBreak, glueArticles, tailStart, fillBlank, blankCount, BLANK } from './english.ts';
 export { crumb } from './crumb.ts';
 export { extraLabel } from './extras.ts';
 export { sourceLinks } from './sources.ts';

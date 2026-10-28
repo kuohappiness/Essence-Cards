@@ -1,7 +1,7 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BLANK, englishBreak, tailStart } from '../review/index.ts';
+import { BLANK, englishBreak, glueArticles, tailStart } from '../review/index.ts';
 
 // 卡片的內容交給 Obsidian 渲染（D-052、D-109、W6 §3-3）：圖片、公式、音檔照樣呈現；sourcePath 是卡組的路徑。
 // 填空題：渲染後把 <mark> 換成空格（一條底線，翻面後答案在同一條線上淡入）。
@@ -28,6 +28,19 @@ export interface MarkdownProps {
   onSlot?: (slot: HTMLElement | null) => void;
   /** 接在最後一個字後面的東西（喇叭，D-145）：和最後一個字包在一起，換行時不會單獨掉到下一行。 */
   tail?: React.ReactNode;
+  /** 英文卡的題目：冠詞和後面的字連在一起換行（glueArticles）。 */
+  english?: boolean;
+}
+
+/** 文字節點裡的冠詞接上不斷行空白（空格、填空裡的不改）。 */
+function glueText(container: HTMLElement): void {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.parentElement?.closest('.ec-slot, .ec-blank')) continue;
+    const text = node.textContent ?? '';
+    const glued = glueArticles(text);
+    if (glued !== text) node.textContent = glued;
+  }
 }
 
 /**
@@ -141,6 +154,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
           }
         }
         const slot = mode === 'typed' ? insertLines(container, lines) : null;
+        if (latest.current.english) glueText(container);
         applyState(container, latest.current);
         // 一律先包好最後一個字：英翻中的喇叭在翻面前就有，中翻英的在答案出現後才有，不用為此重新渲染。
         setTailEl(attachTail(container));

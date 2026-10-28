@@ -38,7 +38,8 @@
   --ec-radius: 12px;
   --ec-radius-small: 6px;
   --ec-touch: 44px;
-  --ec-action-height: 64px;
+  /* 底部那一排按鈕（自評、顯示答案）：使用者 2026-10-28 要減 20%（原本 64px），仍大於 44 點的觸控範圍 */
+  --ec-action-height: 52px;
 
   --ec-fade: 0.18s;
   --ec-slide-out: 0.11s;

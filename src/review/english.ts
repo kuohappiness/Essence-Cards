@@ -70,6 +70,11 @@ export function englishBreak(text: string): number | null {
   return end;
 }
 
+/** 冠詞（a、an、the）和後面的字用不斷行空白連起來，換行時冠詞不會留在行尾（D-145：the 和 park 不拆開）。 */
+export function glueArticles(text: string): string {
+  return text.replace(/\b(a|an|the) +(?=\S)/giu, '$1 ');
+}
+
 /**
  * 接在文字後面的喇叭和哪一段綁在一起換行（D-145：喇叭不單獨掉到下一行）：最後一個英文字（連同標點），
  * 或最後兩個中文字與全形標點；回傳那一段開始的位置（UTF-16），結尾的空白算在那一段裡。
