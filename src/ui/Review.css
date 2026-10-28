@@ -87,9 +87,12 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-ex { margin-top: var(--ec-gap-extra); font-size: var(--ec-size-extra); line-height: 1.6; color: var(--ec-muted); }
 .ec-ex-item + .ec-ex-item { margin-top: 10px; }
 .ec-tools { display: flex; justify-content: flex-end; align-items: center; margin: 8px -10px 0 0; }
-.ec-srcw { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.ec-app .ec-tip { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--ec-press); color: var(--ec-ink); font-size: var(--ec-size-small); }
-.ec-tip.is-text { background: none; color: var(--ec-muted); }
+.ec-srcw { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* 出處：能點的和打字中的「沒印象」「確認」同一套細框、沒有底色（D-145，使用者 2026-10-28：原本深色模式的實心底太重）；
+   不能點的（跨單元的出處）只是灰字。連滑鼠移過、焦點都明確不畫底色，iPhone 上 Obsidian 的按鈕底色不會蓋過來。 */
+.ec-app .ec-tip, .ec-app .ec-tip:hover, .ec-app .ec-tip:focus { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid var(--ec-line); border-radius: 15px; background: transparent; box-shadow: none; color: var(--ec-ink); font-size: var(--ec-size-small); }
+.ec-app .ec-tip:not(.is-text):active { background: color-mix(in srgb, var(--ec-ink) 6%, transparent); }
+.ec-app .ec-tip.is-text { border-color: transparent; color: var(--ec-muted); }
 
 /* 自評四鍵（D-062、D-070）：只有色點和文字，不顯示間隔；打字卡只顯示能按的那幾個 */
 .ec-actions { flex: none; border-top: 1px solid var(--ec-line); min-height: var(--ec-action-height); }
