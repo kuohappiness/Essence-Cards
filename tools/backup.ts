@@ -7,7 +7,7 @@ import type { BackupManifest } from '../src/core/backup/index.ts';
 import { isDeckPath, parseDeck } from '../src/core/deck/index.ts';
 import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { buildVersion } from './build.mjs';
-import { defaultBackupFolder, isInside, listTree, pluginConfig, readError, realTarget } from './vault-io.ts';
+import { defaultBackupFolder, isInside, listTree, pluginConfig, readError, realTarget, virtualizedNotice } from './vault-io.ts';
 
 /** 清單的 by（syntax §8）。 */
 export type BackupBy = 'backup' | 'update-vault' | 'restore';
@@ -182,6 +182,8 @@ if (import.meta.main) {
   const result = await backupVault({ vault: positionals[0], to: values.to, config: values.config, by: 'backup' });
   const bytes = result.manifest.files.reduce((sum, file) => sum + file.size, 0);
   console.log(`已備份：${result.path}（${result.manifest.files.length} 個檔，${bytes} bytes${result.attempts > 1 ? `，檔案在變，第 ${result.attempts} 次才穩定` : ''}）`);
+  const notice = virtualizedNotice(result.path);
+  if (notice) console.log(notice);
   for (const path of result.manifest.absent) console.log('當時不存在：' + path);
   for (const note of result.manifest.notes) console.log(`記下：${note.path}：${note.message}`);
 }

@@ -47,6 +47,16 @@ export function defaultBackupFolder(vaultName: string, env: NodeJS.ProcessEnv = 
   return join(base, 'Essence Cards', '備份', vaultName);
 }
 
+/**
+ * 實際路徑落在封裝 App 的私有資料夾（`AppData\Local\Packages\<App>\LocalCache\`）：在 MSIX 封裝的 App（例如 Claude 桌面 App）
+ * 裡跑時，Windows 把寫進 %LOCALAPPDATA% 的東西導到那裡（2026-10-29 實測）。回傳要印給人看的提醒；不是就回傳 null。
+ */
+export function virtualizedNotice(real: string): string | null {
+  if (!/[\\/]AppData[\\/]Local[\\/]Packages[\\/][^\\/]+[\\/]LocalCache[\\/]/i.test(real)) return null;
+  return `注意：這個程式在封裝的 App 裡跑，Windows 把 %LOCALAPPDATA% 導到那個 App 的私有資料夾，備份實際存在 ${real}：`
+    + '從檔案總管或 App 以外的程式看 %LOCALAPPDATA% 看不到，解除安裝那個 App 時會一起刪掉。要放在別處，用 --to 指定。';
+}
+
 /** 讀不到檔案時分清楚原因（任務 1-1 第 1 點）：消失、權限、被占用，Windows 上其他的多半是 iCloud 只留了雲端佔位檔。 */
 export function readError(path: string, error: unknown): Error {
   const code = (error as NodeJS.ErrnoException).code;
