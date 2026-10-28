@@ -39,6 +39,24 @@ function rawZip(entries: [string, string][]): Uint8Array {
 }
 const opened = (zip: Uint8Array): string => { const result = openBackup(zip); return result.ok ? 'ok' : result.error; };
 
+/** 把 zip 裡（本地標頭與中央目錄）檔名 from 的那個位元組換成 byte，並設定或清掉 UTF-8 旗標。 */
+function patchName(zip: Uint8Array, from: string, at: number, byte: number, utf8: boolean): Uint8Array {
+  const out = zip.slice();
+  const view = new DataView(out.buffer);
+  const name = new TextEncoder().encode(from);
+  let patched = 0;
+  for (let p = 0; p + name.length <= out.length; p++) {
+    if (!name.every((value, i) => out[p + i] === value)) continue;
+    const flags = p >= 30 && view.getUint32(p - 30, true) === 0x04034b50 ? p - 24 : p >= 46 && view.getUint32(p - 46, true) === 0x02014b50 ? p - 38 : -1;
+    if (flags < 0) continue;
+    out[p + at] = byte;
+    view.setUint16(flags, utf8 ? view.getUint16(flags, true) | 0x800 : view.getUint16(flags, true) & ~0x800, true);
+    patched++;
+  }
+  assert.equal(patched, 2);
+  return out;
+}
+
 void test('還原檔名的裝置碼和 state 的 isDeviceCode 一致；只去掉最後完整的「 還原 <日期> <裝置碼>」，衝突副本的 2 留著', () => {
   for (const platform of ['iPhone', 'iPad', 'Android', 'Windows', 'Mac', 'Linux', 'Device', 'Foo', 'iphone']) {
     const stripped = logSource(`2026-10 iPhone-7f3a 還原 2026-11-02 ${platform}-1a2b.jsonl`) === '2026-10 iPhone-7f3a';
@@ -121,6 +139,16 @@ void test('zip 與清單一一對應：同名的項目、兩個 manifest.json、
   assert.match(opened(rawZip([['manifest.json', manifest], ['Essence Cards/a.md', 'a'], ['Essence Cards/b.md', 'c']])), /雜湊和清單不同/);
   assert.match(opened(rawZip([['manifest.json', manifest.replace('"version":1', '"version":2')]])), /清單讀不懂/);
   assert.match(opened(bytes('not a zip')), /不是讀得懂的 zip/);
+});
+
+void test('zip 的檔名要是 UTF-8：壞掉的位元組或沒有 UTF-8 旗標的非 ASCII 名稱都拒絕，不被寬鬆解碼成清單裡的名字（Codex 中途查核 F6）', () => {
+  const name = 'Essence Cards/x.md', at = 'Essence Cards/'.length;
+  const zipWith = (listed: string): Uint8Array => rawZip([['manifest.json', JSON.stringify(manifestOf({ [listed]: 'x' }))], [name, 'x']]);
+  assert.match(opened(rawZip([['manifest.json', JSON.stringify(manifestOf({ [name]: 'x' }))], [name, 'x']])), /^ok$/);
+  assert.match(opened(patchName(zipWith('Essence Cards/�.md'), name, at, 0xff, true)), /檔名不是 UTF-8/);
+  assert.match(opened(patchName(zipWith('Essence Cards/é.md'), name, at, 0xe9, false)), /檔名不是 UTF-8/);
+  // 中文名稱照 UTF-8 寫（fflate 對非 ASCII 名稱設旗標），照常讀得到。
+  assert.equal(opened(zipOf({ 'Essence Cards/國二上/水溶液.md': 'x' })), 'ok');
 });
 
 void test('缺的行：trim 後比、空行不算、原樣保留未知欄位與壞行；現在有的不補；最後一行是現在某一行的開頭時不算缺；還原檔算回來源', () => {
