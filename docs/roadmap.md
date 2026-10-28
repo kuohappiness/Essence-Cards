@@ -11,7 +11,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 四題都有初步結論；Codex 查核兩次，Claude 已回應 | Codex 確認 Claude 的改法 C1～C8；一致後交使用者確認、寫成 D-ID | Codex（使用者轉交） | [討論稿](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md>)、[規畫](plans/updates.md) |
-| 外掛架構逐環節檢視 | 環節 1、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)）；環節 4（`state`）Codex 已回應、Claude 已回覆（新發現 N1：存檔後才開始的讀取也會產生假的遺失） | Codex 確認環節 4 的四點；之後 5、6、9、2、3 | Codex（使用者轉交） | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
+| 外掛架構逐環節檢視 | 環節 1、4、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4 的施工記進 [backlog 技術債](backlog.md#技術債)） | 寫 `state` 讀寫協調的任務說明（開工時間由使用者排）；環節 5 | Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 未來規畫統整的審閱 | Claude 審完：122 項，遺漏 1 項、原意與來源 4 處已修，身分沒有被改 | 使用者決定 3 題：Capture 開工前的研究放 v1 嗎、真實驗證算不算 v1、三項舊共識 | 使用者 | [請使用者決定](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)、[任務說明](../tasks/future-plans-review.md) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
