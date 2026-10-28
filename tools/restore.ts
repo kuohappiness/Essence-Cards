@@ -182,16 +182,28 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     if (file.action !== 'restore' || file.target === null) { outcome('跳過', '現在和備份相同'); continue; }
     if ((old.current?.sha256 ?? null) !== (file.current?.sha256 ?? null)) { outcome('跳過', '計畫之後改過；重跑 --plan 看新的差異'); continue; }
     const target = join(vault, file.current?.path ?? file.target);
-    const temporary = target + '.' + random() + '.restore-tmp';
     const bytes = loaded.backup.files.get(file.path)!;
+    let temporary: string | null = null;
     try {
       await mkdir(dirname(target), { recursive: true });
-      await write(temporary, bytes, 'wx');
+      // 暫存檔用獨占建立；撞到已有的檔（別的程序或先前留下的）就換名字，不動它（Codex 中途查核 F5）。
+      for (let i = 0; i < 20 && temporary === null; i++) {
+        const candidate = target + '.' + random() + '.restore-tmp';
+        try { await write(candidate, bytes, 'wx'); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
+          // 建立之後才失敗（例如空間不足）的半個檔是這次的，刪掉。
+          await unlink(candidate).catch(() => {});
+          throw error;
+        }
+        temporary = candidate;
+      }
+      if (temporary === null) throw Error('找不到沒用過的暫存檔名');
       await rename(temporary, target);
+      temporary = null;
       if (hashBytes(new Uint8Array(await readFile(target))) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');
       outcome('已還原', '');
     } catch (error) {
-      await unlink(temporary).catch(() => {});
+      if (temporary !== null) await unlink(temporary).catch(() => {});
       outcome('失敗', (error as Error).message);
     }
   }

@@ -157,6 +157,27 @@ void test('還原：還原檔寫到一半空間不足時列為失敗、不留半
   assert.equal(again.plan.logs.length, 1);
 });
 
+void test('還原：暫存檔撞到已有的檔就換名字，不刪不是這次建立的檔（Codex 中途查核 F5）', async t => {
+  const { vault, zip, A } = await drill(t);
+  const other = join(vault, A + '.abcd.restore-tmp');
+  await writeFile(other, 'preexisting temporary');
+  const codes = ['2c9e', 'abcd', 'abcd', 'beef'];
+  const options = { vault, backup: zip, ...fixed, random: () => codes.shift() ?? 'ffff' };
+  const { path } = await makePlan(options);
+  const result = await applyPlan({ ...options, plan: path, files: [A, 'Essence Cards/B.md'] });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[A, '已還原'], ['Essence Cards/B.md', '已還原']]);
+  assert.equal(await readFile(other, 'utf8'), 'preexisting temporary');
+});
+
+void test('備份：暫存檔被別的程序搶先建立時失敗，不刪那個檔（Codex 中途查核 F5）', async t => {
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') });
+  const to = await tempFolder(t);
+  await assert.rejects(backupVault({ vault, to, by: 'backup', ...fixed, random: () => 'aaaa', seams: {
+    write: async path => { await writeFile(path, 'other'); throw Object.assign(Error('exists'), { code: 'EEXIST' }); },
+  } }), /exists/);
+  assert.deepEqual(await readdir(to), ['Essence Cards 備份 2026-10-29 200000 未知 aaaa.zip.tmp']);
+});
+
 void test('還原：計畫之後被改過的檔在 --apply 時跳過，不蓋掉', async t => {
   const { vault, zip, A, B } = await drill(t);
   const options = { vault, backup: zip, ...fixed, random: counter() };

@@ -154,8 +154,10 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
   if (!name) throw Error('找不到沒用過的備份檔名');
   const path = join(folder, name);
   const temporary = path + '.tmp';
+  let created = false;
   try {
     await write(temporary, zip);
+    created = true;
     const opened = openBackup(new Uint8Array(await readFile(temporary)));
     if (!opened.ok) throw Error('寫好的備份讀回來不對：' + opened.error);
     if (JSON.stringify(opened.value.manifest) !== JSON.stringify(manifest)) throw Error('寫好的備份讀回來的清單不同');
@@ -167,7 +169,8 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
     if (await exists(path)) throw Error(path + ' 已經存在，不覆寫');
     await rename(temporary, path);
   } catch (error) {
-    await unlink(temporary).catch(() => {});
+    // 只清這次建立的暫存檔：EEXIST 表示別的程序先建了它，不是我們的（Codex 中途查核 F5）。
+    if (created || (error as NodeJS.ErrnoException).code !== 'EEXIST') await unlink(temporary).catch(() => {});
     throw error;
   }
   return { path, manifest, attempts };
