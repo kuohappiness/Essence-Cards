@@ -143,3 +143,55 @@ void test('S22 fillIds 版：一直有新的待讀時，第 5 輪後放棄（不
   assert.equal(memory.texts.get(A), C);
   assert.equal(memory.reads.slice(reads).length, 5);
 });
+
+// ---- §4 準備只預留、核對與採用（離開筆記的 fillIds） ----
+
+const D = '- 能說明 D\n    - QD :: AD\n';
+
+void test('§4 fillIds 核對：寫成後家長又打了別的字，預期的 ID 都在就算寫成；預期不在（ID 被拿掉）不採用、回 false', async t => {
+  const h = await setup(t, { [P]: C });
+  const held = h.holdModify(P);
+  const filling = h.state.fillIds(P);
+  await h.flush();
+  assert.equal(h.texts.get(P), Ca);
+  h.write(P, Ca + D);
+  held.release();
+  assert.equal(await filling, true);
+  h.clean();
+  assert.deepEqual(h.state.deckStatus(P), { missing: 1, issues: [] });
+
+  const lost = await setup(t, { [P]: C });
+  const held2 = lost.holdModify(P);
+  const filling2 = lost.state.fillIds(P);
+  await lost.flush();
+  lost.write(P, C + D);
+  held2.release();
+  assert.equal(await filling2, false);
+  lost.clean();
+  assert.deepEqual(lost.state.deckStatus(P), { missing: 2, issues: [] });
+  // 預留過的 aaaaaa 不再配出。
+  assert.equal(await lost.state.fillIds(P), true);
+  assert.equal(lost.texts.get(P), '- 能說明 C ^aaaaab\n    - QC :: AC\n- 能說明 D ^aaaaac\n    - QD :: AD\n');
+  lost.samePlan();
+});
+
+void test('S18 fillIds 版：寫成後核對讀不到，先回 false；讀到時照核對採用，沒有問題', async t => {
+  const h = await setup(t, { [P]: C, [A]: C });
+  const held = h.holdModify(P);
+  const filling = h.state.fillIds(P);
+  await h.flush();
+  h.failing.add(P);
+  held.release();
+  assert.equal(await filling, false);
+  assert.deepEqual(h.state.unread(), [P]);
+  assert.equal(await h.state.fillIds(A), false, '讀不到時門檻擋住其他寫入');
+  assert.equal(h.texts.get(A), C);
+  const changes = h.changed();
+  h.failing.delete(P);
+  await h.settle(1000);
+  assert.deepEqual(h.state.unread(), []);
+  assert.equal(h.changed(), changes + 1);
+  h.clean();
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  h.samePlan();
+});
