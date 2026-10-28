@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | 第一個里程碑的品質檢查 | R1～R4、R7、R8 與 T2 已在 `main` 做完（`fb95339`～`3c9551f`）；R5 在分支 `claude/quizzical-euclid-f0564e` 做完、還沒合併；R6、R9 等觸發點 | 使用者決定要不要把 R5 的分支合併進 `main`（文件有衝突，程式沒有） | 使用者 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
-| W6 iPhone 測試後的畫面修改 | [D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 實作完（分支 `claude/w6-polish` 的 `e4f5170`），Windows 版 Obsidian 通過，在空格裡打字可行 | 使用者照任務說明最後一節在 iPhone 測；通過後合併 | 使用者 | [任務說明](../tasks/w6-polish.md) |
+| W6 iPhone 測試後的畫面修改 | [D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭) 實作完（分支 `claude/w6-polish` 的 `48c792d`），第一次 iPhone 測試的四點回饋已改、Windows 手機寬度通過 | 使用者照任務說明最後一節在 iPhone 再測一次；通過後合併 | 使用者 | [任務說明](../tasks/w6-polish.md) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 討論中：版本紀錄、考前提醒、更新前備份已有初步結論 | 使用者選第 3 題（內建規則改版）；之後和 Codex 討論，一致再寫成 D-ID | 使用者 | [規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、7 已談定（7 見 [D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)）；環節 8 雙方一致 | 使用者決定電腦專用的主機接點（改 D-053）；`state-load` 與 W6 都已合併，環節 4、5、6、9、2、3 可以接著談 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
