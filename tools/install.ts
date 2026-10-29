@@ -2,10 +2,10 @@ import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } fro
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hashBytes, readBuild } from '../src/core/backup/index.ts';
+import { hashBytes, isPlainPath, readBuild } from '../src/core/backup/index.ts';
 import { buildPlugin } from './build.mjs';
 import { git } from './git.ts';
-import { sameFileKey } from './vault-io.ts';
+import { assertNoLinks, sameFileKey } from './vault-io.ts';
 
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const PLUGIN = 'plugins/essence-cards';
@@ -101,6 +101,9 @@ async function hashes(folder: string): Promise<Record<string, string>> {
 
 /** 複製三個檔到 vault 的外掛資料夾，讀回來比雜湊；把 essence-cards 加進外掛清單（沒有才加）。 */
 async function deploy(from: string, vault: string, config: string, expected?: Record<string, string>): Promise<void> {
+  // 寫入的每一個位置（設定資料夾、外掛資料夾、三個檔、外掛清單）路徑上都不能有連結：vault 本身照登錄判斷了，
+  // 設定資料夾連到別的 vault 時就會寫進沒登錄的那一個（Codex 第二輪 L1）。
+  for (const rel of [...OUTPUTS.map(name => `${config}/${PLUGIN}/${name}`), `${config}/community-plugins.json`]) await assertNoLinks(vault, rel);
   const destination = join(vault, config, PLUGIN);
   await mkdir(destination, { recursive: true });
   for (const name of OUTPUTS) await copyFile(join(from, name), join(destination, name));
@@ -136,6 +139,7 @@ export async function installVault(options: InstallOptions): Promise<Installed> 
   const root = options.root ?? defaultRoot;
   const local = options.local ?? localFolder(root);
   const config = options.config ?? '.obsidian';
+  if (!isPlainPath(config)) throw Error(`設定資料夾「${config}」不是相對 vault 的路徑`);
   const build = options.build ?? buildPlugin;
   const vault = await realpath(options.vault);
   if (!(await stat(vault)).isDirectory()) throw Error('vault 必須是已存在的資料夾');

@@ -159,3 +159,18 @@ void test('git 的環境變數不分大小寫都拿掉：小寫或大小寫混�
   }
   assert.equal(git(other.dir, 'rev-parse', 'HEAD'), other.head);
 });
+
+void test('安裝：設定資料夾（或底下的外掛資料夾、輸出檔）是連到別處的連結時拒絕，不寫進沒登錄的 vault（Codex 第二輪 L1）', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const test = await makeVault(t, {}, { plugin: false });
+  const other = await makeVault(t, { '.obsidian/community-plugins.json': '["other"]' }, { plugin: false });
+  await registerTestVault(test, local);
+  await symlink(join(other, '.obsidian'), join(test, '.obsidian'), 'junction');
+  const fake = await tempFolder(t);
+  await writeFile(join(fake, 'manifest.json'), '{"id":"essence-cards"}');
+  const build = fakeBuild('0.0.1+abc1234.dirty');
+  await assert.rejects(installVault({ vault: test, dev: true, local, build, root: fake }), /\.obsidian：是連結/);
+  assert.deepEqual(await plugin(other), []);
+  assert.equal(await readFile(join(other, '.obsidian/community-plugins.json'), 'utf8'), '["other"]');
+  await assert.rejects(installVault({ vault: test, dev: true, local, build, root: fake, config: '../x' }), /不是相對 vault 的路徑/);
+});
