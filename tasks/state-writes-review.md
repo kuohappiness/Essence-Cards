@@ -112,6 +112,6 @@
 - **R2 的選擇**：`fillIds` 的回呼在準備時關閉也不寫，比任務 §5 原本的分類嚴（報告〈Claude 核對〉有說明），請判斷可不可以。
 - **相鄰案例**請自己找，例如：準備時關閉之後同一篇排著的下一份；`resolve` 的準備時關閉（`track` 觀察到新的原文）；逾時之後的回呼在 `close()` 之前就輪到；小視窗等待中 `resolve` 丟錯、或結果回來時小視窗已經關掉。
 - **驗證**：在最後的 commit 跑 `npm run check`（Claude 跑過：602 個測試全部通過）；你報告裡的 R1 探針在新程式回 `{ timeouts: 2, exists: false }`，R2 探針會停在 `await held.started`（存檔不再呼叫 `persist`，是預期的）。
-- Windows 沒有重跑：三項修正都不改一般流程的時序（R1、R2 只在逾時或準備時關閉才走到，R3 只動小視窗），`save-flow`、`save`、`lock`、`a3check` 的既有結果照舊適用。
+- Windows（Obsidian 1.14.5，測試 vault 的開發版 `0.0.1+e10d2ae`，程式和 `c3de2a0` 相同）重跑，結果都和上一次相同：`save … 140718.json` 17/17（含小視窗開著時重畫、選還原）、`save-flow … 140805.json`（V1 30 ms，其餘 checks 相同，V6 照舊 `[false, true, true]`）、`lock … 141006.json` 50/0、`a3check … 141227.json` C1～C11 都 ok，C8、C10 各一個子項 skipped（和上一次相同）。R1、R2 的情境（逾時、準備時關閉）Windows 做不出來，只有 Node 的測試。
 
 回報接在同一份報告後面，加一節〈再審（日期）〉。

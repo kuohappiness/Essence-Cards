@@ -165,3 +165,4 @@ R3 的重現方式：沿用 `tests/save-wiring.test.ts` 的 esbuild 載入方式
 - 自選做法第 8 點：同意，`view.save()` 沒有變更時不寫仍是推論，審查請求已標明。
 - a3check：審查請求寫「C1～C11 全 ok」不夠精確，C8、C10 各有一個子項 skipped（兩次相同）；以這份報告的寫法為準。
 - 報告原本寫在主資料夾，已搬進分支的同一路徑，隨分支合併。
+- Windows 在修正後重跑 `save`、`save-flow`、`lock`、`a3check`，結果都和上一次相同（細節在審查請求的〈再審〉）。`save` 會在 Obsidian 裡開小視窗、重畫、選還原，R3 的改動沒有影響這條路。
