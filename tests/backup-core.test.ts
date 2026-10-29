@@ -39,21 +39,21 @@ function rawZip(entries: [string, string][]): Uint8Array {
 }
 const opened = (zip: Uint8Array): string => { const result = openBackup(zip); return result.ok ? 'ok' : result.error; };
 
-/** 把 zip 裡（本地標頭與中央目錄）檔名 from 的那個位元組換成 byte，並設定或清掉 UTF-8 旗標。 */
-function patchName(zip: Uint8Array, from: string, at: number, byte: number, utf8: boolean): Uint8Array {
+/** 把 zip 裡（本地標頭與中央目錄，或只有本地標頭）檔名 from 的那個位元組換成 byte，並設定或清掉 UTF-8 旗標。 */
+function patchName(zip: Uint8Array, from: string, at: number, byte: number, utf8: boolean, only?: 'local'): Uint8Array {
   const out = zip.slice();
   const view = new DataView(out.buffer);
   const name = new TextEncoder().encode(from);
   let patched = 0;
   for (let p = 0; p + name.length <= out.length; p++) {
     if (!name.every((value, i) => out[p + i] === value)) continue;
-    const flags = p >= 30 && view.getUint32(p - 30, true) === 0x04034b50 ? p - 24 : p >= 46 && view.getUint32(p - 46, true) === 0x02014b50 ? p - 38 : -1;
+    const flags = p >= 30 && view.getUint32(p - 30, true) === 0x04034b50 ? p - 24 : !only && p >= 46 && view.getUint32(p - 46, true) === 0x02014b50 ? p - 38 : -1;
     if (flags < 0) continue;
     out[p + at] = byte;
     view.setUint16(flags, utf8 ? view.getUint16(flags, true) | 0x800 : view.getUint16(flags, true) & ~0x800, true);
     patched++;
   }
-  assert.equal(patched, 2);
+  assert.equal(patched, only ? 1 : 2);
   return out;
 }
 
@@ -147,6 +147,8 @@ void test('zip 的檔名要是 UTF-8：壞掉的位元組或沒有 UTF-8 旗標�
   assert.match(opened(rawZip([['manifest.json', JSON.stringify(manifestOf({ [name]: 'x' }))], [name, 'x']])), /^ok$/);
   assert.match(opened(patchName(zipWith('Essence Cards/�.md'), name, at, 0xff, true)), /檔名不是 UTF-8/);
   assert.match(opened(patchName(zipWith('Essence Cards/é.md'), name, at, 0xe9, false)), /檔名不是 UTF-8/);
+  // 只有本地標頭的名稱壞掉（中央目錄與清單都正常）也拒絕（Codex 再查 R3）。
+  assert.match(opened(patchName(zipOf({ [name]: 'x' }), name, at, 0xff, true, 'local')), /本地標頭/);
   // 中文名稱照 UTF-8 寫（fflate 對非 ASCII 名稱設旗標），照常讀得到。
   assert.equal(opened(zipOf({ 'Essence Cards/國二上/水溶液.md': 'x' })), 'ok');
 });

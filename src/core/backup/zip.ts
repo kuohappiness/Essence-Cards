@@ -41,10 +41,18 @@ function strictNames(bytes: Uint8Array): string[] | string {
     if (at + 46 > bytes.length || view.getUint32(at, true) !== 0x02014b50) return '中央目錄壞了';
     const length = view.getUint16(at + 28, true);
     const raw = bytes.subarray(at + 46, at + 46 + length);
-    if (raw.some(byte => byte >= 0x80)) {
+    const ascii = !raw.some(byte => byte >= 0x80);
+    if (!ascii) {
       if ((view.getUint16(at + 8, true) & 0x800) === 0) return '檔名不是 UTF-8（沒有 UTF-8 旗標）';
       try { names.push(decoder.decode(raw)); } catch { return '檔名不是 UTF-8（位元組不合法）'; }
     } else names.push(String.fromCharCode(...raw));
+    // 每一項的本地標頭也要是同一個名稱（位元組相同、非 ASCII 有 UTF-8 旗標）：別的讀取端可能照本地標頭命名（Codex 再查 R3）。
+    const local = view.getUint32(at + 42, true);
+    if (local + 30 > bytes.length || view.getUint32(local, true) !== 0x04034b50) return '本地標頭壞了：' + names.at(-1)!;
+    const localLength = view.getUint16(local + 26, true);
+    const localName = bytes.subarray(local + 30, local + 30 + localLength);
+    if (localLength !== length || localName.some((byte, i) => byte !== raw[i])) return '本地標頭的檔名和中央目錄不同：' + names.at(-1)!;
+    if (!ascii && (view.getUint16(local + 6, true) & 0x800) === 0) return '本地標頭的檔名不是 UTF-8（沒有 UTF-8 旗標）：' + names.at(-1)!;
     at += 46 + length + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
   }
   return names;
