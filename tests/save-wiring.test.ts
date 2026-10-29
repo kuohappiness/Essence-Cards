@@ -172,3 +172,21 @@ void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不�
     assert.deepEqual(h.fills, [DECK]);
   }
 });
+
+// 任務說明 2-2、syntax.md §2-1：需要新版的卡組，Cards 不寫它。存檔按鈕照實說明，不說「都已加入複習」（同 D-154 的原則）。
+void test('2-2 需要新版的卡組：按鈕說明需要更新，按下去只提示，不補 ID、不開待處理的小視窗', () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void } }>(code);
+  const filled: string[] = [], notified: string[] = [];
+  const state = { deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), fillText: (path: string, text: string) => { filled.push(path); return text; }, onChange: () => () => {} };
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError() {} });
+  const leaf = stub.leaf(DECK);
+  stub.leaves.push(leaf);
+  saver.refresh();
+  const [button] = (leaf.view as { actions: { label: string; click: () => void }[] }).actions;
+  const tip = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
+  assert.equal(button.label, tip);
+  button.click();
+  assert.deepEqual([filled, notified], [[], [tip]]);
+});

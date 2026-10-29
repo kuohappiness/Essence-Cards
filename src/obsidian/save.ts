@@ -13,6 +13,8 @@ export const TIPS = {
   issues: (n: number) => `有 ${n} 個學習目標的進度連結需要處理`,
   added: (n: number) => `${n} 個學習目標已加入複習`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
+  // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：Cards 不寫它，也不說「都已加入複習」。
+  needsUpdate: '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習',
 };
 export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
@@ -41,8 +43,9 @@ function applyText(editor: Editor, before: string, after: string): void {
   editor.transaction({ changes: changes.map(c => ({ from: editor.offsetToPos(c.from), to: editor.offsetToPos(c.to), text: c.insert })) });
 }
 
-/** 一篇卡組按鈕的樣子：沒有要做的、有目標還沒有 ID、有待處理的問題。 */
-function buttonLook(status: { missing: number; issues: IdIssue[] }): { kind: 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+/** 一篇卡組按鈕的樣子：需要新版、沒有要做的、有目標還沒有 ID、有待處理的問題。 */
+function buttonLook(status: { missing: number; issues: IdIssue[]; needsUpdate?: true }): { kind: 'needs-update' | 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+  if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
@@ -102,6 +105,8 @@ export function wireSave(host: SaveHost): Saver {
   function save(view: MarkdownView): void {
     const state = host.state(), path = view.file?.path;
     if (!state || !path || !isDeckPath(path)) return;
+    // 需要新版的卡組：只說明，不補、不開待處理的小視窗（state 的寫入入口也會拒絕）。
+    if (state.deckStatus(path).needsUpdate) { host.notify(TIPS.needsUpdate); refresh(); return; }
     const editor = view.editor, before = editor.getValue();
     const after = state.fillText(path, before);
     applyText(editor, before, after);
@@ -132,7 +137,7 @@ export function wireSave(host: SaveHost): Saver {
       }
       setIcon(button, look.icon);
       button.setAttribute('aria-label', look.tip);
-      for (const kind of ['done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
+      for (const kind of ['needs-update', 'done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。
     for (const [view, button] of buttons) if (!seen.has(view)) { button.remove(); buttons.delete(view); }

@@ -28,8 +28,14 @@ class FakeMarkdownView {
   file: { path: string } | null;
   editor = { getValue: () => '', transaction() {}, offsetToPos: () => ({ line: 0, ch: 0 }) };
   containerEl = { querySelector: () => null };
+  /** addAction 加上的按鈕：圖示、提示文字（aria-label 跟著更新）與按下去的動作。 */
+  actions: { icon: string; label: string; click: () => void }[] = [];
   constructor(path: string | null) { this.file = path ? { path } : null; }
-  addAction() { return { addClass() {}, setAttribute() {}, toggleClass() {}, remove() {} }; }
+  addAction(icon: string, label: string, click: () => void) {
+    const action = { icon, label, click };
+    this.actions.push(action);
+    return { addClass() {}, setAttribute(name: string, value: string) { if (name === 'aria-label') action.label = value; }, toggleClass() {}, remove() {} };
+  }
 }
 
 export interface ObsidianStub {
