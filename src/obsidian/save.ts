@@ -1,6 +1,6 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
-import { isDeckPath } from '../core/deck/index.ts';
+import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { EditorHandle, IdIssue, IdIssueKind, State, WriteResult } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
@@ -14,6 +14,8 @@ export const TIPS = {
   added: (n: number) => `${n} 個學習目標已加入複習`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
   failed: '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔',
+  /** 受阻：還沒讀完或有檔案讀不到（D-154 第 2 點）；按鈕說明與小視窗也用這一句。 */
+  blocked: '筆記已自動儲存；暫時無法把新目標加入複習，讀取完成後請再按一次存檔',
 };
 export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
@@ -60,11 +62,18 @@ function editorOf(view: MarkdownView, path: string): EditorHandle {
   };
 }
 
-/** 存檔結果的提示；unchanged、blocked、saved 不提示（讀不到時 main.ts 已有一次「讀不到…會自動重試」）。 */
-function saveTip(result: WriteResult): string | null {
+/** 受阻（D-154）：這台電腦會補 ID，但還沒讀完（loading）或有檔案讀不到（unread）。phone、closed 不算。 */
+const blockedByReads = (result: WriteResult): boolean => result.kind === 'blocked' && (result.reason === 'loading' || result.reason === 'unread');
+
+/**
+ * 存檔結果的提示；text 是按下時編輯器裡的文字。受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入；受阻但目標都有 ID、
+ * unchanged、saved 不提示。
+ */
+function saveTip(result: WriteResult, text: string): string | null {
   if (result.kind === 'done') return result.added ? TIPS.added(result.added) : null;
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
+  if (blockedByReads(result)) return parseDeck(text).targets.some(target => !target.id) ? TIPS.blocked : null;
   return null;
 }
 
@@ -117,7 +126,8 @@ class IssuesModal extends Modal {
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
       if (result.kind === 'done') { this.render(); return; }
-      this.host.notify(result.kind === 'failed' ? TIPS.failed : TIPS.stale);
+      // 受阻時問題保留，說「讀取完成後再按」，不說「剛剛改過」。
+      this.host.notify(result.kind === 'failed' ? TIPS.failed : blockedByReads(result) ? TIPS.blocked : TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
@@ -136,6 +146,19 @@ export function wireSave(host: SaveHost): Saver {
   /** 上一次知道開著的檔（離開筆記的備援用）；start() 或第一次 layout-change 之前是 null。 */
   let open: Set<string> | null = null;
 
+  /**
+   * ready() 完成了的 state 與已經在等它的 state：按鈕說明判斷受阻用（D-154）。unread() 變空時可能沒有 onChange（討論稿 P4），
+   * 說明可能晚到下一次更新按鈕；按下去那一刻以 state.save 的結果為準。
+   */
+  const loaded = new WeakSet<State>(), watched = new WeakSet<State>();
+  function blocked(state: State): boolean {
+    if (!watched.has(state)) {
+      watched.add(state);
+      state.ready().then(() => { loaded.add(state); refresh(); }, () => {});
+    }
+    return !loaded.has(state) || state.unread().length > 0;
+  }
+
   /** 存檔還沒結束的卡組：再按不另外排一份。 */
   const saving = new Map<string, Promise<void>>();
   function save(view: MarkdownView): Promise<void> {
@@ -143,8 +166,9 @@ export function wireSave(host: SaveHost): Saver {
     if (!state || !path || !isDeckPath(path)) return Promise.resolve();
     const running = saving.get(path);
     if (running) return running;
+    const text = view.editor.getValue();
     const job = state.save(editorOf(view, path)).then(result => {
-      const tip = saveTip(result);
+      const tip = saveTip(result, text);
       if (tip) host.notify(tip);
       refresh();
       if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view).open();
@@ -163,14 +187,16 @@ export function wireSave(host: SaveHost): Saver {
       if (!state || !path || !isDeckPath(path)) continue;
       seen.add(view);
       const look = buttonLook(state.deckStatus(path));
+      // 受阻期間外觀照舊，說明一律用同一句（不說「學習目標都已加入複習」）。
+      const tip = blocked(state) ? TIPS.blocked : look.tip;
       let button = buttons.get(view);
       if (!button) {
-        button = view.addAction(look.icon, look.tip, () => { void save(view); });
+        button = view.addAction(look.icon, tip, () => { void save(view); });
         button.addClass('essence-cards-save');
         buttons.set(view, button);
       }
       setIcon(button, look.icon);
-      button.setAttribute('aria-label', look.tip);
+      button.setAttribute('aria-label', tip);
       for (const kind of ['done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。

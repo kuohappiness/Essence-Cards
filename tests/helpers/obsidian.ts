@@ -51,8 +51,21 @@ class FakeMarkdownView {
   containerEl = { querySelector: () => null };
   constructor(path: string | null) { this.file = path ? { path } : null; }
   save() { this.saves++; return Promise.resolve(); }
-  addAction() { return { addClass() {}, setAttribute() {}, toggleClass() {}, remove() {} }; }
+  /** addAction 加的按鈕：說明（aria-label）與 class，照加的順序。 */
+  actions: FakeAction[] = [];
+  addAction(_icon: string, label: string) {
+    const action: FakeAction = {
+      label, classes: new Set(),
+      addClass(cls) { action.classes.add(cls); },
+      setAttribute(name, value) { if (name === 'aria-label') action.label = value; },
+      toggleClass(cls, on) { if (on) action.classes.add(cls); else action.classes.delete(cls); },
+      remove() {},
+    };
+    this.actions.push(action);
+    return action;
+  }
 }
+interface FakeAction { label: string; classes: Set<string>; addClass(cls: string): void; setAttribute(name: string, value: string): void; toggleClass(cls: string, on: boolean): void; remove(): void }
 
 export interface ObsidianStub {
   /** 當成 require('obsidian') 的結果。 */
