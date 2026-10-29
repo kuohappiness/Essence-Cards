@@ -129,7 +129,8 @@ class IssuesModal extends Modal {
     this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = true; });
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
-      if (result.kind === 'done') { this.render(); return; }
+      // saved：已寫進磁碟、state 還在核對，和按存檔收到 saved 一樣不提示（環節 5 結論第 1 條的 B6）。
+      if (result.kind === 'done' || result.kind === 'saved') { this.render(); return; }
       // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
       // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
       this.host.notify(blockedByReads(result) ? TIPS.blocked : saveTip(result, this.view.editor.getValue()) ?? TIPS.stale);
@@ -192,8 +193,9 @@ export function wireSave(host: SaveHost): Saver {
       if (!state || !path || !isDeckPath(path)) continue;
       seen.add(view);
       const look = buttonLook(state.deckStatus(path));
-      // 受阻期間外觀照舊，說明一律用同一句（不說「學習目標都已加入複習」）。
-      const tip = blocked(state) ? TIPS.blocked : look.tip;
+      // 受阻期間外觀照舊，說明一律用同一句（不說「學習目標都已加入複習」）；需要新版的照它的說明。按下時 state 的門檻先看讀不到，
+      // 所以這種卡組按下去先說受阻、讀完再按才說需要新版（B7，照實記下、這次不統一）。
+      const tip = blocked(state) && look.kind !== 'needs-update' ? TIPS.blocked : look.tip;
       let button = buttons.get(view);
       if (!button) {
         button = view.addAction(look.icon, tip, () => { void save(view); });

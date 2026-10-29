@@ -445,3 +445,45 @@ void test('B4 補：受阻時小視窗的問題目標本身有 ID（changed）�
     assert.deepEqual(notified, [BLOCKED], reason);
   }
 });
+
+// 外掛架構檢查環節 5 結論第 1 條（tasks/icloud-placeholders.md §2 的 2026-10-29 補充）：
+// B6 小視窗收到 saved（已寫進磁碟、state 還在核對）：和按存檔收到 saved 一樣不提示，不說「剛剛改過」，由 state 繼續核對。
+void test('B6 小視窗按「還原」或「當成新的」收到 saved：不提示', async () => {
+  for (const button of [0, 1]) {
+    const stub = createObsidianStub();
+    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+    const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+    const notified: string[] = [];
+    const state = {
+      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
+      save: () => Promise.resolve({ kind: 'unchanged' }),
+      resolve: () => Promise.resolve({ kind: 'saved' }),
+    };
+    const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+    await saver.save(stub.leaf(DECK).view);
+    stub.modals[0].contentEl.querySelectorAll('button')[button].click();
+    await wait(0);
+    assert.deepEqual(notified, [], String(button));
+  }
+});
+
+// B7 一篇需要新版（裡面有沒 ID 的目標）、同時另有讀不到的檔：按鈕的樣子與說明是需要新版；按下時 state 的門檻先看到讀不到，
+// 提示受阻那一句；讀完再按才說需要新版。兩次說的不同，照實記下，這次不統一。
+void test('B7 需要新版、同時有讀不到的檔：按鈕說需要新版；按下先說受阻，讀完再按才說需要新版', async t => {
+  const NEEDS = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
+  const deck = '---\n科目: 自然\n需要版本: 9.0.0\n---\n' + NEW_TARGET;
+  const h = await blockedSetup(t, deck, 'unread');
+  assert.deepEqual(h.state.deckStatus(DECK), { missing: 0, issues: [], needsUpdate: true });
+  assert.equal(h.tip(), NEEDS);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED]);
+  h.memory.failing.delete(OTHER);
+  h.memory.notify(OTHER);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), []);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED, NEEDS]);
+  assert.equal(h.tip(), NEEDS);
+  assert.equal(h.view.value, deck, '一個字都沒改');
+});
