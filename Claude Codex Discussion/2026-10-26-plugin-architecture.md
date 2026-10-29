@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：外掛架構的逐環節檢視
 
-狀態：進行中：環節 1、4、5、6、7、8 已談定（4 見〈Claude 回應 Codex：環節 4 第二輪〉、5 見〈環節 5 的結論〉、6 見〈環節 6 的結論〉、7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、8 的主機接點見 [D-148](../docs/decisions.md#d-148-電腦專用的主機接點)）；之後 9、2、3
+狀態：進行中：環節 1、4、5、6、7、8 已談定（4 見〈Claude 回應 Codex：環節 4 第二輪〉、5 見〈環節 5 的結論〉、6 見〈環節 6 的結論〉、7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、8 的主機接點見 [D-148](../docs/decisions.md#d-148-電腦專用的主機接點)）；環節 9 的分析與提案寫好，等 Codex 回應；之後 2、3
 
 2026-10-26 起。使用者開了專案討論串「優化外掛架構」，由 Claude（Fable）逐環節找問題、寫提案，每個環節先請 Codex 看過，雙方一致後才進下一個環節；談定的結論之後整理成給 Opus 的任務說明（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)）。**這一串只討論，不改程式。**
 
@@ -1953,3 +1953,149 @@ D-150 的外掛內備份只在電腦，失敗不擋學生複習（`docs/decision
 請使用者確認上面五條。同意後，第 1～4 條寫進 [backlog 技術債](../docs/backlog.md#技術債)，更新這份討論稿的狀態行與 roadmap 那一列。
 
 **同意後的施工（2026-10-30）**：第 1～3 條各寫成 [backlog 技術債](../docs/backlog.md#技術債)的一列；第 4 條改 A8 那一列的觸發點與完成條件。下一個環節是 9（測試與品質基礎設施）。
+
+## 環節 9：測試與品質基礎設施（2026-10-30，Opus 5.5）
+
+基準：`main` 的 `dcb8f88`（state 原樣拆檔 `0e3e8a4` 剛合併）。計時與輸出量在 `c17a0ff` 量：程式與 `9c07caa` 相同，到 `dcb8f88` 只多了 state 拆檔，測試多 1 個。本機 Windows 11、Node 24.13.0、16 個邏輯處理器，同時有別的 session 在用這台電腦；以下的秒數都是一次的量測。依據：[D-117](../docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)、[D-119](../docs/decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)、[D-138](../docs/decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)、[D-148](../docs/decisions.md#d-148-電腦專用的主機接點)、[D-153](../docs/decisions.md#d-153-每個新決定與新任務先和不做比較)；[quality.md](../docs/agents/quality.md)；[里程碑報告](2026-10-27-milestone-1-review.md)的 R1、R6、R8、R10；環節 5 的 W3；環節 6 Codex 第 5 題（`review-ui` 與 `Markdown` 的替身）。
+
+現況：
+
+- `npm run check` 七步（`package.json:23`）。單獨量每一步：型別 6.1 秒、ESLint 34.2、knip 13.2、secretlint 5.7、skill 副本 0.6、文件 1.6、測試 104.3，合計約 166 秒。CI（Linux）整個工作 76～93 秒（`main` 最近 5 次）。
+- 測試：44 個檔、755 個測試；替身 6 個在 `tests/helpers/`。最慢的三個檔（一檔一檔單獨跑）：`save-wiring` 20.8 秒、`build` 18.1、`install` 14.9，共 54 秒。
+- pre-commit：每次都跑文件檢查（讀暫存區）；改到程式相關的路徑就跑完整檢查（`.githooks/pre-commit:15–18`）；只改文件時，跑寫到那個路徑的測試檔，通過只印一行（`:19–31`）。
+- Claude 的 hook（`.claude/settings.json`）：開始時查 `main` 的 CI（R1）；執行 Bash 前擋七種危險的 git 指令（`.claude/hooks/block-dangerous-git.mjs:10–18`）。
+- 開發命令：`src/obsidian/dev*.ts` 8 個檔 2,868 行，只在開發版建置，Node 測得到的只有 `dev-version`；判斷用的純程式在 `src/dev/`（5 個檔 429 行），都有 Node 測試。
+
+這一節看的是：這些檢查有沒有擋到該擋的、花的時間與 token 值不值得，以及哪些地方的綠燈其實不證明它看起來證明的事。
+
+### 9-1 已經對的
+
+- **檢查本身有測試**：ESLint 的模組邊界、日期、不改 Node 內建模組等規則都有正反例（`tests/quality.test.ts:12`、`:158`～`:282`）；pre-commit 在暫存的 repo 裡真的跑一次（`:40`、`:70`）；文件檢查、skill 副本、建置（`main.js` 只 require Obsidian 提供的套件、正式版不含開發程式，`tests/build.test.ts:48`、`:129`）也都有測試。
+- **替身和實物對同一份契約**：`Files` 的 C1～C15 在記憶體版（`tests/files-contract.test.ts:57`）、Node 版（`:12`）與 Obsidian（開發命令 `files`）跑同一份，還驗了壞掉的實作抓得到（`:25`）。CodeMirror 的開發相依必須等於 `obsidian` 的 peer（`tests/build.test.ts:174`，A6），編輯器鎖定的 Node 測試才有意義。
+- **CI 與本機**：R1 之後（10-28 起）`main` 最近 100 次跑了 97 次通過；3 次失敗都是 10-28 只改文件的 commit（`b63c1bb` 起），已由 pre-commit 的文件測試路徑接住，之後沒有只在一邊壞的測試。只在一個平台跑的：不分大小寫的 F4（`tests/node-files.test.ts:63`，Linux 跳過）、`\\?\` 長路徑（`tests/backup.test.ts:198`，只在 Windows）。pre-commit 在 Windows、CI 在 Linux，兩邊都涵蓋。
+- **失敗看得到**：CI 紅了，下一個 Claude session 開始時就會被提醒（`.claude/hooks/ci-status.mjs`）。
+- **開發命令的證據**：結果檔記裝置、平台、Obsidian 版本與 `BUILD`（`src/obsidian/dev.ts:135`；`watchReview` 那條還沒記，backlog 已有）。A3 的判斷出錯之後，`a3check` 的判斷抽成 `src/dev/marks.ts:34` 的 `judge`，在 Node 測（`tests/dev-marks.test.ts`）。
+- **knip、secretlint、skill 副本都留**：knip 擋過真的沒用到的 export（`e425391` 的 commit 訊息）；secretlint 沒找到擋下過什麼的紀錄，但 AI 品質畫面的任務會讀 API 金鑰（`tasks/ai-quality-screen.md:36`），5.7 秒的保險值得；skill 副本 0.6 秒。
+
+### 9-2 發現
+
+**Q1｜P2：擋危險 git 指令的 hook 只接 Bash，`--no-verify` 也沒擋**（已實測）
+
+- `.claude/settings.json:16` 的 matcher 是 `"Bash"`。這個 app 的主要 shell 是 PowerShell，PowerShell 工具的說明也寫著用它跑 git。
+- 探針（scratchpad，`dcb8f88`）：
+  - hook 的程式本身不看是哪個工具：`tool_name` 換成 `PowerShell` 餵給它，`git add -A`、`git stash`、`git push --force` 一樣回 2（擋下）。
+  - 但 PowerShell 工具根本沒呼叫它：在 PowerShell 印一行含 `git stash` 的文字，照常執行；同樣的文字放在 Bash 指令裡會被擋（這次盤點時我自己的一個 Bash 指令就因為含 `git add -A` 的字被擋了）。
+  - AGENTS.md 底線的 `--no-verify` 沒有規則：`git commit --no-verify`、`git commit -n`、`git -c core.hooksPath=… commit` 在兩種工具都回 0。
+- 改這支 hook 也沒有任何檢查：pre-commit 的程式路徑（`.githooks/pre-commit:15`）不含 `.claude/hooks/` 與 `.claude/settings.json`，ESLint 略過 `.claude/**`，也沒有測試。
+- 沒找到發生過的紀錄（只用關鍵字搜了 session 紀錄，不能證明沒發生）。跳過 pre-commit 有 CI 當後盾，但要等 push 之後、下一個 session 開始才看得到。
+- **和不做比較**：
+  - ① 不做：用 PowerShell 的 session 只要一個 `git add -A`、`git stash` 或 `git reset --hard`，就會收走或毀掉同一個資料夾裡別的 session 沒提交的修改，這正是這支 hook 要擋的（AGENTS.md 底線）。跳過 pre-commit 只靠模型記得。
+  - ② 做：matcher 改成同時接 Bash 與 PowerShell；加 `--no-verify`、`commit -n`、`-c core.hooksPath` 三條；一個測試餵正反例（`git stash list`、`git add src/a.ts` 不擋），測試裡寫出 hook 的路徑，改 hook 時 pre-commit 的文件路徑就會跑它。約 20 行。
+  - ③ 更小的做法：只改 matcher。**建議 ②**：`--no-verify` 是 AGENTS.md 的底線；正則寫錯會擋錯或漏擋，正反例測試很便宜。完成條件要有一次真的 PowerShell 呼叫被擋下（matcher 的寫法以實測為準）。
+
+**Q2｜P2：程式的 commit，pre-commit 把完整檢查約 4.2 萬字的輸出全部印出來**（輸出量已實測；token 是估計）
+
+- 只改文件的路徑 2026-10-29 已改成通過只印一行，理由是 AI 讀 commit 的輸出要花 token（quality.md〈檢查指令〉）。程式的路徑照舊直接 `npm run check`（`.githooks/pre-commit:16`）。
+- `c17a0ff` 的測試輸出 41,722 字（其中中文 17,825 字）、778 行；其他六步加起來不到 1,000 字。quality.md 寫的「約 3 萬字」是 10-29 的數字，測試從 519 個（10-27）長到 755 個。
+- session 紀錄裡找得到測試輸出的結尾（例如「state/index.ts 原樣拆檔」那個 session 10-29 的 `duration_ms 116552`），這段輸出確實進了對話；是 pre-commit 還是手動跑的 `npm run check`，從片段分不出來。
+- 估計：一次約 2～2.5 萬 token（中文約一字一 token，其餘約 3.5 字一 token）。10-20 起所有分支有 180 個改到程式的非合併 commit，上限約 450 萬 token；有些 session 只看最後幾行，實際比這少。
+- 失敗時有用的只有最後「failing tests」那一段，前面幾百個 ✔ 沒有用。
+- **和不做比較**：
+  - ① 不做：每個程式 commit 多讀約 2 萬 token，跟著測試數變多。
+  - ② 做：pre-commit 跑完整檢查時，通過只印一行（幾個測試、幾秒）；失敗時印哪一步失敗，測試失敗只印失敗的測試與斷言訊息。`npm run check` 本身與 CI 不變。`tests/quality.test.ts:70` 已經在暫存的 repo 跑真的 hook，加一個程式路徑的情況。
+  - ③ 更小的做法：只把 pre-commit 裡的測試換成 `dot` reporter（755 個測試 793 字，失敗時才印細節）。但 `npm run check` 是一串 `&&`，要換 reporter 就得在 hook 裡另列一次七步，兩份清單會分岔。**建議 ②**，做法施工時試（例如把輸出收起來、通過就丟掉）；完成條件是上面兩句加一個測試。
+
+**Q3｜P3：`tests/` 與 `tools/` 沒有型別檢查**（已實測）
+
+- `tsconfig.json:18–21` 只含 `src/`，`npm run typecheck` 只查 `src/`。ESLint 用預設專案讀 `tests/`、`tools/`（`eslint.config.js:119–121`），但 ESLint 不報型別錯誤；Node 執行 `.ts` 只是拿掉型別、不檢查。
+- 探針：scratchpad 裡一份繼承 repo 設定的 tsconfig，`include` 加上 `tests/**/*.ts`、`tools/*.ts`、`tools/compare/*.ts`（`dcb8f88`）：**9 個錯，都在測試；`tools/` 0 個**。
+  - `tests/review-host.test.ts:92`、`:95`：`speech` 替身少了 `whenIdle`。`Speech` 是 `d7d5079`（10-28，[D-145](../docs/decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)）加的 `whenIdle`（`src/ui/speech.ts:12`），這個測試最後一次改是 `6f96883`（10-27）。兩個 host 測試沒走到自動換卡，所以照樣通過；之後有測試走到，會在替身裡丟 `TypeError`，而不是在這一行報型別錯。替身跟不上介面，正是型別檢查擋得到的。
+  - `tests/helpers/review-ui.ts:88–89`、`:96`：寫入 `as const` 的唯讀欄位。
+  - `tests/state.test.ts:140–141`、`:192` 與 `tests/node-files.test.ts:166`：可能是 `null`、陣列推成 `never[]`。
+- 時間：`tsc` 從 2.6 秒變 4.2 秒（各量兩次）。
+- 推論（未實測）：tsconfig 涵蓋之後，ESLint 的 `allowDefaultProject` 與 100 個檔的上限（現在 65 個）可以拿掉；超過上限時整個 lint 失敗的那個斷崖也跟著沒了。
+- **和不做比較**：
+  - ① 不做：測試與工具的型別錯誤沒有任何一步擋，到現在累積 9 個；替身跟不上介面，要等到有測試走到才發現。`tools/` 的備份、還原、更新命令直接動正式使用的 vault，現在 0 個錯，但沒有檢查看著。
+  - ② 做：`include` 加三個路徑，修 9 個錯（只動測試，不改產品程式），一個小 commit；完整檢查多約 1.6 秒。
+  - ③ 更小的做法：只加 `tools/`（0 個錯，不用修），但替身的漂移在 `tests/`。**建議 ②**。
+
+**Q4｜P3：完整檢查約 166 秒，比 Bash 工具預設的 2 分鐘逾時還長**（已實測）
+
+- 成長：session 紀錄裡測試的 `duration_ms`，10-24 的 CI 約 26 秒，10-27 本機 39～59 秒，10-28 起 62～70 秒，10-29 晚上 101～117 秒（不同 session、不同時刻，只看趨勢）。
+- 時間花在哪：
+  - `save-wiring` 的 20.8 秒裡，17.6 秒是真的在等：16 次 `await wait(1100)`（`tests/save-wiring.test.ts:42` 起），等 `src/obsidian/save.ts:28` 的 1 秒延遲。`main-wiring` 還有 2.3 秒（`:133`、`:136`）。
+  - `build` 18.1 秒、`install` 14.9 秒：各自建置好幾次。
+- 測試一次只跑一個檔：`package.json:11` 的 `--test-concurrency=1`，W3 的 `e7860d3` 加的，commit 訊息沒寫原因。探針：同一份測試 `--test-concurrency=4` 40 秒、`=8` 28 秒，755 個都通過，跑完工作樹乾淨、沒有多出 worktree。**各只跑一次，穩不穩沒驗**。
+- 影響：每個程式 commit 等將近 3 分鐘；Bash 工具預設 2 分鐘逾時，要記得加長或放背景（沒找到因此失敗的紀錄）。Codex 審查也跑完整檢查。
+- **和不做比較**：
+  - ① 不做：每個程式 commit 約 3 分鐘，跟著測試數變長。
+  - ② 做：
+    - (a) 測試並行（例如 4）：改一行，測試 104 → 約 40 秒。風險：靠時間的測試（`study-performance` 的門檻、`fs.watch` 與 `files-contract` 的通知等待）在 CPU 被搶時可能偶爾失敗；會跑 git 的測試（`compare-versions` 開 worktree、`install` 看工作樹乾不乾淨）彼此干擾（10-29 有測試在 hook 裡繼承 `GIT_DIR`、把共用 `.git/config` 的 `core.bare` 改掉，`.githooks/pre-commit:11–14`；原因不是並行，但可見會跑 git 的測試碰得到真的 repo）；這台電腦記憶體偶爾不夠，並行會同時多幾個 Node 程序。
+    - (b) `save-wiring` 用假的計時器（`node:test` 的 `mock.timers`）：省約 17 秒，要改 16 處等待與替身的 `setTimeout`。
+  - ③ 更小的做法：(a) 先在本機連跑幾次（例如 10 次）看有沒有偶發失敗，穩了才改；(b) 不單獨做，等 W2（下一次改 `save.ts` 時要加本地的生命週期測試）順手。**建議 ③**。
+
+**Q5｜P3：開發命令的結果拿來當驗收時，「通過」怎麼判斷沒有寫成規則**（讀程式與前例）
+
+- 前例（[A3 設計稿](2026-10-27-a3-open-decks.md)的 Codex L2）：R1，`a3check` 沒做到的操作（沒切成疊放、找不到編輯器沒打字）只要後面的 ID 數對就回 `ok`；R2，`t1close` 的 `ok` 證明不了啟動時沒寫。兩項都出在開發命令的判斷，Codex 把那段函式抽出來在 Node 重現。修法是把判斷抽成 `judge`：每一步記成看 ID、看按鈕、必要的操作有沒有做到、做不到的子項（`skipped`，寫原因）、只記錄的觀察，在 Node 測。
+- 現在：D-138 第 2 層的八個命令裡，`files`（契約）、`compare`（`src/dev/compare.ts`）、`a3check`（`judge`）的判斷在 Node 測過；`lock`、`save`、`today`、`answer` 的 `ok` 在 `src/obsidian/` 裡算（例如 `src/obsidian/dev-ids.ts:224–229`），沒有 Node 測試；`events` 只記錄。這幾個有沒有 A3 那種「沒做到也過」，我沒有逐一查。
+- quality.md 只對 `a3check` 寫了「`skipped` 不算通過」（〈Obsidian 相容性檢查〉）；一般的寫法沒寫下來。
+- **和不做比較**：
+  - ① 不做：下一個拿結果檔當驗收的開發命令，可能重犯 A3 那種錯，要靠 L2 每次讀判斷的程式才抓得到（A3 抓到了，代價是一輪 L2 加一次 Windows 重跑）。
+  - ② 做：quality.md〈本專案的做法〉加一句：開發命令的結果當驗收（任務的完成條件、D-138 第 2 層）時，必要的操作沒做到算失敗，做不到的子項列 `skipped` 與原因；「通過」的判斷照 `judge` 放進 `src/dev/`，有反例測試。只管新寫或要改的命令，舊的不回頭改。
+  - ③ 更小的做法：不寫，靠 L2。**建議 ②**：一句話，寫在規劃者寫任務說明時會讀的地方。
+
+**Q6｜記下：替身的限制寫在替身檔頭，不另做替身的契約**（讀程式）
+
+- 已記的：里程碑 R6 (a) 要在 `tests/helpers/review-ui.ts` 的檔頭補 RR1 的三點限制（`useSyncExternalStore` 不比對 snapshot、ref 不會清成 null、`contains` 固定回 true），還沒做（檔頭 `:5–11` 只寫了沒有 DOM、版面、焦點與動畫）。環節 6 Codex 又指出兩點：只支援根元件用 hook（`:82`）、`Markdown` 是替身（`:34–37`），所以畫面測試的綠燈不證明 Obsidian `Component` 的生命週期。
+- 新的：`tests/helpers/obsidian.ts` 的 `Plugin` 不會卸載：`registerEvent()`、`register()` 什麼都不做（`:182–183`），`registerDomEvent` 加了就不拿掉（`:186`）。所以 Node 測不到「停用之後什麼都不留」，而 backlog「停用再啟用外掛後，舊的存檔按鈕與小視窗可能留在畫面上」（W2）的完成條件正要「本地的生命週期測試」。
+- Q3 的 `speech` 替身也是同一類：替身跟不上介面。
+- **和不做比較**：
+  - ① 不做：讀測試的人（Claude 或 Codex）只看到綠燈，不知道哪些情境替身根本沒模擬；環節 6 的兩點是 Codex 讀了替身的程式才發現的。
+  - ② 做：不做通用的替身契約（`Files` 那種 C1～C15 只值得用在有資料語義的接點），改兩列既有的完成條件：
+    - R6 (a)：檔頭補五點（RR1 三點加 Codex 兩點），寫明這些由開發命令 `ui`、`md-cases` 驗。觸發點提前到 Q3：Q3 本來就要改這個檔的 `:88–96`。
+    - W2：完成條件加「替身的 `Plugin` 能卸載：`register` 的回呼、`registerEvent`、`registerDomEvent` 在 unload 時拿掉」。
+  - ③ 更小的做法：就是 ②，都跟著已排定的工作。
+
+### 9-3 優先刪減
+
+想過、建議不做：
+
+- **不換測試框架、不加覆蓋率工具**：`node:test` 夠用；覆蓋率的百分比不是目標，邊界例子與反例才是（code-quality〈測試〉）。
+- **不現在加 happy-dom 或 jsdom**：R6 (b) 照原觸發點（寫入口畫面時）。
+- **不固定 Node 的版本**（R1 的 c）：R1 之後沒有只在一邊壞的測試。
+- **pre-commit 不改成只跑受影響的測試**：要分析相依，猜錯就漏；省時間靠 Q2、Q4。
+- **pre-commit 不改成檢查暫存區的快照**：現在型別、lint、測試讀的是工作樹，所以共用資料夾裡別的 session 沒提交的程式，可能讓我的 commit 檢查假失敗或假通過（推論，沒有實例）。但程式的改動在各自的 worktree 做，主資料夾大多只有文件的 commit；CI 用 commit 的內容再跑一次。要做得在別處重建整個工作樹，每次多花時間。
+- **開發命令的結果檔不進 repo**：照設計留在測試 vault（`tasks/icloud-placeholders.md:37`；大的資料不讀進對話，`tasks/w5.md:65`）；任務說明的〈結果〉記數字、檔名與 `BUILD`。Codex 讀不到原始檔，只能交叉閱讀；出過錯的是判斷（Q5），不是抄寫。
+- **`npm audit` 不放進 pre-commit**：CI 有，相依很少變。
+- **`build`、`install` 測試的多次建置先不合併**：能省多少沒量過；Q4 (a) 之後再看。
+- **commit 訊息的語言、「一個 commit 一個決定」不做機械檢查**：程式判斷不了，或不值得。
+- `study-performance` 的門檻照 R10「再失敗一次就改」（`tests/study-performance.test.ts:19`）。
+
+### 9-4 不在這次談
+
+- backlog 已有、觸發點與完成條件不變的：開發命令的證據還差三處（W3 (a)(b)，觸發點已到）、D-148 的 `require` 檢查（W3 (c)）、F5 的收尾。
+- 里程碑報告的 R9（iPhone 測試的步驟）、R10；R6 (b) 照原觸發點，R6 (a) 見 Q6。
+- 錯誤的去向：照[錯誤紀錄的討論稿](2026-10-29-error-log.md)。
+
+### 9-5 什麼時候做
+
+這個環節沒有要現在改的程式。談定後：
+
+- **Q1**：backlog 技術債一列，觸發點：已到，單獨一個小 commit（它保護的是現在就共用的資料夾）。
+- **Q2、Q4 (a)**：都改 pre-commit 與測試的跑法，合成一列；觸發點：已到，Q4 (a) 先連跑幾次確認穩定。Q4 (b) 併進 W2 那一列。
+- **Q3**：一列，觸發點：已到（state 拆檔已合併，`tests/state.test.ts` 不會再撞）。它和 R6 (a)、W3 (a)(b) 都是「觸發點已到的小 commit」，可以由同一個 session 連著做，各自一個 commit。
+- **Q5**：quality.md 一句，談定就寫（只改文件）。
+- **Q6**：改 R6 (a) 的觸發點與 W2 的完成條件；roadmap「第一個里程碑的品質檢查」那一列跟著改。
+
+### 9-6 請 Codex 回應
+
+請專門站在「不做」那一方反駁（[quality.md](../docs/agents/quality.md) 規劃者那一列）：每一項先說不做夠不夠好。
+
+1. **Q1**：hook 只接 Bash 的缺口成立嗎（`.claude/settings.json:16`）？matcher 寫成同時接 Bash 與 PowerShell，在 Claude Code 會生效嗎？還有哪些繞過的寫法（例如 `cmd /c git …`、在 node 腳本裡呼叫 git、`git -C 別的路徑`）值得擋、哪些不值得？`--no-verify` 已有 CI 當後盾，還需要擋嗎？
+2. **Q2**：4.2 萬字與 token 的估計合理嗎？通過只印一行，會不會丟掉 AI 需要的資訊（例如 knip、secretlint 的警告）？有沒有比「把輸出收起來、通過就丟掉」更簡單、又不讓兩份步驟清單分岔的做法？
+3. **Q3**：9 個錯重現得到嗎？把 `tests/`、`tools/` 放進同一份 tsconfig，會不會讓 `src/` 看到不該看的型別，或讓 `tsc` 與 Node 執行 `.ts` 的規則不一致？`allowDefaultProject` 真的能拿掉嗎？只加 `tools/` 夠不夠？
+4. **Q4**：並行測試的風險我列的夠不夠（跑 git、看工作樹、`fs.watch`、時間門檻、記憶體）？要連跑幾次才算穩？`save-wiring` 用假計時器，會不會讓測試和真實 Obsidian 的時序脫鉤？
+5. **Q5**：一句規則值得嗎，還是 L2 就夠？`lock`、`save`、`today`、`answer` 的 `ok` 有沒有 A3 那種「沒做到也過」的情形？
+6. **Q6**、9-3 的刪減，以及這一層還有沒有漏看的問題，例如只靠人記、沒有機械檢查的規則；Codex 在沙箱裡跑檢查的成本（R8）；pre-commit 讀工作樹、不讀暫存區。
+
+回應寫在這份檔案最後，標題「Codex 回應：環節 9（日期）」；只回應、不改程式與其他文件。建議推理等級：高。
