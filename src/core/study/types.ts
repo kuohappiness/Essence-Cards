@@ -58,9 +58,16 @@ export interface History {
   /**
    * 原始紀錄每一行出現過的 lt（作答、變更都算，被取消的也算，取消行多帶的也算），照字串排序、不重複。配新 ID 時避開（D-134）。
    * 壞掉的行（能救回的也一樣）整行寬鬆地找：救回的尾段、每一段 `{"t":` 開頭的尾段、`"lt": "…"` 的字串都算，
-   * 多避開幾個不會錯配（Codex 審查 W5 第二部分的 F3、R1）。
+   * 多避開幾個不會錯配（Codex 審查 W5 第二部分的 F3、R1）。讀不懂的行（下面的 held）裡的也算。
    */
   seen: string[];
+  /**
+   * 讀不懂的行（need 比這台新或格式不對，syntax.md §5-2）停掉的學習目標，照字串排序、不重複：那一行的 lt，以及 undo
+   * 指到的作答的 lt。停掉的不排程、不出題、不寫作答；這不是「狀態：暫停」，換成讀得懂的版本就恢復。
+   */
+  held: string[];
+  /** 有一行讀不懂、又辨認不出它影響哪些目標（§5-2 的三個條件）：整份紀錄不完整，全部學習目標都停。 */
+  incomplete: boolean;
 }
 
 export interface LogWriter {
@@ -103,7 +110,10 @@ export interface ExamScope {
 
 export interface TodayInput {
   decks: readonly DeckEntry[];
-  /** 只用 reviews，不讀 changes。reviews 依時間排好（mergeHistory 的結果；作答後新的一筆加在最後）。 */
+  /**
+   * 用 reviews、held、incomplete，不讀 changes。reviews 依時間排好（mergeHistory 的結果；作答後新的一筆加在最後）；
+   * held 的目標與 incomplete 時的全部目標不排程（syntax.md §5-2）。
+   */
   history: History;
   settings: Settings;
   exam: ExamScope | null;

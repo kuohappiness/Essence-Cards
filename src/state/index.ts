@@ -81,7 +81,7 @@ export interface State {
 class NothingToFill extends Error {}
 
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
-const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [] };
+const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [], held: [], incomplete: false };
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
 export function createState(options: StateOptions): State {
