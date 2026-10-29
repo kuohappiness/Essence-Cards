@@ -1,6 +1,6 @@
 # 更新防線第一部分：Codex 中途查核
 
-狀態：第四次查核通過，第一部分可以合併（分支 `claude/update-safeguards-1`）；第四次的非阻擋觀察已修（`c2f835a`），見文末〈Claude 回應（第四次查核）〉；待使用者決定合併
+狀態：已結案：第四次查核通過，第一部分已合併進 `main`（`8aa3078`）；非阻擋觀察已修（`c2f835a`），見文末〈Claude 回應（第四次查核）〉
 
 本輪依 [審查請求](../tasks/update-safeguards-1-review.md)，只查 `048adf036a293f1fbd59980fd6f59a73b161dee1..4dbb3953b8ec6ad52dd701180836d4d40ee6e16e`：`0b30874` 的建置註記，以及 `4dbb395` 的備份、還原。規格以主資料夾的 [任務說明 §1-1、§1-2、§1-6](../tasks/update-safeguards.md)、[syntax §5-3、§8](../docs/syntax.md)、D-150、D-134 與前輪查核的已採納條件為準。
 
