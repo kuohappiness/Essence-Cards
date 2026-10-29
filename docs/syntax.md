@@ -626,7 +626,7 @@ Cards 呼叫 AI 產生草稿（製卡、加深、錯題分析、補記憶錨點�
 
 放在電腦本機、不在 vault 裡的備份（[D-150](decisions.md#d-150-備份與還原)）。開發期間由更新命令在安裝前做（D-150 第 9 點的過渡做法），之後外掛內的備份用同一種格式，兩邊做的備份都讀得到。怎麼確定一份備份是好的，見 D-150 第 5 點。
 
-- **位置**：預設是這台電腦不經雲端同步的應用程式資料夾：Windows 是 `%LOCALAPPDATA%\Essence Cards\備份\<vault 名稱>\`，其他系統用對應的應用程式資料夾。可以改，但不能在 vault 裡；用實際路徑判斷，連到 vault 的連結也不行。
+- **位置**：預設是這台電腦不經雲端同步的應用程式資料夾：Windows 是 `%LOCALAPPDATA%\Essence Cards\備份\<vault 名稱>\`，其他系統用對應的應用程式資料夾。可以改，但不能在 vault 裡；用實際路徑判斷，連到 vault 的連結也不行。在 Windows 的封裝 App（MSIX，例如 Claude 桌面 App）裡跑的程式，寫進 `%LOCALAPPDATA%` 的東西會被導到那個 App 的私有資料夾（`AppData\Local\Packages\<App>\LocalCache\`），App 外看不到、解除安裝那個 App 時會一起刪掉；實際路徑落在那裡就不寫，要另外指定位置（使用者 2026-10-29）。Obsidian 不是封裝 App，外掛內的備份不受影響。
 - **檔名**：`Essence Cards 備份 <日期> <時分秒> <BUILD> <隨機 4 碼>.zip`，例如 `Essence Cards 備份 2026-11-02 201503 0.1.0+1a2b3c4 a3f9.zip`。時間是開始備份的當地時間；`BUILD` 同清單的 `build`，讀不出來寫 `未知`；隨機 4 碼是 `0-9a-f`。寫的時候用 `<正式檔名>.tmp`，檢查都通過才改成正式檔名，不覆寫已有的檔；失敗就刪掉暫存檔。列出備份時只看 `.zip` 結尾、清單讀得懂的檔。
 - **內容**：zip 裡的路徑和 vault 裡相同（`/` 分隔、UTF-8 檔名），每個檔是讀到的原始位元組，不轉換換行或編碼。範圍是 `Essence Cards/` 底下全部，加上外掛的設定 `<設定資料夾>/plugins/essence-cards/data.json`；不含金鑰。設定資料夾通常是 `.obsidian`，但可以在 Obsidian 改名：做備份的一方要先確定這個 vault 實際用的設定資料夾（裡面有 `plugins/essence-cards/manifest.json`，表示外掛裝在這裡），記在清單的 `vault.config`；確定不了就整份失敗，不能推定成 `.obsidian`、也不能把 `data.json` 記成不存在。外掛內的備份可以排除能確定是 Capture 教材的檔案（D-150 第 4 點），過渡工具不排除任何檔案。
 - **清單**：zip 最上層的 `manifest.json`。vault 的檔案都在 `Essence Cards/` 或設定資料夾底下，不會和它撞名。

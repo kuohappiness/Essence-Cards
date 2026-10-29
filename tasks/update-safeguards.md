@@ -77,6 +77,7 @@
 - `npm run backup -- <vault> [--to <資料夾>] [--config <設定資料夾>]`：備份 `Essence Cards/` 全部，加上 `<設定資料夾>/plugins/essence-cards/data.json`（有的時候；沒有就在清單的 `absent` 記下）。**過渡工具不排除任何檔案**（D-150 第 4 點的排除只在外掛內做）。
 - 設定資料夾（Codex 格式查核 F3，syntax §8）：預設 `.obsidian`，`--config` 可以指定別的；裡面沒有 `plugins/essence-cards/manifest.json` 就整份失敗，不把 `data.json` 記成不存在。寫進清單的 `vault.config`。
 - 預設位置：Windows 是 `%LOCALAPPDATA%\Essence Cards\備份\<vault 名稱>\`，其他系統用對應的應用程式資料夾。`--to` 可以改；用實際路徑（`realpath`，解析 junction 與符號連結）檢查，落在 vault 裡就拒絕。
+- 封裝 App（使用者 2026-10-29 選 A）：在 Claude 桌面 App 裡跑時，`%LOCALAPPDATA%` 會被導到 App 的私有資料夾（syntax §8「位置」）；實際路徑落在那裡就拒絕，要用 `--to` 指定 App 以外的資料夾。維護的 AI 用使用者指定的那一個（記在本機 Claude 的記憶）；`restore --apply` 的還原前備份也有 `--to`。
 - 檢查（任何一步失敗就整份失敗、不留正式檔名）：
   1. 讀原始位元組（不經文字解碼）；讀不到（Windows 的 iCloud 只留雲端佔位檔、權限、消失）要分清楚原因寫進錯誤。
   2. 讀完重新列檔：檔案集合要相同；每個檔案重新算雜湊要相同；紀錄檔只多了後面的行時，檢查舊內容是新內容的完整開頭，用舊內容。卡組在中途被改了就整份重來，最多 3 次。
