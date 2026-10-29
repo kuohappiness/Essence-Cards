@@ -64,6 +64,28 @@ void test('比較：沒 ID 的目標多出或消失、題目指紋、問題與�
   assert.deepEqual(diffSnapshots(after, base(), time).filter(line => line.includes('@4')), ['Essence Cards/A.md 的學習目標不見了：@4:新的（新的）']);
 });
 
+void test('比較：同一個 key 出現好幾次（重複的 ID）時每一個都比，次數改變也抓得到，不會被蓋掉成零差異（Codex 第二輪 L2）', () => {
+  const twice = (): Snapshot => {
+    const snap = base();
+    snap.decks[0].targets = [
+      { key: 'abc234', id: 'abc234', name: 'First', line: 0, ok: true, fingerprints: ['84fee6d9'], importance: 'medium', paused: false, direction: null },
+      { key: 'abc234', id: 'abc234', name: 'Second', line: 2, ok: true, fingerprints: ['b9987b45'], importance: 'medium', paused: false, direction: null },
+    ];
+    return snap;
+  };
+  const changed = twice();
+  changed.decks[0].targets[0].fingerprints = ['ffffffff'];
+  assert.deepEqual(diffSnapshots(twice(), changed, time), ['Essence Cards/A.md 的 abc234 第 1 個的 fingerprints：["84fee6d9"] → ["ffffffff"]']);
+  const more = twice();
+  more.decks[0].targets.push({ ...more.decks[0].targets[1], name: 'Third', line: 4 });
+  assert.deepEqual(diffSnapshots(twice(), more, time), ['Essence Cards/A.md 的 abc234 出現次數：2 → 3']);
+  const problems = base();
+  problems.decks[0].problems = ['2 error duplicate-id', '2 error duplicate-id'];
+  const fewer = base();
+  fewer.decks[0].problems = ['2 error duplicate-id'];
+  assert.deepEqual(diffSnapshots(problems, fewer, time), ['Essence Cards/A.md 少了問題：2 error duplicate-id']);
+});
+
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
 const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();

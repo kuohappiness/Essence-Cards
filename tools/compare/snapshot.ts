@@ -44,6 +44,16 @@ export interface Snapshot {
 export type AdapterResult = { ok: true; snapshot: Snapshot } | { ok: false; reason: string };
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+/** 照 key 分組，保留每一個與原本的順序。 */
+function groupBy<T>(list: readonly T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of list) {
+    const group = groups.get(key(item));
+    if (group) group.push(item);
+    else groups.set(key(item), [item]);
+  }
+  return groups;
+}
 
 /** 兩份比較資料的差異，一項一行；完全相同是空的。time 把毫秒寫成看得懂的時間。 */
 export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: number) => string): string[] {
@@ -55,17 +65,22 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
     for (const key of Object.keys(a.props) as (keyof DeckSnap['props'])[]) {
       if (!same(a.props[key], b.props[key])) out.push(`${path} 的屬性 ${key}：${JSON.stringify(a.props[key])} → ${JSON.stringify(b.props[key])}`);
     }
-    const targetsA = new Map(a.targets.map(target => [target.key, target])), targetsB = new Map(b.targets.map(target => [target.key, target]));
+    // 同一個 key 可能出現好幾次（備份照原樣收有重複 ID 的卡組）：每一個照順序比，次數也比，不能用 Map 蓋掉（Codex 第二輪 L2）。
+    const targetsA = groupBy(a.targets, target => target.key), targetsB = groupBy(b.targets, target => target.key);
     for (const key of [...new Set([...targetsA.keys(), ...targetsB.keys()])]) {
-      const x = targetsA.get(key), y = targetsB.get(key);
-      if (!x || !y) { out.push(`${path} 的學習目標${x ? '不見了' : '多了'}：${key}（${(x ?? y)!.name}）`); continue; }
-      for (const field of ['name', 'line', 'ok', 'fingerprints', 'importance', 'paused', 'direction'] as const) {
-        if (!same(x[field], y[field])) out.push(`${path} 的 ${key} 的 ${field}：${JSON.stringify(x[field])} → ${JSON.stringify(y[field])}`);
+      const xs = targetsA.get(key) ?? [], ys = targetsB.get(key) ?? [];
+      if (!xs.length || !ys.length) { out.push(`${path} 的學習目標${xs.length ? '不見了' : '多了'}：${key}（${[...xs, ...ys].map(target => target.name).join('、')}）`); continue; }
+      if (xs.length !== ys.length) out.push(`${path} 的 ${key} 出現次數：${xs.length} → ${ys.length}`);
+      for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
+        const label = xs.length > 1 || ys.length > 1 ? `${key} 第 ${i + 1} 個` : key + ' ';
+        for (const field of ['name', 'line', 'ok', 'fingerprints', 'importance', 'paused', 'direction'] as const) {
+          if (!same(xs[i][field], ys[i][field])) out.push(`${path} 的 ${label}的 ${field}：${JSON.stringify(xs[i][field])} → ${JSON.stringify(ys[i][field])}`);
+        }
       }
     }
-    const problemsB = new Set(b.problems), problemsA = new Set(a.problems);
-    for (const problem of a.problems) if (!problemsB.has(problem)) out.push(`${path} 少了問題：${problem}`);
-    for (const problem of b.problems) if (!problemsA.has(problem)) out.push(`${path} 多了問題：${problem}`);
+    const problemsA = groupBy(a.problems, problem => problem), problemsB = groupBy(b.problems, problem => problem);
+    for (const [problem, list] of problemsA) for (let i = problemsB.get(problem)?.length ?? 0; i < list.length; i++) out.push(`${path} 少了問題：${problem}`);
+    for (const [problem, list] of problemsB) for (let i = problemsA.get(problem)?.length ?? 0; i < list.length; i++) out.push(`${path} 多了問題：${problem}`);
   }
   for (const id of [...new Set([...Object.keys(before.due), ...Object.keys(after.due)])].sort()) {
     const a = before.due[id], b = after.due[id];
