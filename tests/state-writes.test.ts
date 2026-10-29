@@ -298,7 +298,8 @@ void test('S14 本篇的兩組輸入：(a) 編輯器比磁碟新、(b) 磁碟比
   b.write(P, Ba + C);
   const editorB = createMemoryEditor(b, P, C);
   assert.deepEqual(await b.state.save(editorB), { kind: 'done', added: 1 });
-  // 磁碟沒有 B：編輯器沒收到外部的修改、存檔時把它蓋掉，屬於 Obsidian 編輯器那一層（§9 的 V6 觀察），這裡只看 C 的 ID 與沒有假的問題。
+  // 磁碟沒有 B：替身的編輯器不會收到外部的修改，存檔把它蓋掉。實機上這是存檔撞上外部寫入（§9 的 V6）：在已測的碰撞安排下，
+  // Obsidian 自動存檔與 Cards 存檔都可能覆蓋外部內容，本次不另加保護（討論稿 2026-10-29-save-external-write.md）。這裡只看 C 的 ID 與沒有假的問題。
   assert.equal(editorB.value, Cb);
   b.clean();
   await b.settle();
