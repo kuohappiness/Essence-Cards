@@ -79,6 +79,8 @@ class IssuesModal extends Modal {
   private readonly host: SaveHost;
   private readonly view: MarkdownView;
   private stop: (() => void) | null = null;
+  /** 按下還原或當成新的、結果還沒回來：重畫時按鈕照樣停用，再按不另外排一份（Codex L2 的 R3）。 */
+  private waiting = false;
   constructor(app: App, host: SaveHost, view: MarkdownView) {
     super(app);
     this.host = host;
@@ -104,17 +106,20 @@ class IssuesModal extends Modal {
       else row.createEl('p', { text: BUTTONS.unsure, cls: 'essence-cards-issue-note' });
       buttons.createEl('button', { text: BUTTONS.fresh }).addEventListener('click', () => { this.choose(issue, 'new'); });
     }
+    this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = this.waiting; });
   }
   private choose(issue: IdIssue, choice: 'restore' | 'new'): void {
     const state = this.host.state(), path = this.view.file?.path;
-    if (!state || !path) return;
+    if (!state || !path || this.waiting) return;
     // 結果回來之前兩個按鈕都停用。
+    this.waiting = true;
     this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = true; });
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
+      this.waiting = false;
       if (result.kind === 'done') { this.render(); return; }
       this.host.notify(result.kind === 'failed' ? TIPS.failed : TIPS.stale);
       this.close();
-    }, (error: unknown) => { this.host.onError(error); this.close(); });
+    }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
 }
 

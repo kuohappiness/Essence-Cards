@@ -207,3 +207,38 @@ void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同
   void saver.save(view);
   assert.equal(handles.length, 2, '上一份結束之後再按，排新的一份');
 });
+
+// Codex L2 的 R3（tasks/state-writes.md §7）：小視窗按下還原或當成新的之後，結果回來之前兩個按鈕都停用；這段時間別篇的讀取
+// 讓小視窗重畫（onChange）也一樣，再按不另外排一份。結果回來才解除。
+void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一份；結果回來後才解除', async () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  const listeners = new Set<() => void>();
+  const choices: string[] = [];
+  let finish: (result: unknown) => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [issue] }),
+    onChange: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    save: () => Promise.resolve({ kind: 'unchanged' }),
+    resolve: (_issue: unknown, choice: string) => { choices.push(choice); return new Promise(resolve => { finish = resolve; }); },
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  await saver.save(stub.leaf(DECK).view);
+  assert.equal(stub.modals.length, 1, '有待處理的問題時開小視窗');
+  const buttons = () => stub.modals[0].contentEl.querySelectorAll('button');
+  assert.equal(buttons().length, 2);
+  buttons()[0].click();
+  assert.deepEqual(choices, ['restore']);
+  assert.ok(buttons().every(button => button.disabled));
+  for (let i = 0; i < 2; i++) for (const listener of [...listeners]) listener();
+  assert.equal(buttons().length, 2, '重畫了');
+  assert.ok(buttons().every(button => button.disabled), '重畫之後按鈕又能按');
+  buttons()[1].click();
+  assert.deepEqual(choices, ['restore']);
+  finish({ kind: 'done', added: 0 });
+  await wait(0);
+  assert.equal(buttons().length, 2);
+  assert.ok(buttons().every(button => !button.disabled), '結果回來後解除');
+});

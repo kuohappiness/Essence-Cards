@@ -686,7 +686,7 @@ void test('fillIds 的結果對應（2026-10-29 確認）：沒有要改的核�
 
 // Codex L2 的 R1：逾時之後才輪到的 modify 回呼（同一篇排在前一份卡住的 modify 後面）不能改檔。檔案已經刪掉或改名時，
 // 回呼拿到的是空字串，回傳它在 Files 的契約裡是「建立這個檔」，所以要真正中止 modify。
-for (const after of ['刪掉', '改名', '留著'] as const) void test(`R1 逾時之後才輪到的 modify 回呼不改檔（${after}）：同一篇的兩次 fillIds 都逾時，關閉後才放行`, async t => {
+for (const after of ['刪掉', '改名', '留著'] as const) void test(`L2 R1 逾時之後才輪到的 modify 回呼不改檔（${after}）：同一篇的兩次 fillIds 都逾時，關閉後才放行`, async t => {
   const h = await setup(t, { [P]: C });
   const held = h.holdModify(P);
   const first = h.state.fillIds(P);
@@ -710,7 +710,7 @@ for (const after of ['刪掉', '改名', '留著'] as const) void test(`R1 逾�
 
 // Codex L2 的 R2：準備時 state 同步通知監聽者（觀察到新的原文 → 重排），監聽者或 onError 可能在裡面 close()。
 // 那一刻還沒改編輯器、還沒寫：停下來回 blocked closed，不改字、不 persist；close() 完成時沒有還在進行的寫入。
-for (const how of ['監聽者', 'onError'] as const) void test(`R2 準備時${how}同步 close()：存檔不改編輯器也不寫，回 blocked closed`, async t => {
+for (const how of ['監聽者', 'onError'] as const) void test(`L2 R2 準備時${how}同步 close()：存檔不改編輯器也不寫，回 blocked closed`, async t => {
   const closing: Promise<void>[] = [];
   const h = await setup(t, { [P]: C }, { onError: () => { if (!closing.length) closing.push(h.state.close()); } });
   h.state.onChange(() => {
@@ -727,7 +727,7 @@ for (const how of ['監聽者', 'onError'] as const) void test(`R2 準備時${ho
   assert.equal(h.texts.get(P), C);
 });
 
-void test('R2 fillIds 版：modify 回呼裡準備時監聽者同步 close()，不寫，回 false', async t => {
+void test('L2 R2 fillIds 版：modify 回呼裡準備時監聽者同步 close()，不寫，回 false', async t => {
   const h = await setup(t, { [P]: C });
   const closing: Promise<void>[] = [];
   h.state.onChange(() => { if (!closing.length) closing.push(h.state.close()); });
