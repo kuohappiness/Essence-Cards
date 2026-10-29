@@ -90,7 +90,9 @@ export async function cloudRead(app: App, params: Params): Promise<unknown> {
 /** 之後才回來的讀取與寫入（到期時記成 pending 的）。 */
 export const cloudLate = (): Promise<unknown> => Promise.resolve({ late });
 
-let log: { writer: LogWriter; device: string; lines: string[]; errors: { at: string; error: ErrorFields }[] } | null = null;
+interface Log { writer: LogWriter; device: string; lines: string[]; errors: { at: string; error: ErrorFields }[] }
+/** 同時可以寫幾份（params.slot，預設 a）：同一次停掉 iCloud 裡比較停著時寫入之後的不同做法。 */
+const logs = new Map<string, Log>();
 
 /**
  * W1：在 Essence 佔位檔/寫入/ 用 scopedFiles 建一個 createLogWriter（和外掛寫紀錄同一條路：vault.append）。
@@ -98,15 +100,15 @@ let log: { writer: LogWriter; device: string; lines: string[]; errors: { at: str
  * 回傳應該在檔案裡的全部內容（expected），由呼叫端和實際讀到的比對。
  */
 export async function cloudWrite(app: App, params: Params): Promise<unknown> {
-  const step = params.step ?? 'append';
+  const step = params.step ?? 'append', slot = params.slot ?? 'a';
   if (step === 'seed') {
     // 每次 seed 換一個裝置碼，檔案一定是新的。
     const device = 'W1-' + Date.now().toString(36).slice(-5);
-    const errors: { at: string; error: ErrorFields }[] = [];
-    log = { writer: createLogWriter(scopedFiles(createObsidianFiles(app), WRITE_ROOT), { device, onError: error => { errors.push({ at: new Date().toISOString(), error: fields(error) }); } }), device, lines: [], errors };
+    const errors: Log['errors'] = [];
+    logs.set(slot, { writer: createLogWriter(scopedFiles(createObsidianFiles(app), WRITE_ROOT), { device, onError: error => { errors.push({ at: new Date().toISOString(), error: fields(error) }); } }), device, lines: [], errors });
   }
-  if (!log) throw Error('先執行 step=seed');
-  const current = log;
+  const current = logs.get(slot);
+  if (!current) throw Error('先執行 step=seed（slot=' + slot + '）');
   const add = (): void => {
     const n = current.lines.length + 1;
     // 中英混合、有 emoji：比對位元組時能看出編碼或截斷。
@@ -119,7 +121,7 @@ export async function cloudWrite(app: App, params: Params): Promise<unknown> {
   const flush = await observe(`flush ${current.device}`, () => current.writer.flush(), limitOf(params), () => 'flushed');
   const expected = content(new TextEncoder().encode(current.lines.map(line => line + '\n').join('')));
   const at = Date.now(), offset = -new Date(at).getTimezoneOffset();
-  return { step, device: current.device, path: WRITE_ROOT + '/' + logPath(current.device, at, offset), lines: current.lines.length, flush, expected, errors: current.errors };
+  return { step, slot, device: current.device, path: WRITE_ROOT + '/' + logPath(current.device, at, offset), lines: current.lines.length, flush, expected, errors: current.errors };
 }
 
 interface Trial { state: State; poke: (path: string) => void; opened: number; ready: 'pending' | { ms: number } | { error: ErrorFields }; changes: { at: string; unread: readonly string[] }[]; errors: { at: string; source: string; error: ErrorFields }[] }
