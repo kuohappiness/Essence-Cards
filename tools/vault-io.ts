@@ -1,4 +1,4 @@
-import { lstat, open, readdir, realpath, stat, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, realpath, rmdir, stat, unlink } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -131,6 +131,41 @@ export async function writeNew(path: string, bytes: Uint8Array, write: WriteNew 
     if (identity !== null && await removeOwn(path, identity)) throw error;
     throw Error((error as Error).message + leftBehind(path), { cause: error });
   }
+}
+
+/** 這次建立的一層資料夾與它的身分。 */
+export interface CreatedFolder { path: string; identity: Identity }
+
+/** 建立 folder（含上層），回傳這次才建的每一層（由上到下）與它們的身分；本來就有的不算。 */
+export async function makeFolder(folder: string): Promise<CreatedFolder[]> {
+  const first = await mkdir(folder, { recursive: true });
+  if (first === undefined) return [];
+  // Windows 回報的是 `\\?\` 開頭的長路徑寫法。
+  const top = first.replace(/^\\\\\?\\UNC\\/, '\\\\').replace(/^\\\\\?\\/, '');
+  const created: CreatedFolder[] = [];
+  for (let path = resolve(folder); ; path = dirname(path)) {
+    created.unshift({ path, identity: await lstat(path, { bigint: true }) });
+    if (relative(path, top) === '') return created;
+    // 對不上回報的那一層：確定不了哪幾層是這次建的，一層都不算。
+    if (dirname(path) === path) return [];
+  }
+}
+
+/**
+ * 收掉 makeFolder 這次建的資料夾（Codex 第三次查核 T3）：由下往上，只收身分沒變、還空著的（rmdir 不刪有東西的資料夾）。
+ * 遇到收不掉的那一層就停，它和上面的都留著，回傳那一層；都收掉回傳 null。已經不在的那一層跳過。
+ */
+export async function removeFolders(created: readonly CreatedFolder[]): Promise<string | null> {
+  for (const { path, identity } of [...created].reverse()) {
+    try {
+      const now = await lstat(path, { bigint: true });
+      if (!now.isDirectory() || now.dev !== identity.dev || now.ino !== identity.ino) return path;
+      await rmdir(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return path;
+    }
+  }
+  return null;
 }
 
 /**

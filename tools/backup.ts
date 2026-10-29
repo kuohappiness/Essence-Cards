@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
+import { readFile, realpath, rename, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { BACKUP_FORMAT, BACKUP_SCOPE, BACKUP_VERSION, ESSENCE_ROOT, PLUGIN_DATA, backupName, hashBytes, openBackup, readBuild, writeZip } from '../src/core/backup/index.ts';
@@ -7,7 +7,7 @@ import type { BackupManifest } from '../src/core/backup/index.ts';
 import { isDeckPath, parseDeck } from '../src/core/deck/index.ts';
 import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { buildVersion } from './build.mjs';
-import { defaultBackupFolder, isInside, isOwn, leftBehind, listTree, pluginConfig, readError, realTarget, removeOwn, virtualizedReason, writeNew } from './vault-io.ts';
+import { defaultBackupFolder, isInside, isOwn, leftBehind, listTree, makeFolder, pluginConfig, readError, realTarget, removeFolders, removeOwn, virtualizedReason, writeNew } from './vault-io.ts';
 import type { Identity, WriteNew } from './vault-io.ts';
 
 /** 清單的 by（syntax §8）。 */
@@ -95,15 +95,18 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
   const config = await pluginConfig(vault, options.config);
   const requested = options.to ?? defaultBackupFolder(basename(vault));
   const folder = await realTarget(requested);
-  if (isInside(folder, vault)) throw Error(`備份位置 ${folder} 在 vault 裡（以實際路徑判斷），不能放在 vault 裡`);
-  const newFolder = await mkdir(folder, { recursive: true });
+  const inVault = `備份位置 ${folder} 在 vault 裡（以實際路徑判斷），不能放在 vault 裡`;
+  if (isInside(folder, vault)) throw Error(inVault);
+  // 已經看得出在 App 的私有資料夾（直接指到那裡、經過連結，或之前在 App 裡建過）：不建任何資料夾就拒絕。
+  const known = virtualizedReason(requested, folder);
+  if (known) throw Error(known);
+  // 建好才看得出的（MSIX 在建立時才把 %LOCALAPPDATA% 導走）也拒絕，並收掉這次建的空資料夾；有別的東西或換過就留著（Codex 第三次查核 T3）。
+  const created = await makeFolder(folder);
   const real = await realpath(folder);
-  if (isInside(real, vault)) throw Error(`備份位置 ${folder} 在 vault 裡（以實際路徑判斷），不能放在 vault 裡`);
-  const virtualized = virtualizedReason(requested, real);
-  if (virtualized) {
-    // 這次才建的空資料夾一起拿掉（建在 App 的私有資料夾裡）。
-    if (newFolder !== undefined) await rm(newFolder, { recursive: true, force: true });
-    throw Error(virtualized);
+  const refused = isInside(real, vault) ? inVault : virtualizedReason(requested, real);
+  if (refused) {
+    const kept = await removeFolders(created);
+    throw Error(refused + (kept === null ? '' : `（這次建的資料夾 ${kept} 沒有收掉：裡面有別的東西或已經換過，請確認後手動處理）`));
   }
 
   let main: string | null = null;

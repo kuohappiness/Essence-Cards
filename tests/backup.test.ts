@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, readFile, stat, symlink, unlink, utimes, writeFile, appendFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, stat, symlink, unlink, utimes, writeFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openBackup } from '../src/core/backup/index.ts';
 import { backupVault } from '../tools/backup.ts';
-import { virtualizedReason } from '../tools/vault-io.ts';
+import { makeFolder, removeFolders, virtualizedReason } from '../tools/vault-io.ts';
 import { goal, makeVault, put, review, tempFolder } from './helpers/vault.ts';
 
 const LOG = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
@@ -158,4 +158,41 @@ void test('備份位置的實際路徑落在封裝 App 的私有資料夾（MSIX
   // %TEMP% 不會被導走（2026-10-29 實測），測試的暫存資料夾照常。
   assert.equal(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Temp\essence-abc`), null);
   assert.equal(virtualizedReason('x', '/home/kuo/.local/share/Essence Cards/備份/V'), null);
+});
+
+void test('備份位置已經看得出在封裝 App 的私有資料夾（直接指到或經過連結）時，不建任何資料夾就拒絕，原有的資料夾不動', async t => {
+  const vault = await makeVault(t, { [DECK]: goal('abc123') });
+  const root = await tempFolder(t);
+  const cache = join(root, 'AppData', 'Local', 'Packages', 'SyntheticApp', 'LocalCache');
+  await put(cache, '原有.txt', 'kept');
+  await symlink(cache, join(root, '連到私有資料夾'), 'junction');
+  for (const to of [join(cache, '新備份', '子', 'V'), join(root, '連到私有資料夾', '新備份', 'V')]) {
+    await assert.rejects(backupVault({ vault, to, by: 'backup', ...fixed }), /實際在 .*LocalCache.*用 --to 指定 App 以外的資料夾/);
+  }
+  assert.deepEqual(await readdir(cache), ['原有.txt']);
+  assert.equal(await readFile(join(cache, '原有.txt'), 'utf8'), 'kept');
+});
+
+void test('拒絕備份位置時收掉這次建的資料夾（Codex 第三次查核 T3）：只收空的、身分沒變的，由下往上；有別的東西或換過就留著並回報', async t => {
+  const base = await tempFolder(t);
+  // 都是空的：這次建的三層都收掉，原有的上層不動。
+  const empty = await makeFolder(join(base, '空', 'a', 'b'));
+  assert.deepEqual(empty.map(folder => folder.path), [join(base, '空'), join(base, '空', 'a'), join(base, '空', 'a', 'b')]);
+  assert.equal(await removeFolders(empty), null);
+  assert.deepEqual(await readdir(base), []);
+  // 已經存在的資料夾不算這次建的。
+  await mkdir(join(base, '原有'));
+  assert.deepEqual(await makeFolder(join(base, '原有')), []);
+  // 建好之後別的程序放了東西：下面的空資料夾收掉，有東西的那一層和它的內容留著。
+  const busy = await makeFolder(join(base, '有東西', 'a', 'b'));
+  await writeFile(join(base, '有東西', 'concurrent-content.txt'), 'other process content');
+  assert.equal(await removeFolders(busy), join(base, '有東西'));
+  assert.deepEqual(await readdir(join(base, '有東西')), ['concurrent-content.txt']);
+  // 建好之後被換成另一個空資料夾：不是這次建的，留著，上層也留著。
+  const swapped = await makeFolder(join(base, '換過', 'a'));
+  await rename(join(base, '換過', 'a'), join(base, '換過', '搬走'));
+  await mkdir(join(base, '換過', 'a'));
+  assert.equal(await removeFolders(swapped), join(base, '換過', 'a'));
+  assert.deepEqual((await readdir(join(base, '換過'))).sort(), ['a', '搬走']);
+  assert.deepEqual((await readdir(base)).sort(), ['原有', '換過', '有東西']);
 });
