@@ -648,6 +648,32 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
       out.V5switch = { notices: host.devLog.notices.slice(before), otherUntouched: otherDisk === FLOW_TEXT,
         steps: [await snap('之後（原本那篇）', path, null), await snap('之後（換到的那篇）', other.path, view)] };
       leaf.detach();
+      // 存檔排隊時換篇（state-writes 的 L2「請特別看」第 9 點）：同一個 tick 換篇搶不到存檔前面，所以先讓另一篇的存檔停在
+      // view.save()（包住那個 view 的 save），這篇的存檔排在它後面；換篇之後才放行。輪到這篇時編輯器已經換了：提示「剛剛改過」，
+      // 這篇和換到的那篇都沒被寫。
+      {
+        const first = await fresh(), queued = await fresh(), target = await fresh();
+        const a = await open(app, first.file), b = await open(app, queued.file);
+        await sleep(500);
+        let release = (): void => {};
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const original = a.view.save.bind(a.view);
+        a.view.save = async (clear?: boolean) => { await gate; await original(clear); };
+        const queuedNotices = notices();
+        const holding = saver.save(a.view);
+        const saving = saver.save(b.view);
+        await b.leaf.openFile(target.file);
+        release();
+        await holding;
+        await saving;
+        a.view.save = original;
+        await sleep(1500);
+        out.V5queued = { notices: host.devLog.notices.slice(queuedNotices), staleExpected: TIPS.stale,
+          queuedUntouched: await files.read(queued.path) === FLOW_TEXT, targetUntouched: await files.read(target.path) === FLOW_TEXT,
+          steps: [await snap('之後（排隊的那篇）', queued.path, null), await snap('之後（換到的那篇）', target.path, b.view)] };
+        a.leaf.detach();
+        b.leaf.detach();
+      }
       const renamed = await fresh();
       const tab = await open(app, renamed.file);
       await sleep(500);
@@ -714,6 +740,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
   const v2 = out.V2 as { issuesSeen: string[]; autosaveSeen: boolean };
   const v3 = out.V3 as { ids: number; notices: string[] };
   const v5 = out.V5rename as { filesBefore: number; filesAfter: number; oldPathIssues: number };
+  const queued = out.V5queued as { notices: string[]; queuedUntouched: boolean; targetUntouched: boolean };
   out.checks = {
     V1persistSame: v1.persisted.length > 0 && v1.persisted.every(each => each.same), V1oneNotice: v1.notices.length === 1, V1ms: v1.ms,
     V2noIssues: v2.autosaveSeen && !v2.issuesSeen.length,
@@ -721,6 +748,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     V4: (out.V4 as { editorsAndDiskSame: boolean }).editorsAndDiskSame,
     V5switchOtherUntouched: (out.V5switch as { otherUntouched: boolean }).otherUntouched,
     V5rename: v5.filesBefore === v5.filesAfter && v5.oldPathIssues === 0,
+    V5queued: queued.notices.includes(TIPS.stale) && queued.queuedUntouched && queued.targetUntouched,
     V6bKept: (out.V6 as { diskHasB: boolean }[]).map(each => each.diskHasB),
   };
   return out;
