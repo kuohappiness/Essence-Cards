@@ -71,7 +71,8 @@ export interface State {
   progress(): Progress;
   /**
    * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。牽涉的學習目標不能作答（canAnswer）時什麼都不寫、回傳 null
-   * （任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；找不到那一筆的取消照舊寫。
+   * （任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；找不到那一筆的取消照舊寫。卡組的狀態變更，
+   * 那一篇需要新版時也不寫。
    */
   answer(entry: NewEntry): string | null;
   /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的 ID 都不能。 */
@@ -486,6 +487,8 @@ export function createState(options: StateOptions): State {
       if (!loaded) throw Error('state 還沒 ready');
       const lts = 'lt' in entry ? [entry.lt] : 'undo' in entry ? history.reviews.filter(review => review.t === entry.undo).map(review => review.lt) : [];
       if (!lts.every(answerable)) return null;
+      // 卡組的狀態變更是從卡組的內容得出的：需要新版的卡組不寫（§2-1）。
+      if ('deck' in entry && gated.includes(entry.deck)) return null;
       return record(entry);
     },
     onChange(listener) {

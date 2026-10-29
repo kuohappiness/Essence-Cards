@@ -147,3 +147,9 @@ void test('2-3 帶 need 的行裡的 lt 進 seen：配新 ID 時避開（D-134�
   assert.deepEqual(h.state.history().seen, ['aaaaaa']);
   assert.equal(h.state.fillText(P, '- 新目標\n    - Q :: A\n'), '- 新目標 ^aaaaab\n    - Q :: A\n');
 });
+
+void test('2-2 需要新版的卡組，卡組的狀態變更也不寫：那是從讀不懂的內容得出的', async t => {
+  const h = await setup(t, { [NEW]: marked('9.0.0', goal('aaaaab')), [P]: goal('bbbbbb') });
+  assert.equal(h.state.answer({ set: 'status', deck: NEW, val: '暫停' }), null);
+  assert.equal(typeof h.state.answer({ set: 'status', deck: P, val: '暫停' }), 'string');
+});
