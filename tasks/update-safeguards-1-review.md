@@ -157,3 +157,5 @@
 ### 回報
 
 接在同一份[回報](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)的最後，標題「Codex 第二輪（日期）」；照上面〈回報〉的格式，「請特別看」7 點與「Claude 自己選了做法的地方」16 點逐點回覆。
+
+**第二輪開始後的補充（2026-10-29）**：使用者選了「在封裝 App 裡跑時一定要指定位置」，分支多了 `d39cde2`（`git diff d3e2fad d39cde2`）：「自己選了做法」第 16 點從印提醒改成拒絕（實際路徑落在 `AppData\Local\Packages\<App>\LocalCache\` 時 `backupVault` 丟錯、清掉這次新建的空資料夾，要用 `--to`），`restore --apply` 的還原前備份也有 `--to`。在 `d39cde2` 跑 `npm run check`，613 項全過。如果第二輪已經寫完，這一個 commit 放到下一次再查。
