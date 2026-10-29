@@ -182,8 +182,12 @@ export function createState(options: StateOptions): State {
   const checks = new Map<string, { output: string | null; prepared: Prepared | null; fallback: WriteResult; settle: (result: WriteResult) => void }>();
   /** Cards 改卡組的那一列（§3）：一次只做一份；卡住的寫入只擋後面的寫入，不擋讀檔與複習。 */
   let writes: Promise<unknown> = Promise.resolve();
-  /** 正在等的那一次寫進磁碟（已經限時）；close() 等它的結果明確。 */
+  /**
+   * 正在 I/O 的那一份工作，從 begin 到 end：close() 等它結束（§5）。從 begin 就開始算，不是從呼叫 persist 才算：
+   * editor.apply()、editor.persist() 裡可能同步 close()（Codex L2 再審的 R2 續）。中間只有寫進磁碟那一步會等，那一步有 writeTimeout。
+   */
   let active: Promise<void> | null = null;
+  let finish: (() => void) | null = null;
   let unwatch: (() => void) | null = null;
   // 連續讀不到的次數；決定下一次重試要等多久（Codex 審查 W5 的 F3：不能只等下一次通知）。
   let failures = 0;
@@ -471,6 +475,7 @@ export function createState(options: StateOptions): State {
   function begin(path: string): void {
     busy.add(path);
     bump(path);
+    active = new Promise(resolve => { finish = resolve; });
   }
   /**
    * 第 5 步等一次寫進磁碟（§3 最後一段）：最多等 writeTimeout，超過就當成失敗（錯誤寫明逾時），照第 6 步結束 I/O、放行後面的寫入。
@@ -482,16 +487,15 @@ export function createState(options: StateOptions): State {
     const timeout = new Promise<never>((_, reject) => {
       id = setTimeout(() => { reject(Error(`寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`)); }, writeTimeout);
     });
-    const guarded = Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
-    const settled = guarded.then(() => {}, () => {});
-    active = settled;
-    void settled.then(() => { if (active === settled) active = null; });
-    return guarded;
+    return Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
     busy.delete(path);
     bump(path);
+    finish?.();
+    finish = null;
+    active = null;
     pending.add(path);
     void readNow();
   }

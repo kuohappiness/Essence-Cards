@@ -738,3 +738,32 @@ void test('L2 R2 fillIds 版：modify 回呼裡準備時監聽者同步 close()�
   await closing[0];
   assert.equal(h.texts.get(P), C + '\n');
 });
+
+// Codex L2 再審的 R2 續：editor.apply()（Editor 交易的同步回呼）或 editor.persist()（回傳 Promise 之前）裡同步 close()。
+// 這時已經開始寫：close() 要等這份保存有結果才完成；保存照常寫完，回 saved（編輯器已經改過，不能報成沒改字）。
+for (const where of ['apply', 'persist'] as const) void test(`L2 R2 續：${where}() 裡同步 close()，close() 等保存結束才完成，工作回 saved`, async t => {
+  const h = await setup(t, { [P]: C });
+  const editor = createMemoryEditor(h, P, C);
+  const closing: Promise<void>[] = [];
+  let closed = false;
+  const close = (): void => { if (!closing.length) closing.push(h.state.close().then(() => { closed = true; })); };
+  const apply = editor.apply.bind(editor), persist = editor.persist.bind(editor);
+  if (where === 'apply') editor.apply = (before, after) => { close(); return apply(before, after); };
+  else editor.persist = () => { close(); return persist(); };
+  const held = editor.hold();
+  const saving = h.state.save(editor);
+  await held.started;
+  await h.flush();
+  try {
+    assert.equal(closing.length, 1);
+    assert.equal(closed, false, 'close() 在保存結束之前就完成了');
+    assert.equal(h.texts.get(P), C);
+  } finally {
+    // 斷言失敗時也放行，不然收尾的 close() 會一直等這份保存（假計時器下逾時不會到）。
+    held.release();
+  }
+  assert.deepEqual(await saving, { kind: 'saved' });
+  await closing[0];
+  assert.equal(h.texts.get(P), Ca);
+  assert.equal(editor.value, Ca);
+});
