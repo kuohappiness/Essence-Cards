@@ -1,6 +1,6 @@
 # `state/index.ts` 原樣拆檔：L2 獨立審查（給 Codex）
 
-狀態：等 Codex L2（拆檔與更新防線第二部分的整合一次審，使用者 2026-10-29 決定）
+狀態：L2 完成，沒有要修的（[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）；Windows 的 `save` 有落差待使用者決定，見報告最後〈Claude 核對〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（只搬程式，但搬的是讀寫先後與寫入協調，順序或 microtask 的差異就會讓 state-writes 的保護失效）。
 
@@ -52,7 +52,7 @@
 3. **核對讀取的判斷放在 `writes.ts` 的 `verified`**：原本在 `read()` 裡的一段迴圈；`batch` 改成對每篇呼叫 `writes.verified(path, text)`，位置不變（紀錄合併之後、改名配對之前）。`tracker.wrote` 經 `wrote` 回呼。
 4. **`reads.start(load)`**：列出與重試在讀取層，列出來之後交給 `index.ts` 的 `load`（設 `loaded`、排今天、`catchUp`）；用回呼而不是讓 `index.ts` 先 `await` 列出結果，避免多一層 async。
 5. **檔名**：`reads.ts`、`writes.ts`（Codex 第 5 題寫 `mirror.ts` 是暫名）。
-6. **新增的測試**：`tests/boundaries.test.ts` 一則（`state/index.ts` 的值匯出照字串排序是 `createState`、`deviceCode`、`isDeviceCode`）；`tests/quality.test.ts` 的邊界列表加 4 列（外層 import `reads.ts`、`writes.ts` 被擋，`state/index.ts` import `./reads.ts` 不擋）。
+6. **新增的測試**：`tests/boundaries.test.ts` 一則（`state/index.ts` 的值匯出照字串排序是 `createState`、`deviceCode`、`isDeviceCode`）；`tests/quality.test.ts` 的邊界列表加 3 個案例和 1 行說明（外層 import `reads.ts`、`writes.ts` 被擋，`state/index.ts` import `./reads.ts` 不擋；Codex L2 指出原本寫成「4 列」）。
 7. **和更新防線第二部分的先後**：這邊先在舊的 `main` 上拆，沒等它；它先合併（和那個 session 談定），這邊再合併 `main`、把它的程式放進拆好的檔（`5fd4cf4`）。使用者決定拆檔與整合一次審。
 8. **`blockedText` 留在 `index.ts`、用回呼傳給寫入**：它看 `gated`（`rebuild` 算的）與 `needsUpdate`（版本），都是組合那一層的資料；寫入只需要知道「這篇能不能寫」。
 
@@ -61,7 +61,7 @@
 - Node 24 以上（Claude 用 v24.13.0）。在**上面的工作目錄**裡：`npm ci`、`npm run check`。照 [quality.md](../docs/agents/quality.md) 的審查注意事項，完整的 `npm run check` 要在沙箱外跑。
 - Claude 跑過：每個 commit 的 `npm run check`（pre-commit）。拆檔時的基準 `6345057` 是 673 個測試（state-writes 合併後的數字），`aa6862a`、`d67bb62` 都是 674 個（多的是公開匯出那一則）；合併後的 `main`（`52c5fc5`）是 747 個（更新防線2 的 session 回報），`5fd4cf4` 是 748 個，全部通過。
 - 機械的比對：`6345057` 與 `52c5fc5` 的 `index.ts` 每一行（去掉縮排）在三份新檔裡都找得到，找不到的只有改名（`closed` → `life.closed`、`loaded` → `life.loaded`、`bump` → `reads.bump`、`await active` → `await writes.idle()` 之類）與拆開的轉接。
-- 還沒跑：Windows 的 `save-flow`、`save`、`lock`、`a3check`（任務說明 §4 的建議項）。測試 vault 現在裝著別的 session 的建置（`0.0.1+786d11c`），已問它能不能借用、還沒有回覆；借到之後跑，結果補在這一節，你審的時候若已經補上請一起對照。要比對的基準是 state-writes 最後一次的 `save-flow … 152335`、`save … 152443`、`lock … 152506`、`a3check … 152724`。
+- Windows（2026-10-30 跑，你的 L2 之後）：`save-flow`、`lock`、`a3check` 和基準相同；`save` 拆檔版 8 次過 5 次、`main` 版 8 次全過，細節與判斷見[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)最後〈Claude 核對〉。要比對的基準是 state-writes 最後一次的 `save-flow … 152335`、`save … 152443`、`lock … 152506`、`a3check … 152724`。
 
 ## 回報
 
