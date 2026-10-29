@@ -194,5 +194,11 @@ void test('拒絕備份位置時收掉這次建的資料夾（Codex 第三次查
   await mkdir(join(base, '換過', 'a'));
   assert.equal(await removeFolders(swapped), join(base, '換過', 'a'));
   assert.deepEqual((await readdir(join(base, '換過'))).sort(), ['a', '搬走']);
+  // Windows 的 `\\?\` 長路徑寫法直接傳進來也認得出這次建的幾層（Codex 第四次查核的觀察）。
+  if (process.platform === 'win32') {
+    const long = await makeFolder('\\\\?\\' + join(base, '長', 'a'));
+    assert.deepEqual(long.map(folder => folder.path), [join(base, '長'), join(base, '長', 'a')]);
+    assert.equal(await removeFolders(long), null);
+  }
   assert.deepEqual((await readdir(base)).sort(), ['原有', '換過', '有東西']);
 });

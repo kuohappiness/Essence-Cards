@@ -136,14 +136,17 @@ export async function writeNew(path: string, bytes: Uint8Array, write: WriteNew 
 /** 這次建立的一層資料夾與它的身分。 */
 export interface CreatedFolder { path: string; identity: Identity }
 
+/** 拿掉 Windows 的 `\\?\`（與 `\\?\UNC\`）長路徑寫法，逐層往上時才停得在磁碟根目錄。 */
+const plainPath = (path: string): string => path.replace(/^\\\\\?\\UNC\\/, '\\\\').replace(/^\\\\\?\\/, '');
+
 /** 建立 folder（含上層），回傳這次才建的每一層（由上到下）與它們的身分；本來就有的不算。 */
 export async function makeFolder(folder: string): Promise<CreatedFolder[]> {
   const first = await mkdir(folder, { recursive: true });
   if (first === undefined) return [];
-  // Windows 回報的是 `\\?\` 開頭的長路徑寫法。
-  const top = first.replace(/^\\\\\?\\UNC\\/, '\\\\').replace(/^\\\\\?\\/, '');
+  // Windows 回報的第一層是長路徑寫法；傳進來的也可能是（Codex 第四次查核的觀察）。
+  const top = plainPath(first);
   const created: CreatedFolder[] = [];
-  for (let path = resolve(folder); ; path = dirname(path)) {
+  for (let path = resolve(plainPath(folder)); ; path = dirname(path)) {
     created.unshift({ path, identity: await lstat(path, { bigint: true }) });
     if (relative(path, top) === '') return created;
     // 對不上回報的那一層：確定不了哪幾層是這次建的，一層都不算。
