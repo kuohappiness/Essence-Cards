@@ -1,6 +1,6 @@
 # 雲端佔位檔：分段實測與存檔受阻的提示（給 Claude，本機執行）
 
-狀態：完成：兩部分都在分支 `claude/icloud-placeholders`，合併由使用者決定（結果在文末）
+狀態：完成：已合併進 `main`（`9c07caa`，結果在文末）；iPhone 的部分在 backlog「下一次 iPhone 實機測試」
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：做法已在 D-154 與這份說明定好，這裡是照做與量測）。
 
