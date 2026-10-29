@@ -62,12 +62,13 @@ function node(app: App): { full: (path: string) => string; stat: (full: string) 
 }
 
 /**
- * E2、E3、E7：用一種方法讀一個檔（params.path，vault 內的路徑）。api：files（Files.read，即 vault.read）、
+ * E2、E3、E7：用一種方法讀一個檔（params.target，vault 內的路徑；不能叫 path：Obsidian 用 URI 的 path 參數找 vault，
+ * 找不到就跳出 Vault not found，命令不會執行）。api：files（Files.read，即 vault.read）、
  * binary（vault.adapter.readBinary）、stat（Node 的 fs.promises.stat；只記 size、blocks，不當成判斷方法）。
  */
 export async function cloudRead(app: App, params: Params): Promise<unknown> {
-  const path = params.path, api = params.api ?? 'files';
-  if (!path?.startsWith(CLOUD_ROOT + '/')) throw Error('path 要在 ' + CLOUD_ROOT + '/ 底下');
+  const path = params.target, api = params.api ?? 'files';
+  if (!path?.startsWith(CLOUD_ROOT + '/')) throw Error('target 要在 ' + CLOUD_ROOT + '/ 底下');
   const label = `${api} ${path}`;
   if (api === 'files') {
     const read = await observe(label, () => createObsidianFiles(app).read(path), limitOf(params), text => text === null ? null : content(new TextEncoder().encode(text)));
@@ -146,7 +147,7 @@ function status(current: Trial): unknown {
 
 /**
  * E5：對 Essence 佔位檔/state/ 底下的測試卡組與紀錄建一個 state（不是外掛正在用的那一個；fillIds 關掉，不寫卡組）。
- * step：open（建新的、等 ready 到 limit）、poke（送 params.path 的變動通知，等 wait 毫秒）、status、close。
+ * step：open（建新的、等 ready 到 limit）、poke（送 params.target 的變動通知，等 wait 毫秒）、status、close。
  */
 export async function cloudState(app: App, params: Params): Promise<unknown> {
   const step = params.step ?? 'status';
@@ -165,8 +166,8 @@ export async function cloudState(app: App, params: Params): Promise<unknown> {
   }
   if (!trial) throw Error('先執行 step=open');
   if (step === 'poke') {
-    if (!params.path) throw Error('poke 要帶 path（state 底下的路徑，例如 Essence Cards/測試.md）');
-    trial.poke(params.path);
+    if (!params.target) throw Error('poke 要帶 target（state 底下的路徑，例如 Essence Cards/測試.md）');
+    trial.poke(params.target);
     await new Promise<void>(resolve => { window.setTimeout(resolve, Number(params.wait ?? 2000)); });
     return status(trial);
   }
