@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調（給 Claude，本機執行）
 
-狀態：實作完（分支 `claude/hungry-yonath-106fcb`，到 `cd03533` 為止），等 Codex 的 L2（[審查請求](state-writes-review.md)）；合併由使用者決定
+狀態：實作完、Codex L2 通過（分支 `claude/hungry-yonath-106fcb`，第二次再審 `6833097`，[審查請求](state-writes-review.md)）；待使用者決定合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在外掛架構討論稿的環節 4 和 Codex 談定，這份是執行）。改的是 `src/state/` 的讀寫先後、學習目標 ID 的安全與寫回筆記的流程，屬於高風險範圍，合併前由 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 

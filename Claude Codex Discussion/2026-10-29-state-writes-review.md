@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調：Codex L2 獨立審查
 
-狀態：待再審（第二次）；R1～R3 已修，再審找到的 R2 續已修（`ae7102c`），Claude 的核對在最後〈Claude 核對再審〉
+狀態：L2 通過（第二次再審，審查 `6833097`；結論在最後〈第二次再審〉）；待使用者決定合併
 
 ## 結論與審查基準
 
@@ -271,3 +271,50 @@ await closing;
 - 重跑 `save-flow … 152335.json`：checks 全部和上一次相同，加上 `V5queued` true（提示「已加入複習」「剛剛改過」各一次，存檔回來時排隊的那篇沒變、換到的那篇沒變，排隊的那篇之後由備援補了 2 個 ID）；V1 24 ms；V6 照舊 `[false, true, true]`。這次 `cleanupLeft` 留下 `存檔流程` 資料夾：上一次跑完 `cleanupLeft` 是空的，資料夾裡卻還留著那次的一個測試檔（原因沒查，推論和 iCloud 有關）。跑完檢查資料夾已經是空的，手動刪掉。
 - `save … 152443.json` 17/17、和上一次相同；`lock … 152506.json` 50/0；`a3check … 152724.json` C1～C11 都 ok，C8、C10 各一個子項 skipped（和之前相同），`cleanupLeft` 空。
 - backlog 的「存檔途中換篇只在 Node 驗過」那一列已達完成條件，刪掉；任務說明 V5 列補上結果。
+
+## 第二次再審（2026-10-29）
+
+狀態：第二次再審通過；R2 續已修，V5 的 Windows 等待中換篇證據已補，未發現本輪範圍內需再修的問題
+
+審查分支 `claude/hungry-yonath-106fcb`，基準 `22cede548c2abc203ef0cb6426eaa1dbc891c66d`，待審 HEAD `6833097de27870e41566b013d498d9cc6812b870`。依請求只審 `ae7102c` 的 I/O 生命週期修正、`7c1947a`／`a8c8a8b` 的 V5 開發命令與相鄰案例，並核對任務 §5、V5 列。以下程式位置均指該分支的 `6833097`；`ae7102c` 到 HEAD 的 state 與 state-writes 測試沒有差異。審查開始時 worktree 乾淨；本輪只追加本節，不改程式、測試、vault，不 commit。前文保留各輪當時的待修狀態，本節是本次再審結論；不涵蓋之後的新變更。
+
+### R2 續的修正
+
+**規格與設計核對成立。** `src/state/index.ts:475–478` 在呼叫 Editor 之前建立 active，`:493–500` 在 finally 收尾時完成並清掉 active；`persist()` 只負責保存與逾時，不再覆蓋工作身分。因此 `close()` 在 `:655` 等的是整個 begin～end 的 I/O 期間，也涵蓋 `apply()`、`persist()` 同步回呼。
+
+重跑前輪的真正 CodeMirror `EditorState.transactionFilter` 探針，以及 persist 回傳 Promise 前同步關閉的版本，兩者保存未放行時都得到 `closeResolvedBeforePersist: false`；放行後保存回 `saved`、磁碟與編輯器都有 `^aaaaaa`。這次沒有把已改過編輯器的工作誤報為沒改字，也沒有提前回報關閉完成。
+
+準備後的 closed 檢查仍保留，未碰編輯器的工作照前輪約定中止；實際保存仍由 writeTimeout 限時，成功、失敗、逾時與提早退出都會經過 end。新增兩項回歸測試的預期直接保護這個完成順序，且失敗時會放行測試中的保存，不會把收尾卡住誤認成產品失敗。沒有放寬原本的斷言。
+
+### 相鄰案例
+
+另以 stdin 執行 **11 組公開介面探針，全部通過**；資料只在記憶體，沒有新增測試檔或產品出口。
+
+| 案例 | 結果 |
+|---|---|
+| CodeMirror apply／persist 內同步 close（2 組） | 保存未完成時 close 不完成；放行後 saved，內容正確。 |
+| apply 回 false、apply 丟錯、persist reject（3 組） | 分別回 stale／failed／failed；active 都確實解除，close 可完成，磁碟不被寫入。 |
+| 同一份卡住的保存呼叫兩次 close | 兩份 close 都等待；推進 writeTimeout 後保存 failed，兩份 close 都完成；保存晚到不再走原工作的採用。 |
+| end 已完成、核對讀取尚未回來時呼叫兩次 close | 工作回 saved；close 依既有規則等讀取收尾，放行後兩份都完成，不採用輸出、不通知。 |
+| fillIds 的 modify 回呼在準備之前同步 close | 門檻擋住寫入，fillIds 回 false；close 等該份收尾，不改磁碟。 |
+| 舊 persist 逾時、下一份開始後舊保存才完成 | 舊完成不清掉新 active；此時 close 仍等新的一份，放行後新工作回 saved，ID 不重用。 |
+| 沒改字的 persist 途中 close | 仍等保存完成，結果是 unchanged，不誤回 saved。 |
+| text 回 null 的提早退出之後再排下一份 | 第一份回 stale 並解除 active；close 會等下一份保存，沒有殘留或誤用前一份的完成訊號。 |
+
+### V5 開發命令與 Windows 證據
+
+已直接讀取測試 vault 的 `Essence W5/結果/`，未重新操作 Obsidian 或改寫 vault。新情境用前一份存檔暫停 view.save，使待測存檔確實排隊；換篇後才放行，符合要驗的時序。`a8c8a8b` 把 queuedUntouched 的觀察移到存檔剛回來、離開備援之前，並另外保留備援後的結果，修正合理。
+
+- `save-flow Windows-c50c 2026-10-29 151931.json` 的 V5queued 為 false，不能算通過；但事件中前一份寫完到待測篇 modify 相差 **1005 ms**，支持「觀察已包含離開筆記備援」的解釋。
+- `save-flow … 152335.json` 的 **V5queued 為 true**：queuedUntouched、targetUntouched 都為 true；提示為一次「2 個學習目標已加入複習」（前一份存檔）與一次「剛剛改過」（排隊後換篇）。其後 queuedFilledOnLeave 為 2，兩次 modify 相差 **1007 ms**，與約一秒後的離開備援一致。不能把後面的補 ID 說成排隊存檔誤寫。
+- 因此任務 V5 列與結果、程式一致；原本「等待中換篇只有 Node 證據」的驗證缺口已補，移除對應 backlog 列有依據。V1 為 24 ms、persist 時磁碟與編輯器一致；V2～V4、V5 其他 checks 與前次相同；V6 仍是已知限制 `[false, true, true]`，不當成防覆寫通過。
+- 這次 save-flow 的 **cleanupLeft 非空**，列出 `Essence Cards/W5 範例/存檔流程`，不把清理檢查寫成通過。Claude 已記錄手動清理；本輪唯讀確認該資料夾目前不存在。歷史殘留的根因沒有獨立證據，不能寫成已確定是 iCloud；這不推翻已記下的 V5 行為觀察。
+- `save … 152443.json` 17 項 checks 全 true；`lock … 152506.json` 50 passed／0 failed；`a3check … 152724.json` C1～C11 皆 ok、failed 與 cleanupLeft 空。C8／C10 各一個 skipped 子項與之前相同，仍不算那些子項已測通過。
+
+### 完整檢查與範圍
+
+在 HEAD `6833097`、Node `v24.13.0` 下，**沙箱外 `npm run check` exit 0，604 項測試全過**，0 failed／0 skipped；型別、ESLint、knip、secretlint、skill 副本與文件檢查都通過，測試階段約 69.0 秒。沿用已安裝的相依，未重跑 npm ci。
+
+測試 vault 目前 bundle 可抽出 `0.0.1+a8c8a8b`，其待審程式與 `6833097` 相同；歷史 JSON 的 plugin 仍只記 `0.0.1`，歷史建置與結果綁定的限制照前輪保留。R1、R3 的通過結論沒有被這次差異推翻；R2 續的兩個重現已修、相鄰案例通過，本輪沒有新增需修的規格或設計發現。合併仍由使用者決定。
+
+沒查的項目與原因：未重審指定差異及相鄰路徑以外的既有程式；未在 Windows Obsidian 直接操作 R2 的同步關閉／逾時情境，這些由隔離 Node 探針與回歸測試驗證；未查明歷史清理殘留的根因、未量 no-op view.save 的實機寫入次數，既有結果不足以回答；未測 iPhone／跨裝置 iCloud 或明確延後的功能，本批任務不要求這些驗證。
