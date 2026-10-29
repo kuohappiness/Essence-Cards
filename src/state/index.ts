@@ -206,9 +206,10 @@ export function createState(options: StateOptions): State {
   let gatedIds = new Set<string>();
   function rebuild(): void {
     const all = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
-    deckList = all.filter(entry => !needsUpdate(entry.deck));
-    gated = all.filter(entry => needsUpdate(entry.deck)).map(entry => entry.path);
-    gatedIds = new Set(all.filter(entry => needsUpdate(entry.deck)).flatMap(entry => entry.deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])])));
+    const newer = new Set(all.filter(entry => needsUpdate(entry.deck)));
+    deckList = all.filter(entry => !newer.has(entry));
+    gated = [...newer].map(entry => entry.path);
+    gatedIds = new Set([...newer].flatMap(entry => entry.deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])])));
     // 讀得懂的卡組裡和需要新版的卡組同一個 ID 的目標也不出：舊版分不出那個 ID 現在屬於哪一篇、是什麼意思。
     planList = deckList.map(entry => {
       const skip = tracker.lines(entry.path);
