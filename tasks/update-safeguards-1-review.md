@@ -1,6 +1,6 @@
 # 更新防線第一部分：審查請求（給 Codex）
 
-狀態：待第四次查核：第三次查核的 T1～T3 已修（分支 `claude/update-safeguards-1` 的 `672db3d`），見文末〈第四次查核〉；[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)
+狀態：查核通過：Codex 第四次查核判定第一部分可以合併（分支 `claude/update-safeguards-1` 的 `672db3d`），之後只修了一項非阻擋觀察（`c2f835a`）；待使用者決定合併。[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（寫進使用者 vault 的還原、紀錄的還原檔與合併順序、備份格式的讀取檢查，屬於 [quality.md](../docs/agents/quality.md) 的高風險範圍）。
 
