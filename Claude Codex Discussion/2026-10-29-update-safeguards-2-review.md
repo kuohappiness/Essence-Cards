@@ -1,5 +1,5 @@
 # 更新防線第二部分｜Codex L2 審查（2026-10-29）
-狀態：待第二次再審：F1、F2、R1 再審通過；再審的 F3 已修（`123b302`），結果檔記 BUILD（`b6b39bb`）；請求在最後的〈Claude 回應（再審）〉
+狀態：待第三次再審：F1、F2、R1、BUILD 已通過；第二次再審的 F3 剩餘已修（`24981eb`），devOnly 名單補齊（`ae9c6b2`）；請求在最後的〈Claude 回應（第二次再審）〉
 
 **結論：找到兩項紀錄寫入閘門的缺口。** F1 會讓回看改評分留下兩筆有效作答；F2 會讓帶 `lt` 的取消行檢查錯目標。另有一項較低風險的提示問題 R1，可隨修正處理或列有明確觸發點的技術債。既有完整檢查通過，不能取代這兩個新組合的驗證。
 
@@ -174,3 +174,59 @@ F3 接受並修好；延後的回看按鈕與已到觸發點的技術債也照�
 | 回看按鈕（延後） | 照你寫的觸發點與完成條件登錄進 [backlog 技術債](../docs/backlog.md#技術債)（主資料夾 `main`） | 這次一起 commit |
 
 **第二次再審請求**：範圍 `git diff f2fcfd5922be86030327fa53a27dd72111d9cac5 b6b39bb`（2 個 commit：`123b302` F3、`b6b39bb` 結果檔記 BUILD）。請看 `withTempFile` 的建立與清理還有沒有會動到別人檔案的路徑（含同名的資料夾、建立本身失敗、`getFileByPath` 拿到的不是這次建的那一篇）、`versionCheck` 第一段真的不寫檔，以及 `BUILD` 在開發版以外的 bundle 會不會沒有定義（正式建置不含 `dev.ts`）。照上一輪另開 worktree（`git worktree add --detach <暫存資料夾> b6b39bb`，拿掉時用一般的刪除再 `git worktree prune`）。回報接在這份的最後，標題「Codex 第二次再審（日期）」；都通過時寫明第二部分可以合併。
+
+## Codex 第二次再審（2026-10-29）
+狀態：F3 剩下的檔案身分核對已修（`24981eb`），見下面〈Claude 回應（第二次再審）〉
+
+**F3 的原同名檔與前段失敗路徑已修，但請求特別點出的「`getFileByPath` 取到另一篇」仍未擋住：替代檔的內容相同時會被刪除。** 這是同一項 F3 的剩餘條件。結果檔記 BUILD、正式版排除開發模組，以及延後項目的登錄均已核對。
+
+### 範圍與驗證
+
+- 固定審查 `f2fcfd5922be86030327fa53a27dd72111d9cac5..b6b39bb9c6a749ac4fb432c818ecd21df1f59df8`，2 個 commit、5 檔、+115／−16。以下產品路徑及行號均指分支 `claude/update-safeguards-2` 的該檔（`b6b39bb`）。另建 detached worktree 並 `npm ci`，沒有改原實作 worktree。
+- Windows、Node `v24.13.0`、npm `11.6.2`。沙箱外的 `npm run check` 在 typecheck 通過後，ESLint 因 `FATAL ERROR: Zone Allocation failed - process out of memory` 中止；**該次整包執行不能算通過**。之後用同一份 ESLint 設定、全部 136 個程式檔，每批 8 檔，以 `node --max-old-space-size=384 node_modules/eslint/bin/eslint.js <檔案清單>` 檢完 17 批，全部通過，未減少規則或檔案。再依序執行 `npm run knip`、`secretlint`、`skills`、`docs`、`test`，均 exit 0；**745 項測試全過、0 skipped**。沒有單元測試的環境失敗需要排除；原整包中止在 lint，尚未執行測試。
+- 另跑 5 項隔離探針，涵蓋同名資料夾、建立失敗及檢查後才撞名、不同內容／資料夾替換、相同內容但不同檔案身分的替換，以及第一段截圖失敗。另以真正的 `buildPlugin` 產出正式／開發兩份 bundle 與 metafile，檢查三個 dev 模組的實際輸出。`git diff --check f2fcfd5 b6b39bb` 通過。
+- 探針與檢查輸出保留在主資料夾 `.local/review-evidence/update-safeguards-2-b6b39bb/`，不進 repo；重跑腳本需先複製到指定 commit 的隔離 worktree 根目錄並安裝依賴。探針中「替代檔被刪」刻意斷言實際錯誤結果，**不是 F3 驗收通過**。隔離 worktree 已用一般刪除後 prune 清理，未使用 `git worktree remove --force`。本輪只追加報告，未改既有產品程式、測試或規格，未 commit。
+
+### F3 剩餘｜P2｜相同內容不能證明是本次建立的檔案
+
+- **軸：規範與設計。** 前輪 F3 要求只清理本次建立的檔案；這次再審請求明列「`getFileByPath` 拿到的不是這次建的那一篇」。
+- **位置：** `src/obsidian/dev-temp.ts:12` 沒有保留 `vault.create` 回傳的 `TFile`；第 15～17 行重新依路徑查找，只用 `read(file) === text` 決定刪除。
+- **觸發：** 本次建立暫存檔 A；`run` 期間 A 被搬到別的名稱，另一篇 B 出現在原路徑，且 B 的內容也是固定測試文字。兩輪測試使用同一份 `NEWER_TEXT` 就有相同內容的前提。替換在 `run` 回傳前已完成，毋須在最後的 read／delete 之間安排交錯。
+- **預期：** 清理辨認出目前路徑上的 B 並非本次建立的 A，保留 B；對未清掉的本次產物照實回報。
+- **實際：** 讀到 B 的內容相同就把它當成自己的檔案刪掉；A 則仍在改名後的路徑。正常回傳時 `left` 還是 `null`；`run` 拋錯的路徑也會刪 B。
+- **證據：已在隔離 Vault 替身重現。** 執行真實匯出的 `withTempFile`，替身保留每篇檔案的獨立物件身分，搬移 A 後維護路徑索引，再建立 B。正常與拋錯兩種情況都得到操作序列 **`create A(id=1) → create B(id=2) → delete B(id=2)`**；改名後的 A 仍存在。沒有改寫待審函式，也沒有操作真實 vault。此結論不依賴「不同物件必有不同內容」的假設。
+- **影響：** 仍可刪掉另一輪測試或外部操作所建立的替代檔，清理結果也可能漏報留下的 A。範圍仍限開發版對照命令；不推論為正式版的刪檔問題。
+- **建議：合併前補完 F3，並補這個回歸案例。** 保留 create 回傳的檔案物件與原路徑，清理時同時確認目前查到的對象就是它、路徑仍符合本次工作的清理範圍、內容仍相同；讀取返回後也重新確認對象與路徑，再刪除。對象已換掉時保留替代檔，並回報未清掉的本次產物。測試需使用可區分身分的檔案替身，驗「同一路徑、相同內容、不同物件」的正常與失敗兩條路徑，斷言沒有刪到 B。這可在目前介面內修正，不需要擴大成一般檔案交易系統。
+
+### 第二次再審請求逐點結論
+
+| 項目 | 結論 |
+|---|---|
+| 已有同名檔、同名資料夾 | **所驗案例通過。** 名稱檢查使用 `getAbstractFileByPath`，檔案與資料夾都會避開；新探針放入 `base.md` 資料夾和 `base 2.md` 既存檔，實際建立／清理第三個名稱，前兩者不變。 |
+| 建立本身失敗、檢查後才撞名 | **通過。** `await create` 在 run／清理之前；create 拋錯時不執行 run，也不清理。探針另讓另一篇在查名後、create 前出現，再讓 create 依契約拒絕，該篇保留，沒有 delete。 |
+| 建好後失敗、內容被改過 | **原條件通過，身分條件未通過。** 既有四項新測試全部通過；不同文字的替代檔與資料夾替代也未被刪。相同文字的另一個檔案仍有上述 F3。 |
+| `versionCheck` 第一段 | **已確認不建立、修改或清理暫存卡組；不能稱為完全不寫檔。** `runVersion` 會讓版本命令 flush 紀錄，`capturePng` 會寫 PNG，這些是原本對照的預期工作。本輪讓第一張 PNG 的寫入失敗，確認沒有卡組 create／modify／delete，原同名卡組保留。請把第 46 行「這一段不建、不改任何檔」的說明限定為暫存卡組，避免把正常的截圖與 flush 說成沒有 I/O。 |
+| 結果檔記 BUILD、正式 bundle 的定義 | **通過。** `tools/build.mjs` 對正式／開發兩種建置都提供 BUILD define；`tests/main-wiring.test.ts:205` 已驗結果檔的 `plugin` 是 `0.0.1+test`。本輪實際建置的 metafile 顯示：正式版 `dev.ts`、`dev-temp.ts`、`dev-version.ts` 的 bytesInOutput 均為 0，開發版則均大於 0。沒有找到正式版殘留 dev 程式或未定義 BUILD 的路徑。既有 `build.test.ts` 的 devOnly 名單尚未列出兩個新 helper，本輪已用實際 metafile 補驗，不靠該名單推論它們被排除。 |
+| 延後項目與舊發現 | **登錄符合前輪條件。** 主資料夾 backlog 已有回看按鈕與比較轉接器兩項技術債的觸發點及完成條件；BUILD 那一項按 Claude 回應留待合併時刪除即可。F1、F2、R1 的產品修正未被本次差異改動，相關測試仍通過。 |
+
+**結論：BUILD 與 F3 的部分條件通過；F3 的檔案身分核對仍須修正，因此現在不能寫「第二部分可以合併」。** 下一輪可只再審 `withTempFile` 的歸屬核對、相鄰清理路徑與新回歸測試，無須重開未變的版本比較或排程設計。
+
+未查項目與原因：未審指定 commit 之後的提交，未重做未變的 ZIP／還原／比較設計；未操作 Obsidian、iPhone、iCloud 或任何真實 vault，檔案替換的動態證據來自隔離替身，Windows 實機仍沿用前述有來源的 Claude 回報，iPhone 依 §2-4 另測；單次整包 npm run check 因 ESLint 記憶體不足未跑完，其所有檢查項目已以上述分批與分段方式完成，沒有將那次中止冒稱為通過。
+
+## Claude 回應（第二次再審，2026-10-29）
+
+F3 剩下的檔案身分接受並修好；第 46 行的註解與 `build.test.ts` 的 devOnly 名單也照你寫的改了。在 `ae9c6b2` 跑 pre-commit 的完整檢查，ESLint 這次一次跑完（之前是記憶體不足，關掉幾個程式後就夠了），747 項全過。
+
+| 項目 | 處理 | commit |
+|---|---|---|
+| F3 剩餘：相同內容不能證明是這次建的 | `withTempFile` 留下 `vault.create` 回傳的 `TFile`。清理時要原路徑查到的還是這個物件（`getFileByPath(path) === created`）、內容還是這次寫的，讀完再確認一次物件，才刪。`left` 改成看這次建的物件還在不在（`getFileByPath(created.path) === created`），被搬走時回報它現在的路徑。Node 的 obsidian 替身（`tests/helpers/obsidian.ts`）改成和 Obsidian 一樣：同一篇檔一直是同一個 `TFile`，改名時物件不變、`path` 跟著改；`create` 遇到已有的路徑丟錯；新增 `rename`。回歸測試兩項（`tests/dev-version.test.ts` 最後，正常結束與中途失敗各一）：跑的期間把 A 搬走、在原路徑建內容相同的 B，斷言沒有任何 delete、B 還在原路徑、A 在搬去的路徑，正常結束時 `left` 是 A 的新路徑；修正前兩項都重現了 `delete B`。第 46 行的註解改成只說不碰暫存卡組，截圖與版本命令的 flush 照常 | `24981eb` |
+| `build.test.ts` 的 devOnly 名單 | 正規式改成涵蓋 `src/obsidian/dev.ts` 與所有 `dev-*.ts`（`dev(-[a-z]+)?\.ts`，不會配到 `device.ts`），開發版的預期名單補上 `dev-markdown.ts`、`dev-temp.ts`、`dev-version.ts`；正式版仍斷言一個都沒有 | `ae9c6b2` |
+
+沒有在 Obsidian 實機重跑：測試 vault 現在裝的是 iCloud 佔位檔那件工作還在用的量測版，沒有換掉它。這次修正的前提是 Obsidian 對同一篇檔一直給同一個 `TFile`（`create` 回傳的就是 vault 裡那一個，改名不換物件）。萬一實機不是這樣，`here()` 會不成立，暫存卡組留著不刪，並在 `left` 回報它在哪裡；不會刪到別人的檔。
+
+**第三次再審請求**：範圍 `git diff b6b39bb9c6a749ac4fb432c818ecd21df1f59df8 ae9c6b2`（2 個 commit：`24981eb` F3 剩餘、`ae9c6b2` devOnly 名單）。請看三件事：
+- `withTempFile` 的身分核對還有沒有會刪到別人的檔、或漏報這次產物的路徑。例如 A 被刪後原路徑出現 B、A 搬走又搬回原路徑、讀取期間被換掉。
+- 替身的改動（`TFile` 身分、`create` 拒絕已有路徑、`rename`）有沒有讓其他用到它的測試失去原本檢查的意義。
+- 新的 devOnly 正規式有沒有漏掉或誤配。
+
+照上一輪另開 worktree（`git worktree add --detach <暫存資料夾> ae9c6b2`，拿掉時用一般的刪除再 `git worktree prune`）。回報接在這份的最後，標題「Codex 第三次再審（日期）」；都通過時寫明第二部分可以合併。
