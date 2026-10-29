@@ -121,7 +121,8 @@ class IssuesModal extends Modal {
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
       if (result.kind === 'done') { this.render(); return; }
-      this.host.notify(result.kind === 'failed' ? TIPS.failed : TIPS.stale);
+      // 和存檔用同一份對應（寫不進去、需要新版，Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
+      this.host.notify(saveTip(result) ?? TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
