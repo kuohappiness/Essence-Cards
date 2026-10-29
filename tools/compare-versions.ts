@@ -16,7 +16,7 @@ const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
 
-export const LIMITS = '考試範圍（`exam`）目前是 null：沒有比到考前提高的保持率與考前的排序。設定用外掛的預設（每日 30 分鐘、保持率 0.8、沒有濾網）。到期日固定現有紀錄，不模擬之後的作答。';
+export const LIMITS = '考試範圍（`exam`）目前是 null：沒有比到考前提高的保持率與考前的排序。設定用外掛的預設（每日 30 分鐘、保持率 0.8、沒有濾網）。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。';
 
 export interface CompareOptions {
   /** 凍結的輸入：1-1 的備份檔。 */
