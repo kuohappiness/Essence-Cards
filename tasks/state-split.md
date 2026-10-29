@@ -1,6 +1,6 @@
 # `state/index.ts` 原樣拆檔（給 Claude，本機執行）
 
-狀態：實作中（分支 `claude/state-split-c5c7bf`）
+狀態：實作完成在分支 `claude/state-split-c5c7bf`（`d67bb62`），等 Codex L2（[審查請求](state-split-review.md)）與合併的先後
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（拆法已在外掛架構討論稿的環節 4 和 Codex 談定，這份是執行）。改的是 `src/state/`，屬於高風險範圍，合併前由 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
@@ -81,10 +81,13 @@
 
 ## 和更新防線第二部分的先後
 
-💬 待和「更新防線2」的 session 確認：
+💬 開工時問了「更新防線2」的 session，還沒有回覆；這邊沒有等，先在 `main` 上拆（拆檔是機械的，晚一點合併時再放進去比等它便宜）。兩邊誰後合併，誰解衝突：
 
-- **建議**：更新防線第二部分先合併進 `main`，這裡再以合併後的 `main` 為底拆檔，把它加的程式一起原樣搬（`writable(path, text)` 的需要新版與 `admit` 的對應進 `writes.ts`，並多一個「這篇需要新版」的輸入；`record`、`checkApp`、`blocked()`、`canAnswer`、`version()`、`rebuild` 的 gated 留在 `index.ts`）。它的 L2 審的是現在的檔案配置，不用重審。
-- 如果它要等很久：先在 `main` 上拆，它合併時要把 +119 行重新放進拆好的檔；或這裡先合併它的分支再拆，合併順序就固定成它先。
+- **建議更新防線第二部分先合併**（它的 L2 審的是舊的檔案配置，不用因為拆檔重審）。之後這裡 `git merge origin/main`，把它加的程式照下面的對應放進拆好的檔，`npm run check` 全過，再請 Codex 只審那次合併：
+  - `writes.ts`：`writable` 多一個 `text` 參數與「需要新版」的原因（`blocked.reason` 加 `'needs-update'`），`admit` 的對應、`fillFile` 與 `edit` 裡傳最新文字的那兩處；「這篇需要新版」由 `index.ts` 傳進來（`WritesOptions` 多一個回呼，例如 `blockedText(path, text)`）。
+  - `index.ts`：`StateOptions.build`、`version`、`needsUpdate`、`record`、`checkApp`、`appState`、`rebuild` 的 gated、`answerable`、`blockedText`、`blocked()`、`canAnswer`、`version()`、`flush`、`deckStatus` 的 needsUpdate、`answer`、`load` 裡的 `checkApp()`、`batch` 收尾裡的 `checkApp()`、`mergeHistory` 的 `version` 參數、`EMPTY_HISTORY` 的新欄位。
+  - `reads.ts`：不受影響。
+- 如果這裡先合併：更新防線第二部分合併 `main` 時照上面的對應放，那次合併同樣要請 Codex 審。
 
 ## 完成後
 
