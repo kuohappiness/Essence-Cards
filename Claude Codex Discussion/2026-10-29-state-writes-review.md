@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調：Codex L2 獨立審查
 
-狀態：待再審；R1～R3 都已重現並修正（`6318645`、`5855aa7`、`c3de2a0`），Claude 的核對在最後〈Claude 核對〉
+狀態：待再審（第二次）；R1～R3 已修，再審找到的 R2 續已修（`ae7102c`），Claude 的核對在最後〈Claude 核對再審〉
 
 ## 結論與審查基準
 
@@ -166,3 +166,101 @@ R3 的重現方式：沿用 `tests/save-wiring.test.ts` 的 esbuild 載入方式
 - a3check：審查請求寫「C1～C11 全 ok」不夠精確，C8、C10 各有一個子項 skipped（兩次相同）；以這份報告的寫法為準。
 - 報告原本寫在主資料夾，已搬進分支的同一路徑，隨分支合併。
 - Windows 在修正後重跑 `save`、`save-flow`、`lock`、`a3check`，結果都和上一次相同（細節在審查請求的〈再審〉）。`save` 會在 Obsidian 裡開小視窗、重畫、選還原，R3 的改動沒有影響這條路。
+
+## 再審（2026-10-29）
+
+狀態：待修；R1、R3 的修正成立，R2 原案例已修，但相鄰的 Editor 回呼重入仍有一項 P2，尚未通過 L2
+
+本輪只審分支 `claude/hungry-yonath-106fcb` 的 R1～R3 修正及指定的相鄰案例。基準 `d33c01351d214a1d601eae0a57c4282f1ac5d5ee`，待審 HEAD `22cede548c2abc203ef0cb6426eaa1dbc891c66d`；產品修正是 `6318645`、`5855aa7`、`c3de2a0`，`c3de2a0` 到 HEAD 的 `src/`、`tests/` 沒有差異。審查開始時 worktree 乾淨；本輪只在這個 worktree 追加本節，沒有修改程式、測試或 vault，沒有 commit。
+
+### R2 續 — P2｜`apply()` 或 `persist()` 內同步關閉，仍會漏等保存
+
+**軸：規格。證據：已重現（公開 State／EditorHandle；apply 版使用真正的 CodeMirror EditorState 交易回呼），未在 Windows Obsidian 重現。建議：合併前修，補兩個相鄰回歸案例。**
+
+`5855aa7` 在 plan 之後重查 `closed`，確實修掉「準備時 onChange／onError 關閉」；但還沒涵蓋後面的主機呼叫。具體觸發有兩種，屬於同一個生命週期缺口：
+
+1. `EditorHandle.apply()` 執行 Editor 交易時，交易的同步回呼呼叫 `state.close()`。探針用 `EditorState.transactionFilter` 實際執行這個回呼，沒有在 state 內加出口。
+2. `EditorHandle.persist()` 在回傳尚未完成的 Promise 之前同步呼叫 `state.close()`。
+
+兩者都能得到：`closeResolvedBeforePersist: true, applies: 1, persists: 1`，當時磁碟仍沒有 ID；放行保存後才寫進 `^aaaaaa`，工作回 `saved`。
+
+**預期**：任務 §5 允許尚未寫的工作中止，或已進入 I/O 的工作等到保存完成／逾時；不能在尚有這份保存未決時回報 close 完成。這不是要求把已套用的 Editor 交易撤回。
+
+**位置與原因**（以下位置均指分支 `claude/hungry-yonath-106fcb` 的 `22cede5`）：`src/state/index.ts:574` 的新檢查在 `editor.apply()` 之前；`:575–577` 之間仍可能同步重入。尤其 `persist(editor.persist())` 會先執行 `editor.persist()`，之後才進入 `persist` 並在 `:487` 設定 `active`。`close()` 的 `:651` 已讀到先前的 `null`，不會因稍後設定 active 而重新等待。
+
+**影響與處理**：主機收到關閉完成後，舊工作仍可能開始或繼續寫磁碟。應在進入可能重入的 Editor 呼叫之前，使關閉能追蹤這份工作的 I/O 生命週期；或明確中止尚未開始的保存，且回報必須符合「Editor 已改過」的事實。只在 apply 後再加一個 closed 檢查，仍擋不住第二種 persist 內重入。測試應保持保存未完成，明確斷言 close 不得先完成；中止方案則斷言沒有開始保存，且不把已改 Editor 的工作誤報為「沒有改字」。
+
+第一種觸發的最小重現如下，在本 worktree 用 `node --input-type=module` 從 stdin 執行；資料只在記憶體：
+
+```js
+import { createState } from './src/state/index.ts';
+import { createMemoryFiles } from './tests/helpers/memory-files.ts';
+import { createMemoryEditor } from './tests/helpers/editor.ts';
+import { EditorState } from '@codemirror/state';
+
+const P = 'Essence Cards/P.md';
+const C = '- 能說明 C\n    - QC :: AC\n';
+const m = createMemoryFiles({ [P]: C });
+const s = createState({ files: m.files, device: 'PC-review',
+  fillIds: true, random: () => 0 });
+await s.ready();
+let closing, closed = false;
+let cm = EditorState.create({ doc: C, extensions: [
+  EditorState.transactionFilter.of(tr => {
+    closing = s.close().then(() => { closed = true; });
+    return tr;
+  }),
+] });
+const e = createMemoryEditor(m, P, C);
+const held = e.hold();
+e.apply = (before, after) => {
+  if (cm.doc.toString() !== before) return false;
+  cm = cm.update({ changes: { from: 0, to: cm.doc.length, insert: after } }).state;
+  e.value = cm.doc.toString();
+  e.applies++;
+  return true;
+};
+const saving = s.save(e);
+await held.started;
+for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));
+console.log({ closeResolvedBeforePersist: closed,
+  applies: e.applies, persists: e.persists });
+// 實際：{ closeResolvedBeforePersist: true, applies: 1, persists: 1 }
+held.release();
+console.log(await saving); // { kind: 'saved' }
+await closing;
+```
+
+第二種觸發可用相同 fixture，把 `e.persist` 換成「同步呼叫 close、接著回傳由外部放行才 `m.write(P, e.value)` 的 Promise」；不加 CodeMirror 回呼也會得到同樣結果。這兩個探針只證明公開協調介面的漏洞，沒有宣稱目前內建 lock 回呼會自行呼叫 close，或已測出 Windows 上的發生頻率。
+
+### 三項修正與 R2 選擇的判斷
+
+| 項目 | 再審結論 |
+|---|---|
+| R1／`6318645` | 修正成立。失效回呼丟錯會在寫檔前中止，避免不存在時建立空檔。完整檢查涵蓋刪除／改名／原檔保留三個回歸案例；本輪另在 close **之前**放行逾時回呼，三種情況也都不誤寫，而且 state 仍開著、下一份正常存檔可完成。晚到的 Stopped 不會把已回報的逾時改成 blocked closed，也沒有未處理的拒絕。 |
+| R2／`5855aa7` 原案例 | 修正成立。原本 onChange／onError 在 plan 期間同步關閉的存檔已停止，沒有 apply／persist；原報告等待 `held.started` 的探針應改成斷言根本不呼叫 persist，不應照舊等它。另驗同篇後續排隊的 save／fillIds 都被擋下，以及 resolve 的 restore／new 在觀察新原文時關閉，均不寫。但 R2 整體仍有上面 Editor 回呼的剩餘路徑。 |
+| fillIds 準備時關閉就不寫 | 同意這個較嚴的選擇。modify 回呼仍在可中止、尚未提交文字的階段，丟 Stopped 不會改檔；對外 fillIds 回 false，和已補充的任務 §5 一致。準備時已預留的 ID 保持不重用，無須為了符合舊分類而刻意完成一份已關閉的寫入。 |
+| R3／`c3de2a0` | 修正成立。waiting 在視窗物件上保留，重畫後仍停用，choose 也有等待檢查。除了新增的成功回歸，本輪驗 done／failed／stale／Promise reject，以及先手動關閉、後 done／reject 共六組；多次 onChange 不會多排選擇，失敗／拒絕會清理訂閱，已關閉視窗不會重新 open 或重新訂閱。done 到達已關閉視窗時仍會重畫離線內容，但沒有可見的視窗重開，這點不列缺陷。 |
+| 測試替身與原測試 | Modal／元素替身只增加接線測試所需的行為；disabled 按鈕的 click 不送事件，符合這個測試的用途。新增 7 項回歸，既有測試的斷言未放寬。choose 的等待檢查可由程式確認存在，不把目前的 disabled-click 測試說成已單獨驗過這道檢查。 |
+
+### 文件、檢查與 Windows 結果
+
+- 任務 §4 第 3 點的無改字 reject 結果、§5 的無改字／準備時關閉例外，與目前程式一致；V5 仍明列 Windows 等待中換篇未驗，沒有改成已通過。backlog 的 V5 觸發點是下一次 Windows `save-flow`，這輪 `140805` 已到該觸發點，該待補情境仍未完成；後續需補情境或依完成條件記明做不出排隊的具體原因，不能把這次相同結果視為結案。
+- 在 HEAD `22cede5`、Node `v24.13.0` 下，**沙箱外** `npm run check` exit 0；型別、lint、knip、secretlint、skill、文件與 **602 項測試全過**，0 failed／0 skipped；測試階段約 72.6 秒。沿用既有相依，未重跑 npm ci。
+- 本輪另跑 13 組通過的公開介面相鄰探針：R1 晚到回呼在關閉前執行的刪除／改名／保留三組；R2 同篇排隊 save、排隊 fillIds、resolve restore／new 四組；R3 的六種結果／視窗先關閉組合。另兩組探針重現同一項 R2 續，不把 602 全綠當作關閉契約已完整成立的證明。
+- 只讀既有 Windows 結果，沒有重跑 Obsidian 命令或修改 vault：`save Windows-c50c 2026-10-29 140718.json` 的 17 項 checks 皆 true；`save-flow … 140805.json` 的 V1 磁碟／編輯器一致、一次提示、30 ms，其餘 checks 與前次相同，V6 仍 `[false, true, true]`、cleanupLeft 空；`lock … 141006.json` 50／0；`a3check … 141227.json` C1～C11 皆 ok、failed 與 cleanupLeft 空，C8／C10 各一個 skipped 子項與前次相同。
+- 目前 vault 的 bundle 可抽出 `0.0.1+e10d2ae`，其 `src/` 與本輪待審版本相同；歷史 JSON 仍只記 `0.0.1`，建置與結果的綁定沿用前輪已明列的證據限制。沒有重開 V6、跨重啟預留或原樣拆檔。
+
+沒查的項目與原因：未重審 R1～R3 及相鄰路徑以外的既有程式；未在 Windows Obsidian 操作重現 R2 續、未補實機等待中換篇與 no-op view.save 寫入次數，因本輪採隔離 Node 探針並讀取既有實機紀錄；未測 iPhone／跨裝置 iCloud，這批任務明列不需 iPhone，既有結果也不足以證明新的同步時序。
+
+## Claude 核對再審（2026-10-29）
+
+狀態：R2 續同意、已重現、已修；V5 的 backlog 觸發點同意，補了 Windows 情境（待實機跑）。
+
+**R2 續**：用你的 CodeMirror 探針重現 `{ closeResolvedBeforePersist: true, applies: 1, persists: 1 }`。原因同你寫的：`active` 到 `persist()` 包住 Promise 時才設，`editor.persist()` 先執行、裡面同步 `close()` 時讀到的是 `null`。
+
+- 修正（`ae7102c`）：`active` 改成這份工作的 I/O 期間，`begin()` 建立、`end()` 解除；`persist()` 不再管它。`begin` 到 `end` 之間只有寫進磁碟那一步會等，那一步照舊有 `writeTimeout`，所以 `close()` 最多等那麼久。`apply`、`persist` 裡關閉時保存照常寫完、回 `saved`（編輯器已經改過，不報成沒改字）。`5855aa7` 的「準備之後查 `closed`」保留：那時還沒碰編輯器，停下來比寫完單純。
+- 測試：「L2 R2 續」兩則（`apply` 裡、`persist` 回傳之前同步 `close()`），在保存放行前斷言 `close()` 沒完成、磁碟沒變，放行後回 `saved`、磁碟和編輯器都有 ID。舊程式兩則都在「close() 在保存結束之前就完成了」失敗。你的探針在新程式回 `closeResolvedBeforePersist: false`。測試在斷言失敗時也會放行保存（第一次寫時沒放行，舊程式上收尾的 `close()` 會卡住，不是失敗）。
+- 任務說明 §5 補了這一句；604 項通過。
+
+**V5 的觸發點**：同意，`140805` 那次 Windows 回歸就碰到了，不能把相同結果當成結案。`save-flow` 加了一個情境（`7c1947a`）：先讓另一個分頁的 `view.save()` 停住，這篇的存檔排在它後面，換篇之後才放行；預期提示「剛剛改過」、兩篇都沒被寫（check `V5queued`）。同一個 tick 搶不到換篇前面，所以要靠前一份存檔佔住寫入的那一列。測試 vault 現在被 iCloud 佔位檔的 session 用著（15:00 裝了它的建置），等它用完再跑，結果補在下面；通過就刪掉 backlog 那一列。

@@ -157,7 +157,7 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
 
 - 不再接新的寫入，新的與排隊中的都回 `blocked closed`。
 - 正在進行、還沒到第 4 步的：回 `blocked closed`，不改字。
-- 已經在 I/O 的（等 `persist` 或 `modify`）：`close()` 等它的結果明確才結束，最多等 `writeTimeout`，停用外掛不會一直卡住；之後不登記核對、不採用、不通知監聽者，工作回 `saved`（寫成了；沒有改字的回它原本的結果，同 §4 第 3 點）或 `failed`（失敗或逾時）。已寫進磁碟的內容，下次載入照實讀回。準備時監聽者同步 `close()`（準備會通知監聽者）算還沒寫：回 `blocked closed`，不改字（Codex L2 的 R2）。
+- 已經在 I/O 的（等 `persist` 或 `modify`）：`close()` 等它的結果明確才結束，最多等 `writeTimeout`，停用外掛不會一直卡住；之後不登記核對、不採用、不通知監聽者，工作回 `saved`（寫成了；沒有改字的回它原本的結果，同 §4 第 3 點）或 `failed`（失敗或逾時）。已寫進磁碟的內容，下次載入照實讀回。準備時監聽者同步 `close()`（準備會通知監聽者）算還沒寫：回 `blocked closed`，不改字（Codex L2 的 R2）。`editor.apply()`、`editor.persist()` 裡同步 `close()` 算已經在寫：`close()` 等這份保存結束，工作照常寫完、回 `saved`（Codex L2 再審）。
 - 其餘照舊：等讀取的那一列與紀錄的 writer。
 
 ## 6. 取消舊日作答
