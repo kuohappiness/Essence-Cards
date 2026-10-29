@@ -427,3 +427,21 @@ void test('備份（Codex 第三次查核 T1）：暫存檔寫好後備份資料
   assert.equal(await readFile(join(to, swapped), 'utf8'), 'other process evidence');
   assert.deepEqual(await readdir(to + '移開'), [swapped]);
 });
+
+void test('還原（Codex 第三次查核 T2）：全庫 ID 掃描期間目標才被同步改掉時不蓋掉，跳過並收掉暫存檔', async t => {
+  const A = 'Essence Cards/A.md', B = 'Essence Cards/B.md';
+  const vault = await makeVault(t, { [A]: goal('aaa111'), [B]: goal('bbb222') });
+  const zip = await backup(t, vault);
+  await put(vault, A, goal('aaa111', '改過'));
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path } = await makePlan(options);
+  // 掃到 B 的時候，A 才被同步改掉（暫存檔寫好、改名前的那段掃描期間）。
+  const scan = async (file: string): Promise<Uint8Array> => {
+    if (file.endsWith('B.md')) await put(vault, A, goal('aaa111', '掃描期間同步來的'));
+    return new Uint8Array(await readFile(file));
+  };
+  const result = await applyPlan({ ...options, plan: path, seams: { scan } });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome, file.reason]), [[A, '跳過', '還原期間改過；重跑 --plan 看新的差異']]);
+  assert.equal(await read(vault, A), goal('aaa111', '掃描期間同步來的'));
+  assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), []);
+});

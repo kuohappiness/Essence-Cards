@@ -24,8 +24,11 @@ export interface RestoreOptions {
   now?: () => number;
   offset?: (ms: number) => number;
   random?: () => string;
-  /** 測試用：把內容寫進剛建立的暫存檔或還原檔的替身（模擬空間不足、寫的時候資料夾被換掉）。 */
-  seams?: { write?: WriteNew };
+  /**
+   * 測試用：把內容寫進剛建立的暫存檔或還原檔的替身（模擬空間不足、寫的時候資料夾被換掉）；
+   * 寫入前全庫掃描讀卡組的替身（模擬掃描期間才到的修改）。
+   */
+  seams?: { write?: WriteNew; scan?: (path: string) => Promise<Uint8Array> };
 }
 
 /** 寫到備份資料夾旁（不進 repo）的計畫檔：--apply 用它確認還是同一個 vault、同一份備份，以及每個檔在計畫時的樣子。 */
@@ -167,6 +170,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
   const offset = (options.offset ?? (ms => -new Date(ms).getTimezoneOffset()))(now);
   const random = options.random ?? (() => randomBytes(2).toString('hex'));
   const write = options.seams?.write;
+  const scan = options.seams?.scan ?? (async (path: string) => new Uint8Array(await readFile(path)));
   // 過渡工具讀不到 Obsidian 存的裝置碼：平台名稱加隨機 4 碼，這次還原寫的還原檔都用它（syntax §5-3）。
   const device = platformName() + '-' + random();
   const saved = JSON.parse(await readFile(options.plan, 'utf8')) as PlanFile;
@@ -236,15 +240,16 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
         }
       }
       if (temporary === null) throw Error('找不到沒用過的暫存檔名');
-      // 寫的時候資料夾被換成連結，就不跟著連結讀目標（Codex 中途查核 F3）。
+      // 寫的時候資料夾被換成連結，就不跟著連結讀（Codex 中途查核 F3）。
       await assertNoLinks(vault, folder);
-      if (await shaOf(target) !== expected) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 改名前重新讀現在的全部卡組：前面寫好的檔又被同步改回來、沒選的卡組或新出現的卡組占用了要加回的 ID，就不寫（Codex 再查 R2）。
       if (file.target !== null && isDeckPath(file.target)) {
-        const taken = await occupied(vault, rel, bytes, same);
+        const taken = await occupied(vault, rel, bytes, same, scan);
         if (taken) { await giveUp('跳過', taken); continue; }
       }
+      // 掃描完才最後一次確認目標：寫暫存檔與全庫掃描都要時間，這段期間才到的修改也不能蓋掉（Codex 第三次查核 T2）。
       await assertNoLinks(vault, folder);
+      if (await shaOf(target) !== expected) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 資料夾在這段時間被換掉時，那個位置是別人的檔，不能拿來蓋目標（Codex 第三次查核 T1）。
       if (!await isOwn(temporary.path, temporary.identity)) throw Error(temporary.path + ' 已經不是這次寫的暫存檔');
       await rename(temporary.path, target);
@@ -288,13 +293,13 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
 }
 
 /** 要寫進 rel 的卡組（bytes）的學習目標 ID，現在有沒有在別篇：重新讀現在全部的卡組。讀不到的卡組也擋住（確定不了）。 */
-async function occupied(vault: string, rel: string, bytes: Uint8Array, same: (path: string) => string): Promise<string | null> {
+async function occupied(vault: string, rel: string, bytes: Uint8Array, same: (path: string) => string, read: (path: string) => Promise<Uint8Array>): Promise<string | null> {
   const mine = new Set(deckIds(bytes));
   if (mine.size === 0) return null;
   for (const path of (await listTree(vault, ESSENCE_ROOT)).filter(isDeckPath)) {
     if (same(path) === same(rel)) continue;
     let text: Uint8Array;
-    try { text = new Uint8Array(await readFile(join(vault, path))); } catch { return `讀不到「${path}」，確定不了學習目標 ID 有沒有重複；重跑 --plan`; }
+    try { text = await read(join(vault, path)); } catch { return `讀不到「${path}」，確定不了學習目標 ID 有沒有重複；重跑 --plan`; }
     for (const id of deckIds(text)) if (mine.has(id)) return `學習目標 ID ${id} 現在在「${path}」（還原期間才出現的）；重跑 --plan`;
   }
   return null;
