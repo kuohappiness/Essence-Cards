@@ -48,7 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
-| 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同；升版時改了 7 個寫死版號的測試 |
+| 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同，電腦與 iPhone 重開後都記下 `0.1.0+a4922fa` 的版本行；升版時改了 7 個寫死版號的測試 |
 | 2026-10-29 | 雲端佔位檔的 Windows 實測與存檔受阻的提示（[任務說明](../tasks/icloud-placeholders.md)〈結果〉，合併進 `main` 的 `9c07caa`，754 個測試）：追加寫入舊內容不變；iCloud 停著時讀取 5 ms 失敗、剛重開時卡 60 秒；iCloud 沒在跑時追加的紀錄不會上傳（使用者選不改程式、記技術債）；受阻時存檔、按鈕與小視窗都說「讀取完成後請再按一次存檔」 |
 | 2026-10-29 | 更新防線第二部分合併進 `main`（`1308e58`，[任務說明](../tasks/update-safeguards.md)、[L2 報告與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）：每台裝置記版本行，讀不懂的卡組與紀錄先停著、不出題也不寫；Codex L2 加三次再審後通過，合併後 747 個測試通過；開發命令結果檔改記 BUILD（`b6b39bb`），回看按鈕與比較轉接器記技術債 |
 | 2026-10-29 | `state` 的讀寫先後與寫入協調合併進 `main`（`70ba562`，[任務說明](../tasks/state-writes.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)）：寫入排成一列、先讀完待讀、一個門檻，存檔寫進磁碟並核對後才採用；Codex L2 三輪後通過，合併後 673 個測試通過；V6 記成已知限制（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)） |
