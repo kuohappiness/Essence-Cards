@@ -290,6 +290,16 @@ export function createState(options: StateOptions): State {
   }
   /** 能寫這個目標的紀錄：不是讀不懂的紀錄行停掉的、紀錄不是不完整、不在需要新版的卡組裡（§5-2、§2-1）。 */
   const answerable = (lt: string): boolean => !history.incomplete && !history.held.includes(lt) && !gatedIds.has(lt);
+  /**
+   * answer 能不能寫這一行。分類和 encodeEntry 同一個順序（Codex L2 的 F2）：有 undo 就是取消，看它指到的每一筆作答（多帶的欄位
+   * 不寫出、也不看；找不到那一筆照舊寫）；有 set 是變更，學習目標看 lt，卡組的狀態是從卡組的內容得出的，需要新版的卡組不寫（§2-1）；
+   * 其他是作答，看 lt。
+   */
+  function permits(entry: NewEntry): boolean {
+    if ('undo' in entry) return history.reviews.every(review => review.t !== entry.undo || answerable(review.lt));
+    if ('set' in entry) return 'deck' in entry ? !gated.includes(entry.deck) : 'lt' in entry ? answerable(entry.lt) : true;
+    return answerable(entry.lt);
+  }
   /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（§2-1）。 */
   const blockedText = (path: string, text?: string): boolean => gated.includes(path) || (text !== undefined && needsUpdate(parseDeck(text)));
   function replan(): void {
@@ -713,10 +723,7 @@ export function createState(options: StateOptions): State {
     },
     answer(entry) {
       if (!loaded) throw Error('state 還沒 ready');
-      const lts = 'lt' in entry ? [entry.lt] : 'undo' in entry ? history.reviews.filter(review => review.t === entry.undo).map(review => review.lt) : [];
-      if (!lts.every(answerable)) return null;
-      // 卡組的狀態變更是從卡組的內容得出的：需要新版的卡組不寫（§2-1）。
-      if ('deck' in entry && gated.includes(entry.deck)) return null;
+      if (!permits(entry)) return null;
       const t = record(entry);
       if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
       return t;

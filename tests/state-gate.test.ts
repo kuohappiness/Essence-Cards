@@ -2,6 +2,7 @@ import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry } from '../src/core/study/index.ts';
+import type { NewEntry } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
@@ -158,4 +159,28 @@ void test('2-2 需要新版的卡組，卡組的狀態變更也不寫：那是�
   const h = await setup(t, { [NEW]: marked('9.0.0', goal('aaaaab')), [P]: goal('bbbbbb') });
   assert.equal(h.state.answer({ set: 'status', deck: NEW, val: '暫停' }), null);
   assert.equal(typeof h.state.answer({ set: 'status', deck: P, val: '暫停' }), 'string');
+});
+
+// Codex L2 的 F2：取消多帶 lt 時（型別上允許），閘門要和 encodeEntry 用同一個分類順序：先看 undo 指到的作答，多帶的 lt 不寫出、也不看。
+void test('L2 F2 取消多帶 lt：照 encodeEntry 的分類先看 undo 指的作答；被停的照樣拒絕，可寫的取消不被多帶的欄位誤擋', async t => {
+  const own = 'Essence Cards/紀錄/2026-10 Windows-2c9e.jsonl';
+  const h = await setup(t, { [P]: goal('aaaaaa') + goal('bbbbbb') });
+  const first = h.state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
+  const second = h.state.answer({ lt: 'bbbbbb', r: 'good', v: '12345678' });
+  assert.ok(first !== null && second !== null);
+  await h.state.flush();
+  await h.edit(LOG, JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', need: '9.0.0', lt: 'aaaaaa' }) + '\n');
+  assert.deepEqual([h.state.canAnswer('aaaaaa'), h.state.canAnswer('bbbbbb')], [false, true]);
+  const before = h.texts.get(own);
+  const blocked: NewEntry = { undo: first, lt: 'bbbbbb' };
+  assert.equal(h.state.answer(blocked), null);
+  await h.state.flush();
+  assert.deepEqual([h.texts.get(own), h.state.history().cancelled], [before, []]);
+  const allowed: NewEntry = { undo: second, lt: 'aaaaaa' };
+  const t3 = h.state.answer(allowed);
+  assert.ok(t3 !== null);
+  await h.state.flush();
+  assert.deepEqual(h.state.history().cancelled, [second]);
+  // 寫出的是單純的取消（多帶的 lt 不寫出）。
+  assert.equal((h.texts.get(own) ?? '').trim().split('\n').at(-1), encodeEntry(t3, { undo: second }));
 });
