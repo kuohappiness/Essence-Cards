@@ -650,7 +650,8 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
       leaf.detach();
       // 存檔排隊時換篇（state-writes 的 L2「請特別看」第 9 點）：同一個 tick 換篇搶不到存檔前面，所以先讓另一篇的存檔停在
       // view.save()（包住那個 view 的 save），這篇的存檔排在它後面；換篇之後才放行。輪到這篇時編輯器已經換了：提示「剛剛改過」，
-      // 這篇和換到的那篇都沒被寫。
+      // 存檔沒寫這篇也沒寫換到的那篇。換篇等於離開這篇，離開筆記的備援約 1 秒後會補上這篇的 ID（W5 §8-6），所以「沒寫這篇」
+      // 要在存檔一回來就看，之後補上的另外記。
       {
         const first = await fresh(), queued = await fresh(), target = await fresh();
         const a = await open(app, first.file), b = await open(app, queued.file);
@@ -667,9 +668,10 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
         await holding;
         await saving;
         a.view.save = original;
+        const queuedUntouched = await files.read(queued.path) === FLOW_TEXT;
         await sleep(1500);
         out.V5queued = { notices: host.devLog.notices.slice(queuedNotices), staleExpected: TIPS.stale,
-          queuedUntouched: await files.read(queued.path) === FLOW_TEXT, targetUntouched: await files.read(target.path) === FLOW_TEXT,
+          queuedUntouched, queuedFilledOnLeave: ids(await files.read(queued.path)), targetUntouched: await files.read(target.path) === FLOW_TEXT,
           steps: [await snap('之後（排隊的那篇）', queued.path, null), await snap('之後（換到的那篇）', target.path, b.view)] };
         a.leaf.detach();
         b.leaf.detach();
