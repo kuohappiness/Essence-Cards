@@ -27,6 +27,8 @@ function host(texts: Record<string, string>, options: Omit<StubOptions, 'texts'>
 }
 
 const deck = { 'Essence Cards/a.md': '---\n科目: 自然\n---\n- 目標 ^aaaaaa\n    - Q :: A\n' };
+/** 寫入動作（h.writes）裡不是複習紀錄的：紀錄檔本身，以及第一次寫紀錄時建立的上層資料夾。 */
+const notLog = (write: string): boolean => !/^(?:folder Essence Cards(?:\/紀錄)?|\w+ Essence Cards\/紀錄\/.*)$/.test(write);
 /** 外掛會把錯誤印到 console.error；測試期間收起來，不讓輸出看起來像失敗。 */
 function quiet(t: test.TestContext): void {
   const original = console.error;
@@ -112,7 +114,8 @@ void test('接線：開發版在手機上沒有 lock、save 命令，直接用 U
     if (desktop) continue;
     for (const run of ['save', 'lock']) h.uri({ run });
     await wait(100);
-    assert.deepEqual(h.writes, []);
+    // 紀錄之外什麼都沒寫（每台裝置載入時在自己的紀錄寫版本行，任務說明 2-1）。
+    assert.deepEqual(h.writes.filter(notLog), []);
     assert.deepEqual(h.notices.filter(n => n.includes('只在電腦上執行')).length, 2);
     assert.equal(h.text(trial), '- 能說明蒸發 ^aaaaaa\n    - Q :: A\n');
   }
@@ -128,20 +131,65 @@ void test('接線：重新啟用外掛時已經開著的卡組，啟用時不寫
   h.layoutReady();
   await h.plugin.state?.ready();
   await wait(1100);
-  assert.deepEqual(h.writes, []);
+  assert.deepEqual(h.writes.filter(notLog), []);
   h.closeTabs();
   await wait(1200);
-  assert.deepEqual(h.writes, ['process ' + path]);
+  assert.deepEqual(h.writes.filter(notLog), ['process ' + path]);
   assert.match(h.text(path) ?? '', /^- 新目標 \^[a-z0-9]{6}\n/);
 });
 
 // W6 §7 前提：「版本」命令顯示建置時寫進 main.js 的版本（manifest 的版本加 git commit），不在執行時讀 manifest。
-void test('W6 版本命令顯示建置版本', () => {
+void test('W6 版本命令顯示建置版本；layout ready 之前只有版本', async () => {
   const h = host(deck);
   h.plugin.onload();
   h.commands.get('version')?.callback?.();
-  assert.deepEqual(h.notices, ['Essence Cards：0.0.1+test']);
+  await wait(20);
+  assert.deepEqual(h.notices, ['Essence Cards：0.0.1+test\n外掛還在載入，稍後再看各裝置的版本']);
   h.plugin.onunload();
+});
+
+// 任務說明 2-1：BUILD 由外層傳進 state；載入時在這台的紀錄寫版本行，「版本」命令列出每台裝置最後回報的版本。
+void test('2-1 接線：載入後這台的紀錄有版本行，版本命令列出這台與別台裝置的最後回報', async t => {
+  const phone = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
+  const h = host({ ...deck, [phone]: JSON.stringify({ t: '2026-10-30T07:02:11.020+08:00', set: 'app', val: '0.0.1+5d357fa' }) + '\n' }, { desktop: true });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  // 版本命令先等排隊的紀錄寫完才顯示。
+  h.commands.get('version')?.callback?.();
+  await wait(50);
+  const own = [...h.texts.keys()].find(path => /^Essence Cards\/紀錄\/\d{4}-\d{2} Windows-[0-9a-f]{4}\.jsonl$/.test(path));
+  assert.ok(own, '這台的紀錄檔');
+  assert.deepEqual((h.text(own) ?? '').trim().split('\n').map(line => (JSON.parse(line) as { set: string; val: string })).map(line => [line.set, line.val]), [['app', '0.0.1+test']]);
+  const device = own.slice(own.lastIndexOf(' ') + 1, -'.jsonl'.length);
+  const lines = (h.notices.at(-1) ?? '').split('\n');
+  assert.deepEqual(lines.slice(0, 3), ['Essence Cards：0.0.1+test', `這台（${device}）：已記下這一版`, '各裝置最後回報的版本（不是即時狀態：還沒同步或還沒重開的裝置看不出來）：']);
+  assert.ok(lines.includes('・iPhone-7f3a：0.0.1+5d357fa（2026-10-30 07:02）'), lines.join('\n'));
+  assert.ok(lines.some(line => line.startsWith(`・${device}：0.0.1+test（`)), lines.join('\n'));
+});
+
+// 任務說明 2-2：入口的「給家長」一區還沒做，先在載入時用 Obsidian 的通知提示一次。
+void test('2-2 接線：有內容需要新版時，載入後提示一次；版本命令列出是哪幾篇', async t => {
+  const newer = 'Essence Cards/新寫法.md';
+  const h = host({ ...deck, [newer]: '---\n需要版本: 9.0.0\n---\n- 目標 ^bbbbbb\n    - Q :: A\n' }, { desktop: true });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(20);
+  assert.deepEqual(h.notices, ['Essence Cards：有內容需要新版才讀得懂，請更新外掛']);
+  h.commands.get('version')?.callback?.();
+  await wait(50);
+  assert.deepEqual((h.notices.at(-1) ?? '').split('\n').slice(-2), ['有內容需要新版才讀得懂，請更新外掛：1 篇卡組不出題', '・' + newer]);
+  // 沒有需要新版的內容時不提示。
+  const plain = host(deck, { desktop: true });
+  t.after(() => { plain.plugin.onunload(); });
+  plain.plugin.onload();
+  plain.layoutReady();
+  await plain.plugin.state?.ready();
+  await wait(20);
+  assert.deepEqual(plain.notices, []);
 });
 
 // 技術債 A10：開發版的接線集中在 dev 模組。main.ts 只在一處看 DEV（載入 dev 模組），提示、事件與鎖定的紀錄由 dev 模組訂閱。

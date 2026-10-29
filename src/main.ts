@@ -9,6 +9,7 @@ import { loadDeviceCode } from './obsidian/device.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
+import { versionText } from './obsidian/version.ts';
 import { createState, type ErrorSource, type State } from './state/index.ts';
 import { openReview, registerStart, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
 import type { Pick } from './core/study/index.ts';
@@ -23,6 +24,10 @@ const NOTICES: Partial<Record<ErrorSource, string>> = {
   write: 'Essence Cards：複習紀錄暫時寫不進去，會自動再試',
   read: 'Essence Cards：有些卡組或複習紀錄暫時讀不到，會自動再試',
 };
+/** 有內容需要新版才讀得懂（任務說明 2-2）：入口的「給家長」一區做好之前，載入時用通知提示一次。 */
+const UPDATE_NOTICE = 'Essence Cards：有內容需要新版才讀得懂，請更新外掛';
+/** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
+const VERSION_WAIT = 2000;
 
 /** 編輯器開的檔案（CodeMirror 的 state 裡 Obsidian 放的資訊）。 */
 // obsidian.d.ts 用 CommonJS 的 @codemirror/state 型別，這裡是 ESM 的；同一個執行期物件，只是型別宣告分成兩份。
@@ -71,7 +76,7 @@ export default class EssenceCardsPlugin extends Plugin {
     this.addCommand({
       id: 'version',
       name: '版本',
-      callback: () => { new Notice('Essence Cards：' + BUILD); },
+      callback: () => { void this.showVersion(); },
     });
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
     if (Platform.isDesktopApp) this.ids = this.wireIds();
@@ -170,16 +175,34 @@ export default class EssenceCardsPlugin extends Plugin {
     new Notice(notice);
   }
 
+  /** 「版本」命令（任務說明 2-1）：先等排隊的紀錄寫完，這台的版本行才照實顯示；寫不完也照樣顯示。 */
+  private async showVersion(): Promise<void> {
+    const state = this.state;
+    if (state) await Promise.race([state.flush().catch(() => {}), new Promise(resolve => window.setTimeout(resolve, VERSION_WAIT))]);
+    // 內容好幾行、要對著看：留到使用者關掉。
+    new Notice(versionText(BUILD, this.device, this.state), 0);
+  }
+
+  /** 有內容需要新版才讀得懂：這次載入只提示一次（載入完，或之後重讀時才出現）。 */
+  private updateWarned = false;
+  private warnUpdate(): void {
+    const blocked = this.state?.blocked();
+    if (this.updateWarned || !blocked || (!blocked.decks.length && !blocked.targets.length && !blocked.all)) return;
+    this.updateWarned = true;
+    new Notice(UPDATE_NOTICE);
+  }
+
   private start(files: Files): void {
     // onLayoutReady 的回呼不會隨外掛停用取消：layout ready 之前就停用時不建立 state。
     if (this.unloaded) return;
-    this.state = createState({ files, device: this.device, fillIds: Platform.isDesktopApp, onError: (error, source) => { this.report(error, source); } });
+    // BUILD 由這裡傳進 state，核心不讀全域（任務說明 2-1）：版本行與讀取閘門都照它。
+    this.state = createState({ files, device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, onError: (error, source) => { this.report(error, source); } });
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.ids?.saver.refresh(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); this.warnUpdate(); });
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
     // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。
-    this.state.ready().then(() => { this.ids?.saver.refresh(); }, () => {});
+    this.state.ready().then(() => { this.ids?.saver.refresh(); this.warnUpdate(); }, () => {});
   }
 }
