@@ -51,13 +51,13 @@ void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: root });
   assert.equal((await installVault({ vault, local })).kind, 'test');
   // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
-  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.0\.1\+[0-9a-f]{7,}(\.dirty)?\n/);
+  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.1\.0\+[0-9a-f]{7,}(\.dirty)?\n/);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
   }
   assert.deepEqual(await tree(join(root, 'src')), before);
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Record<string, unknown>;
-  assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.0.1', '1.8.7', false]);
+  assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.1.0', '1.8.7', false]);
 });
 
 void test('W1 沒有 CSS 時 styles.css 是空字串，隔離在暫存專案', async t => {
@@ -83,7 +83,7 @@ void test('W1 新增模組資料夾與 CSS 不會誤報：建置成功、只 req
     'state/a.ts': 'export const a = "a";', 'dev/b.ts': 'export const b = "b";', 'obsidian/c.css': 'c{}',
   });
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: obsidian; version 0\.0\.1(\+\S+)?\n/);
+  assert.match(stdout, /require: obsidian; version 0\.1\.0(\+\S+)?\n/);
   assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), 'c{}');
 });
 void test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
@@ -116,12 +116,12 @@ void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI�
   // W6（R14）：命令代號 review-script、open-times、w6-save（voices 和正式版的 getVoices 撞名，不當記號）、結果資料夾、
   // 截圖與照常繪製用的 Electron 呼叫。
   const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', '"dev-"', '"C14"', 'Essence W5',
-    '"review-script"', '"open-times"', '"w6-save"', 'Essence W6', 'setBackgroundThrottling', 'capturePage'];
+    '"review-script"', '"open-times"', '"w6-save"', 'Essence W6', 'setBackgroundThrottling', 'capturePage', '"cloud-read"'];
   await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.0\.1(\+\S+)?\n/);
+  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.1\.0(\+\S+)?\n/);
   const production = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
 });
@@ -145,7 +145,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {

@@ -1,9 +1,11 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { createObsidianStub } from './helpers/obsidian.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
+import { createState } from '../src/state/index.ts';
 
 // 離開筆記時的備援（W5 §8-6、D-134）：用共用的 obsidian 替身在 Node 跑 src/obsidian/save.ts 的 wireSave，
 // 只模擬分頁與事件，不是 Obsidian 實機（實機證據在開發命令 save、a3check、t1prep／t1close）。
@@ -18,6 +20,8 @@ const code = (await build({
 })).outputFiles[0].text;
 
 const DECK = 'Essence Cards/P.md';
+/** 替身的 state 已經讀完、沒有讀不到的檔（存檔按鈕判斷受阻用，D-154）。 */
+const loadedState = { ready: () => Promise.resolve(), unread: () => [] };
 
 function setup() {
   const stub = createObsidianStub();
@@ -25,7 +29,7 @@ function setup() {
   let intervals = 0;
   const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { intervals++; return id; } };
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; opened(path: string): void; start(): void } }>(code);
-  const state = { deckStatus: () => ({ missing: 1, issues: [] }), fillIds: (path: string) => { fills.push(path); return Promise.resolve(true); }, onChange: () => () => {} };
+  const state = { deckStatus: () => ({ missing: 1, issues: [] }), fillIds: (path: string) => { fills.push(path); return Promise.resolve(true); }, onChange: () => () => {}, ...loadedState };
   const saver = wireSave({ plugin, state: () => state, notify() {}, onError() {} });
   return { saver, leaves: stub.leaves, leaf: stub.leaf, deferred: stub.deferred, fills, fire: stub.fire, intervals: () => intervals };
 }
@@ -181,13 +185,15 @@ void test('2-2 需要新版的卡組：按鈕說明需要更新，存檔被擋�
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
   const notified: string[] = [];
   const state = {
-    deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), onChange: () => () => {},
+    deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), onChange: () => () => {}, ...loadedState,
     save: () => Promise.resolve({ kind: 'blocked', reason: 'needs-update' }),
   };
   const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
   const leaf = stub.leaf(DECK);
   stub.leaves.push(leaf);
   saver.refresh();
+  // 存檔按鈕等 ready() 回來才知道讀完了（D-154 的受阻說明），之後自己再更新一次。
+  await wait(0);
   const [button] = (leaf.view as { actions: { label: string }[] }).actions;
   const tip = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
   assert.equal(button.label, tip);
@@ -204,7 +210,7 @@ void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同
   const handles: Handle[] = [];
   let finish: () => void = () => {};
   const state = {
-    deckStatus: () => ({ missing: 0, issues: [] }), onChange: () => () => {},
+    deckStatus: () => ({ missing: 0, issues: [] }), onChange: () => () => {}, ...loadedState,
     save: (editor: Handle) => { handles.push(editor); return new Promise(resolve => { finish = () => { resolve({ kind: 'unchanged' }); }; }); },
   };
   const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
@@ -241,7 +247,7 @@ void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一
   const choices: string[] = [];
   let finish: (result: unknown) => void = () => {};
   const state = {
-    deckStatus: () => ({ missing: 0, issues: [issue] }),
+    deckStatus: () => ({ missing: 0, issues: [issue] }), ...loadedState,
     onChange: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     save: () => Promise.resolve({ kind: 'unchanged' }),
     resolve: (_issue: unknown, choice: string) => { choices.push(choice); return new Promise(resolve => { finish = resolve; }); },
@@ -265,6 +271,130 @@ void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一
   assert.ok(buttons().every(button => !button.disabled), '結果回來後解除');
 });
 
+// D-154 第 2 點（tasks/icloud-placeholders.md §2）：存檔受阻（這台電腦會補 ID，但還沒讀完或有檔案讀不到）時當下說清楚。
+// 用真的 state（記憶體 Files）做出「還沒讀完」與「讀不到」；替身的 view 把 Editor 的交易套用到自己的文字，save() 把文字寫進
+// 記憶體 Files（Obsidian 的 view.save），編輯器裡的文字一開始就已經自動存檔（和磁碟相同）。
+const BLOCKED = '筆記已自動儲存；暫時無法把新目標加入複習，讀取完成後請再按一次存檔';
+const OTHER = 'Essence Cards/Q.md';
+const WITH_IDS = '- 能說明蒸發 ^aaaaaa\n    - 水變成水蒸氣叫什麼？ :: 蒸發\n';
+const NEW_TARGET = WITH_IDS + '- 能說明凝結\n    - 水蒸氣變成水叫什麼？ :: 凝結\n';
+
+interface BoundView { file: { path: string } | null; value: string; actions: { label: string }[]; editor: unknown; save: () => Promise<void> }
+async function blockedSetup(t: TestContext, deck: string, block: 'unread' | 'loading' | 'none') {
+  const memory = createMemoryFiles({ [DECK]: deck, [OTHER]: '- 能說明 Q ^bbbbbb\n    - Q？ :: Q\n' });
+  if (block === 'unread') memory.failing.add(OTHER);
+  const held = block === 'loading' ? memory.holdRead(OTHER) : null;
+  const state = createState({ files: memory.files, device: 'PC-test', delay: 0, fillIds: true, random: () => 0 });
+  // 斷言在放行之前失敗時，close() 不能一直等那個被攔住的讀取。
+  t.after(() => { held?.release(); return state.close(); });
+  // main.ts 一建立 state 就叫 ready()。
+  const ready = state.ready();
+  if (block !== 'loading') await ready;
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
+  const notices: string[] = [];
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notices.push(message); }, onError(error: unknown) { throw error; } });
+  const leaf = stub.leaf(DECK);
+  stub.leaves.push(leaf);
+  const view = leaf.view as BoundView;
+  view.value = deck;
+  view.editor = {
+    getValue: () => view.value,
+    offsetToPos: (offset: number) => ({ offset }),
+    // 同一次交易的變更都以交易前的文字為準（CodeMirror）：從後往前套。
+    transaction({ changes }: { changes: { from: { offset: number }; to: { offset: number }; text: string }[] }) {
+      for (const change of [...changes].sort((a, b) => b.from.offset - a.from.offset)) view.value = view.value.slice(0, change.from.offset) + change.text + view.value.slice(change.to.offset);
+    },
+  };
+  view.save = () => { if (memory.texts.get(DECK) !== view.value) memory.write(DECK, view.value); return Promise.resolve(); };
+  const settle = () => wait(30);
+  /** 更新按鈕之後的說明（main.ts 在 onChange、切換分頁時更新）。 */
+  const tip = () => { saver.refresh(); return view.actions.at(-1)?.label; };
+  return { memory, state, saver, view, notices, tip, settle, release: () => held?.release(), ready, modals: stub.modals };
+}
+const ids = (text: string) => [...text.matchAll(/ \^([a-z0-9]{6})$/gm)].map(match => match[1]);
+
+void test('B1 有檔案讀不到、文字有沒 ID 的目標：按存檔不改字，提示與按鈕說明都是受阻那一句；恢復後再按，補上 ID', async t => {
+  const h = await blockedSetup(t, NEW_TARGET, 'unread');
+  assert.deepEqual(h.state.unread(), [OTHER]);
+  assert.equal(h.tip(), BLOCKED);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED]);
+  assert.equal(h.view.value, NEW_TARGET, '不改字');
+  assert.equal(h.memory.texts.get(DECK), NEW_TARGET);
+  assert.equal(h.tip(), BLOCKED);
+  h.memory.failing.delete(OTHER);
+  h.memory.notify(OTHER);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), []);
+  assert.equal(h.tip(), '筆記已自動儲存；有 1 個學習目標尚未加入複習', '恢復後回到原本的說明');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED, '1 個學習目標已加入複習']);
+  assert.equal(ids(h.view.value).length, 2);
+  assert.equal(h.memory.texts.get(DECK), h.view.value);
+  assert.equal(h.tip(), '筆記已自動儲存；學習目標都已加入複習');
+});
+
+void test('B2 還沒讀完（ready() 還沒完成）：同 B1；讀完之後按鈕回到原本的說明，再按照常補', async t => {
+  const h = await blockedSetup(t, NEW_TARGET, 'loading');
+  assert.equal(h.tip(), BLOCKED, '不能說「學習目標都已加入複習」');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED]);
+  assert.equal(h.view.value, NEW_TARGET);
+  h.release();
+  await h.ready;
+  await h.settle();
+  assert.equal(h.view.actions.at(-1)?.label, '筆記已自動儲存；有 1 個學習目標尚未加入複習', 'ready() 完成時自己更新按鈕');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED, '1 個學習目標已加入複習']);
+  assert.equal(ids(h.view.value).length, 2);
+});
+
+void test('B3 受阻但每個目標都有 ID：按存檔不提示；按鈕說明照樣是受阻那一句', async t => {
+  const h = await blockedSetup(t, WITH_IDS, 'unread');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, []);
+  assert.equal(h.view.value, WITH_IDS);
+  assert.equal(h.tip(), BLOCKED);
+});
+
+void test('B4 受阻時在小視窗按「還原」與「當成新的」：提示受阻那一句，不是「剛剛改過」；問題保留；恢復後照常還原', async t => {
+  const h = await blockedSetup(t, WITH_IDS, 'none');
+  // 在 Obsidian 以外弄丟 ID（D-134）：重讀時出現待處理的問題。
+  const lost = '- 能說明蒸發\n    - 水變成水蒸氣叫什麼？ :: 蒸發\n';
+  h.memory.write(DECK, lost);
+  h.view.value = lost;
+  await h.settle();
+  assert.equal(h.state.deckStatus(DECK).issues.length, 1);
+  h.memory.failing.add(OTHER);
+  h.memory.notify(OTHER);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), [OTHER]);
+  for (const [i, button] of [[0, 0], [1, 1]] as const) {
+    await h.saver.save(h.view);
+    assert.equal(h.modals.length, i + 1, '有待處理的問題時開小視窗');
+    const buttons = h.modals[i].contentEl.querySelectorAll('button');
+    assert.equal(buttons.length, 2, '還原與當成新的');
+    buttons[button].click();
+    await h.settle();
+    assert.equal(h.notices.at(-1), BLOCKED);
+    assert.ok(!h.notices.includes('這篇筆記剛剛改過，請再按一次存檔'));
+    assert.equal(h.state.deckStatus(DECK).issues.length, 1, '問題保留');
+    assert.equal(h.view.value, lost);
+  }
+  h.memory.failing.delete(OTHER);
+  h.memory.notify(OTHER);
+  await h.settle();
+  const before = h.notices.length;
+  await h.saver.save(h.view);
+  h.modals[2].contentEl.querySelectorAll('button')[0].click();
+  await h.settle();
+  assert.deepEqual(h.state.deckStatus(DECK).issues, []);
+  assert.deepEqual(ids(h.view.value), ['aaaaaa'], '還原原本的 ID');
+  assert.ok(!h.notices.slice(before).includes(BLOCKED));
+});
+
 // Codex L2 的 R1：小視窗開著時這一篇變成需要新版（例如編輯器的文字帶了新寫法），resolve 回 blocked needs-update：
 // 照實說需要更新外掛，不說「請再按一次存檔」（重按也不會成功）。其他結果照舊。
 void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛；stale、failed 照舊', async () => {
@@ -279,7 +409,7 @@ void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
     const notified: string[] = [];
     const state = {
-      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {},
+      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
       save: () => Promise.resolve({ kind: 'unchanged' }),
       resolve: () => Promise.resolve(result),
     };
@@ -289,4 +419,71 @@ void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛
     await wait(0);
     assert.deepEqual(notified, [tip], result.kind);
   }
+});
+
+// 合併更新防線第二部分時（兩邊都改了小視窗的提示）：受阻時小視窗一律說受阻那一句，不看文字。目標本身有 ID 的問題（changed、
+// ambiguous）也一樣，不退回「這篇筆記剛剛改過」；需要新版照上面 L2 R1。
+void test('B4 補：受阻時小視窗的問題目標本身有 ID（changed）：提示受阻那一句', async () => {
+  for (const reason of ['unread', 'loading'] as const) {
+    const stub = createObsidianStub();
+    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+    const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'changed', restore: 'k3m9x2' };
+    const notified: string[] = [];
+    const state = {
+      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
+      save: () => Promise.resolve({ kind: 'blocked', reason }),
+      resolve: () => Promise.resolve({ kind: 'blocked', reason }),
+    };
+    const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+    const view = stub.leaf(DECK).view as { value: string };
+    view.value = '- 能說明 C ^p7q2w8\n    - C？ :: C\n';
+    await saver.save(view);
+    assert.deepEqual(notified, [], '存檔：目標都有 ID，不提示');
+    stub.modals[0].contentEl.querySelectorAll('button')[0].click();
+    await wait(0);
+    assert.deepEqual(notified, [BLOCKED], reason);
+  }
+});
+
+// 外掛架構檢查環節 5 結論第 1 條（tasks/icloud-placeholders.md §2 的 2026-10-29 補充）：
+// B6 小視窗收到 saved（已寫進磁碟、state 還在核對）：和按存檔收到 saved 一樣不提示，不說「剛剛改過」，由 state 繼續核對。
+void test('B6 小視窗按「還原」或「當成新的」收到 saved：不提示', async () => {
+  for (const button of [0, 1]) {
+    const stub = createObsidianStub();
+    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+    const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+    const notified: string[] = [];
+    const state = {
+      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
+      save: () => Promise.resolve({ kind: 'unchanged' }),
+      resolve: () => Promise.resolve({ kind: 'saved' }),
+    };
+    const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+    await saver.save(stub.leaf(DECK).view);
+    stub.modals[0].contentEl.querySelectorAll('button')[button].click();
+    await wait(0);
+    assert.deepEqual(notified, [], String(button));
+  }
+});
+
+// B7 一篇需要新版（裡面有沒 ID 的目標）、同時另有讀不到的檔：按鈕的樣子與說明是需要新版；按下時 state 的門檻先看到讀不到，
+// 提示受阻那一句；讀完再按才說需要新版。兩次說的不同，照實記下，這次不統一。
+void test('B7 需要新版、同時有讀不到的檔：按鈕說需要新版；按下先說受阻，讀完再按才說需要新版', async t => {
+  const NEEDS = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
+  const deck = '---\n科目: 自然\n需要版本: 9.0.0\n---\n' + NEW_TARGET;
+  const h = await blockedSetup(t, deck, 'unread');
+  assert.deepEqual(h.state.deckStatus(DECK), { missing: 0, issues: [], needsUpdate: true });
+  assert.equal(h.tip(), NEEDS);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED]);
+  h.memory.failing.delete(OTHER);
+  h.memory.notify(OTHER);
+  await h.settle();
+  assert.deepEqual(h.state.unread(), []);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BLOCKED, NEEDS]);
+  assert.equal(h.tip(), NEEDS);
+  assert.equal(h.view.value, deck, '一個字都沒改');
 });
