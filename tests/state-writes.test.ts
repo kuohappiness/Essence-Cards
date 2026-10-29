@@ -683,3 +683,27 @@ void test('fillIds 的結果對應（2026-10-29 確認）：沒有要改的核�
   t.mock.timers.tick(10_000);
   await assert.rejects(timing, /逾時/);
 });
+
+// Codex L2 的 R1：逾時之後才輪到的 modify 回呼（同一篇排在前一份卡住的 modify 後面）不能改檔。檔案已經刪掉或改名時，
+// 回呼拿到的是空字串，回傳它在 Files 的契約裡是「建立這個檔」，所以要真正中止 modify。
+for (const after of ['刪掉', '改名', '留著'] as const) void test(`R1 逾時之後才輪到的 modify 回呼不改檔（${after}）：同一篇的兩次 fillIds 都逾時，關閉後才放行`, async t => {
+  const h = await setup(t, { [P]: C });
+  const held = h.holdModify(P);
+  const first = h.state.fillIds(P);
+  await h.flush();
+  t.mock.timers.tick(10_000);
+  await assert.rejects(first, /逾時/);
+  const second = h.state.fillIds(P);
+  await h.flush();
+  t.mock.timers.tick(10_000);
+  await assert.rejects(second, /逾時/);
+  assert.equal(h.texts.get(P), Ca, '第一份已經寫進去');
+  if (after === '刪掉') h.remove(P);
+  if (after === '改名') h.rename(P, Q);
+  await h.state.close();
+  held.release();
+  await h.flush();
+  if (after === '留著') assert.equal(h.texts.get(P), Ca);
+  else assert.equal(h.texts.has(P), false, '舊的路徑被建立成空檔');
+  if (after === '改名') assert.equal(h.texts.get(Q), Ca);
+});

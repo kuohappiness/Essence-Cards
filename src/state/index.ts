@@ -119,6 +119,8 @@ export interface State {
 
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
+/** 工作已經結束（逾時）之後才輪到 modify 的回呼：中止 modify，不改檔也不建立。回傳原文不夠，檔案不存在時那等於建立空檔。 */
+class Ended extends Error {}
 
 /** 先讀完待讀最多幾輪（§3 第 2 步）。 */
 const DRAIN_ROUNDS = 5;
@@ -520,8 +522,8 @@ export function createState(options: StateOptions): State {
       let outcome: WriteResult | Promise<WriteResult> | null;
       try {
         await persist(files.modify(path, text => {
-          // 逾時之後才輪到回呼：這份工作已經結束，不改字。
-          if (!live) return text;
+          // 逾時之後才輪到回呼：這份工作已經結束，中止 modify（Codex L2 的 R1：檔案刪掉或改名後 text 是空字串，回傳它會建立空檔）。
+          if (!live) throw new Ended();
           if (text === '') throw new NothingToFill();
           original = text;
           // 回呼拿到的是最新的原文：重查門檻與待讀（這一篇自己除外，它最新的內容就是這份原文）；有新的待讀就不改，回到第 2 步。
