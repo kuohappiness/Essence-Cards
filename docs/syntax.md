@@ -656,10 +656,10 @@ Cards 呼叫 AI 產生草稿（製卡、加深、錯題分析、補記憶錨點�
 |---|---|
 | `format` | 固定是 `essence-cards-backup`；不是這個值就不是這個格式 |
 | `version` | 這個格式的版本，現在是 `1`。之後要加會改變意思的欄位時才升；讀的一方遇到比自己認得的大，整份當成讀不懂 |
-| `vault` | `name` 是 vault 的資料夾名稱，`path` 是這台電腦上的實際路徑（`/` 分隔），兩者在清理舊備份時用來確認是同一個 vault；`config` 是這個 vault 的設定資料夾（相對 vault 的路徑，例如 `.obsidian`），`data.json` 在 `files` 或 `absent` 裡的路徑就是 `<config>/plugins/essence-cards/data.json` |
-| `build` | 備份當時這個 vault 裝的外掛建置版本（vault 裡 `main.js` 的 `BUILD`）；讀不出來是 `null` |
+| `vault` | `name` 是 vault 的資料夾名稱，`path` 是這台電腦上的實際路徑（`/` 分隔），兩者在清理舊備份時用來確認是同一個 vault，比較時照這台電腦的檔名規則（Windows 不分大小寫）；`config` 是這個 vault 的設定資料夾（相對 vault 的路徑，例如 `.obsidian`），`data.json` 在 `files` 或 `absent` 裡的路徑就是 `<config>/plugins/essence-cards/data.json` |
+| `build` | 備份當時這個 vault 裝的外掛建置版本：過渡工具讀 vault 裡 `main.js` 的 `BUILD`，讀不出來是 `null`；外掛自己做的寫正在執行的外掛的 `BUILD`，不另外讀 `main.js`（別台裝置剛同步來新的 `main.js`、這台還沒重新載入時，兩者可能不同） |
 | `tool` | 做這份備份的程式的建置版本：外掛自己做的和 `build` 相同；過渡工具是 repo 的版本加 commit，寫法同 `BUILD` |
-| `by` | 什麼情況做的：`backup` 手動跑備份工具、`update-vault` 更新命令安裝前、`restore` 還原前先備份現況；外掛內的備份上線時再加自己的值 |
+| `by` | 什麼情況做的。過渡工具：`backup` 手動跑備份工具、`update-vault` 更新命令安裝前。外掛：`new-version` 改寫卡組之前，這台電腦還沒有這個建置版本成功備份的紀錄（第一次跑這個版本，或紀錄被清掉、記的那份找不到）；`monthly` 距離上次成功備份超過 30 天；`manual` 設定頁的「立即備份」。兩邊都用：`restore` 還原前先備份現況。讀的一方只拿來顯示，不認得的值照常讀，不當成讀不懂 |
 | `started`、`finished` | 開始讀、寫完清單的時間，格式同 §5 的 `t` |
 | `scope` | 固定的一句說明：只包含這台電腦當時看得到、讀得到的檔案 |
 | `files` | 每個檔一項，照 `path` 的字元碼排序：`path` 同 zip 裡的路徑，`size` 是位元組數，`sha256` 是原始位元組的 SHA-256（小寫十六進位） |
