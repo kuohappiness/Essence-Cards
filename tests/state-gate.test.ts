@@ -141,3 +141,9 @@ void test('2-2 取消看它指的作答：那一筆的目標後來被停掉，�
   assert.deepEqual([h.state.blocked().all, h.state.canAnswer('bbbbbb'), h.share()], [true, false, []]);
   assert.equal(h.state.answer({ lt: 'bbbbbb', r: 'good', v: '12345678' }), null);
 });
+
+void test('2-3 帶 need 的行裡的 lt 進 seen：配新 ID 時避開（D-134）', async t => {
+  const h = await setup(t, { [P]: '- 新目標\n    - Q :: A\n', [LOG]: JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', need: '9.0.0', lt: 'aaaaaa', r: 'good' }) + '\n' });
+  assert.deepEqual(h.state.history().seen, ['aaaaaa']);
+  assert.equal(h.state.fillText(P, '- 新目標\n    - Q :: A\n'), '- 新目標 ^aaaaab\n    - Q :: A\n');
+});
