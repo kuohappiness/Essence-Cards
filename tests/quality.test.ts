@@ -297,6 +297,10 @@ void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review
     ['src/review/index.ts', "import type { Card, Pick } from '../core/study/index.ts';", false],
     ['src/review/index.ts', "import type { State } from '../state/index.ts';", false],
     ['src/review/index.ts', "import { x } from '../state/ids.ts';", true],
+    // tasks/state-split.md §3：拆出來的讀取層與寫入一樣只能在 state 裡用。
+    ['src/review/index.ts', "import { x } from '../state/reads.ts';", true],
+    ['src/review/index.ts', "import { x } from '../state/writes.ts';", true],
+    ['src/state/index.ts', "import { createReads } from './reads.ts';", false],
     ['src/ui/Review.tsx', "import type { Files } from '../core/files.ts';", true],
     ['src/ui/Review.tsx', "void import('../core/files.ts');", true],
     ['src/ui/Review.tsx', "import { appendLine, createLogWriter, mergeHistory, readHistory, replay, review } from '../core/study/index.ts';", true],

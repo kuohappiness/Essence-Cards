@@ -27,6 +27,11 @@ void test('core 的靜態 import/export、動態 import 與 require 都不能指
     check(source);
   }
 });
+// tasks/state-split.md §2：拆檔前後 state 對外的值不變。
+void test('state 對外只透過 index 匯出 createState 與裝置碼', async () => {
+  const module = await import('../src/state/index.ts');
+  assert.deepEqual(Object.keys(module).sort(), ['createState', 'deviceCode', 'isDeviceCode']);
+});
 void test('deck 對外只透過指定 index 匯出', async () => {
   const module = await import('../src/core/deck/index.ts');
   assert.deepEqual(Object.keys(module).sort(), ['assignIds', 'baseForm', 'blockIds', 'isDeckPath', 'listDeckPaths', 'nameIds', 'parseDeck', 'readDecks', 'setTargetId']);
