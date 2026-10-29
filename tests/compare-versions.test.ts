@@ -77,9 +77,16 @@ void test('發布前比較：開兩個 worktree 各跑轉接器；同一個 comm
   git(repo, 'add', '-A');
   git(repo, 'commit', '-q', '-m', 'one');
   const first = git(repo, 'rev-parse', 'HEAD');
-  // 第二個 commit 拿掉 planToday：轉接器接不上。
+  // 第二個 commit 拿掉 planToday：轉接器接不上。checkout 的換行可能是 LF 或 CRLF（Codex 第二輪 L5），兩種都要真的拿掉。
+  const withoutPlanToday = (text: string): string => text.replace(/^export \{ planToday \} from '\.\/plan\.ts';\r?\n/m, '');
+  for (const eol of ['\n', '\r\n']) {
+    const sample = ['export { review } from \'./fsrs.ts\';', 'export { planToday } from \'./plan.ts\';', 'export { nextCard } from \'./session.ts\';', ''].join(eol);
+    assert.equal(withoutPlanToday(sample), ['export { review } from \'./fsrs.ts\';', 'export { nextCard } from \'./session.ts\';', ''].join(eol), JSON.stringify(eol));
+  }
   const index = join(repo, 'src/core/study/index.ts');
-  await writeFile(index, (await readFile(index, 'utf8')).replace("export { planToday } from './plan.ts';\n", ''));
+  const before = await readFile(index, 'utf8');
+  assert.notEqual(withoutPlanToday(before), before);
+  await writeFile(index, withoutPlanToday(before));
   git(repo, 'commit', '-q', '-am', 'break');
   const vault = await makeVault(t, files);
   const backup = (await backupVault({ vault, to: await tempFolder(t), by: 'backup', now: () => NOW, offset: () => 480 })).path;
