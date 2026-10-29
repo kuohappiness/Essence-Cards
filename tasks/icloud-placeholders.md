@@ -1,6 +1,6 @@
 # 雲端佔位檔：分段實測與存檔受阻的提示（給 Claude，本機執行）
 
-狀態：進行中：第一部分完成（結果在文末）；第二部分開工（state 讀寫協調已合併）
+狀態：完成：兩部分都在分支 `claude/icloud-placeholders`，合併由使用者決定（結果在文末）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)：做法已在 D-154 與這份說明定好，這裡是照做與量測）。
 
@@ -147,3 +147,12 @@ D-154 第 2 點第一項。「受阻」是指：這台電腦會補 ID（`fillIds
 - iCloud 的同步狀態可以不動檔案就讀到：Shell 屬性 `System.StorageProviderState`（1 只在雲端、2 已同步、3 已同步且永遠保留、4 等待上傳、6 傳輸中、10 等待中）。
 - 測試 vault 由幾個 session 共用：16:47 另一個 session（更新防線第二部分）換了建置，E7 的 Obsidian 那一筆改用遠端偵錯直接呼叫 `vault.read`，沒有再換建置。
 - 還原：`Essence 佔位檔/` 全部設回永遠保留並在本機（79 個檔），外掛清單還原，Obsidian 用一般方式重開；結果檔留在 `Essence 佔位檔/結果/`。
+
+### 第二部分：存檔受阻時當下說清楚（2026-10-29，Opus 5.5）
+
+照使用者的選擇，等 `state` 的讀寫協調合併進 `main`（`70ba562`）才做，分支先合併了 `main`（`d657687`）。開工條件的檔案因此改過、以新版為準：存檔改成 `state.save()`／`state.resolve()`，受阻時回 `{ kind: 'blocked', reason: 'loading' | 'unread' }`，所以**沒有在 `State` 加查詢、沒有改 `main.ts`**，只改 `src/obsidian/save.ts`，做 L1。
+
+- **改了什麼**（`03b69f1`）：`TIPS.blocked`「筆記已自動儲存；暫時無法把新目標加入複習，讀取完成後請再按一次存檔」。按存檔回 `blocked`（`loading`、`unread`）而且按下時編輯器裡有沒 ID 的目標（`parseDeck`）時提示它；目標都有 ID 時不提示。按鈕說明在「`ready()` 還沒完成，或 `unread()` 不是空」的期間一律用這一句，外觀照舊；存檔按鈕自己等 `ready()`，完成時更新一次按鈕。小視窗按「還原」「當成新的」遇到受阻時提示這一句、問題保留，不再說「這篇筆記剛剛改過」。`phone`、`closed` 照舊。
+- **測試**：`tests/save-wiring.test.ts` 的 B1～B4 用真的 `createState`（記憶體 Files）做出「讀不到」（`failing`）與「還沒讀完」（`holdRead`），先在舊程式上失敗（按鈕說「有 1 個……尚未加入」「都已加入複習」、小視窗說「剛剛改過」）再改到通過。替身的按鈕改成記下說明；既有替身的 state 補上 `ready`、`unread`，預期都沒改（B5）。`npm run check` 677 個測試通過（合併後的 673 個加 B1～B4）。
+- **Windows 版 Obsidian 對照**（開發命令 `save-blocked`，`786d11c`；用 state-load §8 的獨占鎖）：在 `Essence Cards/W5 範例/存檔測試/` 建兩篇自編卡組，A 有一個沒 ID 的目標，鎖住 B 後重新載入外掛：`unread()` 是 B。打開 A 按存檔：按之前、按之後的按鈕說明與提示都是受阻那一句，編輯器與磁碟的文字都沒改（`save-blocked 174233`）。解開鎖 17 秒內外掛自己讀到 B；按鈕說明回到「有 1 個學習目標尚未加入複習」，再按存檔補上 ID、提示「1 個學習目標已加入複習」（`174301`）。兩篇試用卡組做完刪掉。第一次鎖檔沒鎖成（路徑裡的中文經 `powershell -File` 的參數亂碼，開檔失敗卻照樣標成已鎖），那次 A 照常補了 ID；改成從 UTF-8 檔讀路徑、開檔成功才標記後重做。
+- **合併前要知道**：分支 `claude/update-safeguards-2`（`f2fcfd5`）也改了 `save.ts` 的同幾行（`saveTip`、小視窗的提示、按鈕的樣子，加「需要新版」）。後合併的一方會有衝突；兩邊可以並存：`blocked` 的 `needs-update` 照它的提示，`loading`／`unread` 照這裡的；小視窗受阻時也用這一句。
