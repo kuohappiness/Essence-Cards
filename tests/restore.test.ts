@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFile, lstat, readdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { readDecks } from '../src/core/deck/index.ts';
 import { dueAt, readHistory, replay } from '../src/core/study/index.ts';
 import type { History } from '../src/core/study/index.ts';
@@ -297,4 +297,28 @@ void test('還原：備份讀不懂（清單壞了）就不出計畫', async t =
   const zip = join(await tempFolder(t), 'Essence Cards 備份 2026-10-29 200000 未知 0000.zip');
   await writeFile(zip, 'not a zip');
   await assert.rejects(makePlan({ vault, backup: zip }), /這份備份不能用：不是讀得懂的 zip/);
+});
+
+void test('還原（Codex 再查 R1）：暫存檔寫好後父資料夾被換成連結，清理不沿連結刪外面的同名檔，暫存檔留著並說明', async t => {
+  const A = 'Essence Cards/sub/A.md';
+  const vault = await makeVault(t, { [A]: goal('aaa111') });
+  const zip = await backup(t, vault);
+  await put(vault, A, goal('aaa111', '改過'));
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path } = await makePlan(options);
+  const outside = await tempFolder(t, 'essence-outside-');
+  let swapped = '';
+  const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+    await writeFile(file, bytes, { flag });
+    if (!file.endsWith('.restore-tmp') || swapped) return;
+    swapped = basename(file);
+    await writeFile(join(outside, swapped), 'outside existing evidence');
+    await rename(join(vault, 'Essence Cards/sub'), join(vault, 'Essence Cards/moved'));
+    await symlink(outside, join(vault, 'Essence Cards/sub'), 'junction');
+  };
+  const result = await applyPlan({ ...options, plan: path, seams: { write } });
+  assert.deepEqual(result.files.map(file => file.outcome), ['失敗']);
+  assert.match(result.files[0].reason, /Essence Cards\/sub：是連結.*暫存檔 .*沒有刪/);
+  assert.equal(await readFile(join(outside, swapped), 'utf8'), 'outside existing evidence');
+  assert.ok((await readdir(join(vault, 'Essence Cards/moved'))).includes(swapped));
 });

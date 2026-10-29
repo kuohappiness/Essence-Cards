@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { BACKUP_FORMAT, BACKUP_SCOPE, BACKUP_VERSION, ESSENCE_ROOT, PLUGIN_DATA, backupName, hashBytes, openBackup, readBuild, writeZip } from '../src/core/backup/index.ts';
@@ -162,10 +162,13 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
   if (!name) throw Error('找不到沒用過的備份檔名');
   const path = join(folder, name);
   const temporary = path + '.tmp';
+  // 這次建立的暫存檔的身分（磁碟與 inode）：清理時確認還是同一個檔才刪（Codex 再查 R1 的原則）。
+  let identity: { dev: bigint; ino: bigint } | null = null;
   let created = false;
   try {
     await write(temporary, zip);
     created = true;
+    identity = await lstat(temporary, { bigint: true });
     const opened = openBackup(new Uint8Array(await readFile(temporary)));
     if (!opened.ok) throw Error('寫好的備份讀回來不對：' + opened.error);
     if (JSON.stringify(opened.value.manifest) !== JSON.stringify(manifest)) throw Error('寫好的備份讀回來的清單不同');
@@ -177,8 +180,11 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
     if (await exists(path)) throw Error(path + ' 已經存在，不覆寫');
     await rename(temporary, path);
   } catch (error) {
-    // 只清這次建立的暫存檔：EEXIST 表示別的程序先建了它，不是我們的（Codex 中途查核 F5）。
-    if (created || (error as NodeJS.ErrnoException).code !== 'EEXIST') await unlink(temporary).catch(() => {});
+    // 只清這次建立的暫存檔：EEXIST 表示別的程序先建了它，不是我們的（Codex 中途查核 F5）；建好之後要還是同一個檔才刪。
+    if (created) {
+      const now = await lstat(temporary, { bigint: true }).catch(() => null);
+      if (now && identity && now.dev === identity.dev && now.ino === identity.ino) await unlink(temporary).catch(() => {});
+    } else if ((error as NodeJS.ErrnoException).code !== 'EEXIST') await unlink(temporary).catch(() => {});
     throw error;
   }
   return { path, manifest, attempts };
