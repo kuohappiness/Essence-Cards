@@ -1,6 +1,6 @@
 # 更新防線第一部分：審查請求（給 Codex）
 
-狀態：待審：第一輪修正的再查（`c4a93c6`）與第二輪 L2（1-3～1-5，`d3e2fad`），見文末兩節；[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)
+狀態：待第三次查核：再查與第二輪的發現已修（分支 `claude/update-safeguards-1` 的 `0e1af6c`），見文末〈第三次查核〉；[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（寫進使用者 vault 的還原、紀錄的還原檔與合併順序、備份格式的讀取檢查，屬於 [quality.md](../docs/agents/quality.md) 的高風險範圍）。
 
@@ -159,3 +159,17 @@
 接在同一份[回報](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)的最後，標題「Codex 第二輪（日期）」；照上面〈回報〉的格式，「請特別看」7 點與「Claude 自己選了做法的地方」16 點逐點回覆。
 
 **第二輪開始後的補充（2026-10-29）**：使用者選了「在封裝 App 裡跑時一定要指定位置」，分支多了 `d39cde2`（`git diff d3e2fad d39cde2`）：「自己選了做法」第 16 點從印提醒改成拒絕（實際路徑落在 `AppData\Local\Packages\<App>\LocalCache\` 時 `backupVault` 丟錯、清掉這次新建的空資料夾，要用 `--to`），`restore --apply` 的還原前備份也有 `--to`。在 `d39cde2` 跑 `npm run check`，613 項全過。如果第二輪已經寫完，這一個 commit 放到下一次再查。
+
+## 第三次查核
+
+你的〈Codex 再查〉R1～R4 與〈Codex 第二輪〉L1～L5，Claude 的處理寫在[回報](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)最後的〈Claude 回應（再查與第二輪）〉。請照你在〈第二輪驗證與交回〉寫的，再查改過的路徑、清理與比較邊界。
+
+- **範圍**：`git diff d3e2fadbe37062c53755129e3dab0b0c46c2e584 0e1af6cef2fabc605be67c53a19ac42403345051`（11 個 commit）：`d39cde2` 使用者選的封裝 App 拒絕（上一次的補充，還沒查）、`741cc5a` L5、`169228a` L4、`ce03678` L2、`76a8a23` R3、`6564a67` L3、`2c3b490` L1、`1305cfa` R1、`47ee24e` R2、`99af80a` 報告的限制、`0e1af6c` 計畫先擋連結的設定資料夾。
+- **請特別看**：
+  1. R1：`removeOwn` 與身分的記法（先查連結才記 dev／inode）有沒有還能誤刪或該刪沒刪的組合；建立就失敗的半個檔只查連結夠不夠；還原檔與備份 `.tmp` 的同一原則。
+  2. R2：`occupied` 在改名前重讀全部卡組的位置與成本；檢查與改名之間仍有空檔（沒有鎖），是否需要記成技術債；讀不到的卡組一律擋住是否太嚴。
+  3. R3 與 L2、L4：新的檢查會不會誤擋正常的備份或誤報差異。
+  4. L1 與 L3：安裝的每個寫入位置、git 環境變數的大小寫；`build.mjs` 留一份自己的過濾是否可以。
+  5. `d39cde2`：拒絕的判斷（實際路徑含 `AppData\Local\Packages\<App>\LocalCache\`）與清掉新建空資料夾的範圍。
+- **驗證**：照上面〈驗證方式〉另開 worktree（`git worktree add --detach <暫存資料夾> 0e1af6c`；拿掉時用一般的刪除再 `git worktree prune`）；Claude 在 `0e1af6c` 跑 `npm run check`，621 項全過。電腦的記憶體曾經不夠，跑不起來時照上一輪的做法分開跑並寫明。
+- **回報**：接在同一份回報的最後，標題「Codex 第三次查核（日期）」，每項標明是新發現還是先前項目沒修好。
