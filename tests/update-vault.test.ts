@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { gitEnv } from '../tools/git.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -13,7 +14,7 @@ import type { UpdateOptions } from '../tools/update-vault.ts';
 import { goal, makeVault, put, review, tempFolder } from './helpers/vault.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+const env = gitEnv();
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, env, encoding: 'utf8' }).trim();
 const short = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, env, encoding: 'utf8' }).trim();
 // 當地時間 +08:00 的某一刻。

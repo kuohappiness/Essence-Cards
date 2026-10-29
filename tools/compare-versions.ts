@@ -1,4 +1,4 @@
-import { exec, execFile, execFileSync } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,15 +8,13 @@ import { hashBytes, openBackup } from '../src/core/backup/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import type { AdapterInput } from './compare/adapter.ts';
 import { diffSnapshots } from './compare/snapshot.ts';
+import { git, gitEnv } from './git.ts';
 import type { AdapterResult } from './compare/snapshot.ts';
 
 const run = promisify(execFile);
 const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
-// 拿掉繼承來的 GIT_*：在 git hook 裡跑時 GIT_DIR 指著呼叫的 repo（tools/install.ts 的 git）。
-const env = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
-const git = (root: string, args: string[]): string => execFileSync('git', args, { cwd: root, env: env(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 export const LIMITS = '考試範圍（`exam`）目前是 null：沒有比到考前提高的保持率與考前的排序。設定用外掛的預設（每日 30 分鐘、保持率 0.8、沒有濾網）。到期日固定現有紀錄，不模擬之後的作答。';
 
@@ -39,7 +37,7 @@ export interface CompareResult { report: string; zip: string; old: Side; new: Si
 
 const npmCi = async (dir: string): Promise<void> => {
   // --ignore-scripts：prepare 會改 git 設定，這裡只要相依套件。
-  await shell('npm ci --ignore-scripts --no-audit --no-fund', { cwd: dir, env: env() });
+  await shell('npm ci --ignore-scripts --no-audit --no-fund', { cwd: dir, env: gitEnv() });
 };
 
 /** 一個版本：開 worktree、裝相依、在自己的 Node 程序跑轉接器；結束後拿掉 worktree。接不上就是 ok: false。 */
@@ -52,7 +50,7 @@ async function side(root: string, ref: string, input: string, work: string, inst
   git(root, ['worktree', 'add', '--detach', dir, commit]);
   try {
     await install(dir);
-    try { await run(process.execPath, [ADAPTER, dir, input, output], { cwd: dir, env: env(), maxBuffer: 64 * 1024 * 1024 }); }
+    try { await run(process.execPath, [ADAPTER, dir, input, output], { cwd: dir, env: gitEnv(), maxBuffer: 64 * 1024 * 1024 }); }
     catch (error) { return { commit, build, result: { ok: false, reason: '轉接器沒有跑完：' + (error as Error).message } }; }
     return { commit, build, result: JSON.parse(await readFile(output, 'utf8')) as AdapterResult };
   } finally {

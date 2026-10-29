@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { gitEnv } from '../tools/git.ts';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -6,7 +7,7 @@ import { cp, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promis
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes } from '../src/core/backup/index.ts';
-import { installVault, registerTestVault } from '../tools/install.ts';
+import { installVault, registerTestVault, releaseProblems } from '../tools/install.ts';
 import type { InstallOptions } from '../tools/install.ts';
 import { makeVault, tempFolder } from './helpers/vault.ts';
 
@@ -25,7 +26,7 @@ function fakeBuild(build: string, devOut?: boolean): NonNullable<InstallOptions[
 }
 
 // 拿掉繼承來的 GIT_*：在 pre-commit 裡跑時 GIT_DIR 指著真的 repo，暫存 repo 的 git init 會改到它（2026-10-29 把 core.bare 改成 true）。
-const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+const env = gitEnv();
 const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();
 
@@ -142,4 +143,19 @@ void test('安裝命令：沒給 vault 或多給參數時印用法；開發版�
   await assert.rejects(run(process.execPath, ['tools/install-vault.mjs', vault, '--dev', '--register-test'], { cwd: root }), /用法/);
   await assert.rejects(run(process.execPath, ['tools/install-vault.mjs', vault, '--dev'], { cwd: root }), /開發版只能裝到登錄過的測試 vault/);
   assert.deepEqual(await plugin(vault), []);
+});
+
+void test('git 的環境變數不分大小寫都拿掉：小寫或大小寫混用的 git_dir 指到別的 repo 時，仍讀自己的 repo（Codex 第二輪 L3）', async t => {
+  const own = await repo(t), other = await repo(t, { tag: false });
+  const { buildVersion } = await import('../tools/build.mjs');
+  for (const name of ['git_dir', 'Git_Dir']) {
+    process.env[name] = join(other.dir, '.git');
+    try {
+      assert.equal((await releaseProblems(own.dir)).commit, own.head, name);
+      assert.equal(await buildVersion(own.dir), '0.0.1+' + git(own.dir, 'rev-parse', '--short', 'HEAD'), name);
+    } finally {
+      delete process.env[name];
+    }
+  }
+  assert.equal(git(other.dir, 'rev-parse', 'HEAD'), other.head);
 });

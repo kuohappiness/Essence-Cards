@@ -1,10 +1,10 @@
-import { execFileSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes, readBuild } from '../src/core/backup/index.ts';
 import { buildPlugin } from './build.mjs';
+import { git } from './git.ts';
 import { sameFileKey } from './vault-io.ts';
 
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -29,15 +29,6 @@ export interface InstallOptions {
 export interface Installed { kind: 'dev' | 'test' | 'release'; version: string; build: string; vault: string }
 /** .local/releases/<版號>/release.json：每一份正式產物的版號、建置版本、commit 與雜湊。 */
 interface Release { version: string; build: string; commit: string; created: string; sha256: Record<string, string> }
-
-/**
- * 在 root 跑 git。拿掉繼承來的 GIT_* 環境變數：在 git hook 裡跑時 GIT_DIR 指著呼叫的那個 repo，
- * 不拿掉就會查錯 repo（2026-10-29：測試的 git init 因此把共用 .git/config 的 core.bare 改成 true）。
- */
-function git(root: string, args: string[]): string {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
-  return execFileSync('git', args, { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-}
 
 /**
  * 本機紀錄的資料夾：主資料夾（git 的共用目錄所在的那一個）的 .local/，各個 worktree 共用同一份登錄與正式產物。

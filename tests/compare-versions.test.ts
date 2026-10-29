@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { gitEnv } from '../tools/git.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cp, readFile, symlink, writeFile } from 'node:fs/promises';
@@ -86,7 +87,7 @@ void test('比較：同一個 key 出現好幾次（重複的 ID）時每一個�
   assert.deepEqual(diffSnapshots(problems, fewer, time), ['Essence Cards/A.md 少了問題：2 error duplicate-id']);
 });
 
-const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+const env = gitEnv();
 const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();
 

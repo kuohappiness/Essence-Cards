@@ -1,4 +1,4 @@
-import { exec, execFileSync } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,15 +9,13 @@ import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
 import { compareVersions, LIMITS } from './compare-versions.ts';
 import { examReminder, SCOPE_FOLDER } from './exam-reminder.ts';
+import { git, gitEnv } from './git.ts';
 import type { Reminder } from './exam-reminder.ts';
 import { installVault, isTestVault, localFolder, releaseProblems } from './install.ts';
 import { listTree, pluginConfig } from './vault-io.ts';
 
 const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
-// 拿掉繼承來的 GIT_*：在 git hook 裡跑時 GIT_DIR 指著呼叫的 repo（tools/install.ts 的 git）。
-const env = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
-const git = (root: string, args: string[]): string => execFileSync('git', args, { cwd: root, env: env(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 export const RESTART = 'iPhone 等 iCloud 同步完後，把 Obsidian 完全關掉再開，才會換成新版（電腦也一樣）。';
 
 export interface UpdateOptions {
@@ -55,7 +53,7 @@ export interface CheckResult extends Omit<CheckRecord, 'created'> {
 
 const npmCheck = async (root: string): Promise<void> => {
   try {
-    await shell('npm run check', { cwd: root, env: env(), maxBuffer: 64 * 1024 * 1024 });
+    await shell('npm run check', { cwd: root, env: gitEnv(), maxBuffer: 64 * 1024 * 1024 });
   } catch (error) {
     const out = String((error as { stdout?: string }).stdout ?? '') + String((error as { stderr?: string }).stderr ?? '');
     throw Error('npm run check 沒有通過：\n' + out.split('\n').slice(-40).join('\n'));
