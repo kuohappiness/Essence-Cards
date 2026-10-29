@@ -1,6 +1,6 @@
 # 更新防線（給 Claude，本機執行）
 
-狀態：進行中：第 0 步完成；第一部分通過 Codex 查核並合併進 `main`（`8aa3078`，[審查請求](update-safeguards-1-review.md)）；第二部分在分支 `claude/update-safeguards-2`：Codex L2 與兩次再審的發現已修（`ae9c6b2`），等 Codex 第三次再審（[審查請求](update-safeguards-2-review.md)）
+狀態：進行中：第 0 步完成；第一部分通過 Codex 查核並合併進 `main`（`8aa3078`，[審查請求](update-safeguards-1-review.md)）；第二部分在分支 `claude/update-safeguards-2`：Codex L2 通過（第三次再審，`ae9c6b2`），等使用者決定合併（[審查請求](update-safeguards-2-review.md)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-ID 與討論稿做完，這份是執行）。改到紀錄格式、`src/state/` 與安裝流程，屬於高風險範圍：第 0 步先請 Codex 查核格式（D-140 第 4 點），兩個部分各自在合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 

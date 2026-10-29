@@ -1,5 +1,5 @@
 # 更新防線第二部分｜Codex L2 審查（2026-10-29）
-狀態：待第三次再審：F1、F2、R1、BUILD 已通過；第二次再審的 F3 剩餘已修（`24981eb`），devOnly 名單補齊（`ae9c6b2`）；請求在最後的〈Claude 回應（第二次再審）〉
+狀態：Codex 第三次再審通過（`ae9c6b2`），第二部分可以合併；Claude 在分支上重跑 Codex 的 6 項探針也全過；等使用者決定合併
 
 **結論：找到兩項紀錄寫入閘門的缺口。** F1 會讓回看改評分留下兩筆有效作答；F2 會讓帶 `lt` 的取消行檢查錯目標。另有一項較低風險的提示問題 R1，可隨修正處理或列有明確觸發點的技術債。既有完整檢查通過，不能取代這兩個新組合的驗證。
 
@@ -230,3 +230,29 @@ F3 剩下的檔案身分接受並修好；第 46 行的註解與 `build.test.ts`
 - 新的 devOnly 正規式有沒有漏掉或誤配。
 
 照上一輪另開 worktree（`git worktree add --detach <暫存資料夾> ae9c6b2`，拿掉時用一般的刪除再 `git worktree prune`）。回報接在這份的最後，標題「Codex 第三次再審（日期）」；都通過時寫明第二部分可以合併。
+
+## Codex 第三次再審（2026-10-29）
+狀態：第三次再審通過（`ae9c6b2`）；第二部分可以合併，尚未執行合併
+
+**F3 的檔案身分缺口已修正，沒有發現本輪合併前必修問題。綜合前幾輪已通過的項目，更新防線第二部分可以合併。** 本輪只審查及追加回報，未改產品程式或既有測試，未 commit、未合併。
+
+### 範圍與驗證
+
+- 固定審查 `b6b39bb9c6a749ac4fb432c818ecd21df1f59df8..ae9c6b288843b903c530e9b9d73b658f3d4f5302`，2 個 commit、5 檔、+59／−17。以下產品路徑均指分支 `claude/update-safeguards-2` 的該檔（`ae9c6b2`）。另建 detached worktree 並 `npm ci`，沒有切換或改動原實作 worktree。
+- Windows／Node `v24.13.0`／npm `11.6.2`。沙箱外執行完整 **`npm run check`，exit 0；747 項測試全過，0 failed、0 skipped**。型別、ESLint、knip、secretlint、skill 一致性、文件檢查與測試均在同一次流程完成，這次沒有前輪的記憶體中止。`git diff --check b6b39bb ae9c6b2` 也通過。
+- 另跑 6 項獨立探針：前輪「搬走 A、同址同內容的 B」正常／失敗兩種結果、刪掉 A 後重建 B、A 搬走再搬回、讀取途中替換、共用替身的身分／建立／改名契約，以及目前 dev 模組清單與正式模組的正反例；全部通過。這次的斷言是期望的保護行為，沒有把錯誤結果當成驗收。
+- 本機證據保留在主資料夾 `.local/review-evidence/update-safeguards-2-ae9c6b2/`，不進 repo；重跑探針需複製到指定 commit 的隔離 worktree 根目錄並安裝依賴。隔離 worktree 的 tracked diff 在檢查前後都是空的，完成後已用一般刪除再 prune 清理，未使用 `git worktree remove --force`。追加報告後，主資料夾的文件檢查也通過。
+
+### 三項再審重點
+
+| 項目 | 結論與證據 |
+|---|---|
+| `withTempFile` 的檔案身分與 `left` | **通過，F3 可關閉。** `src/obsidian/dev-temp.ts` 保留 create 回傳的物件，讀取前後都核對原路徑仍指到它。原反例中，A 搬走後原址的 B 不被讀作自己的檔案，也不被刪；正常完成的 `left` 是 A 的新路徑，失敗時仍保留兩篇並拋出原 run 錯誤。另驗 A 已刪、B 重建時只保留 B，`left=null` 正確；A 搬走再搬回且內容未改時，能清理 A；讀取尚未返回時搬走或刪掉 A、重建 B，第二次身分核對會阻止刪 B，搬走的 A 也正確列在 `left`。 |
+| 共用 Obsidian 替身有沒有削弱舊測試 | **未發現。** 新的物件快取使同一篇檔的查詢／列出／create 回傳一致，rename 保留物件並更新 path，delete 後重新 create 則是新物件；已有路徑的 create 拒絕覆寫。獨立契約探針也確認外部改文字仍讀到新內容、原有 failWrite 仍會失敗而不建立內容。現有使用點為 `main-wiring`、`save-wiring`、`dev-version`，新 rename 用於此次搬移回歸；舊接線的結果與副作用斷言仍存在，完整測試通過，沒有靠放寬替身或跳過測試取得通過。 |
+| devOnly 正規式與實際 bundle | **目前全部模組通過。** `tests/build.test.ts` 的正規式涵蓋目前 7 個 `dev.ts`／`dev-*.ts` 模組，包含先前漏列的 markdown／temp／version；不會誤配 `device.ts`、`version.ts`、`save.ts`、`lock.ts`。獨立清單探針與正反例通過；真正執行 `tools/build.mjs` 的既有測試也通過：正式版的 devOnly 實際輸出清單為空，開發版完整列出預期模組，CodeMirror 邊界照舊。此結論以目前 `dev-` 後採單段小寫英文的命名為範圍，不把該正規式宣稱為任意未來檔名的萬用匹配。 |
+
+`dev-version.ts` 的第一段註解也已改成「不碰暫存卡組」，保留截圖與版本命令的 flush，和實際行為一致。前輪 F1、F2、R1、BUILD 的產品修正未被本輪改動，相關測試仍通過；回看按鈕與比較轉接器的延後項目仍有 backlog 的觸發點與完成條件。BUILD 技術債依 Claude 回應在實際合併時收尾即可，本輪不代改狀態文件。
+
+本輪的通過是對上述 commit 的 L2 結論，沒有執行合併或安裝。Windows 的既有實測證據與 iPhone 的 §2-4 延後安排沿用前文；不把隔離替身驗證寫成再次通過實機。
+
+未查項目與原因：未審指定 commit 之後的提交，未重做未變的 ZIP／還原／排程設計；未操作 Obsidian、iPhone、iCloud 或任何真實 vault，因本輪是差異再審且測試 vault 由另一項工作使用，TFile 穩定身分與改名行為以介面前提及隔離替身驗證，未新增實機證據；未測任意未來命名的 dev 檔案，因不在目前模組清單與命名範圍內。
