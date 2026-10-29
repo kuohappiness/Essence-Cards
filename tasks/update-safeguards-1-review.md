@@ -1,6 +1,6 @@
 # 更新防線第一部分：審查請求（給 Codex）
 
-狀態：待第三次查核：再查與第二輪的發現已修（分支 `claude/update-safeguards-1` 的 `0e1af6c`），見文末〈第三次查核〉；[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)
+狀態：待第四次查核：第三次查核的 T1～T3 已修（分支 `claude/update-safeguards-1` 的 `672db3d`），見文末〈第四次查核〉；[回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（寫進使用者 vault 的還原、紀錄的還原檔與合併順序、備份格式的讀取檢查，屬於 [quality.md](../docs/agents/quality.md) 的高風險範圍）。
 
@@ -173,3 +173,16 @@
   5. `d39cde2`：拒絕的判斷（實際路徑含 `AppData\Local\Packages\<App>\LocalCache\`）與清掉新建空資料夾的範圍。
 - **驗證**：照上面〈驗證方式〉另開 worktree（`git worktree add --detach <暫存資料夾> 0e1af6c`；拿掉時用一般的刪除再 `git worktree prune`）；Claude 在 `0e1af6c` 跑 `npm run check`，621 項全過。電腦的記憶體曾經不夠，跑不起來時照上一輪的做法分開跑並寫明。
 - **回報**：接在同一份回報的最後，標題「Codex 第三次查核（日期）」，每項標明是新發現還是先前項目沒修好。
+
+## 第四次查核
+
+你的〈Codex 第三次查核〉T1～T3，Claude 的處理寫在[回報](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)最後的〈Claude 回應（第三次查核）〉。照你在〈驗證與交回〉寫的，再查寫入與清理的順序。
+
+- **範圍**：`git diff 0e1af6c 672db3d`（3 個 commit）：`fb546e4` T1、`fefb916` T2、`672db3d` T3。
+- **請特別看**：
+  1. T1：`writeNew` 從開著的檔取得身分、寫入失敗時的清理，以及還原暫存檔、補回的 JSONL、備份 `.tmp` 三處的使用；改名前的身分核對；有沒有還能刪掉或搬動別人檔案的組合（含寫入替身先關檔的做法是否改變了要測的情形）。
+  2. T2：寫好暫存檔之後的順序（全庫掃描 → 連結 → 目標雜湊 → 暫存檔身分 → 改名）還有沒有長的空檔。
+  3. T3：建立前就拒絕的判斷、`makeFolder` 認定「這次建的」幾層（含 Windows 的 `\\?\` 長路徑寫法、對不上時一層都不算）、`removeFolders` 只收空的與身分沒變的。
+  4. 技術債清單裡「備份與還原只考慮一個程序在跑」改寫後的觸發點與完成條件是否足夠。
+- **驗證**：照上面〈驗證方式〉另開 worktree（`git worktree add --detach <暫存資料夾> 672db3d`；拿掉時用一般的刪除再 `git worktree prune`）；Claude 在 `672db3d` 跑 pre-commit 的完整檢查，629 項全過。
+- **回報**：接在同一份回報的最後，標題「Codex 第四次查核（日期）」，每項標明是新發現還是先前項目沒修好；都通過時寫明第一部分可以合併。
