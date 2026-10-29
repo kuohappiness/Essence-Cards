@@ -3,12 +3,13 @@ import { LOG_FOLDER } from '../core/study/index.ts';
 import type { State } from '../state/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { capturePng, keepRendering } from './dev-review.ts';
+import { withTempFile } from './dev-temp.ts';
 
 // 更新防線第二部分的 Windows 對照（任務說明 2-1、2-2）：版本行真的寫進這台的紀錄、「版本」命令的多行通知在 Obsidian 裡
 // 怎麼顯示、需要新版的卡組讀到之後的樣子。只在開發版（dev.ts 的 version 命令）。
 
-/** 暫時放一篇需要新版的卡組：在 Essence Cards/ 裡才算卡組；做完刪掉。 */
-const NEWER = 'Essence Cards/W5 範例/需要新版（暫存）.md';
+/** 暫時放一篇需要新版的卡組：在 Essence Cards/ 裡才算卡組；名稱撞到已有的檔就換一個。 */
+const NEWER = 'Essence Cards/W5 範例/需要新版（暫存）';
 const NEWER_TEXT = '---\n需要版本: 9.0.0\n---\n- 能說明暫存的目標 ^zzzzz8\n    - Q :: A\n';
 
 interface VersionHost { app: App; device: string; manifest: { id: string } }
@@ -41,25 +42,25 @@ async function ownAppLines(host: VersionHost): Promise<{ path: string; lines: st
 
 export async function versionCheck(host: VersionHost, state: State, shots: string): Promise<unknown> {
   const rendering = keepRendering();
-  const files = createObsidianFiles(host.app);
   try {
-    // 1. 版本行：寫進這台的紀錄了（版本命令會先 flush）。
+    // 1. 版本行：寫進這台的紀錄了（版本命令會先 flush）。這一段不建、不改任何檔。
     const plain = await runVersion(host);
     const plainShot = await capturePng(host.app, shots + ' 1 版本命令.png');
     const after = { version: state.version(), blocked: state.blocked(), ownApp: await ownAppLines(host) };
-    document.querySelectorAll<HTMLElement>('.notice').forEach(el => { el.click(); });
+    Array.from(document.querySelectorAll<HTMLElement>('.notice')).forEach(el => { el.click(); });
     // 2. 需要新版的卡組：state 讀到之後不出題、按鈕說明需要更新、版本命令列出它。
-    await files.modify(NEWER, () => NEWER_TEXT);
-    const seen = await until(() => state.blocked().decks.includes(NEWER));
-    await sleep(500);
-    const gated = await runVersion(host);
-    const gatedShot = await capturePng(host.app, shots + ' 2 需要新版的卡組.png');
-    const deck = { seen, blocked: state.blocked(), deckStatus: state.deckStatus(NEWER), inToday: state.today().share.some(item => item.deck === NEWER), canAnswer: state.canAnswer('zzzzz8') };
-    document.querySelectorAll<HTMLElement>('.notice').forEach(el => { el.click(); });
-    return { plain, plainShot, after, gated, gatedShot, deck };
+    // 只清自己建的那一篇（dev-temp.ts，Codex 再審的 F3）。
+    const newer = await withTempFile(host.app, NEWER, NEWER_TEXT, async path => {
+      const seen = await until(() => state.blocked().decks.includes(path));
+      await sleep(500);
+      const gated = await runVersion(host);
+      const gatedShot = await capturePng(host.app, shots + ' 2 需要新版的卡組.png');
+      const deck = { seen, blocked: state.blocked(), deckStatus: state.deckStatus(path), inToday: state.today().share.some(item => item.deck === path), canAnswer: state.canAnswer('zzzzz8') };
+      Array.from(document.querySelectorAll<HTMLElement>('.notice')).forEach(el => { el.click(); });
+      return { gated, gatedShot, deck };
+    });
+    return { plain, plainShot, after, ...newer.result, temporary: newer.path, left: newer.left };
   } finally {
     rendering.restore();
-    const file = host.app.vault.getAbstractFileByPath(NEWER);
-    if (file) await host.app.vault.delete(file);
   }
 }
