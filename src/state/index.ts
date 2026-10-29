@@ -1,40 +1,16 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { confirms, createIdTracker } from './ids.ts';
+import { createIdTracker } from './ids.ts';
 import { createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
+import { createWrites } from './writes.ts';
+import type { EditorHandle, WriteResult } from './writes.ts';
+export type { EditorHandle, WriteResult } from './writes.ts';
 import type { IdIssue, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
-
-/** 開著的筆記的編輯器（tasks/state-writes.md §1）。由 Obsidian 層實作，state 不 import Obsidian。 */
-export interface EditorHandle {
-  /** 這次寫入的對象。建立時就固定：之後換篇、改名，都照這個路徑處理，不跟著畫面走。 */
-  readonly path: string;
-  /** 編輯器現在的全文；這個編輯器已經不是 path 那一篇（換篇、改名、關掉）時回傳 null。 */
-  text(): string | null;
-  /** 一次同步的 Editor 交易，把 before 改成 after（只改有變的部分）；內容已經不是 before 時不改，回傳 false。 */
-  apply(before: string, after: string): boolean;
-  /** 等編輯器把目前的內容寫進磁碟（TextFileView.save）；寫不進去就 reject。 */
-  persist(): Promise<void>;
-}
-
-/** Cards 改卡組的結果。 */
-export type WriteResult =
-  /** 核對讀取確認寫成了。added：這次新配上 ID 的目標數（還原、當成新的不算）。 */
-  | { kind: 'done'; added: number }
-  /** 沒有要改的（含不是卡組）。 */
-  | { kind: 'unchanged' }
-  /** 門檻沒過，沒有改字。 */
-  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' }
-  /** 途中換了篇、內容被改掉、問題已經不成立，或一直有新的變動：沒有採用，要再存一次。 */
-  | { kind: 'stale' }
-  /** 寫不進磁碟：輸出沒有採用，已配出的 ID 保留、不重用。 */
-  | { kind: 'failed'; error: unknown }
-  /** 已寫進磁碟，但核對時讀不到：state 自己重試，讀到後照核對採用。 */
-  | { kind: 'saved' };
 
 export interface StateOptions {
   files: Files;
@@ -119,17 +95,6 @@ export interface State {
   restoredInEditor(path: string, ids: readonly string[]): void;
 }
 
-/** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
-class NothingToFill extends Error {}
-/**
- * 這份工作不寫了：逾時之後才輪到 modify 的回呼，或準備時關閉了。中止 modify，不改檔也不建立；回傳原文不夠，
- * 檔案不存在時那等於建立空檔。
- */
-class Stopped extends Error {}
-
-/** 先讀完待讀最多幾輪（§3 第 2 步）。 */
-const DRAIN_ROUNDS = 5;
-
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
 const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [] };
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
@@ -165,25 +130,9 @@ export function createState(options: StateOptions): State {
     watched: path => isDeckPath(path) || (isLogPath(path) && !own(path)),
     onError: error => { report(error, 'read'); },
     batch,
-    unreadable(path) {
-      const check = checks.get(path);
-      check?.settle(check.output === null ? check.fallback : { kind: 'saved' });
-    },
+    unreadable: path => { writes.unreadable(path); },
   });
   const unread = reads.unread;
-  /**
-   * 寫成、等核對讀取的工作（§4 第 3 點），照路徑。output 是 null 時沒有改字（沒有要補的、或準備時問題已不成立），
-   * 只等這次讀取、回傳 fallback。讀不到時先回 saved，核對留著，之後第一次讀到時照同一套規則採用（不重新配號、不重做交易）。
-   */
-  const checks = new Map<string, { output: string | null; prepared: Prepared | null; fallback: WriteResult; settle: (result: WriteResult) => void }>();
-  /** Cards 改卡組的那一列（§3）：一次只做一份；卡住的寫入只擋後面的寫入，不擋讀檔與複習。 */
-  let writes: Promise<unknown> = Promise.resolve();
-  /**
-   * 正在 I/O 的那一份工作，從 begin 到 end：close() 等它結束（§5）。從 begin 就開始算，不是從呼叫 persist 才算：
-   * editor.apply()、editor.persist() 裡可能同步 close()（Codex L2 再審的 R2 續）。中間只有寫進磁碟那一步會等，那一步有 writeTimeout。
-   */
-  let active: Promise<void> | null = null;
-  let finish: (() => void) | null = null;
 
   // 原始紀錄每一行的 lt 由紀錄模組算（history.seen，技術債 A1）；tracker 要 Set，照 history 物件的身分快取一個。
   let seenIds: { of: History; ids: Set<string> } | null = null;
@@ -251,21 +200,8 @@ export function createState(options: StateOptions): State {
     }
     // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
     if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
-    // 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、
-    // 把預期的輸出當成自己的寫回，讀到的文字再照下面一般的重讀比對；預期不成立、讀到 null（不見了或改名，不跟著 A2 的改名配對寫到別篇）
-    // 都照一般的重讀處理，回 stale。
-    for (const [path, text] of texts) {
-      const check = checks.get(path);
-      if (!check) continue;
-      checks.delete(path);
-      if (text === null) check.settle({ kind: 'stale' });
-      else if (check.output === null || !check.prepared) check.settle(check.fallback);
-      else if (text === check.output || confirms(text, check.prepared.expect)) {
-        check.prepared.record?.();
-        tracker.wrote(path, check.output);
-        check.settle({ kind: 'done', added: check.prepared.added });
-      } else check.settle({ kind: 'stale' });
-    }
+    // 核對讀取（§4 第 3 點）：等核對的寫入，照這次讀到的文字採用或回 stale，見 writes.ts 的 verified。
+    for (const [path, text] of texts) writes.verified(path, text);
     // 改名：同一批裡消失的卡組與第一次出現的配對（內容相同優先，再來是檔名相同），上一版與待處理的問題跟著新路徑。
     const gone = [...texts].filter(([path, text]) => text === null && tracker.text(path) !== undefined).map(([path]) => path);
     const name = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
@@ -326,70 +262,6 @@ export function createState(options: StateOptions): State {
     return { decks: afterDecks - begin, history: afterHistory - afterDecks, plan: end - afterHistory, total: end - begin };
   }
 
-  /**
-   * 寫入的門檻（§3 第 3 步）：可以時回傳 null，不行時回傳原因。只在電腦（D-134）、讀完之後、還沒關閉，而且沒有讀不到的
-   * 卡組或紀錄（state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）；不是卡組就沒有要改的。之後要加的原因
-   * （D-150 的備份沒成功、更新防線的需要新版、多檔工作的預留還沒載入）都加在這裡，不分散到各個入口。
-   */
-  function writable(path: string): WriteResult | null {
-    if (!options.fillIds) return { kind: 'blocked', reason: 'phone' };
-    if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
-    if (life.closed) return { kind: 'blocked', reason: 'closed' };
-    if (unread.size) return { kind: 'blocked', reason: 'unread' };
-    if (!isDeckPath(path)) return { kind: 'unchanged' };
-    return null;
-  }
-  /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending 裡有不在 unread 的路徑（except 那一篇除外）。 */
-  const waiting = reads.waiting;
-  /** 排進寫入的那一列；排隊時就記下對象，輪到時才取最新的文字。 */
-  function enqueue(job: () => Promise<WriteResult>): Promise<WriteResult> {
-    const next = writes.then(job);
-    writes = next.catch(() => {});
-    return next;
-  }
-  /**
-   * 第 1～3 步：已關閉、先讀完已知的待讀（包括這一篇；最多 DRAIN_ROUNDS 輪，rounds 跨過 fillIds 的重來累計）、門檻。
-   * 回傳 null 時可以開始 I/O；呼叫端接著同步開始，中間不能有 await。
-   */
-  async function admit(path: string, rounds: { count: number }): Promise<WriteResult | null> {
-    if (life.closed) return { kind: 'blocked', reason: 'closed' };
-    // 手機、還沒 ready、不是卡組：不用先讀。
-    const early = writable(path);
-    if (early && !(early.kind === 'blocked' && early.reason === 'unread')) return early;
-    while (waiting()) {
-      if (life.closed) return { kind: 'blocked', reason: 'closed' };
-      if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
-      rounds.count++;
-      // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
-      await reads.readNow();
-    }
-    return writable(path);
-  }
-  /** 第 4 步：這篇的 I/O 開始（§2 第 1 點）。 */
-  function begin(path: string): void {
-    reads.hold(path);
-    active = new Promise(resolve => { finish = resolve; });
-  }
-  /**
-   * 第 5 步等一次寫進磁碟（§3 最後一段）：最多等 writeTimeout，超過就當成失敗（錯誤寫明逾時），照第 6 步結束 I/O、放行後面的寫入。
-   * 它之後才完成，也不採用這份工作的輸出；寫進磁碟的內容會送通知，照一般的讀取處理（配出的 ID 已在 seen，不會被當成換了 ID）。
-   * 代價：還原或當成新的在逾時之後才寫成時，可能多出一個待處理問題，要家長再選一次。
-   */
-  function persist(work: Promise<void>): Promise<void> {
-    let id: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      id = setTimeout(() => { reject(Error(`寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`)); }, writeTimeout);
-    });
-    return Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
-  }
-  /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
-  function end(path: string): void {
-    reads.unhold(path);
-    finish?.();
-    finish = null;
-    active = null;
-    reads.reread(path);
-  }
   /** 對 tracker 做一件事；這篇的文字或待處理的問題因此變了，就採用（更新 deckMap、重排）。 */
   function track<T>(path: string, change: () => T): T {
     const revision = tracker.revision(), known = tracker.text(path);
@@ -402,84 +274,7 @@ export function createState(options: StateOptions): State {
    * 只預留 ID，寫回的文字要等核對讀取確認寫成了才採用。
    */
   const prepare = (path: string, text: string): Prepared => track(path, () => tracker.fill(path, text));
-  /** 第 6、7 步：登記這份寫入的核對，等核對讀取（end 已經排好）。 */
-  function verify(path: string, original: string, prepared: Prepared | null, fallback: WriteResult): Promise<WriteResult> | WriteResult {
-    const output = prepared && prepared.text !== original ? prepared.text : null;
-    // 關閉時在寫的：等到結果明確了，不登記核對、不採用（§5）；有改字是 saved。
-    if (life.closed) return output === null ? fallback : { kind: 'saved' };
-    return new Promise(settle => { checks.set(path, { output, prepared, fallback, settle }); });
-  }
-  /** 離開筆記（沒開著的檔）：在 modify 的回呼裡對最新的原文準備（W5 §8-2 第 4 點）。 */
-  async function fillFile(path: string): Promise<WriteResult> {
-    const rounds = { count: 0 };
-    for (;;) {
-      const stop = await admit(path, rounds);
-      if (stop) return stop;
-      begin(path);
-      let prepared: Prepared | null = null, original = '', again = false, gate: WriteResult | null = null, live = true;
-      let outcome: WriteResult | Promise<WriteResult> | null;
-      try {
-        await persist(files.modify(path, text => {
-          // 逾時之後才輪到回呼：這份工作已經結束，中止 modify（Codex L2 的 R1：檔案刪掉或改名後 text 是空字串，回傳它會建立空檔）。
-          if (!live) throw new Stopped();
-          if (text === '') throw new NothingToFill();
-          original = text;
-          // 回呼拿到的是最新的原文：重查門檻與待讀（這一篇自己除外，它最新的內容就是這份原文）；有新的待讀就不改，回到第 2 步。
-          gate = writable(path);
-          if (gate) return text;
-          if (waiting(path)) { again = true; return text; }
-          prepared = prepare(path, text);
-          // 準備時監聽者可能 close()（見 edit）：不寫。
-          if (life.closed) throw new Stopped();
-          return prepared.text;
-        }));
-        outcome = gate ?? (again ? null : verify(path, original, prepared, { kind: 'unchanged' }));
-      } catch (error) {
-        // 寫不進去：不登記核對；已配出的 ID 留在 seen、不重用。
-        outcome = error instanceof NothingToFill ? { kind: 'unchanged' } : error instanceof Stopped ? { kind: 'blocked', reason: 'closed' } : { kind: 'failed', error };
-      } finally {
-        live = false;
-        end(path);
-      }
-      if (outcome) return outcome;
-      rounds.count++;
-    }
-  }
-  /**
-   * 開著的筆記（save、resolve）：第 4、5 步從最後一次檢查（await admit 之後同步重查）到 apply 之間沒有 await。plan 對編輯器最新的文字準備
-   * （先把它當成新版本比對、觀察到的原文照常採用）；回傳 null 時沒有要寫的，照樣 persist、等核對讀取，回 fallback。
-   */
-  async function edit(editor: EditorHandle, plan: (text: string) => Prepared | null, fallback: WriteResult): Promise<WriteResult> {
-    const path = editor.path;
-    const rounds = { count: 0 };
-    for (;;) {
-      const stop = await admit(path, rounds);
-      if (stop) return stop;
-      // admit 的最後一次檢查到這裡隔了一次 await：其間送來的通知或門檻的變化，回到 admit 重查（輪數照算）。
-      if (!waiting() && !writable(path)) break;
-    }
-    begin(path);
-    let outcome: WriteResult | Promise<WriteResult>;
-    try {
-      const text = editor.text();
-      if (text === null) return { kind: 'stale' };
-      const prepared = plan(text);
-      // plan 觀察到新的原文時會同步通知監聽者（adopt → replan），監聽者或 onError 可能在裡面 close()（Codex L2 的 R2）：
-      // 這時還沒改編輯器、還沒寫，停下來；close() 不用等這一份。
-      if (life.closed) return { kind: 'blocked', reason: 'closed' };
-      if (prepared && prepared.text !== text && !editor.apply(text, prepared.text)) return { kind: 'stale' };
-      // 沒有改字也要 persist：觀察過的編輯器文字可能比磁碟新，要讓磁碟追上，核對讀取才有依據。
-      await persist(editor.persist());
-      outcome = verify(path, text, prepared, fallback);
-    } catch (error) {
-      // 寫不進去：不登記核對，不把 Editor 改回去，已配出的 ID 留在 seen、不重用。這時磁碟可能比觀察過的編輯器文字舊，
-      // 接著的那次讀取可能出現和 N1 一樣的假問題，等下一次存檔成功或 Obsidian 的自動存檔追上後消失（保存失敗時的代價）。
-      outcome = { kind: 'failed', error };
-    } finally {
-      end(path);
-    }
-    return outcome;
-  }
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); } });
 
   return {
     ready() {
@@ -488,11 +283,11 @@ export function createState(options: StateOptions): State {
     },
     unread: () => [...unread].sort(),
     deckStatus: path => life.loaded ? tracker.status(path) : { missing: 0, issues: [] },
-    save: editor => enqueue(() => edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
+    save: editor => writes.enqueue(() => writes.edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
     // 問題已經跟著改名搬到別的路徑：不是這個編輯器的那一篇，不準備（stale）。
-    resolve: (issue, choice, editor) => enqueue(() => edit(editor, text => issue.path === editor.path ? track(editor.path, () => tracker.resolve(issue, choice, text)) : null, { kind: 'stale' })),
+    resolve: (issue, choice, editor) => writes.enqueue(() => writes.edit(editor, text => issue.path === editor.path ? track(editor.path, () => tracker.resolve(issue, choice, text)) : null, { kind: 'stale' })),
     async fillIds(path) {
-      const result = await enqueue(() => fillFile(path));
+      const result = await writes.enqueue(() => writes.fillFile(path));
       // 寫不進去時照舊 reject（呼叫端交給 onError）；已配出的 ID 留在 seen、不重用。
       if (result.kind === 'failed') throw result.error;
       // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
@@ -537,9 +332,8 @@ export function createState(options: StateOptions): State {
       life.closed = true;
       reads.stop();
       // 寫成、等核對的工作回 saved（已寫進磁碟的內容下次載入照實讀回）；在寫的那一份等結果明確，最多 writeTimeout（§5）。
-      for (const check of checks.values()) check.settle(check.output === null ? check.fallback : { kind: 'saved' });
-      checks.clear();
-      await active;
+      writes.stop();
+      await writes.idle();
       await reads.idle();
       await writer.flush();
     },

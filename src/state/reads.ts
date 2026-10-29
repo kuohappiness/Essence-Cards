@@ -27,6 +27,8 @@ export interface ReadsOptions {
   unreadable: (path: string) => void;
 }
 
+export type Reads = ReturnType<typeof createReads>;
+
 export function createReads(options: ReadsOptions) {
   const { files, life, delay, onError } = options;
   /** 收到通知還沒讀的路徑；讀不到的也留在這裡等重試。 */
