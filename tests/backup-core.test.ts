@@ -290,4 +290,8 @@ void test('每台裝置最後回報的版本：從帶來源的原始行算，兩
   ]);
   assert.equal(rows[0].source, L + '2026-11 Windows-2c9e.jsonl');
   assert.equal(rows[4].source, L + '2026-10 iPhone-7f3a 還原 2026-11-02 Windows-2c9e.jsonl');
+  // 還原檔的衝突副本也是還原檔，不算目前版本，歸原來的裝置（Codex 第二輪 L4）。
+  const copy = L + '2026-10 iPhone-7f3a 還原 2026-11-02 Windows-2c9e 2.jsonl';
+  assert.deepEqual(lastVersions([{ path: copy, text: app(T2, '0.0.1+0000000') + '\n' }]).map(row => [row.device, row.note, row.source]),
+    [['iPhone-7f3a', '還原檔', copy]]);
 });

@@ -32,7 +32,10 @@ export function lastVersions(sources: readonly { path: string; text: string }[])
     if (!isLogPath(path)) continue;
     const name = path.slice(LOG_FOLDER.length + 1);
     const stem = name.slice(0, -'.jsonl'.length);
-    const source = logSource(name);
+    // 還原檔的衝突副本（`… 還原 <日期> <裝置碼> 2.jsonl`）也是還原檔：先去掉衝突副本的尾巴再看（Codex 第二輪 L4）。
+    // 補行的分組（syntax §5-3）照舊用 logSource，這裡只為了版本列表分類。
+    const plain = stem.replace(/ \d+$/, '');
+    const source = logSource(name) !== stem ? logSource(name) : logSource(plain + '.jsonl') !== plain ? logSource(plain + '.jsonl') : stem;
     const restored = source !== stem;
     const match = DEVICE_FILE.exec(source);
     const device = match ? match[1] : source;
