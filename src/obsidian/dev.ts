@@ -14,7 +14,7 @@ import { lockTest, saveFlow, saveTest, t1Close, t1Prep, type DevLog, type IdsHos
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
-import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, type Params } from './dev-cloud.ts';
+import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, saveBlocked, type Params } from './dev-cloud.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -86,6 +86,8 @@ const commands: Record<string, DevCommand> = {
   'cloud-write': { name: 'Essence 開發：佔位檔的追加寫入', run: (host, _ids, params) => cloudWrite(host.app, params), desktop: true, root: CLOUD_ROOT },
   'cloud-state': { name: 'Essence 開發：佔位檔的測試 state', run: (host, _ids, params) => cloudState(host.app, params), desktop: true, root: CLOUD_ROOT },
   'cloud-late': { name: 'Essence 開發：佔位檔晚回來的讀寫', run: () => cloudLate(), desktop: true, root: CLOUD_ROOT },
+  // D-154 第 2 點的 Windows 對照：受阻時按一次存檔（用 state-load §8 的獨占鎖做出讀不到）。
+  'save-blocked': { name: 'Essence 開發：受阻時按存檔', run: (host, _ids, params) => saveBlocked({ app: host.app, state: host.state, saver: host.ids?.saver ?? null, notices: listener => host.on('notice', listener) }, params), desktop: true, root: CLOUD_ROOT },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */

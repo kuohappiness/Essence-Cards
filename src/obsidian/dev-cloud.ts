@@ -1,4 +1,4 @@
-import type { App } from 'obsidian';
+import { MarkdownView, type App } from 'obsidian';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { Files } from '../core/files.ts';
@@ -7,6 +7,7 @@ import type { LogWriter, NewEntry } from '../core/study/index.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
 import { createObsidianFiles } from './files.ts';
+import type { Saver } from './save.ts';
 
 // D-154 第 3 點的 Windows 分段實測（tasks/icloud-placeholders.md §1）。佔位狀態由 PowerShell 做出並確認（attrib -P +U、
 // RecallOnDataAccess），這裡每次只做一個動作：記結果、花了多久與錯誤的欄位。只碰 Essence 佔位檔/。
@@ -183,4 +184,32 @@ export async function cloudState(app: App, params: Params): Promise<unknown> {
     return { name, close: done };
   }
   throw Error('step 只能是 open、poke、status、close：' + step);
+}
+
+/** saveBlocked 用的：外掛的 app、state、存檔按鈕的接線與提示的訂閱（dev.ts 從外掛本身接過來）。 */
+export interface SaveHost { app: App; state: State | null; saver: Saver | null; notices: (listener: (message: string) => void) => () => void }
+
+/**
+ * D-154 第 2 點的 Windows 對照（tasks/icloud-placeholders.md §2）：在分頁打開 params.target 這篇卡組（已經開著就用那一個），
+ * 記下存檔按鈕的說明，按一次存檔（和按鈕同一個 saver.save），記下提示、存檔後的說明、編輯器的文字與 state.unread()。
+ * params.close=1：做完關掉那個分頁。
+ */
+export async function saveBlocked(host: SaveHost, params: Params): Promise<unknown> {
+  const { app, state, saver } = host;
+  if (!state || !saver) throw Error('state 或存檔按鈕還沒接好（只在電腦）');
+  const path = params.target, file = path ? app.vault.getFileByPath(path) : null;
+  if (!path || !file) throw Error('找不到 target：' + String(path));
+  const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+  let leaf = app.workspace.getLeavesOfType('markdown').find(l => l.view instanceof MarkdownView && l.view.file?.path === path);
+  if (!leaf) { leaf = app.workspace.getLeaf('tab'); await leaf.openFile(file); await sleep(500); }
+  const view = leaf.view;
+  if (!(view instanceof MarkdownView)) throw Error('打開的不是 Markdown 編輯器');
+  const label = () => { saver.refresh(); return view.containerEl.querySelector('.essence-cards-save')?.getAttribute('aria-label') ?? null; };
+  const before = { tip: label(), unread: state.unread(), text: view.editor.getValue() };
+  const notices: string[] = [];
+  const stop = host.notices(message => { notices.push(message); });
+  try { await saver.save(view); await sleep(300); } finally { stop(); }
+  const after = { tip: label(), unread: state.unread(), text: view.editor.getValue() };
+  if (params.close === '1') leaf.detach();
+  return { path, before, notices, after };
 }
