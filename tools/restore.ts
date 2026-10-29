@@ -47,6 +47,10 @@ async function load(options: RestoreOptions): Promise<Loaded> {
   let config: string | null = null;
   let configError: string | null = null;
   try { config = await pluginConfig(vault, options.config); } catch (error) { configError = (error as Error).message; }
+  // 設定資料夾的路徑上有連結時，--apply 寫 data.json 一定會被擋：計畫就先當成確定不了，data.json 標成擋住。
+  if (config !== null) {
+    try { await assertNoLinks(vault, config + '/' + PLUGIN_DATA); } catch (error) { configError = (error as Error).message; config = null; }
+  }
   const current = new Map<string, Uint8Array>();
   const paths = await listTree(vault, ESSENCE_ROOT);
   if (config !== null) paths.push(config + '/' + PLUGIN_DATA);

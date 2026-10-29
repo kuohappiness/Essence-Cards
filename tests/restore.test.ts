@@ -350,3 +350,15 @@ for (const source of ['已還原的前置檔', '沒選的其他卡組', '新出�
     assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), []);
   });
 }
+
+void test('還原計畫：設定資料夾是連結時，計畫就把 data.json 標成擋住，不等到 --apply 才失敗（Codex 再查的 F3 建議）', async t => {
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/data.json': '{"cap":20}' });
+  const zip = await backup(t, source);
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') }, { plugin: false });
+  const elsewhere = await makeVault(t, { '.obsidian/plugins/essence-cards/data.json': '{}' });
+  await symlink(join(elsewhere, '.obsidian'), join(vault, '.obsidian'), 'junction');
+  const { plan, report } = await makePlan({ vault, backup: zip, ...fixed, random: counter() });
+  assert.deepEqual(plan.config.target, null);
+  assert.deepEqual(plan.files.map(file => [file.path, file.kind, file.action]), [['.obsidian/plugins/essence-cards/data.json', 'unmapped', 'blocked']]);
+  assert.match(await readFile(report, 'utf8'), /\.obsidian：是連結/);
+});
