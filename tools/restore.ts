@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName } from '../src/core/backup/index.ts';
@@ -7,7 +7,8 @@ import { isDeckPath } from '../src/core/deck/index.ts';
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
-import { assertNoLinks, listTree, platformName, pluginConfig, readError, sameFileKey } from './vault-io.ts';
+import { assertNoLinks, isOwn, leftBehind, listTree, platformName, pluginConfig, readError, removeOwn, sameFileKey, writeNew } from './vault-io.ts';
+import type { Identity, WriteNew } from './vault-io.ts';
 
 export const CLOSE_OBSIDIAN = '這台電腦的 Obsidian 要先關掉：過渡的還原工具不處理開著的編輯器與補 ID 的計時器（外掛內的還原才處理）。';
 const PLAN_KIND = 'essence-cards-restore-plan';
@@ -23,8 +24,8 @@ export interface RestoreOptions {
   now?: () => number;
   offset?: (ms: number) => number;
   random?: () => string;
-  /** 測試用：寫檔的替身（模擬空間不足）。 */
-  seams?: { write?: (path: string, bytes: Uint8Array, flag: 'w' | 'wx') => Promise<void> };
+  /** 測試用：把內容寫進剛建立的暫存檔或還原檔的替身（模擬空間不足、寫的時候資料夾被換掉）。 */
+  seams?: { write?: WriteNew };
 }
 
 /** 寫到備份資料夾旁（不進 repo）的計畫檔：--apply 用它確認還是同一個 vault、同一份備份，以及每個檔在計畫時的樣子。 */
@@ -165,7 +166,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
   const now = Math.trunc((options.now ?? Date.now)());
   const offset = (options.offset ?? (ms => -new Date(ms).getTimezoneOffset()))(now);
   const random = options.random ?? (() => randomBytes(2).toString('hex'));
-  const write = options.seams?.write ?? ((path: string, bytes: Uint8Array, flag: 'w' | 'wx') => writeFile(path, bytes, { flag }));
+  const write = options.seams?.write;
   // 過渡工具讀不到 Obsidian 存的裝置碼：平台名稱加隨機 4 碼，這次還原寫的還原檔都用它（syntax §5-3）。
   const device = platformName() + '-' + random();
   const saved = JSON.parse(await readFile(options.plan, 'utf8')) as PlanFile;
@@ -202,7 +203,6 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
   }
   // 照順序寫：要先釋放 ID 的檔沒寫成，等它的就不寫，不留下重複的 ID。
   const written = new Set<string>();
-  const kept = (path: string): string => `；暫存檔 ${path} 沒有刪（路徑在這段時間被換成連結，或已經不是這次寫的那個檔），請確認後手動處理`;
   for (const path of fresh.order) {
     const file = byPath.get(path)!;
     const waiting = file.after.filter(other => !written.has(other));
@@ -212,11 +212,10 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     const target = join(vault, rel);
     const expected = file.current?.sha256 ?? null;
     const bytes = loaded.backup.files.get(file.path)!;
-    let temporary: string | null = null;
-    let identity: Identity | null = null;
-    // 沒寫成就收掉這次的暫存檔；收不掉（不確定是不是自己的）就留著並說明（Codex 再查 R1）。
+    let temporary: { path: string; identity: Identity } | null = null;
+    // 沒寫成就收掉這次的暫存檔；收不掉（不確定是不是自己的）就留著並說明（Codex 再查 R1、第三次查核 T1）。
     const giveUp = async (kind: Outcome, reason: string): Promise<void> => {
-      if (temporary !== null && !await removeOwn(vault, folder, temporary, identity)) reason += kept(temporary);
+      if (temporary !== null && !await removeOwn(temporary.path, temporary.identity)) reason += leftBehind(temporary.path);
       temporary = null;
       outcome(file, kind, reason);
     };
@@ -228,20 +227,17 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       await mkdir(dirname(target), { recursive: true });
       await assertNoLinks(vault, folder);
       // 暫存檔用獨占建立；撞到已有的檔（別的程序或先前留下的）就換名字，不動它（Codex 中途查核 F5）。
+      // 寫入失敗的半個檔由 writeNew 收掉或說明。
       for (let i = 0; i < 20 && temporary === null; i++) {
         const candidate = target + '.' + random() + '.restore-tmp';
-        try { await write(candidate, bytes, 'wx'); } catch (error) {
+        try { temporary = { path: candidate, identity: await writeNew(candidate, bytes, write) }; } catch (error) {
           if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
-          // 建立之後才失敗（例如空間不足）的半個檔是這次的，刪掉；路徑被換掉時留著。
-          if (!await removeOwn(vault, folder, candidate, null)) throw Error((error as Error).message + kept(candidate), { cause: error });
           throw error;
         }
-        temporary = candidate;
       }
       if (temporary === null) throw Error('找不到沒用過的暫存檔名');
-      // 先確認路徑上沒有連結，才記下暫存檔的身分：寫的時候資料夾被換掉，記到的就會是別人的檔。
+      // 寫的時候資料夾被換成連結，就不跟著連結讀目標（Codex 中途查核 F3）。
       await assertNoLinks(vault, folder);
-      identity = await lstat(temporary, { bigint: true });
       if (await shaOf(target) !== expected) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 改名前重新讀現在的全部卡組：前面寫好的檔又被同步改回來、沒選的卡組或新出現的卡組占用了要加回的 ID，就不寫（Codex 再查 R2）。
       if (file.target !== null && isDeckPath(file.target)) {
@@ -249,7 +245,9 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
         if (taken) { await giveUp('跳過', taken); continue; }
       }
       await assertNoLinks(vault, folder);
-      await rename(temporary, target);
+      // 資料夾在這段時間被換掉時，那個位置是別人的檔，不能拿來蓋目標（Codex 第三次查核 T1）。
+      if (!await isOwn(temporary.path, temporary.identity)) throw Error(temporary.path + ' 已經不是這次寫的暫存檔');
+      await rename(temporary.path, target);
       temporary = null;
       if (await shaOf(target) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');
       written.add(path);
@@ -267,45 +265,26 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     const path = LOG_FOLDER + '/' + name;
     names.add(same(path));
     const bytes = new TextEncoder().encode(log.lines.join('\n') + '\n');
-    // 試過獨占建立才可能有這次的檔：EEXIST 是別人的，連結檢查失敗時還沒寫，都不刪；刪之前照 R1 確認還是自己的。
-    let attempted = false;
+    // 寫好之後才失敗的還原檔不留著：重跑時這些行仍算缺，會寫成新的還原檔。只刪這次建立的（Codex 再查 R1、第三次查核 T1）；
+    // 寫入失敗的半個檔由 writeNew 收掉或說明。
     let identity: Identity | null = null;
     try {
       await assertNoLinks(vault, LOG_FOLDER);
       await mkdir(join(vault, LOG_FOLDER), { recursive: true });
       await assertNoLinks(vault, LOG_FOLDER);
-      try { await write(join(vault, path), bytes, 'wx'); } finally { attempted = true; }
+      identity = await writeNew(join(vault, path), bytes, write);
       await assertNoLinks(vault, LOG_FOLDER);
-      identity = await lstat(join(vault, path), { bigint: true });
-      if (hashBytes(new Uint8Array(await readFile(join(vault, path)))) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的內容不同');
+      const back = new Uint8Array(await readFile(join(vault, path)));
+      if (!await isOwn(join(vault, path), identity)) throw Error('寫進去之後那個位置已經不是這次寫的檔');
+      if (hashBytes(back) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的內容不同');
       result.logs.push({ source: log.source, path, lines: log.lines.length, outcome: '已還原', reason: '' });
     } catch (error) {
       let reason = (error as Error).message;
-      // 寫了一半的還原檔不留著：重跑時這些行仍算缺，會寫成新的還原檔。
-      if (attempted && (error as NodeJS.ErrnoException).code !== 'EEXIST' && !await removeOwn(vault, LOG_FOLDER, join(vault, path), identity)) reason += kept(join(vault, path));
+      if (identity !== null && !await removeOwn(join(vault, path), identity)) reason += leftBehind(join(vault, path));
       result.logs.push({ source: log.source, path, lines: log.lines.length, outcome: '失敗', reason });
     }
   }
   return result;
-}
-
-/** 檔案的身分（磁碟與 inode）：確認要刪的還是這次寫的那個檔。 */
-interface Identity { dev: bigint; ino: bigint }
-
-/**
- * 只刪這次建立的檔（Codex 再查 R1）：路徑上沒有連結，而且還是同一個檔（identity 是 null 時只查連結，用在建立就失敗的半個檔）；
- * 不確定就留著，回傳 false。檔案已經不在也算收掉了。
- */
-async function removeOwn(vault: string, folder: string, path: string, identity: Identity | null): Promise<boolean> {
-  try {
-    await assertNoLinks(vault, folder);
-    const now = await lstat(path, { bigint: true });
-    if (!now.isFile() || identity !== null && (now.dev !== identity.dev || now.ino !== identity.ino)) return false;
-    await unlink(path);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ENOENT';
-  }
 }
 
 /** 要寫進 rel 的卡組（bytes）的學習目標 ID，現在有沒有在別篇：重新讀現在全部的卡組。讀不到的卡組也擋住（確定不了）。 */

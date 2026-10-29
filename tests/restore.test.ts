@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFile, lstat, readdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { readDecks } from '../src/core/deck/index.ts';
 import { dueAt, readHistory, replay } from '../src/core/study/index.ts';
@@ -9,7 +10,7 @@ import { backupVault } from '../tools/backup.ts';
 import { createNodeFiles } from '../tools/node-files.ts';
 import { applyPlan, makePlan } from '../tools/restore.ts';
 import type { RestoreOptions } from '../tools/restore.ts';
-import { platformName } from '../tools/vault-io.ts';
+import { platformName, writeNew } from '../tools/vault-io.ts';
 import { goal, makeVault, put, review, tempFolder } from './helpers/vault.ts';
 
 const LOGS = 'Essence Cards/紀錄/';
@@ -132,9 +133,9 @@ const ids = async (vault: string): Promise<(string | null)[]> =>
 
 void test('還原：中途寫入失敗時列為失敗，等它釋放 ID 的檔也不寫、ID 不重複；重跑 --plan 再 --apply 就完成', async t => {
   const { vault, zip, A, B, before } = await drill(t);
-  const write = async (path: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+  const write = async (handle: FileHandle, bytes: Uint8Array, path: string): Promise<void> => {
     if (path.includes('B.md')) throw Object.assign(Error('寫入失敗'), { code: 'EIO' });
-    await writeFile(path, bytes, { flag });
+    await handle.writeFile(bytes);
   };
   const { plan: first, result } = await restore(vault, zip, { seams: { write } });
   // A 要加回 bbb222，它現在在 B：B 先寫（Codex 中途查核 F1）。
@@ -163,9 +164,9 @@ for (const [releases, adds] of [['A', 'B'], ['B', 'A']]) {
       const { plan, path } = await makePlan(options);
       assert.deepEqual(plan.order, [R, D]);
       if (branch === 'changed') await put(vault, R, goal('aaa111', '計畫之後改字') + goal('bbb222'));
-      const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+      const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
         if (branch === 'failed' && file.includes(releases + '.md.')) throw Object.assign(Error('no space left on device'), { code: 'ENOSPC' });
-        await writeFile(file, bytes, { flag });
+        await handle.writeFile(bytes);
       };
       const result = await applyPlan({ ...options, plan: path, seams: { write } });
       const outcomes = Object.fromEntries(result.files.map(file => [file.path, file.outcome]));
@@ -178,8 +179,8 @@ for (const [releases, adds] of [['A', 'B'], ['B', 'A']]) {
 void test('還原（Codex 中途查核 F2）：寫入期間才到的修改不蓋掉——別的檔在前一個檔寫入時被改、這個檔在暫存檔寫好後改名前被改，都跳過', async t => {
   const { vault, zip, A, B } = await drill(t);
   let step = 0;
-  const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
-    await writeFile(file, bytes, { flag });
+  const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+    await handle.writeFile(bytes);
     // 順序是 B 再 A：寫 B 的暫存檔時改了 B（改名前的檢查要擋），之後 A 的寫入照常。
     if (file.includes('B.md.') && step++ === 0) await put(vault, B, goal('ccc333') + goal('bbb222') + goal('new999'));
   };
@@ -193,10 +194,10 @@ void test('還原（Codex 中途查核 F2）：寫入期間才到的修改不蓋
   const options = { vault: other.vault, backup: other.zip, ...fixed, random: counter() };
   const { path } = await makePlan({ ...options, random: counter() });
   let once = true;
-  const late = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+  const late = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
     // 寫 B 的暫存檔時，A 才被同步改掉：輪到 A 時寫之前的重讀要擋住。
     if (file.includes('B.md.') && once) { once = false; await put(other.vault, other.A, goal('aaa111', '同步來的新字')); }
-    await writeFile(file, bytes, { flag });
+    await handle.writeFile(bytes);
   };
   const second = await applyPlan({ ...options, plan: path, seams: { write: late } });
   assert.deepEqual(second.files.map(file => [file.path, file.outcome]), [[other.A, '跳過'], [other.B, '已還原']]);
@@ -205,9 +206,9 @@ void test('還原（Codex 中途查核 F2）：寫入期間才到的修改不蓋
 
 void test('還原：還原檔寫到一半空間不足時列為失敗、不留半個檔，重跑仍算缺', async t => {
   const { vault, zip } = await drill(t);
-  const write = async (path: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
-    if (!path.endsWith('.jsonl')) return writeFile(path, bytes, { flag });
-    await writeFile(path, bytes.subarray(0, 5), { flag });
+  const write = async (handle: FileHandle, bytes: Uint8Array, path: string): Promise<void> => {
+    if (!path.endsWith('.jsonl')) return handle.writeFile(bytes);
+    await handle.writeFile(bytes.subarray(0, 5));
     throw Object.assign(Error('no space left on device'), { code: 'ENOSPC' });
   };
   const { result } = await restore(vault, zip, { seams: { write } });
@@ -229,13 +230,11 @@ void test('還原：暫存檔撞到已有的檔就換名字，不刪不是這次
   assert.equal(await readFile(other, 'utf8'), 'preexisting temporary');
 });
 
-void test('備份：暫存檔被別的程序搶先建立時失敗，不刪那個檔（Codex 中途查核 F5）', async t => {
-  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') });
-  const to = await tempFolder(t);
-  await assert.rejects(backupVault({ vault, to, by: 'backup', ...fixed, random: () => 'aaaa', seams: {
-    write: async path => { await writeFile(path, 'other'); throw Object.assign(Error('exists'), { code: 'EEXIST' }); },
-  } }), /exists/);
-  assert.deepEqual(await readdir(to), ['Essence Cards 備份 2026-10-29 200000 未知 aaaa.zip.tmp']);
+void test('暫存檔在選好名字之後被別的程序搶先建立時，獨占建立失敗、不動那個檔（Codex 中途查核 F5）', async t => {
+  const other = join(await tempFolder(t), 'Essence Cards 備份 2026-10-29 200000 未知 aaaa.zip.tmp');
+  await writeFile(other, 'other');
+  await assert.rejects(writeNew(other, new Uint8Array([1, 2, 3])), { code: 'EEXIST' });
+  assert.equal(await readFile(other, 'utf8'), 'other');
 });
 
 void test('Essence Cards 本身是連結時備份與計畫都拒絕；計畫之後子資料夾被換成連結時不寫，vault 外的檔不動（Codex 中途查核 F3）', async t => {
@@ -253,13 +252,14 @@ void test('Essence Cards 本身是連結時備份與計畫都拒絕；計畫之�
   await put(vault, 'Essence Cards/子/A.md', goal('aaa111', '改過'));
   const options = { vault, backup: zip, ...fixed, random: counter() };
   const { path } = await makePlan(options);
-  const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
-    // 檢查過路徑、寫暫存檔的那一刻換掉（最晚的中途置換）：改名前的檢查要擋住，不能寫到外面的 A.md。
+  const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+    await handle.writeFile(bytes);
+    // 檢查過路徑、寫好暫存檔的那一刻換掉（最晚的中途置換）：改名前的檢查要擋住，不能寫到外面的 A.md。Windows 上開著檔的資料夾搬不動，先關。
     if (file.endsWith('.restore-tmp') && !(await lstat(join(vault, 'Essence Cards/子'))).isSymbolicLink()) {
+      await handle.close();
       await rename(join(vault, 'Essence Cards/子'), join(vault, '子移開'));
       await symlink(join(outside, '子'), join(vault, 'Essence Cards/子'), 'junction');
     }
-    await writeFile(file, bytes, { flag });
   };
   const result = await applyPlan({ ...options, plan: path, seams: { write } });
   assert.deepEqual(result.files.map(file => file.outcome), ['失敗']);
@@ -308,9 +308,10 @@ void test('還原（Codex 再查 R1）：暫存檔寫好後父資料夾被換成
   const { path } = await makePlan(options);
   const outside = await tempFolder(t, 'essence-outside-');
   let swapped = '';
-  const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
-    await writeFile(file, bytes, { flag });
+  const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+    await handle.writeFile(bytes);
     if (!file.endsWith('.restore-tmp') || swapped) return;
+    await handle.close();
     swapped = basename(file);
     await writeFile(join(outside, swapped), 'outside existing evidence');
     await rename(join(vault, 'Essence Cards/sub'), join(vault, 'Essence Cards/moved'));
@@ -318,7 +319,7 @@ void test('還原（Codex 再查 R1）：暫存檔寫好後父資料夾被換成
   };
   const result = await applyPlan({ ...options, plan: path, seams: { write } });
   assert.deepEqual(result.files.map(file => file.outcome), ['失敗']);
-  assert.match(result.files[0].reason, /Essence Cards\/sub：是連結.*暫存檔 .*沒有刪/);
+  assert.match(result.files[0].reason, /Essence Cards\/sub：是連結.*\.restore-tmp 沒有刪/);
   assert.equal(await readFile(join(outside, swapped), 'utf8'), 'outside existing evidence');
   assert.ok((await readdir(join(vault, 'Essence Cards/moved'))).includes(swapped));
 });
@@ -334,8 +335,8 @@ for (const source of ['已還原的前置檔', '沒選的其他卡組', '新出�
     const options = { vault, backup: zip, ...fixed, random: counter() };
     const { plan, path } = await makePlan(options);
     assert.deepEqual(plan.order, [B, A]);
-    const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
-      await writeFile(file, bytes, { flag });
+    const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+      await handle.writeFile(bytes);
       if (!file.includes('A.md.')) return;
       if (source === '已還原的前置檔') await put(vault, B, goal('cde456') + goal('bcd345'));
       if (source === '沒選的其他卡組') await put(vault, C, goal('fff111') + goal('bcd345'));
@@ -361,4 +362,68 @@ void test('還原計畫：設定資料夾是連結時，計畫就把 data.json �
   assert.deepEqual(plan.config.target, null);
   assert.deepEqual(plan.files.map(file => [file.path, file.kind, file.action]), [['.obsidian/plugins/essence-cards/data.json', 'unmapped', 'blocked']]);
   assert.match(await readFile(report, 'utf8'), /\.obsidian：是連結/);
+});
+
+// 寫好：目標也被換了，改名前的重讀跳過。寫到一半：空間不足。目標相同：換進來的資料夾裡目標和計畫時一樣，只有暫存檔不是這次的，改名前的身分核對要擋住。
+for (const variant of ['寫好', '寫到一半', '目標相同'] as const) {
+  void test(`還原（Codex 第三次查核 T1）：暫存檔${variant === '寫到一半' ? '寫到一半' : '寫好'}後父資料夾被換成另一個一般資料夾（${variant}），不刪也不搬替換進來的同名檔`, async t => {
+    // 不是卡組的檔：搬走的資料夾裡的舊檔不會讓學習目標 ID 重複，只看暫存檔的清理。
+    const A = 'Essence Cards/sub/附件.txt';
+    const vault = await makeVault(t, { [A]: '備份時' });
+    const zip = await backup(t, vault);
+    await put(vault, A, '改過');
+    const options = { vault, backup: zip, ...fixed, random: counter() };
+    const { path } = await makePlan(options);
+    const theirs = variant === '目標相同' ? '改過' : '另一個資料夾的';
+    let swapped = '';
+    const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+      await handle.writeFile(variant === '寫到一半' ? bytes.subarray(0, 3) : bytes);
+      if (!file.endsWith('.restore-tmp') || swapped) return;
+      // Windows 上開著檔的資料夾搬不動，先關。
+      await handle.close();
+      swapped = basename(file);
+      await rename(join(vault, 'Essence Cards/sub'), join(vault, 'Essence Cards/moved'));
+      await put(vault, 'Essence Cards/sub/' + swapped, 'other process evidence');
+      await put(vault, A, theirs);
+      if (variant === '寫到一半') throw Object.assign(Error('no space left on device'), { code: 'ENOSPC' });
+    };
+    const result = await applyPlan({ ...options, plan: path, seams: { write } });
+    assert.deepEqual(result.files.map(file => file.outcome), [variant === '寫好' ? '跳過' : '失敗']);
+    assert.match(result.files[0].reason, /\.restore-tmp 沒有刪/);
+    assert.equal(await read(vault, 'Essence Cards/sub/' + swapped), 'other process evidence');
+    assert.equal(await read(vault, A), theirs);
+    assert.ok((await readdir(join(vault, 'Essence Cards/moved'))).includes(swapped));
+  });
+}
+
+void test('還原（Codex 第三次查核 T1）：還原檔寫好後紀錄資料夾被換成另一個一般資料夾，不刪替換進來的同名檔', async t => {
+  const { vault, zip } = await drill(t);
+  const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+    await handle.writeFile(bytes);
+    if (!file.endsWith('.jsonl')) return;
+    await handle.close();
+    await rename(join(vault, LOGS), join(vault, 'Essence Cards/紀錄移開'));
+    await put(vault, LOGS + basename(file), 'other process evidence');
+  };
+  const { result } = await restore(vault, zip, { seams: { write } });
+  assert.deepEqual(result.logs.map(log => log.outcome), ['失敗']);
+  assert.match(result.logs[0].reason, /\.jsonl 沒有刪/);
+  assert.equal(await read(vault, restored('2026-10 iPad-0000')), 'other process evidence');
+});
+
+void test('備份（Codex 第三次查核 T1）：暫存檔寫好後備份資料夾被換成另一個一般資料夾，不刪替換進來的同名檔', async t => {
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') });
+  const to = join(await tempFolder(t), '備份');
+  let swapped = '';
+  await assert.rejects(backupVault({ vault, to, by: 'backup', ...fixed, random: () => 'aaaa', seams: {
+    write: async (handle, bytes, file) => {
+      await handle.writeFile(bytes);
+      await handle.close();
+      swapped = basename(file);
+      await rename(to, to + '移開');
+      await put(to, swapped, 'other process evidence');
+    },
+  } }), /讀回來不對.*沒有刪/);
+  assert.equal(await readFile(join(to, swapped), 'utf8'), 'other process evidence');
+  assert.deepEqual(await readdir(to + '移開'), [swapped]);
 });

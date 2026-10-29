@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { BACKUP_FORMAT, BACKUP_SCOPE, BACKUP_VERSION, ESSENCE_ROOT, PLUGIN_DATA, backupName, hashBytes, openBackup, readBuild, writeZip } from '../src/core/backup/index.ts';
@@ -7,7 +7,8 @@ import type { BackupManifest } from '../src/core/backup/index.ts';
 import { isDeckPath, parseDeck } from '../src/core/deck/index.ts';
 import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { buildVersion } from './build.mjs';
-import { defaultBackupFolder, isInside, listTree, pluginConfig, readError, realTarget, virtualizedReason } from './vault-io.ts';
+import { defaultBackupFolder, isInside, isOwn, leftBehind, listTree, pluginConfig, readError, realTarget, removeOwn, virtualizedReason, writeNew } from './vault-io.ts';
+import type { Identity, WriteNew } from './vault-io.ts';
 
 /** 清單的 by（syntax §8）。 */
 export type BackupBy = 'backup' | 'update-vault' | 'restore';
@@ -22,11 +23,11 @@ export interface BackupOptions {
   offset?: (ms: number) => number;
   /** 檔名的隨機 4 碼。 */
   random?: () => string;
-  /** 測試用：讀檔的替身（模擬讀不到）、每一輪讀完之後的時機（模擬中途被改）、寫 zip 的替身（模擬寫壞）。 */
+  /** 測試用：讀檔的替身（模擬讀不到）、每一輪讀完之後的時機（模擬中途被改）、把 zip 寫進剛建立的暫存檔的替身（模擬寫壞）。 */
   seams?: {
     read?: (path: string) => Promise<Uint8Array>;
     afterRead?: (attempt: number) => Promise<void> | void;
-    write?: (path: string, bytes: Uint8Array) => Promise<void>;
+    write?: WriteNew;
   };
 }
 export interface BackupResult { path: string; manifest: BackupManifest; attempts: number }
@@ -88,7 +89,7 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
   const random = options.random ?? (() => randomBytes(2).toString('hex'));
   const read = options.seams?.read ?? (async (path: string) => new Uint8Array(await readFile(path)));
-  const write = options.seams?.write ?? ((path: string, bytes: Uint8Array) => writeFile(path, bytes, { flag: 'wx' }));
+  const write = options.seams?.write;
   const vault = await realpath(options.vault);
   if (!(await stat(vault)).isDirectory()) throw Error('vault 必須是已存在的資料夾');
   const config = await pluginConfig(vault, options.config);
@@ -162,13 +163,11 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
   if (!name) throw Error('找不到沒用過的備份檔名');
   const path = join(folder, name);
   const temporary = path + '.tmp';
-  // 這次建立的暫存檔的身分（磁碟與 inode）：清理時確認還是同一個檔才刪（Codex 再查 R1 的原則）。
-  let identity: { dev: bigint; ino: bigint } | null = null;
-  let created = false;
+  // 只清這次建立的暫存檔（Codex 中途查核 F5、第三次查核 T1）：建立就失敗（EEXIST，別的程序先建了它）沒有這次的檔；
+  // 寫入失敗的半個檔由 writeNew 收掉或說明；之後才失敗的，確認還是同一個檔才刪。
+  let identity: Identity | null = null;
   try {
-    await write(temporary, zip);
-    created = true;
-    identity = await lstat(temporary, { bigint: true });
+    identity = await writeNew(temporary, zip, write);
     const opened = openBackup(new Uint8Array(await readFile(temporary)));
     if (!opened.ok) throw Error('寫好的備份讀回來不對：' + opened.error);
     if (JSON.stringify(opened.value.manifest) !== JSON.stringify(manifest)) throw Error('寫好的備份讀回來的清單不同');
@@ -178,13 +177,10 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
       if (isDeckPath(file) && signature(back) !== signature(bytes)) throw Error('寫好的備份讀回來 ' + file + ' 的學習目標或題目不同');
     }
     if (await exists(path)) throw Error(path + ' 已經存在，不覆寫');
+    if (!await isOwn(temporary, identity)) throw Error(temporary + ' 已經不是這次寫的暫存檔');
     await rename(temporary, path);
   } catch (error) {
-    // 只清這次建立的暫存檔：EEXIST 表示別的程序先建了它，不是我們的（Codex 中途查核 F5）；建好之後要還是同一個檔才刪。
-    if (created) {
-      const now = await lstat(temporary, { bigint: true }).catch(() => null);
-      if (now && identity && now.dev === identity.dev && now.ino === identity.ino) await unlink(temporary).catch(() => {});
-    } else if ((error as NodeJS.ErrnoException).code !== 'EEXIST') await unlink(temporary).catch(() => {});
+    if (identity !== null && !await removeOwn(temporary, identity)) throw Error((error as Error).message + leftBehind(temporary), { cause: error });
     throw error;
   }
   return { path, manifest, attempts };

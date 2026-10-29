@@ -99,12 +99,12 @@ void test('備份：zip 寫壞或寫不進去時失敗，暫存檔刪掉、沒�
   const vault = await makeVault(t, { [DECK]: goal('abc123') });
   const broken = await tempFolder(t);
   await assert.rejects(backupVault({ vault, to: broken, by: 'backup', ...fixed, seams: {
-    write: (path, bytes) => writeFile(path, bytes.subarray(0, bytes.length - 10)),
+    write: (handle, bytes) => handle.writeFile(bytes.subarray(0, bytes.length - 10)),
   } }), /讀回來不對/);
   assert.deepEqual(await readdir(broken), []);
   const full = await tempFolder(t);
   await assert.rejects(backupVault({ vault, to: full, by: 'backup', ...fixed, seams: {
-    write: async path => { await writeFile(path, 'x'); throw Object.assign(Error('no space'), { code: 'ENOSPC' }); },
+    write: async handle => { await handle.writeFile('x'); throw Object.assign(Error('no space'), { code: 'ENOSPC' }); },
   } }), /no space/);
   assert.deepEqual(await readdir(full), []);
 });

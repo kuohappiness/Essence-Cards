@@ -1,4 +1,5 @@
-import { lstat, readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, open, readdir, realpath, stat, unlink } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { isPlainPath, PLUGIN_MANIFEST } from '../src/core/backup/index.ts';
@@ -83,6 +84,52 @@ export async function assertNoLinks(vault: string, rel: string): Promise<void> {
       throw readError(prefix, error);
     }
     if (info.isSymbolicLink()) throw Error(`${prefix}：是連結（符號連結或 junction），過渡工具不跟著連結讀寫`);
+  }
+}
+
+/** 檔案的身分（磁碟與 inode）：確認要動的還是這次建立的那個檔。 */
+export interface Identity { dev: bigint; ino: bigint }
+/** 把內容寫進剛建立的檔（path 是它的位置）；測試用替身模擬寫壞、空間不足、寫的時候資料夾被換掉。 */
+export type WriteNew = (handle: FileHandle, bytes: Uint8Array, path: string) => Promise<void>;
+
+/** 清理時沒有刪的檔，附在失敗原因後面。 */
+export const leftBehind = (path: string): string => `；${path} 沒有刪（那裡已經不是這次建立的檔，或確定不了），請確認後手動處理`;
+
+/** path 現在就是 identity 那個一般檔案（不跟著連結）。 */
+export async function isOwn(path: string, identity: Identity): Promise<boolean> {
+  const now = await lstat(path, { bigint: true });
+  return now.isFile() && now.dev === identity.dev && now.ino === identity.ino;
+}
+
+/** 只刪這次建立的檔：path 現在還是 identity 那個檔才刪；不是、已經不在或確定不了就不動，回傳 false。 */
+export async function removeOwn(path: string, identity: Identity): Promise<boolean> {
+  try {
+    if (!await isOwn(path, identity)) return false;
+    await unlink(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 獨占建立 path、寫入 bytes，回傳這次建立的檔的身分（Codex 第三次查核 T1）。身分在建立的那一刻從開著的檔讀，不是事後照路徑讀：
+ * 寫的時候資料夾被換掉，記到的仍是這次的檔。建立本身失敗（例如 EEXIST，別的程序先建了它）就沒有這次的檔，什麼都不刪；
+ * 建立之後才失敗的半個檔，確認還是這次的才刪，不然留著並在錯誤裡說明。
+ */
+export async function writeNew(path: string, bytes: Uint8Array, write: WriteNew = (handle, data) => handle.writeFile(data)): Promise<Identity> {
+  const handle = await open(path, 'wx');
+  let identity: Identity | null = null;
+  try {
+    identity = await handle.stat({ bigint: true });
+    await write(handle, bytes, path);
+    await handle.close();
+    return identity;
+  } catch (error) {
+    // 關過再關不會出錯（替身可能先關了）。
+    await handle.close().catch(() => {});
+    if (identity !== null && await removeOwn(path, identity)) throw error;
+    throw Error((error as Error).message + leftBehind(path), { cause: error });
   }
 }
 
