@@ -778,3 +778,103 @@ export async function saveFlowV6(host: IdsHost): Promise<unknown> {
   }));
   return { summary, rows, cleanupLeft };
 }
+
+/**
+ * save-flow-x：V6 去留的實驗 X（討論稿 2026-10-29-save-external-write.md〈Codex 第二輪回應〉第 2 題的步驟）。
+ * 兩種存檔各自在 view.save() 的入口撞上一次外部寫入（把 B 加進磁碟），比較 B 與本地的改動有沒有留下：
+ * - X1：Obsidian 自己的自動存檔（只用 Editor 交易加本地標記，不經過 Cards，等它約 2 秒後呼叫 view.save()）；
+ * - X2：Cards 的存檔（同樣先加本地標記，接著立刻按存檔，view.save() 由 state 呼叫）。
+ * 外部寫入用 fs（繞過 Obsidian，像同步或別的程式）與 adapter.write（V6 原本的寫法）各 5 次。包裝只記時間與入口的編輯器文字，
+ * 不讀檔、不等外部寫入，每個案例只注入一次；X1 沒攔到自動存檔的那次記成沒測（tested: false），不算保留了 B。
+ */
+export async function saveFlowX(host: IdsHost): Promise<unknown> {
+  const { app } = host;
+  const state = host.state, saver = host.devLog.save;
+  if (!state || !saver) throw Error('state 或存檔接線還沒建立');
+  await state.ready();
+  const files = createObsidianFiles(app);
+  const load = (window as unknown as { require?: (name: string) => unknown }).require;
+  const fs = load?.('fs') as { promises: { writeFile(path: string, text: string): Promise<void> } } | undefined;
+  if (!fs) throw Error('拿不到 fs');
+  const fullPath = (path: string) => (app.vault.adapter as unknown as { getFullPath(path: string): string }).getFullPath(path);
+  const rendering = keepRendering();
+  const rec = flowRecorder(app);
+  const stamp = Date.now().toString(36);
+  const LOCAL = '〔本地〕';
+  const ids = (text: string) => (text.match(/ \^[a-z0-9]{6}$/gm) ?? []).filter(id => id !== ' ^vflowb').length;
+  let count = 0;
+  const rows: { writer: string; scenario: string; run: number; tested: boolean; bKept: boolean; localKept: boolean; issues: number; [key: string]: unknown }[] = [];
+  try {
+    for (const writer of ['fs', 'adapter'] as const) {
+      for (const scenario of ['X1', 'X2'] as const) {
+        for (let run = 1; run <= 5; run++) {
+          const path = `${FLOW_FOLDER}/X ${stamp}-${String(++count)}（卡片）.md`;
+          const file = await writeFile(app, path, FLOW_TEXT);
+          await until(() => state.deckStatus(path).missing === 2);
+          const { leaf, view } = await open(app, file);
+          await sleep(500);
+          rec.take();
+          const before = host.devLog.notices.length;
+          const t0 = performance.now();
+          const ms = () => Math.round(performance.now() - t0);
+          const calls: { at: number; done?: number; error?: string; editorHasB: boolean; editorHasLocal: boolean }[] = [];
+          const external: { start?: number; done?: number; error?: string } = {};
+          let landed: Promise<void> = Promise.resolve();
+          const original = view.save.bind(view);
+          view.save = (clear?: boolean) => {
+            const text = view.editor.getValue();
+            const call: (typeof calls)[number] = { at: ms(), editorHasB: text.includes(FLOW_B), editorHasLocal: text.includes(LOCAL) };
+            calls.push(call);
+            if (external.start === undefined) {
+              external.start = ms();
+              const writing = writer === 'fs' ? fs.promises.writeFile(fullPath(path), FLOW_TEXT + FLOW_B) : app.vault.adapter.write(path, FLOW_TEXT + FLOW_B);
+              landed = writing.then(() => { external.done = ms(); }, (error: unknown) => { external.error = String(error); });
+            }
+            const saving = original(clear);
+            void saving.then(() => { call.done = ms(); }, (error: unknown) => { call.error = String(error); });
+            return saving;
+          };
+          try {
+            view.editor.replaceRange(LOCAL, { line: 1, ch: view.editor.getLine(1).length });
+            const saving = scenario === 'X2' ? saver.save(view) : Promise.resolve();
+            const tested = await until(() => external.start !== undefined, 6000);
+            await landed;
+            await saving;
+            await until(() => calls.every(call => call.done !== undefined || call.error !== undefined), 6000);
+            const afterSave = await files.read(path) ?? '';
+            const atSave = ms();
+            await sleep(3000);
+            const disk = await files.read(path) ?? '', editor = view.editor.getValue();
+            rows.push({
+              writer, scenario, run, tested, bKept: disk.includes(FLOW_B), localKept: disk.includes(LOCAL) && (scenario === 'X1' || ids(disk) === 2),
+              issues: state.deckStatus(path).issues.length,
+              external, calls, notices: host.devLog.notices.slice(before),
+              afterSave: { ms: atSave, hasB: afterSave.includes(FLOW_B), hasLocal: afterSave.includes(LOCAL), ids: ids(afterSave) },
+              final: { diskHasB: disk.includes(FLOW_B), diskHasBid: disk.includes('^vflowb'), diskHasLocal: disk.includes(LOCAL), diskIds: ids(disk),
+                editorHasB: editor.includes(FLOW_B), editorHasLocal: editor.includes(LOCAL), sameAsEditor: disk === editor },
+              events: rec.take(),
+            });
+          } finally {
+            view.save = original;
+          }
+          leaf.detach();
+          await sleep(300);
+        }
+      }
+    }
+  } finally {
+    rec.stop();
+    rendering.restore();
+  }
+  await sleep(2500);
+  const cleanupLeft = await removeTestPaths(app, [FLOW_FOLDER]);
+  const summary: Record<string, unknown> = {};
+  for (const writer of ['fs', 'adapter']) {
+    for (const scenario of ['X1', 'X2']) {
+      const mine = rows.filter(row => row.writer === writer && row.scenario === scenario), tested = mine.filter(row => row.tested);
+      summary[`${writer} ${scenario}`] = { of: mine.length, tested: tested.length, bKept: tested.filter(row => row.bKept).length,
+        localKept: tested.filter(row => row.localKept).length, issues: tested.reduce((n, row) => n + row.issues, 0) };
+    }
+  }
+  return { summary, rows, cleanupLeft };
+}
