@@ -297,3 +297,14 @@ void test('每台裝置最後回報的版本：從帶來源的原始行算，兩
   assert.deepEqual(lastVersions([{ path: copy, text: app(T2, '0.0.1+0000000') + '\n' }]).map(row => [row.device, row.note, row.source]),
     [['iPhone-7f3a', '還原檔', copy]]);
 });
+
+// syntax.md §0-1：先看標記，讀不懂的那一行其他內容都不拿來用，版本行也一樣。version 是讀的那一方的正式版號，不傳是版本不明。
+void test('每台裝置最後回報的版本：need 讀不懂的版本行不算，讀得懂的照算', () => {
+  const T1 = '2026-10-28T10:00:00.000+08:00', T2 = '2026-11-02T09:00:00.000+08:00';
+  const text = JSON.stringify({ t: T1, set: 'app', val: '0.1.0+1a2b3c4' }) + '\n' + JSON.stringify({ t: T2, need: '0.2.0', set: 'app', val: '0.2.0+9f8e7d6' }) + '\n';
+  const rows = (version?: string | null) => lastVersions([{ path: 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl', text }], version).map(row => row.build);
+  assert.deepEqual(rows('0.1.0'), ['0.1.0+1a2b3c4']);
+  assert.deepEqual(rows('0.2.0'), ['0.2.0+9f8e7d6']);
+  assert.deepEqual(rows(), ['0.1.0+1a2b3c4']);
+  assert.deepEqual(rows(null), ['0.1.0+1a2b3c4']);
+});

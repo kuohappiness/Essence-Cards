@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-28 | AGENTS.md 重寫（[D-147](../decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)，[任務說明](../../tasks/agents-md-rewrite.md)）：底線放最上、加新增規則的五關，約 4,800 字減到 3,100 字；skill 刪掉重複的句子，`essence-discuss` 改成 AI 能自己載入，也不再依賴不存在的 grilling；Capture 的底線也搬到最上 |
 | 2026-10-28 | A3 合併進 `main`（實作 `dfb368e`，[設計稿](<../../Claude Codex Discussion/2026-10-27-a3-open-decks.md>)）：存檔備援只從 `start()`、`layout-change`、編輯器建立三處追蹤開著的卡組，拿掉每 2 秒掃分頁；Windows 實測 `a3check` 11 項與冷啟動都通過，Codex 三輪 L2 通過 |
 | 2026-10-28 | W6 iPhone 測試後的建議定案：複習畫面拿掉分隔線、打字卡不重複顯示答案、一行一個喇叭、試做在空格裡打字（[D-145](../decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)）；卡組筆記的「全部卡」按鈕與第一次的提醒（[D-146](../decisions.md#d-146-卡組筆記的全部卡按鈕與第一次的提醒)） |
 | 2026-10-28 | 里程碑報告的 R1～R4、R7、R8（[處理紀錄](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md#處理紀錄2026-10-28>)）：測試不再改全域的 `fs`，CI 沒通過時開 session 就提醒；加 `seen` 與同批順序的性質測試，順便做 T2；skill 與 quality.md 補四條做法 |

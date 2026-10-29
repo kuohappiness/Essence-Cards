@@ -14,8 +14,11 @@ import { lockTest, saveFlow, saveTest, t1Close, t1Prep, type DevLog, type IdsHos
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
+import { versionCheck } from './dev-version.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
+/** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；結果檔的 plugin 記它，才核對得到跑的是哪一次建置。 */
+declare const BUILD: string;
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
 const limit = 20;
@@ -80,6 +83,8 @@ const commands: Record<string, DevCommand> = {
   // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。t1prep 之後至少等 10 秒再執行，讓 Obsidian 先存好版面
   // （2026-10-28 只等 5 秒時有一次重新載入後沒有還原那兩個分頁）。
   'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
+  // 更新防線第二部分（任務說明 2-1、2-2）：版本行、「版本」命令的通知、需要新版的卡組；截圖寫在 Essence W5/結果/。
+  version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
@@ -119,7 +124,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
     const path = await writeResult(plugin.app, code, plugin.device, {
       code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
-      obsidian: apiVersion, plugin: plugin.manifest.version,
+      obsidian: apiVersion, plugin: BUILD,
       onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
       sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
     }, command.root);
@@ -192,6 +197,7 @@ async function answer(host: Host): Promise<unknown> {
   // 寫一筆、等寫完，回傳 encodeEntry 的結果與它的檔案（和 state 寫檔的路徑相同）。
   async function write(entry: NewEntry) {
     const t = state.answer(entry);
+    if (t === null) throw Error('這個學習目標需要新版才讀得懂，不能寫：' + JSON.stringify(entry));
     const line = encodeEntry(t, entry);
     const stamp = parseLine(line);
     if (!stamp) throw Error('寫出的紀錄無法解析：' + line);

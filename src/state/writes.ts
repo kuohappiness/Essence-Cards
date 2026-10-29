@@ -27,8 +27,8 @@ export type WriteResult =
   | { kind: 'done'; added: number }
   /** 沒有要改的（含不是卡組）。 */
   | { kind: 'unchanged' }
-  /** 門檻沒過，沒有改字。 */
-  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' }
+  /** 門檻沒過，沒有改字。needs-update：這一篇需要新版才讀得懂（任務說明 2-2）。 */
+  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' | 'needs-update' }
   /** 途中換了篇、內容被改掉、問題已經不成立，或一直有新的變動：沒有採用，要再存一次。 */
   | { kind: 'stale' }
   /** 寫不進磁碟：輸出沒有採用，已配出的 ID 保留、不重用。 */
@@ -59,10 +59,12 @@ export interface WritesOptions {
   prepare: (path: string, text: string) => Prepared;
   /** 核對讀取確認寫成了：把預期的輸出當成自己的寫回（tracker.wrote）。 */
   wrote: (path: string, text: string) => void;
+  /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（更新防線任務說明 2-2）。 */
+  blockedText: (path: string, text?: string) => boolean;
 }
 
 export function createWrites(options: WritesOptions) {
-  const { files, life, reads, writeTimeout, prepare } = options;
+  const { files, life, reads, writeTimeout, prepare, blockedText } = options;
   /**
    * 寫成、等核對讀取的工作（§4 第 3 點），照路徑。output 是 null 時沒有改字（沒有要補的、或準備時問題已不成立），
    * 只等這次讀取、回傳 fallback。讀不到時先回 saved，核對留著，之後第一次讀到時照同一套規則採用（不重新配號、不重做交易）。
@@ -79,15 +81,18 @@ export function createWrites(options: WritesOptions) {
 
   /**
    * 寫入的門檻（§3 第 3 步）：可以時回傳 null，不行時回傳原因。只在電腦（D-134）、讀完之後、還沒關閉，而且沒有讀不到的
-   * 卡組或紀錄（state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）；不是卡組就沒有要改的。之後要加的原因
-   * （D-150 的備份沒成功、更新防線的需要新版、多檔工作的預留還沒載入）都加在這裡，不分散到各個入口。
+   * 卡組或紀錄（state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）；不是卡組就沒有要改的；需要新版的卡組
+   * 不寫（任務說明 2-2，給了 text 時也看這份最新的文字）。之後要加的原因（D-150 的備份沒成功、多檔工作的預留還沒載入）
+   * 都加在這裡，不分散到各個入口。
    */
-  function writable(path: string): WriteResult | null {
+  function writable(path: string, text?: string): WriteResult | null {
     if (!options.fillIds) return { kind: 'blocked', reason: 'phone' };
     if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
     if (life.closed) return { kind: 'blocked', reason: 'closed' };
     if (reads.unread.size) return { kind: 'blocked', reason: 'unread' };
     if (!isDeckPath(path)) return { kind: 'unchanged' };
+    // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：state 最近讀到的，或這次要寫的最新文字，任何一邊讀不懂都不寫。
+    if (blockedText(path, text)) return { kind: 'blocked', reason: 'needs-update' };
     return null;
   }
   /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending 裡有不在 unread 的路徑（except 那一篇除外）。 */
@@ -104,9 +109,9 @@ export function createWrites(options: WritesOptions) {
    */
   async function admit(path: string, rounds: { count: number }): Promise<WriteResult | null> {
     if (life.closed) return { kind: 'blocked', reason: 'closed' };
-    // 手機、還沒 ready、不是卡組：不用先讀。
+    // 手機、還沒 ready、不是卡組：不用先讀。讀不到、需要新版要看讀到的內容：先讀完待讀再判斷（待讀裡可能就是改回來的那一篇）。
     const early = writable(path);
-    if (early && !(early.kind === 'blocked' && early.reason === 'unread')) return early;
+    if (early && !(early.kind === 'blocked' && (early.reason === 'unread' || early.reason === 'needs-update'))) return early;
     while (waiting()) {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
@@ -163,8 +168,9 @@ export function createWrites(options: WritesOptions) {
           if (!live) throw new Stopped();
           if (text === '') throw new NothingToFill();
           original = text;
-          // 回呼拿到的是最新的原文：重查門檻與待讀（這一篇自己除外，它最新的內容就是這份原文）；有新的待讀就不改，回到第 2 步。
-          gate = writable(path);
+          // 回呼拿到的是最新的原文：重查門檻（含這份原文需不需要新版）與待讀（這一篇自己除外，它最新的內容就是這份原文）；
+          // 有新的待讀就不改，回到第 2 步。
+          gate = writable(path, text);
           if (gate) return text;
           if (waiting(path)) { again = true; return text; }
           prepared = prepare(path, text);
@@ -202,6 +208,9 @@ export function createWrites(options: WritesOptions) {
     try {
       const text = editor.text();
       if (text === null) return { kind: 'stale' };
+      // 編輯器最新的文字也過一次門檻：需要新版（state 還沒讀到）就不寫（§2-1）。
+      const gate = writable(path, text);
+      if (gate) return gate;
       const prepared = plan(text);
       // plan 觀察到新的原文時會同步通知監聽者（adopt → replan），監聽者或 onError 可能在裡面 close()（Codex L2 的 R2）：
       // 這時還沒改編輯器、還沒寫，停下來；close() 不用等這一份。

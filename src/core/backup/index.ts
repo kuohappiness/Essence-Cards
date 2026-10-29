@@ -7,3 +7,4 @@ export { missingLogLines } from './logs.ts';
 export { deckIds, planRestore } from './plan.ts';
 export type { PlannedFile, RestorePlan } from './plan.ts';
 export { lastVersions } from './versions.ts';
+export type { VersionReport } from './versions.ts';
