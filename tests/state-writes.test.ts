@@ -707,3 +707,34 @@ for (const after of ['刪掉', '改名', '留著'] as const) void test(`R1 逾�
   else assert.equal(h.texts.has(P), false, '舊的路徑被建立成空檔');
   if (after === '改名') assert.equal(h.texts.get(Q), Ca);
 });
+
+// Codex L2 的 R2：準備時 state 同步通知監聽者（觀察到新的原文 → 重排），監聽者或 onError 可能在裡面 close()。
+// 那一刻還沒改編輯器、還沒寫：停下來回 blocked closed，不改字、不 persist；close() 完成時沒有還在進行的寫入。
+for (const how of ['監聽者', 'onError'] as const) void test(`R2 準備時${how}同步 close()：存檔不改編輯器也不寫，回 blocked closed`, async t => {
+  const closing: Promise<void>[] = [];
+  const h = await setup(t, { [P]: C }, { onError: () => { if (!closing.length) closing.push(h.state.close()); } });
+  h.state.onChange(() => {
+    if (how === 'onError') throw Error('監聽者出錯');
+    if (!closing.length) closing.push(h.state.close());
+  });
+  const editor = createMemoryEditor(h, P, C + '\n');
+  const result = await h.state.save(editor);
+  assert.equal(closing.length, 1, '準備時沒有通知監聽者');
+  await closing[0];
+  assert.deepEqual(result, { kind: 'blocked', reason: 'closed' });
+  assert.equal(editor.applies, 0);
+  assert.equal(editor.persists, 0);
+  assert.equal(h.texts.get(P), C);
+});
+
+void test('R2 fillIds 版：modify 回呼裡準備時監聽者同步 close()，不寫，回 false', async t => {
+  const h = await setup(t, { [P]: C });
+  const closing: Promise<void>[] = [];
+  h.state.onChange(() => { if (!closing.length) closing.push(h.state.close()); });
+  // 磁碟比 state 讀到的新（還沒送通知）：回呼拿到它時觀察到新的原文，準備會通知監聽者。
+  h.texts.set(P, C + '\n');
+  assert.equal(await h.state.fillIds(P), false);
+  assert.equal(closing.length, 1, '準備時沒有通知監聽者');
+  await closing[0];
+  assert.equal(h.texts.get(P), C + '\n');
+});

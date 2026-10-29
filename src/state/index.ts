@@ -119,8 +119,11 @@ export interface State {
 
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
-/** 工作已經結束（逾時）之後才輪到 modify 的回呼：中止 modify，不改檔也不建立。回傳原文不夠，檔案不存在時那等於建立空檔。 */
-class Ended extends Error {}
+/**
+ * 這份工作不寫了：逾時之後才輪到 modify 的回呼，或準備時關閉了。中止 modify，不改檔也不建立；回傳原文不夠，
+ * 檔案不存在時那等於建立空檔。
+ */
+class Stopped extends Error {}
 
 /** 先讀完待讀最多幾輪（§3 第 2 步）。 */
 const DRAIN_ROUNDS = 5;
@@ -523,7 +526,7 @@ export function createState(options: StateOptions): State {
       try {
         await persist(files.modify(path, text => {
           // 逾時之後才輪到回呼：這份工作已經結束，中止 modify（Codex L2 的 R1：檔案刪掉或改名後 text 是空字串，回傳它會建立空檔）。
-          if (!live) throw new Ended();
+          if (!live) throw new Stopped();
           if (text === '') throw new NothingToFill();
           original = text;
           // 回呼拿到的是最新的原文：重查門檻與待讀（這一篇自己除外，它最新的內容就是這份原文）；有新的待讀就不改，回到第 2 步。
@@ -531,12 +534,14 @@ export function createState(options: StateOptions): State {
           if (gate) return text;
           if (waiting(path)) { again = true; return text; }
           prepared = prepare(path, text);
+          // 準備時監聽者可能 close()（見 edit）：不寫。
+          if (closed) throw new Stopped();
           return prepared.text;
         }));
         outcome = gate ?? (again ? null : verify(path, original, prepared, { kind: 'unchanged' }));
       } catch (error) {
         // 寫不進去：不登記核對；已配出的 ID 留在 seen、不重用。
-        outcome = error instanceof NothingToFill ? { kind: 'unchanged' } : { kind: 'failed', error };
+        outcome = error instanceof NothingToFill ? { kind: 'unchanged' } : error instanceof Stopped ? { kind: 'blocked', reason: 'closed' } : { kind: 'failed', error };
       } finally {
         live = false;
         end(path);
@@ -564,6 +569,9 @@ export function createState(options: StateOptions): State {
       const text = editor.text();
       if (text === null) return { kind: 'stale' };
       const prepared = plan(text);
+      // plan 觀察到新的原文時會同步通知監聽者（adopt → replan），監聽者或 onError 可能在裡面 close()（Codex L2 的 R2）：
+      // 這時還沒改編輯器、還沒寫，停下來；close() 不用等這一份。
+      if (closed) return { kind: 'blocked', reason: 'closed' };
       if (prepared && prepared.text !== text && !editor.apply(text, prepared.text)) return { kind: 'stale' };
       // 沒有改字也要 persist：觀察過的編輯器文字可能比磁碟新，要讓磁碟追上，核對讀取才有依據。
       await persist(editor.persist());
