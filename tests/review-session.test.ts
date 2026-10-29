@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeEntry, mergeHistory, parseLine } from '../src/core/study/index.ts';
+import { encodeEntry, mergeHistory, parseLine, planToday } from '../src/core/study/index.ts';
 import type { Pick, Rating } from '../src/core/study/index.ts';
 import { AWAY_LIMIT, createSession, RATE_DELAY } from '../src/review/index.ts';
 import type { Session, TypedView, View } from '../src/review/index.ts';
@@ -44,10 +44,10 @@ interface Harness extends MemoryFiles {
   log: () => string[];
   open: (pick: Pick) => Promise<Session>;
 }
-async function setup(t: TestContext, texts: Record<string, string> = vault): Promise<Harness> {
+async function setup(t: TestContext, texts: Record<string, string> = vault, start = START): Promise<Harness> {
   if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
   const memory = createMemoryFiles(texts);
-  const clock = { now: START };
+  const clock = { now: start };
   const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => clock.now, offset: () => 480 });
   t.after(() => state.close());
   await state.ready();
@@ -655,4 +655,32 @@ void test('2-2 複習中途別台裝置的紀錄出現讀不懂的行、停掉�
   await h.state.flush();
   assert.deepEqual(h.log(), []);
   assert.equal(lt(s.view()), 'a2');
+});
+
+// S25（tasks/state-writes.md §6、外掛架構討論稿環節 4 Codex 第二輪的重現）：回看改評分會先取消原本那一筆；
+// 取消的那一筆早於今天的份的開始時，今天的份要重排，不能留著用被取消那一筆算的記憶。
+void test('S25 跨 04:00 回看改評分：今天的份重排，和 planToday(input()) 相同；同一天的取消不重排', async t => {
+  const h = await setup(t, vault, at('2026-10-25T03:59:00.000+08:00'));
+  const s = await h.open({ subject: '自然' });
+  const target = lt(s.view());
+  s.reveal();
+  await rateLater(h, s, 'miss');
+  h.clock.now = at('2026-10-25T04:01:00.000+08:00');
+  assert.notEqual(h.state.today().slots.get(target)?.memory, null, '04:01 的份用 03:59 那一筆算記憶');
+  s.back();
+  assert.equal(lt(s.view()), target);
+  s.rate('good');
+  await h.state.flush();
+  assert.deepEqual(h.state.today(), planToday(h.state.input()));
+  assert.equal(h.state.today().slots.get(target)?.memory, null);
+
+  const same = await setup(t);
+  const s2 = await same.open({ subject: '自然' });
+  s2.reveal();
+  await rateLater(same, s2, 'miss');
+  const before = same.state.today();
+  s2.back();
+  s2.rate('good');
+  await same.state.flush();
+  assert.equal(same.state.today(), before);
 });

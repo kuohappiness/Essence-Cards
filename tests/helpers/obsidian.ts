@@ -3,12 +3,30 @@ import * as codemirrorView from '@codemirror/view';
 
 /**
  * 最小的 obsidian 替身（技術債 A9）：在 Node 跑 esbuild 建好的外掛程式碼，不是 Obsidian 實機。
- * 只模擬接線用得到的：外掛的註冊方法、Notice、vault 的讀寫與事件、分頁與 workspace 的事件、Platform。
+ * 只模擬接線用得到的：外掛的註冊方法、Notice、Modal、vault 的讀寫與事件、分頁與 workspace 的事件、Platform。
  * 實機的證據在開發命令與 Windows 版 Obsidian 的截圖。
  */
 class TAbstractFile { path: string; constructor(path: string) { this.path = path; } }
 class TFile extends TAbstractFile {}
 class TFolder extends TAbstractFile { children: TAbstractFile[] = []; }
+
+/** Modal 用的最小元素：empty、createDiv、createEl、setText、click、照標籤找的 querySelectorAll、disabled。 */
+class FakeEl {
+  readonly tag: string;
+  text: string;
+  disabled = false;
+  readonly children: FakeEl[] = [];
+  private readonly clicks: (() => void)[] = [];
+  constructor(tag = 'div', options?: { text?: string }) { this.tag = tag; this.text = options?.text ?? ''; }
+  empty() { this.children.length = 0; }
+  setText(text: string) { this.text = text; }
+  createDiv(options?: { text?: string }) { return this.createEl('div', options); }
+  createEl(tag: string, options?: { text?: string }) { const el = new FakeEl(tag, options); this.children.push(el); return el; }
+  addEventListener(type: string, callback: () => void) { if (type === 'click') this.clicks.push(callback); }
+  /** 照瀏覽器：停用的按鈕不送 click。 */
+  click() { if (!this.disabled) for (const callback of this.clicks) callback(); }
+  querySelectorAll(tag: string): FakeEl[] { return this.children.flatMap(child => [...child.tag === tag ? [child] : [], ...child.querySelectorAll(tag)]); }
+}
 
 export interface StubOptions {
   /** vault 裡一開始有的檔案。 */
@@ -26,11 +44,15 @@ interface Command { id: string; name?: string; callback?: () => void; checkCallb
 
 class FakeMarkdownView {
   file: { path: string } | null;
-  editor = { getValue: () => '', transaction() {}, offsetToPos: () => ({ line: 0, ch: 0 }) };
+  /** 編輯器的文字（transaction 不改它）；save() 被呼叫的次數。 */
+  value = '';
+  saves = 0;
+  editor = { getValue: () => this.value, transaction() {}, offsetToPos: () => ({ line: 0, ch: 0 }) };
   containerEl = { querySelector: () => null };
   /** addAction 加上的按鈕：圖示、提示文字（aria-label 跟著更新）與按下去的動作。 */
   actions: { icon: string; label: string; click: () => void }[] = [];
   constructor(path: string | null) { this.file = path ? { path } : null; }
+  save() { this.saves++; return Promise.resolve(); }
   addAction(icon: string, label: string, click: () => void) {
     const action = { icon, label, click };
     this.actions.push(action);
@@ -46,6 +68,8 @@ export interface ObsidianStub {
   commands: Map<string, Command>;
   ribbons: { icon: string; title: string; callback: (evt: unknown) => unknown }[];
   extensions: () => number;
+  /** open() 過的 Modal：open 時呼叫 onOpen、close 時呼叫 onClose。 */
+  modals: { titleEl: FakeEl; contentEl: FakeEl; close(): void }[];
   /** registerObsidianProtocolHandler 收到的處理函式，照 action。 */
   protocol: Map<string, (params: Record<string, string>) => void>;
   /** 寫入 vault 的動作與路徑。 */
@@ -84,6 +108,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const ribbons: ObsidianStub['ribbons'] = [];
   const writes: string[] = [];
   const protocol = new Map<string, (params: Record<string, string>) => void>();
+  const modals: ObsidianStub['modals'] = [];
   let extensions = 0;
   let calls = 0, ready = false, before = 0;
   const texts = new Map(Object.entries(options.texts ?? {}));
@@ -146,7 +171,16 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   }
   class Notice { constructor(message: string) { notices.push(message); } }
   class Component { load() {} unload() {} register() {} }
-  class Modal { app: unknown; constructor(app: unknown) { this.app = app; } open() {} close() {} }
+  class Modal {
+    app: unknown;
+    titleEl = new FakeEl();
+    contentEl = new FakeEl();
+    onOpen?(): void;
+    onClose?(): void;
+    constructor(app: unknown) { this.app = app; }
+    open() { modals.push(this); this.onOpen?.(); }
+    close() { this.onClose?.(); }
+  }
   class SuggestModal extends Modal {}
   const obsidian = {
     Plugin, Notice, Component, Modal, SuggestModal, TFile, TFolder, TAbstractFile,
@@ -169,7 +203,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   }
   const leaf = (path: string | null): Leaf => ({ view: new FakeMarkdownView(path), getViewState: () => ({ state: path ? { file: path } : {} }) });
   return {
-    obsidian, app, notices, commands, ribbons, extensions: () => extensions, protocol, writes, texts,
+    obsidian, app, notices, commands, ribbons, extensions: () => extensions, modals, protocol, writes, texts,
     text: path => texts.get(path),
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout.splice(0)) callback(); },

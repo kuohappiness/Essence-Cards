@@ -173,20 +173,94 @@ void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不�
   }
 });
 
-// 任務說明 2-2、syntax.md §2-1：需要新版的卡組，Cards 不寫它。存檔按鈕照實說明，不說「都已加入複習」（同 D-154 的原則）。
-void test('2-2 需要新版的卡組：按鈕說明需要更新，按下去只提示，不補 ID、不開待處理的小視窗', () => {
+// 任務說明 2-2、syntax.md §2-1：需要新版的卡組，Cards 不寫它（state 的寫入門檻回 blocked needs-update）。存檔按鈕照實說明，
+// 不說「都已加入複習」（同 D-154 的原則）；按下去只提示，不開待處理的小視窗。
+void test('2-2 需要新版的卡組：按鈕說明需要更新，存檔被擋時提示同一句，不開待處理的小視窗', async () => {
   const stub = createObsidianStub();
   const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
-  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void } }>(code);
-  const filled: string[] = [], notified: string[] = [];
-  const state = { deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), fillText: (path: string, text: string) => { filled.push(path); return text; }, onChange: () => () => {} };
-  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError() {} });
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
+  const notified: string[] = [];
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), onChange: () => () => {},
+    save: () => Promise.resolve({ kind: 'blocked', reason: 'needs-update' }),
+  };
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
   const leaf = stub.leaf(DECK);
   stub.leaves.push(leaf);
   saver.refresh();
-  const [button] = (leaf.view as { actions: { label: string; click: () => void }[] }).actions;
+  const [button] = (leaf.view as { actions: { label: string }[] }).actions;
   const tip = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
   assert.equal(button.label, tip);
-  button.click();
-  assert.deepEqual([filled, notified], [[], [tip]]);
+  await saver.save(leaf.view);
+  assert.deepEqual([notified, stub.modals.length], [[tip], 0]);
+});
+
+// S27（tasks/state-writes.md §7）：存檔交給 state 的 EditorHandle 照按下時的那一篇；按鈕連按只排一份。
+void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同時 apply 回傳 false、persist 呼叫 view.save()；連按只排一份', async () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  interface Handle { path: string; text(): string | null; apply(before: string, after: string): boolean; persist(): Promise<void> }
+  const handles: Handle[] = [];
+  let finish: () => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [] }), onChange: () => () => {},
+    save: (editor: Handle) => { handles.push(editor); return new Promise(resolve => { finish = () => { resolve({ kind: 'unchanged' }); }; }); },
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  const view = stub.leaf(DECK).view as { file: { path: string } | null; value: string; saves: number };
+  view.value = '- 能說明 C\n';
+  const first = saver.save(view), second = saver.save(view);
+  assert.equal(first, second, '同一篇還沒結束時回傳同一個 Promise');
+  assert.equal(handles.length, 1);
+  const [handle] = handles;
+  assert.equal(handle.path, DECK);
+  assert.equal(handle.text(), '- 能說明 C\n');
+  assert.equal(handle.apply('別的內容', '- 能說明 C ^aaaaaa\n'), false);
+  assert.equal(handle.apply('- 能說明 C\n', '- 能說明 C ^aaaaaa\n'), true);
+  await handle.persist();
+  assert.equal(view.saves, 1);
+  view.file = { path: 'Essence Cards/Q.md' };
+  assert.equal(handle.text(), null, '換篇之後');
+  assert.equal(handle.path, DECK);
+  finish();
+  await first;
+  view.file = { path: DECK };
+  void saver.save(view);
+  assert.equal(handles.length, 2, '上一份結束之後再按，排新的一份');
+});
+
+// Codex L2 的 R3（tasks/state-writes.md §7）：小視窗按下還原或當成新的之後，結果回來之前兩個按鈕都停用；這段時間別篇的讀取
+// 讓小視窗重畫（onChange）也一樣，再按不另外排一份。結果回來才解除。
+void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一份；結果回來後才解除', async () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  const listeners = new Set<() => void>();
+  const choices: string[] = [];
+  let finish: (result: unknown) => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [issue] }),
+    onChange: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    save: () => Promise.resolve({ kind: 'unchanged' }),
+    resolve: (_issue: unknown, choice: string) => { choices.push(choice); return new Promise(resolve => { finish = resolve; }); },
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  await saver.save(stub.leaf(DECK).view);
+  assert.equal(stub.modals.length, 1, '有待處理的問題時開小視窗');
+  const buttons = () => stub.modals[0].contentEl.querySelectorAll('button');
+  assert.equal(buttons().length, 2);
+  buttons()[0].click();
+  assert.deepEqual(choices, ['restore']);
+  assert.ok(buttons().every(button => button.disabled));
+  for (let i = 0; i < 2; i++) for (const listener of [...listeners]) listener();
+  assert.equal(buttons().length, 2, '重畫了');
+  assert.ok(buttons().every(button => button.disabled), '重畫之後按鈕又能按');
+  buttons()[1].click();
+  assert.deepEqual(choices, ['restore']);
+  finish({ kind: 'done', added: 0 });
+  await wait(0);
+  assert.equal(buttons().length, 2);
+  assert.ok(buttons().every(button => !button.disabled), '結果回來後解除');
 });

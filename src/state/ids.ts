@@ -2,6 +2,10 @@ import { assignIds, blockIds, parseDeck, setTargetId } from '../core/deck/index.
 import type { Deck, Target } from '../core/deck/index.ts';
 
 export type IdIssueKind = 'lost' | 'changed' | 'ambiguous';
+/**
+ * 待處理的問題。state 用物件身分認出是哪一個問題（技術債 A12）：畫面不能複製這個物件，要把拿到的同一個物件交回 resolve。
+ * 內容沒變的重讀原地更新行號、保留同一個物件；內容改過就換一個新物件，舊的不能再寫回（D-134）。
+ */
 export interface IdIssue {
   path: string;
   /** 那個目標現在的行號。 */
@@ -23,6 +27,20 @@ interface Pending {
   fingerprints: string[];
   /** 有卡組或紀錄讀不到時找到的：占用資訊不完整，等都讀到了再由 confirm() 核對（state-load §3-2）。 */
   provisional: boolean;
+}
+
+/** 寫入的預期變更（tasks/state-writes.md §4 第 2 點）：這個 ID 在名稱是 name 的目標的行尾。 */
+export interface Expected { id: string; name: string }
+/**
+ * 一份寫入的準備：要寫回的文字、預期的變更、這次新配的 ID 數，以及延後到採用時才做的記錄（還原、當成新的）。
+ * 準備只預留 ID（配出的立刻記進 seen）：不採用輸出、不解除待處理、不記 removed（§4 第 1 點）。
+ */
+export interface Prepared { text: string; expect: Expected[]; added: number; record: (() => void) | null }
+
+/** 預期的變更都在這份文字裡：每個 ID 都在某個目標的行尾，而且那個目標的名稱和預期相同（§4 第 3 點）。 */
+export function confirms(text: string, expect: readonly Expected[]): boolean {
+  const targets = parseDeck(text).targets;
+  return expect.every(({ id, name }) => targets.some(t => t.id === id && t.name === name));
 }
 
 export interface IdTrackerOptions {
@@ -161,11 +179,16 @@ export function createIdTracker(options: IdTrackerOptions) {
     for (const items of pending.values()) for (const item of items) if (item.issue.restore) ids.add(item.issue.restore);
     return ids;
   }
-  /** 照一般規則補這一篇（待處理的跳過），記下配出的 ID。 */
-  function fill(path: string, text: string): string {
-    const result = assignIds(text, { taken: taken(), skip: lines(path), random: options.random });
+  /** 照一般規則補這一篇（skip 的行跳過），配出的 ID 立刻記進 seen（預留）。回傳寫回的文字與新配的 ID。 */
+  function reserve(text: string, skip: ReadonlySet<number>): { text: string; ids: string[] } {
+    const result = assignIds(text, { taken: taken(), skip, random: options.random });
     for (const { id } of result.assigned) seen.add(id);
-    return result.text;
+    return { text: result.text, ids: result.assigned.map(({ id }) => id) };
+  }
+  /** 這些 ID 在寫回的文字裡所在目標的名稱。 */
+  function expected(text: string, ids: readonly string[]): Expected[] {
+    const targets = parseDeck(text).targets;
+    return ids.flatMap(id => targets.filter(t => t.id === id).map(t => ({ id, name: t.name })));
   }
 
   return {
@@ -208,47 +231,65 @@ export function createIdTracker(options: IdTrackerOptions) {
     removed(ids: readonly string[]): void { for (const id of ids) removed.add(id); },
     restored(ids: readonly string[]): void { for (const id of ids) removed.delete(id); },
     /**
-     * 存檔：先把這份文字當成新版本比對（可能比讀到的新），再補。回傳要寫回的文字，以及寫成之後才呼叫的 commit
-     * （把寫回的文字當成這一篇現在的內容；寫不進去時不呼叫，state 就不會以為 ID 已經在檔案裡）。
+     * 存檔的準備：先把這份文字當成新版本比對（可能比讀到的新；先觀察原文再配號），再照一般規則補。只預留 ID，
+     * 寫成並由核對讀取確認之後，state 才呼叫 wrote 把寫回的文字當成這一篇現在的內容（寫不進去時不呼叫，就不會以為 ID 已經在檔案裡）。
      */
-    fill(path: string, text: string): { text: string; commit: () => void } {
+    fill(path: string, text: string): Prepared {
       if (texts.get(path) !== text) observeText(path, text, true);
-      const next = fill(path, text);
-      return { text: next, commit: () => { if (texts.get(path) !== next) observeText(path, next, false); } };
+      const next = reserve(text, lines(path));
+      return { text: next.text, expect: expected(next.text, next.ids), added: next.ids.length, record: null };
     },
-    /** 家長選了：回傳寫回後的文字；問題已不在、內容改過（問題物件已換新）、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。 */
-    resolve(issue: IdIssue, choice: 'restore' | 'new', text: string): string | null {
+    /**
+     * 家長選了之後的準備：問題已不在、內容改過（問題物件已換新）、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。
+     * 「拿掉這個問題、被換掉的 ID 記成刻意拿掉、還原的 ID 記成見過」放在 record，採用時才做；在那之前問題還在，
+     * 還原的 ID 照舊經由問題的 restore 留在 taken() 裡。
+     */
+    resolve(issue: IdIssue, choice: 'restore' | 'new', text: string): Prepared | null {
       const path = issue.path;
       if (texts.get(path) !== text) observeText(path, text, true);
-      const items = pending.get(path) ?? [];
-      const item = items.find(each => each.issue === issue);
+      const item = (pending.get(path) ?? []).find(each => each.issue === issue);
       if (!item) return null;
       const target = versions.get(path)?.targets.find(t => t.line === issue.line);
       if (!target) return null;
       const own = [...(target.id ? [target.id] : []), ...(target.idCandidates ?? [])];
-      let next: string | null;
+      const restore = choice === 'restore' ? item.issue.restore : null;
+      let next: string | null, id: string | undefined;
       if (choice === 'restore') {
-        const restore = item.issue.restore;
         if (!restore || target.implicit) return null;
         // 寫回前重新確認：原本的 ID 現在不在任何卡組（這個目標自己那一行的候選不算）。
         const bare = setTargetId(text, target.line, null);
         if (bare === null || elsewhere(path).has(restore) || presentOf(bare, parseDeck(bare)).has(restore)) return null;
         next = setTargetId(text, target.line, restore);
-        if (next === null) return null;
-        pending.set(path, items.filter(each => each !== item));
+        id = restore;
       } else {
         const bare = target.implicit ? text : setTargetId(text, target.line, null);
         if (bare === null) return null;
-        pending.set(path, items.filter(each => each !== item));
-        next = fill(path, bare);
+        // 這個目標還在待處理（採用時才拿掉），補的時候不跳過它；其他待處理的照常跳過。
+        const skip = lines(path);
+        skip.delete(target.line);
+        const filled = reserve(bare, skip);
+        next = filled.text;
+        // 這個目標配到的那一個：同名、行號最近的新 ID（隱含目標補上 ID 時會多一行）。
+        const mine = expected(next, filled.ids).filter(e => e.name === target.name);
+        const lineOf = (each: Expected) => parseDeck(next as string).targets.find(t => t.id === each.id)?.line ?? Infinity;
+        id = mine.sort((a, b) => Math.abs(lineOf(a) - target.line) - Math.abs(lineOf(b) - target.line))[0]?.id;
       }
-      revision++;
-      // 自己寫回時拿掉的 ID（被換掉的、當成新的拿掉的候選）不算弄丟。
-      for (const id of own) if (id !== item.issue.restore || choice !== 'restore') removed.add(id);
-      if (item.issue.restore && choice === 'restore') seen.add(item.issue.restore);
-      if (!pending.get(path)?.length) pending.delete(path);
-      observeText(path, next, false);
-      return next;
+      if (next === null || id === undefined) return null;
+      return { text: next, expect: [{ id, name: target.name }], added: 0, record() {
+        const items = pending.get(path) ?? [];
+        const rest = items.filter(each => each !== item);
+        if (rest.length !== items.length) {
+          revision++;
+          if (rest.length) pending.set(path, rest); else pending.delete(path);
+        }
+        // 自己寫回時拿掉的 ID（被換掉的、當成新的拿掉的候選）不算弄丟。
+        for (const each of own) if (each !== restore) removed.add(each);
+        if (restore) seen.add(restore);
+      } };
+    },
+    /** 自己寫回的文字（核對讀取確認寫成了）：當成這一篇現在的內容，延續待處理的問題，不找新的弄丟。 */
+    wrote(path: string, text: string): void {
+      if (texts.get(path) !== text) observeText(path, text, false);
     },
   };
 }

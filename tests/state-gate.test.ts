@@ -5,6 +5,7 @@ import { encodeEntry } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
+import { createMemoryEditor, fillText } from './helpers/editor.ts';
 
 // 讀取閘門的 state 一側（任務說明 2-2、syntax.md §0-1、§2-1、§5-2）：這台是 0.1.0+1a2b3c4。外部改檔是記憶體 Files 的
 // write（通知同步送出），`settle()` 用假計時器讓 delay 過去、跑完重讀。
@@ -62,27 +63,32 @@ void test('2-2 沒傳 build（版本不明）：任何「需要版本」都讀�
   assert.deepEqual([h.share(), h.state.blocked().decks], [['bbbbbb'], [NEW]]);
 });
 
-void test('2-2 需要新版的卡組，三個寫入入口都拒絕：fillText 回傳原文、fillIds 不改檔、resolveText 回傳 null', async t => {
+void test('2-2 需要新版的卡組，三個寫入入口都拒絕：save、resolve 回 blocked needs-update，fillIds 不改檔', async t => {
   const text = marked('9.0.0', goal('aaaaab') + '- 新目標\n    - Q :: A\n');
   const h = await setup(t, { [NEW]: text });
-  assert.equal(h.state.fillText(NEW, text), text);
+  const editor = createMemoryEditor(h, NEW, text);
+  assert.deepEqual(await h.state.save(editor), { kind: 'blocked', reason: 'needs-update' });
+  assert.deepEqual(await h.state.resolve({ path: NEW, line: 4, name: '能說明 aaaaab', kind: 'lost', restore: 'aaaaab' }, 'new', editor), { kind: 'blocked', reason: 'needs-update' });
+  assert.deepEqual([editor.value, editor.applies, editor.persists], [text, 0, 0]);
   assert.equal(await h.state.fillIds(NEW), false);
   assert.deepEqual(h.modifies, []);
   assert.equal(h.texts.get(NEW), text);
-  assert.equal(h.state.resolveText({ path: NEW, line: 4, name: '能說明 aaaaab', kind: 'lost', restore: 'aaaaab' }, 'new', text), null);
 });
 
 void test('2-2 寫入前看最新的文字：編輯器裡或檔案裡剛出現的需要版本也擋住', async t => {
   const h = await setup(t, { [P]: '- 新目標\n    - Q :: A\n' });
   const newer = marked('9.0.0', '- 新目標\n    - Q :: A\n');
   // 存檔：編輯器的文字已經帶標記，state 讀到的還沒有。
-  assert.equal(h.state.fillText(P, newer), newer);
+  const editor = createMemoryEditor(h, P, newer);
+  assert.deepEqual(await h.state.save(editor), { kind: 'blocked', reason: 'needs-update' });
+  assert.deepEqual([editor.value, editor.applies, editor.persists], [newer, 0, 0]);
   // 離開筆記：檔案已經被別台裝置改成新寫法，通知還沒處理。
   h.texts.set(P, newer);
   assert.equal(await h.state.fillIds(P), false);
   assert.equal(h.texts.get(P), newer);
-  // 讀得懂時照常補。
-  h.texts.set(P, '- 新目標\n    - Q :: A\n');
+  assert.deepEqual(h.state.blocked().decks, [P], '這次離開筆記之後讀到了新寫法');
+  // 改回讀得懂的寫法（有通知）：寫入前先讀完待讀，照常補。
+  h.write(P, '- 新目標\n    - Q :: A\n');
   assert.equal(await h.state.fillIds(P), true);
   assert.equal(h.texts.get(P), '- 新目標 ^aaaaaa\n    - Q :: A\n');
 });
@@ -98,7 +104,7 @@ void test('2-2 每次重讀都重新檢查：卡組變成需要新版就停，�
 
 void test('2-2 需要新版的卡組裡的 ID 照樣算用過：別篇配新 ID 時避開；讀得懂的卡組裡同一個 ID 也不出', async t => {
   const h = await setup(t, { [NEW]: marked('9.0.0', goal('aaaaaa')), [P]: '- 新目標\n    - Q :: A\n', 'Essence Cards/重複.md': goal('aaaaaa') + goal('cccccc') });
-  assert.equal(h.state.fillText(P, '- 新目標\n    - Q :: A\n'), '- 新目標 ^aaaaab\n    - Q :: A\n');
+  assert.equal(await fillText(h.state, h, P, '- 新目標\n    - Q :: A\n'), '- 新目標 ^aaaaab\n    - Q :: A\n');
   assert.deepEqual(h.share(), ['aaaaab', 'cccccc']);
 });
 
@@ -145,7 +151,7 @@ void test('2-2 取消看它指的作答：那一筆的目標後來被停掉，�
 void test('2-3 帶 need 的行裡的 lt 進 seen：配新 ID 時避開（D-134）', async t => {
   const h = await setup(t, { [P]: '- 新目標\n    - Q :: A\n', [LOG]: JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', need: '9.0.0', lt: 'aaaaaa', r: 'good' }) + '\n' });
   assert.deepEqual(h.state.history().seen, ['aaaaaa']);
-  assert.equal(h.state.fillText(P, '- 新目標\n    - Q :: A\n'), '- 新目標 ^aaaaab\n    - Q :: A\n');
+  assert.equal(await fillText(h.state, h, P, '- 新目標\n    - Q :: A\n'), '- 新目標 ^aaaaab\n    - Q :: A\n');
 });
 
 void test('2-2 需要新版的卡組，卡組的狀態變更也不寫：那是從讀不懂的內容得出的', async t => {
