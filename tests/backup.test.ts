@@ -4,7 +4,7 @@ import { readdir, readFile, stat, symlink, unlink, utimes, writeFile, appendFile
 import { join } from 'node:path';
 import { openBackup } from '../src/core/backup/index.ts';
 import { backupVault } from '../tools/backup.ts';
-import { virtualizedNotice } from '../tools/vault-io.ts';
+import { virtualizedReason } from '../tools/vault-io.ts';
 import { goal, makeVault, put, review, tempFolder } from './helpers/vault.ts';
 
 const LOG = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
@@ -150,9 +150,12 @@ void test('備份：設定資料夾照 --config；沒有外掛資料夾時整份
   await assert.rejects(backupVault({ vault, to: await tempFolder(t), by: 'backup', ...fixed }), /\.obsidian\/plugins\/essence-cards\/manifest\.json 不存在/);
 });
 
-void test('備份位置落在封裝 App 的私有資料夾（MSIX 把 %LOCALAPPDATA% 導過去）時要照實提醒', () => {
-  assert.match(virtualizedNotice(String.raw`C:\Users\kuo\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Essence Cards\備份\V\a.zip`) ?? '',
-    /備份實際存在 .*Packages.*解除安裝那個 App 時會一起刪掉/);
-  assert.equal(virtualizedNotice(String.raw`C:\Users\kuo\AppData\Local\Essence Cards\備份\V\a.zip`), null);
-  assert.equal(virtualizedNotice('/home/kuo/.local/share/Essence Cards/備份/V/a.zip'), null);
+void test('備份位置的實際路徑落在封裝 App 的私有資料夾（MSIX 把 %LOCALAPPDATA% 導過去）時拒絕，要用 --to 指定別處（使用者 2026-10-29）', () => {
+  assert.match(virtualizedReason('預設位置', String.raw`C:\Users\kuo\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Essence Cards\備份\V`) ?? '',
+    /實際在 .*Packages.*解除安裝那個 App 時會一起刪掉。用 --to 指定 App 以外的資料夾/);
+  assert.notEqual(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache`), null);
+  assert.equal(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Essence Cards\備份\V`), null);
+  // %TEMP% 不會被導走（2026-10-29 實測），測試的暫存資料夾照常。
+  assert.equal(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Temp\essence-abc`), null);
+  assert.equal(virtualizedReason('x', '/home/kuo/.local/share/Essence Cards/備份/V'), null);
 });

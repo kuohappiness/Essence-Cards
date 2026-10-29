@@ -11,7 +11,7 @@ import { compareVersions, LIMITS } from './compare-versions.ts';
 import { examReminder, SCOPE_FOLDER } from './exam-reminder.ts';
 import type { Reminder } from './exam-reminder.ts';
 import { installVault, isTestVault, localFolder, releaseProblems } from './install.ts';
-import { listTree, pluginConfig, virtualizedNotice } from './vault-io.ts';
+import { listTree, pluginConfig } from './vault-io.ts';
 
 const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -216,8 +216,6 @@ if (import.meta.main) {
     const result = await checkUpdate(options);
     console.log(`考前提醒：${result.exam.message}`);
     console.log(`備份：${result.backup}`);
-    const notice = virtualizedNotice(result.backup);
-    if (notice) console.log(notice);
     console.log('baseline' in result && 'missing' in result.baseline ? `發布前比較：基線缺失（${result.baseline.missing}）` : `發布前比較：${result.differences === null ? '無法比較' : `差異 ${result.differences} 項`}`);
     console.log(`報告：${result.report}`);
     console.log('各裝置最後回報的版本（不是即時狀態：還沒同步、還沒重開的裝置看不出來）：');

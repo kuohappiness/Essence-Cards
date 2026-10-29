@@ -17,6 +17,8 @@ export interface RestoreOptions {
   backup: string;
   /** 這個 vault 現在的設定資料夾，預設 .obsidian；裡面要有外掛，確定不了時 data.json 擋住。 */
   config?: string;
+  /** --apply 先做的現況備份放哪裡；預設是備份檔旁邊。 */
+  to?: string;
   now?: () => number;
   offset?: (ms: number) => number;
   random?: () => string;
@@ -174,7 +176,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     if (!file || file.action !== 'restore') throw Error(`${path} 不是計畫裡可以還原的檔`);
   }
 
-  const before = await backupVault({ vault, to: dirname(options.backup), config: options.config, by: 'restore', now: options.now, offset: options.offset });
+  const before = await backupVault({ vault, to: options.to ?? dirname(options.backup), config: options.config, by: 'restore', now: options.now, offset: options.offset });
   const loaded = await load({ ...options, vault });
   const result: ApplyResult = { backup: before.path, files: [], logs: [] };
   const outcome = (file: { path: string; target: string | null }, kind: Outcome, reason: string): void => {
@@ -282,13 +284,13 @@ async function exists(path: string): Promise<boolean> {
 
 if (import.meta.main) {
   const usage = '用法：npm run restore -- <vault> <備份檔> --plan [--config <設定資料夾>]\n'
-    + '　　　npm run restore -- <vault> <備份檔> --apply <計畫檔> [--files <備份裡的路徑> …] [--config <設定資料夾>]\n' + CLOSE_OBSIDIAN;
+    + '　　　npm run restore -- <vault> <備份檔> --apply <計畫檔> [--files <備份裡的路徑> …] [--to <還原前備份的資料夾>] [--config <設定資料夾>]\n' + CLOSE_OBSIDIAN;
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-    plan: { type: 'boolean' }, apply: { type: 'string' }, files: { type: 'string', multiple: true }, config: { type: 'string' },
+    plan: { type: 'boolean' }, apply: { type: 'string' }, files: { type: 'string', multiple: true }, config: { type: 'string' }, to: { type: 'string' },
   } });
   if (positionals.length !== 2 || !!values.plan === (values.apply !== undefined) || !(await exists(positionals[1]))) throw Error(usage);
   console.log(CLOSE_OBSIDIAN);
-  const options = { vault: positionals[0], backup: positionals[1], config: values.config };
+  const options = { vault: positionals[0], backup: positionals[1], config: values.config, to: values.to };
   if (values.plan) {
     const { plan: result, path, report: md } = await makePlan(options);
     const count = (action: PlannedFile['action']): number => result.files.filter(file => file.action === action).length;

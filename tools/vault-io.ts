@@ -49,12 +49,13 @@ export function defaultBackupFolder(vaultName: string, env: NodeJS.ProcessEnv = 
 
 /**
  * 實際路徑落在封裝 App 的私有資料夾（`AppData\Local\Packages\<App>\LocalCache\`）：在 MSIX 封裝的 App（例如 Claude 桌面 App）
- * 裡跑時，Windows 把寫進 %LOCALAPPDATA% 的東西導到那裡（2026-10-29 實測）。回傳要印給人看的提醒；不是就回傳 null。
+ * 裡跑時，Windows 把寫進 %LOCALAPPDATA% 的東西導到那裡（2026-10-29 實測；%TEMP% 不會）。App 外看不到，解除安裝那個 App
+ * 時會一起刪掉，所以備份不放這裡：回傳拒絕的理由；不是就回傳 null（使用者 2026-10-29 選的做法）。
  */
-export function virtualizedNotice(real: string): string | null {
-  if (!/[\\/]AppData[\\/]Local[\\/]Packages[\\/][^\\/]+[\\/]LocalCache[\\/]/i.test(real)) return null;
-  return `注意：這個程式在封裝的 App 裡跑，Windows 把 %LOCALAPPDATA% 導到那個 App 的私有資料夾，備份實際存在 ${real}：`
-    + '從檔案總管或 App 以外的程式看 %LOCALAPPDATA% 看不到，解除安裝那個 App 時會一起刪掉。要放在別處，用 --to 指定。';
+export function virtualizedReason(folder: string, real: string): string | null {
+  if (!/[\\/]AppData[\\/]Local[\\/]Packages[\\/][^\\/]+[\\/]LocalCache[\\/]/i.test(real + '\\')) return null;
+  return `備份位置 ${folder} 實際在 ${real}：這個程式在封裝的 App（例如 Claude 桌面 App）裡跑，Windows 把它導到那個 App 的私有資料夾，`
+    + '從檔案總管或 App 以外的程式看不到，解除安裝那個 App 時會一起刪掉。用 --to 指定 App 以外的資料夾（不能在 vault 裡、也不要在雲端同步的資料夾裡）。';
 }
 
 /** 讀不到檔案時分清楚原因（任務 1-1 第 1 點）：消失、權限、被占用，Windows 上其他的多半是 iCloud 只留了雲端佔位檔。 */

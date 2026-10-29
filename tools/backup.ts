@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { BACKUP_FORMAT, BACKUP_SCOPE, BACKUP_VERSION, ESSENCE_ROOT, PLUGIN_DATA, backupName, hashBytes, openBackup, readBuild, writeZip } from '../src/core/backup/index.ts';
@@ -7,7 +7,7 @@ import type { BackupManifest } from '../src/core/backup/index.ts';
 import { isDeckPath, parseDeck } from '../src/core/deck/index.ts';
 import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { buildVersion } from './build.mjs';
-import { defaultBackupFolder, isInside, listTree, pluginConfig, readError, realTarget, virtualizedNotice } from './vault-io.ts';
+import { defaultBackupFolder, isInside, listTree, pluginConfig, readError, realTarget, virtualizedReason } from './vault-io.ts';
 
 /** 清單的 by（syntax §8）。 */
 export type BackupBy = 'backup' | 'update-vault' | 'restore';
@@ -92,10 +92,18 @@ export async function backupVault(options: BackupOptions): Promise<BackupResult>
   const vault = await realpath(options.vault);
   if (!(await stat(vault)).isDirectory()) throw Error('vault 必須是已存在的資料夾');
   const config = await pluginConfig(vault, options.config);
-  const folder = await realTarget(options.to ?? defaultBackupFolder(basename(vault)));
+  const requested = options.to ?? defaultBackupFolder(basename(vault));
+  const folder = await realTarget(requested);
   if (isInside(folder, vault)) throw Error(`備份位置 ${folder} 在 vault 裡（以實際路徑判斷），不能放在 vault 裡`);
-  await mkdir(folder, { recursive: true });
-  if (isInside(await realpath(folder), vault)) throw Error(`備份位置 ${folder} 在 vault 裡（以實際路徑判斷），不能放在 vault 裡`);
+  const newFolder = await mkdir(folder, { recursive: true });
+  const real = await realpath(folder);
+  if (isInside(real, vault)) throw Error(`備份位置 ${folder} 在 vault 裡（以實際路徑判斷），不能放在 vault 裡`);
+  const virtualized = virtualizedReason(requested, real);
+  if (virtualized) {
+    // 這次才建的空資料夾一起拿掉（建在 App 的私有資料夾裡）。
+    if (newFolder !== undefined) await rm(newFolder, { recursive: true, force: true });
+    throw Error(virtualized);
+  }
 
   let main: string | null = null;
   try { main = await readFile(join(vault, config, 'plugins/essence-cards/main.js'), 'utf8'); } catch { /* 沒裝 main.js：build 是 null */ }
@@ -182,8 +190,6 @@ if (import.meta.main) {
   const result = await backupVault({ vault: positionals[0], to: values.to, config: values.config, by: 'backup' });
   const bytes = result.manifest.files.reduce((sum, file) => sum + file.size, 0);
   console.log(`已備份：${result.path}（${result.manifest.files.length} 個檔，${bytes} bytes${result.attempts > 1 ? `，檔案在變，第 ${result.attempts} 次才穩定` : ''}）`);
-  const notice = virtualizedNotice(result.path);
-  if (notice) console.log(notice);
   for (const path of result.manifest.absent) console.log('當時不存在：' + path);
   for (const note of result.manifest.notes) console.log(`記下：${note.path}：${note.message}`);
 }
