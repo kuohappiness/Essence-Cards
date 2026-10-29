@@ -1,6 +1,6 @@
 # 存檔的 view.save() 蓋掉剛到的外部修改：修法（請 Fable 審查，再請 Codex 查核）
 
-狀態：✅ 實驗 X 的結果是 X1、X2 都蓋掉，照使用者同意的規則不修 V6（見稿末〈實驗 X 的結果與結論〉）；退回與改寫完成後請 Codex 查核是否乾淨
+狀態：✅ 實驗 X 的結果是 X1、X2 都蓋掉，照使用者同意的規則不修 V6（見稿末〈實驗 X 的結果與結論〉）；退回與改寫已完成（〈退回與回歸〉），待 Codex 查核是否乾淨
 
 2026-10-29｜Claude（Opus 5.5）｜依據：[tasks/state-writes.md](../tasks/state-writes.md) §9 的 V6；[外掛架構討論稿](2026-10-26-plugin-architecture.md)環節 4〈Codex 回應：環節 4 第二輪〉第 1 點（存檔改成 `view.save()` 加核對讀取）
 
@@ -495,3 +495,33 @@ X1 保留、X2 蓋掉時（子解釋 (b) 成立），再回來談：那時先找
 3. 修 `await admit()` 的交接窗口（不是 V6 的修法，是三方都同意的獨立規格落差），加 Node 情境。
 4. P 記進 backlog，觸發點用 Codex 第 3 題第 3 點的寫法。
 5. 退回與改寫完成後，請 Codex 查核是否乾淨（使用者要求）。
+
+## 退回與回歸（2026-10-29）
+
+照〈實驗 X 的結果與結論〉做完的：
+
+| commit | 內容 |
+|---|---|
+| `01ee28c` | 這份稿記下實驗 X 的結果與不修的結論 |
+| `199d360` | `git revert` 掉 `e597f39`、`f033114`、`637428d`（開發命令 `save-flow-v6`、`save-flow-x`）；`src/obsidian/` 回到 `1f6c514` 的內容（`git diff 1f6c514 199d360 -- src/obsidian` 是空的） |
+| `7faf34f` | 任務說明 S14、V6 兩列與 S14 (b) 的測試註解改成 Codex 第 3 題第 1 點的措辭；backlog 技術債加 P 一列 |
+| `cd03533` | `edit` 在 `await admit()` 之後同步重查 `waiting()` 與 `writable()`，有變動就回到 `admit`（輪數沿用同一份）。新增三個 Node 情境：交接時別篇送來通知（掃第 0～20 個 microtask）、交接時 `close()`、存檔版的 S22（一直有新的待讀，第 5 輪後 stale）。前兩個在舊程式上失敗（n=1 那格），S22 存檔版新舊都通過 |
+
+`git diff 1f6c514 HEAD -- src tests tools` 只剩 `cd03533` 與 S14 (b) 的註解。
+
+回歸（外掛 `0.0.1+cd03533`，Windows Obsidian 1.14.5）：
+
+- `npm run check`：595 項通過。
+- `save`（`save Windows-c50c 2026-10-29 104818.json`）：17 項 checks 全 true，和 10-28 相同。
+- `save-flow`（`save-flow Windows-c50c 2026-10-29 104901.json`）：V1 persist 時磁碟＝編輯器、提示一次、24 ms；V2 自動存檔後 15 ms 按、3 秒內沒有問題；V3、V4、V5 換篇、V5 改名照舊；V6 同一個 tick 蓋掉、50 ms 與 200 ms 保留（和原本相同，已知限制）；V7 唯讀時提示 TIPS.failed。
+- 中途一次環境問題：第一次重跑 `save-flow` 時，一篇測試卡組被 iCloud 轉成讀不到的雲端佔位檔（屬性有 OFFLINE、RECALL_ON_DATA_ACCESS），收尾刪不掉，整份結果只剩 EPERM 錯誤（`104157.json`）；接著跑的 `save` 因為 state 有一篇讀不到，照 state-load §3 擋住所有寫入，13 項 false（`104312.json`，開發命令 `unread` 列出的正是那一篇）。約 3 分鐘後 iCloud 自己清掉它，`unread` 變空，再跑上面兩個結果才是有效的。
+
+### 請 Codex 查核是否乾淨（使用者要求）
+
+基準：`1f6c514`（加 V6 實驗命令之前）到這一節的 commit。只查「這一輪為 V6 做的事有沒有退乾淨、留下的是不是都該留」，`state-writes` 其他的實作另做 L2。
+
+1. `src`、`tests`、`tools` 相對 `1f6c514` 是否只剩 `cd03533` 與 S14 (b) 的註解？`save-flow-v6`、`save-flow-x` 有沒有殘留（命令登錄、import、helper、文件引用；這份稿裡的 commit 紀錄除外）？
+2. 程式裡有沒有任何 H、D、A、P 的修法或它們的半成品？
+3. 文件（`tasks/state-writes.md` 的 S14、V6 兩列，`docs/backlog.md` 的 P 列，`tests/state-writes.test.ts` S14 (b) 的註解）的措辭是否符合 Codex 第 3 題第 1 點：沒有寫成「已證實 Cards 沒有加大窗口」，V6 沒有標成通過；P 的觸發點是否和第 3 點一致？
+4. 〈實驗 X 的結果與結論〉的數字和敘述是否和兩個結果檔一致？
+5. `cd03533` 是否照 Codex 第 2 題的規格（await 之後同步重查待讀、門檻；輪數不重設；持續通知有限退出；關閉），測試是否真的抓得到舊程式的問題？
