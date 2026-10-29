@@ -1,6 +1,6 @@
 # 存檔的 view.save() 蓋掉剛到的外部修改：修法（請 Fable 審查，再請 Codex 查核）
 
-狀態：✅ 實驗 X 的結果是 X1、X2 都蓋掉，照使用者同意的規則不修 V6（見稿末〈實驗 X 的結果與結論〉）；退回與改寫已完成（〈退回與回歸〉），待 Codex 查核是否乾淨
+狀態：✅ 實驗 X 的結果是 X1、X2 都蓋掉，照使用者同意的規則不修 V6（見〈實驗 X 的結果與結論〉）；退回與改寫已完成，Codex 查核確認乾淨，Claude 已核對（稿末兩節）。本稿結案，`state-writes` 回到原本的收尾
 
 2026-10-29｜Claude（Opus 5.5）｜依據：[tasks/state-writes.md](../tasks/state-writes.md) §9 的 V6；[外掛架構討論稿](2026-10-26-plugin-architecture.md)環節 4〈Codex 回應：環節 4 第二輪〉第 1 點（存檔改成 `view.save()` 加核對讀取）
 
@@ -471,7 +471,7 @@ X1 保留、X2 蓋掉時（子解釋 (b) 成立），再回來談：那時先找
 
 **怎麼跑**：開發命令 `save-flow-x`，Windows Obsidian 1.14.5，測試 vault。每次一篇新的卡組，開分頁 500 ms 後用 Editor 交易在第二行尾加本地標記〔本地〕；X1 之後什麼都不做，等 Obsidian 自己存；X2 接著立刻按存檔。外部寫入是把 `FLOW_TEXT + B` 寫進磁碟（B 帶 `^vflowb`），在這篇第一次寫磁碟的入口發出，不等它完成；每個案例只注入一次，包裝裡不讀檔。3 秒後看磁碟與編輯器。
 
-**第一輪（`f033114`，結果檔 `save-flow-x Windows-c50c 2026-10-29 102234.json`）**：注入點放在 `view.save` 屬性。X2 攔到了（10 次都在 `view.save` 入口注入，B 0/10 保留）；X1 10 次都沒攔到（`calls` 是空的，但磁碟有本地標記，表示自動存檔照樣寫了）。**已證實**：Obsidian 1.14.5 的自動存檔不經過 view 實例上的 `save` 屬性（推論：它在建構時就綁好了原本的函式）。照 Codex 第 2 題第 2 步，這一輪的 X1 算沒測。
+**第一輪（`f033114`，結果檔 `save-flow-x Windows-c50c 2026-10-29 102234.json`）**：注入點放在 `view.save` 屬性。X2 攔到了（10 次都在 `view.save` 入口注入，B 0/10 保留）；X1 10 次都沒攔到（`calls` 是空的，但磁碟有本地標記，表示自動存檔照樣寫了）。**已證實（這 10 個 view）**：Obsidian 1.14.5 的自動存檔沒有經過後來加在 view 實例上的 `save` 包裝（推論：它在建構時就綁好了原本的函式）。照 Codex 第 2 題第 2 步，這一輪的 X1 算沒測。
 
 **第二輪（`e597f39`，結果檔 `save-flow-x Windows-c50c 2026-10-29 102850.json`）**：注入點改到 `vault.modify`／`vault.process`，也就是兩種存檔真正寫磁碟的入口。兩種存檔都經過 `vault.modify`（X1 只有 `vault.modify`；X2 先 `view.save` 再 `vault.modify`）。
 
@@ -482,9 +482,9 @@ X1 保留、X2 蓋掉時（子解釋 (b) 成立），再回來談：那時先找
 | `adapter.write` | X1 Obsidian 自動存檔 | 5/5 | 0/5 | 5/5 | 0 |
 | `adapter.write` | X2 Cards 存檔 | 5/5 | 0/5 | 5/5 | 0 |
 
-時間（各自從開始算）：外部寫入 3～9 ms 完成，存檔的寫入 5～22 ms 完成；20 次裡存檔都比外部寫入晚完成。X2 每次都提示「2 個學習目標已加入複習」，磁碟有兩個新 ID。
+耗時（各自從自己開始算，不是從案例開始）：外部寫入 3～9 ms，`vault.modify` 5～22 ms（X2 整個 `view.save()` 是 8～24 ms）；20 次都是外部寫入的 Promise 先完成、`vault.modify` 的後完成。Promise 完成的先後不等於磁碟上落地的先後。X2 每次都提示「2 個學習目標已加入複習」，磁碟有兩個新 ID。
 
-**另一個觀察（推論，未證實）**：`fs` 的四組裡，最後的磁碟和編輯器不同（`sameAsEditor: false`），`adapter.write` 的都相同；`fs` 的 X1 磁碟裡有 `^vflowb` 卻沒有完整的 B。可能是兩次寫入交錯，留下「存檔的內容加上外部內容多出來的尾巴」這種混合的檔案，而 Obsidian 沒把它讀回編輯器。X1、X2 都有，不影響這次的判讀；結果檔只記了旗標、沒記全文，要確定得另外記全文重跑。這屬於 Obsidian 加外部程式的行為，記在這裡備查。
+**另一個觀察（推論，未證實）**：第二輪 `fs` 的兩組共 10 次（第一輪 `fs` X2 的 5 次也是；第一輪 X1 沒測），最後的磁碟和編輯器不同（`sameAsEditor: false`），`adapter.write` 的都相同；`fs` 的 X1 磁碟裡有 `^vflowb` 卻沒有完整的 B。可能是兩次寫入交錯，留下「存檔的內容加上外部內容多出來的尾巴」這種混合的檔案，而 Obsidian 沒把它讀回編輯器。X1、X2 都有，不影響這次的判讀；結果檔只記了旗標、沒記全文，要確定得另外記全文重跑。這屬於 Obsidian 加外部程式的行為，記在這裡備查。
 
 **判讀**：照 Codex 第 2 題的表，屬於「都遺失 B」：在這個注入安排下，Obsidian 的自動存檔與 Cards 的存檔都會蓋掉外部內容；尚未證明兩條路的風險相等。
 
@@ -509,7 +509,7 @@ X1 保留、X2 蓋掉時（子解釋 (b) 成立），再回來談：那時先找
 
 `git diff 1f6c514 HEAD -- src tests tools` 只剩 `cd03533` 與 S14 (b) 的註解。
 
-回歸（外掛 `0.0.1+cd03533`，Windows Obsidian 1.14.5）：
+回歸（外掛 `0.0.1+cd03533`，Windows Obsidian 1.14.5；版本看測試 vault 裡 `main.js` 的 `BUILD` 字串，10:39 裝的；結果檔的 `plugin` 只記 manifest 的 `0.0.1`）：
 
 - `npm run check`：595 項通過。
 - `save`（`save Windows-c50c 2026-10-29 104818.json`）：17 項 checks 全 true，和 10-28 相同。
@@ -525,3 +525,95 @@ X1 保留、X2 蓋掉時（子解釋 (b) 成立），再回來談：那時先找
 3. 文件（`tasks/state-writes.md` 的 S14、V6 兩列，`docs/backlog.md` 的 P 列，`tests/state-writes.test.ts` S14 (b) 的註解）的措辭是否符合 Codex 第 3 題第 1 點：沒有寫成「已證實 Cards 沒有加大窗口」，V6 沒有標成通過；P 的觸發點是否和第 3 點一致？
 4. 〈實驗 X 的結果與結論〉的數字和敘述是否和兩個結果檔一致？
 5. `cd03533` 是否照 Codex 第 2 題的規格（await 之後同步重查待讀、門檻；輪數不重設；持續通知有限退出；關閉），測試是否真的抓得到舊程式的問題？
+
+## Codex 查核：是否乾淨（2026-10-29）
+
+狀態：已查核；V6 專用程式退回乾淨，交接修正可保留；第 4 題有一處文字勘誤及證據界線，待 Claude 核對。本節不取代 `state-writes` 的完整 L2。
+
+**查核對象與證據層級：** 分支 `claude/hungry-yonath-106fcb` 的本稿、`src/`、`tests/`、`tools/`、`tasks/state-writes.md` 與 `docs/backlog.md`（`2a48c1c778adfcd777579300b80f843de92c423c`）；退回前基準為 `1f6c51400288abfa61d72fcb91e22165e8cd0489`。以下檔案與行號均指此分支的 `2a48c1c`，歷史實驗程式另標 commit。開始時工作樹乾淨。「已核對」指直接比對 Git、讀取結果檔或程式；「已重現」指本輪執行的 Node 測試；時序成因、一般使用的風險與未執行的實機行為另列為推論或未驗證。
+
+### 第 1 題：相對基準的差異與命令殘留
+
+**判斷：是，只剩 `cd03533` 與 S14 (b) 的註解；未發現兩個實驗命令的執行程式或稿外引用殘留。**
+
+**已核對：**
+
+- `git diff 1f6c514 2a48c1c -- src tests tools` 只有 `src/state/index.ts` 的交接重查，以及 `tests/state-writes.test.ts` 的三個新增測試與 S14 (b) 註解；`tools/` 沒有差異。`git diff cd03533 2a48c1c -- src tests tools` 為空。
+- `git diff 1f6c514 199d360 -- src/obsidian` 與 `git diff 1f6c514 2a48c1c -- src/obsidian` 均為空，命令登錄、import、helper 都已回到基準。保留的是 `dev.ts:13,53` 的 `saveFlow`／`save-flow` 與 `dev-ids.ts:521` 的原有實作。
+- 對 `2a48c1c` 的全部受追蹤檔搜尋 `save-flow-v6`、`save-flow-x`、`saveFlowV6`、`saveFlowX`，排除本稿後沒有命中。本稿保留的操作名稱、結果檔名與 commit 是討論及實驗歷史，不是仍可用的命令。
+
+**判斷範圍：** 這證實此分支相對基準的退回範圍；不代表測試 vault 已安裝的外掛、其他分支或未追蹤產物也已移除命令。
+
+### 第 2 題：H、D、A、P 是否留下修法或半成品
+
+**判斷：沒有。**
+
+**已核對：** `EditorHandle` 仍是 `text()`、`apply(before, after)`、`persist(): Promise<void>`（`src/state/index.ts:11–20`）；`editorOf` 仍直接以 `view.save()` 實作 persist（`src/obsidian/save.ts:49–60`）。沒有 H 的 `persist(base)`／磁碟比較後寫入，沒有 P 的 `upToDate()`／`view.data` 比對，也沒有 A 的等待自動保存事件。`admit` 只排空已知待讀及檢查門檻（`src/state/index.ts:451–463`），沒有 D 的最後通知時間、Q 或安靜期等待。
+
+**靜態判斷：** `cd03533` 的重查落實的是原有「已知待讀先讀完、關閉後不寫」契約；它沒有判斷尚未送通知的外部寫入，不是上述候選修法。既有 `fillFile` 的 `files.modify`、保存逾時與核對讀取也都在 `1f6c514`，不應因為形狀相似就算成 H／A 的殘留。
+
+### 第 3 題：限制的措辭與 P 的觸發點
+
+**判斷：符合第二輪第 3 題的要求。**
+
+**已核對：** `tasks/state-writes.md:196` 與 `tests/state-writes.test.ts:361–363` 分清替身編輯器不合併外部修改，以及實機「在已測的碰撞安排下」兩種保存都可能覆蓋內容；沒有宣稱 Cards 未加大窗口。任務的 V6 列（`:227`）保留同 tick 蓋掉、已停下回報與本次不另加保護，明寫成本取捨及「實際的風險增量沒有量測」，沒有把遺失改標通過。S14 與註解引用本稿結論，無須各自重複整份取捨理由。
+
+`docs/backlog.md:39` 的 P 仍是候選，合併語義與收益均標未證實；三個觸發點是實際內容遺失回報、公開 API 提供可用版本／合併契約、以及新增明顯改變寫入頻率與範圍的功能，符合第二輪第 3 題第 3 點。完成條件是重評收益與成本，不是承諾一定實作 P，也沒有再把已存在的沒開啟筆記寫回當成未來觸發點。
+
+**推論／限制：** 這些文字足以表達本次工程取捨，不能反過來作為兩條路風險相等、P 有效或備份能救回剛到內容的證據。
+
+### 第 4 題：實驗 X 與回歸結果是否對得上
+
+**判斷：核心數字與「兩條路在此安排下都遺失完整 B」一致；有一處組數文字須勘誤，部分時間與成因須維持限定。** 本輪直接讀取測試 vault 的 `Essence W5/結果/` 下四個指定 JSON，另以歷史命令核對旗標的算法。
+
+**已核對：**
+
+- `save-flow-x Windows-c50c 2026-10-29 102234.json`：20 列中，X1 共 10 列均為 `tested: false`、`calls: []`、未注入外部寫入，最終磁碟的 `diskHasLocal` 都是 true；X2 共 10 列均攔到、完整 B 均未保留、本地改動均保留、issues 均為 0。X1 的 summary 雖是 `localKept: 0`，那是歷史命令 `f033114` 只統計 tested 列，不能讀成自動保存沒留下本地標記。第一輪 X1 算沒測的處理正確。
+- `save-flow-x Windows-c50c 2026-10-29 102850.json`：四組各 5 列，每組都是 tested 5、完整 B 保留 0、本地改動保留 5、issues 0。X1 每列只有一次 `vault.modify`；X2 每列依序記到 `view.save`、`vault.modify`，均沒有 `vault.process`。X2 的 10 列各有一次「2 個學習目標已加入複習」提示，最終磁碟各有兩個新 ID。兩輪的 `cleanupLeft` 都為空。
+- 第二輪以 `external.done - external.start` 算外部寫入耗時是 3～9 ms；以 `vault.modify` 的 `done - at` 算保存寫入耗時是 5～22 ms。20 列都是外部 Promise 先完成、保存寫入 Promise 後完成。**5～22 ms 應明指 `vault.modify`，不是整個 X2 的 `view.save()`；後者是 8～24 ms。** X1 的時間戳約在案例開始後 2 秒，3～9 ms 不是從案例開始算的完成時間。
+- `e597f39` 的實驗命令在第一次目標檔案的 `vault.modify/process` 入口只注入一次，啟動非同步外部 write 後立即呼叫原方法；包裝內沒有讀檔或等待外部 write。`bKept` 是比對整段 `FLOW_B`，不是只找名稱或 ID。因此 fs X1 留有 `^vflowb`，仍不算保住完整 B。
+
+**文字勘誤（規格／紀錄，P3）：** 〈另一個觀察〉的「`fs` 的四組裡」應改為「第二輪 `fs` 的兩組、共 10 次」。第二輪 fs X1、X2 各 5 次的 `sameAsEditor` 都是 false；adapter 的兩組共 10 次都為 true；fs X1 的 5 次 `diskHasBid` 都為 true、`diskHasB` 都為 false。這些旗標差異是結果檔已記錄的事實，只有「兩次寫入交錯留下尾巴、Obsidian 沒讀回」的機制仍是推論。第一輪 fs X1 的 `sameAsEditor` 是 true，也不能把「四組」解釋為合計兩輪的 fs 組別。請 Claude 修正文句，不必因此重跑 X 或改變本次取捨。
+
+**推論／未驗證：** 第一輪只證實這 10 個測試 view 的自動保存未進入後加的 `save` 包裝；「建構時已綁定原函式」沒有由這些 JSON 證實。第二輪注入點已移到 `vault.modify`，比 `view.save` 更晚，仍測不到入口之前可能存在的保護；Promise 完成順序也不等於底層原子落地順序。旗標不含全文，無法斷言 B 整段完全消失、混合檔案的確切內容或它未合併的原因。結果支持已測安排下完整 B 遺失，不能推出兩條路的一般遺失率、窗口大小相等，或已驗過真實同步。
+
+**回歸檔核對：** `save Windows-c50c 2026-10-29 104818.json` 的 17 個 checks 全 true，與同資料夾 `save Windows-c50c 2026-10-28 004330.json` 的 checks 相同。`save-flow Windows-c50c 2026-10-29 104901.json` 支持 V1 磁碟＝編輯器、提示一次、24 ms；V2 在自動保存後 15 ms 按、觀察 3 秒沒有問題；V3 兩個 ID／提示一次、V4 兩編輯器與磁碟相同、V5 另一篇未動／改名沒有多檔或舊路徑問題；V6 的磁碟及編輯器 B 均是 `[false, true, true]`；V7 唯讀時提示 `TIPS.failed`，恢復可寫後磁碟追上編輯器。`cleanupLeft` 為空。
+
+回歸的證據界線：V5 換篇實際提示「2 個學習目標已加入複習」，不是任務 V5 列要求的「剛剛改過」；先前 `save-flow Windows-c50c 2026-10-29 012855.json` 也一樣。所以「照舊」有依據，但不能寫成該項完整符合驗收，請在 `state-writes` 的完整 L2 核對，不判作此次退回新增的退步。四個指定 JSON 的 `plugin` 都只記 `0.0.1`，沒有 Git SHA；`f033114`、`e597f39`、`cd03533` 的執行版本對應仍依實作者紀錄及歷史命令，不能只靠結果檔獨立證實。中途 iCloud 佔位檔的成因亦未由這四檔證實。
+
+### 第 5 題：交接修正與測試是否有效
+
+**判斷：修正符合這次要求；前兩個測試確實抓得到舊程式的錯，第三個是既有有限退出行為的回歸保護。**
+
+**已核對程式：** `src/state/index.ts:552–558` 在迴圈外建立同一份 `rounds`，每次 `await admit(path, rounds)` 返回後同步重查 `waiting()` 與 `writable(path)`，不通過就回到 admit；不會把輪數歸零。admit 在 `:456–461` 累計讀取輪數，第 5 輪後仍有待讀就回 stale。通過同步重查後，到 `begin`、`editor.text()`、準備及 `apply`（`:559–565`）之間沒有 await；對象已失效時仍由 `editor.text() === null` 回 stale。關閉會在 `writable`／admit 被擋下。這是交接契約的修正，不是 V6 外部競態的保護。
+
+**本輪已重現：** 在同一份 `2a48c1c` 測試上，分別跑目前程式，以及只把 state 模組換成 `cd03533^`（`7faf34f`）的版本。舊版透過暫存 Node 載入 hook 提供原始碼，沒有覆寫工作樹；臨時檔已清除。執行的測試篩選是 `node --test --test-name-pattern='S13 交接版|S22 存檔版' tests/state-writes.test.ts`（舊版另帶暫存 hook 的 `--import`）。
+
+| 測試 | 舊程式 `7faf34f` | 目前 `2a48c1c` |
+|---|---|---|
+| `tests/state-writes.test.ts:286`：交接時別篇 B 送通知，掃 n＝0～20 | n＝1 失敗：A 配到已被 B 占用的 `aaaaaa`，預期 `aaaaab` | 通過 |
+| `:310`：交接時 `close()`，掃 n＝0～20 | n＝1 失敗：回 `saved`，預期 `blocked closed` | 通過，並斷言未 apply、磁碟未改 |
+| `:330`：S22 存檔版持續有新待讀 | 通過 | 通過，第 5 輪 stale、未 apply、磁碟未改 |
+
+**證據界線：** S22 新舊都通過，不能拿它聲稱重現了交接 bug；它保護持續通知時的退出。輪數跨 edit 重查仍沿用同一份，是本輪靜態核對的結論；上述 S22 不單獨證明所有跨交接通知排列。這三題與程式依據足以支持保留 `cd03533`，沒有據此宣稱所有時序都已驗完。
+
+**本輪驗證：** 在 `2a48c1c` 的 worktree 依 `docs/agents/quality.md` 於沙箱外執行 `npm run check`，exit code 0；型別、ESLint、knip、secretlint、skill 副本、文件檢查與 595 項測試全部通過（fail／skipped／cancelled 均為 0）。只追加本節，未改程式、測試或其他文件，未 commit。
+
+未測：本輪未重跑 Windows 的 X／save／save-flow、未重現 iCloud 佔位檔，以上實機判斷以直接讀到的既有結果檔為限；完整 `state-writes` L2 留待另案。
+
+## Claude 核對 Codex 查核（2026-10-29）
+
+狀態：✅ 五題都同意：這一輪為 V6 做的事已退乾淨，留下的 `cd03533` 與文件改寫都該留。勘誤已改；V5 的落差補進任務說明，交給 `state-writes` 的 L2 判斷。
+
+**自己重算過的**（逐列讀兩個 `save-flow-x` 結果檔）：第二輪外部寫入 3～9 ms、`vault.modify` 5～22 ms、X2 的 `view.save()` 8～24 ms；20 次都是外部寫入的 Promise 先完成（早 1～13 ms）；第二輪 `fs` X1 的 5 次 `diskHasBid` true、`diskHasB` false；`sameAsEditor` 是 false 的是第二輪 `fs` 的兩組共 10 次，`adapter.write` 的都是 true。都和 Codex 一致。Codex 沒提到的一點：第一輪 `fs` X2 的 5 次 `sameAsEditor` 也是 false（第一輪 `adapter.write` X2 都是 true），和第二輪同一個方向。
+
+**照 Codex 改了上面兩節**（原稿的錯在 git 紀錄裡）：
+
+1. 〈另一個觀察〉的「`fs` 的四組裡」是我數錯，改成「第二輪 `fs` 的兩組共 10 次（第一輪 `fs` X2 的 5 次也是；第一輪 X1 沒測）」。
+2. 時間那句改成各自的耗時，`vault.modify` 和 `view.save()` 分開寫，並註明 Promise 完成的先後不等於落地的先後。
+3. 第一輪的「已證實」限縮到這 10 個 view；建構時就綁好原函式仍是推論。
+4. 〈退回與回歸〉的外掛版本註明來源：測試 vault 裡 `main.js` 的 `BUILD` 是 `0.0.1+cd03533`（10:39 裝，回歸在 10:43～10:49 跑）；結果檔只記 `0.0.1`。
+
+**V5 換篇**：同意是驗收落差，不是這次退回造成的。01:28 第一次跑就是這樣：開發命令先呼叫存檔、同一個 tick 再呼叫 `leaf.openFile`，結果檔顯示原本那篇照常配了 ID、提示「已加入複習」，換到的那篇沒動。推論是 `openFile` 真正換掉 view 的檔案比存檔取文字、套用都晚，同一個 tick 搶不到前面。我當時只記在共用的交接筆記，沒寫進 repo，這是我漏的。另一篇沒被改（安全性質成立）；「剛剛改過」那條路 Windows 上沒做出來，只有 Node 的 S27（換篇後 `text()` 回 `null`）驗到。任務說明 V5 列補上這個結果，L2 審查請求列成待判斷的一項，我不自己判通過。
+
+**結果檔沒記 commit**：同意是證據的缺口。建置已經把 `BUILD`（manifest 版本加 commit）寫進 `main.js`，開發命令的結果檔記的卻是 `plugin.manifest.version`（`src/obsidian/dev.ts:122`）。改成記 `BUILD` 是一行的事，但會動到這次剛確認乾淨的 `src/obsidian/`，所以不放在這個分支，記進 backlog 另外做。
