@@ -4,9 +4,11 @@ import type { Deck, Target } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
 import type { IdIssue } from './ids.ts';
 export type { IdIssue, IdIssueKind } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, parseTime, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
+import { lastVersions } from '../core/backup/index.ts';
+import type { VersionReport } from '../core/backup/index.ts';
 
 export interface StateOptions {
   files: Files;
@@ -74,6 +76,13 @@ export interface State {
   answer(entry: NewEntry): string | null;
   /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的 ID 都不能。 */
   canAnswer(lt: string): boolean;
+  /**
+   * 「版本」命令用（任務說明 2-1、syntax.md §5-1）。build：這次的 BUILD，沒傳是 null。own：這台的版本行；waiting 是自己的
+   * 紀錄還沒都讀到（本機歷史待讀取，讀到才比），same 是最後一行已經是這個 BUILD，queued 是排進寫入、還沒有 flush 確認寫成，
+   * written 是 flush 確認寫成，沒傳 build 是 null。devices：每台裝置「最後回報」的版本，從帶來源路徑的原始紀錄算
+   * （包括這台剛排進寫入的那一行），不是即時狀態。
+   */
+  version(): { build: string | null; own: 'waiting' | 'same' | 'queued' | 'written' | null; devices: VersionReport[] };
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫。 */
   onChange(listener: () => void): () => void;
   /** 等目前排隊的紀錄寫完。 */
@@ -160,6 +169,35 @@ export function createState(options: StateOptions): State {
     return seenIds.ids;
   }
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0 });
+
+  /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
+  function record(entry: NewEntry): string {
+    const t = writer.write(entry);
+    const line = encodeEntry(t, entry);
+    const stamp = parseLine(line);
+    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
+    // 和 writer 寫檔的路徑相同：t 已經帶著寫入當下的時間與時區。
+    const path = logPath(device, stamp.at, stamp.offset);
+    sources.set(path, (sources.get(path) ?? '') + line + '\n');
+    history = appendLine(history, line);
+    return t;
+  }
+  /** 這台的版本行（version().own）。 */
+  let appState: 'waiting' | 'same' | 'queued' | 'written' | null = options.build === undefined ? null : 'waiting';
+  /**
+   * 版本行（任務說明 2-1、syntax.md §5-1）：自己的紀錄檔（檔名正好是 logPath 的格式）都讀到之後比一次，時間最晚的那一行
+   * `app` 不是這個 BUILD（或沒有、或同一個時間有不同的值）就排一行，一次啟動最多一行。讀到時已經 ready 的話，這一行排在
+   * 那段期間的作答後面（Codex 格式查核 R2）。
+   */
+  function checkApp(): void {
+    if (appState !== 'waiting' || options.build === undefined || closed || [...unread].some(own)) return;
+    const reports = lastVersions([...sources].filter(([path]) => own(path)).map(([path, text]) => ({ path, text })), version);
+    const at = (report: VersionReport): number => parseTime(report.t)?.at ?? -Infinity;
+    const last = reports.reduce<VersionReport | null>((best, report) => best === null || at(report) > at(best) ? report : best, null);
+    if (last?.build === options.build) { appState = 'same'; return; }
+    record({ set: 'app', val: options.build });
+    appState = 'queued';
+  }
   /** 給 planToday 的卡組：拿掉待處理的目標（W5 §8-5：不出題）。 */
   let planList: DeckEntry[] = [];
   /** 需要新版的卡組（路徑照字串排序）與它們的 ID（候選也算）。 */
@@ -319,6 +357,8 @@ export function createState(options: StateOptions): State {
     if (!unread.size) tracker.confirm();
     if (tracker.revision() !== revision) decksChanged = true;
     if (decksChanged) rebuild();
+    // 第一次載入時由 load() 在紀錄那一批之後比；之後是讀不到的自己的紀錄終於讀到了。
+    if (loaded) checkApp();
     if (loaded && (decksChanged || logsChanged)) replan();
   }
 
@@ -352,6 +392,8 @@ export function createState(options: StateOptions): State {
     await queue(() => read(logPaths));
     const afterHistory = performance.now();
     if (closed) throw Error('state 已關閉，沒有讀完');
+    // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
+    checkApp();
     loaded = true;
     current = planToday(input());
     const end = performance.now();
@@ -444,21 +486,19 @@ export function createState(options: StateOptions): State {
       if (!loaded) throw Error('state 還沒 ready');
       const lts = 'lt' in entry ? [entry.lt] : 'undo' in entry ? history.reviews.filter(review => review.t === entry.undo).map(review => review.lt) : [];
       if (!lts.every(answerable)) return null;
-      const t = writer.write(entry);
-      const line = encodeEntry(t, entry);
-      const stamp = parseLine(line);
-      if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
-      // 和 writer 寫檔的路徑相同：t 已經帶著寫入當下的時間與時區。
-      const path = logPath(device, stamp.at, stamp.offset);
-      sources.set(path, (sources.get(path) ?? '') + line + '\n');
-      history = appendLine(history, line);
-      return t;
+      return record(entry);
     },
     onChange(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    flush: () => writer.flush(),
+    async flush() {
+      // 版本行在這次 flush 開始前就排好了，flush 成功就是寫成了（寫入成功以 flush 為準）。
+      const queued = appState === 'queued';
+      await writer.flush();
+      if (queued && appState === 'queued') appState = 'written';
+    },
+    version: () => ({ build: options.build ?? null, own: appState, devices: lastVersions([...sources].map(([path, text]) => ({ path, text })), version) }),
     async close() {
       closed = true;
       if (timer !== null) clearTimeout(timer);

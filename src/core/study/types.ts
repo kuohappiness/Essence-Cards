@@ -43,6 +43,8 @@ export type NewEntry =
   | { set: 'retention'; val: number }
   | { set: 'semester'; val: string }
   | { set: 'filter'; val: string[] }
+  // 版本行（syntax.md §5-1）：val 是 BUILD 原樣，沒有 deck、lt。
+  | { set: 'app'; val: string }
   | { set: 'status'; deck: string; val: '草稿' | '啟用' | '暫停' }
   | { set: 'status'; lt: string; val: '啟用' | '暫停' };
 
