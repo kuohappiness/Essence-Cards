@@ -6,7 +6,7 @@
 
 | 角色 | 由誰擔任 |
 |---|---|
-| 規劃者 | Claude 的 Opus，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high |
+| 規劃者 | Claude 的 Opus，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high。任務說明與決定先和「不做」比較（[D-153](../decisions.md#d-153-每個新決定與新任務先和不做比較)），討論稿請 Codex 專門站在「不做」那一方反駁 |
 | 實作者 | Claude 的 Opus，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex |
 | 獨立審查者（L2） | 新開的 Codex session，不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude 的 Opus：L1 對照、核對 L2 的發現、合併 |

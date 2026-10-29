@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-27 | 里程碑報告的 R5（`73b4000`，[實機記錄](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)）：開發命令 `events` 記錄 Obsidian 事件；外部改名是 `create`＋`delete`，A2 不重開；資料夾刪除的契約 C15 通過；加 `unread` 命令 |
 | 2026-10-27 | 第一個里程碑的回顧與安全檢查（[報告](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)）：安全沒有發現、`npm audit` 0；十項建議，最重要的是 CI 在 main 紅了三天沒人發現，等使用者選 |
 | 2026-10-27 | W6 複習畫面合併進 `main`（`f136cf6`，[任務說明](../../tasks/w6.md)、[iPhone 測試](../../tasks/w6-iphone.md)）：W1～W6 打通，第一個里程碑達成。iPhone 第一次打開 259、223 ms，D-110 不加快取；使用者覺得鍵盤、朗讀、靜音與手勢都正常 |
 | 2026-10-27 | 歸檔原則補齊（[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)，[任務說明](../../tasks/archive-principles.md)）：文件檢查拿掉字數上限、plans 加狀態行；AGENTS 與 skill 寫明各類文件的終點，backlog 清掉已定案的項目 |
