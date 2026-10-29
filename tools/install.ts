@@ -3,8 +3,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes, isPlainPath, readBuild } from '../src/core/backup/index.ts';
+import { readDecks } from '../src/core/deck/index.ts';
+import { readHistory } from '../src/core/study/index.ts';
+import { canRead } from '../src/core/version/index.ts';
 import { buildPlugin } from './build.mjs';
 import { git } from './git.ts';
+import { createNodeFiles } from './node-files.ts';
 import { assertNoLinks, sameFileKey } from './vault-io.ts';
 
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -128,12 +132,28 @@ async function loadRelease(local: string, version: string): Promise<{ folder: st
 }
 
 /**
+ * 退回前的檢查（D-149 第 4 點、任務說明 1-4）：vault 裡那一版讀不懂的「需要版本」與 need（比它新或格式不對），
+ * 照外掛讀的規則找（syntax.md §0-1、§2-1、§5-2）。讀不到的檔案讓整個檢查失敗，不當成沒有。
+ */
+async function newerData(vault: string, version: string): Promise<string[]> {
+  const files = createNodeFiles(vault);
+  const found: string[] = [];
+  for (const { path, deck: { props: { need } } } of await readDecks(files)) {
+    if (need !== null && !canRead(need, version)) found.push(`${path}：需要版本${need === false ? '的寫法讀不懂' : ' ' + need}`);
+  }
+  const history = await readHistory(files, version);
+  if (history.incomplete) found.push('複習紀錄：有讀不懂的行，辨認不出影響哪些學習目標');
+  else if (history.held.length) found.push(`複習紀錄：${String(history.held.length)} 個學習目標的紀錄需要比 ${version} 新的版本（${history.held.join('、')}）`);
+  return found;
+}
+
+/**
  * 安裝外掛到 vault（D-149 第 4 點，擋法寫在安裝命令本身）：
  * - dev：目標必須是登錄過的測試 vault。
  * - 不帶 dev、目標是登錄過的測試 vault：照舊建置後複製。
  * - 其他一律當正式使用的 vault：要符合 releaseProblems 的條件；先建置到暫存資料夾、確認 DEV 是 false，
  *   產物與雜湊存到 .local/releases/<版號>/（同一個版號已經有不同的產物就拒絕），再複製到 vault、讀回比雜湊。
- * - release：從 .local/releases/ 重裝那一份。
+ * - release：從 .local/releases/ 重裝那一份；現有資料需要比那一版新的版本時拒絕（newerData）。
  */
 export async function installVault(options: InstallOptions): Promise<Installed> {
   const root = options.root ?? defaultRoot;
@@ -146,6 +166,8 @@ export async function installVault(options: InstallOptions): Promise<Installed> 
   const test = await isTestVault(vault, local);
   if (options.release !== undefined) {
     const { folder, release } = await loadRelease(local, options.release);
+    const newer = await newerData(vault, release.version);
+    if (newer.length) throw Error(`現有資料需要比 ${release.version} 新的版本才讀得懂，不能退回這一版：\n- ` + newer.join('\n- '));
     await deploy(folder, vault, config, release.sha256);
     return { kind: 'release', version: release.version, build: release.build, vault };
   }
@@ -191,7 +213,7 @@ export async function installVault(options: InstallOptions): Promise<Installed> 
 /** CLI：tools/install-vault.mjs 轉來這裡。 */
 export async function main(args: readonly string[]): Promise<void> {
   const usage = '用法：npm run install-vault -- <vault> [--dev] [--config <設定資料夾>]\n'
-    + '　　　npm run install-vault -- <vault> --release <版號>（從 .local/releases/ 重裝那一份）\n'
+    + '　　　npm run install-vault -- <vault> --release <版號>（退回：從 .local/releases/ 重裝那一份，現有資料需要更新的版本時拒絕）\n'
     + '　　　npm run install-vault -- <vault> --register-test（登錄成測試 vault）';
   const rest = [...args];
   const take = (flag: string): string | undefined => {
