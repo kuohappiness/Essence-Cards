@@ -6,7 +6,7 @@
 
 | 角色 | 由誰擔任 |
 |---|---|
-| 規劃者 | Claude 的 Opus，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high |
+| 規劃者 | Claude 的 Opus，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high。任務說明與決定先和「不做」比較（[D-153](../decisions.md#d-153-每個新決定與新任務先和不做比較)），討論稿請 Codex 專門站在「不做」那一方反駁 |
 | 實作者 | Claude 的 Opus，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex |
 | 獨立審查者（L2） | 新開的 Codex session，不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude 的 Opus：L1 對照、核對 L2 的發現、合併 |
@@ -17,7 +17,7 @@
 
 - `npm run check`：型別、ESLint（含模組邊界）、knip、secretlint、skill 副本一致性、文件檢查、測試（[D-117](../decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)）。
 - 文件檢查：`node tools/check-docs.ts`，每次 commit 都跑，只改文件的 commit 也跑（[D-141](../decisions.md#d-141-文件架構入口只放狀態同一類資訊只維護一份)、[D-143](../decisions.md#d-143-歸檔原則每類文件都有終點不設字數上限)）。
-- 自動執行的地方：`.githooks/pre-commit`、`.github/workflows/check.yml`。
+- 自動執行的地方：`.githooks/pre-commit`、`.github/workflows/check.yml`。pre-commit 在程式相關的檔案有變動時跑完整的 `npm run check`；只改文件時，測試讀的文件（例如 `syntax.md` 的範例、`decisions.md`）有變動，就只跑寫到那個路徑的測試檔，通過時只印一行（2026-10-29：`b63c1bb` 只改 `syntax.md` 的範例就讓 CI 紅了；完整檢查的輸出約 3 萬字，AI 讀 commit 的輸出要花 token）。新的測試要讀文件時，在測試裡寫出它的路徑（例如 `new URL('../docs/syntax.md', import.meta.url)`），pre-commit 才找得到。
 - CI 的結果：每個 Claude session 開始時，`.claude/hooks/ci-status.mjs` 會查 `main` 最近一次跑完的 GitHub Actions，沒通過就提醒；看到提醒先用 `gh run view <id> --log-failed` 找原因，能修就修，不能修就告訴使用者。本機是 Windows、CI 是 Linux，只在一邊壞的問題 pre-commit 擋不到（2026-10 曾紅了三天沒人發現，[第一個里程碑的檢查](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) R1）。
 - knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：`npm run knip`（`tools/knip.mjs`）已經自動加上 `KNIP_DISABLE_RAW_TRANSFER=1`，檢查項目不變；直接跑 `npx knip` 時要自己加（2026-10-27 W6 合併時遇到）。
 - Codex 審查時：完整的 `npm run check` 要在沙箱外跑。沙箱裡會有 10～11 項環境造成的固定失敗（symlink、改名的 EPERM、git config；W5 第二部分三輪都是這樣）；沒辦法解除沙箱時，回報裡逐項列出失敗的測試，並說明哪些是環境造成的。審查請求的「驗證方式」連到這一點。

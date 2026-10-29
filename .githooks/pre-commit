@@ -7,7 +7,21 @@ if [ ! -d node_modules ]; then
 fi
 # 文件檢查每次都跑，讀暫存區（D-141）；程式檢查只在程式相關的檔案有變動時跑。
 node tools/check-docs.ts --staged
-if ! git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
+staged=$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD)
+if printf '%s\n' "$staged" | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
+  npm run check
   exit 0
 fi
-npm run check
+# 只改文件時，測試會讀的檔案（例如 syntax.md 的範例）有變動，就跑寫到它路徑的那幾個測試檔。
+# 通過時只印一行：AI 讀 commit 的輸出要花 token，完整檢查的輸出約 3 萬字（2026-10-29 b63c1bb 讓 CI 紅了）。
+tests=$(printf '%s\n' "$staged" | while IFS= read -r path; do
+  [ -n "$path" ] && grep -rlF --include='*.test.ts' -e "$path" tests || true
+done | sort -u)
+[ -n "$tests" ] || exit 0
+# 測試檔的路徑沒有空白，照空白拆開。
+# shellcheck disable=SC2086
+if ! out=$(node --test --test-concurrency=1 --test-reporter=dot $tests 2>&1); then
+  printf '%s\n' "$out" >&2
+  exit 1
+fi
+echo "讀到這次文件的測試通過：$(echo $tests)"
