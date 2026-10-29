@@ -1,6 +1,6 @@
 # `state/index.ts` 原樣拆檔（給 Claude，本機執行）
 
-狀態：實作完成在分支 `claude/state-split-c5c7bf`（`d67bb62`），等 Codex L2（[審查請求](state-split-review.md)）與合併的先後
+狀態：實作完成在分支 `claude/state-split-c5c7bf`（`d67bb62`），等更新防線第二部分先合併、整合進拆好的檔之後，一次做 Codex L2（[審查請求](state-split-review.md)，使用者 2026-10-29 決定）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（拆法已在外掛架構討論稿的環節 4 和 Codex 談定，這份是執行）。改的是 `src/state/`，屬於高風險範圍，合併前由 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
