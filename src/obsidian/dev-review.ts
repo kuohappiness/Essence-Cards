@@ -395,6 +395,14 @@ export function keepRendering(): { before: string; restore: () => void } {
   contents?.setBackgroundThrottling?.(false);
   return { before, restore: () => { contents?.setBackgroundThrottling?.(true); } };
 }
+/** 整個視窗截一張 PNG 寫進 vault 的 path（Electron 的 capturePage）；拿不到 webContents 時回傳 null。 */
+export async function capturePng(app: App, path: string): Promise<string | null> {
+  const contents = webContents();
+  if (!contents) return null;
+  const png = (await contents.capturePage()).toPNG();
+  await app.vault.adapter.writeBinary(path, png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer);
+  return path;
+}
 
 const overlay = () => document.querySelector<HTMLElement>('.ec-fullscreen');
 const inOverlay = <T extends Element>(selector: string): T[] => Array.from(overlay()?.querySelectorAll<T>(selector) ?? []);

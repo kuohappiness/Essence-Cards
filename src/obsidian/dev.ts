@@ -14,6 +14,7 @@ import { lockTest, saveFlow, saveTest, t1Close, t1Prep, type DevLog, type IdsHos
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
+import { versionCheck } from './dev-version.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -80,6 +81,8 @@ const commands: Record<string, DevCommand> = {
   // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。t1prep 之後至少等 10 秒再執行，讓 Obsidian 先存好版面
   // （2026-10-28 只等 5 秒時有一次重新載入後沒有還原那兩個分頁）。
   'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
+  // 更新防線第二部分（任務說明 2-1、2-2）：版本行、「版本」命令的通知、需要新版的卡組；截圖寫在 Essence W5/結果/。
+  version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
