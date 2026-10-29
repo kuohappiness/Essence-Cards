@@ -23,3 +23,4 @@
 - [AI、Capture 與外掛生態](ai-and-ecosystem.md)
 - [獨立 App](standalone-app.md)
 - [更新與相容](updates.md)
+- [維修與查修的準備](maintenance.md)

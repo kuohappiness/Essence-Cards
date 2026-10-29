@@ -7,3 +7,6 @@ _site/
 node_modules/
 /main.js
 /styles.css
+
+# 本機紀錄：測試 vault 的登錄、正式產物（更新防線 1-4）
+.local/

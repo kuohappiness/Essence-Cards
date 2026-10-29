@@ -8,6 +8,10 @@ fi
 # 文件檢查每次都跑，讀暫存區（D-141）；程式檢查只在程式相關的檔案有變動時跑。
 node tools/check-docs.ts --staged
 staged=$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD)
+# 暫存區上面讀完了。測試與工具會在暫存資料夾跑 git，hook 繼承的 GIT_DIR、GIT_INDEX_FILE 等會讓它們改到這個 repo
+# （2026-10-29：測試的 git init 把共用 .git/config 的 core.bare 改成 true，所有 worktree 都不能用）。
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
 if printf '%s\n' "$staged" | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
   npm run check
   exit 0
