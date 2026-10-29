@@ -12,7 +12,6 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 維修與查修的準備 | 盤點完成，缺口 G1～G3；使用者同意 G1（正式版把錯誤記下來），位置與格式的討論稿寫好 | Codex 查核；一致後交使用者確認，寫成 D-ID 與任務說明 | 使用者（開 Codex） | [規畫](plans/maintenance.md)、[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
-| `state/index.ts` 原樣拆檔 | 實作完成在分支 `claude/state-split-c5c7bf`：讀取層 `reads.ts`、寫入 `writes.ts`、`ids.ts`、組合 `index.ts`，只搬不改行為；更新防線第二部分已整合進去（`5fd4cf4`），748 個測試通過 | Codex L2 已過、沒有要修的；Windows 輪流對照兩個版本各 5 次全過；合併前先把最新的 `main` 合進來再跑一次檢查，由使用者決定合併 | 使用者 | [任務說明](../tasks/state-split.md)、[審查請求](../tasks/state-split-review.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成，`0.1.0` 已裝到正式使用的 vault；外掛內備份與還原的任務說明已寫 | 使用者確認設定頁的說明文字、選還原畫面什麼時候做；之後本機照任務說明做 | 使用者 | [外掛內備份任務說明](../tasks/plugin-backup.md)、[規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、4、5、6、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4、5、6 的施工記進 [backlog 技術債](backlog.md#技術債)，環節 5 的存檔受阻提示已隨雲端佔位檔任務合併） | 環節 9（測試與品質基礎設施）：Claude 寫分析與提案，交 Codex | Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
@@ -49,6 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-30 | `state/index.ts` 原樣拆檔合併進 `main`（`0e3e8a4`，[任務說明](../tasks/state-split.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）：拆成讀取層 `reads.ts`、寫入 `writes.ts`、`ids.ts`、組合 `index.ts`，只搬不改行為，更新防線第二部分一起整合；Codex L2 沒有要修的，Windows 輪流對照各 5 次全過，755 個測試通過 |
 | 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同，電腦與 iPhone 重開後都記下 `0.1.0+a4922fa` 的版本行；升版時改了 7 個寫死版號的測試 |
 | 2026-10-29 | 雲端佔位檔的 Windows 實測與存檔受阻的提示（[任務說明](../tasks/icloud-placeholders.md)〈結果〉，合併進 `main` 的 `9c07caa`，754 個測試）：追加寫入舊內容不變；iCloud 停著時讀取 5 ms 失敗、剛重開時卡 60 秒；iCloud 沒在跑時追加的紀錄不會上傳（使用者選不改程式、記技術債）；受阻時存檔、按鈕與小視窗都說「讀取完成後請再按一次存檔」 |
 | 2026-10-29 | 更新防線第二部分合併進 `main`（`1308e58`，[任務說明](../tasks/update-safeguards.md)、[L2 報告與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）：每台裝置記版本行，讀不懂的卡組與紀錄先停著、不出題也不寫；Codex L2 加三次再審後通過，合併後 747 個測試通過；開發命令結果檔改記 BUILD（`b6b39bb`），回看按鈕與比較轉接器記技術債 |
@@ -58,4 +58,3 @@ flowchart LR
 | 2026-10-29 | 新決定與新任務先和「不做」比較（[D-153](decisions.md#d-153-每個新決定與新任務先和不做比較)）：寫在 essence-discuss、essence-decision 與 quality.md 的規劃者一列，AGENTS.md 只補半句 |
 | 2026-10-29 | 更新防線第 0 步：最低版本標記、版本行、還原檔與備份檔的格式寫進 [syntax.md](syntax.md)（§0-1、§5-1～5-3、§8），Codex 格式查核的 F1～F4 已照改（[查核與回應](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md#claude-回應-codex-格式查核2026-10-29>)）；讀不到自己的紀錄時不擋作答（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 補充） |
 | 2026-10-29 | 未來規畫統整的審閱結案（[審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#claude-審閱2026-10-28opus-55-高>)、[任務說明](../tasks/future-plans-review.md)）：122 項補回遺漏 1、原意與來源 4 處；使用者決定 Capture 開工前研究放 v1、真實驗證不算 v1、C-017 列第二階段、C-011 → D-152、C-009 結案 |
-| 2026-10-29 | 教材不限課本、補充筆記另外放（[D-152](decisions.md#d-152-教材是針對考試範圍的文件補充筆記另外放)）：針對考試範圍的學校講義、補習班教材算課內，延伸改從「教材以外」算，不一致時學校的優先；舊共識 C-011 結案（[統整審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)） |

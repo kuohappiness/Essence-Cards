@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-29 | 教材不限課本、補充筆記另外放（[D-152](../decisions.md#d-152-教材是針對考試範圍的文件補充筆記另外放)）：針對考試範圍的學校講義、補習班教材算課內，延伸改從「教材以外」算，不一致時學校的優先；舊共識 C-011 結案（[統整審閱](<../../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)） |
 | 2026-10-28 | 更新與相容定案（[D-149](../decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)、[D-150](../decisions.md#d-150-備份與還原)、[D-151](../decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)，[討論稿](<../../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md>)）：每台裝置記版本、讀不懂就停、正式 vault 只裝正式版；外掛自己備份（每月一次、隨時手動），紀錄只補不刪；內建規則跟著外掛、改了就是自訂版 |
 | 2026-10-28 | W6 iPhone 回饋的畫面修改合併進 `main`（`7d09247`，[D-145](../decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)，[審查與回應](<../../Claude Codex Discussion/2026-10-28-w6-polish-review.md>)）：Codex 兩輪的 F1～F8、R1～R4 都已修；iPhone 待驗語音念完、切 App 回來換卡、細框按鈕與 `md-cases` |
 | 2026-10-28 | AGENTS.md 重寫（[D-147](../decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)，[任務說明](../../tasks/agents-md-rewrite.md)）：底線放最上、加新增規則的五關，約 4,800 字減到 3,100 字；skill 刪掉重複的句子，`essence-discuss` 改成 AI 能自己載入，也不再依賴不存在的 grilling；Capture 的底線也搬到最上 |

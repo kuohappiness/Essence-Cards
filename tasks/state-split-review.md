@@ -1,6 +1,6 @@
 # `state/index.ts` 原樣拆檔：L2 獨立審查（給 Codex）
 
-狀態：L2 完成，沒有要修的（[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）；Windows 輪流對照兩個版本各 5 次全過，等使用者決定合併
+狀態：已結案：L2 通過、沒有要修的，已合併進 `main`（`0e3e8a4`）；結論見[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)最後〈Claude 核對〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（只搬程式，但搬的是讀寫先後與寫入協調，順序或 microtask 的差異就會讓 state-writes 的保護失效）。
 
