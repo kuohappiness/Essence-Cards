@@ -1,6 +1,6 @@
 # `state/index.ts` 原樣拆檔：L2 獨立審查（給 Codex）
 
-狀態：L2 完成，沒有要修的（[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）；Windows 的 `save` 有落差待使用者決定，見報告最後〈Claude 核對〉
+狀態：L2 完成，沒有要修的（[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）；Windows 輪流對照兩個版本各 5 次全過，等使用者決定合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（只搬程式，但搬的是讀寫先後與寫入協調，順序或 microtask 的差異就會讓 state-writes 的保護失效）。
 
@@ -61,7 +61,7 @@
 - Node 24 以上（Claude 用 v24.13.0）。在**上面的工作目錄**裡：`npm ci`、`npm run check`。照 [quality.md](../docs/agents/quality.md) 的審查注意事項，完整的 `npm run check` 要在沙箱外跑。
 - Claude 跑過：每個 commit 的 `npm run check`（pre-commit）。拆檔時的基準 `6345057` 是 673 個測試（state-writes 合併後的數字），`aa6862a`、`d67bb62` 都是 674 個（多的是公開匯出那一則）；合併後的 `main`（`52c5fc5`）是 747 個（更新防線2 的 session 回報），`5fd4cf4` 是 748 個，全部通過。
 - 機械的比對：`6345057` 與 `52c5fc5` 的 `index.ts` 每一行（去掉縮排）在三份新檔裡都找得到，找不到的只有改名（`closed` → `life.closed`、`loaded` → `life.loaded`、`bump` → `reads.bump`、`await active` → `await writes.idle()` 之類）與拆開的轉接。
-- Windows（2026-10-30 跑，你的 L2 之後）：`save-flow`、`lock`、`a3check` 和基準相同；`save` 拆檔版 8 次過 5 次、`main` 版 8 次全過，細節與判斷見[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)最後〈Claude 核對〉。要比對的基準是 state-writes 最後一次的 `save-flow … 152335`、`save … 152443`、`lock … 152506`、`a3check … 152724`。
+- Windows（2026-10-30 跑，你的 L2 之後）：`save-flow`、`lock`、`a3check` 和基準相同；`save` 一開始拆檔版 8 次過 5 次、`main` 版 8 次全過；之後輪流對照兩個版本各 5 次全過，判斷是環境造成的。細節見[報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)最後〈Claude 核對〉。要比對的基準是 state-writes 最後一次的 `save-flow … 152335`、`save … 152443`、`lock … 152506`、`a3check … 152724`。
 
 ## 回報
 
