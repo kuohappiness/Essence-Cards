@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調（給 Claude，本機執行）
 
-狀態：未開工：開工時間由使用者排
+狀態：已結案：已合併進 `main`（`70ba562`）；Codex L2 第二次再審通過（[審查請求](state-writes-review.md)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在外掛架構討論稿的環節 4 和 Codex 談定，這份是執行）。改的是 `src/state/` 的讀寫先後、學習目標 ID 的安全與寫回筆記的流程，屬於高風險範圍，合併前由 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
@@ -91,7 +91,11 @@ export interface State {
   save(editor: EditorHandle): Promise<WriteResult>;
   /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
   resolve(issue: IdIssue, choice: 'restore' | 'new', editor: EditorHandle): Promise<WriteResult>;
-  /** 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補；核對後確實補上了才回傳 true。不存在時不建立。 */
+  /**
+   * 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補。不存在時不建立。
+   * done 回傳 true；saved（已寫進檔、核對還沒讀到）也回傳 true，和原本「有改字回傳 true」相同；unchanged、blocked、stale 回傳 false；
+   * modify 失敗與 writeTimeout 逾時都 reject（leave() 照舊交給 host.onError）。（2026-10-29 Claude 確認）
+   */
   fillIds(path: string): Promise<boolean>;
 }
 ```
@@ -143,7 +147,7 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
    - **不完全一樣，但預期的變更都在**（每個 ID 都在某個目標的行尾，而且那個目標的名稱和預期相同；家長在這段時間又打了別的字）：先套用延後的記錄，把預期的輸出當成自己的寫回比對，再把讀到的文字照一般的重讀比對（家長之後的改動照常偵測）→ `done`。
    - **預期的變更不成立**（交易被過濾、目標被改掉或刪掉）：不套用延後的記錄，照一般的重讀比對 → `stale`。
    - **讀到 `null`**（這篇不見了，或被改名）：照一般的處理 → `stale`；不跟著 A2 的改名配對寫到別篇。
-   - **讀不到（reject）**：這篇進 `unread`，工作回 `saved`；核對留著，之後第一次讀到時照這一點的同一套規則處理（不重新配號、不重做交易）。這段時間 `unread()` 不是空的，門檻會擋住其他寫入。
+   - **讀不到（reject）**：這篇進 `unread`，工作回 `saved`（這次沒有改字的工作回它原本的結果：存檔 `unchanged`、小視窗 `stale`，不回 `saved`；2026-10-29 Claude 確認，Codex L2 同意）；核對留著，之後第一次讀到時照這一點的同一套規則處理（不重新配號、不重做交易）。這段時間 `unread()` 不是空的，門檻會擋住其他寫入。
    - `added` 是確認寫成的新配 ID 數；只有 `save`、`fillIds` 的補 ID 算。
 4. **A12**：小視窗拿到的 `IdIssue` 現在用物件身分認出是哪一個問題。預設**保留**：這次的排隊與等待讀取都不複製問題物件；內容沒變的重讀會原地更新行號、保留同一個物件，內容改過就換一個新物件，舊的不能再寫回（D-134）。在 `IdIssue` 的註解寫明「畫面不能複製這個物件」，並加 §8 的 S26。要改成 token，先在回報寫明理由，連同 W5 F1 的測試一起搬。
 
@@ -153,7 +157,7 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
 
 - 不再接新的寫入，新的與排隊中的都回 `blocked closed`。
 - 正在進行、還沒到第 4 步的：回 `blocked closed`，不改字。
-- 已經在 I/O 的（等 `persist` 或 `modify`）：`close()` 等它的結果明確才結束，最多等 `writeTimeout`，停用外掛不會一直卡住；之後不登記核對、不採用、不通知監聽者，工作回 `saved`（寫成了）或 `failed`（失敗或逾時）。已寫進磁碟的內容，下次載入照實讀回。
+- 已經在 I/O 的（等 `persist` 或 `modify`）：`close()` 等它的結果明確才結束，最多等 `writeTimeout`，停用外掛不會一直卡住；之後不登記核對、不採用、不通知監聽者，工作回 `saved`（寫成了；沒有改字的回它原本的結果，同 §4 第 3 點）或 `failed`（失敗或逾時）。已寫進磁碟的內容，下次載入照實讀回。準備時監聽者同步 `close()`（準備會通知監聽者）算還沒寫：回 `blocked closed`，不改字（Codex L2 的 R2）。`editor.apply()`、`editor.persist()` 裡同步 `close()` 算已經在寫：`close()` 等這份保存結束，工作照常寫完、回 `saved`（Codex L2 再審）。
 - 其餘照舊：等讀取的那一列與紀錄的 writer。
 
 ## 6. 取消舊日作答
@@ -189,9 +193,9 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
 | S11 | **M1 的還原版**（Codex 第 1 題）：P 有一個 `lost`、`restore: 'k3m9x2'`；讀取停在半路（無 ID 的舊文字）時選「還原」 | `done`；放行之後與核對之後都沒有再出現 `lost` |
 | S12 | **N1**：P 是沒有 ID 的 C；只送通知（磁碟沒變），立刻存檔（編輯器文字也是 C） | `done`、`added: 1`；在存檔前後、推進 501 ms 後都沒有問題；磁碟是補好的文字（`^aaaaaa`） |
 | S13 | **H4-1 別篇**（Codex 第 6 題）：ready 時只有 A（一個沒有 ID 的目標）；外部建立 B（含 `^aaaaaa`）並通知，還沒讀；立刻存 A | A 配到 `aaaaab`；之後沒有重複 ID、沒有問題 |
-| S14 | **本篇的兩組輸入**（Codex 第二輪第 3 點）：(a) 磁碟是 C 且待讀，編輯器文字是 B `^aaaaaa` 加上沒有 ID 的 C；(b) 磁碟已改成 B `^aaaaaa` 加 C 並通知，編輯器文字仍只有 C | 兩組的 C 都配到 `aaaaab`。(b) 結束時磁碟沒有 B：那是編輯器沒收到外部的修改、存檔時把它蓋掉，屬於 Obsidian 編輯器那一層，在 V6 觀察；這個測試只斷言 C 的 ID 和沒有假的問題 |
+| S14 | **本篇的兩組輸入**（Codex 第二輪第 3 點）：(a) 磁碟是 C 且待讀，編輯器文字是 B `^aaaaaa` 加上沒有 ID 的 C；(b) 磁碟已改成 B `^aaaaaa` 加 C 並通知，編輯器文字仍只有 C | 兩組的 C 都配到 `aaaaab`。(b) 結束時磁碟沒有 B：替身的編輯器不會收到外部的修改，存檔把它蓋掉。實機上這是存檔撞上外部寫入（V6）；在已測的碰撞安排下，Obsidian 自動存檔與 Cards 存檔都可能覆蓋外部內容，本次不另加保護（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)〈實驗 X 的結果與結論〉，2026-10-29）。這個測試只斷言 C 的 ID 和沒有假的問題 |
 | S15 | **連續兩份寫入與舊成功回報**（Codex 第 2 題）：`fillIds(P)` 的 modify 寫完但延遲回傳；這時存檔 P（編輯器的文字是 `fillIds` 寫成後的內容再加上目標 B） | 第二份等第一份結束才開始；最後磁碟與 `decks()` 都有 A、B 和各自的 ID；過程中 `decks()` 不會退回只有 A |
-| S16 | **寫入失敗**：`persist` reject；另一例 `modify` 失敗（`failModify`） | `failed`（`fillIds` 回 `false`）；`deckStatus(P).missing` 不變；下一次存檔配到 `aaaaab`，不重用 `aaaaaa`；state 沒有改編輯器的文字 |
+| S16 | **寫入失敗**：`persist` reject；另一例 `modify` 失敗（`failModify`） | `failed`（`fillIds` 照舊 reject，2026-10-29 Claude 確認：§1 簽名不變、限制 3 既有測試的預期不改）；`deckStatus(P).missing` 不變；下一次存檔配到 `aaaaab`，不重用 `aaaaaa`；state 沒有改編輯器的文字 |
 | S17 | **no-op**：沒有要改的；另一例編輯器文字比磁碟新但沒有要補的 | `unchanged`；兩例都有 persist 與核對讀取，之後磁碟和 state 一致、沒有問題 |
 | S18 | **已保存、核對讀不到**：`persist` 成功後讓 P 讀不到 | `saved`；`unread()` 含 P，另一篇的存檔回 `blocked unread`；恢復、推進重試：照核對採用，沒有問題、`onChange` 一次。還原版：延後的記錄在讀到時才套用，不出現被換掉的 ID 造成的 `lost` |
 | S19 | **等待中換篇、改名、刪除後重建**：(a) 輪到時編輯器已換篇；(b) `persist` 延遲時把 P 改名成 Q；(c) 再建一個內容不同的新 P | (a) `stale`，沒有交易、沒有 persist。(b) 結果不是 `done`；Q 照一般讀取處理，沒有問題。(c) 新的 P 沒有被 Cards 寫入；舊的工作不會把 ID 寫到新的 P |
@@ -219,8 +223,8 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
 | V2 | **N1**：打一個字，等到這篇的 `modify` 事件（自動存檔）後 100 ms 內按存檔；之後 3 秒每 50 ms 看一次 `deckStatus` | 從頭到尾沒有 `lost` |
 | V3 | 同一個 tick 連按兩次 | 只配一組 ID、只提示一次 |
 | V4 | 兩個分頁開同一篇，在其中一個按存檔 | 兩個編輯器與磁碟最後都相同 |
-| V5 | 按下後同一個 tick 讓這個分頁換篇；另一次按下後立刻改名 | 換篇：提示「剛剛改過」，另一篇沒有被改。改名：沒有別的檔案被改，沒有問題 |
-| V6 | 外部用 `vault.adapter.write` 把 B（含 ID）加進開著的這一篇，同一個 tick、50 ms 後、200 ms 後各按一次存檔 | 記下磁碟最後有沒有 B、編輯器有沒有收到 B。**B 被蓋掉時停下來回報**，這次不設計修法（Obsidian 編輯器那一層，S14 的 (b)） |
+| V5 | 按下後同一個 tick 讓這個分頁換篇；另一次按下後立刻改名 | 換篇：提示「剛剛改過」，另一篇沒有被改。改名：沒有別的檔案被改，沒有問題。2026-10-29 Windows：改名照預期；換篇那次存檔搶在換篇之前做完，原本那篇照常配 ID、提示「已加入複習」，另一篇沒有被改，「剛剛改過」那條路只有 Node 的 S27 驗到。L2 判斷：先做完是合法的時序。之後 `save-flow` 加了「存檔排隊時換篇」（先讓另一個分頁的存檔停在 `view.save()`）：Windows 提示「剛剛改過」，存檔沒寫這篇也沒寫換到的那篇，這篇約 1 秒後由離開筆記的備援補上 ID（check `V5queued`，`save-flow … 152335.json`；[L2 報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)〈Claude 核對再審〉） |
+| V6 | 外部用 `vault.adapter.write` 把 B（含 ID）加進開著的這一篇，同一個 tick、50 ms 後、200 ms 後各按一次存檔 | 記下磁碟最後有沒有 B、編輯器有沒有收到 B。**B 被蓋掉時停下來回報**，這次不設計修法。2026-10-29 同一個 tick 那次蓋掉，已停下來回報；接著的實驗 X 顯示，在已測的碰撞安排下 Obsidian 自動存檔與 Cards 存檔都會覆蓋外部內容。本次未另加保護，因為還沒找到收益足夠、成本合理的做法，實際的風險增量沒有量測（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)〈實驗 X 的結果與結論〉） |
 | V7 | 保存失敗：試著讓檔案暫時唯讀 | 提示 `TIPS.failed`；檔案恢復可寫之後再存一次就補上。做不出 `view.save()` 失敗時寫明「Windows 做不出這個情境」，保留 Node 的測試，不硬湊 |
 
 **如果 `persist` 完成時磁碟還不是編輯器的內容**（`view.save()` 沒有等寫完），停下來回報：§3 第 6 步的核對會因此回 `stale`，要另外想辦法。

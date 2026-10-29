@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：外掛架構的逐環節檢視
 
-狀態：進行中：環節 1、4、7、8 已談定（4 見〈Claude 回應 Codex：環節 4 第二輪〉、7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、8 的主機接點見 [D-148](../docs/decisions.md#d-148-電腦專用的主機接點)）；之後 5、6、9、2、3
+狀態：進行中：環節 1、4、7、8 已談定（4 見〈Claude 回應 Codex：環節 4 第二輪〉、7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、8 的主機接點見 [D-148](../docs/decisions.md#d-148-電腦專用的主機接點)）；環節 5 已寫好，等 Codex 回應；之後 6、9、2、3
 
 2026-10-26 起。使用者開了專案討論串「優化外掛架構」，由 Claude（Fable）逐環節找問題、寫提案，每個環節先請 Codex 看過，雙方一致後才進下一個環節；談定的結論之後整理成給 Opus 的任務說明（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)）。**這一串只討論，不改程式。**
 
@@ -1406,3 +1406,110 @@ Claude 寫的「現在的畫面沒有取消，`src/` 只有紀錄模組處理 un
 - 下一個 `state` 工作（第 1～4 條，加第 6 條的取消舊日作答）的任務說明由 Claude 寫，照 D-140 交給 Opus（高）執行；高風險範圍，合併前做 Codex L2。
 - 原樣拆檔、多檔寫入、設定與範圍的接線、狀態變更紀錄，照上一輪的施工順序，記進 backlog 的技術債。
 - 這個環節沒有要使用者決定的產品選擇；任務什麼時候開工，請使用者排。下一個環節是 5（Obsidian 接線層）。
+
+## 環節 5：Obsidian 接線層（`src/obsidian/`、`src/main.ts`）（2026-10-29，Opus 5.5）
+
+`state` 的讀寫協調已合併（`70ba562`），回到原本的順序。基準：`main` 的 `6345057`（`src/`、`tests/`、`tools/` 和 `70ba562` 相同）。依據：[D-110](../docs/decisions.md#d-110-v1-外掛的程式結構)、[D-134](../docs/decisions.md#d-134-學習目標-id-的補上時機與保護)、[D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇) 第 4 點、[D-148](../docs/decisions.md#d-148-電腦專用的主機接點)、[D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 3 點、[D-150](../docs/decisions.md#d-150-備份與還原) 第 3 點、[D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測) 第 2 點；[W5 架構檢查](2026-10-26-w5-architecture-debt.md)的 A3、A9、A10（都已做完）；[V6 討論稿](2026-10-29-save-external-write.md)。
+
+同時有三個分支會改到這一層：
+
+- `claude/update-safeguards-2`（`f73525b`，等 Codex L2）：需要新版時的按鈕、版本命令（`src/obsidian/version.ts`、`dev-version.ts`）。
+- `claude/icloud-placeholders`（`4dbb3bf`）：D-154 第一部分的開發命令 `dev-cloud.ts`。第二部分「存檔受阻時說清楚」還沒開工，會改 `save.ts`。
+- `claude/state-split-c5c7bf`：`state/index.ts` 原樣拆檔，任務說明剛寫好。
+
+正式版的部分：`main.ts` 185 行（生命週期、平台分流、提示、外掛事件）、`save.ts` 233 行（存檔按鈕與命令、待處理問題的小視窗、離開筆記的備援、`EditorHandle`）、`lock.ts` 281 行（編輯器裡鎖住 ID，不 import obsidian）、`files.ts` 87 行（環節 1）、`diff.ts` 69 行、`device.ts` 24 行。開發命令 5 個檔共 2,581 行（`dev.ts`、`dev-ids.ts`、`dev-events.ts`、`dev-review.ts`、`dev-markdown.ts`），正式建置不含。
+
+### 5-1 已經對的
+
+- **平台只在 `main.ts` 分一次**：電腦才 `wireIds()`（鎖 ID、存檔按鈕、離開筆記的備援），`createState` 的 `fillIds` 用同一個條件；`state` 的門檻也擋手機（`blocked phone`）。兩層都擋，D-142 第 4 點「在寫入的入口就擋住」成立；`tests/main-wiring.test.ts` 的「只在電腦」「開發版在手機上不寫任何檔案」兩個案例鎖住。
+- `main.ts` 只有一處 `DEV`（A10，`main-wiring.test.ts:148`）；開發命令訂閱外掛的事件，不讀內部欄位。
+- 開著的卡組只有三個來源，已拿掉每 2 秒掃分頁（A3）。`save.ts:191–224` 的註解寫明各自接住哪個實測情境。
+- 存檔的 `EditorHandle`（`save.ts:49–61`）照 state-writes §1：路徑在按下時固定，換篇後 `text()` 回 `null`，`apply` 先比對原文，`persist` 是 `view.save()`；S27 與 Windows 的 V1～V7 驗過。V6 是已知限制，候選 P 和它的觸發點在 backlog，這一環節不重談。
+- `lock.ts`、`diff.ts` 不 import obsidian，在 Node 用 Obsidian 實際提供的 CodeMirror 版本測（A6）；兩個接線測試共用 `tests/helpers/obsidian.ts`（A9）。
+
+### 5-2 發現
+
+**W1｜P2：「能不能寫、為什麼不能」，按鈕、按下的結果、小視窗各自判斷**
+
+- 能不能寫只有一個判斷：`state` 的 `writable()`（`src/state/index.ts:440`，順序是 phone → loading → closed → unread → 不是卡組）。畫面拿不到它：按鈕看 `deckStatus()`，原因要等按下後才從 `WriteResult.blocked` 知道。
+- 結果是三個功能各開一條路，先後順序靠人對齊：
+  - **D-154**：還沒讀完時 `deckStatus` 回 `{ missing: 0, issues: [] }`（`index.ts:599`），按鈕說明是「學習目標都已加入複習」，正是 D-154 第 2 點要擋的那句。雲端佔位檔任務 §2 第 5 點打算在 `save.ts` 用 `unread()` 加按鈕自己記的「`ready()` 完成了沒」來判斷。
+  - **D-149**（分支 `update-safeguards-2`）：`deckStatus` 多一個 `needsUpdate`，`buttonLook` 先看它（分支的 `save.ts:75–79`）；`writable()` 卻先看 `unread`（分支的 `index.ts:519–527`）。兩個同時成立時，按鈕說「需要新版」，按下去說「暫時無法……讀取完成後請再按一次」（靜態推斷；D-154 的提示做好之後才會出現）。
+  - **D-150** 第 3 點：備份失敗時存檔按鈕要說明先處理備份。這是第三個原因，也會是第三條路。
+- **小視窗另有一份對應**：`choose()`（`save.ts:117–122`）把 `done`、`failed` 以外的結果都報成「這篇筆記剛剛改過，請再按一次存檔」，包括四種 `blocked`、`unchanged` 與 `saved`。`saved` 是已寫進磁碟、核對讀取讀不到、`state` 自己重試，正好是雲端佔位檔期間會出現的情況；家長被請去「再按一次」，其實不用。存檔的 `saveTip()`（`:64–69`）對同樣的結果是另一份對應。
+- **雲端佔位檔任務 §2 的寫法**：第 3 點只修了 `blocked`，而且第 3、5 點還寫著 state-writes 之前的介面（`resolveText` 回 `null`、`fillText`）。那份任務開工前會比對有沒有改過、以新版為準，不會做錯，但描述要跟著改。
+- **建議**：
+  1. `deckStatus(path)` 多回一個 `blocked`：就是 `writable(path)` 的原因，沒有就是 `null`；取代分支的 `needsUpdate`。之後 D-150 的備份、多檔工作的預留，都只加在 `writable()` 一處，按鈕自然跟上。
+  2. `save.ts` 只留一份「結果 → 提示」與「原因 → 按鈕說明」的對應，`saveTip`、`choose`、`buttonLook` 都查它。`choose` 遇到 `saved` 和存檔一樣不提示。
+  3. `writable()` 把 needs-update 排到 unread 之前。兩個都擋寫入，但「需要新版」不會自己消失、家長能動手處理，應該先說；它只看這一篇（state 最近讀到的或這次的文字），不需要別篇的占用。
+  4. 不加「門檻變了就通知畫面」：雲端佔位檔任務已接受按鈕說明可能晚到切換分頁時才更新（[討論稿](2026-10-29-icloud-placeholders.md)〈Codex 回應〉P4），按下那一刻一律以當下的判斷為準。
+- **和不做比較**：
+  - ① 不做：雲端佔位檔任務照原案在 `save.ts` 自己判斷，D-150 再加一條。兩個原因同時成立時，按鈕和按下的結果說不同的話；`saved` 時家長多按一次。資料不受影響（寫入都擋住），頻率低，影響是家長困惑。
+  - ② 做：`State` 多一個欄位、`save.ts` 一張對應表、測試「每個原因的按鈕說明和按下的提示一致」。`state` 是高風險範圍，但雲端佔位檔任務 §2 本來就允許「加一個唯讀的查詢」並做 L2，不多一次審查。
+  - ③ 更小的做法：就是把 §2 本來要加的那個查詢定成通用的形狀，不另開任務；多出來的工作主要是分支上 `needsUpdate` 的改名與 `choose` 的對應。
+
+**W2｜P3：停用再啟用外掛時，舊的存檔按鈕與小視窗留在畫面上**（推論，未實機重現）
+
+- `refresh()` 用 `view.addAction` 加按鈕（`save.ts:168`）；`wireSave` 只用 `registerEvent` 註冊事件，卸載時沒有拿掉按鈕。`IssuesModal` 也不會隨外掛卸載關閉。`addAction` 的公開說明（`obsidian.d.ts:5405–5413`）沒有寫會隨外掛卸載移除。
+- 推論的後果：不關 Obsidian、只停用再啟用外掛，開著的卡組會有兩個存檔按鈕。按到舊的那個，舊的 `state` 已關閉，回 `blocked closed`，`saveTip` 不提示，看起來「按了沒反應」；開著的小視窗按下去會說「剛剛改過」。
+- **誰會遇到**：
+  - 家長很少：更新的說明是「把 Obsidian 完全關掉再開」（`tools/update-vault.ts:19`）。
+  - 開發時很常：每次 `install-vault --dev` 之後，AI 用 URI `reload` 停用再啟用。開發命令用 `querySelector('.essence-cards-save')` 找按鈕（`dev-ids.ts:250`），拿到的是第一個，可能就是舊的那個。目前的開發命令都開新的分頁，所以還沒碰到。
+- **建議**：`wireSave` 用 `plugin.register()` 在卸載時拿掉所有按鈕、關掉開著的小視窗。先在 Windows 用 URI `reload` 確認：開一篇卡組、重新載入、數 `.essence-cards-save`；重現了才改。共用替身加「停用後沒有按鈕」的案例。
+- **和不做比較**：不做，家長幾乎碰不到，但開發測試可能點到舊按鈕、誤判失敗；做的代價是幾行程式加一個替身案例。建議下一次改 `save.ts` 時順便做，不單獨開工。
+
+**W3｜P3：三個機械檢查沒有涵蓋它寫的範圍**
+
+- **(a) 「正式建置不含開發命令」的測試靠手寫的檔名清單**：`tests/build.test.ts:139` 只認 `dev.ts`、`dev-ids.ts`、`dev-review.ts`、`dev-events.ts`。
+  - 漏掉的：W6 加的 `dev-markdown.ts` 不在裡面，分支 `update-safeguards-2` 的 `dev-version.ts` 也沒加；分支 `icloud-placeholders` 則是手動把 `dev-cloud` 加進去。同一個漏已經發生兩次。
+  - **已證實**（`main` 的 `6345057`，建到 scratchpad）：開發版有 `dev-markdown.ts` 5,885 bytes，正式版沒有。現在沒有漏進正式版，但真的漏進去時這個測試抓不到。
+  - **建議**：判斷改成 `/^src\/obsidian\/dev(-[^/]+)?\.ts$/`；開發版的預期清單從 `readdir` 算，不手寫。注意 `device.ts` 是正式程式，只看「`dev` 開頭」會誤判。
+- **(b) 結果檔沒記 commit**（V6 討論稿留下的，backlog 已有一列）：觸發點「下一次改 `src/obsidian/dev.ts`」其實已經發生，`update-safeguards-2` 與 `icloud-placeholders` 都改了 `dev.ts`。但那一列是 state-writes 合併時才進 `main` 的，兩個分支開的時候看不到它。建議和 (a) 一起做：都是開發命令的證據，各一行加一個測試。
+- **(c) D-148 的檢查會漏掉 `window.require`**：D-148 第 3 點要求「`require` 都算，不准用計算出來的模組名」，現在的邊界規則只認 `require(…)` 這種寫法（`eslint.config.js:98`）。`dev-review.ts:381–383` 用 `window.require('electron')` 拿截圖與照常繪製的功能，邊界規則看不到；照 D-148 擴大到整個 `src/` 時也會照樣漏掉。另外，開發命令真的需要 Electron，D-148 的「只有一個資料夾能用」要先決定開發命令算不算例外：放進電腦專用的資料夾，或另列開發用的放行清單。
+  - **建議**：不現在做（D-148 第 4 點：等第一個用到的功能）。記進 backlog：
+    - 觸發點：寫 D-148 第一個功能（外掛內備份或背景製卡）的任務說明時。
+    - 完成條件：`window.require`、`globalThis.require` 這類成員存取也擋；開發命令的 Electron 有明確的放法；`eslint.config.js:14` 的註解說「@codemirror 只有 `src/obsidian/` 與 `main.ts` 能用」，實際上 `src/ui/` 沒有被擋，改成和規則一致。
+- **和不做比較**：
+  - (a)(b) 不做：開發程式漏進正式版、結果檔是哪一版，都只能靠人記，每次 L2 要另外核對。做的代價各兩三行。
+  - (c) 不做：D-148 的檢查上線後，第一個用 `window.require` 的正式程式會躲過它，iPhone 上執行到就壞。現在只要在 backlog 寫一列。
+
+**W4｜記下：設定頁要接別台裝置改的 `data.json`**
+
+- 外掛的 `data.json` 跟著 iCloud 同步（`device.ts` 的註解）：iPhone 改了每日上限，電腦要到重開才看到。Obsidian 有 `Plugin.onExternalSettingsChange()`（1.5.7 起，`obsidian.d.ts:7359–7367`），外部改了 `data.json` 時呼叫。
+- **建議**：不現在做，還沒有設定頁。寫進 backlog「改設定不會重排」那一列的完成條件：設定頁接 `onExternalSettingsChange`，重讀後照環節 4 結論第 6 條重排；iPhone 上會不會呼叫要實測。寫的那一邊已由 D-149 第 7 點（存檔時以寫前重讀的內容為底）管。
+
+### 5-3 優先刪減
+
+想過、建議不做：
+
+- **不拆 `main.ts`、`save.ts`**：各自不到 250 行，管的事都小。入口畫面、備份、設定頁接上來時（環節 6、D-150 的任務），照 `wireSave` 的寫法各自一個 `wireX(host)`、交回小的控制柄，`main.ts` 只管生命週期與組合。這是現在的做法，不另寫成規則。
+- **不把 `dev-*.ts` 搬進 `src/obsidian/dev/`**：W3 (a) 改判斷就夠；搬了之後，討論稿與任務說明裡的路徑都會失效。
+- **不加「只有 `main.ts` 能 import `src/obsidian/`」的邊界規則**：現在只有 `main.ts` 與開發命令在用，沒有誤用。
+- **不在電腦的 `quit` 事件另外 `flush()`**：現有的 `visibilitychange` 可能已經接住（未實測），也沒有寫入遺失的回報。
+- **停用時舊 `state` 的 `close()` 沒人等、新的 `state` 同時開始，不處理**：更新的說明是完全重開；第二階段要支援社群外掛的原地更新時再看。
+- V6 的候選 P 照 backlog 的觸發點，不在這一環節重談。
+
+### 5-4 不在這次談
+
+- 錯誤的去向：照[錯誤紀錄的討論稿](2026-10-29-error-log.md)（`recordError`），各處的 `console.error` 在那裡收斂。
+- 入口畫面的「給家長」一區（D-154 第 2 點、D-149 的需要新版、D-150 的備份失敗）屬於環節 6；W1 的 `blocked` 也能給它用。
+- A2（環節 1）；A8（`deckStatus` 的成本）：W1 多的欄位只查幾個旗標與 `gated`，不重新解析。
+
+### 5-5 什麼時候做
+
+- **W1**：放進雲端佔位檔任務 §2，它本來就要改 `save.ts`、加一個唯讀的查詢、做 L2。順序：更新防線第二部分合併 → `state` 原樣拆檔合併 → §2。談定後改那份任務 §2 的第 1、3、5 點（順便換掉舊介面的名稱），並通知做那份任務的 session。
+- **W2**：下一次改 `save.ts` 時做，照現在的排程也是雲端佔位檔任務 §2；先在 Windows 重現。
+- **W3 (a)(b)**：更新防線第二部分與雲端佔位檔任務都合併之後，做一個只改 `tests/build.test.ts`、`src/obsidian/dev.ts` 的小 commit；或由其中一個還沒合併的分支順手做。
+- **W3 (c)、W4**：只寫進 backlog。
+
+### 5-6 請 Codex 回應
+
+請專門站在「不做」那一方反駁（[quality.md](../docs/agents/quality.md) 規劃者那一列）：每一項先說不做夠不夠好。
+
+1. **W1**：「三個功能各判斷一次」的證據與推論成立嗎？尤其是分支上 needs-update 與 unread 的順序、`choose` 對 `saved` 的提示。`deckStatus().blocked` 有沒有反例？例如按鈕用的 `writable(path)` 不帶這次編輯器的文字，按鈕和按下的結果還是可能不同。needs-update 排到 unread 之前，有沒有安全上的問題？
+2. W1 放進雲端佔位檔任務 §2，比另開任務好嗎？那份任務的 Windows 實測已經在跑，改 §2 會不會讓它的驗收變得不清楚？
+3. **W2**：Codex 知道 Obsidian 卸載外掛時，會不會拿掉 `addAction` 加的元素、關掉 Modal 嗎？不確定就留給 Windows 實測。
+4. **W3**：(a) 的判斷式與預期清單的改法夠不夠；(c) 除了 `window.require`，還有哪些載入 Node／Electron 的寫法會躲過 D-148 的檢查（例如變數當 `import()` 的參數、`process.versions` 判斷之後的 `require`）？
+5. 5-3 的刪減，以及這一層還有沒有 Claude 漏看的問題，例如 `lock.ts` 和 `state` 寫入那一列的互動、兩個視窗、手機上的接線。
+
+回應寫在這份檔案最後，標題「Codex 回應：環節 5（日期）」；只回應、不改程式與其他文件。建議推理等級：高。

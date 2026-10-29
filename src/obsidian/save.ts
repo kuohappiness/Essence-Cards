@@ -1,7 +1,7 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
-import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { IdIssue, IdIssueKind, State } from '../state/index.ts';
+import { isDeckPath } from '../core/deck/index.ts';
+import type { EditorHandle, IdIssue, IdIssueKind, State, WriteResult } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
 // 存檔按鈕、待處理問題的小視窗與離開筆記時的備援（W5 §8-6、D-134），只在電腦接上。
@@ -13,6 +13,7 @@ export const TIPS = {
   issues: (n: number) => `有 ${n} 個學習目標的進度連結需要處理`,
   added: (n: number) => `${n} 個學習目標已加入複習`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
+  failed: '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔',
 };
 export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
@@ -28,7 +29,7 @@ export interface SaveHost {
   state: () => State | null;
   /** 提示家長（Notice）；開發版另外記下來給開發命令讀。 */
   notify: (message: string) => void;
-  /** 離開筆記時補 ID 失敗（例如寫不進去）。 */
+  /** 離開筆記時補 ID 失敗（例如寫不進去）；存檔與小視窗的寫入出現程式的錯也交給它。 */
   onError: (error: unknown) => void;
   /** 記下離開筆記與補 ID 的時間點（main.ts 發成事件，開發命令訂閱；技術債 A10）。 */
   log?: (event: string) => void;
@@ -39,6 +40,32 @@ function applyText(editor: Editor, before: string, after: string): void {
   const changes = textChanges(before, after);
   if (!changes.length) return;
   editor.transaction({ changes: changes.map(c => ({ from: editor.offsetToPos(c.from), to: editor.offsetToPos(c.to), text: c.insert })) });
+}
+
+/**
+ * 開著的筆記交給 state 寫入（tasks/state-writes.md §7）：path 是按下時的那一篇；換篇、改名之後 text() 回傳 null，
+ * 內容已經不是 before 時 apply 不改；persist 等編輯器把內容寫進磁碟（view.save()）。
+ */
+function editorOf(view: MarkdownView, path: string): EditorHandle {
+  const editor = view.editor;
+  return {
+    path,
+    text: () => view.file?.path === path ? editor.getValue() : null,
+    apply(before, after) {
+      if (editor.getValue() !== before) return false;
+      applyText(editor, before, after);
+      return true;
+    },
+    persist: () => view.save(),
+  };
+}
+
+/** 存檔結果的提示；unchanged、blocked、saved 不提示（讀不到時 main.ts 已有一次「讀不到…會自動重試」）。 */
+function saveTip(result: WriteResult): string | null {
+  if (result.kind === 'done') return result.added ? TIPS.added(result.added) : null;
+  if (result.kind === 'stale') return TIPS.stale;
+  if (result.kind === 'failed') return TIPS.failed;
+  return null;
 }
 
 /** 一篇卡組按鈕的樣子：沒有要做的、有目標還沒有 ID、有待處理的問題。 */
@@ -52,6 +79,8 @@ class IssuesModal extends Modal {
   private readonly host: SaveHost;
   private readonly view: MarkdownView;
   private stop: (() => void) | null = null;
+  /** 按下還原或當成新的、結果還沒回來：重畫時按鈕照樣停用，再按不另外排一份（Codex L2 的 R3）。 */
+  private waiting = false;
   constructor(app: App, host: SaveHost, view: MarkdownView) {
     super(app);
     this.host = host;
@@ -77,20 +106,28 @@ class IssuesModal extends Modal {
       else row.createEl('p', { text: BUTTONS.unsure, cls: 'essence-cards-issue-note' });
       buttons.createEl('button', { text: BUTTONS.fresh }).addEventListener('click', () => { this.choose(issue, 'new'); });
     }
+    this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = this.waiting; });
   }
   private choose(issue: IdIssue, choice: 'restore' | 'new'): void {
-    const state = this.host.state();
-    if (!state) return;
-    const editor = this.view.editor, before = editor.getValue();
-    const after = state.resolveText(issue, choice, before);
-    if (after === null) { this.host.notify(TIPS.stale); this.close(); return; }
-    applyText(editor, before, after);
-    this.render();
+    const state = this.host.state(), path = this.view.file?.path;
+    if (!state || !path || this.waiting) return;
+    // 結果回來之前兩個按鈕都停用。
+    this.waiting = true;
+    this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
+      this.waiting = false;
+      if (result.kind === 'done') { this.render(); return; }
+      this.host.notify(result.kind === 'failed' ? TIPS.failed : TIPS.stale);
+      this.close();
+    }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
 }
 
-/** wireSave 交回的：更新按鈕、存檔、編輯器建立時記下這篇開著、layout ready 時記下目前開著哪些。 */
-export interface Saver { refresh: () => void; save: (view: MarkdownView) => void; opened: (path: string | undefined) => void; start: () => void }
+/**
+ * wireSave 交回的：更新按鈕、存檔（等到結果、提示與按鈕都更新後才完成；同一篇的存檔還沒結束時回傳同一個 Promise）、
+ * 編輯器建立時記下這篇開著、layout ready 時記下目前開著哪些。
+ */
+export interface Saver { refresh: () => void; save: (view: MarkdownView) => Promise<void>; opened: (path: string | undefined) => void; start: () => void }
 /** 接上存檔按鈕、同名命令與離開筆記時的備援。 */
 export function wireSave(host: SaveHost): Saver {
   const { plugin } = host;
@@ -99,19 +136,21 @@ export function wireSave(host: SaveHost): Saver {
   /** 上一次知道開著的檔（離開筆記的備援用）；start() 或第一次 layout-change 之前是 null。 */
   let open: Set<string> | null = null;
 
-  function save(view: MarkdownView): void {
+  /** 存檔還沒結束的卡組：再按不另外排一份。 */
+  const saving = new Map<string, Promise<void>>();
+  function save(view: MarkdownView): Promise<void> {
     const state = host.state(), path = view.file?.path;
-    if (!state || !path || !isDeckPath(path)) return;
-    const editor = view.editor, before = editor.getValue();
-    const after = state.fillText(path, before);
-    applyText(editor, before, after);
-    const status = state.deckStatus(path);
-    // 這次真的加上 ID 的目標數（用存檔當下的文字算，不用 state 上一次讀到的）。
-    const withId = (text: string): number => parseDeck(text).targets.filter(target => target.id).length;
-    const added = Math.max(0, withId(after) - withId(before));
-    if (added) host.notify(TIPS.added(added));
-    refresh();
-    if (status.issues.length) new IssuesModal(app, host, view).open();
+    if (!state || !path || !isDeckPath(path)) return Promise.resolve();
+    const running = saving.get(path);
+    if (running) return running;
+    const job = state.save(editorOf(view, path)).then(result => {
+      const tip = saveTip(result);
+      if (tip) host.notify(tip);
+      refresh();
+      if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view).open();
+    }).catch(host.onError).finally(() => { saving.delete(path); });
+    saving.set(path, job);
+    return job;
   }
 
   function refresh(): void {
@@ -126,7 +165,7 @@ export function wireSave(host: SaveHost): Saver {
       const look = buttonLook(state.deckStatus(path));
       let button = buttons.get(view);
       if (!button) {
-        button = view.addAction(look.icon, look.tip, () => { save(view); });
+        button = view.addAction(look.icon, look.tip, () => { void save(view); });
         button.addClass('essence-cards-save');
         buttons.set(view, button);
       }
@@ -144,7 +183,7 @@ export function wireSave(host: SaveHost): Saver {
     checkCallback: checking => {
       const view = app.workspace.getActiveViewOfType(MarkdownView);
       const ok = !!view?.file && isDeckPath(view.file.path) && !!host.state();
-      if (ok && !checking) save(view);
+      if (ok && !checking) void save(view);
       return ok;
     },
   });
