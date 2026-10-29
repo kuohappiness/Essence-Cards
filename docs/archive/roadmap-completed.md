@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-28 | 里程碑報告的 R1～R4、R7、R8（[處理紀錄](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md#處理紀錄2026-10-28>)）：測試不再改全域的 `fs`，CI 沒通過時開 session 就提醒；加 `seen` 與同批順序的性質測試，順便做 T2；skill 與 quality.md 補四條做法 |
 | 2026-10-27 | 里程碑報告的 R5（`73b4000`，[實機記錄](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)）：開發命令 `events` 記錄 Obsidian 事件；外部改名是 `create`＋`delete`，A2 不重開；資料夾刪除的契約 C15 通過；加 `unread` 命令 |
 | 2026-10-27 | 第一個里程碑的回顧與安全檢查（[報告](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)）：安全沒有發現、`npm audit` 0；十項建議，最重要的是 CI 在 main 紅了三天沒人發現，等使用者選 |
 | 2026-10-27 | W6 複習畫面合併進 `main`（`f136cf6`，[任務說明](../../tasks/w6.md)、[iPhone 測試](../../tasks/w6-iphone.md)）：W1～W6 打通，第一個里程碑達成。iPhone 第一次打開 259、223 ms，D-110 不加快取；使用者覺得鍵盤、朗讀、靜音與手勢都正常 |

@@ -1,6 +1,6 @@
 # iCloud 雲端佔位檔：一般使用者遇到時怎麼辦（請 Codex 查核）
 
-狀態：進行中：Claude 與 Codex 一致（縮小版，見文末〈Claude 回應〉），等使用者確認
+狀態：已結案：2026-10-29 使用者選「照縮小版做」，寫成 [D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)；實測與存檔提示見 [tasks/icloud-placeholders.md](../tasks/icloud-placeholders.md)
 
 2026-10-29｜Claude（Opus 5.5）｜依據：[backlog v1 任務第一優先那一列](../docs/backlog.md#v1-需要做的任務)（使用者 2026-10-29：開發中常遇到 iCloud 雲端佔位檔，要討論一般使用者實際使用時遇到要怎麼解決）；重大決策先和 Codex 討論（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）
 

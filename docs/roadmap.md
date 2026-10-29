@@ -8,7 +8,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
-| iCloud 雲端佔位檔（第一優先） | Codex 查核完，雙方一致採縮小版：說明書教保持下載、存檔受阻時當下說清楚、先分段實測 | 使用者確認後寫 D-ID、D-048 補充與實測任務（交本機） | 使用者 | [討論稿](<../Claude Codex Discussion/2026-10-29-icloud-placeholders.md>) |
+| iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)），任務說明寫好 | 本機照任務說明做 Windows 分段實測與存檔受阻的提示 | 使用者（開本機 session） | [任務說明](../tasks/icloud-placeholders.md) |
 | 維修與查修的準備 | 盤點完成：模組化、版本、重現、回歸測試、退回大多已有；缺口 G1～G3 | 使用者回答第一題（正式版要不要把錯誤記下來）；同意就寫討論稿交 Codex | 使用者 | [規畫](plans/maintenance.md) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
@@ -47,6 +47,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-29 | 雲端佔位檔讀不到時的處理定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)，[討論稿](<../Claude Codex Discussion/2026-10-29-icloud-placeholders.md>)）：說明書教保持下載、存檔受阻時當下說清楚、先分段實測；不自動補延後的 ID、不改 iCloud 設定 |
 | 2026-10-29 | 新決定與新任務先和「不做」比較（[D-153](decisions.md#d-153-每個新決定與新任務先和不做比較)）：寫在 essence-discuss、essence-decision 與 quality.md 的規劃者一列，AGENTS.md 只補半句 |
 | 2026-10-29 | 更新防線第 0 步：最低版本標記、版本行、還原檔與備份檔的格式寫進 [syntax.md](syntax.md)（§0-1、§5-1～5-3、§8），Codex 格式查核的 F1～F4 已照改（[查核與回應](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md#claude-回應-codex-格式查核2026-10-29>)）；讀不到自己的紀錄時不擋作答（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 補充） |
 | 2026-10-29 | 未來規畫統整的審閱結案（[審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#claude-審閱2026-10-28opus-55-高>)、[任務說明](../tasks/future-plans-review.md)）：122 項補回遺漏 1、原意與來源 4 處；使用者決定 Capture 開工前研究放 v1、真實驗證不算 v1、C-017 列第二階段、C-011 → D-152、C-009 結案 |
@@ -56,4 +57,3 @@ flowchart LR
 | 2026-10-28 | AGENTS.md 重寫（[D-147](decisions.md#d-147-agentsmd-的寫法底線在上新增規則先過五關)，[任務說明](../tasks/agents-md-rewrite.md)）：底線放最上、加新增規則的五關，約 4,800 字減到 3,100 字；skill 刪掉重複的句子，`essence-discuss` 改成 AI 能自己載入，也不再依賴不存在的 grilling；Capture 的底線也搬到最上 |
 | 2026-10-28 | A3 合併進 `main`（實作 `dfb368e`，[設計稿](<../Claude Codex Discussion/2026-10-27-a3-open-decks.md>)）：存檔備援只從 `start()`、`layout-change`、編輯器建立三處追蹤開著的卡組，拿掉每 2 秒掃分頁；Windows 實測 `a3check` 11 項與冷啟動都通過，Codex 三輪 L2 通過 |
 | 2026-10-28 | W6 iPhone 測試後的建議定案：複習畫面拿掉分隔線、打字卡不重複顯示答案、一行一個喇叭、試做在空格裡打字（[D-145](decisions.md#d-145-複習畫面再精簡拿掉分隔線答案不重複一行一個喇叭)）；卡組筆記的「全部卡」按鈕與第一次的提醒（[D-146](decisions.md#d-146-卡組筆記的全部卡按鈕與第一次的提醒)） |
-| 2026-10-28 | 里程碑報告的 R1～R4、R7、R8（[處理紀錄](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md#處理紀錄2026-10-28>)）：測試不再改全域的 `fs`，CI 沒通過時開 session 就提醒；加 `seen` 與同批順序的性質測試，順便做 T2；skill 與 quality.md 補四條做法 |
