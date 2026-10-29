@@ -14,6 +14,7 @@ import { lockTest, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from '
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
+import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, type Params } from './dev-cloud.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 const root = 'Essence W5';
@@ -34,9 +35,9 @@ interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () =
 
 /**
  * desktop：會寫卡組筆記或只有電腦做得到的命令，只在電腦註冊、只在電腦執行（D-134：iPhone 不寫卡組；Codex 審查第二部分的 F4）。
- * root：結果寫到哪個資料夾（W6 的命令寫 Essence W6/，W6 §4）。
+ * root：結果寫到哪個資料夾（W6 的命令寫 Essence W6/，W6 §4）。params：URI 帶的參數（命令面板執行時是空的）。
  */
-interface DevCommand { name: string; run: (host: Host, ids: IdsHost) => Promise<unknown>; desktop?: true; root?: string }
+interface DevCommand { name: string; run: (host: Host, ids: IdsHost, params: Params) => Promise<unknown>; desktop?: true; root?: string }
 /** 事件記錄用的：存檔備援的接線、外掛的 state 與它發出的紀錄（dev-events.ts）。 */
 const events = (host: Host): EventsHost => ({ app: host.app, saver: host.ids?.saver ?? null, state: () => host.state, log: listener => host.on('event', listener) });
 const commands: Record<string, DevCommand> = {
@@ -78,6 +79,11 @@ const commands: Record<string, DevCommand> = {
   // 結果檔只表示已經排定重新載入；有沒有冷啟動，看 t1close-cold 的 deferred。t1prep 之後至少等 10 秒再執行，讓 Obsidian 先存好版面
   // （2026-10-28 只等 5 秒時有一次重新載入後沒有還原那兩個分頁）。
   'app-reload': { name: 'Essence 開發：重新載入 Obsidian 視窗', run: host => { window.setTimeout(() => { (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('app:reload'); }, 1000); return Promise.resolve({ reloading: true }); }, desktop: true },
+  // D-154 第 3 點的 Windows 分段實測（tasks/icloud-placeholders.md §1）：URI 帶參數，佔位狀態由 PowerShell 做出並確認。
+  'cloud-read': { name: 'Essence 開發：讀一個佔位檔', run: (host, _ids, params) => cloudRead(host.app, params), desktop: true, root: CLOUD_ROOT },
+  'cloud-write': { name: 'Essence 開發：佔位檔的追加寫入', run: (host, _ids, params) => cloudWrite(host.app, params), desktop: true, root: CLOUD_ROOT },
+  'cloud-state': { name: 'Essence 開發：佔位檔的測試 state', run: (host, _ids, params) => cloudState(host.app, params), desktop: true, root: CLOUD_ROOT },
+  'cloud-late': { name: 'Essence 開發：佔位檔晚回來的讀寫', run: () => cloudLate(), desktop: true, root: CLOUD_ROOT },
 };
 
 /** 開發版收集 console.error 與沒接住的錯誤（errors 命令寫出來；AI 看不到 Obsidian 的 console）。 */
@@ -105,7 +111,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
   watchReview(plugin, (code, data) => writeResult(plugin.app, code, plugin.device, data, W6_ROOT));
   const ids: IdsHost = { app: plugin.app, get state() { return plugin.state; }, devLog };
   let runs = 0;
-  async function run(code: string): Promise<void> {
+  async function run(code: string, params: Params = {}): Promise<void> {
     const command = Object.hasOwn(commands, code) ? commands[code] : undefined;
     if (!command) { new Notice('Essence 開發：沒有「' + code + '」'); return; }
     // 命令面板與 URI 都經過這裡：手機上不執行會寫卡組的命令。
@@ -113,7 +119,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     runs++;
     const startedAt = performance.now();
     let result: unknown;
-    try { result = await command.run(plugin, ids); }
+    try { result = await command.run(plugin, ids, params); }
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
     const path = await writeResult(plugin.app, code, plugin.device, {
       code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
@@ -133,7 +139,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
       const plugins = (plugin.app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
       const id = plugin.manifest.id;
       void plugins.disablePlugin(id).then(() => plugins.enablePlugin(id)).then(() => { new Notice('Essence 開發：已重新載入'); });
-    } else void run(params.run ?? '');
+    } else void run(params.run ?? '', params);
   });
 }
 

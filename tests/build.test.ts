@@ -116,7 +116,7 @@ void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI�
   // W6（R14）：命令代號 review-script、open-times、w6-save（voices 和正式版的 getVoices 撞名，不當記號）、結果資料夾、
   // 截圖與照常繪製用的 Electron 呼叫。
   const marks = ['"essence-cards-dev"', 'cases.json', 'export-compare', '"dev-"', '"C14"', 'Essence W5',
-    '"review-script"', '"open-times"', '"w6-save"', 'Essence W6', 'setBackgroundThrottling', 'capturePage'];
+    '"review-script"', '"open-times"', '"w6-save"', 'Essence W6', 'setBackgroundThrottling', 'capturePage', '"cloud-read"'];
   await run(process.execPath, ['tools/build.mjs', '--dev'], { cwd: dir });
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
@@ -136,7 +136,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
     return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
   };
-  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-ids|-review|-events)?\.ts$/.test(path);
+  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-ids|-review|-events|-cloud)?\.ts$/.test(path);
   assert.deepEqual((await included(false)).filter(devOnly), []);
   // I9：CodeMirror 由 Obsidian 提供，沒有另一份被打包進來；編輯器的鎖定在正式版裡。
   for (const dev of [false, true]) {
@@ -144,7 +144,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {
