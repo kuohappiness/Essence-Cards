@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
+import { installVault, registerTestVault } from '../tools/install.ts';
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -35,11 +36,20 @@ async function project(t: TestContext, files: Record<string, string>): Promise<s
   return dir;
 }
 
-void test('W1 安裝指令先建置並複製三個檔案，只 require Obsidian 提供的套件，不改動 src/', async t => {
+/** 暫存的測試 vault，登錄在暫存的本機紀錄裡（更新防線 1-4：開發版與還沒正式發布的建置只裝登錄過的測試 vault）。 */
+async function testVault(t: TestContext): Promise<{ vault: string; local: string }> {
   const vault = await mkdtemp(join(tmpdir(), 'essence-vault-'));
-  t.after(() => rm(vault, { recursive: true, force: true }));
+  const local = await mkdtemp(join(tmpdir(), 'essence-local-'));
+  t.after(async () => { await rm(vault, { recursive: true, force: true }); await rm(local, { recursive: true, force: true }); });
+  await registerTestVault(vault, local);
+  return { vault, local };
+}
+
+void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault 先建置再複製三個檔案，不改動 src/', async t => {
+  const { vault, local } = await testVault(t);
   const before = await tree(join(root, 'src'));
-  const { stdout } = await run(process.execPath, ['tools/install-vault.mjs', vault], { cwd: root });
+  const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: root });
+  assert.equal((await installVault({ vault, local })).kind, 'test');
   // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
   assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.0\.1\+[0-9a-f]{7,}(\.dirty)?\n/);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
@@ -91,6 +101,14 @@ void test('study 連同 FSRS 可直接建成 browser bundle，不需要宿主或
   assert.deepEqual(imports.filter(entry => entry.external), []);
 });
 
+// 之後外掛內的備份直接用 src/core/backup（D-150、任務說明 §1）：連同 fflate 要能在手機上載入（Codex 中途查核第 7 點）。
+void test('backup 連同 fflate 與 SHA-256 可直接建成 browser bundle，不需要 Node', async () => {
+  const result = await build({ absWorkingDir: root, entryPoints: ['src/core/backup/index.ts'], bundle: true, platform: 'browser', format: 'esm', write: false, metafile: true });
+  const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
+  assert.deepEqual(imports.filter(entry => entry.external), []);
+  assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('node_modules/fflate/')));
+});
+
 void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI、命令名稱、對照與契約檢查、複習畫面的量測與劇本', async t => {
   const dir = await project(t, {});
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
@@ -139,15 +157,16 @@ void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫
   for (const name of ['src/ui/Review.css', 'src/ui/Markdown.css', 'src/obsidian/ids.css']) assert.ok(styles.includes(await readFile(join(root, name), 'utf8')), name);
 });
 
-void test('W5 安裝 --dev 裝開發版，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {
-  const vault = await mkdtemp(join(tmpdir(), 'essence-vault-'));
-  t.after(async () => { await rm(vault, { recursive: true, force: true }); await run(process.execPath, ['tools/build.mjs'], { cwd: root }); });
+void test('W5 安裝 --dev 裝開發版到測試 vault，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {
+  const { vault, local } = await testVault(t);
+  t.after(() => run(process.execPath, ['tools/build.mjs'], { cwd: root }));
   await mkdir(join(vault, '.obsidian'));
   await writeFile(join(vault, '.obsidian/community-plugins.json'), '["other"]');
-  for (let i = 0; i < 2; i++) await run(process.execPath, ['tools/install-vault.mjs', vault, '--dev'], { cwd: root });
+  for (let i = 0; i < 2; i++) assert.equal((await installVault({ vault, local, dev: true })).kind, 'dev');
   assert.deepEqual(JSON.parse(await readFile(join(vault, '.obsidian/community-plugins.json'), 'utf8')), ['other', 'essence-cards']);
-  assert.ok((await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8')).includes('essence-cards-dev'));
-  await assert.rejects(run(process.execPath, ['tools/install-vault.mjs', vault, '--dev', 'x'], { cwd: root }), /用法/);
+  const main = await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8');
+  assert.match(main, /^\/\*! Essence Cards build=\S+ dev=true \*\//);
+  assert.ok(main.includes('"essence-cards-dev"'));
 });
 
 // 技術債 A6（D-138 第 1 層）：編輯器鎖定的 Node 測試用的 CodeMirror，必須是 Obsidian 實際提供的那一版。

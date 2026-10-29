@@ -44,7 +44,7 @@ void test('安裝 hook 時恢復 LF：Git Bash 可執行，缺相依時程式與
   const shell = promisify(exec);
   // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
   const env = { ...process.env };
-  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   const isolated = { cwd: root, env };
   await run('git', ['init', '-q'], isolated);
   await mkdir(join(root, '.githooks'));
@@ -78,7 +78,7 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   });
   const run = promisify(execFile);
   const env = { ...process.env };
-  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   const isolated = { cwd: root, env };
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
@@ -113,7 +113,7 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
   const root = await mkdtemp(join(tmpdir(), 'essence-hook-path-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = { ...process.env };
-  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
   const isolated = { cwd: root, env };
   const run = promisify(execFile);
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];

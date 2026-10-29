@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../tools/check-docs.ts';
 
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
-for (const key of Object.keys(process.env)) if (key.startsWith('GIT_')) delete process.env[key];
+for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith('GIT_')) delete process.env[key];
 
 const git = (root: string, ...args: string[]) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', ...args], { cwd: root, stdio: 'pipe' });
 
