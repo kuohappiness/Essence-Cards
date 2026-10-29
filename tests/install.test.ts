@@ -30,13 +30,19 @@ const env = gitEnv();
 const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();
 
-/** 暫存的 repo：src、tools/build.mjs、manifest.json、package.json，相依套件用 junction 指回；commit 後打 tag v0.0.1。 */
+/**
+ * 暫存的 repo：src、tools/build.mjs、manifest.json、package.json，相依套件用 junction 指回；commit 後打 tag v0.0.1。
+ * 版號固定是 0.0.1，不跟著真的 repo 升版（升到 0.1.0 時這裡的測試全部壞過）。
+ */
 async function repo(t: T, { tag = true }: { tag?: boolean } = {}): Promise<{ dir: string; head: string }> {
   const dir = await tempFolder(t, 'essence-repo-');
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   await mkdir(join(dir, 'tools'));
   await cp(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
-  for (const name of ['manifest.json', 'package.json']) await cp(join(root, name), join(dir, name));
+  for (const name of ['manifest.json', 'package.json']) {
+    const json = JSON.parse(await readFile(join(root, name), 'utf8')) as Record<string, unknown>;
+    await writeFile(join(dir, name), JSON.stringify({ ...json, version: '0.0.1' }, null, 2) + '\n');
+  }
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
   await writeFile(join(dir, '.gitignore'), 'node_modules\n/main.js\n/styles.css\n.local/\n');
   git(dir, 'init', '-q');
