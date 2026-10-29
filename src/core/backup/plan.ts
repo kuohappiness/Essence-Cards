@@ -158,7 +158,7 @@ function orderWrites(files: PlannedFile[], { backup, current }: PlanInput): { or
 interface Occurrence { shown: string; restored: PlannedFile | null }
 
 /** 一篇卡組占用的學習目標 ID：每個目標的 ID，ambiguous 的目標是它的候選（同 state 的 targetIds、D-134），同一個目標只算一次。 */
-function deckIds(bytes: Uint8Array): string[] {
+export function deckIds(bytes: Uint8Array): string[] {
   return parseDeck(text(bytes)).targets.flatMap(target => [...new Set([...target.id === null ? [] : [target.id], ...target.idCandidates ?? []])]);
 }
 

@@ -322,3 +322,31 @@ void test('還原（Codex 再查 R1）：暫存檔寫好後父資料夾被換成
   assert.equal(await readFile(join(outside, swapped), 'utf8'), 'outside existing evidence');
   assert.ok((await readdir(join(vault, 'Essence Cards/moved'))).includes(swapped));
 });
+
+for (const source of ['已還原的前置檔', '沒選的其他卡組', '新出現的卡組'] as const) {
+  void test(`還原（Codex 再查 R2）：要加回的 ID 在還原期間被${source}重新占用時不寫，ID 不重複`, async t => {
+    const A = 'Essence Cards/A.md', B = 'Essence Cards/B.md', C = 'Essence Cards/C.md';
+    // 備份：A 有 abc234、bcd345；計畫時 bcd345 在 B。B 先寫（釋放 bcd345），再寫 A。
+    const vault = await makeVault(t, { [A]: goal('abc234') + goal('bcd345'), [B]: goal('cde456'), [C]: goal('fff111') });
+    const zip = await backup(t, vault);
+    await put(vault, A, goal('abc234'));
+    await put(vault, B, goal('cde456') + goal('bcd345'));
+    const options = { vault, backup: zip, ...fixed, random: counter() };
+    const { plan, path } = await makePlan(options);
+    assert.deepEqual(plan.order, [B, A]);
+    const write = async (file: string, bytes: Uint8Array, flag: 'w' | 'wx'): Promise<void> => {
+      await writeFile(file, bytes, { flag });
+      if (!file.includes('A.md.')) return;
+      if (source === '已還原的前置檔') await put(vault, B, goal('cde456') + goal('bcd345'));
+      if (source === '沒選的其他卡組') await put(vault, C, goal('fff111') + goal('bcd345'));
+      if (source === '新出現的卡組') await put(vault, 'Essence Cards/D.md', goal('bcd345'));
+    };
+    const result = await applyPlan({ ...options, plan: path, files: [A, B], seams: { write } });
+    const outcomes = Object.fromEntries(result.files.map(file => [file.path, [file.outcome, file.reason]]));
+    assert.equal(outcomes[A][0], '跳過');
+    assert.match(outcomes[A][1], /學習目標 ID bcd345 現在在「Essence Cards\/[BCD]\.md」/);
+    const ids = (await readDecks(createNodeFiles(vault))).flatMap(entry => entry.deck.targets.map(target => target.id));
+    assert.equal(ids.filter(id => id === 'bcd345').length, 1, ids.join(','));
+    assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), []);
+  });
+}

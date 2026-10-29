@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { lstat, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { ESSENCE_ROOT, PLUGIN_DATA, hashBytes, openBackup, planRestore, restoreLogName } from '../src/core/backup/index.ts';
+import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName } from '../src/core/backup/index.ts';
+import { isDeckPath } from '../src/core/deck/index.ts';
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
@@ -238,6 +239,11 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       await assertNoLinks(vault, folder);
       identity = await lstat(temporary, { bigint: true });
       if (await shaOf(target) !== expected) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
+      // 改名前重新讀現在的全部卡組：前面寫好的檔又被同步改回來、沒選的卡組或新出現的卡組占用了要加回的 ID，就不寫（Codex 再查 R2）。
+      if (file.target !== null && isDeckPath(file.target)) {
+        const taken = await occupied(vault, rel, bytes, same);
+        if (taken) { await giveUp('跳過', taken); continue; }
+      }
       await assertNoLinks(vault, folder);
       await rename(temporary, target);
       temporary = null;
@@ -296,6 +302,19 @@ async function removeOwn(vault: string, folder: string, path: string, identity: 
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === 'ENOENT';
   }
+}
+
+/** 要寫進 rel 的卡組（bytes）的學習目標 ID，現在有沒有在別篇：重新讀現在全部的卡組。讀不到的卡組也擋住（確定不了）。 */
+async function occupied(vault: string, rel: string, bytes: Uint8Array, same: (path: string) => string): Promise<string | null> {
+  const mine = new Set(deckIds(bytes));
+  if (mine.size === 0) return null;
+  for (const path of (await listTree(vault, ESSENCE_ROOT)).filter(isDeckPath)) {
+    if (same(path) === same(rel)) continue;
+    let text: Uint8Array;
+    try { text = new Uint8Array(await readFile(join(vault, path))); } catch { return `讀不到「${path}」，確定不了學習目標 ID 有沒有重複；重跑 --plan`; }
+    for (const id of deckIds(text)) if (mine.has(id)) return `學習目標 ID ${id} 現在在「${path}」（還原期間才出現的）；重跑 --plan`;
+  }
+  return null;
 }
 
 /** 檔案內容的雜湊；不存在是 null。 */
