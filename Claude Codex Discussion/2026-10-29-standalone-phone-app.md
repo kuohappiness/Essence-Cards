@@ -1,11 +1,12 @@
 # 獨立手機版 Essence Cards（請使用者先選範圍，再請 Codex 查核）
 
-狀態：進行中：等使用者選第 1 節的範圍；Codex 可以先查第 2～7 節
+狀態：進行中：使用者補充卡點是 iCloud，Claude 寫了〈第二輪〉；等使用者選第二輪第 6 節的先後，Codex 查核兩輪
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../docs/plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
 ## 先讀這裡
 
+- **第二輪改了前提**：使用者說卡點是 iCloud 同步，不是 Obsidian 本身。第一輪的 F1（同步不換、照舊 iCloud）與 F3～F5（iCloud 的書籤、下載、附件）由文末〈第二輪〉取代；第 3 節「網頁版不可行」的前提是要讀 iCloud，改走雲端硬碟的 API 後網頁版可行。其餘各節照舊有效。
 - **要做什麼**：把 D-129 裡「手機」這一半拆出來先談：學生的 iPhone 不裝 Obsidian，直接打開 Essence Cards 自己的 App 複習。第 1 節請使用者選範圍、更正四個假設；第 2 節和「不做」比較；第 3～6 節是技術提案（框架、檔案與同步、渲染與出處、版本與發布）；第 7 節是開工條件；第 8 節請 Codex 回答。
 - **基準**：`main` 的 `43171f8` 加上新增這份稿的 commit。只有文件。
 - **必讀**：D-004、D-019、D-109、D-110、D-128、D-129、D-134（iPhone 不寫卡組筆記）、D-148、D-149、D-154；[syntax.md](../docs/syntax.md) §0-1、§5；[獨立 App 計畫](../docs/plans/standalone-app.md)、[2026-10-23 的討論摘要](../docs/archive/discussions/2026-10-23-standalone-software.md)。程式：`src/core/files.ts`、`src/state/index.ts`、`src/ui/`（`Markdown.tsx`、`rendered.ts`、`sources.ts`、`speech.ts`、`host.tsx`、`Review.tsx`、`start.ts`）。
@@ -137,3 +138,86 @@
 - [Web features explorer：File system access](https://web-platform-dx.github.io/web-features-explorer/features/file-system-access)：Safari 與 iPhone 的 Safari 不支援
 - [Expo 價目](https://expo.dev/pricing)：免費方案的建置次數
 - [Obsidian 論壇：What technology Obsidian mobile is developed with?](https://forum.obsidian.md/t/what-technology-obsidian-mobile-is-developed-with/40125)：使用者回覆認為是 Capacitor，非官方說法
+
+## 第二輪：卡點是 iCloud，不是 Obsidian（Claude，2026-10-29）
+
+### 1. 使用者的補充
+
+> 對我來說 Obsidian 有一個卡點，因為我必須要在 iPhone 上面複習，而 Obsidian iOS 版本必須綁定利用 iCloud 做同步，但 iCloud 的同步常常出現問題，像是佔位檔的問題。如果不使用 Obsidian 有可能嗎？例如獨立 App，或是網頁，透過非 iCloud 的方式與電腦端同步（不考慮 Obsidian Sync、Remotely Save）。
+
+### 2. 結論
+
+- **可以**。要拿掉的是 iCloud；Obsidian 要不要拿掉是另一個決定，兩件事可以分開。
+- 更正一個前提：Obsidian 的 iPhone 版可以把 vault 放在「我的 iPhone」（本機），不一定要用 iCloud；不用官方 Sync 時，要和 Windows 同步才需要 iCloud 或同步外掛。所以「Essence Cards 外掛自己同步」也能拿掉 iCloud，學生照舊用 Obsidian。
+- 問題主要在 Windows 那一端：D-154 的分析是電腦最常讀不到 iPhone 寫的紀錄；Obsidian 官方也說 Windows 上的 iCloud 可能造成檔案重複或損壞。所以電腦與手機要一起換掉 iCloud 才有用。
+
+### 3. 為什麼 Essence 自己做同步做得起來
+
+通用的同步（iCloud、Remotely Save）難，是因為任何檔案兩邊都能改，要猜哪一邊對。Essence 的資料規則已經把這件事拆掉了：
+
+| 檔案 | 誰寫 | 同步方向 |
+|---|---|---|
+| 卡組、轉錄稿、圖片與音檔、考試範圍、設定 | 只有電腦（D-134：iPhone 不寫卡組筆記） | 電腦 → 雲端 → 手機 |
+| 複習紀錄 | 每台裝置每個月一個檔，只追加（syntax.md §5） | 每台只上傳自己的，下載別台的 |
+
+所以沒有「兩邊同時改同一個檔」要合併。剩下要處理的：上傳到一半斷線（整檔上傳加版本比對）；電腦上刪掉或改名（照電腦的）；手機上有人改了同步來的檔（偵測到就另存一份、不蓋掉，提示家長）；兩台電腦改了同一篇（現在用 iCloud 也有的既有風險，D-134 的代價）。
+
+### 4. 中間走哪裡（不用 iCloud，Essence 不營運服務，D-128）
+
+| 管道 | 怎麼運作 | 好處 | 代價與待查 |
+|---|---|---|---|
+| **使用者自己的 Dropbox**（💡 先做這個） | 外掛或 App 用 Dropbox 的 API 讀寫一個 App 專用資料夾（`/Apps/Essence Cards`），電腦不必裝 Dropbox | 免費 2 GB；API 有變動清單與檔案雜湊，適合只傳有變的檔；App 專用資料夾讓學生的手機只碰得到這一個資料夾；授權用 PKCE，程式裡不放密鑰（D-003） | 要有 Dropbox 帳號；免費版限 3 台裝置，API 存取算不算**待查證**；Essence 要註冊一個 Dropbox App（免費，開發狀態的使用者人數上限待查證） |
+| OneDrive | 同上，用 Microsoft Graph | 免費 5 GB；很多家庭已有 Microsoft 帳號 | App 註冊的流程待查；第二個再做 |
+| Google Drive | 同上 | 免費 15 GB | 讀寫整個雲端硬碟的權限要通過 Google 審查；只用「這個 App 建立的檔案」的權限可能就夠，待查 |
+| 家裡 Wi-Fi 直接傳 | 電腦的外掛在家裡網路開一個小服務（D-148 的電腦專用資料夾），手機在家時同步 | 不經過任何雲端、沒有帳號、零費用 | 電腦要開著、兩邊在同一個 Wi-Fi 才同步；網頁版做不到（https 的網頁連不了家裡的 http）；iPhone 會問一次區域網路的權限 |
+| 自架（NAS、WebDAV） | — | — | D-005：一般使用者不需要，不做 |
+
+Remotely Save 的免費版也是走 Dropbox 與 OneDrive 的 App 專用資料夾，可見 Obsidian 的 iPhone 版做得到這種授權與傳輸（它的說明也寫了：自動同步只在 Obsidian 開著時跑，出錯時不提示）。我們不裝它，但同一條路自己走、只傳 Essence 的檔，出錯時照 D-154 的原則當下說清楚。
+
+### 5. 手機端三條路（都用同一個同步模組）
+
+| | 外掛自己同步（Obsidian 不動） | 網頁版（PWA） | 獨立 App（Capacitor） |
+|---|---|---|---|
+| 拿掉 iCloud | 是 | 是 | 是 |
+| 學生不用 Obsidian | 否：手機仍用 Obsidian，vault 改放本機 | 是 | 是 |
+| Apple 年費、Mac | 不用 | 不用 | 一年 US$99、雲端 macOS 建置 |
+| 程式怎麼更新到手機 | **要另想**：現在靠 iCloud 把 `main.js` 帶到 iPhone（D-053），拿掉 iCloud 後改用 BRAT，或由同步帶過去 | 網頁一發布就更新 | TestFlight，每個建置 90 天後失效 |
+| 資料存在哪 | Obsidian 的本機 vault | Safari 的網站資料：加到主畫面時 WebKit 傾向保留，但系統空間不足或很久沒用時可能整份清掉（WebKit 官方說明）。所以作答完要馬上上傳；清掉了重新下載就好，只有還沒上傳的作答會不見 | App 自己的資料夾，最穩 |
+| 系統通知 | 不能 | 不能（要推播伺服器，D-128） | 能 |
+| 要新寫的 | 同步模組、設定頁的「連接 Dropbox」 | 同步模組、網頁外殼、渲染替代（第一輪 R1）、出處閱讀（R2） | 同左，加上原生的殼 |
+
+第一輪 F1、F3～F5 的 iCloud 書籤、下載與附件問題，這三條路都沒有：檔案由我們自己下載到本機。
+
+### 6. 💡 建議的順序
+
+0. **最便宜的一步（不做的那一方）**：D-154 的實測照做，Windows 的 vault 設「一律保留在此裝置上」、iPhone 設「保持下載」。這樣就不再出事的話，可以先不換。但 Obsidian 官方對 Windows 上 iCloud 的警告仍在，而且 iPhone 新寫的檔到了電腦可能先是佔位檔（D-154 的 E1 要驗）。
+1. **同步模組先做，裝在現在的外掛裡**：寫成核心模組（純函式加一個「雲端」接點，和 `Files` 一樣有 Node 版的替身可以測），先接 Dropbox。電腦與 iPhone 的 vault 都改放本機資料夾，iCloud 完全拿掉；學生照舊用 Obsidian 複習。這一步解決卡點，也是之後網頁版與 App 的地基，做了不浪費。
+2. **要脫離 Obsidian 時（之後、選做）**：網頁版或 App 直接用同一個同步模組。建議先做網頁版：不用年費和 Mac，改了馬上更新；碰到資料被清掉、或想要系統通知時，再用 Capacitor 包成 App（畫面是同一份）。
+
+第 1 步要不要提前到 v1，請使用者決定：它改的是 D-004 的「同步沿用 iCloud，不疊加 Dropbox 等服務」，而 iCloud 佔位檔正是 v1 的第一優先。
+
+### 7. 第 1 步和「不做」比較（D-153）
+
+- **不做會怎樣**：照 D-154 的分析，電腦常讀不到 iPhone 寫的紀錄（電腦上的進度不準、剛做過的卡再出）；讀不到時存檔不能把新目標加入複習；備份會失敗；開發時讀 iPhone 寫回的結果檔常卡住（使用者：「常常出現問題」）。直接影響家長與開發，學生間接受影響。
+- **做的代價**：
+  - 程式：同步模組（變動清單、只傳有變的檔、整檔上傳加版本比對、刪除與改名、手機誤改的保護、上次同步的狀態存在本機且可以重建）；設定頁的「連接 Dropbox」與授權完回到 Obsidian（`obsidian://`）；入口顯示上次同步的時間與錯誤；Node 的假雲端測試。
+  - 遷移：兩台裝置的 vault 從 iCloud 搬到本機，第一次同步；說明書重寫同步那一章（D-048）。
+  - 跟著要改的：iPhone 的外掛更新不能再靠 iCloud（改 BRAT 或由同步帶）；開發時 iPhone 的結果檔也要經過同步回到電腦。
+  - 使用者要多學的：申請 Dropbox 帳號、每台裝置按一次「連接」。
+- **更小的做法**：第 0 步；或用現成的 Remotely Save（使用者不考慮）。
+
+### 8. 請 Codex 回答（第二輪）
+
+1. 站在不做那一方：第 0 步做完之前，有沒有理由先不談第 1 步？
+2. 第 3 節的單向規則有沒有漏掉的寫入者（例如設定頁、AI 輸出快照、備份、還原檔、G1 的錯誤紀錄）？哪些檔一定要在手機上有？
+3. Dropbox 的事實：免費版 3 台裝置的限制算不算 API 存取；開發狀態的使用者人數上限；PKCE 與 App 專用資料夾在 Obsidian iPhone 版（`requestUrl`、`obsidian://` 回呼）是否可行；token 存哪裡才不會跟著同步出去（D-003、D-149 第 7 點的 localStorage）。
+4. 網頁版在 iPhone 的資料被清掉的風險，第 5 節的處理夠不夠？
+5. 拿掉 iCloud 後，iPhone 的外掛更新用 BRAT 還是由同步帶，哪個符合 D-149 的正式安裝？
+6. 家裡 Wi-Fi 直接傳值不值得當第二種管道？
+
+### 參考（第二輪）
+
+- [WebKit：Updates to Storage Policy](https://webkit.org/?p=14403)：主畫面網頁 App 的保存與清除
+- [Remotely Save 說明](https://github.com/remotely-save/remotely-save)：免費版支援 Dropbox、OneDrive 的 App 專用資料夾，支援 Obsidian 手機版
+- [Dropbox 論壇：Three devices limit and API access](https://community.dropbox.com/en/discussion/334652/three-devices-limit-and-api-access)：同樣的問題，答案待查
+- [Obsidian：跨裝置同步](https://obsidian.md/help/sync-notes)：Windows 上的 iCloud 可能造成檔案重複或損壞
