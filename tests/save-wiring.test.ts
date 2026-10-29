@@ -173,6 +173,28 @@ void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不�
   }
 });
 
+// 任務說明 2-2、syntax.md §2-1：需要新版的卡組，Cards 不寫它（state 的寫入門檻回 blocked needs-update）。存檔按鈕照實說明，
+// 不說「都已加入複習」（同 D-154 的原則）；按下去只提示，不開待處理的小視窗。
+void test('2-2 需要新版的卡組：按鈕說明需要更新，存檔被擋時提示同一句，不開待處理的小視窗', async () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
+  const notified: string[] = [];
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), onChange: () => () => {},
+    save: () => Promise.resolve({ kind: 'blocked', reason: 'needs-update' }),
+  };
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+  const leaf = stub.leaf(DECK);
+  stub.leaves.push(leaf);
+  saver.refresh();
+  const [button] = (leaf.view as { actions: { label: string }[] }).actions;
+  const tip = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
+  assert.equal(button.label, tip);
+  await saver.save(leaf.view);
+  assert.deepEqual([notified, stub.modals.length], [[tip], 0]);
+});
+
 // S27（tasks/state-writes.md §7）：存檔交給 state 的 EditorHandle 照按下時的那一篇；按鈕連按只排一份。
 void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同時 apply 回傳 false、persist 呼叫 view.save()；連按只排一份', async () => {
   const stub = createObsidianStub();
@@ -241,4 +263,30 @@ void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一
   await wait(0);
   assert.equal(buttons().length, 2);
   assert.ok(buttons().every(button => !button.disabled), '結果回來後解除');
+});
+
+// Codex L2 的 R1：小視窗開著時這一篇變成需要新版（例如編輯器的文字帶了新寫法），resolve 回 blocked needs-update：
+// 照實說需要更新外掛，不說「請再按一次存檔」（重按也不會成功）。其他結果照舊。
+void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛；stale、failed 照舊', async () => {
+  for (const [result, tip] of [
+    [{ kind: 'blocked', reason: 'needs-update' }, '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習'],
+    [{ kind: 'stale' }, '這篇筆記剛剛改過，請再按一次存檔'],
+    [{ kind: 'failed', error: Error('寫不進去') }, '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔'],
+  ] as const) {
+    const stub = createObsidianStub();
+    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+    const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+    const notified: string[] = [];
+    const state = {
+      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {},
+      save: () => Promise.resolve({ kind: 'unchanged' }),
+      resolve: () => Promise.resolve(result),
+    };
+    const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+    await saver.save(stub.leaf(DECK).view);
+    stub.modals[0].contentEl.querySelectorAll('button')[0].click();
+    await wait(0);
+    assert.deepEqual(notified, [tip], result.kind);
+  }
 });

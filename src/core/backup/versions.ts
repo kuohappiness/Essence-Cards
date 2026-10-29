@@ -1,4 +1,5 @@
 import { isLogPath, LOG_FOLDER, parseTime } from '../study/index.ts';
+import { canRead } from '../version/index.ts';
 import { logSource } from './names.ts';
 
 /** 一台裝置最後回報的建置版本（syntax §5-1 的 `set: app` 行）。 */
@@ -23,10 +24,11 @@ const ORDER = { null: 0, 衝突副本: 1, 不確定: 0, 還原檔: 2 } as const;
 
 /**
  * 每台裝置最後回報的版本，從帶來源路徑的原始紀錄算（任務說明 2-1）：不能用合併後的 History.changes，它不帶來源、
- * 會把兩台裝置時間與值都相同的回報去重成一筆。只看 `紀錄/` 直接底下的 .jsonl；讀不出來的行跳過。
+ * 會把兩台裝置時間與值都相同的回報去重成一筆。只看 `紀錄/` 直接底下的 .jsonl；讀不出來的行跳過，need 讀不懂的行
+ * 也跳過（syntax §0-1；version 是讀的那一方的正式版號，不傳是版本不明）。
  * 這是最後回報，不是即時狀態：還沒同步、還沒重開的裝置看不出來。
  */
-export function lastVersions(sources: readonly { path: string; text: string }[]): VersionReport[] {
+export function lastVersions(sources: readonly { path: string; text: string }[], version: string | null = null): VersionReport[] {
   const best = new Map<string, { report: VersionReport; at: number; values: Set<string> }>();
   for (const { path, text } of sources) {
     if (!isLogPath(path)) continue;
@@ -47,6 +49,7 @@ export function lastVersions(sources: readonly { path: string; text: string }[])
       if (!data || typeof data !== 'object') continue;
       const { t, set, val } = data as Record<string, unknown>;
       if (set !== 'app' || typeof val !== 'string' || typeof t !== 'string') continue;
+      if (Object.hasOwn(data, 'need') && !canRead((data as { need: unknown }).need, version)) continue;
       const time = parseTime(t);
       if (!time) continue;
       const current = best.get(path);

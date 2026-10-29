@@ -6,9 +6,31 @@ import type { Item, Line } from './markdown.ts';
 import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
 
 const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
-const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', categories: [], isTranscript: false });
+const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', categories: [], isTranscript: false, need: null });
 const string = (value: unknown): string | null => typeof value === 'string' ? value : null;
 const strings = (value: unknown): string[] => typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+
+/** YAML 雙引號字串的單字元跳脫（YAML 1.2 §5.7）。 */
+const ESCAPES: Record<string, string> = { '0': '\0', a: '\x07', b: '\b', t: '\t', '\t': '\t', n: '\n', v: '\v', f: '\f', r: '\r', e: '\x1b',
+  ' ': ' ', '"': '"', '/': '/', '\\': '\\', N: '\x85', _: '\xa0', L: ' ', P: ' ' };
+/** 照 YAML 雙引號字串的規則解開跳脫：`需` 這類跳脫字元、行尾 `\` 接下一行（去掉下一行開頭的空白）；認不得的照原文留著。 */
+function unescapeYaml(text: string): string {
+  return text.replace(/\\(?:x([0-9a-fA-F]{2})|u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|(\n)[ \t]*|([^]))/g,
+    (match, x?: string, u?: string, wide?: string, eol?: string, single?: string) => {
+      const code = x ?? u ?? wide;
+      if (code !== undefined) {
+        const point = parseInt(code, 16);
+        return point <= 0x10ffff ? String.fromCodePoint(point) : match;
+      }
+      if (eol !== undefined) return '';
+      return single !== undefined && Object.hasOwn(ESCAPES, single) ? ESCAPES[single] : match;
+    });
+}
+/**
+ * 屬性區讀不出來時（YAML 寫壞、最上層不是對照表、沒有結束）：原文或解開跳脫之後含「需要版本」，就算有標記但讀不懂
+ * （syntax.md §2-1、Codex 格式查核 F1）。縮排、引號、跳脫的鍵名、冒號前的空白都擋得到；寫在值或註解裡也算，寧可多擋。
+ */
+const mentionsNeed = (raw: string): boolean => raw.includes('需要版本') || unescapeYaml(raw).includes('需要版本');
 
 export function readProperties(lines: Line[]): { props: DeckProps; start: number; problems: Problem[] } {
   const props = defaultProps();
@@ -20,11 +42,14 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
   // 沒有結束的屬性區，Obsidian 當成一般文字，底下的清單照樣顯示（W5 對照）。
   if (end < 0) {
     hint(0, '屬性區塊沒有結束，Obsidian 把它當成一般文字；先使用預設值');
+    // 沒有結束就看到檔尾（syntax.md §2-1）。
+    if (mentionsNeed(lines.slice(1).map(line => line.raw).join('\n'))) props.need = false;
     return { props, start: 0, problems };
   }
   const start = end + 1;
+  const raw = lines.slice(1, end).map(line => line.raw).join('\n');
   try {
-    const doc = parseDocument(lines.slice(1, end).map(line => line.raw).join('\n'));
+    const doc = parseDocument(raw);
     if (doc.errors.length) throw Error('無法解析屬性');
     const data: unknown = doc.toJS();
     if (data !== null && (typeof data !== 'object' || Array.isArray(data))) throw Error('屬性不是對照表');
@@ -39,6 +64,7 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
     props.materials = strings(values['材料']);
     props.categories = strings(values['分類']);
     props.isTranscript = Object.hasOwn(values, '來源類型');
+    if (Object.hasOwn(values, '需要版本')) props.need = string(values['需要版本']) ?? false;
     if (Object.hasOwn(values, '狀態')) {
       const status = values['狀態'];
       if (status === '草稿') props.status = 'draft';
@@ -50,7 +76,7 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
     }
   } catch {
     hint(0, '屬性區塊寫法有問題，先使用預設值');
-    return { props: defaultProps(), start, problems };
+    return { props: { ...defaultProps(), need: mentionsNeed(raw) ? false : null }, start, problems };
   }
   return { props, start, problems };
 }

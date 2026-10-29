@@ -102,7 +102,7 @@ function recording(state: State): { state: State; written: { t: string; line: st
   const written: { t: string; line: string; entry: NewEntry }[] = [];
   return {
     written,
-    state: { ...state, answer(entry) { const t = state.answer(entry); written.push({ t, line: encodeEntry(t, entry), entry }); return t; } },
+    state: { ...state, answer(entry) { const t = state.answer(entry); if (t !== null) written.push({ t, line: encodeEntry(t, entry), entry }); return t; } },
   };
 }
 
@@ -113,7 +113,9 @@ async function undoAll(state: State, written: { t: string; entry: NewEntry }[]):
   for (const w of [...written]) {
     if ('undo' in w.entry || undone.has(w.t)) continue;
     const entry = { undo: w.t };
-    lines.push(encodeEntry(state.answer(entry), entry));
+    const t = state.answer(entry);
+    if (t === null) throw Error('那一筆的學習目標需要新版才讀得懂，取消不能寫：' + w.t);
+    lines.push(encodeEntry(t, entry));
     undone.add(w.t);
   }
   await state.flush();
@@ -392,6 +394,14 @@ export function keepRendering(): { before: string; restore: () => void } {
   const before = document.visibilityState;
   contents?.setBackgroundThrottling?.(false);
   return { before, restore: () => { contents?.setBackgroundThrottling?.(true); } };
+}
+/** 整個視窗截一張 PNG 寫進 vault 的 path（Electron 的 capturePage）；拿不到 webContents 時回傳 null。 */
+export async function capturePng(app: App, path: string): Promise<string | null> {
+  const contents = webContents();
+  if (!contents) return null;
+  const png = (await contents.capturePage()).toPNG();
+  await app.vault.adapter.writeBinary(path, png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer);
+  return path;
 }
 
 const overlay = () => document.querySelector<HTMLElement>('.ec-fullscreen');

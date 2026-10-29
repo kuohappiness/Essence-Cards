@@ -14,6 +14,8 @@ export const TIPS = {
   added: (n: number) => `${n} 個學習目標已加入複習`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
   failed: '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔',
+  // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：Cards 不寫它，也不說「都已加入複習」。
+  needsUpdate: '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習',
 };
 export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
@@ -60,16 +62,18 @@ function editorOf(view: MarkdownView, path: string): EditorHandle {
   };
 }
 
-/** 存檔結果的提示；unchanged、blocked、saved 不提示（讀不到時 main.ts 已有一次「讀不到…會自動重試」）。 */
+/** 存檔結果的提示；unchanged、saved 與需要新版以外的 blocked 不提示（讀不到時 main.ts 已有一次「讀不到…會自動重試」）。 */
 function saveTip(result: WriteResult): string | null {
   if (result.kind === 'done') return result.added ? TIPS.added(result.added) : null;
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
+  if (result.kind === 'blocked' && result.reason === 'needs-update') return TIPS.needsUpdate;
   return null;
 }
 
-/** 一篇卡組按鈕的樣子：沒有要做的、有目標還沒有 ID、有待處理的問題。 */
-function buttonLook(status: { missing: number; issues: IdIssue[] }): { kind: 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+/** 一篇卡組按鈕的樣子：需要新版、沒有要做的、有目標還沒有 ID、有待處理的問題。 */
+function buttonLook(status: { missing: number; issues: IdIssue[]; needsUpdate?: true }): { kind: 'needs-update' | 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+  if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
@@ -117,7 +121,8 @@ class IssuesModal extends Modal {
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
       if (result.kind === 'done') { this.render(); return; }
-      this.host.notify(result.kind === 'failed' ? TIPS.failed : TIPS.stale);
+      // 和存檔用同一份對應（寫不進去、需要新版，Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
+      this.host.notify(saveTip(result) ?? TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
@@ -171,7 +176,7 @@ export function wireSave(host: SaveHost): Saver {
       }
       setIcon(button, look.icon);
       button.setAttribute('aria-label', look.tip);
-      for (const kind of ['done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
+      for (const kind of ['needs-update', 'done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。
     for (const [view, button] of buttons) if (!seen.has(view)) { button.remove(); buttons.delete(view); }

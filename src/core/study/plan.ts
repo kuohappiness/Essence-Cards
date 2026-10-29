@@ -82,6 +82,9 @@ export function planToday(input: TodayInput): Today {
   const subjectOf = new Map<string, string | null>();
   const owner = new Map<string, { path: string; target: Target }>();
   const chosen: { entry: DeckEntry; target: Target; id: string }[] = [];
+  // 讀不懂的紀錄行停掉的目標（syntax.md §5-2）：照樣占著 ID 的歸屬，只是不排程。
+  const held = new Set(input.history.held);
+  const stopped = (id: string): boolean => input.history.incomplete || held.has(id);
   for (const entry of decks) {
     const { props, targets } = entry.deck;
     if (props.isTranscript || props.status !== 'active') {
@@ -100,7 +103,7 @@ export function planToday(input: TodayInput): Today {
       }
       owner.set(id, { path: entry.path, target });
       subjectOf.set(id, props.subject);
-      if (target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance)) chosen.push({ entry, target, id });
+      if (target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance) && !stopped(id)) chosen.push({ entry, target, id });
     }
   }
 

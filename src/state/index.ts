@@ -1,11 +1,14 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, listDeckPaths, parseDeck } from '../core/deck/index.ts';
-import type { Deck } from '../core/deck/index.ts';
+import type { Deck, Target } from '../core/deck/index.ts';
 import { confirms, createIdTracker } from './ids.ts';
 import type { IdIssue, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, parseTime, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
+import { canRead, releaseOf } from '../core/version/index.ts';
+import { lastVersions } from '../core/backup/index.ts';
+import type { VersionReport } from '../core/backup/index.ts';
 
 /** 開著的筆記的編輯器（tasks/state-writes.md §1）。由 Obsidian 層實作，state 不 import Obsidian。 */
 export interface EditorHandle {
@@ -25,8 +28,8 @@ export type WriteResult =
   | { kind: 'done'; added: number }
   /** 沒有要改的（含不是卡組）。 */
   | { kind: 'unchanged' }
-  /** 門檻沒過，沒有改字。 */
-  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' }
+  /** 門檻沒過，沒有改字。needs-update：這一篇需要新版才讀得懂（任務說明 2-2）。 */
+  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' | 'needs-update' }
   /** 途中換了篇、內容被改掉、問題已經不成立，或一直有新的變動：沒有採用，要再存一次。 */
   | { kind: 'stale' }
   /** 寫不進磁碟：輸出沒有採用，已配出的 ID 保留、不重用。 */
@@ -38,6 +41,11 @@ export interface StateOptions {
   files: Files;
   /** 例如 'iPhone-7f3a'；紀錄的檔名用它。 */
   device: string;
+  /**
+   * 這次建置的版本 `BUILD`（例如 `0.1.0+1a2b3c4`），由外層傳進來，核心不讀全域（任務說明 2-1）。`+` 前面的正式版號決定
+   * 讀得懂哪些「需要版本」與 need（syntax.md §0-1）；沒傳時版本不明，任何標記都讀不懂。
+   */
+  build?: string;
   now?: () => number;
   offset?: (ms: number) => number;
   /** 預設 { capMinutes: 30, retention: 0.8, filter: [] }（D-104、D-078）。 */
@@ -80,8 +88,14 @@ export interface State {
    * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
    */
   unread(): readonly string[];
+  /** 讀得懂的卡組；需要新版的（blocked().decks）不在裡面。 */
   decks(): readonly DeckEntry[];
   history(): History;
+  /**
+   * 需要新版才讀得懂的內容（D-149 第 3 點、syntax.md §0-1）：decks 是「需要版本」讀不懂的卡組（不出題，Cards 也不寫它）；
+   * targets 是讀不懂的紀錄行停掉的學習目標；all 是有一行辨認不出影響範圍，全部學習目標都停。每次重讀都重新判斷。
+   */
+  blocked(): { decks: readonly string[]; targets: readonly string[]; all: boolean };
   /** 目前的輸入：decks、history、settings、exam: null、呼叫當下的 now 與 offset。 */
   input(): TodayInput;
   /** 今天的份；過了清晨 4 點或 offset 變了，先重排。 */
@@ -92,16 +106,30 @@ export interface State {
   /**
    * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。取消的那一筆早於今天的份的開始（例如複習到 03:59、過了 04:00 回看改評分）時，
    * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
+   * 牽涉的學習目標不能作答（canAnswer）時什麼都不寫、回傳 null（任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；
+   * 找不到那一筆的取消照舊寫。卡組的狀態變更，那一篇需要新版時也不寫。
    */
-  answer(entry: NewEntry): string;
+  answer(entry: NewEntry): string | null;
+  /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的 ID 都不能。 */
+  canAnswer(lt: string): boolean;
+  /**
+   * 「版本」命令用（任務說明 2-1、syntax.md §5-1）。build：這次的 BUILD，沒傳是 null。own：這台的版本行；waiting 是自己的
+   * 紀錄還沒都讀到（本機歷史待讀取，讀到才比），same 是最後一行已經是這個 BUILD，queued 是排進寫入、還沒有 flush 確認寫成，
+   * written 是 flush 確認寫成，沒傳 build 是 null。devices：每台裝置「最後回報」的版本，從帶來源路徑的原始紀錄算
+   * （包括這台剛排進寫入的那一行），不是即時狀態。
+   */
+  version(): { build: string | null; own: 'waiting' | 'same' | 'queued' | 'written' | null; devices: VersionReport[] };
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫。 */
   onChange(listener: () => void): () => void;
   /** 等目前排隊的紀錄寫完。 */
   flush(): Promise<void>;
   /** 停止監看、等紀錄寫完。 */
   close(): Promise<void>;
-  /** 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。 */
-  deckStatus(path: string): { missing: number; issues: IdIssue[] };
+  /**
+   * 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。需要新版的卡組只回 needsUpdate（沒有要補的、
+   * 沒有可以處理的問題：Cards 不寫它）。
+   */
+  deckStatus(path: string): { missing: number; issues: IdIssue[]; needsUpdate?: true };
   /** 存檔（開著的筆記）：排進寫入的那一列，補 ID、歸位、改縮排，寫進磁碟並核對後才採用。 */
   save(editor: EditorHandle): Promise<WriteResult>;
   /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
@@ -129,11 +157,15 @@ class Stopped extends Error {}
 const DRAIN_ROUNDS = 5;
 
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
-const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [] };
+const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [], held: [], incomplete: false };
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
 export function createState(options: StateOptions): State {
   const { files, device } = options;
+  /** 這台的正式版號（syntax.md §0-1）；null 是版本不明。 */
+  const version = options.build === undefined ? null : releaseOf(options.build);
+  /** 「需要版本」讀不懂（§2-1）：整篇不出題，Cards 也不寫它。 */
+  const needsUpdate = (deck: Deck): boolean => deck.props.need !== null && !canRead(deck.props.need, version);
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
   const settings = options.settings ?? DEFAULT_SETTINGS;
@@ -209,15 +241,67 @@ export function createState(options: StateOptions): State {
     return seenIds.ids;
   }
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0 });
+
+  /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
+  function record(entry: NewEntry): string {
+    const t = writer.write(entry);
+    const line = encodeEntry(t, entry);
+    const stamp = parseLine(line);
+    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
+    // 和 writer 寫檔的路徑相同：t 已經帶著寫入當下的時間與時區。
+    const path = logPath(device, stamp.at, stamp.offset);
+    sources.set(path, (sources.get(path) ?? '') + line + '\n');
+    history = appendLine(history, line);
+    return t;
+  }
+  /** 這台的版本行（version().own）。 */
+  let appState: 'waiting' | 'same' | 'queued' | 'written' | null = options.build === undefined ? null : 'waiting';
+  /**
+   * 版本行（任務說明 2-1、syntax.md §5-1）：自己的紀錄檔（檔名正好是 logPath 的格式）都讀到之後比一次，時間最晚的那一行
+   * `app` 不是這個 BUILD（或沒有、或同一個時間有不同的值）就排一行，一次啟動最多一行。讀到時已經 ready 的話，這一行排在
+   * 那段期間的作答後面（Codex 格式查核 R2）。
+   */
+  function checkApp(): void {
+    if (appState !== 'waiting' || options.build === undefined || closed || [...unread].some(own)) return;
+    const reports = lastVersions([...sources].filter(([path]) => own(path)).map(([path, text]) => ({ path, text })), version);
+    const at = (report: VersionReport): number => parseTime(report.t)?.at ?? -Infinity;
+    const last = reports.reduce<VersionReport | null>((best, report) => best === null || at(report) > at(best) ? report : best, null);
+    if (last?.build === options.build) { appState = 'same'; return; }
+    record({ set: 'app', val: options.build });
+    appState = 'queued';
+  }
   /** 給 planToday 的卡組：拿掉待處理的目標（W5 §8-5：不出題）。 */
   let planList: DeckEntry[] = [];
+  /** 需要新版的卡組（路徑照字串排序）與它們的 ID（候選也算）。 */
+  let gated: string[] = [];
+  let gatedIds = new Set<string>();
   function rebuild(): void {
-    deckList = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
+    const all = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
+    const newer = new Set(all.filter(entry => needsUpdate(entry.deck)));
+    deckList = all.filter(entry => !newer.has(entry));
+    gated = [...newer].map(entry => entry.path);
+    gatedIds = new Set([...newer].flatMap(entry => entry.deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])])));
+    // 讀得懂的卡組裡和需要新版的卡組同一個 ID 的目標也不出：舊版分不出那個 ID 現在屬於哪一篇、是什麼意思。
     planList = deckList.map(entry => {
       const skip = tracker.lines(entry.path);
-      return skip.size ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !skip.has(t.line)) } } : entry;
+      const drop = (t: Target): boolean => skip.has(t.line) || (t.id !== null && gatedIds.has(t.id));
+      return entry.deck.targets.some(drop) ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !drop(t)) } } : entry;
     });
   }
+  /** 能寫這個目標的紀錄：不是讀不懂的紀錄行停掉的、紀錄不是不完整、不在需要新版的卡組裡（§5-2、§2-1）。 */
+  const answerable = (lt: string): boolean => !history.incomplete && !history.held.includes(lt) && !gatedIds.has(lt);
+  /**
+   * answer 能不能寫這一行。分類和 encodeEntry 同一個順序（Codex L2 的 F2）：有 undo 就是取消，看它指到的每一筆作答（多帶的欄位
+   * 不寫出、也不看；找不到那一筆照舊寫）；有 set 是變更，學習目標看 lt，卡組的狀態是從卡組的內容得出的，需要新版的卡組不寫（§2-1）；
+   * 其他是作答，看 lt。
+   */
+  function permits(entry: NewEntry): boolean {
+    if ('undo' in entry) return history.reviews.every(review => review.t !== entry.undo || answerable(review.lt));
+    if ('set' in entry) return 'deck' in entry ? !gated.includes(entry.deck) : 'lt' in entry ? answerable(entry.lt) : true;
+    return answerable(entry.lt);
+  }
+  /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（§2-1）。 */
+  const blockedText = (path: string, text?: string): boolean => gated.includes(path) || (text !== undefined && needsUpdate(parseDeck(text)));
   function replan(): void {
     current = planToday(input());
     if (closed) return;
@@ -329,7 +413,7 @@ export function createState(options: StateOptions): State {
       }
     }
     // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
-    if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
+    if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })), version);
     // 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、
     // 把預期的輸出當成自己的寫回，讀到的文字再照下面一般的重讀比對；預期不成立、讀到 null（不見了或改名，不跟著 A2 的改名配對寫到別篇）
     // 都照一般的重讀處理，回 stale。
@@ -392,6 +476,8 @@ export function createState(options: StateOptions): State {
     if (!unread.size) tracker.confirm();
     if (tracker.revision() !== revision) decksChanged = true;
     if (decksChanged) rebuild();
+    // 第一次載入時由 load() 在紀錄那一批之後比；之後是讀不到的自己的紀錄終於讀到了。
+    if (loaded) checkApp();
     if (loaded && (decksChanged || logsChanged)) replan();
   }
 
@@ -425,6 +511,8 @@ export function createState(options: StateOptions): State {
     await queue(() => read(logPaths));
     const afterHistory = performance.now();
     if (closed) throw Error('state 已關閉，沒有讀完');
+    // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
+    checkApp();
     loaded = true;
     current = planToday(input());
     const end = performance.now();
@@ -434,15 +522,18 @@ export function createState(options: StateOptions): State {
 
   /**
    * 寫入的門檻（§3 第 3 步）：可以時回傳 null，不行時回傳原因。只在電腦（D-134）、讀完之後、還沒關閉，而且沒有讀不到的
-   * 卡組或紀錄（state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）；不是卡組就沒有要改的。之後要加的原因
-   * （D-150 的備份沒成功、更新防線的需要新版、多檔工作的預留還沒載入）都加在這裡，不分散到各個入口。
+   * 卡組或紀錄（state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）；不是卡組就沒有要改的；需要新版的卡組
+   * 不寫（任務說明 2-2，給了 text 時也看這份最新的文字）。之後要加的原因（D-150 的備份沒成功、多檔工作的預留還沒載入）
+   * 都加在這裡，不分散到各個入口。
    */
-  function writable(path: string): WriteResult | null {
+  function writable(path: string, text?: string): WriteResult | null {
     if (!options.fillIds) return { kind: 'blocked', reason: 'phone' };
     if (!loaded) return { kind: 'blocked', reason: 'loading' };
     if (closed) return { kind: 'blocked', reason: 'closed' };
     if (unread.size) return { kind: 'blocked', reason: 'unread' };
     if (!isDeckPath(path)) return { kind: 'unchanged' };
+    // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：state 最近讀到的，或這次要寫的最新文字，任何一邊讀不懂都不寫。
+    if (blockedText(path, text)) return { kind: 'blocked', reason: 'needs-update' };
     return null;
   }
   /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending 裡有不在 unread 的路徑（except 那一篇除外）。 */
@@ -459,9 +550,9 @@ export function createState(options: StateOptions): State {
    */
   async function admit(path: string, rounds: { count: number }): Promise<WriteResult | null> {
     if (closed) return { kind: 'blocked', reason: 'closed' };
-    // 手機、還沒 ready、不是卡組：不用先讀。
+    // 手機、還沒 ready、不是卡組：不用先讀。讀不到、需要新版要看讀到的內容：先讀完待讀再判斷（待讀裡可能就是改回來的那一篇）。
     const early = writable(path);
-    if (early && !(early.kind === 'blocked' && early.reason === 'unread')) return early;
+    if (early && !(early.kind === 'blocked' && (early.reason === 'unread' || early.reason === 'needs-update'))) return early;
     while (waiting()) {
       if (closed) return { kind: 'blocked', reason: 'closed' };
       if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
@@ -533,8 +624,9 @@ export function createState(options: StateOptions): State {
           if (!live) throw new Stopped();
           if (text === '') throw new NothingToFill();
           original = text;
-          // 回呼拿到的是最新的原文：重查門檻與待讀（這一篇自己除外，它最新的內容就是這份原文）；有新的待讀就不改，回到第 2 步。
-          gate = writable(path);
+          // 回呼拿到的是最新的原文：重查門檻（含這份原文需不需要新版）與待讀（這一篇自己除外，它最新的內容就是這份原文）；
+          // 有新的待讀就不改，回到第 2 步。
+          gate = writable(path, text);
           if (gate) return text;
           if (waiting(path)) { again = true; return text; }
           prepared = prepare(path, text);
@@ -572,6 +664,9 @@ export function createState(options: StateOptions): State {
     try {
       const text = editor.text();
       if (text === null) return { kind: 'stale' };
+      // 編輯器最新的文字也過一次門檻：需要新版（state 還沒讀到）就不寫（§2-1）。
+      const gate = writable(path, text);
+      if (gate) return gate;
       const prepared = plan(text);
       // plan 觀察到新的原文時會同步通知監聽者（adopt → replan），監聽者或 onError 可能在裡面 close()（Codex L2 的 R2）：
       // 這時還沒改編輯器、還沒寫，停下來；close() 不用等這一份。
@@ -596,7 +691,7 @@ export function createState(options: StateOptions): State {
       return loading;
     },
     unread: () => [...unread].sort(),
-    deckStatus: path => loaded ? tracker.status(path) : { missing: 0, issues: [] },
+    deckStatus: path => !loaded ? { missing: 0, issues: [] } : gated.includes(path) ? { missing: 0, issues: [], needsUpdate: true } : tracker.status(path),
     save: editor => enqueue(() => edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
     // 問題已經跟著改名搬到別的路徑：不是這個編輯器的那一篇，不準備（stale）。
     resolve: (issue, choice, editor) => enqueue(() => edit(editor, text => issue.path === editor.path ? track(editor.path, () => tracker.resolve(issue, choice, text)) : null, { kind: 'stale' })),
@@ -610,6 +705,8 @@ export function createState(options: StateOptions): State {
     removedInEditor(_path, ids) { tracker.removed(ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },
     decks: () => deckList,
+    blocked: () => ({ decks: gated, targets: history.held, all: history.incomplete }),
+    canAnswer: answerable,
     history: () => history,
     input,
     today: () => fresh().today,
@@ -626,22 +723,22 @@ export function createState(options: StateOptions): State {
     },
     answer(entry) {
       if (!loaded) throw Error('state 還沒 ready');
-      const t = writer.write(entry);
-      const line = encodeEntry(t, entry);
-      const stamp = parseLine(line);
-      if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
-      // 和 writer 寫檔的路徑相同：t 已經帶著寫入當下的時間與時區。
-      const path = logPath(device, stamp.at, stamp.offset);
-      sources.set(path, (sources.get(path) ?? '') + line + '\n');
-      history = appendLine(history, line);
-      if (stamp.kind === 'undo' && current && Date.parse(stamp.undo) < dayStart(current.day, current.offset)) current = null;
+      if (!permits(entry)) return null;
+      const t = record(entry);
+      if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
       return t;
     },
     onChange(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    flush: () => writer.flush(),
+    async flush() {
+      // 版本行在這次 flush 開始前就排好了，flush 成功就是寫成了（寫入成功以 flush 為準）。
+      const queued = appState === 'queued';
+      await writer.flush();
+      if (queued && appState === 'queued') appState = 'written';
+    },
+    version: () => ({ build: options.build ?? null, own: appState, devices: lastVersions([...sources].map(([path, text]) => ({ path, text })), version) }),
     async close() {
       closed = true;
       if (timer !== null) clearTimeout(timer);

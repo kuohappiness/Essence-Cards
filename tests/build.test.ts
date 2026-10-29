@@ -136,7 +136,8 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
     return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
   };
-  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-ids|-review|-events)?\.ts$/.test(path);
+  // 開發命令的模組都叫 src/obsidian/dev.ts 或 dev-*.ts（device.ts 不算），新加的不用改這裡也受檢查。
+  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-[a-z]+)?\.ts$/.test(path);
   assert.deepEqual((await included(false)).filter(devOnly), []);
   // I9：CodeMirror 由 Obsidian 提供，沒有另一份被打包進來；編輯器的鎖定在正式版裡。
   for (const dev of [false, true]) {
@@ -144,7 +145,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {
