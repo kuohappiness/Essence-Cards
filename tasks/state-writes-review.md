@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調：L2 獨立審查（給 Codex）
 
-狀態：待再審；L2 報告（`Claude Codex Discussion/2026-10-29-state-writes-review.md`）的 R1～R3 已修，見最後〈再審〉
+狀態：待第二次再審；再審的 R2 續已修，見最後〈第二次再審〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（`src/state/` 的寫入先後、ID 的安全與寫回筆記的流程互相牽動）。
 
@@ -115,3 +115,16 @@
 - Windows（Obsidian 1.14.5，測試 vault 的開發版 `0.0.1+e10d2ae`，程式和 `c3de2a0` 相同）重跑，結果都和上一次相同：`save … 140718.json` 17/17（含小視窗開著時重畫、選還原）、`save-flow … 140805.json`（V1 30 ms，其餘 checks 相同，V6 照舊 `[false, true, true]`）、`lock … 141006.json` 50/0、`a3check … 141227.json` C1～C11 都 ok，C8、C10 各一個子項 skipped（和上一次相同）。R1、R2 的情境（逾時、準備時關閉）Windows 做不出來，只有 Node 的測試。
 
 回報接在同一份報告後面，加一節〈再審（日期）〉。
+
+## 第二次再審（2026-10-29）
+
+你在報告〈再審〉找到的 R2 續已修，Claude 的核對與 Windows 結果寫在報告最後〈Claude 核對再審〉。請只再審下面的範圍。
+
+- **待審 commit**：
+  - R2 續：`ae7102c`（`active` 改成 `begin` 到 `end` 的 I/O 期間）。看差異用 `git diff 22cede5 ae7102c`。
+  - V5 的 Windows 情境：`7c1947a`、`a8c8a8b`（只動開發命令 `save-flow`）。
+  - 文件 commit 不用審；任務說明 §5 與 V5 列的改動請對一下是否和程式、結果檔一致。
+- **相鄰案例**請自己找，例如：`close()` 在 `end()` 之後、核對讀取回來之前；同一份工作 `close()` 被呼叫兩次；`fillIds` 的 modify 回呼裡（準備之前）同步 `close()`；逾時之後 `active` 是否確實解除、下一份工作開始時 `close()` 等的是新的那一份。
+- **驗證**：在最後的 commit 跑 `npm run check`（Claude 跑過：604 個測試全部通過）；你報告〈再審〉的 CodeMirror 探針在新程式回 `closeResolvedBeforePersist: false`、工作回 `saved`。Windows 結果檔在測試 vault 的 `Essence W5/結果/`：`save-flow … 152335.json`（`V5queued` true；`151931` 那次是檢查時間放錯，見報告）、`save … 152443.json`、`lock … 152506.json`、`a3check … 152724.json`。
+
+回報接在同一份報告後面，加一節〈第二次再審（日期）〉。
