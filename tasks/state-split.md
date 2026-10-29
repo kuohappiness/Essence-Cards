@@ -81,7 +81,7 @@
 
 ## 和更新防線第二部分的先後
 
-💬 開工時問了「更新防線2」的 session，還沒有回覆；這邊沒有等，先在 `main` 上拆（拆檔是機械的，晚一點合併時再放進去比等它便宜）。兩邊誰後合併，誰解衝突：
+開工時問了「更新防線2」的 session；它的回覆在拆完之後才到（2026-10-29）：同意它先合併，合併進 `main` 後會通知這邊並附上 merge commit。§2-2 對 `index.ts` 的改動都在 `f73525b`，但它的 L2 若改到門檻或版本行，合併前 `writable`、`admit`、`answer`、`checkApp`、`rebuild` 附近還可能再變；它新 import 的 `../core/version/index.ts`、`../core/backup/index.ts`（`lastVersions`）跟著那幾段走。這邊已經先在 `main` 上拆好（拆檔是機械的，晚一點合併時再放進去比等它便宜）。兩邊誰後合併，誰解衝突：
 
 - **建議更新防線第二部分先合併**（它的 L2 審的是舊的檔案配置，不用因為拆檔重審）。之後這裡 `git merge origin/main`，把它加的程式照下面的對應放進拆好的檔，`npm run check` 全過，再請 Codex 只審那次合併：
   - `writes.ts`：`writable` 多一個 `text` 參數與「需要新版」的原因（`blocked.reason` 加 `'needs-update'`），`admit` 的對應、`fillFile` 與 `edit` 裡傳最新文字的那兩處；「這篇需要新版」由 `index.ts` 傳進來（`WritesOptions` 多一個回呼，例如 `blockedText(path, text)`）。
