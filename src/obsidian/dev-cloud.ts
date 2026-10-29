@@ -123,7 +123,8 @@ export async function cloudWrite(app: App, params: Params): Promise<unknown> {
 }
 
 interface Trial { state: State; poke: (path: string) => void; opened: number; ready: 'pending' | { ms: number } | { error: ErrorFields }; changes: { at: string; unread: readonly string[] }[]; errors: { at: string; source: string; error: ErrorFields }[] }
-let trial: Trial | null = null;
+/** 同時可以開幾份（params.slot，預設 a）：同一次停掉 iCloud 裡，一份載入後才讀不到、一份第一次載入就讀不到。 */
+const trials = new Map<string, Trial>();
 
 /** 測試 state 的 Files：另外記下 watch 的回呼，poke 可以送一個「這個檔變了」的通知（載入後才讀不到的情況）。 */
 function pokeable(files: Files): { files: Files; poke: (path: string) => void } {
@@ -134,7 +135,7 @@ function pokeable(files: Files): { files: Files; poke: (path: string) => void } 
   };
 }
 
-function status(current: Trial): unknown {
+function status(current: Trial): Record<string, unknown> {
   const { state } = current;
   const loaded = typeof current.ready === 'object' && 'ms' in current.ready;
   return {
@@ -150,33 +151,34 @@ function status(current: Trial): unknown {
  * step：open（建新的、等 ready 到 limit）、poke（送 params.target 的變動通知，等 wait 毫秒）、status、close。
  */
 export async function cloudState(app: App, params: Params): Promise<unknown> {
-  const step = params.step ?? 'status';
+  const step = params.step ?? 'status', name = params.slot ?? 'a';
   if (step === 'open') {
-    if (trial) await trial.state.close();
+    await trials.get(name)?.state.close();
     const { files, poke } = pokeable(scopedFiles(createObsidianFiles(app), STATE_ROOT));
     const errors: Trial['errors'] = [];
     const state = createState({ files, device: 'cloud-test', fillIds: false, delay: 200, onError: (error, source) => { errors.push({ at: new Date().toISOString(), source, error: fields(error) }); } });
     const current: Trial = { state, poke, opened: performance.now(), ready: 'pending', changes: [], errors };
-    trial = current;
+    trials.set(name, current);
     state.onChange(() => { current.changes.push({ at: new Date().toISOString(), unread: state.unread() }); });
     const start = performance.now();
     state.ready().then(() => { current.ready = { ms: Math.round(performance.now() - start) }; }, (error: unknown) => { current.ready = { error: fields(error) }; });
     await observe('state ready', () => state.ready(), limitOf(params));
-    return status(current);
+    return { name, ...status(current) };
   }
-  if (!trial) throw Error('先執行 step=open');
+  const trial = trials.get(name);
+  if (!trial) throw Error('先執行 step=open（slot=' + name + '）');
   if (step === 'poke') {
     if (!params.target) throw Error('poke 要帶 target（state 底下的路徑，例如 Essence Cards/測試.md）');
     trial.poke(params.target);
     await new Promise<void>(resolve => { window.setTimeout(resolve, Number(params.wait ?? 2000)); });
-    return status(trial);
+    return { name, ...status(trial) };
   }
-  if (step === 'status') return status(trial);
+  if (step === 'status') return { name, ...status(trial) };
   if (step === 'close') {
     const { state } = trial;
     const done = await observe('state close', () => state.close(), limitOf(params), () => 'closed');
-    trial = null;
-    return { close: done };
+    trials.delete(name);
+    return { name, close: done };
   }
   throw Error('step 只能是 open、poke、status、close：' + step);
 }
