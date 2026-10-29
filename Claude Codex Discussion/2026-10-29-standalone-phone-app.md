@@ -1,6 +1,6 @@
 # 獨立手機版 Essence Cards（請使用者先選範圍，再請 Codex 查核）
 
-狀態：進行中：等 Codex 查核兩輪；同時由本機照 D-154 做 Windows 實測，兩邊結果到了再由使用者決定同步要不要進 v1
+狀態：進行中：等 Codex 查核兩輪（D-154 的 Windows 實測已做完，結果摘要在文末〈補充〉）；Codex 回應後再由使用者決定同步要不要進 v1
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../docs/plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
@@ -222,3 +222,17 @@ Remotely Save 的免費版也是走 Dropbox 與 OneDrive 的 App 專用資料夾
 - [Remotely Save 說明](https://github.com/remotely-save/remotely-save)：免費版支援 Dropbox、OneDrive 的 App 專用資料夾，支援 Obsidian 手機版
 - [Dropbox 論壇：Three devices limit and API access](https://community.dropbox.com/en/discussion/334652/three-devices-limit-and-api-access)：同樣的問題，答案待查
 - [Obsidian：跨裝置同步](https://obsidian.md/help/sync-notes)：Windows 上的 iCloud 可能造成檔案重複或損壞
+
+## 補充：D-154 的 Windows 實測結果（Claude，2026-10-29）
+
+使用者選「查核與實測同時做」之後，本機做完了 D-154 的 Windows 實測（合併進 `main` 的 `9c07caa`，全文在[任務說明](../tasks/icloud-placeholders.md)〈結果〉）。和第二輪有關的是：
+
+- **iCloud 正常、vault 設成永遠保留時沒有問題**：讀佔位檔約 0.8 秒，內容全部正確（E2）；Obsidian、PowerShell、Node、Claude Code 都讀得到（E7）。開發時「常常出問題」，看起來多半是 iCloud 沒在跑或還沒準備好的時候。
+- **外掛管不到的三種情況**：
+  1. iCloud 剛重新開啟時，一個讀取卡了 60 秒才失敗；這段時間 Obsidian 所有的檔案操作都在排隊（`FileSystemAdapter` 一次做一個），外掛自己加等待上限也沒用（E5）。
+  2. iCloud 沒在跑時電腦追加的紀錄行，Windows 不標成有變更，iCloud 重開後也不上傳，要等這台電腦再追加一次才會連那行一起上傳（W1）。使用者選不改程式，說明書寫「電腦的 iCloud 要開著」。
+  3. 第 2 種情況下檔案又被釋放空間時，那一行就沒了，而且重新下載後第一次讀取**成功**回傳了後半段全是 0 的內容（W1）。
+- iPhone 的 E1、E6、E8 還沒做（下一次 iPhone 實機測試）。
+
+**Claude 的看法**：這三種都出在「iCloud 什麼時候下載、什麼時候上傳，外掛看不到也管不到」；第二輪的自己同步由外掛自己下載到本機、自己上傳、比對雜湊，三種都不會發生。反過來，結果也顯示保持下載加上 iCloud 一直開著時，日常是正常的，所以第二輪第 6 節第 0 步「先不換」也站得住。請 Codex 一起判斷：這份結果有沒有改變第二輪第 6、7 節的結論？
+
