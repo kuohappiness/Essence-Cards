@@ -781,11 +781,11 @@ export async function saveFlowV6(host: IdsHost): Promise<unknown> {
 
 /**
  * save-flow-x：V6 去留的實驗 X（討論稿 2026-10-29-save-external-write.md〈Codex 第二輪回應〉第 2 題的步驟）。
- * 兩種存檔各自在 view.save() 的入口撞上一次外部寫入（把 B 加進磁碟），比較 B 與本地的改動有沒有留下：
- * - X1：Obsidian 自己的自動存檔（只用 Editor 交易加本地標記，不經過 Cards，等它約 2 秒後呼叫 view.save()）；
+ * 兩種存檔各自在寫磁碟的入口（vault.modify／vault.process）撞上一次外部寫入（把 B 加進磁碟），比較 B 與本地的改動有沒有留下：
+ * - X1：Obsidian 自己的自動存檔（只用 Editor 交易加本地標記，不經過 Cards，等它約 2 秒後自己存）；
  * - X2：Cards 的存檔（同樣先加本地標記，接著立刻按存檔，view.save() 由 state 呼叫）。
- * 外部寫入用 fs（繞過 Obsidian，像同步或別的程式）與 adapter.write（V6 原本的寫法）各 5 次。包裝只記時間與入口的編輯器文字，
- * 不讀檔、不等外部寫入，每個案例只注入一次；X1 沒攔到自動存檔的那次記成沒測（tested: false），不算保留了 B。
+ * 外部寫入用 fs（繞過 Obsidian，像同步或別的程式）與 adapter.write（V6 原本的寫法）各 5 次。包裝只記時間與要寫的文字，
+ * 不讀檔、不等外部寫入，每個案例只注入一次；沒攔到寫入的那次記成沒測（tested: false），不算保留了 B。
  */
 export async function saveFlowX(host: IdsHost): Promise<unknown> {
   const { app } = host;
@@ -817,22 +817,35 @@ export async function saveFlowX(host: IdsHost): Promise<unknown> {
           const before = host.devLog.notices.length;
           const t0 = performance.now();
           const ms = () => Math.round(performance.now() - t0);
-          const calls: { at: number; done?: number; error?: string; editorHasB: boolean; editorHasLocal: boolean }[] = [];
+          const calls: { via: string; at: number; done?: number; error?: string; hasB: boolean; hasLocal: boolean }[] = [];
           const external: { start?: number; done?: number; error?: string } = {};
           let landed: Promise<void> = Promise.resolve();
-          const original = view.save.bind(view);
-          view.save = (clear?: boolean) => {
-            const text = view.editor.getValue();
-            const call: (typeof calls)[number] = { at: ms(), editorHasB: text.includes(FLOW_B), editorHasLocal: text.includes(LOCAL) };
+          /** 這篇的一次寫入開始：記下要寫的文字；第一次寫入（vault.modify 或 vault.process）的入口注入外部寫入，不等它。 */
+          const enter = (via: string, text: string | null, inject: boolean): (typeof calls)[number] => {
+            const call: (typeof calls)[number] = { via, at: ms(), hasB: !!text?.includes(FLOW_B), hasLocal: !!text?.includes(LOCAL) };
             calls.push(call);
-            if (external.start === undefined) {
+            if (inject && external.start === undefined) {
               external.start = ms();
               const writing = writer === 'fs' ? fs.promises.writeFile(fullPath(path), FLOW_TEXT + FLOW_B) : app.vault.adapter.write(path, FLOW_TEXT + FLOW_B);
               landed = writing.then(() => { external.done = ms(); }, (error: unknown) => { external.error = String(error); });
             }
-            const saving = original(clear);
-            void saving.then(() => { call.done = ms(); }, (error: unknown) => { call.error = String(error); });
-            return saving;
+            return call;
+          };
+          const settle = <T>(call: (typeof calls)[number], work: Promise<T>): Promise<T> => {
+            void work.then(() => { call.done = ms(); }, (error: unknown) => { call.error = String(error); });
+            return work;
+          };
+          // view.save 只記（第一輪 X1 沒攔到自動存檔：它不經過這個屬性）；注入放在 vault 這一層，兩種存檔都在寫磁碟的入口撞上。
+          const vault = app.vault;
+          const saveOwn = Object.hasOwn(view, 'save'), modifyOwn = Object.hasOwn(vault, 'modify'), processOwn = Object.hasOwn(vault, 'process');
+          const originalSave = view.save.bind(view), originalModify = vault.modify.bind(vault), originalProcess = vault.process.bind(vault);
+          view.save = (clear?: boolean) => settle(enter('view.save', view.editor.getValue(), false), originalSave(clear));
+          vault.modify = (target, data, options) => target.path === path ? settle(enter('vault.modify', data, true), originalModify(target, data, options)) : originalModify(target, data, options);
+          vault.process = (target, fn, options) => target.path === path ? settle(enter('vault.process', null, true), originalProcess(target, fn, options)) : originalProcess(target, fn, options);
+          const restore = () => {
+            if (saveOwn) view.save = originalSave; else Reflect.deleteProperty(view, 'save');
+            if (modifyOwn) vault.modify = originalModify; else Reflect.deleteProperty(vault, 'modify');
+            if (processOwn) vault.process = originalProcess; else Reflect.deleteProperty(vault, 'process');
           };
           try {
             view.editor.replaceRange(LOCAL, { line: 1, ch: view.editor.getLine(1).length });
@@ -855,7 +868,7 @@ export async function saveFlowX(host: IdsHost): Promise<unknown> {
               events: rec.take(),
             });
           } finally {
-            view.save = original;
+            restore();
           }
           leaf.detach();
           await sleep(300);
