@@ -67,8 +67,13 @@ export interface State {
   /** nextCard；不會回傳 'stale'。 */
   next(pick: Pick): Next;
   progress(): Progress;
-  /** 寫一行紀錄（背景）、併進 history，回傳 t；不重排。 */
-  answer(entry: NewEntry): string;
+  /**
+   * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。牽涉的學習目標不能作答（canAnswer）時什麼都不寫、回傳 null
+   * （任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；找不到那一筆的取消照舊寫。
+   */
+  answer(entry: NewEntry): string | null;
+  /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的 ID 都不能。 */
+  canAnswer(lt: string): boolean;
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫。 */
   onChange(listener: () => void): () => void;
   /** 等目前排隊的紀錄寫完。 */
@@ -172,6 +177,8 @@ export function createState(options: StateOptions): State {
       return entry.deck.targets.some(drop) ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !drop(t)) } } : entry;
     });
   }
+  /** 能寫這個目標的紀錄：不是讀不懂的紀錄行停掉的、紀錄不是不完整、不在需要新版的卡組裡（§5-2、§2-1）。 */
+  const answerable = (lt: string): boolean => !history.incomplete && !history.held.includes(lt) && !gatedIds.has(lt);
   /** 這一篇（這份文字，或 state 最近讀到的內容）需要新版：Cards 不寫它（§2-1）。 */
   const blockedText = (path: string, text: string): boolean => gated.includes(path) || needsUpdate(parseDeck(text));
   function replan(): void {
@@ -418,6 +425,7 @@ export function createState(options: StateOptions): State {
     restoredInEditor(_path, ids) { tracker.restored(ids); },
     decks: () => deckList,
     blocked: () => ({ decks: gated, targets: history.held, all: history.incomplete }),
+    canAnswer: answerable,
     history: () => history,
     input,
     today: () => fresh().today,
@@ -434,6 +442,8 @@ export function createState(options: StateOptions): State {
     },
     answer(entry) {
       if (!loaded) throw Error('state 還沒 ready');
+      const lts = 'lt' in entry ? [entry.lt] : 'undo' in entry ? history.reviews.filter(review => review.t === entry.undo).map(review => review.lt) : [];
+      if (!lts.every(answerable)) return null;
       const t = writer.write(entry);
       const line = encodeEntry(t, entry);
       const stamp = parseLine(line);

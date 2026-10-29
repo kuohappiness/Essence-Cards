@@ -106,3 +106,38 @@ void test('2-2 需要新版的卡組不影響紀錄：別台裝置對它的作�
   const h = await setup(t, { [NEW]: marked('9.0.0', goal('aaaaab')), [LOG]: encodeEntry('2026-10-20T19:00:00.000+08:00', { lt: 'aaaaab', r: 'good', v: '12345678' }) + '\n' });
   assert.deepEqual([h.share(), h.state.history().reviews.map(r => r.lt)], [[], ['aaaaab']]);
 });
+
+// 停掉的目標不寫作答（syntax.md §5-2、任務說明 2-2）：answer 回傳 null、什麼都不寫；取消看它指的作答。
+void test('2-2 answer 拒絕停掉的目標：讀不懂的紀錄行停掉的、需要新版的卡組裡的；其他照常', async t => {
+  const h = await setup(t, {
+    [NEW]: marked('9.0.0', goal('gggggg')), [P]: goal('aaaaaa') + goal('bbbbbb') + goal('cccccc'),
+    [LOG]: JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', need: '9.0.0', lt: 'bbbbbb', r: 'miss', v: '12345678' }) + '\n',
+  });
+  const own = 'Essence Cards/紀錄/2026-10 Windows-2c9e.jsonl';
+  assert.deepEqual([h.state.canAnswer('aaaaaa'), h.state.canAnswer('bbbbbb'), h.state.canAnswer('gggggg')], [true, false, false]);
+  assert.equal(h.state.answer({ lt: 'bbbbbb', r: 'good', v: '12345678' }), null);
+  assert.equal(h.state.answer({ lt: 'gggggg', r: 'good', v: '12345678' }), null);
+  assert.equal(h.state.answer({ lt: 'bbbbbb', r: 'miss', src: 'mistake' }), null);
+  assert.equal(h.state.answer({ set: 'status', lt: 'gggggg', val: '暫停' }), null);
+  const kept = h.state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
+  assert.equal(typeof kept, 'string');
+  assert.equal(typeof h.state.answer({ set: 'cap', val: 20 }), 'string');
+  await h.state.flush();
+  const written = (h.texts.get(own) ?? '').trim().split('\n').map(line => JSON.parse(line) as { lt?: string; set?: string }).filter(line => line.set !== 'app');
+  assert.deepEqual(written.map(line => line.lt ?? line.set), ['aaaaaa', 'cap']);
+  assert.deepEqual(h.state.history().reviews.map(r => r.lt), ['aaaaaa']);
+});
+
+void test('2-2 取消看它指的作答：那一筆的目標後來被停掉，取消也不寫；整份紀錄不完整時全部都不寫', async t => {
+  const h = await setup(t, { [P]: goal('aaaaaa') + goal('bbbbbb') });
+  const t1 = h.state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
+  assert.ok(t1);
+  await h.edit(LOG, JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', need: '9.0.0', lt: 'aaaaaa' }) + '\n');
+  assert.equal(h.state.answer({ undo: t1 }), null);
+  assert.equal(h.state.history().reviews.some(r => r.t === t1), true);
+  // 取消找不到對象（例如很久以前的）照舊寫。
+  assert.equal(typeof h.state.answer({ undo: '2026-10-01T19:00:00.000+08:00' }), 'string');
+  await h.edit(LOG, JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', need: '9.0.0' }) + '\n');
+  assert.deepEqual([h.state.blocked().all, h.state.canAnswer('bbbbbb'), h.share()], [true, false, []]);
+  assert.equal(h.state.answer({ lt: 'bbbbbb', r: 'good', v: '12345678' }), null);
+});

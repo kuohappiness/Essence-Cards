@@ -190,6 +190,7 @@ async function answer(host: Host): Promise<unknown> {
   // 寫一筆、等寫完，回傳 encodeEntry 的結果與它的檔案（和 state 寫檔的路徑相同）。
   async function write(entry: NewEntry) {
     const t = state.answer(entry);
+    if (t === null) throw Error('這個學習目標需要新版才讀得懂，不能寫：' + JSON.stringify(entry));
     const line = encodeEntry(t, entry);
     const stamp = parseLine(line);
     if (!stamp) throw Error('寫出的紀錄無法解析：' + line);

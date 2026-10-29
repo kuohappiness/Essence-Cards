@@ -615,3 +615,44 @@ void test('F4 英翻中切走超過 60 秒：重新開始時題目照樣自動�
   s.toCurrent();
   assert.deepEqual([lt(s.view()), card(s.view()).revealed, card(s.view()).autoRead], [second, false, null]);
 });
+
+// 任務說明 2-2：一篇卡組或一個目標在複習中途變成需要新版（停掉），目前這張作答時被拒絕：不寫紀錄、不算做過，畫面換下一張。
+void test('2-2 複習中途卡組變成需要新版：這張作答不寫、不進回看，換下一張；回看裡停掉的那張不能改評分', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  s.reveal();
+  await rateLater(h, s, 'good');
+  assert.equal(lt(s.view()), 'a2');
+  // 別台裝置把這篇改成新寫法（這個 state 沒有傳 build，任何「需要版本」都讀不懂）。
+  h.write(NATURAL, naturalText.replace('科目: 自然', '科目: 自然\n需要版本: 9.0.0'));
+  await h.settle();
+  assert.equal(lt(s.view()), 'a2', '目前這張不換（W6 §2-1）');
+  s.reveal();
+  h.clock.now += RATE_DELAY;
+  assert.equal(s.rate('good'), true);
+  await h.state.flush();
+  assert.deepEqual(h.log().map(line => parseLine(line)?.kind === 'review' ? (parseLine(line) as { lt: string }).lt : line), ['a1']);
+  assert.equal(s.view().kind, 'done');
+  assert.deepEqual(s.history().map(entry => entry.card.lt), ['a1']);
+  // 回看 a1：它的卡組需要新版，不能改評分。
+  s.back();
+  assert.deepEqual(card(s.view()).allowed, []);
+  assert.equal(s.rate('miss'), false);
+  await h.state.flush();
+  assert.equal(h.log().length, 1);
+});
+
+void test('2-2 複習中途別台裝置的紀錄出現讀不懂的行、停掉目前這張：作答不寫，換下一張', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  h.write(PHONE, earlier + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', need: '9.0.0', lt: 'a1', r: 'miss', v: '12345678' }) + '\n');
+  await h.settle();
+  s.reveal();
+  h.clock.now += RATE_DELAY;
+  assert.equal(s.rate('good'), true);
+  await h.state.flush();
+  assert.deepEqual(h.log(), []);
+  assert.equal(lt(s.view()), 'a2');
+});

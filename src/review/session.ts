@@ -249,8 +249,9 @@ export function createSession(options: SessionOptions): Session {
       const typedView: TypedView | null = entry.answer !== null ? {
         step: 3, first: entry.typed, second: entry.retry, notice: false, hint: null, answer: entry.answer ?? '', attempt: entry.firstCompare, copy: null, live: null, firstAttempt: entry.firstCompare, input: entry.firstInput ?? '', finished: true, canSkip: false,
       } : null;
+      // 回看的那張後來被停掉（需要新版，任務說明 2-2）：不能改評分。
       return {
-        kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: entry.changeable, pressed: entry.rating,
+        kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: state.canAnswer(entry.card.lt) ? entry.changeable : [], pressed: entry.rating,
         english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length }, shown: 0,
       };
     }
@@ -401,6 +402,12 @@ export function createSession(options: SessionOptions): Session {
     const first = typed?.first ?? null, second = typed?.second ?? null;
     // 寫紀錄只經過 state.answer（W6 限制第 4 點）；寫不進去由 W5 的提示處理，畫面照常換下一張。
     const t = state.answer({ lt: card.lt, r: rating, v: card.prompt.fingerprint, ...(first ? { typed: first } : {}), ...(second ? { retry: second } : {}) });
+    // 這張在作答前被停掉（需要新版，任務說明 2-2）：沒有寫紀錄，不算做過、不進回看，換下一張。
+    if (t === null) {
+      load();
+      notify();
+      return true;
+    }
     // 回看時要顯示第 1 步打的字與比對：拼對的就是答案本身；拼錯或按「沒印象」的是 attempt（對最接近答案的比對）。
     const firstCompare = typed ? (typed.firstAttempt ?? spelling(typed.answer, typed.answer)) : null;
     done.push({
@@ -428,9 +435,13 @@ export function createSession(options: SessionOptions): Session {
    * 在完成畫面時重新問 next，改成沒印象或差一點的那張回到目前時就出（Codex L2 F2）。
    */
   function change(entry: DoneCard, rating: Rating): boolean {
-    if (entry.rating === rating || !entry.changeable.includes(rating)) return false;
+    // 那張後來被停掉（需要新版）就不能改：先問，取消與新的評分才會一起寫或一起不寫。
+    if (entry.rating === rating || !entry.changeable.includes(rating) || !state.canAnswer(entry.card.lt)) return false;
     state.answer({ undo: entry.t });
-    entry.t = state.answer({ lt: entry.card.lt, r: rating, v: entry.card.prompt.fingerprint, ...(entry.typed ? { typed: entry.typed } : {}), ...(entry.retry ? { retry: entry.retry } : {}) });
+    const t = state.answer({ lt: entry.card.lt, r: rating, v: entry.card.prompt.fingerprint, ...(entry.typed ? { typed: entry.typed } : {}), ...(entry.retry ? { retry: entry.retry } : {}) });
+    // 同一個目標剛問過可以寫，不會是 null；型別上仍要處理。
+    if (t === null) return false;
+    entry.t = t;
     entry.rating = rating;
     if (!current) load();
     notify();
