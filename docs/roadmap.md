@@ -10,11 +10,10 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)），任務說明寫好 | 本機照任務說明做 Windows 分段實測與存檔受阻的提示 | 使用者（開本機 session） | [任務說明](../tasks/icloud-placeholders.md) |
 | 維修與查修的準備 | 盤點完成，缺口 G1～G3；使用者同意 G1（正式版把錯誤記下來），位置與格式的討論稿寫好 | Codex 查核；一致後交使用者確認，寫成 D-ID 與任務說明 | 使用者（開 Codex） | [規畫](plans/maintenance.md)、[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>) |
-| `state` 的讀寫先後與寫入協調 | 實作完（分支 `claude/hungry-yonath-106fcb`，604 個測試）；Codex L2 第二次再審通過（R1～R3、R2 續已修，Windows 重跑相同，V5 補了排隊中換篇）；V6（存檔撞上外部寫入）三方一致不修，記成已知限制 | 使用者決定合併（合併前先把 `main` 合進分支、重跑檢查）；之後做 `state/index.ts` 原樣拆檔 | 使用者 | [任務說明](../tasks/state-writes.md)、[審查請求](../tasks/state-writes-review.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)、[V6 討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線第一部分已合併進 `main`（`8aa3078`，1-1～1-5）；備份位置使用者已選 | 第二部分：外掛的版本行與讀取閘門（分支 `claude/update-safeguards-2`）；做完更新防線才裝下一版到正式使用的 vault | Claude | [任務說明](../tasks/update-safeguards.md)、[審查請求](../tasks/update-safeguards-1-review.md)、[中途查核與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)、[格式查核與回應](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md#claude-回應-codex-格式查核2026-10-29>)、[規畫](plans/updates.md) |
-| 外掛架構逐環節檢視 | 環節 1、4、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4 的施工記進 [backlog 技術債](backlog.md#技術債)） | Claude 接著寫環節 5（`state` 讀寫協調見上一列） | 使用者、Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
+| 外掛架構逐環節檢視 | 環節 1、4、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4 的施工記進 [backlog 技術債](backlog.md#技術債)） | Claude 接著寫環節 5；`state` 讀寫協調已合併，`state/index.ts` 原樣拆檔的觸發點已到（backlog 技術債） | 使用者、Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
 | 英文一字多義 | 規則已改（D-125） | 有多義字的真實教材時試用 | 新教材 | [D-125](decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
@@ -48,7 +47,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
-| 2026-10-29 | `state` 的讀寫先後與寫入協調實作完（[任務說明](../tasks/state-writes.md)，分支 `claude/hungry-yonath-106fcb` 的 `cd03533`）：寫入排成一列、先讀完待讀、一個門檻，存檔寫進磁碟並核對後才採用；V6 記成已知限制（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)）。604 個測試通過；Codex L2 三輪（R1～R3、再審的 R2 續）後通過，未合併 |
+| 2026-10-29 | `state` 的讀寫先後與寫入協調合併進 `main`（`70ba562`，[任務說明](../tasks/state-writes.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)）：寫入排成一列、先讀完待讀、一個門檻，存檔寫進磁碟並核對後才採用；Codex L2 三輪後通過，合併後 673 個測試通過；V6 記成已知限制（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)） |
 | 2026-10-29 | 更新防線第一部分合併進 `main`（`8aa3078`，[任務說明](../tasks/update-safeguards.md)、[查核與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)）：備份、還原工具、發布前比較、安裝的擋法與更新命令；Codex 四輪查核的發現都已修，R4 與無鎖空檔記技術債 |
 | 2026-10-29 | 雲端佔位檔讀不到時的處理定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)，[討論稿](<../Claude Codex Discussion/2026-10-29-icloud-placeholders.md>)）：說明書教保持下載、存檔受阻時當下說清楚、先分段實測；不自動補延後的 ID、不改 iCloud 設定 |
 | 2026-10-29 | 新決定與新任務先和「不做」比較（[D-153](decisions.md#d-153-每個新決定與新任務先和不做比較)）：寫在 essence-discuss、essence-decision 與 quality.md 的規劃者一列，AGENTS.md 只補半句 |

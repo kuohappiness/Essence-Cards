@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調：L2 獨立審查（給 Codex）
 
-狀態：L2 通過（第二次再審，審查 `6833097`，[報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)最後〈第二次再審〉）；待使用者決定合併
+狀態：已結案：L2 第二次再審通過，已合併進 `main`（`70ba562`）；結論見[報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)最後〈第二次再審〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（`src/state/` 的寫入先後、ID 的安全與寫回筆記的流程互相牽動）。
 
