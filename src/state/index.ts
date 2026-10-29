@@ -1,16 +1,22 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, listDeckPaths, parseDeck } from '../core/deck/index.ts';
-import type { Deck } from '../core/deck/index.ts';
+import type { Deck, Target } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
 import type { IdIssue } from './ids.ts';
 export type { IdIssue, IdIssueKind } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
+import { canRead, releaseOf } from '../core/version/index.ts';
 
 export interface StateOptions {
   files: Files;
   /** 例如 'iPhone-7f3a'；紀錄的檔名用它。 */
   device: string;
+  /**
+   * 這次建置的版本 `BUILD`（例如 `0.1.0+1a2b3c4`），由外層傳進來，核心不讀全域（任務說明 2-1）。`+` 前面的正式版號決定
+   * 讀得懂哪些「需要版本」與 need（syntax.md §0-1）；沒傳時版本不明，任何標記都讀不懂。
+   */
+  build?: string;
   now?: () => number;
   offset?: (ms: number) => number;
   /** 預設 { capMinutes: 30, retention: 0.8, filter: [] }（D-104、D-078）。 */
@@ -46,8 +52,14 @@ export interface State {
    * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
    */
   unread(): readonly string[];
+  /** 讀得懂的卡組；需要新版的（blocked().decks）不在裡面。 */
   decks(): readonly DeckEntry[];
   history(): History;
+  /**
+   * 需要新版才讀得懂的內容（D-149 第 3 點、syntax.md §0-1）：decks 是「需要版本」讀不懂的卡組（不出題，Cards 也不寫它）；
+   * targets 是讀不懂的紀錄行停掉的學習目標；all 是有一行辨認不出影響範圍，全部學習目標都停。每次重讀都重新判斷。
+   */
+  blocked(): { decks: readonly string[]; targets: readonly string[]; all: boolean };
   /** 目前的輸入：decks、history、settings、exam: null、呼叫當下的 now 與 offset。 */
   input(): TodayInput;
   /** 今天的份；過了清晨 4 點或 offset 變了，先重排。 */
@@ -63,13 +75,16 @@ export interface State {
   flush(): Promise<void>;
   /** 停止監看、等紀錄寫完。 */
   close(): Promise<void>;
-  /** 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。 */
-  deckStatus(path: string): { missing: number; issues: IdIssue[] };
-  /** 存檔（開著的筆記）：回傳補 ID、歸位之後的文字；沒有要改、手機、不是卡組時回傳原文。 */
+  /**
+   * 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。需要新版的卡組只回 needsUpdate（沒有要補的、
+   * 沒有可以處理的問題：Cards 不寫它）。
+   */
+  deckStatus(path: string): { missing: number; issues: IdIssue[]; needsUpdate?: true };
+  /** 存檔（開著的筆記）：回傳補 ID、歸位之後的文字；沒有要改、手機、不是卡組、需要新版時回傳原文。 */
   fillText(path: string, text: string): string;
   /** 離開筆記時（沒開著的檔）：讀檔、照 fillText 寫回；不存在時不建立。有改字回傳 true。 */
   fillIds(path: string): Promise<boolean>;
-  /** 家長選了之後：回傳寫回後的文字；證據不再成立時回傳 null，問題保留。 */
+  /** 家長選了之後：回傳寫回後的文字；證據不再成立、或這一篇需要新版時回傳 null，問題保留。 */
   resolveText(issue: IdIssue, choice: 'restore' | 'new', text: string): string | null;
   /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
   removedInEditor(path: string, ids: readonly string[]): void;
@@ -86,6 +101,10 @@ const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.
 
 export function createState(options: StateOptions): State {
   const { files, device } = options;
+  /** 這台的正式版號（syntax.md §0-1）；null 是版本不明。 */
+  const version = options.build === undefined ? null : releaseOf(options.build);
+  /** 「需要版本」讀不懂（§2-1）：整篇不出題，Cards 也不寫它。 */
+  const needsUpdate = (deck: Deck): boolean => deck.props.need !== null && !canRead(deck.props.need, version);
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
   const settings = options.settings ?? DEFAULT_SETTINGS;
@@ -138,13 +157,23 @@ export function createState(options: StateOptions): State {
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0 });
   /** 給 planToday 的卡組：拿掉待處理的目標（W5 §8-5：不出題）。 */
   let planList: DeckEntry[] = [];
+  /** 需要新版的卡組（路徑照字串排序）與它們的 ID（候選也算）。 */
+  let gated: string[] = [];
+  let gatedIds = new Set<string>();
   function rebuild(): void {
-    deckList = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
+    const all = [...deckMap].map(([path, deck]) => ({ path, deck })).sort(byPath);
+    deckList = all.filter(entry => !needsUpdate(entry.deck));
+    gated = all.filter(entry => needsUpdate(entry.deck)).map(entry => entry.path);
+    gatedIds = new Set(all.filter(entry => needsUpdate(entry.deck)).flatMap(entry => entry.deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])])));
+    // 讀得懂的卡組裡和需要新版的卡組同一個 ID 的目標也不出：舊版分不出那個 ID 現在屬於哪一篇、是什麼意思。
     planList = deckList.map(entry => {
       const skip = tracker.lines(entry.path);
-      return skip.size ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !skip.has(t.line)) } } : entry;
+      const drop = (t: Target): boolean => skip.has(t.line) || (t.id !== null && gatedIds.has(t.id));
+      return entry.deck.targets.some(drop) ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !drop(t)) } } : entry;
     });
   }
+  /** 這一篇（這份文字，或 state 最近讀到的內容）需要新版：Cards 不寫它（§2-1）。 */
+  const blockedText = (path: string, text: string): boolean => gated.includes(path) || needsUpdate(parseDeck(text));
   function replan(): void {
     current = planToday(input());
     for (const listener of [...listeners]) {
@@ -242,7 +271,7 @@ export function createState(options: StateOptions): State {
       }
     }
     // 別台裝置的紀錄一律整份重新 merge，不直接追加（Codex 審查 W4 第 10 點）。
-    if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })));
+    if (logsChanged) history = mergeHistory([...sources].map(([path, text]) => ({ path, text })), version);
     // 改名：同一批裡消失的卡組與第一次出現的配對（內容相同優先，再來是檔名相同），上一版與待處理的問題跟著新路徑。
     const gone = [...texts].filter(([path, text]) => text === null && tracker.text(path) !== undefined).map(([path]) => path);
     const name = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
@@ -330,10 +359,10 @@ export function createState(options: StateOptions): State {
   const writable = (): boolean => options.fillIds && loaded && !closed && !unread.size;
   /**
    * 存檔的準備：補 ID、歸位、改縮排（待處理的跳過）；只對卡組。輸入的文字是這一篇最新的內容，
-   * 比對出的問題立刻採用；寫回的文字要等 commit（寫成之後）才採用。
+   * 比對出的問題立刻採用；寫回的文字要等 commit（寫成之後）才採用。需要新版的卡組（這份文字或最近讀到的）不碰（§2-1）。
    */
   function prepare(path: string, text: string): { text: string; commit: () => void } | null {
-    if (!writable() || !isDeckPath(path)) return null;
+    if (!writable() || !isDeckPath(path) || blockedText(path, text)) return null;
     const revision = tracker.revision(), known = tracker.text(path);
     const fill = tracker.fill(path, text);
     if (tracker.text(path) !== known || tracker.revision() !== revision) adopt(path);
@@ -357,10 +386,10 @@ export function createState(options: StateOptions): State {
       return loading;
     },
     unread: () => [...unread].sort(),
-    deckStatus: path => loaded ? tracker.status(path) : { missing: 0, issues: [] },
+    deckStatus: path => !loaded ? { missing: 0, issues: [] } : gated.includes(path) ? { missing: 0, issues: [], needsUpdate: true } : tracker.status(path),
     fillText,
     async fillIds(path) {
-      if (!writable() || !isDeckPath(path)) return false;
+      if (!writable() || !isDeckPath(path) || gated.includes(path)) return false;
       let fill: ReturnType<typeof prepare> = null, changed = false;
       try {
         // 在 modify 的回呼裡對最新的文字重新計算（W5 §8-2 第 4 點）。
@@ -379,7 +408,7 @@ export function createState(options: StateOptions): State {
       return changed;
     },
     resolveText(issue, choice, text) {
-      if (!writable()) return null;
+      if (!writable() || blockedText(issue.path, text)) return null;
       const revision = tracker.revision(), known = tracker.text(issue.path);
       const next = tracker.resolve(issue, choice, text);
       if (tracker.text(issue.path) !== known || tracker.revision() !== revision) adopt(issue.path);
@@ -388,6 +417,7 @@ export function createState(options: StateOptions): State {
     removedInEditor(_path, ids) { tracker.removed(ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },
     decks: () => deckList,
+    blocked: () => ({ decks: gated, targets: history.held, all: history.incomplete }),
     history: () => history,
     input,
     today: () => fresh().today,
