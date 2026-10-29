@@ -43,7 +43,7 @@ async function ownAppLines(host: VersionHost): Promise<{ path: string; lines: st
 export async function versionCheck(host: VersionHost, state: State, shots: string): Promise<unknown> {
   const rendering = keepRendering();
   try {
-    // 1. 版本行：寫進這台的紀錄了（版本命令會先 flush）。這一段不建、不改任何檔。
+    // 1. 版本行：寫進這台的紀錄了（版本命令會先 flush）。這一段不碰暫存卡組，只寫截圖（版本命令照常 flush 紀錄）。
     const plain = await runVersion(host);
     const plainShot = await capturePng(host.app, shots + ' 1 版本命令.png');
     const after = { version: state.version(), blocked: state.blocked(), ownApp: await ownAppLines(host) };

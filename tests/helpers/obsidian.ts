@@ -114,17 +114,33 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const texts = new Map(Object.entries(options.texts ?? {}));
   const count = (): void => { if (!ready) calls++; };
   const fail = options.failWrite ? (): Promise<never> => Promise.reject(Error('寫不進去')) : null;
+  // 和 Obsidian 一樣，同一篇檔案每次查都是同一個 TFile（新建的才是新物件），改名時物件不變、path 跟著改（Codex 第二次再審的 F3）。
+  const nodes = new Map<string, TFile>();
+  const node = (path: string): TFile => { let file = nodes.get(path); if (!file) nodes.set(path, file = new TFile(path)); return file; };
   const vault = {
-    getAbstractFileByPath: (path: string) => { count(); return texts.has(path) ? new TFile(path) : null; },
-    getFileByPath: (path: string) => texts.has(path) ? new TFile(path) : null,
-    getFiles: () => { count(); return [...texts.keys()].map(path => new TFile(path)); },
+    getAbstractFileByPath: (path: string) => { count(); return texts.has(path) ? node(path) : null; },
+    getFileByPath: (path: string) => texts.has(path) ? node(path) : null,
+    getFiles: () => { count(); return [...texts.keys()].map(node); },
     read: (file: TFile) => { count(); return options.failRead?.(file.path) ? Promise.reject(Error('讀不到：' + file.path)) : Promise.resolve(texts.get(file.path) ?? ''); },
     cachedRead: (file: TFile) => Promise.resolve(texts.get(file.path) ?? ''),
-    create: (path: string, text: string) => { count(); writes.push('create ' + path); if (fail) return fail(); texts.set(path, text); return Promise.resolve(new TFile(path)); },
+    // 和 Obsidian 一樣，已經有這個檔時丟錯，不覆寫。
+    create: (path: string, text: string) => {
+      count(); writes.push('create ' + path);
+      if (fail) return fail();
+      if (texts.has(path)) return Promise.reject(Error('File already exists.'));
+      texts.set(path, text); nodes.delete(path);
+      return Promise.resolve(node(path));
+    },
     append: (file: TFile, text: string) => { count(); writes.push('append ' + file.path); if (fail) return fail(); texts.set(file.path, (texts.get(file.path) ?? '') + text); return Promise.resolve(); },
     process: (file: TFile, edit: (text: string) => string) => { count(); writes.push('process ' + file.path); texts.set(file.path, edit(texts.get(file.path) ?? '')); return Promise.resolve(''); },
     modify: (file: TFile, text: string) => { writes.push('modify ' + file.path); texts.set(file.path, text); return Promise.resolve(); },
-    delete: (file: TFile) => { writes.push('delete ' + file.path); texts.delete(file.path); return Promise.resolve(); },
+    delete: (file: TFile) => { writes.push('delete ' + file.path); texts.delete(file.path); nodes.delete(file.path); return Promise.resolve(); },
+    rename: (file: TFile, to: string) => {
+      writes.push('rename ' + file.path + ' → ' + to);
+      texts.set(to, texts.get(file.path) ?? ''); texts.delete(file.path); nodes.delete(file.path);
+      file.path = to; nodes.set(to, file);
+      return Promise.resolve();
+    },
     createFolder: (path: string) => { count(); writes.push('folder ' + path); return Promise.resolve(); },
     adapter: {
       write: (path: string, text: string) => { writes.push('adapter ' + path); texts.set(path, text); return Promise.resolve(); },

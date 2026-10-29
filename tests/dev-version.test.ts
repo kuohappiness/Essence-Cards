@@ -59,3 +59,26 @@ void test('F3 version 命令第一步就失敗：還沒建任何檔，同名的�
   await assert.rejects(h.versionCheck({ app, device: 'Windows-test', manifest: { id: 'essence-cards' } }, state, 'Essence W5/結果/版本'), /命令失敗/);
   assert.deepEqual([h.texts.get(NEWER), h.writes], [MINE, []]);
 });
+
+// Codex 第二次再審的 F3：內容相同不能證明是這次建的。跑的期間這次的檔被搬走、原路徑出現另一篇內容一樣的檔：
+// 那一篇不刪；這次的檔留在搬去的地方，回報在 left。正常結束與中途失敗都一樣。
+for (const fails of [false, true]) void test('F3 同一個路徑換成內容相同的另一篇：不刪它，回報這次的檔搬去哪裡' + (fails ? '（中途失敗）' : ''), async () => {
+  const h = setup();
+  type File = { path: string };
+  const vault = h.app.vault as { getFileByPath(path: string): File | null; rename(file: File, to: string): Promise<void>; create(path: string, text: string): Promise<File> };
+  let other: File | null = null;
+  const running = h.withTempFile(h.app, STEM, TEXT, async path => {
+    const mine = vault.getFileByPath(path);
+    assert.ok(mine);
+    await vault.rename(mine, STEM + '（搬走）.md');
+    other = await vault.create(path, TEXT);
+    if (fails) throw Error('截圖失敗');
+    return null;
+  });
+  if (fails) await assert.rejects(running, /截圖失敗/);
+  else assert.equal((await running).left, STEM + '（搬走）.md');
+  assert.ok(other);
+  assert.equal(vault.getFileByPath(STEM + '.md'), other, '另一篇還在');
+  assert.deepEqual([h.texts.get(STEM + '.md'), h.texts.get(STEM + '（搬走）.md')], [TEXT, TEXT]);
+  assert.ok(!h.writes.some(write => write.startsWith('delete ')), h.writes.join('\n'));
+});
