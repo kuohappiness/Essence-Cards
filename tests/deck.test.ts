@@ -26,7 +26,7 @@ const codes = (body: string) => deck(body).problems.map(p => p.code);
 
 void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題目與補充', () => {
   const parsed = parseDeck(examples[0]);
-  assert.deepEqual(parsed.props, { term: '國二上', subject: '自然', unit: { code: '2-2', name: '水溶液' }, materials: ['[[國二上自然 2-2 水溶液]]'], status: 'active', categories: [], isTranscript: false });
+  assert.deepEqual(parsed.props, { term: '國二上', subject: '自然', unit: { code: '2-2', name: '水溶液' }, materials: ['[[國二上自然 2-2 水溶液]]'], status: 'active', categories: [], isTranscript: false, need: null });
   assert.deepEqual(parsed.problems, []);
   const expected = [
     ['k3m9x2', '能說出溶質與溶劑的意思', '1 溶液', ['p.43'], '定義', 'medium', ['[[國二上自然 第一次段考]]'], [
@@ -58,7 +58,7 @@ void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題
 
 void test('§2-2 英文完整例子：兩方向、typed、例句與記憶錨點', () => {
   const parsed = parseDeck(examples[1]);
-  assert.deepEqual(parsed.props, { term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, materials: ['[[國二上英文 L1 Back to School]]'], status: 'active', categories: [], isTranscript: false });
+  assert.deepEqual(parsed.props, { term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, materials: ['[[國二上英文 L1 Back to School]]'], status: 'active', categories: [], isTranscript: false, need: null });
   assert.deepEqual(parsed.problems, []);
   const rows = [
     ['b4rw7k', 'borrow 英翻中', 'en-zh', 'borrow', 'borrow', 'v. 借入、向別人借', ['例句：Can I borrow your pen? 我可以借你的筆嗎？'], [], null],
@@ -407,6 +407,54 @@ void test('開頭 --- 之後用 ... 結尾不算結束：當成一般文字，�
 void test('YAML 未知狀態提示位於狀態行', () => {
   const parsed = parseDeck('---\n科目: 自然\n狀態: 已採用\n---');
   assert.equal(parsed.props.status, 'active'); assert.equal(parsed.problems[0].line, 2); assert.equal(parsed.problems[0].targetLine, null);
+});
+
+// 需要版本（syntax.md §0-1、§2-1，D-149 第 3 點）：parseDeck 只照實回報標記，讀不讀得懂由知道這台版本的一方判斷。
+// need：沒寫是 null；值是字串時是那個字串（格式由讀取端檢查）；值不是字串、或屬性區讀不出來而原文含「需要版本」時是 false。
+void test('§2-1 需要版本：照實回報字串；沒寫是 null；寫了但不是字串是 false（有標記但壞掉）', () => {
+  const need = (yaml: string) => parseDeck('---\n科目: 自然\n' + yaml + '\n---\n- Q :: A').props.need;
+  assert.equal(need('需要版本: 0.6.0'), '0.6.0');
+  assert.equal(need('需要版本: "0.10.0"'), '0.10.0');
+  assert.equal(need('需要版本: v0.6.0'), 'v0.6.0');
+  assert.equal(need('"\\u9700\\u8981\\u7248\\u672c": 0.6.0'), '0.6.0');
+  assert.equal(need('需要版本: ""'), '');
+  for (const yaml of ['需要版本: 0.6', '需要版本: 6', '需要版本:', '需要版本: null', '需要版本: [0.6.0]', '需要版本: { v: 0.6.0 }', '需要版本: true']) assert.equal(need(yaml), false, yaml);
+  assert.equal(need('其他: 1'), null);
+  assert.equal(need('備註: 需要版本'), null);
+  assert.equal(parseDeck('- Q :: A').props.need, null);
+  assert.equal(parseDeck('---\n---\n- Q :: A').props.need, null);
+  assert.equal(parseDeck('').props.need, null);
+});
+// Codex 格式查核 F1：屬性區讀不出來時，原文照 YAML 雙引號字串的規則解開跳脫之後含「需要版本」就算讀不懂。
+for (const [label, key] of [
+  ['引號', '"需要版本": 9.0.0'], ['縮排', '  需要版本:'], ['冒號前空白', '需要版本 :'], ['引號沒有值', '"需要版本":'],
+  ['行尾 \\ 接行', '"需要\\\n  版本": 9.0.0'], ['CRLF 的行尾 \\ 接行', '"需\\\r\n要版本": 9.0.0'], ['\\u 跳脫', '"\\u9700\\u8981\\u7248\\u672c": 9.0.0'],
+  ['\\U 跳脫', '"\\U00009700要\\u7248本": 9.0.0'], ['寫在註解', '# 需要版本 9.0.0'], ['寫在值', '備註: 需要版本'],
+] as const) {
+  void test('§2-1 屬性區寫壞時含「需要版本」是讀不懂：' + label, () => {
+    for (const broken of ['科目: [', '科目: 自然\n科目: 英文']) {
+      const parsed = parseDeck('---\n' + broken + '\n' + key + '\n---\n- Q :: A');
+      assert.equal(parsed.props.need, false, broken);
+      assert.deepEqual({ ...parsed.props, need: null }, parseDeck('').props, broken);
+    }
+    // 沒有結束的屬性區（Obsidian 當成一般文字）：一直看到檔尾。
+    assert.equal(parseDeck('---\n' + key + '\n- Q :: A').props.need, false);
+    assert.equal(parseDeck('---\n科目: 自然\n- Q :: A\n' + key).props.need, false);
+  });
+}
+void test('§2-1 最上層不是對照表、原文含「需要版本」是讀不懂；不含就照舊用預設值', () => {
+  assert.equal(parseDeck('---\n- 需要版本\n---\n- Q :: A').props.need, false);
+  assert.equal(parseDeck('---\n需要版本\n---\n- Q :: A').props.need, false);
+  assert.equal(parseDeck('---\n- 不是對照表\n---\n- Q :: A').props.need, null);
+});
+void test('§2-1 屬性區寫壞但沒有「需要版本」四個字：照舊用預設值，跳脫拼不出來的也不算', () => {
+  for (const text of ['---\n科目: [\n---\n- Q :: A', '---\n科目: 自然\n- Q :: A', '---\n科目: [\n"需要\n  版本": 9.0.0\n---', '---\n科目: [\n"需要\\\\u7248本": 9.0.0\n---', '---\n科目: [\n需要 版本: 1\n---']) {
+    const parsed = parseDeck(text);
+    assert.equal(parsed.props.need, null, text);
+    assert.deepEqual(parsed.props, parseDeck('').props, text);
+  }
+  // 屬性區之後的內容不是屬性區的原文。
+  assert.equal(parseDeck('---\n科目: [\n---\n- 需要版本 :: 0.6.0').props.need, null);
 });
 
 void test('三個指紋驗算值', () => {
