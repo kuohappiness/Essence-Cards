@@ -1,6 +1,6 @@
 # `state` 的讀寫先後與寫入協調（給 Claude，本機執行）
 
-狀態：未開工：開工時間由使用者排
+狀態：實作完（分支 `claude/hungry-yonath-106fcb`，到 `cd03533` 為止），等 Codex 的 L2（[審查請求](state-writes-review.md)）；合併由使用者決定
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在外掛架構討論稿的環節 4 和 Codex 談定，這份是執行）。改的是 `src/state/` 的讀寫先後、學習目標 ID 的安全與寫回筆記的流程，屬於高風險範圍，合併前由 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
@@ -223,7 +223,7 @@ Cards 所有改卡組的動作（`save`、`resolve`、`fillIds`，之後的多�
 | V2 | **N1**：打一個字，等到這篇的 `modify` 事件（自動存檔）後 100 ms 內按存檔；之後 3 秒每 50 ms 看一次 `deckStatus` | 從頭到尾沒有 `lost` |
 | V3 | 同一個 tick 連按兩次 | 只配一組 ID、只提示一次 |
 | V4 | 兩個分頁開同一篇，在其中一個按存檔 | 兩個編輯器與磁碟最後都相同 |
-| V5 | 按下後同一個 tick 讓這個分頁換篇；另一次按下後立刻改名 | 換篇：提示「剛剛改過」，另一篇沒有被改。改名：沒有別的檔案被改，沒有問題 |
+| V5 | 按下後同一個 tick 讓這個分頁換篇；另一次按下後立刻改名 | 換篇：提示「剛剛改過」，另一篇沒有被改。改名：沒有別的檔案被改，沒有問題。2026-10-29 Windows：改名照預期；換篇那次存檔搶在換篇之前做完，原本那篇照常配 ID、提示「已加入複習」，另一篇沒有被改，「剛剛改過」那條路只有 Node 的 S27 驗到。是否算符合，交給 L2 判斷（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)〈Claude 核對 Codex 查核〉） |
 | V6 | 外部用 `vault.adapter.write` 把 B（含 ID）加進開著的這一篇，同一個 tick、50 ms 後、200 ms 後各按一次存檔 | 記下磁碟最後有沒有 B、編輯器有沒有收到 B。**B 被蓋掉時停下來回報**，這次不設計修法。2026-10-29 同一個 tick 那次蓋掉，已停下來回報；接著的實驗 X 顯示，在已測的碰撞安排下 Obsidian 自動存檔與 Cards 存檔都會覆蓋外部內容。本次未另加保護，因為還沒找到收益足夠、成本合理的做法，實際的風險增量沒有量測（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)〈實驗 X 的結果與結論〉） |
 | V7 | 保存失敗：試著讓檔案暫時唯讀 | 提示 `TIPS.failed`；檔案恢復可寫之後再存一次就補上。做不出 `view.save()` 失敗時寫明「Windows 做不出這個情境」，保留 Node 的測試，不硬湊 |
 
