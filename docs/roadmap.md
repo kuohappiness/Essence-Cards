@@ -12,7 +12,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 維修與查修的準備 | 盤點完成，缺口 G1～G3；使用者同意 G1（正式版把錯誤記下來），位置與格式的討論稿寫好 | Codex 查核；一致後交使用者確認，寫成 D-ID 與任務說明 | 使用者（開 Codex） | [規畫](plans/maintenance.md)、[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6、R9 等觸發點：R6 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
-| 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線兩個部分都已合併進 `main`：第一部分（`8aa3078`，1-1～1-5）、第二部分（`1308e58`，版本行與讀取閘門）；iPhone 兩項併進下一次實機測試 | 更新防線第 3 步：升 `0.1.0`、打 tag，問過使用者才裝到正式使用的 vault | Claude（裝之前問使用者） | [任務說明](../tasks/update-safeguards.md)、[第二部分審查請求](../tasks/update-safeguards-2-review.md)、[第二部分回報與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)、[第一部分審查請求](../tasks/update-safeguards-1-review.md)、[中途查核與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)、[格式查核與回應](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md#claude-回應-codex-格式查核2026-10-29>)、[規畫](plans/updates.md) |
+| 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成：兩個部分合併進 `main`（`8aa3078`、`1308e58`），第一個正式版 `0.1.0`（tag `v0.1.0`）已裝到正式使用的 vault；iPhone 兩項併進下一次實機測試 | 寫「外掛內的備份與還原」任務說明（D-150 第 1～8 點）；之後的正式版用 `update-vault` 裝 | Claude（專案討論串） | [規畫](plans/updates.md)、[更新防線任務說明](../tasks/update-safeguards.md) |
 | 外掛架構逐環節檢視 | 環節 1、4、5、7、8 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4、5 的施工記進 [backlog 技術債](backlog.md#技術債)，環節 5 的存檔受阻提示已隨雲端佔位檔任務合併） | 環節 6（畫面層）：Claude 寫分析與提案，交 Codex | Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
@@ -48,6 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同；升版時改了 7 個寫死版號的測試 |
 | 2026-10-29 | 雲端佔位檔的 Windows 實測與存檔受阻的提示（[任務說明](../tasks/icloud-placeholders.md)〈結果〉，合併進 `main` 的 `9c07caa`，754 個測試）：追加寫入舊內容不變；iCloud 停著時讀取 5 ms 失敗、剛重開時卡 60 秒；iCloud 沒在跑時追加的紀錄不會上傳（使用者選不改程式、記技術債）；受阻時存檔、按鈕與小視窗都說「讀取完成後請再按一次存檔」 |
 | 2026-10-29 | 更新防線第二部分合併進 `main`（`1308e58`，[任務說明](../tasks/update-safeguards.md)、[L2 報告與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）：每台裝置記版本行，讀不懂的卡組與紀錄先停著、不出題也不寫；Codex L2 加三次再審後通過，合併後 747 個測試通過；開發命令結果檔改記 BUILD（`b6b39bb`），回看按鈕與比較轉接器記技術債 |
 | 2026-10-29 | `state` 的讀寫先後與寫入協調合併進 `main`（`70ba562`，[任務說明](../tasks/state-writes.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)）：寫入排成一列、先讀完待讀、一個門檻，存檔寫進磁碟並核對後才採用；Codex L2 三輪後通過，合併後 673 個測試通過；V6 記成已知限制（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)） |
@@ -57,4 +58,3 @@ flowchart LR
 | 2026-10-29 | 更新防線第 0 步：最低版本標記、版本行、還原檔與備份檔的格式寫進 [syntax.md](syntax.md)（§0-1、§5-1～5-3、§8），Codex 格式查核的 F1～F4 已照改（[查核與回應](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md#claude-回應-codex-格式查核2026-10-29>)）；讀不到自己的紀錄時不擋作答（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 補充） |
 | 2026-10-29 | 未來規畫統整的審閱結案（[審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#claude-審閱2026-10-28opus-55-高>)、[任務說明](../tasks/future-plans-review.md)）：122 項補回遺漏 1、原意與來源 4 處；使用者決定 Capture 開工前研究放 v1、真實驗證不算 v1、C-017 列第二階段、C-011 → D-152、C-009 結案 |
 | 2026-10-29 | 教材不限課本、補充筆記另外放（[D-152](decisions.md#d-152-教材是針對考試範圍的文件補充筆記另外放)）：針對考試範圍的學校講義、補習班教材算課內，延伸改從「教材以外」算，不一致時學校的優先；舊共識 C-011 結案（[統整審閱](<../Claude Codex Discussion/2026-10-23-future-plans-consolidation.md#請使用者決定>)） |
-| 2026-10-28 | 更新與相容定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)、[D-150](decisions.md#d-150-備份與還原)、[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)，[討論稿](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md>)）：每台裝置記版本、讀不懂就停、正式 vault 只裝正式版；外掛自己備份（每月一次、隨時手動），紀錄只補不刪；內建規則跟著外掛、改了就是自訂版 |
