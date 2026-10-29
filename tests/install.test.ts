@@ -174,3 +174,31 @@ void test('安裝：設定資料夾（或底下的外掛資料夾、輸出檔）
   assert.equal(await readFile(join(other, '.obsidian/community-plugins.json'), 'utf8'), '["other"]');
   await assert.rejects(installVault({ vault: test, dev: true, local, build, root: fake, config: '../x' }), /不是相對 vault 的路徑/);
 });
+
+// D-149 第 4 點、任務說明 1-4：退回前先檢查現有資料的「需要版本」與 need；有比那一版新（或讀不懂）的就拒絕，什麼都不裝。
+void test('退回：現有資料需要比那一版新的版本時拒絕，列出是哪些；讀得懂的照裝', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const folder = join(local, 'releases', '0.1.0');
+  await mkdir(folder, { recursive: true });
+  const outputs = { 'main.js': '/*! Essence Cards build=0.1.0+1a2b3c4 dev=false */\n', 'manifest.json': '{"id":"essence-cards","version":"0.1.0"}', 'styles.css': '' };
+  for (const [name, text] of Object.entries(outputs)) await writeFile(join(folder, name), text);
+  const sha256 = Object.fromEntries(Object.entries(outputs).map(([name, text]) => [name, hashBytes(new TextEncoder().encode(text))]));
+  await writeFile(join(folder, 'release.json'), JSON.stringify({ version: '0.1.0', build: '0.1.0+1a2b3c4', commit: '1a2b3c4', created: '2026-10-29T00:00:00.000Z', sha256 }));
+  const goal = '- 目標 ^aaaaaa\n    - Q :: A\n';
+  const log = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
+  const cases: [Record<string, string>, RegExp][] = [
+    [{ 'Essence Cards/新.md': '---\n需要版本: 0.2.0\n---\n' + goal }, /Essence Cards\/新\.md：需要版本 0\.2\.0/],
+    [{ 'Essence Cards/壞.md': '---\n科目: [\n需要版本: 0.0.1\n---\n' + goal }, /Essence Cards\/壞\.md：需要版本的寫法讀不懂/],
+    [{ [log]: JSON.stringify({ t: '2026-10-28T10:00:00.000+08:00', need: '0.2.0', lt: 'aaaaaa', r: 'good', v: '12345678' }) + '\n' }, /複習紀錄：1 個學習目標的紀錄需要比 0\.1\.0 新的版本（aaaaaa）/],
+    [{ [log]: JSON.stringify({ t: '2026-10-28T10:00:00.000+08:00', need: 'v0.1.0', set: 'cap', val: 20 }) + '\n' }, /複習紀錄：有讀不懂的行，辨認不出影響哪些學習目標/],
+  ];
+  for (const [files, message] of cases) {
+    const vault = await makeVault(t, files, { plugin: false });
+    await assert.rejects(installVault({ vault, release: '0.1.0', local }), (error: Error) => /需要比 0\.1\.0 新的版本才讀得懂，不能退回這一版/.test(error.message) && message.test(error.message));
+    assert.deepEqual(await plugin(vault), [], Object.keys(files)[0]);
+  }
+  const vault = await makeVault(t, { 'Essence Cards/舊.md': '---\n需要版本: 0.1.0\n---\n' + goal,
+    [log]: JSON.stringify({ t: '2026-10-28T10:00:00.000+08:00', need: '0.0.9', lt: 'aaaaaa', r: 'good', v: '12345678' }) + '\n' }, { plugin: false });
+  assert.equal((await installVault({ vault, release: '0.1.0', local })).version, '0.1.0');
+  assert.deepEqual(await plugin(vault), ['main.js', 'manifest.json', 'styles.css']);
+});

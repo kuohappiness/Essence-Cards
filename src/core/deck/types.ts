@@ -11,6 +11,11 @@ export interface DeckProps {
   status: 'draft' | 'active' | 'paused';
   categories: string[];
   isTranscript: boolean;
+  /**
+   * 屬性「需要版本」（syntax.md §0-1、§2-1）：沒寫是 null；值是字串時是那個字串，格式與新舊由知道這台版本的一方判斷；
+   * 值不是字串，或屬性區讀不出來而原文含「需要版本」時是 false（有標記但壞掉，等於讀不懂）。
+   */
+  need: string | false | null;
 }
 export interface Target {
   id: string | null;

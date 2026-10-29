@@ -117,7 +117,8 @@ export default tseslint.config(
     languageOptions: { parserOptions: {
       projectService: {
         allowDefaultProject: ['tools/*.ts', 'tools/compare/*.ts', 'tests/*.ts', 'tests/helpers/*.ts'],
-        maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 60,
+        // tools、tests 不在 tsconfig 的 include 裡，由這裡的預設專案涵蓋；超過上限時 lint 整個失敗（2026-10-29 加到 61 個）。
+        maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 100,
       },
       tsconfigRootDir: import.meta.dirname,
     } },

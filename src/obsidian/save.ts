@@ -16,6 +16,8 @@ export const TIPS = {
   failed: '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔',
   /** 受阻：還沒讀完或有檔案讀不到（D-154 第 2 點）；按鈕說明與小視窗也用這一句。 */
   blocked: '筆記已自動儲存；暫時無法把新目標加入複習，讀取完成後請再按一次存檔',
+  // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：Cards 不寫它，也不說「都已加入複習」。
+  needsUpdate: '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習',
 };
 export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
@@ -62,23 +64,25 @@ function editorOf(view: MarkdownView, path: string): EditorHandle {
   };
 }
 
-/** 受阻（D-154）：這台電腦會補 ID，但還沒讀完（loading）或有檔案讀不到（unread）。phone、closed 不算。 */
+/** 受阻（D-154）：這台電腦會補 ID，但還沒讀完（loading）或有檔案讀不到（unread）。phone、closed、needs-update 不算。 */
 const blockedByReads = (result: WriteResult): boolean => result.kind === 'blocked' && (result.reason === 'loading' || result.reason === 'unread');
 
 /**
- * 存檔結果的提示；text 是按下時編輯器裡的文字。受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入；受阻但目標都有 ID、
- * unchanged、saved 不提示。
+ * 存檔結果的提示；text 是按下時編輯器裡的文字。需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。
+ * 受阻但目標都有 ID、unchanged、saved 與其他 blocked 不提示。
  */
 function saveTip(result: WriteResult, text: string): string | null {
   if (result.kind === 'done') return result.added ? TIPS.added(result.added) : null;
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
+  if (result.kind === 'blocked' && result.reason === 'needs-update') return TIPS.needsUpdate;
   if (blockedByReads(result)) return parseDeck(text).targets.some(target => !target.id) ? TIPS.blocked : null;
   return null;
 }
 
-/** 一篇卡組按鈕的樣子：沒有要做的、有目標還沒有 ID、有待處理的問題。 */
-function buttonLook(status: { missing: number; issues: IdIssue[] }): { kind: 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+/** 一篇卡組按鈕的樣子：需要新版、沒有要做的、有目標還沒有 ID、有待處理的問題。 */
+function buttonLook(status: { missing: number; issues: IdIssue[]; needsUpdate?: true }): { kind: 'needs-update' | 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+  if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
@@ -126,8 +130,9 @@ class IssuesModal extends Modal {
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
       if (result.kind === 'done') { this.render(); return; }
-      // 受阻時問題保留，說「讀取完成後再按」，不說「剛剛改過」。
-      this.host.notify(result.kind === 'failed' ? TIPS.failed : blockedByReads(result) ? TIPS.blocked : TIPS.stale);
+      // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
+      // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
+      this.host.notify(blockedByReads(result) ? TIPS.blocked : saveTip(result, this.view.editor.getValue()) ?? TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
@@ -197,7 +202,7 @@ export function wireSave(host: SaveHost): Saver {
       }
       setIcon(button, look.icon);
       button.setAttribute('aria-label', tip);
-      for (const kind of ['done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
+      for (const kind of ['needs-update', 'done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。
     for (const [view, button] of buttons) if (!seen.has(view)) { button.remove(); buttons.delete(view); }
