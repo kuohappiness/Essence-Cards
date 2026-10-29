@@ -1,6 +1,6 @@
 # 獨立手機版 Essence Cards（請使用者先選範圍，再請 Codex 查核）
 
-狀態：進行中：使用者補充卡點是 iCloud，Claude 寫了〈第二輪〉；等使用者選第二輪第 6 節的先後，Codex 查核兩輪
+狀態：進行中：等 Codex 查核兩輪；同時由本機照 D-154 做 Windows 實測，兩邊結果到了再由使用者決定同步要不要進 v1
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../docs/plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
@@ -8,9 +8,10 @@
 
 - **第二輪改了前提**：使用者說卡點是 iCloud 同步，不是 Obsidian 本身。第一輪的 F1（同步不換、照舊 iCloud）與 F3～F5（iCloud 的書籤、下載、附件）由文末〈第二輪〉取代；第 3 節「網頁版不可行」的前提是要讀 iCloud，改走雲端硬碟的 API 後網頁版可行。其餘各節照舊有效。
 - **要做什麼**：把 D-129 裡「手機」這一半拆出來先談：學生的 iPhone 不裝 Obsidian，直接打開 Essence Cards 自己的 App 複習。第 1 節請使用者選範圍、更正四個假設；第 2 節和「不做」比較；第 3～6 節是技術提案（框架、檔案與同步、渲染與出處、版本與發布）；第 7 節是開工條件；第 8 節請 Codex 回答。
-- **基準**：`main` 的 `43171f8` 加上新增這份稿的 commit。只有文件。
+- **使用者的選擇**（2026-10-29，第二輪第 6 節的先後）：「查核與實測同時做再決定」。Codex 查核這份稿的兩輪，本機同時照 [D-154 的任務說明](../tasks/icloud-placeholders.md) 做 Windows 實測；兩邊的結果都到了，才決定「外掛自己經 Dropbox 同步」要不要提前到 v1。第一輪第 1 節的範圍等同步定了再請使用者選。
+- **基準**：`main` 的 `43171f8` 加上這份稿的 commit（`2109716` 第一輪、`573f287` 第二輪、記錄使用者選擇的這一次）。只有文件。
 - **必讀**：D-004、D-019、D-109、D-110、D-128、D-129、D-134（iPhone 不寫卡組筆記）、D-148、D-149、D-154；[syntax.md](../docs/syntax.md) §0-1、§5；[獨立 App 計畫](../docs/plans/standalone-app.md)、[2026-10-23 的討論摘要](../docs/archive/discussions/2026-10-23-standalone-software.md)。程式：`src/core/files.ts`、`src/state/index.ts`、`src/ui/`（`Markdown.tsx`、`rendered.ts`、`sources.ts`、`speech.ts`、`host.tsx`、`Review.tsx`、`start.ts`）。
-- **怎麼回應**（Codex）：只回報，不改程式與其他文件。回應寫在這份檔案最後，標題「Codex 回應（日期）」：第 2 節**專門站在「不做」那一方反駁**（[D-153](../docs/decisions.md#d-153-每個新決定與新任務先和不做比較)）；第 3～7 節每一項寫同意、不同意或改法與理由；第 8 節逐題回答。Apple、Capacitor、iCloud 的行為請查官方文件，查不到的標「未證實」。建議推理等級：高。
+- **怎麼回應**（Codex）：只回報，不改程式與其他文件。回應寫在這份檔案最後，標題「Codex 回應（日期）」：第 2 節**專門站在「不做」那一方反駁**（[D-153](../docs/decisions.md#d-153-每個新決定與新任務先和不做比較)）；第 3～7 節每一項寫同意、不同意或改法與理由；第 8 節逐題回答。第二輪同樣：第 6 節第 1 步與第 7 節站在「不做」那一方反駁，第 3～5 節寫同意、不同意或改法，第 8 節逐題回答。Apple、Capacitor、iCloud 的行為請查官方文件，查不到的標「未證實」。建議推理等級：高。
 
 ## 1. 請使用者先決定：手機版做到哪裡
 
