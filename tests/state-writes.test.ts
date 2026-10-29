@@ -283,6 +283,66 @@ void test('S13 H4-1 別篇：外部建立的 B（含 aaaaaa）還沒讀，立刻
   h.samePlan();
 });
 
+void test('S13 交接版：admit 最後一次檢查之後、存檔取文字之前才送來的通知（別篇 B 含 aaaaaa）也先讀完再配號，不撞號', async t => {
+  // 在第 n 個 microtask 才建立 B，掃過 admit 的最後一次檢查和 edit 接著執行之間的那一格（V6 討論稿 Codex 回應第 2 題的交接窗口）。
+  // B 在取文字之後才建立的不在這個測試的範圍。
+  let checked = 0;
+  for (let n = 0; n <= 20; n++) {
+    const h = await setup(t, { [A]: C });
+    const editor = createMemoryEditor(h, A, C);
+    const text = editor.text.bind(editor);
+    let seen = false;
+    editor.text = () => { seen = h.texts.has(B); return text(); };
+    const saving = h.state.save(editor);
+    void (async () => { for (let i = 0; i < n; i++) await Promise.resolve(); h.write(B, Ca); })();
+    const result = await saving;
+    if (!seen) continue;
+    checked++;
+    assert.deepEqual(result, { kind: 'done', added: 1 }, `n=${String(n)}`);
+    assert.equal(editor.value, Cb, `n=${String(n)}：B 已經寫進磁碟、通知已送來才取文字，卻沒有先讀 B 就配號`);
+    await h.settle();
+    h.clean(A);
+    h.clean(B);
+  }
+  assert.ok(checked > 1);
+});
+
+void test('S13 交接版：admit 最後一次檢查之後、取文字之前才 close()，存檔不改編輯器也不寫，回 blocked closed', async t => {
+  let checked = 0;
+  for (let n = 0; n <= 20; n++) {
+    const h = await setup(t, { [A]: C });
+    const editor = createMemoryEditor(h, A, C);
+    const text = editor.text.bind(editor);
+    let seen = false, before = false;
+    editor.text = () => { seen = true; return text(); };
+    const saving = h.state.save(editor);
+    void (async () => { for (let i = 0; i < n; i++) await Promise.resolve(); before = !seen; void h.state.close(); })();
+    const result = await saving;
+    if (!before) continue;
+    checked++;
+    assert.deepEqual(result, { kind: 'blocked', reason: 'closed' }, `n=${String(n)}`);
+    assert.equal(editor.applies, 0, `n=${String(n)}`);
+    assert.equal(h.texts.get(A), C, `n=${String(n)}`);
+  }
+  assert.ok(checked > 1);
+});
+
+void test('S22 存檔版：一直有新的待讀時，第 5 輪後回 stale（不改編輯器、不寫），不會一直等下去', async t => {
+  if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
+  const memory = createMemoryFiles({ [A]: C, [P]: C });
+  const files = { ...memory.files, read: (path: string) => { const result = memory.files.read(path); if (path === P) memory.notify(P); return result; } };
+  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0 });
+  t.after(() => state.close());
+  await state.ready();
+  memory.notify(P);
+  const reads = memory.reads.length;
+  const editor = createMemoryEditor(memory, A, C);
+  assert.deepEqual(await state.save(editor), { kind: 'stale' });
+  assert.equal(editor.applies, 0);
+  assert.equal(memory.texts.get(A), C);
+  assert.equal(memory.reads.slice(reads).length, 5);
+});
+
 void test('S14 本篇的兩組輸入：(a) 編輯器比磁碟新、(b) 磁碟比編輯器新，C 都配到 aaaaab，沒有假的問題', async t => {
   const a = await setup(t, { [P]: C });
   a.notify(P);

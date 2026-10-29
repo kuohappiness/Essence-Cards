@@ -544,13 +544,18 @@ export function createState(options: StateOptions): State {
     }
   }
   /**
-   * 開著的筆記（save、resolve）：第 4、5 步從 admit 的最後一次檢查到 apply 之間沒有 await。plan 對編輯器最新的文字準備
+   * 開著的筆記（save、resolve）：第 4、5 步從最後一次檢查（await admit 之後同步重查）到 apply 之間沒有 await。plan 對編輯器最新的文字準備
    * （先把它當成新版本比對、觀察到的原文照常採用）；回傳 null 時沒有要寫的，照樣 persist、等核對讀取，回 fallback。
    */
   async function edit(editor: EditorHandle, plan: (text: string) => Prepared | null, fallback: WriteResult): Promise<WriteResult> {
     const path = editor.path;
-    const stop = await admit(path, { count: 0 });
-    if (stop) return stop;
+    const rounds = { count: 0 };
+    for (;;) {
+      const stop = await admit(path, rounds);
+      if (stop) return stop;
+      // admit 的最後一次檢查到這裡隔了一次 await：其間送來的通知或門檻的變化，回到 admit 重查（輪數照算）。
+      if (!waiting() && !writable(path)) break;
+    }
     begin(path);
     let outcome: WriteResult | Promise<WriteResult>;
     try {
