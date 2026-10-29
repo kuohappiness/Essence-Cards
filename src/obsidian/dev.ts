@@ -17,6 +17,8 @@ import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples,
 import { versionCheck } from './dev-version.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
+/** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；結果檔的 plugin 記它，才核對得到跑的是哪一次建置。 */
+declare const BUILD: string;
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
 const limit = 20;
@@ -122,7 +124,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
     const path = await writeResult(plugin.app, code, plugin.device, {
       code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
-      obsidian: apiVersion, plugin: plugin.manifest.version,
+      obsidian: apiVersion, plugin: BUILD,
       onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
       sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
     }, command.root);

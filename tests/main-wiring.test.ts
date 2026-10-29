@@ -200,3 +200,18 @@ void test('A10 src/main.ts 只有一處 DEV（宣告之外），沒有 null as �
   assert.ok(!source.includes('null as'), 'main.ts 不該再有 null as 宣告的開發用欄位');
   assert.ok(!source.includes('devLog'), 'devLog 搬到 dev 模組');
 });
+
+// 技術債「開發命令的結果檔只記 manifest 的版本」：結果檔的 plugin 記建置版本 BUILD（版本加 commit），審查者才能從結果檔核對跑的是哪一次建置。
+void test('開發命令的結果檔：plugin 是建置版本 BUILD，不是 manifest 的版本', async t => {
+  const h = host(deck, { desktop: true }, devBundled);
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  await wait(20);
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  h.uri({ run: 'unread' });
+  await wait(100);
+  const path = [...h.texts.keys()].find(key => key.startsWith('Essence W5/結果/unread '));
+  assert.ok(path, '有結果檔');
+  assert.equal((JSON.parse(h.text(path) ?? '{}') as { plugin?: string }).plugin, '0.0.1+test');
+});
