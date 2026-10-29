@@ -684,3 +684,29 @@ void test('S25 跨 04:00 回看改評分：今天的份重排，和 planToday(in
   await same.state.flush();
   assert.equal(same.state.today(), before);
 });
+
+// Codex L2 的 F1：回看改評分要讓取消與新評分一起寫或一起不寫。取消涵蓋同一個 t 的所有作答：別台裝置同一刻的作答（a2）被停時，
+// 取消被拒，這次改評分整組不寫，回看仍是原本的評分。
+void test('L2 F1 回看改評分：取消被拒（同一刻別台裝置的作答被停）時整組不寫，回看的評分不變', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  s.reveal();
+  await rateLater(h, s, 'good');
+  const [line] = h.log();
+  const answered = parseLine(line);
+  assert.ok(answered);
+  // iPhone 在同一個毫秒答了 a2，之後那台寫了只停 a2 的新寫法（這個 state 沒有傳 build，任何 need 都讀不懂）。
+  h.write(PHONE, earlier + encodeEntry(answered.t, { lt: 'a2', r: 'good', v: '12345678' }) + '\n'
+    + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', need: '9.0.0', lt: 'a2' }) + '\n');
+  await h.settle();
+  assert.deepEqual([h.state.canAnswer('a1'), h.state.canAnswer('a2')], [true, false]);
+  s.back();
+  assert.equal(s.rate('miss'), false);
+  await h.state.flush();
+  assert.deepEqual(h.log(), [line]);
+  assert.deepEqual(h.state.history().reviews.filter(review => review.lt === 'a1').map(review => review.r), ['good']);
+  assert.deepEqual(h.state.history().cancelled, []);
+  assert.deepEqual(s.history().map(entry => [entry.card.lt, entry.rating]), [['a1', 'good']]);
+  assert.equal(card(s.view()).pressed, 'good');
+});

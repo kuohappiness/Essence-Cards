@@ -435,11 +435,12 @@ export function createSession(options: SessionOptions): Session {
    * 在完成畫面時重新問 next，改成沒印象或差一點的那張回到目前時就出（Codex L2 F2）。
    */
   function change(entry: DoneCard, rating: Rating): boolean {
-    // 那張後來被停掉（需要新版）就不能改：先問，取消與新的評分才會一起寫或一起不寫。
+    // 取消與新的評分一起寫或一起不寫：那張後來被停掉（需要新版）就不能改，先問；取消涵蓋同一個 t 的所有作答，別台裝置同一刻的
+    // 作答被停時取消會被拒（Codex L2 的 F1），這時新的評分也不寫。
     if (entry.rating === rating || !entry.changeable.includes(rating) || !state.canAnswer(entry.card.lt)) return false;
-    state.answer({ undo: entry.t });
+    if (state.answer({ undo: entry.t }) === null) return false;
     const t = state.answer({ lt: entry.card.lt, r: rating, v: entry.card.prompt.fingerprint, ...(entry.typed ? { typed: entry.typed } : {}), ...(entry.retry ? { retry: entry.retry } : {}) });
-    // 同一個目標剛問過可以寫，不會是 null；型別上仍要處理。
+    // 同一個目標剛問過可以寫、取消也寫了，不會是 null；型別上仍要處理。
     if (t === null) return false;
     entry.t = t;
     entry.rating = rating;
