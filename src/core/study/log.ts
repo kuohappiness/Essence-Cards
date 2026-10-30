@@ -66,6 +66,7 @@ export function createLogWriter(files: Files, options: {
       last = at;
       pending.push({ path, line });
       writeVersion++;
+      // 失敗已經交給 onError（呼叫端記下），那一行留在佇列，下一次 write／flush 重試。
       void start().catch(() => {});
       return t;
     },

@@ -15,6 +15,7 @@ export function createObsidianFiles(app: App): Files {
   // 同一個路徑的 modify / append 排隊，和 Node 版相同（大小寫不同視為同一個檔，頂多多排隊）。
   function serial(path: string, action: () => Promise<void>): Promise<void> {
     const key = path.normalize('NFC').toLowerCase();
+    // 前一份的失敗已經由 next 交回它自己的呼叫端：這裡與下面清掉排隊的 .catch 只是不讓它擋住下一份、不留下沒人接的拒絕。
     const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
     pending.set(key, next);
     void next.finally(() => { if (pending.get(key) === next) pending.delete(key); }).catch(() => {});

@@ -160,6 +160,7 @@ export function wireSave(host: SaveHost): Saver {
   function blocked(state: State): boolean {
     if (!watched.has(state)) {
       watched.add(state);
+      // ready() 拒絕已經經過 onError 記下（tasks/error-log.md §2-3），或是停用外掛；按鈕維持受阻。
       state.ready().then(() => { loaded.add(state); refresh(); }, () => {});
     }
     return !loaded.has(state) || state.unread().length > 0;

@@ -194,6 +194,7 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 「版本」命令（任務說明 2-1）：先等排隊的紀錄寫完，這台的版本行才照實顯示；寫不完也照樣顯示。 */
   private async showVersion(): Promise<void> {
     const state = this.state;
+    // 寫不進去已經經過 onError（write）記下；版本命令照樣顯示，版本行標成還沒寫成。
     if (state) await Promise.race([state.flush().catch(() => {}), new Promise(resolve => window.setTimeout(resolve, VERSION_WAIT))]);
     // 內容好幾行、要對著看：留到使用者關掉。
     new Notice(versionText(BUILD, this.device, this.state), 0);
