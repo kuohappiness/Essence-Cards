@@ -36,6 +36,47 @@ function repeatThrow(): void { throw Error('error-probe：同一個錯誤連續 
 /** 複習畫面的 React 錯誤：effect 裡停止朗讀時拋錯（Review 每次換卡都 speech.stop()）。 */
 function speechThrow(): void { throw Error('error-probe：複習畫面的 effect 拋錯'); }
 
+interface Contents { sendInputEvent?(event: { type: 'keyDown' | 'keyUp' | 'char'; keyCode: string; modifiers?: string[] }): void }
+function webContents(): Contents | null {
+  const load = (window as unknown as { require?: (name: string) => unknown }).require;
+  const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
+  return electron?.remote?.getCurrentWebContents() ?? null;
+}
+/** 現在有焦點的元素：class、aria-label 或文字，認得出是哪一個就好。 */
+function focused(): string {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return active === null ? 'null' : active.nodeName;
+  const inMenu = !!active.closest('.ec-report');
+  return (inMenu ? '選單：' : '背後：') + (active.getAttribute('aria-label') ?? (active.textContent?.trim() || active.className));
+}
+
+/** 打字卡上打開回報選單，送真的 Tab（含 Shift+Tab）與一個字，記下焦點與字；Esc 關上後焦點回到輸入框。 */
+async function menuFocus(review: ReviewHandle): Promise<unknown> {
+  const contents = webContents();
+  if (!contents?.sendInputEvent) return 'Electron 不能送按鍵';
+  const send = contents.sendInputEvent.bind(contents);
+  const typedInput = (): string | null => { const view = review.session.view(); return view.kind === 'card' ? view.card.typed?.input ?? null : null; };
+  if (!await until(() => !!overlay()?.querySelector('.ec-input'), 3000)) return '不是打字卡';
+  const before = typedInput();
+  overlay()?.querySelector<HTMLButtonElement>('button[aria-label="回報問題"]')?.click();
+  await until(() => !!overlay()?.querySelector('.ec-report'));
+  await sleep(200);
+  const tabs: string[] = [focused()];
+  for (const shift of [false, false, false, false, false, false, false, true, true]) {
+    send({ type: 'keyDown', keyCode: 'Tab', modifiers: shift ? ['shift'] : [] });
+    send({ type: 'keyUp', keyCode: 'Tab', modifiers: shift ? ['shift'] : [] });
+    await sleep(80);
+    tabs.push((shift ? 'Shift+Tab → ' : 'Tab → ') + focused());
+  }
+  send({ type: 'char', keyCode: 'z' });
+  await sleep(150);
+  const typed = { before, after: typedInput(), menuOpen: !!overlay()?.querySelector('.ec-report') };
+  send({ type: 'keyDown', keyCode: 'Escape' });
+  send({ type: 'keyUp', keyCode: 'Escape' });
+  await sleep(200);
+  return { tabs, stayedInMenu: tabs.every(tab => tab.includes('選單：')), typed, afterEscape: { menuOpen: !!overlay()?.querySelector('.ec-report'), focus: focused(), reviewOpen: !!overlay() } };
+}
+
 /** 打開複習畫面、等第一張卡畫出來（React 的 render 不是同步的；畫面被 React 卸載時等到逾時），回傳 handle。 */
 async function openCard(host: ProbeHost, ms = 5000): Promise<ReviewHandle | null> {
   const handle = host.startReview({ subject: '自然' }) ?? host.startReview({ more: true });
@@ -101,6 +142,8 @@ export async function errorProbe(host: ProbeHost): Promise<unknown> {
     const english = host.startReview({ subject: '英文' });
     if (english && await until(() => !!overlay()?.querySelector('.ec-auto'), 3000)) steps.english = await capturePng(host.app, `${SHOTS} 英文卡.png`);
     else steps.english = '沒有英文卡可以打開';
+    // 8. 選單開著時的焦點（Codex L2 的 R1）：打字卡打開選單，用 Electron 送真的 Tab 與字，焦點不離開選單、字不變；Esc 關上。
+    steps.focus = english ? await menuFocus(english) : '沒有英文卡可以打開';
     english?.close();
   } finally { rendering.restore(); }
 
