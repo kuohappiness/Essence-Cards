@@ -18,7 +18,13 @@ function refusal(requested: string, real: string, vault: string, fix?: string): 
  * problem 是不能用的原因。vault 是 vault 的實際路徑。fix 是遇到封裝 App 時怎麼換位置的說法。
  */
 export async function checkFolder(requested: string, vault: string, fix?: string): Promise<{ real: string; problem: string | null }> {
-  const real = await realTarget(requested);
+  let real: string;
+  try { real = await realTarget(requested); } catch (error) {
+    // 一路往上都不存在：連磁碟（例如外接硬碟的磁碟代號）都找不到。照實說，不猜是不是沒接上（D-154）。
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') throw error;
+    throw Error(`備份位置 ${requested} 所在的磁碟找不到（${code}）`, { cause: error });
+  }
   return { real, problem: refusal(requested, real, vault, fix) };
 }
 

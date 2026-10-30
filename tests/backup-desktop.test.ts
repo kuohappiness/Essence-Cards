@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { link, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { filesReader, openBackup, takeBackup } from '../src/core/backup/index.ts';
@@ -116,4 +117,13 @@ void test('刪舊備份：內容和剛才驗過的不同、資料夾的實際位
   await removeBackup(to, to, listed);
   assert.deepEqual(await readdir(to), []);
   assert.ok(path.endsWith(listed.name));
+});
+
+void test('位置：所在的磁碟找不到（例如外接硬碟的磁碟代號不存在）時寫出是哪個位置，不露出 realpath 的原始訊息', { skip: process.platform !== 'win32' }, async t => {
+  const vault = await tempFolder(t, 'essence-vault-');
+  const letter = [...'QRSTUVWXYZ'].find(drive => !existsSync(drive + ':\\'));
+  if (!letter) { t.skip('沒有空著的磁碟代號'); return; }
+  const folder = letter + ':\\Essence 備份';
+  await assert.rejects(checkFolder(folder, vault), (error: Error) => error.message === `備份位置 ${folder} 所在的磁碟找不到（ENOENT）`);
+  await assert.rejects(prepareFolder(folder, vault), /所在的磁碟找不到/);
 });

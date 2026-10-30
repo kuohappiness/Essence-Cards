@@ -7,9 +7,10 @@ import type { Desktop } from '../desktop/index.ts';
 // 外掛內的備份（D-150、tasks/plugin-backup.md §1-4～§1-7），只在電腦接上：什麼時候做、通知、這台電腦的設定。
 // 寫到 vault 外的動作都在 src/desktop（D-148），這裡只拿 main.ts 動態載入後交進來的 Desktop。
 
-/** 這台電腦的設定（這個 vault 專用的 localStorage，不放 data.json：D-149 第 7 點、同 device.ts）。 */
-const FOLDER_KEY = 'essence-cards-backup-folder';
-const LAST_KEY = 'essence-cards-backup-last';
+/** 這台電腦的設定（這個 vault 專用的 localStorage，不放 data.json：D-149 第 7 點、同 device.ts）；開發命令 backup 也讀寫它們。 */
+export const BACKUP_KEYS = { folder: 'essence-cards-backup-folder', last: 'essence-cards-backup-last' };
+const FOLDER_KEY = BACKUP_KEYS.folder;
+const LAST_KEY = BACKUP_KEYS.last;
 /** 開著時多久看一次要不要做每月的備份（任務說明 §1-4）。 */
 const EVERY = 6 * 60 * 60 * 1000;
 /** 失敗時的通知（§1-6）：入口畫面的「給家長」一區做好之前先用 Obsidian 的通知。 */
