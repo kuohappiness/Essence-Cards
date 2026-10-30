@@ -373,9 +373,11 @@ async function filesContract(app: App): Promise<unknown> {
     rename: (from, to) => app.vault.rename(entry(from), to),
     remove: path => app.vault.delete(entry(path), true),
   }, dir, { notice: 3000, quiet: 500 });
-  // tasks/error-log.md §4：真的 vault.createFolder 同時建同一個資料夾時拋出什麼（C16 驗的是 Files 已經沿用建好的資料夾）。
+  // tasks/error-log.md §4：真的 vault.createFolder 撞到時拋出什麼（C16 驗的是 Files 已經沿用建好的資料夾）。
+  // 同時建兩次（兩個都還沒完成），以及另一個寫入剛建好之後才建（Files 先查不到、輪到時已經有了，Codex 用替身重現的順序）。
+  const outcome = (result: PromiseSettledResult<unknown>): string => result.status === 'fulfilled' ? 'fulfilled' : result.reason instanceof Error ? result.reason.message : String(result.reason);
   const race = dir + '/createFolder';
-  const folderRace = (await Promise.allSettled([app.vault.createFolder(race), app.vault.createFolder(race)]))
-    .map(result => result.status === 'fulfilled' ? 'fulfilled' : result.reason instanceof Error ? result.reason.message : String(result.reason));
-  return { passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results, folderRace };
+  const folderRace = (await Promise.allSettled([app.vault.createFolder(race), app.vault.createFolder(race)])).map(outcome);
+  const folderExists = outcome((await Promise.allSettled([app.vault.createFolder(race)]))[0]);
+  return { passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results, folderRace, folderExists };
 }
