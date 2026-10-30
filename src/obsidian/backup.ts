@@ -33,8 +33,13 @@ export interface BackupWiring {
   desktop: Desktop;
   /** 使用者選的位置；null 是預設位置。 */
   custom(): string | null;
-  /** 換位置（null 是用預設位置）：舊位置的備份不動、不搬（§1-7）。 */
+  /** 換位置（null 是用預設位置）：舊位置的備份不動、不搬（§1-7）。不檢查，設定頁用 useFolder。 */
   setFolder(folder: string | null): void;
+  /**
+   * 設定頁選了 folder：檢查能不能用（§1-1），可以就記下它的實際路徑，設定頁顯示的就是實際存放的位置（§1-5，Codex L2 B6）；
+   * 回傳不能用的原因，可以用是 null。
+   */
+  useFolder(folder: string): Promise<string | null>;
   /** state 讀完之後：看一次要不要備份，之後每 6 小時看一次。 */
   start(): void;
 }
@@ -100,6 +105,13 @@ export function wireBackup(host: BackupHostOptions): BackupWiring {
   return {
     runner, desktop, custom,
     setFolder(folder) { app.saveLocalStorage(FOLDER_KEY, folder); },
+    async useFolder(folder) {
+      let checked: { real: string; problem: string | null };
+      try { checked = await desktop.check(folder); } catch (error) { return error instanceof Error ? error.message : String(error); }
+      if (checked.problem) return checked.problem;
+      app.saveLocalStorage(FOLDER_KEY, checked.real);
+      return null;
+    },
     start() {
       void runner.check();
       plugin.registerInterval(window.setInterval(() => { void runner.check(); }, EVERY));

@@ -136,19 +136,11 @@ class EssenceSettingTab extends PluginSettingTab {
     if (chosen !== null) await this.use(backup, chosen);
   }
 
-  /** 選了不能用的位置：當場說明原因，不換位置（§1-5）。 */
+  /** 選了不能用的位置：當場說明原因，不換位置（§1-5）；可以用就記下實際路徑，位置那一列顯示的是它。 */
   private async use(backup: BackupWiring, folder: string): Promise<void> {
     if (!folder) return;
-    try {
-      const { problem } = await backup.desktop.check(folder);
-      this.problem = problem;
-    } catch (error) {
-      this.problem = error instanceof Error ? error.message : String(error);
-    }
-    if (!this.problem) {
-      backup.setFolder(folder);
-      this.typing = false;
-    }
+    this.problem = await backup.useFolder(folder);
+    if (!this.problem) this.typing = false;
     this.display();
   }
 
