@@ -48,6 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-30 | 預覽卡片定案（[D-161](decisions.md#d-161-預覽卡片不記錄不動排程設定頁打開才有)）：家長快速看版型，不寫紀錄、不動排程；設定頁打開才顯示，手機電腦都有；v1 和範圍與目錄一起做 |
 | 2026-10-30 | 外掛內的備份第一部分合併進 `main`（`7a12688`，[任務說明](../tasks/plugin-backup.md)〈結果：第一部分〉、[L2 報告](<../Claude Codex Discussion/2026-10-30-plugin-backup-1-review.md>)）：電腦上新版改寫前、每月一次、隨時手動備份，沒成功前停寫卡組、複習照常；Node／Electron 只在 `src/desktop/`（D-148）；設定頁的「備份」一區（D-156）；Codex L2 三次再審後通過，合併後 815 個測試通過 |
 | 2026-10-30 | 外掛架構檢查環節 9 的四列與環節 5 的 W3 (a)(b) 合併進 `main`（分支 `claude/zealous-williams-bb5446`，[討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 9 的結論〉）：擋 git 指令的 hook 也接 PowerShell、加擋跳過 hook 的寫法（`2596f53`；合併時用 PowerShell 工具實測：含 `git stash` 的一行被擋、`--force-if-includes` 不擋）；pre-commit 改用 dot reporter（`976a7f4`）；`tests/`、`tools/` 加進型別檢查、修好 9 個錯（`cea60a3`）；建置測試建到暫存資料夾（`e2e8fa5`）；結果檔都記 `BUILD`、正式版檢查涵蓋 `dev-*.ts`（`c13f516`） |
 | 2026-10-30 | 維修與查修的準備討論完成（[規畫](plans/maintenance.md)）：模組化已有，缺的是正式版的錯誤證據（D-155）與學生回報（D-160）；查單一目標排程的工具現在不做，觸發點記在 [backlog 技術債](backlog.md#技術債) |
@@ -57,4 +58,3 @@ flowchart LR
 | 2026-10-30 | 設定頁依功能分區、不寫「給家長」（[D-156](decisions.md#d-156-設定頁依功能分區不寫給家長)，使用者看外掛內備份的設定頁截圖時提出）：分複習、學期、AI 製卡、備份四區；入口的「給家長」另外問 |
 | 2026-10-30 | 正式版的錯誤紀錄定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)，[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>)）：每台裝置每月一個小檔在 `紀錄/錯誤/`，只記自己的錯、有去重與上限、寫不進去就丟；正式安裝存對照表；還原不列它。[任務說明](../tasks/error-log.md)交本機 |
 | 2026-10-30 | `state/index.ts` 原樣拆檔合併進 `main`（`0e3e8a4`，[任務說明](../tasks/state-split.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）：拆成讀取層 `reads.ts`、寫入 `writes.ts`、`ids.ts`、組合 `index.ts`，只搬不改行為，更新防線第二部分一起整合；Codex L2 沒有要修的，Windows 輪流對照各 5 次全過，755 個測試通過 |
-| 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同，電腦與 iPhone 重開後都記下 `0.1.0+a4922fa` 的版本行；升版時改了 7 個寫死版號的測試 |
