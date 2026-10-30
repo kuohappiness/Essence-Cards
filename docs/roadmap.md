@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 的 E1、E6、E8 在下一次 iPhone 實機測試；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債三列等觸發點 | iPhone 實機測試 | [任務說明](../tasks/icloud-placeholders.md) |
-| 維修與查修的準備 | 盤點完成，缺口 G1～G3；使用者同意 G1（正式版把錯誤記下來），位置與格式的討論稿寫好 | Codex 查核；一致後交使用者確認，寫成 D-ID 與任務說明 | 使用者（開 Codex） | [規畫](plans/maintenance.md)、[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>) |
+| 維修與查修的準備 | 盤點完成，缺口 G1～G3；G1（正式版把錯誤記下來）的討論稿 Claude 與 Codex 一致 | 使用者確認 G1 的結論；確認後寫 D-ID 與任務說明交本機；再問 G2、G3 | 使用者 | [規畫](plans/maintenance.md)、[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做；R6 (a) 併進 backlog「`tests/`、`tools/` 沒有型別檢查」那一列 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成，`0.1.0` 已裝到正式使用的 vault；外掛內備份與還原的任務說明已寫 | 第 0 步的格式查核已一致；本機在分支 `claude/plugin-backup-1` 做第一部分（備份），設定頁的版面截圖給使用者看。還原畫面放到 v1 結案前（使用者 2026-10-29） | Claude | [外掛內備份任務說明](../tasks/plugin-backup.md)、[格式查核請求](../tasks/plugin-backup-format-review.md)、[規畫](plans/updates.md) |
