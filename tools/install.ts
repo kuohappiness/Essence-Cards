@@ -14,6 +14,8 @@ import { assertNoLinks, sameFileKey } from './vault-io.ts';
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const PLUGIN = 'plugins/essence-cards';
 const OUTPUTS = ['main.js', 'manifest.json', 'styles.css'] as const;
+/** 對照表（D-155 第 5 點）：和正式產物一起存在本機、雜湊記進 release.json，不裝進 vault；npm run locate 用它。 */
+const MAP = 'main.js.map';
 
 export interface InstallOptions {
   vault: string;
@@ -31,7 +33,7 @@ export interface InstallOptions {
   build?: typeof buildPlugin;
 }
 export interface Installed { kind: 'dev' | 'test' | 'release'; version: string; build: string; vault: string }
-/** .local/releases/<版號>/release.json：每一份正式產物的版號、建置版本、commit 與雜湊。 */
+/** .local/releases/<版號>/release.json：每一份正式產物的版號、建置版本、commit 與雜湊（有對照表的版本也記 main.js.map）。 */
 interface Release { version: string; build: string; commit: string; created: string; sha256: Record<string, string> }
 
 /**
@@ -182,7 +184,8 @@ export async function installVault(options: InstallOptions): Promise<Installed> 
   if (problems.length) throw Error(`${vault} 不是登錄過的測試 vault，只能裝正式版，但條件不符：\n- ` + problems.join('\n- '));
   const temporary = await mkdtemp(join(tmpdir(), 'essence-release-'));
   try {
-    const built = await build({ root, dev: false, outdir: temporary });
+    // 同一次建置另外輸出對照表（main.js 逐位元組不變，tests/build.test.ts 的 §6）。
+    const built = await build({ root, dev: false, outdir: temporary, sourcemap: join(temporary, MAP) });
     await copyFile(join(root, 'manifest.json'), join(temporary, 'manifest.json'));
     const stamped = readBuild(await readFile(join(temporary, 'main.js'), 'utf8'));
     if (built.dev || stamped.dev !== false) throw Error('建置的 DEV 不是 false，不能裝到正式使用的 vault');
@@ -191,6 +194,7 @@ export async function installVault(options: InstallOptions): Promise<Installed> 
       throw Error(`建置版本 ${stamped.build ?? '（讀不到）'} 和 tag v${version} 的 commit 不符`);
     }
     const sha256 = await hashes(temporary);
+    const map = await readFile(join(temporary, MAP)).catch(() => { throw Error('建置沒有輸出對照表 ' + MAP); });
     const folder = join(local, 'releases', version);
     // 已經有這個版號的紀錄就要讀得懂、雜湊對得上，不蓋過去。
     const existing = await stat(join(folder, 'release.json')).then(() => true, () => false) ? (await loadRelease(local, version)).release : null;
@@ -198,8 +202,8 @@ export async function installVault(options: InstallOptions): Promise<Installed> 
       if (OUTPUTS.some(name => existing.sha256[name] !== sha256[name])) throw Error(`${folder} 已經有 ${version} 的另一份產物；同一個版號不能有兩份`);
     } else {
       await mkdir(folder, { recursive: true });
-      for (const name of OUTPUTS) await copyFile(join(temporary, name), join(folder, name));
-      const release: Release = { version, build: stamped.build, commit, created: new Date().toISOString(), sha256 };
+      for (const name of [...OUTPUTS, MAP]) await copyFile(join(temporary, name), join(folder, name));
+      const release: Release = { version, build: stamped.build, commit, created: new Date().toISOString(), sha256: { ...sha256, [MAP]: hashBytes(new Uint8Array(map)) } };
       await writeFile(join(folder, 'release.json'), JSON.stringify(release, null, 2) + '\n');
       await loadRelease(local, version);
     }
