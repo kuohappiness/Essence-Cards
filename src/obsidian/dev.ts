@@ -356,7 +356,7 @@ async function reading(app: App, text: string, path: string): Promise<string[]> 
   } finally { component.unload(); }
 }
 
-/** §2：在 Essence W5/暫存/ 跑 C1～C15；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+/** §2：在 Essence W5/暫存/ 跑 C1～C16；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
 async function filesContract(app: App): Promise<unknown> {
   const dir = root + '/暫存';
   const old = app.vault.getAbstractFileByPath(dir);

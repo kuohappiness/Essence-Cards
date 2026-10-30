@@ -8,7 +8,7 @@ import type { Files } from '../src/core/files.ts';
 import { createNodeFiles } from '../tools/node-files.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
-// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C15；每個例子一個新的暫存 vault。
+// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C16；每個例子一個新的暫存 vault。
 for (const item of contractCases) {
   void test(`Files 契約 ${item.code}：${item.title}`, async t => {
     const root = await mkdtemp(join(tmpdir(), 'essence-contract-'));
@@ -41,6 +41,8 @@ void test('Files 契約抓得到壞掉的實作', async t => {
     C14: { ...good, read: path => good.read(path.replace(/^(\.\.\/)+|^\//, '')) },
     // 刪資料夾時只通知第一層的檔（Obsidian 若只對資料夾發一次事件、子資料夾已經不在，就會像這樣）。
     C15: { ...good, watch: onChange => good.watch(path => { if (!path.includes('/sub/')) onChange(path); }) },
+    // 讀成文字再編碼回去，換行被轉換。
+    C16: { ...good, readBytes: async path => { const text = await good.read(path); return text === null ? null : new TextEncoder().encode(text.replaceAll('\r\n', '\n')); } },
   };
   let run = 0;
   for (const [code, files] of Object.entries(broken)) {
@@ -59,3 +61,12 @@ for (const item of contractCases) {
     assert.deepEqual(result, { code: item.code, ok: true });
   });
 }
+
+// 外掛內的備份 §1-2：讀不到（不是不存在）時 readBytes 丟出原本的錯誤，呼叫的一方才寫得出原因（D-154）。
+void test('Node 的 readBytes：讀不到時丟出原本的錯誤（這裡用資料夾當檔案讀，EISDIR），不當成不存在', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'essence-contract-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = createNodeFiles(root);
+  await files.modify('Essence Cards/資料夾/a.md', () => 'a');
+  await assert.rejects(files.readBytes('Essence Cards/資料夾'), (error: NodeJS.ErrnoException) => error.code === 'EISDIR');
+});

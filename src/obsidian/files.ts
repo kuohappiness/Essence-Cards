@@ -53,6 +53,10 @@ export function createObsidianFiles(app: App): Files {
       // vault.read 讀磁碟上最新的內容（cachedRead 可能是舊的），包括 iCloud 剛同步來的。
       return found ? vault.read(found) : null;
     },
+    async readBytes(path) {
+      const found = file(location(path));
+      return found ? new Uint8Array(await vault.readBinary(found)) : null;
+    },
     modify(path, edit) {
       location(path);
       return serial(path, async () => {

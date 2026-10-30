@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 
 /**
- * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3）。Node 的測試與 Obsidian 的開發命令跑同一份；
+ * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2）。Node 的測試與 Obsidian 的開發命令跑同一份；
  * 改名與刪除不在 Files 介面裡，由兩邊各自提供（Node 用 node:fs，Obsidian 用 vault.rename、vault.delete）。
  */
 export interface ContractOps {
@@ -183,6 +183,7 @@ export const contractCases: readonly ContractCase[] = [
       const escape = `${dir}/${'../'.repeat(dir.split('/').length + 1)}x`;
       for (const path of ['../x', escape, '/x']) {
         await rejects(() => files.read(path), `read(${show(path)})`);
+        await rejects(() => files.readBytes(path), `readBytes(${show(path)})`);
         await rejects(() => files.list(path), `list(${show(path)})`);
         await rejects(() => files.modify(path, () => 'x'), `modify(${show(path)})`);
         await rejects(() => files.append(path, 'x'), `append(${show(path)})`);
@@ -203,6 +204,16 @@ export const contractCases: readonly ContractCase[] = [
       for (const path of paths) same(await files.read(path), null, `刪除資料夾後 read(${path})`);
     },
   },
+  {
+    // 外掛內的備份（tasks/plugin-backup.md §1-2）：原始位元組，不轉換換行。讀不到時丟錯在 Node 的測試裡另外驗（實機做不出權限錯誤）。
+    code: 'C16', title: 'readBytes 讀回原始的 UTF-8 位元組（中文、表情符號、\r\n、沒有檔尾換行）；不存在回傳 null',
+    async run({ files, dir }) {
+      const text = '中文😀\r\n第二行\n第三行';
+      await files.modify(`${dir}/c16.md`, () => text);
+      same([...await files.readBytes(`${dir}/c16.md`) ?? []], [...new TextEncoder().encode(text)], 'readBytes');
+      same(await files.readBytes(`${dir}/沒有.md`), null, 'readBytes 不存在的檔');
+    },
+  },
 ];
 
 /** 跑一個例子；每個例子用 dir 底下自己代號的資料夾，彼此不共用檔案。 */
@@ -216,7 +227,7 @@ export async function runContractCase(item: ContractCase, files: Files, ops: Con
   }
 }
 
-/** 依序跑 C1～C15；dir 要是空的（或不存在）。 */
+/** 依序跑 C1～C16；dir 要是空的（或不存在）。 */
 export async function runFilesContract(files: Files, ops: ContractOps, dir: string, wait: ContractWait): Promise<ContractResult[]> {
   const results: ContractResult[] = [];
   for (const item of contractCases) results.push(await runContractCase(item, files, ops, dir, wait));

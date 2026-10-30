@@ -52,6 +52,10 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
       return found.sort();
     },
     read(path) { return read(location(path)); },
+    async readBytes(path) {
+      try { return new Uint8Array(await readFile(location(path))); }
+      catch (error) { if (missing(error)) return null; throw error; }
+    },
     modify(path, edit) {
       const file = location(path);
       return serial(file, async () => {
