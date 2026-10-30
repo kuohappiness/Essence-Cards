@@ -5,8 +5,8 @@ import { createIdTracker } from './ids.ts';
 import { createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
 import { createWrites } from './writes.ts';
-import type { EditorHandle, WriteResult } from './writes.ts';
-export type { EditorHandle, WriteResult } from './writes.ts';
+import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
+export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, parseTime, planToday, progress } from '../core/study/index.ts';
@@ -37,6 +37,11 @@ export interface StateOptions {
   onError?: (error: unknown, source: ErrorSource) => void;
   /** 補學習目標 ID：電腦 true、手機 false（D-134：iPhone 不寫卡組筆記）。 */
   fillIds: boolean;
+  /**
+   * 改寫卡組之前要先有一份成功的備份（D-150 第 3 點）：電腦上外掛內的備份接上時是 true，寫入的閘門一開始關著
+   * （save、resolve 回 blocked backup，fillIds 回傳 false），backupReady(true) 才打開。沒傳或 false 時不擋（手機、測試）。
+   */
+  backup?: boolean;
   /** 傳給 assignIds，測試用。 */
   random?: () => number;
   /** 等一次寫進磁碟（編輯器的 persist、modify）最多多久（毫秒），預設 10_000；超過就當成失敗、放行後面的寫入。 */
@@ -117,6 +122,13 @@ export interface State {
    * 回傳 true；沒有要改、門檻沒過、途中變了（stale）回傳 false；寫不進去或逾時 reject（已配出的 ID 保留、不重用）。
    */
   fillIds(path: string): Promise<boolean>;
+  /**
+   * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
+   * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
+   */
+  writeBlock(): WriteBlock | null;
+  /** 外掛內的備份（StateOptions.backup）：有一份成功的備份時 true，失敗或還沒有時 false。沒傳 backup 時不作用。 */
+  backupReady(ready: boolean): void;
   /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
   removedInEditor(path: string, ids: readonly string[]): void;
   /** 這台電腦的編輯器裡 Undo／Redo 或貼上讓這些 ID 回來了：之後再弄丟就照常算弄丟。 */
@@ -362,7 +374,9 @@ export function createState(options: StateOptions): State {
    * 只預留 ID，寫回的文字要等核對讀取確認寫成了才採用。
    */
   const prepare = (path: string, text: string): Prepared => track(path, () => tracker.fill(path, text));
-  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText });
+  /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
+  let backupPending = options.backup === true;
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending });
 
   return {
     ready() {
@@ -381,6 +395,8 @@ export function createState(options: StateOptions): State {
       // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
       return result.kind === 'done' || result.kind === 'saved';
     },
+    writeBlock: () => writes.blockedNow(),
+    backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(_path, ids) { tracker.removed(ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },
     decks: () => deckList,

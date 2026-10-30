@@ -1,4 +1,5 @@
-import { formatTime } from '../study/index.ts';
+import { formatTime, parseTime } from '../study/index.ts';
+import type { BackupManifest } from './manifest.ts';
 
 // 和 state/device.ts 的 isDeviceCode 相同的裝置碼（tests/backup-core.test.ts 檢查兩邊一致）。
 const DEVICE = '(?:iPhone|iPad|Android|Windows|Mac|Linux|Device)-[0-9a-f]{4}';
@@ -25,6 +26,17 @@ export function backupName(started: number, offset: number, build: string | null
   const time = formatTime(started, offset);
   const known = build !== null && BUILD_PATTERN.test(build) ? build : '未知';
   return `Essence Cards 備份 ${time.slice(0, 10)} ${time.slice(11, 19).replaceAll(':', '')} ${known} ${random}.zip`;
+}
+
+/**
+ * 自動清理只認檔名和清單對得上的備份（syntax §8「自動清理只認完整的備份」）：用清單的 started（照它自己記的時區）、build、
+ * 檔名裡的隨機 4 碼重新產生的檔名要和 name 完全相同；build 不是 null、又不是 BUILD 的寫法時不認。
+ */
+export function matchesName(name: string, manifest: Pick<BackupManifest, 'started' | 'build'>): boolean {
+  const started = parseTime(manifest.started);
+  const random = / ([0-9a-f]{4})\.zip$/.exec(name)?.[1];
+  if (!started || !random || (manifest.build !== null && !BUILD_PATTERN.test(manifest.build))) return false;
+  return backupName(started.at, started.offset, manifest.build, random) === name;
 }
 
 /**

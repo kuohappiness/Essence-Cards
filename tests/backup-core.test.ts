@@ -138,7 +138,7 @@ void test('zip 與清單一一對應：同名的項目、兩個 manifest.json、
   assert.match(opened(rawZip([['manifest.json', manifest], ['Essence Cards/a.md', 'a'], ['Essence Cards/b.md', 'bb']])), /大小和清單不同/);
   assert.match(opened(rawZip([['manifest.json', manifest], ['Essence Cards/a.md', 'a'], ['Essence Cards/b.md', 'c']])), /雜湊和清單不同/);
   assert.match(opened(rawZip([['manifest.json', manifest.replace('"version":1', '"version":2')]])), /清單讀不懂/);
-  assert.match(opened(bytes('not a zip')), /不是讀得懂的 zip/);
+  assert.match(opened(bytes('not a zip')), /找不到 zip 的中央目錄/);
 });
 
 void test('zip 的檔名要是 UTF-8：壞掉的位元組或沒有 UTF-8 旗標的非 ASCII 名稱都拒絕，不被寬鬆解碼成清單裡的名字（Codex 中途查核 F6）', () => {
@@ -307,4 +307,57 @@ void test('每台裝置最後回報的版本：need 讀不懂的版本行不算�
   assert.deepEqual(rows('0.2.0'), ['0.2.0+9f8e7d6']);
   assert.deepEqual(rows(), ['0.1.0+1a2b3c4']);
   assert.deepEqual(rows(null), ['0.1.0+1a2b3c4']);
+});
+
+// 技術債「讀備份時，zip 的註解裡剛好有 EOCD 簽章」：先依檔尾與長度辨認有效的 EOCD，嚴格名稱檢查與解壓用同一份結構。
+/** 在 zip 的 EOCD 後面接上註解（改註解長度欄位）。 */
+function withComment(zip: Uint8Array, comment: Uint8Array): Uint8Array {
+  const out = new Uint8Array(zip.length + comment.length);
+  out.set(zip);
+  out.set(comment, zip.length);
+  new DataView(out.buffer).setUint16(zip.length - 22 + 20, comment.length, true);
+  return out;
+}
+/** 一個 EOCD 的 22 個位元組：筆數、中央目錄的大小與位置、註解長度。 */
+function eocd(count: number, size: number, offset: number, comment: number): Uint8Array {
+  const out = new Uint8Array(22);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x06054b50, true);
+  view.setUint16(8, count, true); view.setUint16(10, count, true);
+  view.setUint32(12, size, true); view.setUint32(16, offset, true); view.setUint16(20, comment, true);
+  return out;
+}
+
+void test('EOCD：一般註解、註解裡剛好有 EOCD 簽章、註解裡偽造一個長度剛好到檔尾的 EOCD，合法的 zip 都讀得到', () => {
+  const zip = zipOf({ 'Essence Cards/a.md': 'A' });
+  assert.equal(opened(withComment(zip, bytes('一般的註解'))), 'ok');
+  assert.equal(opened(withComment(zip, new Uint8Array([0x50, 0x4b, 0x05, 0x06, 1, 2, 3]))), 'ok');
+  // 偽造的 EOCD 放在註解最後：它的註解長度 0 剛好到檔尾，但中央目錄不在它前面，不採用。
+  assert.equal(opened(withComment(zip, eocd(0, 0, 0, 0))), 'ok');
+  // Codex L2 B4：偽造的候選帶 ZIP64 的標記（筆數 0xffff），也要略過、繼續往前找真正的 EOCD。
+  assert.equal(opened(withComment(zip, eocd(0xffff, 0, 0, 0))), 'ok');
+});
+
+void test('EOCD：唯一的 EOCD 帶 ZIP64 的標記時照舊拒絕（不支援 ZIP64）', () => {
+  const zip = zipOf({ 'Essence Cards/a.md': 'A' }).slice();
+  const view = new DataView(zip.buffer);
+  const end = zip.length - 22;
+  view.setUint16(end + 8, 0xffff, true);
+  view.setUint16(end + 10, 0xffff, true);
+  view.setUint32(end + 16, 0xffffffff, true);
+  assert.equal(opened(zip), '不支援 ZIP64');
+});
+
+void test('EOCD：中央目錄越界、筆數不一致、註解長度對不到檔尾、截短，都被拒絕', () => {
+  const zip = zipOf({ 'Essence Cards/a.md': 'A' });
+  const end = zip.length - 22;
+  const broken = (patch: (view: DataView) => void): string => {
+    const copy = zip.slice();
+    patch(new DataView(copy.buffer));
+    return opened(copy);
+  };
+  assert.equal(broken(view => { view.setUint32(end + 16, view.getUint32(end + 16, true) + 1, true); }), '找不到 zip 的中央目錄');
+  assert.equal(broken(view => { view.setUint16(end + 8, 9, true); }), '找不到 zip 的中央目錄');
+  assert.equal(broken(view => { view.setUint16(end + 20, 5, true); }), '找不到 zip 的中央目錄');
+  assert.equal(opened(zip.subarray(0, zip.length - 1)), '找不到 zip 的中央目錄');
 });

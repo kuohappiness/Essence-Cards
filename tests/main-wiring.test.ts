@@ -1,15 +1,19 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { mkdtempSync } from 'node:fs';
+import { readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { build, type Plugin as BuildPlugin } from 'esbuild';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
+import { desktopOnly } from '../tools/build.mjs';
 
 // src/main.ts 的接線（W5 §4-1）：用共用的 obsidian 替身（tests/helpers/obsidian.ts）在 Node 跑正式建置的程式碼，不是 Obsidian 實機。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bundle = async (dev: boolean, plugins: BuildPlugin[] = []) => (await build({
-  absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', plugins,
+  absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', plugins: [desktopOnly(root), ...plugins],
   external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: '"0.0.1+test"' },
 })).outputFiles[0].text;
 const bundled = await bundle(false);
@@ -26,17 +30,33 @@ const devNoScreen = await bundle(true, [{
   },
 }]);
 
+interface BackupLike { runner: { status(): { ready: boolean; failure: { step: string; message: string } | null } } }
 interface PluginLike {
   onload(): void; onunload(): void; startReview(pick: { subject: string }): { close(): void } | null;
-  state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean> } | null;
+  state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean>; writeBlock(): string | null } | null;
+  backup: BackupLike | null;
 }
 
-/** 建好替身、載入外掛（正式版或開發版）並建立外掛物件。 */
+/** 電腦的替身用的暫存資料夾：vault 的位置與備份位置（外掛內的備份真的寫在這裡，D-150）。 */
+const temporary: string[] = [];
+after(() => Promise.all(temporary.map(dir => rm(dir, { recursive: true, force: true }))));
+const tempDir = (): string => { const dir = mkdtempSync(join(tmpdir(), 'essence-wiring-')); temporary.push(dir); return dir; };
+const MANIFEST = '.obsidian/plugins/essence-cards/manifest.json';
+
+/**
+ * 建好替身、載入外掛（正式版或開發版）並建立外掛物件。電腦的替身有真的 vault 位置與備份位置（暫存資料夾），外掛載入後自己做一份
+ * 備份、打開寫入的閘門；backedUp() 等到那時候。
+ */
 function host(texts: Record<string, string>, options: Omit<StubOptions, 'texts'> = {}, code = bundled) {
-  const stub = createObsidianStub({ ...options, texts });
+  const desktop = options.desktop ? { vaultPath: tempDir(), localStorage: { 'essence-cards-backup-folder': tempDir() } } : {};
+  const stub = createObsidianStub({ ...desktop, ...options, texts: options.desktop ? { [MANIFEST]: '{"id":"essence-cards"}', ...texts } : texts });
   const { default: Plugin } = stub.load<{ default: new (app: unknown, manifest: unknown) => PluginLike }>(code);
   const plugin = new Plugin(stub.app, { id: 'essence-cards', version: '0.0.1' });
-  return { ...stub, plugin, uri: (params: Record<string, string>) => { stub.protocol.get('essence-cards-dev')?.(params); } };
+  async function backedUp(): Promise<void> {
+    for (let i = 0; i < 300 && !plugin.backup?.runner.status().ready; i++) await wait(10);
+    assert.ok(plugin.backup?.runner.status().ready, '外掛載入後的備份沒有成功：' + JSON.stringify(plugin.backup?.runner.status().failure));
+  }
+  return { ...stub, plugin, backedUp, uri: (params: Record<string, string>) => { stub.protocol.get('essence-cards-dev')?.(params); } };
 }
 
 const deck = { 'Essence Cards/a.md': '---\n科目: 自然\n---\n- 目標 ^aaaaaa\n    - Q :: A\n' };
@@ -97,7 +117,7 @@ void test('接線：啟動時讀不到紀錄，提示讀不到並自己重試到
 void test('接線：補 ID、存檔命令與編輯器的鎖定只在電腦；手機的 state 不寫卡組', async t => {
   const missing = { 'Essence Cards/b.md': '- 新目標\n    - Q :: A\n' };
   for (const desktop of [false, true]) {
-    const { plugin, commands, extensions, layoutReady, text } = host(missing, { desktop });
+    const { plugin, commands, extensions, layoutReady, text, backedUp } = host(missing, { desktop });
     t.after(() => { plugin.onunload(); });
     plugin.onload();
     assert.equal(commands.has('save'), desktop);
@@ -106,6 +126,7 @@ void test('接線：補 ID、存檔命令與編輯器的鎖定只在電腦；手
     layoutReady();
     assert.ok(plugin.state);
     await plugin.state.ready();
+    if (desktop) await backedUp();
     assert.equal(await plugin.state.fillIds('Essence Cards/b.md'), desktop);
     assert.equal(/\^[a-z0-9]{6}\n/.test(text('Essence Cards/b.md') ?? ''), desktop);
     plugin.onunload();
@@ -143,6 +164,7 @@ void test('接線：重新啟用外掛時已經開著的卡組，啟用時不寫
   h.plugin.onload();
   h.layoutReady();
   await h.plugin.state?.ready();
+  await h.backedUp();
   await wait(1100);
   assert.deepEqual(h.writes.filter(notLog), []);
   h.closeTabs();
@@ -227,6 +249,88 @@ void test('開發命令的結果檔：plugin 是建置版本 BUILD，不是 mani
   const path = [...h.texts.keys()].find(key => key.startsWith('Essence W5/結果/unread '));
   assert.ok(path, '有結果檔');
   assert.equal((JSON.parse(h.text(path) ?? '{}') as { plugin?: string }).plugin, '0.0.1+test');
+});
+
+// 外掛內的備份（tasks/plugin-backup.md §1-4、§1-6、§1-9）：電腦上載入後自己備份，成功才打開寫入的閘門；備份位置不能用時通知、閘門關著。
+void test('備份接線：電腦上 state 讀完之後自己做一份 new-version 備份，成功前存檔受阻、成功後打開閘門；有 6 小時的計時器與設定分頁', async t => {
+  const h = host({ 'Essence Cards/b.md': '- 新目標\n    - Q :: A\n' }, { desktop: true });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  assert.equal(h.settingTabs.length, 1);
+  h.layoutReady();
+  assert.equal(h.plugin.state?.writeBlock(), 'loading');
+  await h.plugin.state?.ready();
+  await h.backedUp();
+  assert.equal(h.plugin.state?.writeBlock(), null);
+  const folder = h.storage('essence-cards-backup-folder') as string;
+  const names = await readdir(folder);
+  assert.equal(names.length, 1);
+  // 替身的 BUILD（0.0.1+test）不是 BUILD 的寫法，檔名照 syntax §8 寫「未知」；清單與 localStorage 的 build 照實記。
+  assert.match(names[0], /^Essence Cards 備份 \d{4}-\d{2}-\d{2} \d{6} 未知 [0-9a-f]{4}\.zip$/);
+  const last = h.storage('essence-cards-backup-last') as { build: string; name: string };
+  assert.deepEqual([last.build, last.name], ['0.0.1+test', names[0]]);
+  assert.equal(h.timers().registerInterval, 1);
+  assert.deepEqual(h.notices, []);
+  assert.equal(await h.plugin.state?.fillIds('Essence Cards/b.md'), true);
+});
+
+void test('備份接線：備份位置在 vault 裡時失敗，通知一次、閘門關著（存檔受阻），不寫卡組', async t => {
+  const vaultPath = tempDir();
+  const h = host({ 'Essence Cards/b.md': '- 新目標\n    - Q :: A\n' }, { desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': join(vaultPath, '備份') } });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  for (let i = 0; i < 300 && !h.plugin.backup?.runner.status().failure; i++) await wait(10);
+  const failure = h.plugin.backup?.runner.status().failure;
+  assert.equal(failure?.step, '準備備份位置');
+  assert.match(failure?.message ?? '', /在 vault 裡/);
+  assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因']);
+  assert.equal(h.plugin.state?.writeBlock(), 'backup');
+  assert.equal(await h.plugin.state?.fillIds('Essence Cards/b.md'), false);
+  assert.equal(h.text('Essence Cards/b.md'), '- 新目標\n    - Q :: A\n');
+  assert.deepEqual(await readdir(vaultPath), []);
+});
+
+// D-148 第 3 點的驗收（手機替身）：手機上沒有載入電腦專用的資料夾（沒有 require Node 或 Electron）、沒有建立任何計時器，
+// 設定分頁照樣加上（只寫「備份在電腦上做」）。正式建置的 main.js 另在 tests/build.test.ts 驗。
+void test('備份接線：手機上不載入電腦專用的資料夾、不建立計時器，閘門不擋（手機本來就不寫卡組）', async t => {
+  const h = host(deck);
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(50);
+  assert.deepEqual([...new Set(h.required)].sort(), ['@codemirror/state', '@codemirror/view', 'obsidian']);
+  assert.deepEqual(h.timers(), { setInterval: 0, registerInterval: 0 });
+  assert.equal(h.plugin.backup, null);
+  assert.equal(h.settingTabs.length, 1);
+  assert.equal(h.plugin.state?.writeBlock(), 'phone');
+});
+
+void test('備份接線：同一個 BUILD 重開、記的那份還在時不重做，閘門直接打開；記的那份不見了就重做', async t => {
+  const vaultPath = tempDir(), folder = tempDir();
+  const first = host(deck, { desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': folder } });
+  t.after(() => { first.plugin.onunload(); });
+  first.plugin.onload();
+  first.layoutReady();
+  await first.backedUp();
+  first.plugin.onunload();
+  const storage = { 'essence-cards-backup-folder': folder, 'essence-cards-backup-last': first.storage('essence-cards-backup-last') };
+  const again = host(deck, { desktop: true, vaultPath, localStorage: storage });
+  t.after(() => { again.plugin.onunload(); });
+  again.plugin.onload();
+  again.layoutReady();
+  await again.backedUp();
+  assert.equal((await readdir(folder)).length, 1);
+  again.plugin.onunload();
+  await rm(join(folder, (await readdir(folder))[0]));
+  const gone = host(deck, { desktop: true, vaultPath, localStorage: storage });
+  t.after(() => { gone.plugin.onunload(); });
+  gone.plugin.onload();
+  gone.layoutReady();
+  await gone.backedUp();
+  assert.equal((await readdir(folder)).length, 1);
 });
 
 // 開發命令的證據 W3 (a)（外掛架構檢查環節 5）：複習畫面的量測（dev-review 的 watchReview）不經過命令那一層，結果檔也要記 BUILD。

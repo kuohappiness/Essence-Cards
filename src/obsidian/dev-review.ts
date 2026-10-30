@@ -91,6 +91,7 @@ function onlyExamples(files: Files): Files {
   return {
     list: async folder => (await files.list(folder)).filter(keep),
     read: path => files.read(path),
+    readBytes: path => files.readBytes(path),
     modify: (path, edit) => files.modify(path, edit),
     append: (path, line) => files.append(path, line),
     watch: onChange => files.watch(path => { if (keep(path)) onChange(path); }),
@@ -140,6 +141,11 @@ function blankHistory(files: Files): Files {
       return [...(await files.list(folder)).filter(path => !isLogPath(path)), ...[...logs.keys()].filter(path => path.startsWith(prefix))].sort();
     },
     read: async path => isLogPath(path) ? logs.get(path) ?? null : files.read(path),
+    readBytes: async path => {
+      if (!isLogPath(path)) return files.readBytes(path);
+      const text = logs.get(path);
+      return text === undefined ? null : new TextEncoder().encode(text);
+    },
     modify: async (path, edit) => {
       if (!isLogPath(path)) return files.modify(path, edit);
       const before = logs.get(path) ?? '';

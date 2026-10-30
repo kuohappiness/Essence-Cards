@@ -184,3 +184,37 @@ void test('L2 F2 取消多帶 lt：照 encodeEntry 的分類先看 undo 指的�
   // 寫出的是單純的取消（多帶的 lt 不寫出）。
   assert.equal((h.texts.get(own) ?? '').trim().split('\n').at(-1), encodeEntry(t3, { undo: second }));
 });
+
+// 外掛內的備份 §1-4、§1-9：沒有成功的備份之前，Cards 改寫卡組的入口都回 blocked backup；作答照常寫；成功後恢復，失敗後再成功也恢復。
+void test('備份的閘門：存檔、離開時補 ID、待處理的兩個選項都受阻，作答照常；成功後恢復，失敗後再成功也恢復', async t => {
+  const text = goal('aaaaab') + '- 新目標\n    - Q :: A\n';
+  const h = await setup(t, { [P]: text }, { backup: true });
+  const editor = createMemoryEditor(h, P, text);
+  const issue = { path: P, line: 0, name: '能說明 aaaaab', kind: 'lost' as const, restore: 'aaaaab' };
+  const blocked = { kind: 'blocked', reason: 'backup' };
+  assert.equal(h.state.writeBlock(), 'backup');
+  assert.deepEqual(await h.state.save(editor), blocked);
+  assert.deepEqual(await h.state.resolve(issue, 'restore', editor), blocked);
+  assert.deepEqual(await h.state.resolve(issue, 'new', editor), blocked);
+  assert.equal(await h.state.fillIds(P), false);
+  assert.deepEqual([editor.value, editor.applies, editor.persists, h.modifies], [text, 0, 0, []]);
+  assert.ok(h.state.answer({ lt: 'aaaaab', r: 'good', v: '12345678' }));
+  await h.state.flush();
+  assert.match(h.texts.get('Essence Cards/紀錄/2026-10 Windows-2c9e.jsonl') ?? '', /"lt":"aaaaab"/);
+  h.state.backupReady(true);
+  assert.equal(h.state.writeBlock(), null);
+  assert.equal(await h.state.fillIds(P), true);
+  h.state.backupReady(false);
+  assert.equal(h.state.writeBlock(), 'backup');
+  assert.deepEqual(await h.state.save(editor), blocked);
+  h.state.backupReady(true);
+  assert.equal(h.state.writeBlock(), null);
+});
+
+void test('備份的閘門：沒傳 backup 時不擋，backupReady 不作用；手機的原因排在前面', async t => {
+  const h = await setup(t, { [P]: goal('aaaaab') });
+  h.state.backupReady(false);
+  assert.equal(h.state.writeBlock(), null);
+  const phone = await setup(t, { [P]: goal('aaaaab') }, { backup: true, fillIds: false });
+  assert.equal(phone.state.writeBlock(), 'phone');
+});

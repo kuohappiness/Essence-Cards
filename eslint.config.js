@@ -42,6 +42,15 @@ const restricted = (patterns) => ['error', { patterns }];
 const fsrs = { group: ['ts-fsrs', 'ts-fsrs/*'], message: 'ts-fsrs 只由 study/fsrs.ts 包裝。' };
 const localDate = /^(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds)$|^to(Locale.*)?(Date|Time)?String$|^getYear$|^setYear$/;
 
+// D-148：Node 與 Electron 只有電腦專用的資料夾能用，而且只能用明列的（同 tools/build.mjs 的 DESKTOP_ONLY，建置再查一次）。
+const desktopOnly = ['electron', 'node:crypto', 'node:fs/promises', 'node:os', 'node:path'];
+const isNodeOrElectron = name => name === 'electron' || name.startsWith('electron/') || name.startsWith('node:') || builtinModules.includes(name) || builtinModules.includes(name.split('/')[0]);
+const desktopMessage = 'Node 與 Electron 只有 src/desktop/ 能用，而且只能用明列的模組（D-148）；畫面與其他模組透過 main.ts 交進來的動作使用。';
+const desktopEntry = 'src/desktop/ 只能由 src/main.ts 在判斷是電腦之後動態 import（D-148，不經共用的重新匯出檔）；其他檔案只能 import type。';
+const requireMessage = 'src/ 不能用 require（直接呼叫、取成別名、成員或字串索引存取都不行）：Node 與 Electron 在 src/desktop/ 用靜態 import（D-148）；開發命令用 src/obsidian/dev*.ts 的放行清單。';
+// @codemirror 是 Obsidian 提供的編輯器（W5 §8-2）：只有 src/obsidian/ 與 main.ts 能用。
+const codemirrorMessage = '@codemirror 只有 src/obsidian/ 與 src/main.ts 能用（用 Obsidian 提供的那一份）。';
+
 // 核心不能 import src 裡核心以外的檔案。
 // 核心的模組之間：src/core/<模組>/ 從別的模組只能 import 那個模組的 index.ts；deck 不能 import study；study 從 deck 只拿型別。
 const coreModule = /\/src\/core\/([^/]+)\//;
@@ -72,9 +81,28 @@ const moduleBoundaries = {
     const privateCore = new RegExp(coreEntry.regex);
     const privateState = new RegExp(stateEntry.regex);
     const filesEntry = new RegExp(viewFiles.regex);
-    function check(node, source) {
+    // D-148 的範圍是整個 src/：電腦專用的資料夾、可以碰 CodeMirror 的地方、開發命令的 require 放行清單（正式建置不含它們，tests/build.test.ts）。
+    const inSrc = path.includes('/src/');
+    const inDesktop = path.includes('/src/desktop/');
+    const isMain = path.endsWith('/src/main.ts');
+    const editorSide = isMain || path.includes('/src/obsidian/');
+    const devRequire = /\/src\/obsidian\/dev(-[a-z]+)?\.ts$/.test(path);
+    const toDesktop = name => {
+      if (!name.startsWith('.')) return false;
+      return posix.normalize(posix.join(posix.dirname(path), name)).includes('/src/desktop/');
+    };
+    /** Node／Electron、src/desktop/、@codemirror 的邊界；四種載入形式都經過這裡。dynamic：動態 import；typeOnly：只拿型別。 */
+    function srcBoundary(name, { dynamic = false, typeOnly = false } = {}) {
+      if (!inSrc || typeOnly) return undefined;
+      if (isNodeOrElectron(name)) return inDesktop && desktopOnly.includes(name) ? undefined : desktopMessage;
+      if (!inDesktop && toDesktop(name) && !(isMain && dynamic)) return desktopEntry;
+      if (!editorSide && (name === '@codemirror' || name.startsWith('@codemirror/'))) return codemirrorMessage;
+      return undefined;
+    }
+    function check(node, source, dynamic) {
       const literal = source?.type === 'TSLiteralType' ? source.literal : source;
       const name = literal?.value;
+      const typeOnly = node.type === 'TSImportType';
       let message;
       if (typeof name !== 'string') message = '模組名稱必須是字串常值，才能檢查邊界。';
       else if ((inCore || inPure) && (name.startsWith('node:') || builtinModules.includes(name) || corePackages.some(pkg => name === pkg || name.startsWith(pkg + '/')))) message = inCore ? coreImports.message : pureImports.message;
@@ -82,23 +110,65 @@ const moduleBoundaries = {
       else if (!inCore && privateCore.test(name)) message = coreEntry.message;
       else if (!inState && privateState.test(name)) message = stateEntry.message;
       else if (inView && filesEntry.test(name)) message = viewFiles.message;
-      else if (inCore) message = crossModule(path, name, node.type === 'TSImportType');
+      else if (inCore) message = crossModule(path, name, typeOnly);
+      message ??= srcBoundary(name, { dynamic, typeOnly });
       if (message) context.report({ node, message });
     }
     function checkStatic(node, typeOnly) {
-      const message = node.source && inCore ? crossModule(path, node.source.value, typeOnly) : undefined;
+      if (!node.source) return;
+      const message = (inCore ? crossModule(path, node.source.value, typeOnly) : undefined) ?? srcBoundary(node.source.value, { typeOnly });
       if (message) context.report({ node, message });
     }
+    /**
+     * 識別字 require 只是名稱，不是拿載入器來用：`.require` 成員（另由 MemberExpression 擋）、物件字面值與類別的屬性名、型別裡的成員名。
+     * 解構（ObjectPattern）的屬性名不算名稱：`const { require: load } = window` 是取出載入器（Codex L2 B5）。
+     */
+    function onlyName(node) {
+      const parent = node.parent;
+      if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) return true;
+      if (parent.type === 'Property' && parent.key === node && parent.parent.type === 'ObjectExpression') return true;
+      if ((parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') && parent.key === node) return true;
+      return parent.type === 'TSPropertySignature' || parent.type === 'TSMethodSignature';
+    }
+    /**
+     * 內容剛好是 'require' 的字串或樣板字串用來取出載入器的位置：計算的成員（`window['require']`）、解構的屬性名
+     * （`{ 'require': load }`、`{ [`require`]: load }`）、`Reflect` 的引數（`Reflect.get(window, 'require')`）。其他地方是普通的
+     * 字串資料，不擋（Codex 再審 C2）；先存進變數再取的寫法不在這道檢查的範圍。
+     */
+    function takesLoader(node) {
+      const parent = node.parent;
+      if (parent.type === 'MemberExpression' && parent.property === node && parent.computed) return true;
+      if (parent.type === 'Property' && parent.key === node && parent.parent.type === 'ObjectPattern') return true;
+      const callee = parent.type === 'CallExpression' && parent.arguments.includes(node) ? parent.callee : null;
+      return callee?.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'Reflect';
+    }
+    const banRequire = inSrc && !devRequire;
+    const report = node => { context.report({ node, message: requireMessage }); };
     return {
       ImportDeclaration(node) { checkStatic(node, node.importKind === 'type'); },
       ExportNamedDeclaration(node) { checkStatic(node, node.exportKind === 'type'); },
       ExportAllDeclaration(node) { checkStatic(node, node.exportKind === 'type'); },
-      ImportExpression(node) { check(node, node.source); },
+      ImportExpression(node) { check(node, node.source, true); },
       CallExpression(node) {
         if (node.callee.type === 'Identifier' && node.callee.name === 'require') check(node, node.arguments[0]);
       },
       TSImportType(node) { check(node, node.argument); },
       TSExternalModuleReference(node) { check(node, node.expression); },
+      // 技術債「D-148 的檢查會漏掉別的 require 寫法」：require(…)、const load = require、window.require、module.require、
+      // globalThis['require']、require.call、解構取出（識別字、字串、樣板字串、簡寫、解構賦值）、Reflect.get(window, 'require') 都擋：
+      // 識別字 require 只要不是名稱就擋（Codex L2 B5）；內容剛好是 'require' 的字串只在取出載入器的位置擋（Codex 再審 C2）。
+      Identifier(node) {
+        if (banRequire && node.name === 'require' && !onlyName(node)) report(node);
+      },
+      Literal(node) {
+        if (banRequire && node.value === 'require' && takesLoader(node)) report(node);
+      },
+      TemplateLiteral(node) {
+        if (banRequire && node.expressions.length === 0 && node.quasis[0]?.value.cooked === 'require' && takesLoader(node)) report(node);
+      },
+      MemberExpression(node) {
+        if (banRequire && !node.computed && node.property.type === 'Identifier' && node.property.name === 'require') report(node);
+      },
     };
   },
 };

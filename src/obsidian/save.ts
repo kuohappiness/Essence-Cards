@@ -1,7 +1,7 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { EditorHandle, IdIssue, IdIssueKind, State, WriteResult } from '../state/index.ts';
+import type { EditorHandle, IdIssue, IdIssueKind, State, WriteBlock, WriteResult } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
 // 存檔按鈕、待處理問題的小視窗與離開筆記時的備援（W5 §8-6、D-134），只在電腦接上。
@@ -18,6 +18,8 @@ export const TIPS = {
   blocked: '筆記已自動儲存；暫時無法把新目標加入複習，讀取完成後請再按一次存檔',
   // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：Cards 不寫它，也不說「都已加入複習」。
   needsUpdate: '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習',
+  /** 受阻：這台電腦還沒有一份成功的備份（D-150 第 3 點，外掛內備份任務說明 §1-6）；按鈕說明與小視窗也用這一句。 */
+  backup: '筆記已自動儲存；備份還沒成功，先不把新目標加入複習，到設定頁看原因',
 };
 export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
@@ -64,8 +66,13 @@ function editorOf(view: MarkdownView, path: string): EditorHandle {
   };
 }
 
-/** 受阻（D-154）：這台電腦會補 ID，但還沒讀完（loading）或有檔案讀不到（unread）。phone、closed、needs-update 不算。 */
-const blockedByReads = (result: WriteResult): boolean => result.kind === 'blocked' && (result.reason === 'loading' || result.reason === 'unread');
+/**
+ * 受阻的原因對到的說明（技術債「存檔按鈕的受阻原因各自判斷」：按鈕的說明看 state.writeBlock()，按下的結果看 save 回的原因，
+ * 兩邊用這一張表、state 用同一個順序）。還沒讀完、有檔案讀不到（D-154）、還沒有成功的備份（D-150）；phone、closed 不提示。
+ */
+const BLOCKED: Partial<Record<WriteBlock, string>> = { loading: TIPS.blocked, unread: TIPS.blocked, backup: TIPS.backup };
+/** 受阻的說明；不是受阻或不提示的原因是 null。 */
+const blockedTip = (result: WriteResult): string | null => result.kind === 'blocked' && result.reason !== 'needs-update' ? BLOCKED[result.reason] ?? null : null;
 
 /**
  * 存檔結果的提示；text 是按下時編輯器裡的文字。需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。
@@ -76,7 +83,8 @@ function saveTip(result: WriteResult, text: string): string | null {
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
   if (result.kind === 'blocked' && result.reason === 'needs-update') return TIPS.needsUpdate;
-  if (blockedByReads(result)) return parseDeck(text).targets.some(target => !target.id) ? TIPS.blocked : null;
+  const blocked = blockedTip(result);
+  if (blocked) return parseDeck(text).targets.some(target => !target.id) ? blocked : null;
   return null;
 }
 
@@ -133,7 +141,7 @@ class IssuesModal extends Modal {
       if (result.kind === 'done' || result.kind === 'saved') { this.render(); return; }
       // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
       // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
-      this.host.notify(blockedByReads(result) ? TIPS.blocked : saveTip(result, this.view.editor.getValue()) ?? TIPS.stale);
+      this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue()) ?? TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
@@ -153,16 +161,17 @@ export function wireSave(host: SaveHost): Saver {
   let open: Set<string> | null = null;
 
   /**
-   * ready() 完成了的 state 與已經在等它的 state：按鈕說明判斷受阻用（D-154）。unread() 變空時可能沒有 onChange（討論稿 P4），
-   * 說明可能晚到下一次更新按鈕；按下去那一刻以 state.save 的結果為準。
+   * 按鈕說明的受阻原因（D-154、D-150）：依 state 目前所知（writeBlock）。已經在等 ready() 的 state 讀完時更新按鈕；
+   * unread() 變空時可能沒有 onChange（討論稿 P4），備份的閘門由外掛更新按鈕，說明可能晚到下一次更新；按下去那一刻以 state.save 的結果為準。
    */
-  const loaded = new WeakSet<State>(), watched = new WeakSet<State>();
-  function blocked(state: State): boolean {
+  const watched = new WeakSet<State>();
+  function blockTip(state: State): string | null {
     if (!watched.has(state)) {
       watched.add(state);
-      state.ready().then(() => { loaded.add(state); refresh(); }, () => {});
+      state.ready().then(refresh, () => {});
     }
-    return !loaded.has(state) || state.unread().length > 0;
+    const reason = state.writeBlock();
+    return reason ? BLOCKED[reason] ?? null : null;
   }
 
   /** 存檔還沒結束的卡組：再按不另外排一份。 */
@@ -195,7 +204,8 @@ export function wireSave(host: SaveHost): Saver {
       const look = buttonLook(state.deckStatus(path));
       // 受阻期間外觀照舊，說明一律用同一句（不說「學習目標都已加入複習」）；需要新版的照它的說明。按下時 state 的門檻先看讀不到，
       // 所以這種卡組按下去先說受阻、讀完再按才說需要新版（B7，照實記下、這次不統一）。
-      const tip = blocked(state) && look.kind !== 'needs-update' ? TIPS.blocked : look.tip;
+      const blocked = blockTip(state);
+      const tip = blocked && look.kind !== 'needs-update' ? blocked : look.tip;
       let button = buttons.get(view);
       if (!button) {
         button = view.addAction(look.icon, tip, () => { void save(view); });
