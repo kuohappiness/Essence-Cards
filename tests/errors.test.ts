@@ -376,3 +376,27 @@ void test('§1 F1 V8 真的產生的 `at async plugin:essence-cards:行:欄` 認
   assert.match((JSON.parse(lines(memory.texts.get(FILE))[0]) as { stack: string }).stack, /^at async plugin:essence-cards:\d+:\d+$/);
 });
 
+// Codex 再審的 F2：stack 開頭的「名稱: 訊息」確認不了時（name 讀了會拋錯、toString 被改、訊息後來改過），
+// 不把訊息裡像 frame 的那一行當成自己的；確認得了訊息在哪裡結束時，真正的 frame 照樣留。
+void test('§1 F2 訊息的範圍確認不了時不誤收；name 拋錯但找得到訊息時，真正的 frame 照樣留', () => {
+  const fake = (): Error => {
+    const error = Error('first\n    at fake (plugin:essence-cards:9:9)');
+    error.stack = ['Error: first', '    at fake (plugin:essence-cards:9:9)', '    at real (plugin:other-plugin:1:1)'].join('\n');
+    return error;
+  };
+  const broken = Object.defineProperty(fake(), 'name', { get() { throw Error('name-unavailable'); } });
+  assert.equal(hasOwnFrame(broken), false, 'name 拋錯');
+  const changed = fake();
+  changed.message = 'changed later';
+  assert.equal(hasOwnFrame(changed), false, '訊息後來改過');
+  const renamed = fake();
+  renamed.name = 'Renamed';
+  assert.equal(hasOwnFrame(renamed), false, '名稱後來改過');
+  const own = Object.defineProperty(Error('first\n    at fake (plugin:essence-cards:9:9)'), 'name', { get() { throw Error('name-unavailable'); } });
+  own.stack = ['Error: first', '    at fake (plugin:essence-cards:9:9)', '    at real (plugin:essence-cards:1:2)'].join('\n');
+  assert.equal(hasOwnFrame(own), true, '找得到訊息：真正的 frame 留');
+  // WebKit 的 stack 沒有訊息那一段：名稱讀不到也照樣認得。
+  const webkit = Object.defineProperty(Error('w'), 'name', { get() { throw Error('name-unavailable'); } });
+  webkit.stack = 'onload@plugin:essence-cards:1:2';
+  assert.equal(hasOwnFrame(webkit), true, 'WebKit');
+});
