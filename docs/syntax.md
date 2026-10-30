@@ -656,8 +656,8 @@ Cards 呼叫 AI 產生草稿（製卡、加深、錯題分析、補記憶錨點�
 |---|---|
 | `format` | 固定是 `essence-cards-backup`；不是這個值就不是這個格式 |
 | `version` | 這個格式的版本，現在是 `1`。之後要加會改變意思的欄位時才升；讀的一方遇到比自己認得的大，整份當成讀不懂 |
-| `vault` | `name` 是 vault 的資料夾名稱，`path` 是這台電腦上的實際路徑（`/` 分隔），兩者在清理舊備份時用來確認是同一個 vault，比較時照這台電腦的檔名規則（Windows 不分大小寫）；`config` 是這個 vault 的設定資料夾（相對 vault 的路徑，例如 `.obsidian`），`data.json` 在 `files` 或 `absent` 裡的路徑就是 `<config>/plugins/essence-cards/data.json` |
-| `build` | 備份當時這個 vault 裝的外掛建置版本：過渡工具讀 vault 裡 `main.js` 的 `BUILD`，讀不出來是 `null`；外掛自己做的寫正在執行的外掛的 `BUILD`，不另外讀 `main.js`（別台裝置剛同步來新的 `main.js`、這台還沒重新載入時，兩者可能不同） |
+| `vault` | `name` 是 vault 的資料夾名稱，`path` 是這台電腦上的實際路徑（`/` 分隔）；兩者都從解析過連結的實際路徑取，不用 Obsidian 顯示的名稱。清理舊備份時用這兩個確認是同一個 vault，比較時照這台電腦的檔名規則（Windows 不分大小寫）；只有名稱相同、路徑不同（搬過 vault）不算同一個，`config` 不同仍算同一個。`config` 是這個 vault 的設定資料夾（相對 vault 的路徑，例如 `.obsidian`），`data.json` 在 `files` 或 `absent` 裡的路徑就是 `<config>/plugins/essence-cards/data.json` |
+| `build` | 這份備份所記的外掛建置版本，來源依做的一方：過渡工具讀 vault 裡 `main.js` 的 `BUILD`，讀不出來是 `null`；外掛自己做的寫正在執行的外掛的 `BUILD`，不另外讀 `main.js`（別台裝置剛同步來新的 `main.js`、這台還沒重新載入時，兩者可能不同） |
 | `tool` | 做這份備份的程式的建置版本：外掛自己做的和 `build` 相同；過渡工具是 repo 的版本加 commit，寫法同 `BUILD` |
 | `by` | 什麼情況做的。過渡工具：`backup` 手動跑備份工具、`update-vault` 更新命令安裝前。外掛：`new-version` 改寫卡組之前，這台電腦還沒有這個建置版本成功備份的紀錄（第一次跑這個版本，或紀錄被清掉、記的那份找不到）；`monthly` 距離上次成功備份超過 30 天；`manual` 設定頁的「立即備份」。兩邊都用：`restore` 還原前先備份現況。讀的一方只拿來顯示，不認得的值照常讀，不當成讀不懂 |
 | `started`、`finished` | 開始讀、寫完清單的時間，格式同 §5 的 `t` |
@@ -667,9 +667,10 @@ Cards 呼叫 AI 產生草稿（製卡、加深、錯題分析、補記憶錨點�
 | `excluded` | 排除的檔，每項 `path` 與 `reason`；過渡工具一律是空的 |
 | `notes` | 照原樣備份、但值得記下的事，每項 `path` 與 `message`，例如原本就有語法問題的卡組；不算失敗 |
 
-讀備份的一方（還原、列出、發布前比較）：
+讀備份的一方（還原、列出、發布前比較、清理）：
 
 - **清單讀得懂**：JSON 讀得出來還不夠。`format` 是 `essence-cards-backup`、`version` 是認得的整數；上面的欄位除了 `build` 可以是 `null`，都要有、型別對（`files`、`absent`、`excluded`、`notes` 是清單）；每個 `size` 是非負整數，每個 `sha256` 是 64 個小寫十六進位字元。不符就整份不用。不認得的欄位忽略。
 - **一一對應**：zip 裡恰好一個 `manifest.json`；zip 裡的檔案路徑、`files` 的 `path` 各自不重複；zip 裡的每個檔（清單以外）都要在 `files` 裡，`files` 的每個檔都要在 zip 裡，大小與雜湊相同。任何重複或不符都整份當成壞掉，不能靠去重放過。
 - **路徑範圍**：只能在 `Essence Cards/` 底下，或是 `<vault.config>/plugins/essence-cards/data.json` 那一個；有 `..`、`.`、空的段、開頭的 `/`、磁碟代號或反斜線都算壞掉。
+- **自動清理只認完整的備份**：要算進保留或刪掉的，必須是備份資料夾直接底下的一般檔（不是連結，不往子資料夾找），整份通過上面三條，而且檔名和用清單的 `started`（照它自己記的時區）、`build`、檔名裡的隨機 4 碼重新產生的完全相同；`build` 不是 `null`、又不是 `BUILD` 的寫法時不認。其他的檔，例如 `.zip.tmp`、衝突副本（結尾多了 ` 2`）、大寫的 `.ZIP`、驗不過的，都不計數、不刪。列出與還原照上面三條，不套這條較嚴的檔名規則。
 - **寫回的目的地另外算**，不直接拿 zip 裡的路徑當寫入位置：`data.json` 從清單的 `vault.config` 對到現在這個 vault 的設定資料夾，兩邊都要明列在還原計畫裡，現在的設定資料夾確定不了就擋住，不推定成 `.obsidian`。對應之後，兩個來源會寫到同一個檔時（例如在不分大小寫的 Windows 上，`Essence Cards/A.md` 和 `Essence Cards/a.md`），兩個都列成衝突並擋住，一份都不寫；判斷照目的地那台電腦的規則，不禁止其他平台本來合法的兩個檔名。
