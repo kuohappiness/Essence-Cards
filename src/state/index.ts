@@ -350,6 +350,13 @@ export function createState(options: StateOptions): State {
 
   /** 第一次載入時讀取那一列已經把錯誤交給 onError（read）：ready() 拒絕時不再報一次 init。 */
   let queueFailed = false;
+  /**
+   * 這個拒絕是 close() 造成的（Closed）。判斷本身也不能拋錯（Codex 再審的 F3）：拒絕的值可能是查原型就拋錯的 Proxy。
+   * 拋錯時當成不是：照樣用原值報 init，原值照樣拒絕。
+   */
+  const closedBy = (error: unknown): boolean => {
+    try { return error instanceof Closed; } catch { return false; }
+  };
   const loadQueue = (paths: string[]): Promise<void> => reads.queue(() => reads.read(paths)).catch((error: unknown) => { queueFailed = true; throw error; });
   async function load(begin: number, deckPaths: string[], logPaths: string[]): Promise<LoadTimings> {
     // 卡組一批、紀錄一批（自己的紀錄也讀），和之後的檔案變動走同一個 read。
@@ -389,7 +396,7 @@ export function createState(options: StateOptions): State {
       // 這類讀取那一列以外的錯在這裡補報 init；讀取那一列已經報過的不再報；停用不是故障。停用看拒絕的原因（Closed），
       // 不看拒絕當下關閉了沒有：程式的錯之後同一輪又 close() 時照樣要報（Codex L2 的 R2）。
       loading ??= reads.start(load).catch((error: unknown) => {
-        if (!(error instanceof Closed) && !queueFailed) report(error, 'init');
+        if (!closedBy(error) && !queueFailed) report(error, 'init');
         throw error;
       });
       return loading;

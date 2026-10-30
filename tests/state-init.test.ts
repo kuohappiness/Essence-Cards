@@ -96,3 +96,20 @@ void test('§2-3 R2 列不出來的等待中 close()：拒絕是 close 造成的
   assert.equal(await ready, 'rejected');
   assert.deepEqual(errors.map(([source]) => source), ['read']);
 });
+
+// Codex 再審的 F3：分辨「close 造成的」本身也不能拋錯；拋錯的值不准查原型（Proxy）時，照樣用原值記一次 init、原值照樣拒絕。
+void test('§2-3 F3 watch 拋出不准查原型的值：照樣記一次 init，ready() 的拒絕值不變', async () => {
+  const memory = createMemoryFiles(vault);
+  const original = new Proxy({}, { getPrototypeOf() { throw Error('prototype-check-crash'); } });
+  // eslint-disable-next-line @typescript-eslint/only-throw-error -- 這個測試要的就是拋出不是 Error 的值。
+  const files: Files = { ...memory.files, watch: () => { throw original; } };
+  const sources: string[] = [];
+  let reported: unknown = null;
+  const state = createState({ files, device: 'PC-test', delay: 5, fillIds: false, offset: () => 480,
+    onError: (error, source) => { sources.push(source); reported = error; } });
+  const reason = await state.ready().then(() => null, (error: unknown) => error);
+  assert.equal(reason, original);
+  assert.deepEqual(sources, ['init']);
+  assert.equal(reported, original);
+  await state.close();
+});
