@@ -321,3 +321,26 @@ void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review
     assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
   }
 });
+
+// tasks/error-log.md §2-4：產品程式的錯要交給錯誤紀錄（D-155 第 2 點）；只有先印 console 再交出錯誤的幾個檔、開發命令可以用 console。
+void test('§2-4 src/ 開 no-console：新加的 console.log 報錯；main.ts、Markdown.tsx、開發命令放行；tools 與 tests 不管', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  for (const [path, blocked] of [
+    ['src/core/errors/log.ts', true],
+    ['src/state/index.ts', true],
+    ['src/ui/Review.tsx', true],
+    ['src/ui/host.tsx', true],
+    ['src/obsidian/save.ts', true],
+    ['src/main.ts', false],
+    ['src/ui/Markdown.tsx', false],
+    ['src/obsidian/dev.ts', false],
+    ['src/obsidian/dev-review.ts', false],
+    ['src/dev/compare.ts', false],
+    ['tools/example.ts', false],
+    ['tests/example.test.ts', false],
+  ] as const) {
+    const [result] = await lint.lintText("console.log('x');\nconsole.error('y');", { filePath: path });
+    const found = result.messages.filter(message => message.ruleId === 'no-console').length;
+    assert.equal(found, blocked ? 2 : 0, path);
+  }
+});
