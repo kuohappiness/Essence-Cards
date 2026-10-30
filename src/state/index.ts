@@ -2,7 +2,7 @@ import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
-import { createReads } from './reads.ts';
+import { Closed, createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
 import { createWrites } from './writes.ts';
 import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
@@ -357,7 +357,7 @@ export function createState(options: StateOptions): State {
     const afterDecks = performance.now();
     await loadQueue(logPaths);
     const afterHistory = performance.now();
-    if (life.closed) throw Error('state 已關閉，沒有讀完');
+    if (life.closed) throw new Closed();
     // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
     checkApp();
     life.loaded = true;
@@ -386,9 +386,10 @@ export function createState(options: StateOptions): State {
   return {
     ready() {
       // 除了 close() 之外，讓 ready() 拒絕的每一條路都恰好經過一次 onError（tasks/error-log.md §2-3）：監看拋錯、首次排程
-      // 這類讀取那一列以外的錯在這裡補報 init；讀取那一列已經報過的不再報；停用不是故障。
+      // 這類讀取那一列以外的錯在這裡補報 init；讀取那一列已經報過的不再報；停用不是故障。停用看拒絕的原因（Closed），
+      // 不看拒絕當下關閉了沒有：程式的錯之後同一輪又 close() 時照樣要報（Codex L2 的 R2）。
       loading ??= reads.start(load).catch((error: unknown) => {
-        if (!life.closed && !queueFailed) report(error, 'init');
+        if (!(error instanceof Closed) && !queueFailed) report(error, 'init');
         throw error;
       });
       return loading;

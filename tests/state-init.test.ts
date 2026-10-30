@@ -74,3 +74,25 @@ void test('§2-3 列不出來的重試照舊每次一次（read），列出來�
   assert.deepEqual(errors.map(([source]) => source), ['read', 'read']);
   await state.close();
 });
+
+// Codex L2 的 R2：拒絕的原因是程式的錯時，就算呼叫端在同一輪 close()，也照樣記一次 init；close() 本身造成的拒絕才不記。
+void test('§2-3 R2 files.watch 拋錯後同一輪就 close()：照樣記一次 init', async () => {
+  const memory = createMemoryFiles(vault);
+  const files: Files = { ...memory.files, watch: () => { throw Error('watch-crash'); } };
+  const { state, errors } = setup(files);
+  const ready = state.ready().catch((error: unknown) => (error as Error).message);
+  await state.close();
+  assert.equal(await ready, 'watch-crash');
+  assert.deepEqual(errors, [['init', 'watch-crash']]);
+});
+
+void test('§2-3 R2 列不出來的等待中 close()：拒絕是 close 造成的，只有列不出來那一次 read', async () => {
+  const memory = createMemoryFiles(vault);
+  memory.control.failList = true;
+  const { state, errors } = setup(memory.files);
+  const ready = settled(state.ready());
+  await wait(20);
+  await state.close();
+  assert.equal(await ready, 'rejected');
+  assert.deepEqual(errors.map(([source]) => source), ['read']);
+});
