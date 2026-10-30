@@ -1,9 +1,10 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { transform } from 'esbuild';
 import { hashBytes } from '../src/core/backup/index.ts';
 import { buildPlugin } from '../tools/build.mjs';
 import { locate } from '../tools/locate.ts';
@@ -63,4 +64,24 @@ void test('§6 locate：main.js 或對照表的雜湊和 release.json 不同、�
   await assert.rejects(locate('9.9.9', ['1:1'], local), /main\.js\.map 和 release\.json 記的雜湊不同/);
   await writeFile(join(folder, 'main.js'), 'tampered');
   await assert.rejects(locate('9.9.9', ['1:1'], local), /main\.js 和 release\.json 記的雜湊不同/);
+});
+
+// Codex 再審的 F4：行長不算行尾的換行字元；LF 與 CRLF 的產物都接受最後一個字那一欄、拒絕下一欄。
+void test('§6 F4 locate：LF 與 CRLF 的產物，行尾的邊界相同', async t => {
+  const local = await mkdtemp(join(tmpdir(), 'essence-locate-'));
+  t.after(() => rm(local, { recursive: true, force: true }));
+  const { code, map } = await transform('let x = 1;\nlet y = 2;\n', { loader: 'ts', sourcemap: 'external', sourcefile: 'fixture.ts' });
+  const last = code.split('\n')[0].length;
+  for (const [version, newline] of [['1.0.0', '\n'], ['1.0.1', '\r\n']] as const) {
+    const folder = join(local, 'releases', version);
+    await mkdir(folder, { recursive: true });
+    const main = code.replaceAll('\n', newline);
+    await writeFile(join(folder, 'main.js'), main);
+    await writeFile(join(folder, 'main.js.map'), map);
+    const sha256 = { 'main.js': hashBytes(new TextEncoder().encode(main)), 'main.js.map': hashBytes(new TextEncoder().encode(map)) };
+    await writeFile(join(folder, 'release.json'), JSON.stringify({ version, build: version + '+abc1234', sha256 }));
+    const [found] = await locate(version, [`1:${String(last)}`], local);
+    assert.equal(found.source, 'fixture.ts', version);
+    await assert.rejects(locate(version, [`1:${String(last + 1)}`], local), /超出 main\.js/, version);
+  }
 });

@@ -45,7 +45,8 @@ export async function locate(version: string, positions: readonly string[], loca
   const payload = JSON.parse(await readFile(join(folder, 'main.js.map'), 'utf8')) as SourceMapPayload & { sourcesContent?: (string | null)[] };
   const map = new SourceMap(payload);
   // 產物裡每一行的長度：超出範圍的位置 findEntry 會沿用前一個對應，看起來像對到了（Codex L2 的 R4）。
-  const code = (await readFile(join(folder, 'main.js'), 'utf8')).split('\n');
+  // 行尾的換行字元不算進行長，CRLF 的產物和 LF 的邊界一樣（再審的 F4）。
+  const code = (await readFile(join(folder, 'main.js'), 'utf8')).split(/\r?\n/);
   return positions.map(position => {
     const match = /(\d+):(\d+)\)?\s*$/.exec(position);
     const line = match ? Number(match[1]) : 0, column = match ? Number(match[2]) : 0;
