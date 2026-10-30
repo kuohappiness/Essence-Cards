@@ -45,17 +45,26 @@ async function testVault(t: TestContext): Promise<{ vault: string; local: string
   return { vault, local };
 }
 
-void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault 先建置再複製三個檔案，不改動 src/', async t => {
+// 外掛架構檢查環節 9 的 N2：建置與安裝都不寫 repo 根目錄的 main.js，同一個資料夾同時跑兩次這個檔才不會互相覆寫。
+void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault 先建置再複製三個檔案，不改動 src/、不寫 repo 根目錄', async t => {
   const { vault, local } = await testVault(t);
+  const out = await mkdtemp(join(tmpdir(), 'essence-out-'));
+  t.after(() => rm(out, { recursive: true, force: true }));
   const before = await tree(join(root, 'src'));
-  const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: root });
-  assert.equal((await installVault({ vault, local })).kind, 'test');
+  // 建 repo 本身（版本帶 commit），輸出到暫存資料夾。
+  const script = "const { buildPlugin } = await import('./tools/build.mjs'); await buildPlugin({ outdir: process.argv[1] });";
+  const { stdout } = await run(process.execPath, ['--input-type=module', '-e', script, out], { cwd: root });
   // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
   assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.1\.0\+[0-9a-f]{7,}(\.dirty)?\n/);
-  for (const name of ['main.js', 'manifest.json', 'styles.css']) {
-    assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
-  }
+  assert.deepEqual(await tree(out), ['main.js', 'styles.css']);
   assert.deepEqual(await tree(join(root, 'src')), before);
+  // 安裝到測試 vault 會在專案根目錄建置再複製（tools/install.ts），所以用暫存專案。
+  const dir = await project(t, {});
+  await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
+  assert.equal((await installVault({ root: dir, vault, local })).kind, 'test');
+  for (const name of ['main.js', 'manifest.json', 'styles.css']) {
+    assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(dir, name)));
+  }
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Record<string, unknown>;
   assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.1.0', '1.8.7', false]);
 });
@@ -136,8 +145,10 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
     return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
   };
-  // 開發命令的模組都叫 src/obsidian/dev.ts 或 dev-*.ts（device.ts 不算），新加的不用改這裡也受檢查。
-  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-[a-z]+)?\.ts$/.test(path);
+  // 開發命令的模組都叫 src/obsidian/dev.ts 或 dev-*.ts（device.ts 不算），新加的不用改這裡也受檢查；
+  // dev- 後面有數字或第二個 - 的也算（開發命令的證據 W3 (b)）。
+  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-[^/]+)?\.ts$/.test(path);
+  assert.deepEqual(['src/obsidian/dev-v2.ts', 'src/obsidian/dev-a-b.ts', 'src/obsidian/device.ts'].map(devOnly), [true, true, false]);
   assert.deepEqual((await included(false)).filter(devOnly), []);
   // I9：CodeMirror 由 Obsidian 提供，沒有另一份被打包進來；編輯器的鎖定在正式版裡。
   for (const dev of [false, true]) {
@@ -160,10 +171,11 @@ void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫
 
 void test('W5 安裝 --dev 裝開發版到測試 vault，並把 essence-cards 加進那個 vault 的外掛清單一次', async t => {
   const { vault, local } = await testVault(t);
-  t.after(() => run(process.execPath, ['tools/build.mjs'], { cwd: root }));
+  const dir = await project(t, {});
+  await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   await mkdir(join(vault, '.obsidian'));
   await writeFile(join(vault, '.obsidian/community-plugins.json'), '["other"]');
-  for (let i = 0; i < 2; i++) assert.equal((await installVault({ vault, local, dev: true })).kind, 'dev');
+  for (let i = 0; i < 2; i++) assert.equal((await installVault({ root: dir, vault, local, dev: true })).kind, 'dev');
   assert.deepEqual(JSON.parse(await readFile(join(vault, '.obsidian/community-plugins.json'), 'utf8')), ['other', 'essence-cards']);
   const main = await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8');
   assert.match(main, /^\/\*! Essence Cards build=\S+ dev=true \*\//);

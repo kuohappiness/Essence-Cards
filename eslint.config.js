@@ -114,14 +114,8 @@ export default tseslint.config(
   {
     files: source,
     extends: [tseslint.configs.recommendedTypeChecked],
-    languageOptions: { parserOptions: {
-      projectService: {
-        allowDefaultProject: ['tools/*.ts', 'tools/compare/*.ts', 'tests/*.ts', 'tests/helpers/*.ts'],
-        // tools、tests 不在 tsconfig 的 include 裡，由這裡的預設專案涵蓋；超過上限時 lint 整個失敗（2026-10-29 加到 61 個）。
-        maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 100,
-      },
-      tsconfigRootDir: import.meta.dirname,
-    } },
+    // tools、tests 也在 tsconfig 的 include 裡（外掛架構檢查環節 9 的 Q3），型別檢查與 lint 用同一個專案。
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-floating-promises': 'error',

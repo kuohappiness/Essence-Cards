@@ -138,6 +138,51 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
   await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
 });
 
+// 外掛架構檢查環節 9 結論第 2 條（Q2）：改到程式時跑同一份 npm run check，只是測試改用 dot reporter。
+void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留原本的 NODE_OPTIONS；失敗時擋下並印出錯誤', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'essence-hook-check-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = promisify(execFile);
+  // 原本的 NODE_OPTIONS 已有 --test-reporter 時（例如這個測試本身由 pre-commit 執行），再加一個 node 會報錯，所以換成已知的值。
+  // 這個測試的程序帶著 NODE_TEST_CONTEXT，裡面再跑的 node --test 會當自己是子程序，測試失敗也回 0，所以拿掉。
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_OPTIONS: '--max-old-space-size=1024' };
+  delete env.NODE_TEST_CONTEXT;
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  const isolated = { cwd: root, env };
+  const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
+  await run('git', ['init', '-q'], isolated);
+  // hook 只看 node_modules 在不在；文件檢查換成什麼都不做的替身，不 stage。
+  await mkdir(join(root, 'node_modules'));
+  await mkdir(join(root, 'tools'));
+  await writeFile(join(root, 'tools/check-docs.ts'), 'export {};\n');
+  await mkdir(join(root, '.githooks'));
+  const hook = join(root, '.githooks/pre-commit');
+  await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await chmod(hook, 0o755);
+  await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
+  const check = 'node -e "console.log(\'NODE_OPTIONS=\' + process.env.NODE_OPTIONS)" && node --test probe.test.mjs';
+  await writeFile(join(root, 'package.json'), JSON.stringify({ private: true, scripts: { check } }));
+  const probe = "import test from 'node:test';\nvoid test('probe-pass', () => {});\n";
+  await writeFile(join(root, 'probe.test.mjs'), probe);
+  await mkdir(join(root, 'src'));
+  await writeFile(join(root, 'src/probe.ts'), 'export {};\n');
+  await run('git', ['add', '--', 'src/probe.ts'], isolated);
+  const passed = await run('git', commit, isolated);
+  assert.match(passed.stdout + passed.stderr, /NODE_OPTIONS=--max-old-space-size=1024 --test-reporter=dot\n/);
+  assert.doesNotMatch(passed.stdout + passed.stderr, /probe-pass/);
+  await writeFile(join(root, 'probe.test.mjs'), probe + "void test('probe-fail', () => { throw new Error('probe failure message'); });\n");
+  await writeFile(join(root, 'src/probe.ts'), 'export const changed = 1;\n');
+  await run('git', ['add', '--', 'src/probe.ts'], isolated);
+  await assert.rejects(run('git', commit, isolated), (error: unknown) => {
+    const { code, stdout, stderr } = error as { code: unknown; stdout: string; stderr: string };
+    assert.equal(code, 1);
+    assert.match(stdout + stderr, /probe failure message/);
+    assert.doesNotMatch(stdout + stderr, /probe-pass/);
+    return true;
+  });
+  assert.equal((await run('git', ['rev-list', '--count', 'HEAD'], isolated)).stdout.trim(), '1');
+});
+
 const loadForms = (name: string) => [
   "import '" + name + "';", "export * from '" + name + "';",
   "void import('" + name + "');", "require('" + name + "');",

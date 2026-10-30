@@ -9,6 +9,8 @@ import type { ReviewProps } from '../../src/ui/Review.tsx';
  * useEffect、useLayoutEffect、useSyncExternalStore 照 React 的規則（effect 照宣告順序、deps 沒變不跑、先跑全部的 cleanup 再跑
  * 新的），子元件（Card、Actions、Done…）沒有 hook，直接展開成樹。
  * 不是瀏覽器：沒有 DOM、版面、焦點移動與真的動畫；那些在 Windows 版 Obsidian 用開發命令 ui 驗。
+ * 和 React 不一樣的三點（第一個里程碑報告 R6 (a)）：useSyncExternalStore 每次通知都重畫，不比對 snapshot 有沒有變；
+ * 元素卸載時 ref 不會清成 null；元素的 contains 固定回 true。
  */
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -84,13 +86,13 @@ export async function renderReview(props: ReviewProps): Promise<ReviewUi> {
     return slots[cursor++] as T;
   }
   function useEffectStub(layout: boolean, create: () => unknown, deps?: readonly unknown[]): void {
-    const { effect } = slot(() => ({ kind: 'effect', effect: { layout, deps: undefined, create, cleanup: undefined, pending: true } }) as const);
+    const { effect } = slot((): { kind: 'effect'; effect: Effect } => ({ kind: 'effect', effect: { layout, deps: undefined, create, cleanup: undefined, pending: true } }));
     if (effect.pending || !sameDeps(effect.deps, deps)) { effect.pending = true; effect.create = create; }
     effect.deps = deps;
   }
   const react = {
     useState(initial: unknown) {
-      const state = slot(() => ({ kind: 'state', value: typeof initial === 'function' ? (initial as () => unknown)() : initial }) as const);
+      const state = slot((): { kind: 'state'; value: unknown } => ({ kind: 'state', value: typeof initial === 'function' ? (initial as () => unknown)() : initial }));
       const set = (next: unknown): void => {
         const value = typeof next === 'function' ? (next as (old: unknown) => unknown)(state.value) : next;
         if (mounted && !Object.is(value, state.value)) { state.value = value; dirty = true; }

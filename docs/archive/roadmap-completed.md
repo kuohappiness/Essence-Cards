@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-29 | 更新防線第二部分合併進 `main`（`1308e58`，[任務說明](../../tasks/update-safeguards.md)、[L2 報告與回應](<../../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）：每台裝置記版本行，讀不懂的卡組與紀錄先停著、不出題也不寫；Codex L2 加三次再審後通過，合併後 747 個測試通過；開發命令結果檔改記 BUILD（`b6b39bb`），回看按鈕與比較轉接器記技術債 |
 | 2026-10-29 | `state` 的讀寫先後與寫入協調合併進 `main`（`70ba562`，[任務說明](../../tasks/state-writes.md)、[L2 報告](<../../Claude Codex Discussion/2026-10-29-state-writes-review.md>)）：寫入排成一列、先讀完待讀、一個門檻，存檔寫進磁碟並核對後才採用；Codex L2 三輪後通過，合併後 673 個測試通過；V6 記成已知限制（[討論稿](<../../Claude Codex Discussion/2026-10-29-save-external-write.md>)） |
 | 2026-10-29 | 更新防線第一部分合併進 `main`（`8aa3078`，[任務說明](../../tasks/update-safeguards.md)、[查核與回應](<../../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)）：備份、還原工具、發布前比較、安裝的擋法與更新命令；Codex 四輪查核的發現都已修，R4 與無鎖空檔記技術債 |
 | 2026-10-29 | 雲端佔位檔讀不到時的處理定案（[D-154](../decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)，[討論稿](<../../Claude Codex Discussion/2026-10-29-icloud-placeholders.md>)）：說明書教保持下載、存檔受阻時當下說清楚、先分段實測；不自動補延後的 ID、不改 iCloud 設定 |

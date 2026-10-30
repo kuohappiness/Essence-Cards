@@ -23,7 +23,7 @@ export interface ReviewHost extends Plugin {
   on(kind: 'review', listener: (value: ReviewEvent) => void): () => void;
 }
 /** 寫一個結果檔，回傳路徑（dev.ts 的 writeResult）。 */
-type Write = (code: string, data: unknown) => Promise<string>;
+type Write = (code: string, data: Record<string, unknown>) => Promise<string>;
 
 const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 const frames = () => new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); });
@@ -44,7 +44,7 @@ const round = (ms: number) => Math.round(ms);
 let opens = 0;
 interface Measure { open: number; fromPickMs: number | null; next: number[]; gestures: unknown[]; failed: unknown[]; away: unknown[]; keyboard: unknown[] }
 /** 一次打開的量測；ui 命令自己開的畫面也用它。 */
-function measurer(): { onEvent: (event: ReviewEvent) => void; result: () => unknown } {
+function measurer(): { onEvent: (event: ReviewEvent) => void; result: () => Record<string, unknown> } {
   let current: Measure | null = null;
   const start = (): Measure => current ??= { open: ++opens, fromPickMs: null, next: [], gestures: [], failed: [], away: [], keyboard: [] };
   return {

@@ -160,7 +160,7 @@ void test('Files.watch 列資料夾暫時回 EPERM：恢復後自己重新比對
   await rm(join(root, 'folder/a.md'));
   // 檔案系統的通知都送完了（這段期間每次比對都失敗），之後不會再有新的通知。
   await setTimeout(300);
-  assert.deepEqual(events, []);
+  assert.deepEqual<string[]>(events, []);
   list.failing = false;
   const deadline = performance.now() + 3000;
   while (!events.includes('folder/a.md') && performance.now() < deadline) await setTimeout(10);
