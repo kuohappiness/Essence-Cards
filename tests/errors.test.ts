@@ -292,3 +292,43 @@ void test('§1 after：第一次讀寫之前先等它（layout ready 之前不�
   await wait(10);
   assert.equal(lines(memory.texts.get(FILE)).length, 1);
 });
+
+// tasks/error-log.md §8（D-160 第 4 點）：學生回報記進同一個檔；去重的鍵是 lt、v、kind。
+void test('§8 report：同一張卡同一項 12 次只有 2 行（第 1 次與 n: 10）；同一張卡不同項、不同卡同一項各算一個', async () => {
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  const card = { path: DECK, lt: 'k3m9x2', v: 'a1b2c3d4' };
+  for (let i = 0; i < 12; i++) log.report({ kind: 'content', ...card });
+  log.report({ kind: 'audio', ...card });
+  log.report({ kind: 'content', ...card, v: 'ffffffff' });
+  log.report({ kind: 'content', ...card, lt: 'p7q2w8' });
+  await wait(10);
+  const written = lines(memory.texts.get(FILE));
+  assert.deepEqual(written, [
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"report","kind":"content","path":"Essence Cards/國二上/自然/2-2 水溶液（卡片）.md","lt":"k3m9x2","v":"a1b2c3d4"}',
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"report","kind":"content","path":"Essence Cards/國二上/自然/2-2 水溶液（卡片）.md","lt":"k3m9x2","v":"a1b2c3d4","n":10}',
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"report","kind":"audio","path":"Essence Cards/國二上/自然/2-2 水溶液（卡片）.md","lt":"k3m9x2","v":"a1b2c3d4"}',
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"report","kind":"content","path":"Essence Cards/國二上/自然/2-2 水溶液（卡片）.md","lt":"k3m9x2","v":"ffffffff"}',
+    '{"t":"2026-11-02T20:15:03.250+08:00","build":"0.1.0+1a2b3c4","obsidian":"1.14.5","where":"report","kind":"content","path":"Essence Cards/國二上/自然/2-2 水溶液（卡片）.md","lt":"p7q2w8","v":"a1b2c3d4"}',
+  ]);
+  // 錯誤與回報的鍵分開：同樣的字串當錯誤記，不算同一個。
+  log.record('render', 'k3m9x2', { path: DECK });
+  await wait(10);
+  assert.equal(lines(memory.texts.get(FILE)).length, 6);
+});
+
+void test('§8 report：月上限與寫不進去照 §1（共用每月 300 行）', async () => {
+  const old = Array.from({ length: 299 }, () => '{"where":"read"}').join('\n') + '\n';
+  const memory = createMemoryFiles({ [FILE]: old });
+  const { log } = setup(memory.files);
+  log.report({ kind: 'stuck', path: DECK, lt: 'a', v: 'b' });
+  log.report({ kind: 'other', path: DECK, lt: 'a', v: 'b' });
+  await wait(10);
+  const written = lines(memory.texts.get(FILE));
+  assert.equal(written.length, 300);
+  assert.match(written[299], /"where":"limit"\}$/);
+  const failing = createMemoryFiles();
+  failing.control.failAppend = true;
+  const { log: broken } = setup(failing.files);
+  assert.doesNotThrow(() => { broken.report({ kind: 'display', path: DECK, lt: 'a', v: 'b' }); });
+});
