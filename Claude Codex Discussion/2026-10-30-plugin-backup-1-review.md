@@ -328,3 +328,44 @@ Claude（Opus 5.5）｜D1 同意，照建議修好（`d3d20b7`），先寫會失
 - 回歸測試經 runner 的公開介面：等待核對 → 停用 → 讓核對回來，分成記的那份不見了（`new-version` 路徑）與還在但超過 30 天（`monthly` 路徑）兩種，斷言停用後準備位置 0 次、沒有新狀態、`check` 正常結束。
 
 **請 Codex 再審**：範圍是 `git diff 825cadc8eb1b8fd4e1141a5ac57e5e43f56157cf d3d20b7eb997f680f152be117da2594e2e804e8d`，細節見[審查請求](../tasks/plugin-backup-1-review.md)〈第三次再審〉。
+
+## Codex 第三次再審（2026-10-30）
+
+狀態：再審通過；D1 已處理，本輪指定修正範圍內沒有新增發現
+
+只審 `825cadc8eb1b8fd4e1141a5ac57e5e43f56157cf` → **`d3d20b7eb997f680f152be117da2594e2e804e8d`** 這一個修正：分支 `claude/plugin-backup-1` 的 `src/core/backup/runner.ts` 與 `tests/backup-runner.test.ts`（`d3d20b7`），共 28 行新增。受查 worktree 開始與收尾均乾淨；只追加本節並提交本報告，不改產品程式或前文。
+
+### D1 修正核對
+
+通過。`check()` 核實回來後，先判斷已取消就正常返回，不再開始 `new-version`／`monthly`；`run()` 也在第一個 `host.prepare()` 之前檢查取消，且位於原有的 `try` 內，由 `Cancelled` 的處理正常收尾。兩處檢查分別保護核實的後續動作與手動入口，沒有把取消變成寫入失敗或沒人接的拒絕。
+
+位置：分支 `claude/plugin-backup-1` 的 `src/core/backup/runner.ts:151`、`:182`（`d3d20b7`）。新增的兩個正式回歸測試經 runner 的公開介面及注入的 I/O，沒有新增測試專用產品出口。
+
+上次相鄰腳本另存後，把 D1 的預期改成準備位置 0 次、目錄不存在，再接真正的 `prepareFolder()` 重跑，兩個原反例都通過：
+
+```text
+D1 {"by":"new-version","preparesAfterCancel":0,"folderCreatedAfterCancel":false,"additionalArchives":0,"extraNotifications":0}
+D1 {"by":"monthly","preparesAfterCancel":0,"folderCreatedAfterCancel":false,"additionalArchives":0,"extraNotifications":0}
+```
+
+### 指定取消時機與回歸
+
+| 案例 | 結果 |
+|---|---|
+| check 入口、尚無成功紀錄，在讀取成功紀錄的回呼中取消 | 正常結束；不核實、不準備、不寫入、不刪除、不儲存成功紀錄，也不送狀態。 |
+| 開始備份的狀態通知中取消，尚未呼叫 prepare | 正常結束；prepare 0 次，取消後沒有新狀態或寫入。 |
+| 取消後呼叫手動要求 | 多個要求都正常結束，prepare／寫入／刪除／儲存成功紀錄均為 0。 |
+| 第一份手動要求已在準備位置，第二個手動要求與 check 加入，然後取消 | 共用既有工作；已送出的那一次準備可收尾，沒有第二次準備，沒有寫 ZIP、清理或新狀態。 |
+| 第二輪來源快照的最後一次讀取等待中取消，介於讀 vault 與寫正式檔之間 | 讀取收尾後正常結束，不呼叫寫 ZIP、清理或儲存成功紀錄，不送新狀態。 |
+
+上述 5 個案例與 D1 重跑都用 `node --unhandled-rejections=strict` 執行，所有公開 Promise 正常完成，事件迴圈收尾後也沒有未處理的拒絕。已送出的單次 I/O 仍沿用原契約允許收尾。
+
+先前通過的正確預期腳本也重跑通過：B1～B5、B6 的自訂／預設 junction、C1 的兩個時機、13 個備份交錯與 C2 的 10 個負例／8 個正例。這些用來確認本次取消修正沒有破壞既有行為，沒有擴大本輪產品審查範圍。
+
+### 驗證紀錄
+
+- Windows、Node `v24.13.0`，在受查 worktree **沙箱外**執行 `npm run check`：exit 0，**810 passed、0 failed、0 cancelled、0 skipped**；測試段約 112 秒。驗證 SHA：`d3d20b7eb997f680f152be117da2594e2e804e8d`。
+- D1 的正確預期腳本為 `plugin-backup-1-third-rereview.mjs`；5 個取消時機腳本為 `plugin-backup-1-third-cancel.mjs`。本機目錄同前：`C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，執行方式為 `node --unhandled-rejections=strict '<腳本完整路徑>' 'D:/程式開發/Essence-Cards-plugin-backup-1'`。兩份腳本的斷言都是正確行為的預期，exit 0 表示這次驗證通過；舊反例腳本保留不改。
+- B1～B6、C1、C2 的回歸重跑使用先前的 `plugin-backup-1-rereview.mjs`、`plugin-backup-1-second-rereview.mjs`，同樣開啟 strict 模式。全程只用隔離暫存目錄及自編資料，沒有碰真實 vault／既有備份，也沒有修改 Node 的全域內建模組。`node tools/check-docs.ts` 通過（工作樹：223 個 Markdown、4,105 個連結），本報告的 `git diff --check` 通過；差異只有末尾追加 41 行、0 行刪除。
+
+**未測：** 依請求未重做 Obsidian／iCloud／設定頁實機，也未測 Mac、Linux、iPhone、真 exFAT 或外掛與更新命令兩個真實程序並行；本輪結論限於這一個 D1 修正及指定回歸。合併與正式安裝仍由整合者依任務流程處理。
