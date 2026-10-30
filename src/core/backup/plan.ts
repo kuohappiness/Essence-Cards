@@ -1,4 +1,5 @@
 import { isDeckPath, parseDeck } from '../deck/index.ts';
+import { isErrorLogPath } from '../errors/index.ts';
 import { isLogPath, LOG_FOLDER } from '../study/index.ts';
 import { missingLogLines } from './logs.ts';
 import type { MissingLines } from './logs.ts';
@@ -56,11 +57,16 @@ interface PlanInput {
 const info = (bytes: Uint8Array): FileInfo => ({ size: bytes.length, sha256: hashBytes(bytes) });
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 const byText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
+/**
+ * 勾選清單裡的檔：複習紀錄另外逐行補（logs）；錯誤紀錄（`紀錄/錯誤/`）不列也不補回（D-155 第 6 點、syntax §9），
+ * 家長看不懂它的衝突與「備份後才有」，舊的錯誤仍在備份 zip 裡。這個例外只寫在這裡，不擴大 isLogPath。
+ */
+const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(path);
 
 /**
  * 還原計畫（D-150 第 7、8 點；syntax §5-3、§8）。不寫任何檔。
  * - 非紀錄的檔：和現在不同的（改過的、不見的）可以還原，備份後才有的列出但不動；`紀錄/` 裡不是複習 JSONL 的檔只補不見的，
- *   同名不同內容列成衝突。對應到目的地之後撞名的，兩個都擋住。
+ *   同名不同內容列成衝突；錯誤紀錄不列（listed）。對應到目的地之後撞名的，兩個都擋住。
  * - 全庫 ID 檢查：照選擇還原之後，`Essence Cards/` 的所有卡組有重複的學習目標 ID（同一篇裡重複也算），參與重複的還原檔
  *   擋住；擋住的不還原之後再檢查一次，直到沒有新的。
  * - 複習紀錄：每個來源缺的行。
@@ -70,8 +76,8 @@ export function planRestore(input: PlanInput): RestorePlan {
   const dataSource = manifest.vault.config + '/' + PLUGIN_DATA;
   const targetOf = (path: string): string | null => path !== dataSource ? path : config === null ? null : config + '/' + PLUGIN_DATA;
   const currentPath = new Map<string, string>();
-  for (const path of current.keys()) if (!isLogPath(path)) currentPath.set(sameFile(path), path);
-  const restorable = [...backup.keys()].filter(path => !isLogPath(path)).sort(byText);
+  for (const path of current.keys()) if (listed(path)) currentPath.set(sameFile(path), path);
+  const restorable = [...backup.keys()].filter(listed).sort(byText);
   const writers = new Map<string, string[]>();
   for (const path of restorable) {
     const target = targetOf(path);
@@ -102,7 +108,7 @@ export function planRestore(input: PlanInput): RestorePlan {
     files.push({ path, target, kind, action: reasons.length ? 'blocked' : 'restore', reasons, backup: mine, current: now, after: [] });
   }
   for (const path of [...current.keys()].sort(byText)) {
-    if (isLogPath(path) || matched.has(path)) continue;
+    if (!listed(path) || matched.has(path)) continue;
     files.push({ path, target: path, kind: 'added', action: 'keep', reasons: [], backup: null, current: { path, ...info(current.get(path)!) }, after: [] });
   }
   for (const file of files) {
