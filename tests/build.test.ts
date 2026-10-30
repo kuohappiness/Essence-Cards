@@ -8,6 +8,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
+import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -51,7 +52,8 @@ void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: root });
   assert.equal((await installVault({ vault, local })).kind, 'test');
   // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
-  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.1\.0\+[0-9a-f]{7,}(\.dirty)?\n/);
+  // D-148：Node 與 Electron 只由 src/desktop/ 引入，另外列出。
+  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; desktop: electron, node:crypto, node:fs\/promises, node:os, node:path; version 0\.1\.0\+[0-9a-f]{7,}(\.dirty)?\n/);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(root, name)));
   }
@@ -83,7 +85,7 @@ void test('W1 新增模組資料夾與 CSS 不會誤報：建置成功、只 req
     'state/a.ts': 'export const a = "a";', 'dev/b.ts': 'export const b = "b";', 'obsidian/c.css': 'c{}',
   });
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: obsidian; version 0\.1\.0(\+\S+)?\n/);
+  assert.match(stdout, /require: obsidian; desktop: ; version 0\.1\.0(\+\S+)?\n/);
   assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), 'c{}');
 });
 void test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
@@ -121,7 +123,7 @@ void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI�
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; version 0\.1\.0(\+\S+)?\n/);
+  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; desktop: electron, node:crypto, node:fs\/promises, node:os, node:path; version 0\.1\.0(\+\S+)?\n/);
   const production = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
 });
@@ -180,4 +182,49 @@ void test('A6 @codemirror/state、@codemirror/view 的開發相依和 obsidian �
     const installed = JSON.parse(await readFile(join(root, 'node_modules', name, 'package.json'), 'utf8')) as { version: string };
     assert.equal(installed.version, obsidian.peerDependencies[name], name + ' 實際裝的版本');
   }
+});
+
+// D-148 第 3 點（建置）：Node 與 Electron 只在 src/desktop/ 引入、只能用明列的；src/desktop/ 只由 main.ts 動態載入。
+void test('D-148 建置擋下 src/desktop/ 以外引入 Node、明列以外的模組、靜態載入 src/desktop/', async t => {
+  const cases: [string, Record<string, string>, RegExp][] = [
+    ['畫面用 Node', { 'main.ts': 'import { a } from "./ui/a.ts"; console.log(a);', 'ui/a.ts': 'import { readFile } from "node:fs/promises"; export const a = readFile;' }, /node:fs\/promises 只有 src\/desktop\/ 能用.*src\/ui\/a\.ts/],
+    ['src/desktop/ 用明列以外的', { 'main.ts': 'void import("./desktop/a.ts");', 'desktop/a.ts': 'import { exec } from "node:child_process"; export const a = exec;' }, /node:child_process 只有 src\/desktop\/ 能用/],
+    ['靜態載入 src/desktop/', { 'main.ts': 'import { a } from "./desktop/a.ts"; console.log(a);', 'desktop/a.ts': 'import { join } from "node:path"; export const a = join;' }, /src\/main\.ts → src\/desktop\/a\.ts/],
+  ];
+  for (const [name, files, message] of cases) {
+    const dir = await project(t, files);
+    await assert.rejects(run(process.execPath, ['tools/build.mjs'], { cwd: dir }), (error: { stderr: string }) => message.test(error.stderr), name);
+  }
+});
+
+// D-148 第 3 點（驗收）：用 isDesktopApp=false、碰到 Node 或 Electron 就丟錯的替身載入正式建置的 main.js（tools/build.mjs 的產出），
+// 確認沒載入 src/desktop/、沒有建立任何計時器；電腦的替身才載入（反過來確認這個檢查抓得到）。
+void test('D-148 手機替身載入正式的 main.js：不 require Node 或 Electron、不建立計時器；電腦替身才載入 src/desktop/', async t => {
+  const dir = await project(t, {});
+  await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
+  await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
+  const code = await readFile(join(dir, 'main.js'), 'utf8');
+  const deck = { 'Essence Cards/a.md': '- 目標 ^aaaaaa\n    - Q :: A\n', '.obsidian/plugins/essence-cards/manifest.json': '{}' };
+  async function loaded(options: StubOptions) {
+    const stub = createObsidianStub({ ...options, texts: deck });
+    const { default: Plugin } = stub.load<{ default: new (app: unknown, manifest: unknown) => { onload(): void; onunload(): void; state: { ready(): Promise<unknown> } | null; backup: { runner: { status(): { ready: boolean } } } | null } }>(code);
+    const plugin = new Plugin(stub.app, { id: 'essence-cards', version: '0.1.0' });
+    t.after(() => { plugin.onunload(); });
+    plugin.onload();
+    stub.layoutReady();
+    await plugin.state?.ready();
+    for (let i = 0; i < 300 && options.desktop && !plugin.backup?.runner.status().ready; i++) await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    return { stub, plugin };
+  }
+  const phone = await loaded({});
+  assert.deepEqual([...new Set(phone.stub.required)].sort(), ['@codemirror/state', '@codemirror/view', 'obsidian']);
+  assert.deepEqual(phone.stub.timers(), { setInterval: 0, registerInterval: 0 });
+  assert.equal(phone.plugin.backup, null);
+  const vaultPath = await mkdtemp(join(tmpdir(), 'essence-vault-')), folder = await mkdtemp(join(tmpdir(), 'essence-backup-'));
+  t.after(async () => { await rm(vaultPath, { recursive: true, force: true }); await rm(folder, { recursive: true, force: true }); });
+  const desktop = await loaded({ desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': folder } });
+  assert.ok(desktop.stub.required.includes('node:fs/promises'));
+  assert.equal(desktop.stub.timers().registerInterval, 1);
+  assert.equal(desktop.plugin.backup?.runner.status().ready, true);
 });

@@ -1,0 +1,38 @@
+/* 設定頁「給家長」的備份一列（tasks/plugin-backup.md §1-5）：路徑、一行短說明加 ⓘ、點開的三點、不能用時的原因。 */
+.essence-cards-backup-path {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  word-break: break-all;
+  margin-bottom: var(--size-2-2);
+}
+.essence-cards-backup-note {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+.essence-cards-backup-info {
+  display: inline-flex;
+  padding: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.essence-cards-backup-info:hover,
+.essence-cards-backup-info[aria-expanded="true"] {
+  color: var(--text-accent);
+}
+.essence-cards-backup-info svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+.essence-cards-backup-details {
+  margin: var(--size-2-3) 0 0;
+  padding-inline-start: var(--size-4-4);
+}
+.essence-cards-backup-details li {
+  margin-bottom: var(--size-2-1);
+}
+.essence-cards-backup-problem {
+  color: var(--text-error);
+  margin-top: var(--size-2-2);
+}

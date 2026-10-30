@@ -1,5 +1,8 @@
 import * as codemirrorState from '@codemirror/state';
 import * as codemirrorView from '@codemirror/view';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
 
 /**
  * 最小的 obsidian 替身（技術債 A9）：在 Node 跑 esbuild 建好的外掛程式碼，不是 Obsidian 實機。
@@ -25,6 +28,8 @@ class FakeEl {
   addEventListener(type: string, callback: () => void) { if (type === 'click') this.clicks.push(callback); }
   /** 照瀏覽器：停用的按鈕不送 click。 */
   click() { if (!this.disabled) for (const callback of this.clicks) callback(); }
+  /** 設定分頁開著沒：替身裡一律沒開。 */
+  isShown() { return false; }
   querySelectorAll(tag: string): FakeEl[] { return this.children.flatMap(child => [...child.tag === tag ? [child] : [], ...child.querySelectorAll(tag)]); }
 }
 
@@ -37,6 +42,13 @@ export interface StubOptions {
   failWrite?: boolean;
   /** Platform.isDesktopApp；預設 false（手機）。 */
   desktop?: boolean;
+  /**
+   * 電腦上 vault 在磁碟上的位置（FileSystemAdapter.getBasePath）：給了才是 FileSystemAdapter，外掛內的備份才載入得起來
+   * （load 的程式碼這時可以 require node: 的模組）。vault 的內容仍在記憶體裡。
+   */
+  vaultPath?: string;
+  /** 這個 vault 的 localStorage 一開始的值（例如備份位置）。 */
+  localStorage?: Record<string, unknown>;
 }
 
 interface Leaf { view: unknown; getViewState(): { state?: { file?: string } } }
@@ -85,6 +97,14 @@ export interface ObsidianStub {
   window: EventTarget & { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout; setInterval: (callback: () => void, ms?: number) => number; clearInterval: () => void };
   /** registerInterval 登記的回呼：tick() 全部跑一次。 */
   tick: () => void;
+  /** window.setInterval 與 registerInterval 被呼叫的次數（手機不該建立備份的計時器，D-148）。 */
+  timers: () => { setInterval: number; registerInterval: number };
+  /** load 的程式碼 require 過的模組名稱（含被拒絕的）。 */
+  required: string[];
+  /** addSettingTab 加上的設定分頁。 */
+  settingTabs: unknown[];
+  /** 這個 vault 的 localStorage 現在的值（app.loadLocalStorage）。 */
+  storage: (key: string) => unknown;
   /** Markdown 分頁。 */
   leaves: Leaf[];
   leaf: (path: string | null) => Leaf;
@@ -96,7 +116,7 @@ export interface ObsidianStub {
   /** 送 workspace 的事件（layout-change、file-open、active-leaf-change、editor-change…）。 */
   fire: (name: string, ...args: unknown[]) => void;
   /**
-   * 執行 esbuild 建好的 CommonJS 程式碼：require 只認 obsidian 與 CodeMirror；document 與 window 由替身提供，不動 Node 的全域。
+   * 執行 esbuild 建好的 CommonJS 程式碼：require 只認 obsidian 與 CodeMirror（電腦而且給了 vaultPath 時加上 node: 的模組）；document 與 window 由替身提供，不動 Node 的全域。
    * 回傳 module.exports。
    */
   load: <T>(code: string) => T;
@@ -110,6 +130,9 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const protocol = new Map<string, (params: Record<string, string>) => void>();
   const modals: ObsidianStub['modals'] = [];
   let extensions = 0;
+  const timers = { setInterval: 0, registerInterval: 0 };
+  const required: string[] = [];
+  const settingTabs: unknown[] = [];
   let calls = 0, ready = false, before = 0;
   const texts = new Map(Object.entries(options.texts ?? {}));
   const count = (): void => { if (!ready) calls++; };
@@ -117,7 +140,18 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   // 和 Obsidian 一樣，同一篇檔案每次查都是同一個 TFile（新建的才是新物件），改名時物件不變、path 跟著改（Codex 第二次再審的 F3）。
   const nodes = new Map<string, TFile>();
   const node = (path: string): TFile => { let file = nodes.get(path); if (!file) nodes.set(path, file = new TFile(path)); return file; };
+  /** 替身的 vault.adapter：給了 vaultPath 才是 FileSystemAdapter（電腦專用的備份在其他情況載入失敗，照實提示）。 */
+  class FileSystemAdapter { getBasePath() { return options.vaultPath ?? ''; } }
+  const bytes = (path: string): ArrayBuffer => new TextEncoder().encode(texts.get(path) ?? '').buffer;
+  const adapter = {
+    write: (path: string, text: string) => { writes.push('adapter ' + path); texts.set(path, text); return Promise.resolve(); },
+    read: (path: string) => Promise.resolve(texts.get(path) ?? ''),
+    readBinary: (path: string) => Promise.resolve(bytes(path)),
+    exists: (path: string) => Promise.resolve(texts.has(path)),
+  };
   const vault = {
+    configDir: '.obsidian',
+    readBinary: (file: TFile) => { count(); return options.failRead?.(file.path) ? Promise.reject(Error('讀不到：' + file.path)) : Promise.resolve(bytes(file.path)); },
     getAbstractFileByPath: (path: string) => { count(); return texts.has(path) ? node(path) : null; },
     getFileByPath: (path: string) => texts.has(path) ? node(path) : null,
     getFiles: () => { count(); return [...texts.keys()].map(node); },
@@ -142,14 +176,11 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       return Promise.resolve();
     },
     createFolder: (path: string) => { count(); writes.push('folder ' + path); return Promise.resolve(); },
-    adapter: {
-      write: (path: string, text: string) => { writes.push('adapter ' + path); texts.set(path, text); return Promise.resolve(); },
-      read: (path: string) => Promise.resolve(texts.get(path) ?? ''),
-      exists: (path: string) => Promise.resolve(texts.has(path)),
-    },
+    adapter: options.vaultPath ? Object.assign(new FileSystemAdapter(), adapter) : adapter,
     on: () => { count(); return {}; },
     offref: () => {},
   };
+  const storage = new Map(Object.entries(options.localStorage ?? {}));
   const layout: (() => void)[] = [];
   const handlers = new Map<string, ((...args: unknown[]) => void)[]>();
   const intervals: (() => void)[] = [];
@@ -165,12 +196,13 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       leftSplit: { collapsed: true }, rightSplit: { collapsed: true },
     },
     metadataCache: { getFileCache: () => null, getFirstLinkpathDest: () => null },
-    loadLocalStorage: () => null, saveLocalStorage: () => {},
+    loadLocalStorage: (key: string) => storage.get(key) ?? null,
+    saveLocalStorage: (key: string, value: unknown) => { if (value === null) storage.delete(key); else storage.set(key, value); },
   };
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const window = Object.assign(new EventTarget(), {
     setTimeout, clearTimeout,
-    setInterval: (callback: () => void) => { intervals.push(callback); return intervals.length; },
+    setInterval: (callback: () => void) => { timers.setInterval++; intervals.push(callback); return intervals.length; },
     clearInterval: () => {},
   });
   class Plugin {
@@ -181,7 +213,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     registerEditorExtension() { extensions++; }
     registerEvent() {}
     register() {}
-    registerInterval(id: number) { return id; }
+    registerInterval(id: number) { timers.registerInterval++; return id; }
+    addSettingTab(tab: unknown) { settingTabs.push(tab); }
     registerObsidianProtocolHandler(action: string, handler: (params: Record<string, string>) => void) { protocol.set(action, handler); }
     registerDomEvent(target: EventTarget, type: string, callback: () => void) { target.addEventListener(type, callback); }
   }
@@ -198,8 +231,13 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     close() { this.onClose?.(); }
   }
   class SuggestModal extends Modal {}
+  class PluginSettingTab {
+    app: unknown; plugin: unknown; containerEl = new FakeEl();
+    constructor(app: unknown, plugin: unknown) { this.app = app; this.plugin = plugin; }
+  }
+  class Setting {}
   const obsidian = {
-    Plugin, Notice, Component, Modal, SuggestModal, TFile, TFolder, TAbstractFile,
+    Plugin, Notice, Component, Modal, SuggestModal, PluginSettingTab, Setting, FileSystemAdapter, TFile, TFolder, TAbstractFile,
     MarkdownView: FakeMarkdownView,
     MarkdownRenderer: { render: (_app: unknown, markdown: string, el: { textContent: string }) => { el.textContent = markdown; return Promise.resolve(); } },
     setIcon: () => {}, editorInfoField: {}, apiVersion: 'test',
@@ -210,8 +248,11 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const run = new Function('require', 'module', 'exports', 'document', 'window', code) as (require: (name: string) => unknown, module: unknown, exports: unknown, document: unknown, window: unknown) => void;
     run((name: string) => {
+      required.push(name);
       if (name === '@codemirror/state') return codemirrorState;
       if (name === '@codemirror/view') return codemirrorView;
+      // 電腦上的備份（D-148）：替身是電腦、而且給了 vaultPath 時，Node 的內建模組用 Node 自己的。
+      if (options.desktop && options.vaultPath && name.startsWith('node:')) return nodeRequire(name);
       if (name !== 'obsidian') throw Error('只能 require obsidian 與 CodeMirror：' + name);
       return obsidian;
     }, module, module.exports, document, window);
@@ -220,6 +261,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const leaf = (path: string | null): Leaf => ({ view: new FakeMarkdownView(path), getViewState: () => ({ state: path ? { file: path } : {} }) });
   return {
     obsidian, app, notices, commands, ribbons, extensions: () => extensions, modals, protocol, writes, texts,
+    timers: () => ({ ...timers }), required, settingTabs, storage: key => storage.get(key) ?? null,
     text: path => texts.get(path),
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout.splice(0)) callback(); },

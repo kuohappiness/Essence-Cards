@@ -143,6 +143,8 @@ const loadForms = (name: string) => [
   "void import('" + name + "');", "require('" + name + "');",
 ];
 const isBoundary = (message: { ruleId: string | null }) => message.ruleId === 'no-restricted-imports' || message.ruleId === 'essence/module-boundaries';
+/** D-148：src/ 一律不准 require（不管載入的是什麼），其他寫法照各自的邊界。 */
+const expected = (path: string, code: string, blocked: boolean): boolean => blocked || (path.startsWith('src/') && code.startsWith('require('));
 for (const [name, path, dependency] of [
   ['核心不能載入 React', 'src/core/files.ts', 'react'],
   ['入口不能載入核心內部', 'src/main.ts', './core/study/fsrs.ts'],
@@ -173,7 +175,7 @@ void test('L2-4 三個目錄都受邊界規則保護，公開入口與 FSRS 包�
     ['tests/example.test.ts', '../src/core/deck/index.ts', false],
   ] as const) for (const code of loadForms(name)) {
     const [result] = await lint.lintText(code, { filePath: path });
-    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+    assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);
   }
   for (const [path, blocked] of [['src/core/study/types.ts', true], ['tests/example.test.ts', true], ['src/core/study/fsrs.ts', false]] as const) {
     const [result] = await lint.lintText("export type External = import('ts-fsrs').FSRS;", { filePath: path });
@@ -206,7 +208,7 @@ void test('W4 核心模組之間只能 import 對方的 index.ts，deck 不能�
     ['src/core/future/x.ts', "export { dayOf } from '../study/time.ts';", true],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
-    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+    assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);
   }
 });
 
@@ -237,7 +239,7 @@ void test('W5 state 與 dev 不能 import Obsidian、畫面或 Node；核心不�
     ['src/obsidian/lock.ts', "import { EditorState } from '@codemirror/state';", false],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
-    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+    assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);
   }
 });
 
@@ -274,7 +276,7 @@ void test('A7 src/state/ 只能透過 index.ts 使用，涵蓋 import、export�
     ['src/state/ids.ts', './device.ts', false],
   ] as const) for (const code of loadForms(name)) {
     const [result] = await lint.lintText(code, { filePath: path });
-    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+    assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);
   }
 });
 
@@ -318,6 +320,46 @@ void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review
     ['src/state/index.ts', "import { planToday } from '../core/study/index.ts';", false],
   ] as const) {
     const [result] = await lint.lintText(code, { filePath: path });
-    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code);
+    assert.equal(result.messages.some(isBoundary), expected(path, code, blocked), path + ': ' + code);
+  }
+});
+
+// D-148 第 3 點與技術債「D-148 的檢查會漏掉別的 require 寫法」：整個 src/ 禁用 Node 與 Electron，只有 src/desktop/ 能用明列的；
+// require 的各種寫法都擋（開發命令 src/obsidian/dev*.ts 是放行清單，正式建置不含它們）；src/desktop/ 只能由 main.ts 動態載入；
+// @codemirror 只有 src/obsidian/ 與 main.ts。
+void test('D-148 Node 與 Electron 只在 src/desktop/，require 的各種寫法都擋，src/desktop/ 只能由 main.ts 動態載入', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const cases: [string, string, boolean][] = [
+    ['src/ui/a.ts', "import { readFile } from 'node:fs/promises';", true],
+    ['src/obsidian/a.ts', "import 'fs';", true],
+    ['src/obsidian/a.ts', "void import('electron');", true],
+    ['src/main.ts', "import { shell } from 'electron';", true],
+    ['src/desktop/a.ts', "import { readFile } from 'node:fs/promises';", false],
+    ['src/desktop/a.ts', "import { shell } from 'electron';", false],
+    ['src/desktop/a.ts', "import { exec } from 'node:child_process';", true],
+    ['src/desktop/a.ts', "import { readFile } from 'fs/promises';", true],
+    ['src/obsidian/a.ts', "require('fs');", true],
+    ['src/obsidian/a.ts', "const load = require; load('fs');", true],
+    ['src/obsidian/a.ts', "(window as unknown as { require(name: string): unknown }).require('fs');", true],
+    ['src/obsidian/a.ts', "(globalThis as Record<string, (name: string) => unknown>)['require']('fs');", true],
+    ['src/obsidian/a.ts', "(globalThis as Record<string, (name: string) => unknown>)[`require`]('fs');", true],
+    ['src/obsidian/a.ts', "declare const module: { require(name: string): unknown }; module.require('fs');", true],
+    ['src/obsidian/a.ts', "require.call(null, 'fs');", true],
+    ['src/desktop/a.ts', "const fs = require('node:fs/promises');", true],
+    ['src/obsidian/dev-x.ts', "const load = (window as unknown as { require?: (name: string) => unknown }).require;", false],
+    ['src/obsidian/a.ts', "const o = { require: 1 }; type T = { require: () => void }; interface U { require(): void }", false],
+    ['src/main.ts', "void import('./desktop/index.ts');", false],
+    ['src/main.ts', "import { createDesktop } from './desktop/index.ts';", true],
+    ['src/obsidian/a.ts', "void import('../desktop/index.ts');", true],
+    ['src/obsidian/a.ts', "import { createDesktop } from '../desktop/index.ts';", true],
+    ['src/obsidian/a.ts', "import type { Desktop } from '../desktop/index.ts';", false],
+    ['src/desktop/a.ts', "import { x } from './io.ts';", false],
+    ['src/ui/a.ts', "import { EditorState } from '@codemirror/state';", true],
+    ['src/obsidian/a.ts', "import { EditorState } from '@codemirror/state';", false],
+    ['tools/a.ts', "import { readFile } from 'node:fs/promises'; require('fs');", false],
+  ];
+  for (const [path, code, blocked] of cases) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    assert.equal(result.messages.some(isBoundary), blocked, path + ': ' + code + ' ' + JSON.stringify(result.messages.map(message => message.message)));
   }
 });
