@@ -48,6 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-30 | 設定頁依功能分區、不寫「給家長」（[D-156](decisions.md#d-156-設定頁依功能分區不寫給家長)，使用者看外掛內備份的設定頁截圖時提出）：分複習、學期、AI 製卡、備份四區；入口的「給家長」另外問 |
 | 2026-10-30 | 正式版的錯誤紀錄定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)，[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>)）：每台裝置每月一個小檔在 `紀錄/錯誤/`，只記自己的錯、有去重與上限、寫不進去就丟；正式安裝存對照表；還原不列它。[任務說明](../tasks/error-log.md)交本機 |
 | 2026-10-30 | `state/index.ts` 原樣拆檔合併進 `main`（`0e3e8a4`，[任務說明](../tasks/state-split.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）：拆成讀取層 `reads.ts`、寫入 `writes.ts`、`ids.ts`、組合 `index.ts`，只搬不改行為，更新防線第二部分一起整合；Codex L2 沒有要修的，Windows 輪流對照各 5 次全過，755 個測試通過 |
 | 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同，電腦與 iPhone 重開後都記下 `0.1.0+a4922fa` 的版本行；升版時改了 7 個寫死版號的測試 |
@@ -57,4 +58,3 @@ flowchart LR
 | 2026-10-29 | 更新防線第一部分合併進 `main`（`8aa3078`，[任務說明](../tasks/update-safeguards.md)、[查核與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)）：備份、還原工具、發布前比較、安裝的擋法與更新命令；Codex 四輪查核的發現都已修，R4 與無鎖空檔記技術債 |
 | 2026-10-29 | 雲端佔位檔讀不到時的處理定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)，[討論稿](<../Claude Codex Discussion/2026-10-29-icloud-placeholders.md>)）：說明書教保持下載、存檔受阻時當下說清楚、先分段實測；不自動補延後的 ID、不改 iCloud 設定 |
 | 2026-10-29 | 新決定與新任務先和「不做」比較（[D-153](decisions.md#d-153-每個新決定與新任務先和不做比較)）：寫在 essence-discuss、essence-decision 與 quality.md 的規劃者一列，AGENTS.md 只補半句 |
-| 2026-10-29 | 更新防線第 0 步：最低版本標記、版本行、還原檔與備份檔的格式寫進 [syntax.md](syntax.md)（§0-1、§5-1～5-3、§8），Codex 格式查核的 F1～F4 已照改（[查核與回應](<../Claude Codex Discussion/2026-10-28-updates-and-compatibility.md#claude-回應-codex-格式查核2026-10-29>)）；讀不到自己的紀錄時不擋作答（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 補充） |
