@@ -121,7 +121,10 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     }
   }
 
-  /** 新備份成功後清理（任務說明 §1-7）：回傳沒做完的。 */
+  /**
+   * 新備份成功後清理（任務說明 §1-7）：回傳沒做完的。外掛停用之後不開始新的刪除（列檔回來後、每次刪之前都看一次，Codex L2 B2）；
+   * 已經送出的那一次刪除不中斷。
+   */
   async function clean(folder: string, keep: string): Promise<string[]> {
     let stale: StoredBackup[];
     try { stale = staleBackups(await host.list(folder), host.vault, host.key, keep); } catch (error) {
@@ -129,6 +132,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     }
     const left: string[] = [];
     for (const backup of stale) {
+      stop();
       try { await host.remove(folder, backup); } catch (error) { left.push(backup.name + '：' + message(error)); }
     }
     return left;

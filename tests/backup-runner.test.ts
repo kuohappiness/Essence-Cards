@@ -22,7 +22,7 @@ function memoryHost() {
   const folders = new Map<string, Map<string, Uint8Array>>();
   const control = {
     failPrepare: null as string | null, failTimes: Infinity, holdPrepare: null as Promise<void> | null, holdList: null as Promise<void> | null,
-    failRemove: new Set<string>(), writes: 0, codes: 0, prepares: 0, removes: 0, lists: 0,
+    failRemove: new Set<string>(), blockRemoves: false, onRemove: null as (() => void) | null, writes: 0, codes: 0, prepares: 0, removes: 0, lists: 0,
   };
   const folder = (path: string): Map<string, Uint8Array> => {
     if (!folders.has(path)) folders.set(path, new Map());
@@ -55,7 +55,8 @@ function memoryHost() {
     read: (path, name) => Promise.resolve(folders.get(path)?.get(name) ?? null),
     remove(path, backup) {
       control.removes++;
-      if (control.failRemove.has(backup.name)) return Promise.reject(Error('刪不掉'));
+      control.onRemove?.();
+      if (control.blockRemoves || control.failRemove.has(backup.name)) return Promise.reject(Error('刪不掉'));
       folder(path).delete(backup.name);
       return Promise.resolve();
     },
@@ -311,4 +312,40 @@ void test('L2 B3：手動備份先開始、check 後到時共用同一個結果�
   assert.equal(memory.control.writes, 0);
   assert.equal(runner.status().ready, false);
   assert.equal(runner.status().failure?.by, 'manual');
+});
+
+void test('L2 B2：清理列檔停在半路時停用外掛，之後不開始任何刪除', async () => {
+  const memory = memoryHost();
+  let now = NOW;
+  const { runner } = setup({ memory, now: () => now });
+  for (let i = 0; i < 10; i++) { now = NOW + i * 60_000; await runner.backup(); }
+  assert.equal(memory.folder(DEFAULT).size, 10);
+  let release = (): void => {};
+  memory.control.holdList = new Promise(resolve => { release = resolve; });
+  const lists = memory.control.lists, removes = memory.control.removes;
+  now = NOW + 20 * 60_000;
+  const done = runner.backup();
+  await settle(() => memory.control.lists > lists);
+  runner.cancel();
+  release();
+  await done;
+  assert.equal(memory.control.removes, removes);
+  assert.equal(memory.folder(DEFAULT).size, 11);
+});
+
+void test('L2 B2：兩次刪除之間停用外掛，下一次刪除不開始', async () => {
+  const memory = memoryHost();
+  let now = NOW;
+  const { runner } = setup({ memory, now: () => now });
+  // 先留下 12 份（清理都刪不掉），第 13 份成功後有 3 份要刪。
+  memory.control.blockRemoves = true;
+  for (let i = 0; i < 12; i++) { now = NOW + i * 60_000; await runner.backup(); }
+  memory.control.blockRemoves = false;
+  assert.equal(memory.folder(DEFAULT).size, 12);
+  const removes = memory.control.removes;
+  memory.control.onRemove = () => { runner.cancel(); };
+  now = NOW + 20 * 60_000;
+  await runner.backup();
+  assert.equal(memory.control.removes - removes, 1);
+  assert.equal(memory.folder(DEFAULT).size, 12);
 });
