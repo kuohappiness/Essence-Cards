@@ -262,6 +262,45 @@ void test('R5 D-158 原形和答案只差彎引號：第 1 步拼錯直接第 3 
   assert.ok(h.log()[0].endsWith(',"typed":"wrong","retry":"not-needed"}'), h.log()[0]);
 });
 
+void test('R5 D-158 照打送出一次還是不對才能跳過：按了這張結束，照平常選評分，紀錄和照打完一樣', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  s.input('made up my mind'); s.submit();
+  s.input('made up his mand'); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).canSkip], [3, false], '剛進第 3 步不能跳過');
+  s.skip();
+  assert.equal(typed(s.view()).finished, false);
+  s.input('   '); s.submit();
+  assert.equal(typed(s.view()).canSkip, false, '空白送出不算一次');
+  s.input('made up his mnd'); s.submit();
+  let view = typed(s.view());
+  assert.deepEqual([view.step, view.finished, view.canSkip], [3, false, true], '照打錯一次之後可以跳過');
+  assert.deepEqual(card(s.view()).allowed, []);
+  s.skip();
+  view = typed(s.view());
+  assert.deepEqual([view.step, view.finished, view.canSkip, view.answer, view.live, view.first, view.second], [3, true, false, 'made up his mind', null, 'wrong', 'wrong']);
+  assert.equal(card(s.view()).autoRead, null, '進第 3 步時已經念過答案，跳過不再念');
+  assert.deepEqual(card(s.view()).allowed, ['miss', 'near']);
+  s.input('made up his mind'); s.submit();
+  assert.equal(typed(s.view()).input, 'made up his mnd', '走完之後不再收輸入');
+  await rateLater(h, s, 'near');
+  assert.deepEqual(h.log().length, 1);
+  const entry = JSON.parse(h.log()[0]) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(entry).sort(), ['lt', 'r', 'retry', 't', 'typed', 'v'], '跳過不另寫進紀錄');
+  assert.deepEqual([entry.typed, entry.retry], ['wrong', 'wrong']);
+  // 第 1 步按「沒印象」的照打也一樣：跳過後只剩沒印象。
+  assert.equal(lt(s.view()), 'z2');
+  s.skip(); s.input('borrow'); s.submit();
+  await rateLater(h, s, 'miss');
+  assert.equal(lt(s.view()), 'z3');
+  s.skip(); s.input('lite'); s.submit();
+  s.skip();
+  assert.deepEqual([typed(s.view()).finished, card(s.view()).allowed], [true, ['miss']]);
+  assert.equal(s.rateOnly(), true);
+  await h.state.flush();
+  assert.ok(h.log()[2].endsWith(',"typed":"skip","retry":"not-needed"}'), h.log()[2]);
+});
+
 void test('R5 D-158 第 2 步多按的空白與不換行空白不算錯：retry: right，能選的評分照第 1 步', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });

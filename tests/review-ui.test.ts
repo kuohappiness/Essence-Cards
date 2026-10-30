@@ -311,6 +311,21 @@ void test('D-145 只剩一個自評時自動換下一張：正在念答案時等
   assert.equal(o.session.history().length, 1);
 });
 
+void test('D-158 照打送出一次還是不對之後，「確認」旁邊出現「跳過」；按了答案出現、可以自評', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3', 'z1']) } });
+  assert.equal(lt(o.session), 'z2');
+  o.session.input('borow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['確認'], '剛進照打：只有確認');
+  o.session.input('borow'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['跳過', '確認']);
+  o.ui.click(o.ui.find('ec-skip')[0]);
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-typed-actions'), [], '走完了：沒有跳過與確認');
+  assert.deepEqual(o.ui.find('ec-rate').map(o.ui.text), ['沒印象', '差一點'], '照第 1 步拼錯選評分');
+});
+
 // Codex 審查 F1、F2（2026-10-28）：自動換卡的等待在畫面關掉、切到背景時取消；同一題重出、回看後回來、切走不到 60 秒回來都會再等。
 const autoDeck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off', ''].join('\n');
 /** 第 1 步按「沒印象」、照打正確答案，走完三步（只剩一個自評）。 */

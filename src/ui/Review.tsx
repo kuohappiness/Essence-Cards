@@ -304,12 +304,12 @@ export function Review(props: ReviewProps): React.JSX.Element {
 }
 
 /**
- * 打字中的「沒印象」與「確認」（D-145，iPhone 回饋）：放在題目正下方，不放在畫面最底下。
+ * 打字中的「沒印象」與「確認」（D-145，iPhone 回饋）：放在題目正下方，不放在畫面最底下。照打錯過一次之後「沒印象」的位置是「跳過」（D-158）。
  * iPhone 的 Obsidian 開鍵盤時不縮畫面（W6 的 J7），最底下那一排會被鍵盤蓋住。
  */
 function TypedActions({ typed, animating, submit, skip }: { typed: TypedView; animating: boolean; submit: () => void; skip: () => void }): React.JSX.Element {
   return <div className="ec-typed-actions">
-    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{RATING_LABELS.miss}</button>}
+    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{typed.step === 3 ? '跳過' : RATING_LABELS.miss}</button>}
     <button type="button" className="ec-show ec-confirm" disabled={animating || !typed.input.trim()} onClick={submit}>確認</button>
   </div>;
 }
