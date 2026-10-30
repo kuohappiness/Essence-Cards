@@ -119,17 +119,19 @@ const moduleBoundaries = {
       const message = (inCore ? crossModule(path, node.source.value, typeOnly) : undefined) ?? srcBoundary(node.source.value, { typeOnly });
       if (message) context.report({ node, message });
     }
-    /** 這個 require 是不是被拿來用（呼叫、取成別名、當成值傳）：物件的屬性名、型別裡的成員名不算。 */
-    function requireValue(node) {
+    /**
+     * 這個 require（識別字、字串或樣板字串）只是名稱，不是拿載入器來用：`.require` 成員（另由 MemberExpression 擋）、物件字面值與類別的
+     * 屬性名、型別裡的成員名與字面值型別。解構（ObjectPattern）的屬性名不算名稱：`const { require: load } = window` 是取出載入器（Codex L2 B5）。
+     */
+    function onlyName(node) {
       const parent = node.parent;
-      if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) return false;
-      if ((parent.type === 'Property' || parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') && parent.key === node && !parent.computed) return false;
-      if (parent.type === 'TSPropertySignature' || parent.type === 'TSMethodSignature') return false;
-      return true;
+      if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) return true;
+      if (parent.type === 'Property' && parent.key === node && parent.parent.type === 'ObjectExpression') return true;
+      if ((parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') && parent.key === node) return true;
+      return parent.type === 'TSPropertySignature' || parent.type === 'TSMethodSignature' || parent.type === 'TSLiteralType';
     }
-    const isRequireKey = property => (property.type === 'Literal' && property.value === 'require')
-      || (property.type === 'TemplateLiteral' && property.expressions.length === 0 && property.quasis[0]?.value.cooked === 'require');
     const banRequire = inSrc && !devRequire;
+    const report = node => { context.report({ node, message: requireMessage }); };
     return {
       ImportDeclaration(node) { checkStatic(node, node.importKind === 'type'); },
       ExportNamedDeclaration(node) { checkStatic(node, node.exportKind === 'type'); },
@@ -141,15 +143,19 @@ const moduleBoundaries = {
       TSImportType(node) { check(node, node.argument); },
       TSExternalModuleReference(node) { check(node, node.expression); },
       // 技術債「D-148 的檢查會漏掉別的 require 寫法」：require(…)、const load = require、window.require、module.require、
-      // globalThis['require']、require.call 都擋。
+      // globalThis['require']、require.call、解構取出（識別字、字串、樣板字串、簡寫、解構賦值）、Reflect.get(window, 'require') 都擋：
+      // 識別字 require 與內容剛好是 'require' 的字串只要不是名稱就擋（Codex L2 B5）。
       Identifier(node) {
-        if (banRequire && node.name === 'require' && requireValue(node)) context.report({ node, message: requireMessage });
+        if (banRequire && node.name === 'require' && !onlyName(node)) report(node);
+      },
+      Literal(node) {
+        if (banRequire && node.value === 'require' && !onlyName(node)) report(node);
+      },
+      TemplateLiteral(node) {
+        if (banRequire && node.expressions.length === 0 && node.quasis[0]?.value.cooked === 'require' && !onlyName(node)) report(node);
       },
       MemberExpression(node) {
-        if (!banRequire) return;
-        if ((!node.computed && node.property.type === 'Identifier' && node.property.name === 'require') || (node.computed && isRequireKey(node.property))) {
-          context.report({ node, message: requireMessage });
-        }
+        if (banRequire && !node.computed && node.property.type === 'Identifier' && node.property.name === 'require') report(node);
       },
     };
   },
