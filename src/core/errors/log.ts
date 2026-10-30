@@ -44,10 +44,10 @@ const MAX_KEYS = 500;
 const MAX_PENDING = 50;
 /**
  * 這個外掛自己的一層 frame：位置 `plugin:essence-cards:行:欄` 在那一層的結尾（`plugin:essence-cards-x:` 這種別的外掛不算）。
- * V8（Windows、Android）寫 `at 名稱 (位置)` 或 `at 位置`；WebKit（iPhone）寫 `名稱@位置`、`@位置` 或只有位置。
- * 錯誤訊息裡剛好有這個字串的那一行不算（Codex L2 的 R3）。
+ * V8（Windows、Android）寫 `at 名稱 (位置)`、`at 位置` 或 `at async 位置`；WebKit（iPhone）寫 `名稱@位置`、`@位置` 或只有位置。
+ * 錯誤訊息裡剛好有這個字串的那一行不算（Codex L2 的 R3、再審的 F1）。
  */
-const OWN_FRAME = /^(?:at (?:.*\()?|[^@]*@)?plugin:essence-cards:\d+:\d+\)?$/;
+const OWN_FRAME = /^(?:at (?:async )?(?:.*\()?|[^@]*@)?plugin:essence-cards:\d+:\d+\)?$/;
 const UNKNOWN = '（無法轉成文字）';
 
 export function errorLogPath(ms: number, offset: number, device: string): string {
@@ -85,9 +85,10 @@ function ownFrames(error: unknown): string[] {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return [];
   const raw = attempt(() => (error as { stack?: unknown }).stack);
   if (typeof raw !== 'string') return [];
+  const frames = (stack: string): string[] => stack.split('\n').map(line => line.trim()).filter(line => OWN_FRAME.test(line));
   const header = attempt(() => Error.prototype.toString.call(error));
-  const stack = header && raw.startsWith(header) ? raw.slice(header.length) : raw;
-  return stack.split('\n').map(line => line.trim()).filter(line => OWN_FRAME.test(line));
+  if (header && raw.startsWith(header)) return frames(raw.slice(header.length));
+  return frames(raw);
 }
 
 /** window 的 error 與 unhandledrejection 只收這個（D-155 第 2 點的補網）：stack 裡有這個外掛自己的程式位置。 */

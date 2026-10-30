@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { setTimeout as wait } from 'node:timers/promises';
+import vm from 'node:vm';
 import type { Files } from '../src/core/files.ts';
 import { createErrorLog, errorLogPath, ERROR_FOLDER, hasOwnFrame, isErrorLogPath } from '../src/core/errors/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
@@ -359,3 +360,19 @@ void test('§1 R3 訊息裡有 plugin:essence-cards:、frame 全是別人的：�
   const stacks = lines(memory.texts.get(FILE)).map(line => (JSON.parse(line) as { stack?: string }).stack);
   assert.deepEqual(stacks, [undefined, 'at own (plugin:essence-cards:7:8)', '@plugin:essence-cards:1:2\nglobal code@plugin:essence-cards:3:4\nplugin:essence-cards:5:6']);
 });
+
+// Codex 再審的 F1：V8 的匿名 async frame（`at async 位置`，沒有名稱與括號）也是自己的程式位置。用真的 V8 產生 stack。
+void test('§1 F1 V8 真的產生的 `at async plugin:essence-cards:行:欄` 認得', async () => {
+  const external = async (): Promise<never> => { await wait(1); throw Error('external-crash'); };
+  const context = vm.createContext({ external });
+  const error = await (vm.runInContext('(async () => { await external(); })()', context, { filename: 'plugin:essence-cards' }) as Promise<never>).catch((reason: unknown) => reason);
+  const stack = (error as Error).stack ?? '';
+  assert.match(stack, /\n\s+at async plugin:essence-cards:\d+:\d+/, stack);
+  assert.equal(hasOwnFrame(error), true);
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  log.record('uncaught', error);
+  await wait(10);
+  assert.match((JSON.parse(lines(memory.texts.get(FILE))[0]) as { stack: string }).stack, /^at async plugin:essence-cards:\d+:\d+$/);
+});
+
