@@ -1,6 +1,6 @@
 # 正式版的錯誤紀錄與複習畫面的回報：L2 審查請求（給新開的 Codex session）
 
-狀態：審過一輪（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)），R1～R4 已修，待再審
+狀態：審過一輪（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)），R1～R4 已修；再審的 F1～F4 已修，待再審
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。這是 [code-quality](../.agents/skills/code-quality/review.md) 的 L2：只審查與回報，不改產品程式；可以在隔離的暫存資料夾重現。回報寫在 `Claude Codex Discussion/2026-10-31-error-log-review.md`（新檔，標題下第一行寫狀態）。
 

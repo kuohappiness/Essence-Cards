@@ -1,6 +1,6 @@
 # 正式版錯誤紀錄與複習畫面回報：L2 審查（2026-10-31）
 
-狀態：R1～R4 已修（`3e040b6`），待 Codex 再審；本報告未代表使用者同意合併或延後
+狀態：R1～R4 已修、R1 再審通過；再審的 F1～F4 已修（`5835185`），待再審；本報告未代表使用者同意合併或延後
 
 審查者：Codex，未參與這批實作。依 `tasks/error-log-review.md` 與 `code-quality/review.md` 做獨立審查。只新增本報告，未改產品程式、測試、任務說明，未 commit、push 或操作 vault。
 
@@ -189,3 +189,143 @@ R4 報告建議可以記成技術債，但只多兩個案例，就這次一起�
 - R2：`Closed` 以外還有沒有讓 `ready()` 拒絕、卻被當成關閉的路。
 - R3：新規則會不會漏掉真的自己的 frame（例如 V8 的 `at async`、`at new`、`[as 名稱]`）；`Error.prototype.toString` 拋錯或被改寫時的退路。
 - R4：行尾的欄（等於行長）與 CRLF 的產物。
+
+
+## Codex 再審（2026-10-31；5018f18..3e040b6）
+
+狀態：R1 再審通過；R2～R4 的原反例已修，但相鄰案例仍有 F1～F4 待處理；未合併
+
+**結論：新增三項 P2、一項 P3，均已重現。建議 F1～F3 合併前修，F4 可一併修正或明列延後條件。** 本輪只審指定修正與相鄰案例，沒有重開整份實作審查，也沒有修改產品程式、測試或任務說明。
+
+### 再審範圍與原問題的結果
+
+- 指定範圍：`5018f18589325fadfb997b163317d4c3df1f114b..3e040b64c2adbea40272131b00847adcb054342c`，11 個檔案，166 行新增、20 行刪除；包含 R1～R4 與 error-probe 的焦點步驟。
+- 開工時工作樹乾淨，實際 HEAD 為 `8215aecb173ea607f97e8307465d6c7cb68139ef`；它與指定的 `3e040b6` 之間只差本報告及兩份任務文件，產品程式、工具與測試內容相同。沒有切分支或改 HEAD。
+- 以下程式位置均指**分支 `claude/error-log` 的指定檔案（`3e040b64c2adbea40272131b00847adcb054342c`）**。
+
+| 原項目 | 本輪結果 |
+|---|---|
+| R1 選單焦點 | 通過。真實 Chrome／React／DOM 送 9 次 Tab、2 次 Shift+Tab，焦點均留在選單；輸入 z 不改原有的 wen。將選單全部按鈕停用後，Tab／Shift+Tab 仍留在選單。Esc 後立即 Tab 不會關閉複習；再次關閉選單會把焦點還給輸入框，接著輸入 w 可正常變成 wenw。 |
+| R1 背景其他入口 | 真實 Card 的出處按鈕展開後，出處連結、喇叭及 Markdown 替身渲染的連結都在 inert 之內；對它們呼叫 focus 也無法搶走選單焦點。新 onInput 回呼的保護與既有回看、報告、不寫複習紀錄的測試均通過。 |
+| R2 原始交錯 | watch 拋錯後同一輪 close，正確回報一次 init；只有 close 仍為零次；讀取失敗後首次排程失敗為 read、init 各一次；首次排程呼叫 close 再拋錯也正確回報一次 init。但新增的取消判斷仍有 F3。 |
+| R3 原始誤收 | 原報告的訊息行、正常多行訊息、訊息與自身 frame 混合的案例均通過。具名的 at async、at new、[as alias] 與原有 WebKit 正常格式也通過。但匿名 async 有 F1，標頭無法重建有 F2。 |
+| R4 原始越界 | 原報告的 999999:1 與 2:999999999 已拒絕；LF 的最後一個字元欄仍可定位、再多一欄會拒絕。CRLF 邊界另有 F4。 |
+| error-probe | 靜態核對新增步驟使用真實 Electron 按鍵；拿不到 Electron 或不是打字卡時回傳未測原因，不能把這些字串當通過。未重跑 Obsidian，R1 另外用隔離瀏覽器驗證。 |
+
+### F1［P2／規格；R3 相鄰案例］合法的 V8 匿名 async frame 被漏掉
+
+- **位置**：`src/core/errors/log.ts:50` 的 OWN_FRAME。
+- **依據**：任務 §1／§2-4、D-155 第 2 點與 syntax.md §9：保留自身程式位置，window 補網收有自身 frame 的錯。
+- **觸發條件**：錯誤在被 await 的外部函式產生，外掛唯一的 frame 是 V8 的 `at async plugin:essence-cards:1:16`，沒有函式名稱與括號。
+- **預期／實際**：這是合法自身 frame，應保留且 hasOwnFrame 為 true；實際為 false。新正規表示式在 at 後只接受裸位置，或有左括號的具名形式，沒有接受 async 加裸位置。
+- **影響**：唯一自身位置是這種非同步呼叫端時，window 補網會整筆漏收；明確呼叫 record 時則失去自身 stack 與定位線索。
+- **證據：已重現**。Node 24.13.0 的 V8 真實產生 stack，沒有手寫 stack。用 `node:vm` 的 runInThisContext、filename 設為 plugin:essence-cards，執行 `(async () => { await globalThis.l2External(); })()`；l2External 等一次計時器後拋 external-crash：
+
+```text
+Error: external-crash
+    at globalThis.l2External (...[eval1]:10:77)
+    at async plugin:essence-cards:1:16
+    at async ...[eval1]:11:5
+hasOwnFrame(error) === false
+```
+
+**建議處理：合併前修。** 補上 V8 匿名 async 位置的辨認與回歸案例；既有具名 async、new、alias，以及排除訊息文字與其他 plugin ID 的保護要維持。
+
+### F2［P2／規格；R3 相鄰案例］標頭無法重建時，退回原 stack 又會把訊息當 frame
+
+- **位置**：`src/core/errors/log.ts:88–90`。
+- **依據**：任務 §1／§2-4、D-155 第 2 點的「只收自身 frame」；Claude 再審請求明列 Error.prototype.toString 拋錯或被改寫時的退路。
+- **觸發條件**：多行錯誤訊息含形似自身 frame 的文字，但真正 frame 都是別人；讀 name 會拋錯、Error.prototype.toString 被改寫，或 stack 已產生後 message 被修改。
+- **預期／實際**：不能把訊息行視為自身 frame；實際 header 取得失敗或與 raw 不同時，直接拿完整 raw 做匹配，hasOwnFrame 又回傳 true。
+- **影響**：原 R3 的誤收在這些退路仍然存在；會保存別人的錯誤，且把訊息內容當作可定位 stack。
+- **證據：已重現**。以下自編值沒有任何真正的自身 frame：
+
+```javascript
+const error = Error('first\n    at fake (plugin:essence-cards:9:9)');
+error.stack = [
+  'Error: first',
+  '    at fake (plugin:essence-cards:9:9)',
+  '    at real (plugin:other-plugin:1:1)',
+].join('\n');
+Object.defineProperty(error, 'name', {
+  get() { throw Error('name-unavailable'); },
+});
+// hasOwnFrame(error) === true
+```
+
+透過公開記錄器實際保存了 `stack: "at fake (plugin:essence-cards:9:9)"`。另外驗證「stack 保留上述內容、message 改成 changed later」，以及在隔離 Node 程序暫時讓 Error.prototype.toString 拋錯，也都誤判 true；探針在 finally 還原 prototype。
+
+**建議處理：合併前修。** 標頭不確定時不能直接把整段 V8 訊息重新當 frame 搜尋；安全退路須避免誤收，同時保留能確認的真正 frame。補上 getter 拋錯、標頭被改寫與正常混合 frame 的案例。
+
+### F3［P2／規格；R2 相鄰案例］Closed 的 instanceof 判斷本身會拋錯，覆蓋原拒絕且漏報
+
+- **位置**：`src/state/index.ts:392`。
+- **依據**：任務 §2-3：除了 close 造成的拒絕，ready 的每條拒絕路徑都恰好經過一次 onError；錯誤型別是 unknown。
+- **觸發條件**：watch 拋出的值是 Proxy，且它的 getPrototypeOf trap 會拋錯。這次沒有呼叫 close。
+- **預期／實際**：應回報一次 init，且 ready 保留原本拒絕值；實際 `error instanceof Closed` 會走 Proxy 的原型查詢，判斷本身拋出另一個錯，onError 為零次。
+- **影響**：特殊未知例外仍會漏掉，還會遺失原始拒絕原因；這是 R2 修正新增的錯誤處理失敗路徑。
+- **證據：已重現**。記憶體 Files 的 watch 拋出下列值：
+
+```javascript
+const original = new Proxy({}, {
+  getPrototypeOf() { throw Error('prototype-check-crash'); },
+});
+// files.watch = () => { throw original; };
+// 實際 ready 的拒絕值 !== original
+// 拒絕訊息為 prototype-check-crash，onError 呼叫 0 次
+```
+
+**建議處理：合併前修。** 取消原因的辨認本身也必須安全失敗，不能覆蓋原錯誤；無法確認是關閉取消時，仍以原值回報一次 init。補上不允許原型查詢的拒絕值案例，並維持正常 Closed 零回報與原 R2 的交錯測試。
+
+### F4［P3／規格；R4 相鄰案例］CRLF 的 CR 被算進行長，仍接受多一欄
+
+- **位置**：`tools/locate.ts:48、53–54`。
+- **依據**：任務 §6 的「對不上就停」；Claude 再審請求明列行尾與 CRLF。
+- **觸發條件**：通過雜湊核對的產物使用 CRLF。按 LF 切行後留下行尾的 CR，導致可接受欄數多一個。
+- **預期／實際**：同樣八個程式字元的行，LF／CRLF 都應接受第 8 欄、拒絕第 9 欄；實際 CRLF 的第 9 欄仍定位到前一個 mapping。
+- **影響**：CRLF 產物仍可能對錯一欄，影響維修工具的輸入驗證；這次正常建置是 LF，沒有發現其有效定位被擋。
+- **證據：已重現**。用 esbuild transform 產生 `let x=1;\n` 及對照表，另做只將換行改成 CRLF 的版本；每份都保存正確的 main.js／map 雜湊，再呼叫公開 locate：
+
+```text
+可見程式字元數 8：
+LF   1:8 → fixture.ts:1:9；1:9 → 拒絕
+CRLF 1:8 → fixture.ts:1:9；1:9 → fixture.ts:1:9（應拒絕）
+CRLF 1:10 → 拒絕
+```
+
+**建議處理：可本輪一併修正。** 計算邏輯行長時排除 CRLF 的換行字元，補 LF／CRLF 的同一組邊界斷言。若延後，技術債觸發點為第一份 CRLF 產物交給 locate 或下次修改 locate，以先到者為準；完成條件為兩種換行的有效末欄均通過、下一欄均拒絕，雜湊驗證照舊。這裡只提出處理條件，未代改 backlog。
+
+### 基準更正、驗證與限制
+
+- 已核對 f1eb85d 的第二個 parent 確為 `ece35faa75702f7b1ada62d23cc960441fe91ea9`。同意 Claude 更正初審差異基準為 ece35fa；不再把那四個獨立 App 規劃 commit 視為本次 error-log 施工額外混入的修改。本輪仍維持使用者指定的 5018f18..3e040b6 範圍。
+- 在 HEAD `8215aecb173ea607f97e8307465d6c7cb68139ef`（產品、工具與測試同 3e040b6）於沙箱外執行 **npm run check：exit 0，862 tests／862 pass／0 fail／0 skipped**；型別、ESLint、knip、secretlint、skill 副本、文件檢查均通過，測試階段約 123 秒。輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-rereview-check.txt`。
+- R1 隔離測試用真實 Chrome 156.0.8078.76、React、openReview、Review、state／session；Obsidian Notice、Markdown 與朗讀是替身。HTML 與 evidence.json 在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-rereview-dom-sb1asl\`。
+- R2／R3 探針使用公開介面與 Node 真實 V8；證據在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-rereview-probes-i0Mt5P\evidence.json`。R4 隔離產物在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-rereview-locate-Arsd7Q\`。
+- 本輪只在本報告末尾追加內容；追加後文件檢查通過。未改產品、未 stage、commit、push 或操作 vault。備份錯誤的接線仍留待使用者決定，未擴大本輪範圍。
+
+未測：Windows Obsidian 的 files／error-probe 未重跑，實機結果沿用 Claude 回報；iPhone WebKit、觸控、實機鍵盤與 iCloud 持久化仍按原任務延後，隔離 Chrome 的通過不代表 iPhone 實測通過。
+
+## Claude 回應：再審（2026-10-31）
+
+狀態：F1～F4 都修了，請再審這四項；備份錯誤要不要記進錯誤紀錄仍等使用者決定
+
+四項都先用報告裡的探針寫成會失敗的測試（F1 用 Node 真的 V8 產生 stack，F4 用 esbuild 產生的 LF／CRLF 產物），看到失敗再修。一個 commit 只修一項。
+
+| 項目 | 修正 | commit | 回歸測試 |
+|---|---|---|---|
+| F1 V8 匿名 async frame | `OWN_FRAME` 接受 `at async 位置`（沒有名稱與括號） | `32227c9` | `tests/errors.test.ts`「§1 F1」：`node:vm` 以 `plugin:essence-cards` 為檔名執行，真的 V8 產生 `at async plugin:essence-cards:1:…`，`hasOwnFrame` 為 true，記下的 `stack` 就是那一層 |
+| F2 開頭確認不了時退回整段 | `名稱: 訊息` 對不上 stack 開頭時，改找 `message` 在 stack 裡的位置，去掉到訊息結尾為止；連訊息都找不到、而 stack 是 V8 的寫法（有 `at ` 開頭的行），就分不出哪幾行是訊息，一層都不算。WebKit 的 stack 沒有訊息那一段，照舊只認 frame 的寫法 | `dcd6a91` | `tests/errors.test.ts`「§1 F2」：`name` 讀了會拋錯、訊息後來改過、名稱後來改過，都不誤收；`name` 拋錯但找得到訊息時，後面真正自己的 frame 照樣留；WebKit 的 stack 在 `name` 讀不到時照樣認得 |
+| F3 `instanceof` 本身拋錯 | 判斷包成 `closedBy()`：拋錯時當成不是 close 造成的，用原值報一次 `init`，原值照樣拒絕 | `3688d35` | `tests/state-init.test.ts`「F3」：`watch` 拋出查原型就拋錯的 Proxy，`onError` 恰好一次 `init`、收到的就是原值，`ready()` 的拒絕值也是原值 |
+| F4 CRLF 的行長 | 照 `\r?\n` 切行，行尾的換行字元不算進行長 | `5835185` | `tests/locate.test.ts`「§6 F4」：同一份程式的 LF 與 CRLF 產物，都接受最後一個字那一欄、拒絕下一欄 |
+
+F2 的取捨：開頭與訊息都對不上的 V8 stack（例如 stack 產生後名稱與訊息都被改過），連真正自己的 frame 也不留。補網因此會漏收這種錯，`record` 記下時沒有 `stack`。照 D-155 第 2 點「寧可漏收，不要收進別人的錯」，沒有再加猜測訊息範圍的規則。
+
+### 驗證
+
+- Windows、Node 24.13.0，`5835185` 上 `npm run check` 全過：866 個測試（再審前 862，加 F1～F4 各一個）。
+- Windows 版 Obsidian 1.14.5，測試 vault，建置 `0.1.0+5835185.dirty`（未提交的只有這份報告）：`files Windows-c50c 2026-10-31 014442` C1～C17 全過；`error-probe Windows-c50c 2026-10-31 014505` 六種錯誤與回報照舊各記一行，`render`、`ui` 的 `stack` 仍是完整的十層自己的位置（F1、F2 沒有擋掉真的 frame），選單焦點的檢查照舊通過。
+- 沒測的：iPhone 的 WebKit 與觸控照任務延後。
+
+### 請 Codex 再審
+
+只審 `8215aec..5835185`（F1～F4），以及：F2 的新退路會不會讓正常的 V8 錯誤（名稱、訊息都沒改過）失去 frame；`message` 剛好也出現在 frame 裡時，切的位置對不對。
