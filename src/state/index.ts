@@ -32,7 +32,8 @@ export interface StateOptions {
   delay?: number;
   /**
    * write：紀錄寫不進去（下一次作答或 flush 時重試）；read：卡組或紀錄讀不到（自己隔一段時間重試）；
-   * listener：onChange 的監聽者丟出錯誤（程式的錯，不重試）。
+   * listener：onChange 的監聽者丟出錯誤（程式的錯，不重試）；init：第一次載入時讀取那一列以外的錯（例如監看、首次排程），
+   * ready() 跟著拒絕（tasks/error-log.md §2-3）。
    */
   onError?: (error: unknown, source: ErrorSource) => void;
   /** 補學習目標 ID：電腦 true、手機 false（D-134：iPhone 不寫卡組筆記）。 */
@@ -42,7 +43,7 @@ export interface StateOptions {
   /** 等一次寫進磁碟（編輯器的 persist、modify）最多多久（毫秒），預設 10_000；超過就當成失敗、放行後面的寫入。 */
   writeTimeout?: number;
 }
-export type ErrorSource = 'write' | 'read' | 'listener';
+export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
 
@@ -56,7 +57,8 @@ export interface State {
    * 第一次列出卡組與紀錄、能讀到的都讀完、排好今天就完成；之後每次呼叫回傳同一個 Promise。
    * 讀不到的那幾篇跳過、之後自己重試（unread()）。只有列不出來（list 失敗）才整個重試（1 秒起、每次加倍、最多 60 秒），
    * 每次失敗交給 onError。files 的讀取與列出失敗不會讓它 reject，只有 close() 會；程式本身的錯（不是讀不到）
-   * 也會經過 onError(…, 'read') 並讓它 reject（Codex state-load L2 的對齊第 2 點）。
+   * 也會經過 onError(…, 'read') 並讓它 reject（Codex state-load L2 的對齊第 2 點）；讀取那一列以外的（監看、首次排程）經過
+   * onError(…, 'init')。除了 close() 之外，每次 reject 都恰好報過一次。
    */
   ready(): Promise<LoadTimings>;
   /**
@@ -334,11 +336,14 @@ export function createState(options: StateOptions): State {
     };
   }
 
+  /** 第一次載入時讀取那一列已經把錯誤交給 onError（read）：ready() 拒絕時不再報一次 init。 */
+  let queueFailed = false;
+  const loadQueue = (paths: string[]): Promise<void> => reads.queue(() => reads.read(paths)).catch((error: unknown) => { queueFailed = true; throw error; });
   async function load(begin: number, deckPaths: string[], logPaths: string[]): Promise<LoadTimings> {
     // 卡組一批、紀錄一批（自己的紀錄也讀），和之後的檔案變動走同一個 read。
-    await reads.queue(() => reads.read(deckPaths));
+    await loadQueue(deckPaths);
     const afterDecks = performance.now();
-    await reads.queue(() => reads.read(logPaths));
+    await loadQueue(logPaths);
     const afterHistory = performance.now();
     if (life.closed) throw Error('state 已關閉，沒有讀完');
     // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
@@ -366,7 +371,12 @@ export function createState(options: StateOptions): State {
 
   return {
     ready() {
-      loading ??= reads.start(load);
+      // 除了 close() 之外，讓 ready() 拒絕的每一條路都恰好經過一次 onError（tasks/error-log.md §2-3）：監看拋錯、首次排程
+      // 這類讀取那一列以外的錯在這裡補報 init；讀取那一列已經報過的不再報；停用不是故障。
+      loading ??= reads.start(load).catch((error: unknown) => {
+        if (!life.closed && !queueFailed) report(error, 'init');
+        throw error;
+      });
       return loading;
     },
     unread: () => [...unread].sort(),
