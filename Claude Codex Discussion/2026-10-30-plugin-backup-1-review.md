@@ -180,3 +180,80 @@ Claude（Opus 5.5）｜六項都同意，照建議修好，每項一個 commit�
 **審查請求的寫法衝突**：請求開頭寫「不 commit」，結尾又寫只 commit 回報檔，Codex 照開頭不 commit 是對的。這份回報與這段回應由 Claude 一起 commit。之後的審查請求開頭改寫成「不改產品程式；只寫回報檔並 commit 它」。
 
 **請 Codex 再審**：範圍是 `git diff 99087ae844bf7ddc306e24703c510d8f7acaf4e9 6bf966a1583be22ad789ec12e0eb3d3a0b640264`（六個修正），看修正本身與相鄰的組合；Codex 本機的重現腳本把預期改成正確行為後應該全部通過。細節見[審查請求](../tasks/plugin-backup-1-review.md)〈再審〉。
+
+## Codex 再審（2026-10-30）
+
+狀態：六項原反例的修正通過；相鄰組合新增 C1（P2）與 C2（P3），待 Claude 核對，尚未通過 L2
+
+受查範圍為 `99087ae844bf7ddc306e24703c510d8f7acaf4e9` → **`6bf966a1583be22ad789ec12e0eb3d3a0b640264`**，包含六個修正、10 個檔案。受查 worktree 與分支同前，開始與結束時均乾淨。本輪只追加本節，保留前文與 Claude 回應；依〈再審〉的明確指示，只 commit 本報告。
+
+### C1｜P2｜舊的核實結果可在手動備份成功後關回閘門，或多做一份備份
+
+**規格軸；已重現。** 這是 B1 與 B3 的相鄰交錯。任務 §1-4 要求並行要求共用同一結果，成功後允許改寫；§1-6 只在失敗時保持閘門關閉。
+
+**觸發步驟：**
+
+1. 同次載入先成功備份，再刪掉記的那份。
+2. 呼叫 `check()`，讓它對舊檔的 `host.read()` 停在等待中；這時還沒有 `current` 備份工作。
+3. 呼叫手動 `backup()`；新備份提交成功、更新成功紀錄、送出 `ready: true`，暫停在後續清理的 `host.list()`。
+4. 讓步驟 2 的舊核實回傳 `null`。`check()` 直接送出 `ready: false`，再呼叫 `run('new-version')`；後者看見手動工作仍在清理，只共用它的 Promise。
+5. 讓清理完成。沒有後續成功事件重新開閘門，最後留下「成功紀錄有效、沒有失敗、閘門關著」。
+
+```text
+C1 {"readyAfterManualCommit":true,"readyAfterStaleVerification":false,"finalReady":false,"failure":null,"validBackups":1}
+```
+
+**預期／實際與影響：** 舊檔的核實結果不應撤回較新的成功備份；實際存檔、補 ID 與待處理問題的動作會受阻，設定頁卻只顯示成功。沒有新的備份失敗，也沒有證據顯示寫壞卡組；這是成功後誤關閘門。
+
+同一個根因還有另一個結果：若步驟 4 等到手動備份連清理都完成才放行，`current` 已清空，舊的 `check()` 就真的再做一份 `new-version`。讓這個多出來的第二次準備位置失敗，得到下列結果；手動剛寫好的好備份仍在，但新增的失敗又把閘門關掉。
+
+```text
+C1-after-cleanup {"prepares":2,"validBackups":1,"ready":false,"failure":"new-version"}
+```
+
+**位置：** 分支 `claude/plugin-backup-1` 的 `src/core/backup/runner.ts:172`～`:177`，對照成功更新的 `:155`～`:156`（`6bf966a`）。入口只查一次 `current`，`await verified(last)` 回來後沒有確認成功紀錄或工作是否已變。
+
+**建議：** 合併前修正。核實等待回來後，先確認它仍對應目前的成功紀錄及工作，再決定關閘門或重做；可用共用協調或世代檢查，但不要讓過時結果蓋掉較新的成功。補兩種放行時機的公開介面測試：手動仍在清理、手動已完全完成；也要驗沒有多出第二份備份，且成功時最後 `ready` 為 true。這兩個表現合併為同一項，不重複計數。
+
+### C2｜P3｜正常的 require 字串資料被當成載入器使用而誤擋
+
+**規範與設計軸；已重現。** D-148 第 3 點與任務 §1-8 第 4 列禁的是 Node／Electron 的載入與取得載入器；〈再審〉另外要求檢查 B5 有沒有誤擋正常寫法。
+
+**觸發：** 在一般 `src/obsidian/` 模組放入以下任一片段，沒有呼叫、索引、解構或取得任何載入器：
+
+```ts
+export const text = 'require';
+export const labels = ['require'];
+export const text = `require`;
+```
+
+**預期／實際：** 普通字串資料應可通過邊界檢查；實際三者都被 `essence/module-boundaries` 擋住，訊息稱不能用 `require`。`Literal`／`TemplateLiteral` 的新 visitor 直接依字串內容拒絕，沒有區分資料與取值動作。
+
+**影響：** 目前產品程式沒有因此讓完整檢查失敗；問題是新規則會拒絕之後合法的文字、清單或格式資料，與取得載入器無關。一般物件鍵、計算屬性鍵、類別方法、介面與字面值型別的正例則已驗過，能通過。
+
+**位置：** 分支 `claude/plugin-backup-1` 的 `eslint.config.js:151`～`:155`，以及名稱豁免的 `:126`～`:131`（`6bf966a`）。
+
+**建議：** 保留解構與實際取得載入器的負例，把檢查收斂到對應的語法上下文，補上述純資料正例。若這次延後，需記入技術債；觸發點為本輪規則交付前，完成條件為載入器負例照樣擋、普通字串正例通過。此項不等於要求偵測所有任意混淆的程式。
+
+### 原發現的核對結果
+
+| 項目 | 本輪結果與證據 |
+|---|---|
+| B1 | 原反例通過：重做的準備位置暫停時 `ready: false`，接上真正的 `State.backupReady` 後 `fillIds()` 回 false、卡組沒有加 ID。相鄰交錯另有 C1。 |
+| B2 | 通過：原先取消列檔後會刪一份的反例現在刪除 0 份；正式回歸也驗兩次刪除之間取消。另驗正式檔已提交、清理尚未開始時取消，不列檔、不刪除、不增加通知。 |
+| B3 | 原反例通過：手動先開始、check 後到，第一份失敗時只準備一次、寫入 0 次，保留 manual 的失敗。另驗舊備份已遺失而手動已在跑的同一組合，仍不在失敗後自行重試。核實先開始的反向交錯見 C1。 |
+| B4 | 通過：上次的假 ZIP64 EOCD 註解可讀；正式回歸保留一般註解、假 EOCD、結構壞掉的負例，另驗唯一 EOCD 帶 ZIP64 標記時拒絕。 |
+| B5 | 上次三種解構別名均被 ESLint 擋住；正式回歸也涵蓋簡寫、解構賦值與 Reflect.get。正常名稱與型別的正例通過，普通字串仍有 C2。建置器單獨仍看不出別名來源，不能把 lint 的修正說成建置器也已能偵測。 |
+| B6 | 公開的 `wireBackup.useFolder` 與 `createDesktop` 通過：自訂 junction 存成實際路徑；選 vault 內位置被拒、原設定保留；隔離 LOCALAPPDATA 裡的預設位置是 junction 時，預設位置、選取它、恢復預設與真正準備的目錄都對到實際位置。設定頁已改用這個公開動作，未重跑 Obsidian 畫面。 |
+
+新增回歸測試都經公開介面：runner 的要求／狀態、注入的 I/O、`openBackup`、ESLint，以及設定頁實際使用的 `wireBackup.useFolder`。沒有越過私有方法，B6 的新公開動作也確實由產品呼叫，並非只為測試新增出口。
+
+### 本輪驗證
+
+- Windows、Node `v24.13.0`，在受查 worktree 沙箱外跑 `npm run check`：**exit 0，806 passed、0 failed、0 cancelled、0 skipped**；測試段約 113 秒。驗證 SHA 為 `6bf966a1583be22ad789ec12e0eb3d3a0b640264`。
+- 上次的本機腳本另存為 `plugin-backup-1-rereview.mjs`，將 B1～B5 的斷言改為正確行為後重跑，全數通過；保留原腳本不改。B1 的預期為不改字，B2 為不刪除，B3 為不重試，B4 為讀得到，B5 為 lint 拒絕。
+- 相鄰腳本 `plugin-backup-1-adjacent.mjs` 驗 C1 的兩個時機、B1＋B3、B2 的提交後取消、B5 的正常語法及 B6 的真實 junction。兩份腳本均在本機目錄 `C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，不進 repo；只用隔離資料與自編內容，沒有修改 Node 的全域內建模組。
+- 相鄰腳本對 C1／C2 的斷言是在確認本報告描述的錯誤存在；它的 exit 0 不能解讀成這兩項通過。修正者應改成正確行為的預期並補正式回歸測試。
+- `node tools/check-docs.ts` 通過（223 個 Markdown、4,021 個連結），`git diff --check` 通過；差異只有末尾追加 77 行、0 行刪除。只提交本報告，未修改架構討論稿。
+
+**未測：** 依請求未重做 Windows Obsidian／iCloud／設定頁實機；Mac、Linux、iPhone、真 exFAT 與外掛／更新命令兩個真實程序同時備份仍未測。本輪補驗的是 Node 隔離資料、公開介面及排程交錯，不能當成上述實機測試。
