@@ -296,7 +296,7 @@ void test('還原：備份讀不懂（清單壞了）就不出計畫', async t =
   const vault = await makeVault(t, {});
   const zip = join(await tempFolder(t), 'Essence Cards 備份 2026-10-29 200000 未知 0000.zip');
   await writeFile(zip, 'not a zip');
-  await assert.rejects(makePlan({ vault, backup: zip }), /這份備份不能用：不是讀得懂的 zip/);
+  await assert.rejects(makePlan({ vault, backup: zip }), /這份備份不能用：找不到 zip 的中央目錄/);
 });
 
 void test('還原（Codex 再查 R1）：暫存檔寫好後父資料夾被換成連結，清理不沿連結刪外面的同名檔，暫存檔留著並說明', async t => {
