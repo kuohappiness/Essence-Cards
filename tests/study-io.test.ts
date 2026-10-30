@@ -13,6 +13,7 @@ function fake(append: Files['append']): Files {
     append,
     list: () => Promise.resolve([]),
     read: () => Promise.resolve(null),
+    readBytes: () => Promise.reject(Error('沒有用到 readBytes')),
     modify: () => Promise.reject(Error('沒有用到 modify')),
     watch: () => { throw Error('沒有用到 watch'); },
   };

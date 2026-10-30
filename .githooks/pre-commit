@@ -13,11 +13,13 @@ staged=$(git -c core.quotepath=false diff --cached --name-only --no-renames --di
 # shellcheck disable=SC2046
 unset $(git rev-parse --local-env-vars)
 if printf '%s\n' "$staged" | grep -Eq '^(src/|tests/|tools/|\.claude/skills/|\.agents/skills/|package[^/]*\.json$|tsconfig\.json$|manifest\.json$|eslint\.config\.js$|knip\.[^/]+$|\.secretlint[^/]*$|\.githooks/|\.github/workflows/check\.yml$)'; then
-  npm run check
+  # 測試改用 dot reporter：通過的只印一個點，失敗的照常印出，exit code 照常傳回。AI 讀 commit 的輸出要花 token，
+  # 原本約 4.2 萬字（外掛架構檢查環節 9 的 Q2）。手動跑與 CI 不變。
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--test-reporter=dot" npm run check
   exit 0
 fi
-# 只改文件時，測試會讀的檔案（例如 syntax.md 的範例）有變動，就跑寫到它路徑的那幾個測試檔。
-# 通過時只印一行：AI 讀 commit 的輸出要花 token，完整檢查的輸出約 3 萬字（2026-10-29 b63c1bb 讓 CI 紅了）。
+# 只改文件時，測試會讀的檔案（例如 syntax.md 的範例）有變動，就跑寫到它路徑的那幾個測試檔（2026-10-29 b63c1bb 讓 CI 紅了）。
+# 通過時只印一行。
 tests=$(printf '%s\n' "$staged" | while IFS= read -r path; do
   [ -n "$path" ] && grep -rlF --include='*.test.ts' -e "$path" tests || true
 done | sort -u)

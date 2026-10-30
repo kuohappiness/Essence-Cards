@@ -20,8 +20,8 @@ const code = (await build({
 })).outputFiles[0].text;
 
 const DECK = 'Essence Cards/P.md';
-/** 替身的 state 已經讀完、沒有讀不到的檔（存檔按鈕判斷受阻用，D-154）。 */
-const loadedState = { ready: () => Promise.resolve(), unread: () => [] };
+/** 替身的 state 已經讀完、沒有讀不到的檔、沒有受阻（存檔按鈕判斷受阻用，D-154）。 */
+const loadedState = { ready: () => Promise.resolve(), unread: () => [], writeBlock: () => null };
 
 function setup() {
   const stub = createObsidianStub();
@@ -280,11 +280,11 @@ const WITH_IDS = '- 能說明蒸發 ^aaaaaa\n    - 水變成水蒸氣叫什麼�
 const NEW_TARGET = WITH_IDS + '- 能說明凝結\n    - 水蒸氣變成水叫什麼？ :: 凝結\n';
 
 interface BoundView { file: { path: string } | null; value: string; actions: { label: string }[]; editor: unknown; save: () => Promise<void> }
-async function blockedSetup(t: TestContext, deck: string, block: 'unread' | 'loading' | 'none') {
+async function blockedSetup(t: TestContext, deck: string, block: 'unread' | 'loading' | 'backup' | 'none') {
   const memory = createMemoryFiles({ [DECK]: deck, [OTHER]: '- 能說明 Q ^bbbbbb\n    - Q？ :: Q\n' });
   if (block === 'unread') memory.failing.add(OTHER);
   const held = block === 'loading' ? memory.holdRead(OTHER) : null;
-  const state = createState({ files: memory.files, device: 'PC-test', delay: 0, fillIds: true, random: () => 0 });
+  const state = createState({ files: memory.files, device: 'PC-test', delay: 0, fillIds: true, random: () => 0, backup: block === 'backup' });
   // 斷言在放行之前失敗時，close() 不能一直等那個被攔住的讀取。
   t.after(() => { held?.release(); return state.close(); });
   // main.ts 一建立 state 就叫 ready()。
@@ -486,4 +486,18 @@ void test('B7 需要新版、同時有讀不到的檔：按鈕說需要新版；
   assert.deepEqual(h.notices, [BLOCKED, NEEDS]);
   assert.equal(h.tip(), NEEDS);
   assert.equal(h.view.value, deck, '一個字都沒改');
+});
+
+// 外掛內的備份 §1-6：受阻原因是備份時，按鈕說明與按下的提示都是備份那一句（和讀不到同一張對應表）；備份成功後照常補。
+void test('備份還沒成功、文字有沒 ID 的目標：按鈕說明與存檔的提示都是備份那一句，不改字；成功後再按，補上 ID', async t => {
+  const h = await blockedSetup(t, NEW_TARGET, 'backup');
+  const BACKUP = '筆記已自動儲存；備份還沒成功，先不把新目標加入複習，到設定頁看原因';
+  assert.equal(h.tip(), BACKUP);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BACKUP]);
+  assert.equal(h.view.value, NEW_TARGET, '不改字');
+  h.state.backupReady(true);
+  assert.equal(h.tip(), '筆記已自動儲存；有 1 個學習目標尚未加入複習');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [BACKUP, '1 個學習目標已加入複習']);
 });

@@ -23,7 +23,7 @@ export interface ReviewHost extends Plugin {
   on(kind: 'review', listener: (value: ReviewEvent) => void): () => void;
 }
 /** 寫一個結果檔，回傳路徑（dev.ts 的 writeResult）。 */
-type Write = (code: string, data: unknown) => Promise<string>;
+type Write = (code: string, data: Record<string, unknown>) => Promise<string>;
 
 const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 const frames = () => new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); });
@@ -44,7 +44,7 @@ const round = (ms: number) => Math.round(ms);
 let opens = 0;
 interface Measure { open: number; fromPickMs: number | null; next: number[]; gestures: unknown[]; failed: unknown[]; away: unknown[]; keyboard: unknown[] }
 /** 一次打開的量測；ui 命令自己開的畫面也用它。 */
-function measurer(): { onEvent: (event: ReviewEvent) => void; result: () => unknown } {
+function measurer(): { onEvent: (event: ReviewEvent) => void; result: () => Record<string, unknown> } {
   let current: Measure | null = null;
   const start = (): Measure => current ??= { open: ++opens, fromPickMs: null, next: [], gestures: [], failed: [], away: [], keyboard: [] };
   return {
@@ -91,6 +91,7 @@ function onlyExamples(files: Files): Files {
   return {
     list: async folder => (await files.list(folder)).filter(keep),
     read: path => files.read(path),
+    readBytes: path => files.readBytes(path),
     modify: (path, edit) => files.modify(path, edit),
     append: (path, line) => files.append(path, line),
     watch: onChange => files.watch(path => { if (keep(path)) onChange(path); }),
@@ -140,6 +141,11 @@ function blankHistory(files: Files): Files {
       return [...(await files.list(folder)).filter(path => !isLogPath(path)), ...[...logs.keys()].filter(path => path.startsWith(prefix))].sort();
     },
     read: async path => isLogPath(path) ? logs.get(path) ?? null : files.read(path),
+    readBytes: async path => {
+      if (!isLogPath(path)) return files.readBytes(path);
+      const text = logs.get(path);
+      return text === undefined ? null : new TextEncoder().encode(text);
+    },
     modify: async (path, edit) => {
       if (!isLogPath(path)) return files.modify(path, edit);
       const before = logs.get(path) ?? '';

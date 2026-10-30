@@ -10,7 +10,7 @@ import type { LoadTimings, State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
 
 // W5 說明 §7：+08:00、now 由測試控制、delay 很小；只透過公開介面測。
-// 技術債 A9：用記憶體 Files（契約 C1～C15 驗過，通知在寫入當下同步送出）加 node:test 的假計時器：
+// 技術債 A9：用記憶體 Files（契約 C1～C16 驗過，通知在寫入當下同步送出）加 node:test 的假計時器：
 // `settle()` 讓 delay 過去並跑完排好的處理，所以不用等真的檔案系統，也沒有固定時間的 wait()。
 const DELAY = 50;
 const at = (text: string) => Date.parse(text);
@@ -136,6 +136,7 @@ void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔�
   const t2 = state.answer({ lt: 'b', r: 'near', v });
   clock.now = at('2026-11-01T00:00:00.100+08:00');
   const t3 = state.answer({ lt: 'b', r: 'good', v });
+  assert.ok(t2 !== null && t3 !== null, '兩次作答都記下');
   await state.flush();
   assert.match(texts.get(PC) ?? '', new RegExp(t2.replaceAll('.', '\\.').replaceAll('+', '\\+')));
   assert.equal(texts.get('Essence Cards/紀錄/2026-11 PC-test.jsonl'), encodeEntry(t3, { lt: 'b', r: 'good', v }) + '\n');
@@ -164,7 +165,7 @@ void test('T8 別台裝置的紀錄：只重讀那個檔、delay 內合併成一
   h.append(PHONE, review('2026-10-23T19:00:00.000+08:00', 'a', 'easy'));
   // delay 還沒到：不讀、不重排。
   await h.settle(DELAY / 2);
-  assert.deepEqual(h.reads, []);
+  assert.deepEqual<string[]>(h.reads, []);
   assert.equal(h.changed(), 0);
   await h.settle();
   assert.equal(h.changed(), 1);
@@ -178,7 +179,7 @@ void test('T8 別台裝置的紀錄：只重讀那個檔、delay 內合併成一
     h.append(PHONE, review(`2026-10-23T20:00:0${String(i)}.000+08:00`, 'b'));
     await h.settle(DELAY / 2);
   }
-  assert.deepEqual(h.reads, []);
+  assert.deepEqual<string[]>(h.reads, []);
   await h.settle();
   assert.deepEqual(h.reads, [PHONE]);
   assert.equal(h.changed(), 2);

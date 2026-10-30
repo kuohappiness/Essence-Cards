@@ -8,6 +8,7 @@ export function countFiles(files: Files): { files: Files; calls: () => number } 
     files: {
       list: folder => { calls++; return files.list(folder); },
       read: path => { calls++; return files.read(path); },
+      readBytes: path => { calls++; return files.readBytes(path); },
       modify: (path, edit) => { calls++; return files.modify(path, edit); },
       append: (path, line) => { calls++; return files.append(path, line); },
       watch: onChange => { calls++; return files.watch(onChange); },
@@ -25,6 +26,7 @@ export function scopedFiles(files: Files, root: string): Files {
   return {
     list: async folder => (await files.list(folder === '' ? prefix.slice(0, -1) : inner(folder))).map(path => path.slice(prefix.length)),
     read: path => files.read(inner(path)),
+    readBytes: path => files.readBytes(inner(path)),
     modify: (path, edit) => files.modify(inner(path), edit),
     append: (path, line) => files.append(inner(path), line),
     watch: onChange => files.watch(path => { if (path.startsWith(prefix)) onChange(path.slice(prefix.length)); }),

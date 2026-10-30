@@ -7,6 +7,43 @@ import { fileURLToPath } from 'node:url';
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 // 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
 const external = ['obsidian', '@codemirror/state', '@codemirror/view'];
+/** D-148：只有電腦專用的資料夾能用 Node 與 Electron，而且只能用明列的這幾個（不放寬全域的 external）。 */
+export const DESKTOP = 'src/desktop/';
+export const DESKTOP_ONLY = ['electron', 'node:crypto', 'node:fs/promises', 'node:os', 'node:path'];
+
+/**
+ * D-148 第 3 點的建置檢查（esbuild 外掛）：Node 的內建模組與 Electron 只在 src/desktop/ 裡引入、而且在明列的清單裡時才當成外部模組；
+ * 其他檔案（含第三方套件的傳遞相依）引入就讓建置失敗，說出是哪個檔。測試打包 src/main.ts 時也用它。
+ */
+export function desktopOnly(root = defaultRoot) {
+  return {
+    name: 'essence-desktop-only',
+    setup(build) {
+      build.onResolve({ filter: /^(node:|electron$)/ }, args => {
+        const from = relative(root, args.importer).replaceAll('\\', '/');
+        if (from.startsWith(DESKTOP) && DESKTOP_ONLY.includes(args.path)) return { path: args.path, external: true };
+        return { errors: [{ text: `${args.path} 只有 ${DESKTOP} 能用，而且要在明列的清單裡（D-148）：${from} 不行` }] };
+      });
+    },
+  };
+}
+
+/**
+ * metafile 的第二道檢查（D-148 第 3 點）：每個外部模組由哪個檔引入。Obsidian 提供的那幾個哪裡都能用；DESKTOP_ONLY 只能由 src/desktop/
+ * 的檔引入；src/desktop/ 只能由 src/main.ts 動態 import（不經共用的重新匯出檔）。回傳違規的「檔 → 模組」。
+ */
+export function desktopViolations(metafile) {
+  const bad = [];
+  for (const [file, input] of Object.entries(metafile.inputs)) {
+    const from = file.replaceAll('\\', '/');
+    for (const item of input.imports) {
+      const to = item.path.replaceAll('\\', '/');
+      if (item.external && !external.includes(to) && !(DESKTOP_ONLY.includes(to) && from.startsWith(DESKTOP))) bad.push(`${from} → ${to}`);
+      if (!item.external && to.startsWith(DESKTOP) && !from.startsWith(DESKTOP) && !(from === 'src/main.ts' && item.kind === 'dynamic-import')) bad.push(`${from} → ${to}`);
+    }
+  }
+  return bad;
+}
 
 /**
  * 「版本」命令顯示的建置版本：manifest 的版本加 git commit（有未提交的修改時加 .dirty）。寫進 main.js、不在執行時讀
@@ -38,7 +75,7 @@ export async function buildPlugin({ root = defaultRoot, dev = false, outdir = ro
   const result = await build({
     absWorkingDir: root, entryPoints: ['src/main.ts'], outfile,
     bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
-    jsx: 'automatic', external, metafile: true, sourcemap: sourcemap ? 'external' : false,
+    jsx: 'automatic', external, metafile: true, plugins: [desktopOnly(root)], sourcemap: sourcemap ? 'external' : false,
     banner: { js: `/*! Essence Cards build=${version} dev=${dev} */` },
     define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: JSON.stringify(version) },
   });
@@ -56,9 +93,12 @@ export async function buildPlugin({ root = defaultRoot, dev = false, outdir = ro
   const code = await readFile(outfile, 'utf8');
   const requires = [...code.matchAll(/\brequire\(["']([^"']+)["']\)/g)].map(m => m[1]);
   const imports = Object.values(result.metafile.outputs).flatMap(out => out.imports);
-  if (requires.some(name => !external.includes(name)) || imports.some(i => i.external && !external.includes(i.path))) {
-    throw Error('建置含有 ' + external.join('、') + ' 以外的外部相依：' + requires.join(', '));
+  const allowed = [...external, ...DESKTOP_ONLY];
+  if (requires.some(name => !allowed.includes(name)) || imports.some(i => i.external && !allowed.includes(i.path))) {
+    throw Error('建置含有 ' + allowed.join('、') + ' 以外的外部相依：' + requires.join(', '));
   }
+  const violations = desktopViolations(result.metafile);
+  if (violations.length) throw Error('Node 或 Electron 只能在 ' + DESKTOP + ' 裡用，而且只由 src/main.ts 動態載入（D-148）：' + violations.join('、'));
   // 另一份 CodeMirror 被打包進來時，類別身分和 Obsidian 的不同，編輯器的擴充會失效。
   const bundled = Object.keys(result.metafile.inputs).filter(path => path.replaceAll('\\', '/').includes('node_modules/@codemirror/'));
   if (bundled.length) throw Error('CodeMirror 被打包進 main.js：' + bundled.join(', '));
@@ -73,7 +113,8 @@ export async function buildPlugin({ root = defaultRoot, dev = false, outdir = ro
     return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
   });
   await writeFile(resolve(outdir, 'styles.css'), (await Promise.all(css.map(path => readFile(path, 'utf8')))).join('\n'));
-  console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${[...new Set(requires)].sort().join(', ')}; version ${version}`);
+  const listed = names => [...new Set(names)].sort().join(', ');
+  console.log(`main.js ${Buffer.byteLength(code)} bytes; require: ${listed(requires.filter(name => external.includes(name)))}; desktop: ${listed(requires.filter(name => DESKTOP_ONLY.includes(name)))}; version ${version}`);
   return { version, dev };
 }
 

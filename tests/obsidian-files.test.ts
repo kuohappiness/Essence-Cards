@@ -66,15 +66,15 @@ function obsidianFiles(app: { vault: ReturnType<typeof vault> }): Files {
   return module.exports.createObsidianFiles(app as unknown as App);
 }
 
-const case16 = contractCases.find(item => item.code === 'C16');
+const case17 = contractCases.find(item => item.code === 'C17');
 const noOps = { rename: () => Promise.reject(Error('不用')), remove: () => Promise.reject(Error('不用')) };
 
-void test('§4 Obsidian 版 Files：不存在的資料夾裡同時 append 兩個不同的檔，兩個都成功（C16）', async () => {
-  assert.ok(case16);
+void test('§4 Obsidian 版 Files：不存在的資料夾裡同時 append 兩個不同的檔，兩個都成功（C17）', async () => {
+  assert.ok(case17);
   const app = { vault: vault() };
-  const result = await runContractCase(case16, obsidianFiles(app), noOps, 'Essence W5/暫存', { notice: 200, quiet: 50 });
-  assert.deepEqual(result, { code: 'C16', ok: true });
-  assert.deepEqual(app.vault.folders(), ['Essence W5', 'Essence W5/暫存', 'Essence W5/暫存/C16', 'Essence W5/暫存/C16/new']);
+  const result = await runContractCase(case17, obsidianFiles(app), noOps, 'Essence W5/暫存', { notice: 200, quiet: 50 });
+  assert.deepEqual(result, { code: 'C17', ok: true });
+  assert.deepEqual(app.vault.folders(), ['Essence W5', 'Essence W5/暫存', 'Essence W5/暫存/C17', 'Essence W5/暫存/C17/new']);
 });
 
 void test('§4 建資料夾失敗、而那個路徑不是資料夾（例如是檔案）時照原樣拋出', async () => {

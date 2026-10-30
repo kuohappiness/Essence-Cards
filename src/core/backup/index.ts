@@ -1,4 +1,4 @@
-export { BACKUP_FORMAT, BACKUP_VERSION, BACKUP_SCOPE, ESSENCE_ROOT, PLUGIN_DATA, PLUGIN_MANIFEST, isPlainPath, readManifest } from './manifest.ts';
+export { ESSENCE_ROOT, PLUGIN_DATA, PLUGIN_MANIFEST, isPlainPath, readManifest } from './manifest.ts';
 export type { BackupManifest } from './manifest.ts';
 export { hashBytes, openBackup, writeZip } from './zip.ts';
 export type { OpenedBackup } from './zip.ts';
@@ -7,4 +7,10 @@ export { missingLogLines } from './logs.ts';
 export { deckIds, planRestore } from './plan.ts';
 export type { PlannedFile, RestorePlan } from './plan.ts';
 export { lastVersions } from './versions.ts';
+export { checkWritten, filesReader, takeBackup } from './take.ts';
+export type { BackupReader, Taken, TakeOptions } from './take.ts';
 export type { VersionReport } from './versions.ts';
+export { staleBackups } from './retention.ts';
+export type { StoredBackup } from './retention.ts';
+export { createBackupRunner } from './runner.ts';
+export type { BackupHost, BackupRunner, BackupStatus, LastBackup, PluginBy } from './runner.ts';

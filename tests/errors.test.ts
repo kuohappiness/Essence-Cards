@@ -253,6 +253,7 @@ void test('§1 寫不進去：append 拒絕或永遠不回來，record 照樣立
   const stuck: Files = {
     list: () => Promise.resolve([]),
     read: () => { reads++; return Promise.resolve(null); },
+    readBytes: () => Promise.resolve(null),
     modify: () => new Promise(() => {}),
     append: () => { appends++; return new Promise(() => {}); },
     watch: () => () => {},

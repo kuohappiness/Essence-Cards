@@ -17,9 +17,11 @@ import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples,
 import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, saveBlocked, type Params } from './dev-cloud.ts';
 import { versionCheck } from './dev-version.ts';
 import { errorProbe } from './dev-errors.ts';
+import { backupDev } from './dev-backup.ts';
+import type { BackupWiring } from './backup.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
-/** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；結果檔的 plugin 記它，才核對得到跑的是哪一次建置。 */
+/** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；writeResult 把它寫進每個結果檔的 plugin，才核對得到跑的是哪一次建置。 */
 declare const BUILD: string;
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
@@ -30,6 +32,7 @@ interface Host extends Plugin {
   device: string;
   state: State | null;
   ids: IdsWiring | null;
+  backup: BackupWiring | null;
   lockAlso: string[];
   startReview(pick: Pick): ReviewHandle | null;
   on<K extends PluginEvent>(kind: K, listener: (value: PluginEvents[K]) => void): () => void;
@@ -95,6 +98,8 @@ const commands: Record<string, DevCommand> = {
   // 更新防線第二部分（任務說明 2-1、2-2）：版本行、「版本」命令的通知、需要新版的卡組；截圖寫在 Essence W5/結果/。
   // tasks/error-log.md §7：正式版的錯誤紀錄與複習畫面的回報（D-155、D-160）。
   'error-probe': { name: 'Essence 開發：錯誤紀錄實測', run: errorProbe, desktop: true },
+  // 外掛內的備份（tasks/plugin-backup.md §1-2、§1-10）：URI 的 do 參數選要做的事，截圖寫在 Essence W5/結果/備份 …/。
+  backup: { name: 'Essence 開發：備份', run: (host, ids, params) => backupDev({ app: host.app, backup: host.backup, state: host.state, notices: ids.devLog.notices, refresh: () => { host.ids?.saver.refresh(); } }, params, `${root}/結果/備份 ${host.device} ${stampOf(new Date())}`), desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
 
@@ -135,7 +140,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
     const path = await writeResult(plugin.app, code, plugin.device, {
       code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
-      obsidian: apiVersion, plugin: BUILD,
+      obsidian: apiVersion,
       onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
       sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
     }, command.root);
@@ -266,12 +271,13 @@ function stampOf(now: Date): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
-async function writeResult(app: App, code: string, device: string, data: unknown, folder = root): Promise<string> {
+/** 開發命令與複習畫面的量測（watchReview）共用的出口：每個結果檔的 plugin 都是 BUILD（W3 (a)）。 */
+async function writeResult(app: App, code: string, device: string, data: Record<string, unknown>, folder = root): Promise<string> {
   const stamp = stampOf(new Date());
   await ensureFolder(app, folder + '/結果');
   let path = `${folder}/結果/${code} ${device} ${stamp}.json`;
   for (let n = 2; app.vault.getAbstractFileByPath(path); n++) path = `${folder}/結果/${code} ${device} ${stamp}-${n}.json`;
-  await app.vault.create(path, JSON.stringify(data, null, 2));
+  await app.vault.create(path, JSON.stringify({ plugin: BUILD, ...data }, null, 2));
   return path;
 }
 
@@ -359,7 +365,7 @@ async function reading(app: App, text: string, path: string): Promise<string[]> 
   } finally { component.unload(); }
 }
 
-/** §2：在 Essence W5/暫存/ 跑 C1～C16；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+/** §2：在 Essence W5/暫存/ 跑 C1～C17；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
 async function filesContract(app: App): Promise<unknown> {
   const dir = root + '/暫存';
   const old = app.vault.getAbstractFileByPath(dir);
@@ -373,7 +379,7 @@ async function filesContract(app: App): Promise<unknown> {
     rename: (from, to) => app.vault.rename(entry(from), to),
     remove: path => app.vault.delete(entry(path), true),
   }, dir, { notice: 3000, quiet: 500 });
-  // tasks/error-log.md §4：真的 vault.createFolder 撞到時拋出什麼（C16 驗的是 Files 已經沿用建好的資料夾）。
+  // tasks/error-log.md §4：真的 vault.createFolder 撞到時拋出什麼（C17 驗的是 Files 已經沿用建好的資料夾）。
   // 同時建兩次（兩個都還沒完成），以及另一個寫入剛建好之後才建（Files 先查不到、輪到時已經有了，Codex 用替身重現的順序）。
   const outcome = (result: PromiseSettledResult<unknown>): string => result.status === 'fulfilled' ? 'fulfilled' : result.reason instanceof Error ? result.reason.message : String(result.reason);
   const race = dir + '/createFolder';

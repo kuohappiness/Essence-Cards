@@ -21,14 +21,20 @@ export interface EditorHandle {
   persist(): Promise<void>;
 }
 
+/** 不看是哪一篇的受阻原因，照門檻檢查的順序（writable）。 */
+export type WriteBlock = 'phone' | 'loading' | 'closed' | 'backup' | 'unread';
+
 /** Cards 改卡組的結果。 */
 export type WriteResult =
   /** 核對讀取確認寫成了。added：這次新配上 ID 的目標數（還原、當成新的不算）。 */
   | { kind: 'done'; added: number }
   /** 沒有要改的（含不是卡組）。 */
   | { kind: 'unchanged' }
-  /** 門檻沒過，沒有改字。needs-update：這一篇需要新版才讀得懂（任務說明 2-2）。 */
-  | { kind: 'blocked'; reason: 'phone' | 'loading' | 'unread' | 'closed' | 'needs-update' }
+  /**
+   * 門檻沒過，沒有改字。needs-update：這一篇需要新版才讀得懂（任務說明 2-2）；backup：這台電腦還沒有一份成功的備份
+   * （D-150 第 3 點，外掛內備份任務說明 §1-4）。
+   */
+  | { kind: 'blocked'; reason: WriteBlock | 'needs-update' }
   /** 途中換了篇、內容被改掉、問題已經不成立，或一直有新的變動：沒有採用，要再存一次。 */
   | { kind: 'stale' }
   /** 寫不進磁碟：輸出沒有採用，已配出的 ID 保留、不重用。 */
@@ -61,6 +67,8 @@ export interface WritesOptions {
   wrote: (path: string, text: string) => void;
   /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（更新防線任務說明 2-2）。 */
   blockedText: (path: string, text?: string) => boolean;
+  /** 這台電腦還沒有一份成功的備份：Cards 不改寫卡組（D-150 第 3 點）。 */
+  backupPending: () => boolean;
 }
 
 export function createWrites(options: WritesOptions) {
@@ -80,16 +88,25 @@ export function createWrites(options: WritesOptions) {
   let finish: (() => void) | null = null;
 
   /**
-   * 寫入的門檻（§3 第 3 步）：可以時回傳 null，不行時回傳原因。只在電腦（D-134）、讀完之後、還沒關閉，而且沒有讀不到的
-   * 卡組或紀錄（state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）；不是卡組就沒有要改的；需要新版的卡組
-   * 不寫（任務說明 2-2，給了 text 時也看這份最新的文字）。之後要加的原因（D-150 的備份沒成功、多檔工作的預留還沒載入）
-   * 都加在這裡，不分散到各個入口。
+   * 門檻裡不看是哪一篇的部分，依 state 目前所知（State.writeBlock 也用這一份，存檔按鈕的說明和按下的結果照同一個順序）：
+   * 只在電腦（D-134）、讀完之後、還沒關閉、這台電腦有一份成功的備份（D-150 第 3 點），而且沒有讀不到的卡組或紀錄
+   * （state-load §3：占用資訊不完整時，不能把「不知道」當成「沒用過」）。
+   */
+  function blockedNow(): WriteBlock | null {
+    if (!options.fillIds) return 'phone';
+    if (!life.loaded) return 'loading';
+    if (life.closed) return 'closed';
+    if (options.backupPending()) return 'backup';
+    if (reads.unread.size) return 'unread';
+    return null;
+  }
+  /**
+   * 寫入的門檻（§3 第 3 步）：可以時回傳 null，不行時回傳原因。先看 blockedNow；不是卡組就沒有要改的；需要新版的卡組
+   * 不寫（任務說明 2-2，給了 text 時也看這份最新的文字）。之後要加的原因（多檔工作的預留還沒載入）都加在這裡，不分散到各個入口。
    */
   function writable(path: string, text?: string): WriteResult | null {
-    if (!options.fillIds) return { kind: 'blocked', reason: 'phone' };
-    if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
-    if (life.closed) return { kind: 'blocked', reason: 'closed' };
-    if (reads.unread.size) return { kind: 'blocked', reason: 'unread' };
+    const reason = blockedNow();
+    if (reason) return { kind: 'blocked', reason };
     if (!isDeckPath(path)) return { kind: 'unchanged' };
     // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：state 最近讀到的，或這次要寫的最新文字，任何一邊讀不懂都不寫。
     if (blockedText(path, text)) return { kind: 'blocked', reason: 'needs-update' };
@@ -234,6 +251,7 @@ export function createWrites(options: WritesOptions) {
     enqueue,
     edit,
     fillFile,
+    blockedNow,
     /**
      * 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、
      * 把預期的輸出當成自己的寫回，讀到的文字再照組合那一層一般的重讀比對；預期不成立、讀到 null（不見了或改名，不跟著 A2 的改名配對寫到別篇）
