@@ -148,7 +148,7 @@
 | AI 評測集、NotebookLM 對照與匯入、Jev 重測、多家庭規則回饋與錯題模型分工 | 暫緩或有條件再評估 | [查看](plans/ai-and-ecosystem.md#ai-品質比較與評測) |
 | Capture 的影片、網頁來源與整理成好讀的筆記 | PDF／圖片與開工前的現成專案研究屬 v1 | [查看](plans/ai-and-ecosystem.md#capture-的其他來源) |
 | Mindmap、對接介面與共用設定 | 方向與提案分別保留 | [查看](plans/ai-and-ecosystem.md#mindmap-與共用設定) |
-| 獨立 App | D-128／D-129；列入計畫，開工先後與技術選擇未定 | [查看](plans/standalone-app.md) |
+| 獨立 App 與不用 iCloud 的同步 | D-128／D-129；2026-10-30：Obsidian 仍是首選，先做外掛經使用者 Dropbox 同步的最小驗證（要不要安排待使用者決定），手機端之後要離開 Obsidian 走網頁版 | [查看](plans/standalone-app.md) |
 
 ### 舊入口對照
 
