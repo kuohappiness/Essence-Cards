@@ -44,10 +44,14 @@ export async function locate(version: string, positions: readonly string[], loca
   }
   const payload = JSON.parse(await readFile(join(folder, 'main.js.map'), 'utf8')) as SourceMapPayload & { sourcesContent?: (string | null)[] };
   const map = new SourceMap(payload);
+  // 產物裡每一行的長度：超出範圍的位置 findEntry 會沿用前一個對應，看起來像對到了（Codex L2 的 R4）。
+  const code = (await readFile(join(folder, 'main.js'), 'utf8')).split('\n');
   return positions.map(position => {
     const match = /(\d+):(\d+)\)?\s*$/.exec(position);
     const line = match ? Number(match[1]) : 0, column = match ? Number(match[2]) : 0;
     if (line < 1 || column < 1) throw Error(`位置要寫 stack 裡的「行:欄」（1 起算）：${position}`);
+    const length = code[line - 1 - OFFSET.line]?.length;
+    if (length === undefined || column - OFFSET.column > length) throw Error(`${position} 超出 main.js 的範圍（${String(code.length)} 行${length === undefined ? '' : `，第 ${String(line)} 行 ${String(length)} 個字`}），對不上`);
     const entry = map.findEntry(line - 1 - OFFSET.line, column - 1 - OFFSET.column);
     if (!('originalSource' in entry)) throw Error(`${position} 在對照表裡找不到對應的原始碼`);
     const index = payload.sources.findIndex(source => source === entry.originalSource || entry.originalSource.endsWith('/' + source));

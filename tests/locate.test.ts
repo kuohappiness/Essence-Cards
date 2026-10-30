@@ -50,6 +50,9 @@ void test('§6 locate：main.js 或對照表的雜湊和 release.json 不同、�
   const { local, folder } = await release(t);
   await assert.rejects(locate('9.9.9', ['abc'], local), /位置/);
   await assert.rejects(locate('9.9.9', ['0:1'], local), /位置/);
+  // Codex L2 的 R4：超出 main.js 的行數或那一行的長度，不沿用前一個對應，直接停。
+  await assert.rejects(locate('9.9.9', ['999999:1'], local), /超出 main\.js/);
+  await assert.rejects(locate('9.9.9', ['2:999999999'], local), /超出 main\.js/);
   await assert.rejects(locate('1.2.3', ['1:1'], local), /沒有 1\.2\.3 的正式產物/);
   const saved = JSON.parse(await readFile(join(folder, 'release.json'), 'utf8')) as { sha256: Record<string, string> };
   const { 'main.js.map': _map, ...withoutMap } = saved.sha256;
