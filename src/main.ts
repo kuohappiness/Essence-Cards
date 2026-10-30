@@ -27,6 +27,8 @@ const NOTICES: Partial<Record<ErrorSource, string>> = {
 };
 /** 有內容需要新版才讀得懂（任務說明 2-2）：入口的「給家長」一區做好之前，載入時用通知提示一次。 */
 const UPDATE_NOTICE = 'Essence Cards：有內容需要新版才讀得懂，請更新外掛';
+/** 學生在複習畫面回報之後的提示（D-160 第 3 點）；記錄器盡力而為，寫不進去時也照樣這樣說（D-160 的代價）。 */
+const REPORT_NOTICE = '已記下，可以跟家長說一聲';
 /** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
 const VERSION_WAIT = 2000;
 
@@ -127,6 +129,8 @@ export default class EssenceCardsPlugin extends Plugin {
       app: this.app, state: this.state, pick, pickedAt,
       onEvent: event => { this.emit('review', event); },
       onError: (error, where, path) => { this.fail(where, error, path); },
+      // 學生的回報（D-160）：記進錯誤紀錄，不寫複習紀錄、不改排程；提示照第 3 點。
+      onReport: (kind, card) => { this.errors.report({ kind, path: card.deck, lt: card.lt, v: card.v }); new Notice(REPORT_NOTICE); },
       onClose: () => { this.review = null; },
     });
     return this.review;

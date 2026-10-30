@@ -347,3 +347,25 @@ void test('§2-4 補網：window 的 error 與 unhandledrejection 只收自己�
   await wait(20);
   assert.deepEqual(errorLines(h).map(line => [line.where, line.msg]), [['uncaught', '同步拋錯'], ['uncaught', '非同步拒絕']]);
 });
+
+// tasks/error-log.md §8（D-160）：畫面的回報交給記錄器的 report，出一次提示；不寫複習紀錄。
+void test('§8 接線：回報記進錯誤紀錄（where: report），出一次提示，不寫複習紀錄', async t => {
+  const h = host(deck, {}, reviewBundled);
+  t.after(() => { h.plugin.onunload(); });
+  let options: { onReport?: (kind: string, card: { deck: string; lt: string; v: string }) => void } | null = null;
+  h.obsidian.__openReview = (opened: typeof options) => { options = opened; return { session: {}, close() {} }; };
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(20);
+  const logWrites = (): string[] => h.writes.filter(write => /^\w+ Essence Cards\/紀錄\/[^/]+\.jsonl$/.test(write));
+  const before = logWrites().length;
+  (h.plugin as unknown as { startReview(pick: unknown): unknown }).startReview({ subject: '自然' });
+  const { onReport } = options as unknown as { onReport?: (kind: string, card: { deck: string; lt: string; v: string }) => void };
+  assert.ok(onReport);
+  onReport('content', { deck: 'Essence Cards/a.md', lt: 'aaaaaa', v: '12345678' });
+  await wait(20);
+  assert.deepEqual(errorLines(h).map(line => [line.where, line.kind, line.path, line.lt, line.v]), [['report', 'content', 'Essence Cards/a.md', 'aaaaaa', '12345678']]);
+  assert.deepEqual(h.notices, ['已記下，可以跟家長說一聲']);
+  assert.equal(logWrites().length, before, '複習紀錄沒有多寫');
+});

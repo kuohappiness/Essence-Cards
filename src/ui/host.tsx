@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { Pick } from '../core/study/index.ts';
 import { createSession, keyboardFit, type Session } from '../review/index.ts';
 import type { State } from '../state/index.ts';
-import { Review, type ReviewEvent } from './Review.tsx';
+import { Review, type ReviewEvent, type ReviewProps } from './Review.tsx';
 import { createSpeech, loadAutoRead, NO_ENGLISH_VOICE, saveAutoRead, type Speech } from './speech.ts';
 
 // 全螢幕（D-109、W6 §3-2）：一層蓋滿整個視窗，直接掛在 document.body，蓋住 Obsidian 的上下欄；
@@ -19,6 +19,8 @@ export interface OpenOptions {
   onEvent?: (event: ReviewEvent) => void;
   /** 畫面的錯（D-155）：render 是卡片顯示不出來（path 是卡組），ui 是 React 沒接住的錯。主機印在 console 並記進錯誤紀錄。 */
   onError?: (error: unknown, where: 'render' | 'ui', path?: string) => void;
+  /** 學生在旗子的選單選了一項（D-160）；沒傳就沒有旗子。 */
+  onReport?: ReviewProps['onReport'];
   onClose?: () => void;
 }
 export interface ReviewHandle { session: Session; close(): void }
@@ -66,11 +68,13 @@ export function openReview(options: OpenOptions): ReviewHandle {
   const report = onEvent && ((event: ReviewEvent): void => { if (!closed) onEvent(event); });
   // 切到背景（W6 §2-1、L2 的 F4）：朗讀立刻停；連續超過 60 秒才回來，目前這張未評分的卡從頭開始（Session 判斷）。
   // 桌面的 Obsidian 被別的視窗整個遮住也算 hidden（2026-10-26 實測），所以短的切換不重設。
+  // 回報的選單開著時不重設（D-160 第 3 點）：不 pause，回來時 resume 就不會從頭開始，選單與卡片照舊。
   let hiddenAt: number | null = null;
+  let menuOpen = false;
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') {
       speech.stop();
-      session.pause();
+      if (!menuOpen) session.pause();
       hiddenAt ??= performance.now();
     } else if (hiddenAt !== null) {
       const ms = performance.now() - hiddenAt;
@@ -124,6 +128,7 @@ export function openReview(options: OpenOptions): ReviewHandle {
   root.render(<Review
     app={app} session={session} speech={speech} pickedAt={pickedAt} onEvent={report}
     onRenderError={onError && ((error, path) => { onError(error, 'render', path); })}
+    onReport={options.onReport} onMenu={open => { menuOpen = open; }}
     close={() => { handle.close(); }}
     openLink={(linktext, sourcePath) => { handle.close(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}

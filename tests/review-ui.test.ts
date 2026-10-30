@@ -450,11 +450,12 @@ void test('D-145 題目沒有 ＿＿ 的打字卡：輸入框照舊在題目下�
   assert.equal(o.ui.find('ec-input')[0].props.placeholder, '輸入英文');
 });
 
-void test('D-145 自然卡（沒有自動朗讀開關）的上方列和英文卡一樣是四格，✕ 在最後一格', async t => {
+// D-160：自動朗讀與 ✕ 之間多一格回報的旗子（沒有旗子時也留一格空的），所以是五格。
+void test('D-145 自然卡（沒有自動朗讀開關）的上方列和英文卡一樣是五格，✕ 在最後一格', async t => {
   const o = await open(t, { subject: '自然' });
   const top = o.ui.find('ec-top')[0].children.filter((child): child is Tree => typeof child !== 'string');
-  assert.equal(top.length, 4);
-  assert.equal(top[3].props['aria-label'], '結束複習');
+  assert.equal(top.length, 5);
+  assert.equal(top[4].props['aria-label'], '結束複習');
   o.ui.key(' ');
   assert.equal(o.ui.find('ec-a').length, 1, '一般的問答卡照舊畫答案格');
 });
@@ -497,4 +498,137 @@ void test('§2-2 卡片顯示不出來：Markdown 的 onFail 交出錯誤與卡�
   for (const markdown of markdowns) (markdown.props.onFail as (error: unknown, path: string) => void)(error, NATURAL);
   assert.deepEqual(failed, markdowns.map(() => [error, NATURAL]));
   assert.deepEqual(events.filter(event => (event as { kind: string }).kind === 'render-failed').map(event => (event as { side: string }).side), ['front', ...markdowns.slice(1).map(() => 'back')]);
+});
+
+// tasks/error-log.md §8（D-160）：上方那一排的旗子打開選單，選一項就交出那張卡；選單開著時按鍵、點卡片與自動換卡都不作用，卡片狀態不變。
+type Reported = [string, { deck: string; lt: string; v: string }];
+const flag = (ui: ReviewUi) => ui.find('ec-flag');
+const items = (ui: ReviewUi) => ui.find('ec-report-item');
+const choose = (ui: ReviewUi, label: string): void => {
+  const item = items(ui).find(button => ui.text(button) === label);
+  assert.ok(item, label);
+  ui.click(item);
+};
+const fingerprint = (session: Session): string => { const view = session.view(); return view.kind === 'card' ? view.card.card.prompt.fingerprint : ''; };
+
+void test('§8 旗子：沒傳 onReport 時沒有；有卡時在「結束複習」左邊；讀取中與完成畫面沒有；動畫期間停用', async t => {
+  const plain = await open(t, { subject: '自然' });
+  assert.deepEqual(flag(plain.ui), []);
+  const reported: Reported[] = [];
+  const o = await open(t, { subject: '自然' }, { props: { onReport: (kind, card) => { reported.push([kind, card]); } } });
+  assert.equal(flag(o.ui).length, 1);
+  assert.equal(flag(o.ui)[0].props['aria-label'], '回報問題');
+  const top = o.ui.find('ec-top')[0].children.filter(child => typeof child !== 'string');
+  assert.deepEqual(top.slice(-2).map(child => child.props['aria-label']), ['回報問題', '結束複習'], '旗子在結束的左邊，結束仍在最右邊');
+  // 動畫期間（回看的換卡）停用。
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  o.ui.motion.hold = true;
+  o.ui.key('ArrowLeft');
+  assert.equal(flag(o.ui)[0].props.disabled, true);
+  o.ui.motion.hold = false;
+  o.ui.motion.release();
+  await o.ui.settle();
+  assert.equal(flag(o.ui)[0].props.disabled, false);
+  o.ui.key('ArrowRight');
+  await o.ui.settle();
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.equal(o.session.view().kind, 'done');
+  assert.deepEqual(flag(o.ui), [], '完成畫面沒有');
+  // 讀取中：state 還沒讀完就打開畫面。
+  const memory = createMemoryFiles({ [NATURAL]: naturalText });
+  const state = createState({ files: memory.files, device: 'PC-test', delay: 30, fillIds: false, offset: () => 480 });
+  t.after(() => state.close());
+  const session = createSession({ state, pick: { subject: '自然' } });
+  t.after(() => { session.close(); });
+  const loading = await renderReview({ app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], speech: { say() {}, stop() {}, whenIdle: () => () => {} }, autoRead: { get: () => false, set() {} }, pickedAt: 0, onReport: () => {} });
+  t.after(() => { loading.unmount(); });
+  assert.equal(session.view().kind, 'loading');
+  assert.deepEqual(flag(loading), []);
+  assert.deepEqual(reported, []);
+});
+
+void test('§8 選單開著：自評的鍵、空白鍵、←、點卡片都不作用；選一項交出卡組、lt、v 與代號，卡片還是同一張、同一面', async t => {
+  const reported: Reported[] = [];
+  let closed = 0;
+  const o = await open(t, { subject: '自然' }, { props: { onReport: (kind, card) => { reported.push([kind, card]); }, close: () => { closed++; } } });
+  o.ui.key(' ');
+  o.clock.now += RATE_DELAY;
+  const before = { lt: lt(o.session), v: fingerprint(o.session) };
+  o.ui.click(flag(o.ui)[0]);
+  assert.deepEqual(items(o.ui).map(o.ui.text), ['這張卡的內容有錯（題目或答案不對）', '卡片顯示不完整或空白', '按了沒反應、卡住', '聲音不對或沒有聲音', '其他（可以另外截圖給家長）', '取消']);
+  for (const key of ['3', '1', ' ', 'Enter', 'ArrowLeft', 'ArrowRight']) o.ui.key(key);
+  o.ui.click(o.ui.find('ec-stage')[0]);
+  for (const button of o.ui.find('ec-rate')) o.ui.click(button);
+  await o.ui.settle();
+  await o.flush();
+  assert.deepEqual(o.log(), [], '不寫紀錄');
+  assert.equal(lt(o.session), before.lt);
+  assert.equal(items(o.ui).length, 6, '選單還開著');
+  choose(o.ui, '卡片顯示不完整或空白');
+  assert.deepEqual(reported, [['display', { deck: NATURAL, lt: 'a1', v: before.v }]]);
+  assert.deepEqual(items(o.ui), [], '選了就關掉');
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.revealed, '還是翻開的那一面');
+  assert.equal(lt(o.session), 'a1');
+  // Esc 與「取消」只關選單；選單關著時 Esc 照舊結束複習。
+  o.ui.click(flag(o.ui)[0]);
+  o.ui.key('Escape');
+  assert.deepEqual(items(o.ui), []);
+  assert.equal(closed, 0);
+  o.ui.click(flag(o.ui)[0]);
+  choose(o.ui, '取消');
+  assert.deepEqual(items(o.ui), []);
+  assert.equal(reported.length, 1);
+  o.ui.key('Escape');
+  assert.equal(closed, 1);
+  // 選單關了之後照常：自評換下一張。
+  o.ui.key('3');
+  await o.ui.settle();
+  assert.equal(lt(o.session), 'a2');
+});
+
+void test('§8 回看上一張時回報的是那一張', async t => {
+  const reported: Reported[] = [];
+  const o = await open(t, { subject: '自然' }, { props: { onReport: (kind, card) => { reported.push([kind, card]); } } });
+  const first = fingerprint(o.session);
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.equal(lt(o.session), 'a2');
+  o.ui.key('ArrowLeft');
+  await o.ui.settle();
+  o.ui.click(flag(o.ui)[0]);
+  choose(o.ui, '這張卡的內容有錯（題目或答案不對）');
+  assert.deepEqual(reported, [['content', { deck: NATURAL, lt: 'a1', v: first }]]);
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.viewing, '還在回看');
+});
+
+void test('§8 打字卡打到一半回報：回來時字還在、還在同一步；只剩一個自評時選單開著不自動換卡', async t => {
+  const reported: Reported[] = [];
+  const o = await open(t, { subject: '英文' }, { autoRead: true, holdSpeech: true, texts: { [ENGLISH]: autoDeck }, props: { onReport: (kind, card) => { reported.push([kind, card]); } } });
+  o.session.input('wen');
+  o.ui.click(flag(o.ui)[0]);
+  choose(o.ui, '按了沒反應、卡住');
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.input === 'wen' && view.card.typed.step === 1, '字還在、還在第 1 步');
+  assert.deepEqual(reported.map(([kind, card]) => [kind, card.lt]), [['stuck', 'g1']]);
+  // 走完三步、只剩「沒印象」：選單開著時不等念完、不自動記下；關掉才等。
+  o.session.input('');
+  await skipAndCopy(o, 'went');
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss']], '先確認一般情況會自動記下');
+  await skipAndCopy(o, 'turn off');
+  o.ui.click(flag(o.ui)[0]);
+  await o.ui.settle();
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss']], '選單開著：不自動記下');
+  choose(o.ui, '取消');
+  await o.ui.settle();
+  for (const callback of o.idle.splice(0)) callback();
+  await o.ui.settle();
+  assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']], '關掉選單後照常');
 });

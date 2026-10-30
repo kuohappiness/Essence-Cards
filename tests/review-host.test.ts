@@ -194,3 +194,22 @@ void test('§2-2 React root 的 onUncaughtError、onRecoverableError 與畫面�
   assert.equal(h.page.rootOptions(), undefined);
   assert.equal(h.page.review().onRenderError, undefined);
 });
+
+// tasks/error-log.md §8（D-160 第 3 點）：回報的選單開著時，離開超過 60 秒回來也不從頭開始；選單關上之後照舊。
+void test('§8 選單開著時切走超過 60 秒：卡片不重設；onReport 原樣交給畫面', async t => {
+  const h = await setup(t);
+  const onReport = (): void => {};
+  const handle = h.page.open({ pick: { subject: '自然' }, speech: h.speech, onReport });
+  t.after(() => { handle.close(); });
+  await handle.session.ready();
+  assert.equal(h.page.review().onReport, onReport);
+  const shown = (): number => { const view = handle.session.view(); return view.kind === 'card' ? view.card.shown : -1; };
+  const away = (ms: number): void => { h.page.hide(); t.mock.timers.tick(ms); h.page.show(); };
+  handle.session.reveal();
+  h.page.review().onMenu?.(true);
+  away(AWAY_LIMIT + 1);
+  assert.equal(shown(), 0, '選單開著：不重設');
+  h.page.review().onMenu?.(false);
+  away(AWAY_LIMIT + 1);
+  assert.equal(shown(), 1, '選單關上：照舊從頭開始');
+});
