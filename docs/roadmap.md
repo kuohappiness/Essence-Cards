@@ -17,7 +17,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
 | 英文一字多義 | 規則已改（D-125） | 有多義字的真實教材時試用 | 新教材 | [D-125](decisions.md#d-125-英文規則依製卡流程重排與一字多義的學習目標) |
-| 獨立手機版與不用 iCloud 的同步（規畫） | 使用者補充卡點是 iCloud；Claude 第二輪建議先在外掛裡自己同步（使用者的 Dropbox），脫離 Obsidian 之後再談 | Codex 查核兩輪，本機同時做 D-154 的 Windows 實測；兩邊結果到了再決定同步要不要進 v1 | 使用者（開 Codex） | [討論稿](<../Claude Codex Discussion/2026-10-29-standalone-phone-app.md>)、[計畫](plans/standalone-app.md) |
+| 獨立手機版與不用 iCloud 的同步（規畫） | 使用者補充卡點是 iCloud；Claude 第二輪建議先在外掛裡自己同步（使用者的 Dropbox），脫離 Obsidian 之後再談 | Codex 查核兩輪（D-154 的 Windows 實測已做完，結果補進討論稿）；回應後再決定同步要不要進 v1 | 使用者（開 Codex） | [討論稿](<../Claude Codex Discussion/2026-10-29-standalone-phone-app.md>)、[計畫](plans/standalone-app.md) |
 
 第一個里程碑：W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（D-111），2026-10-27 達成；品質檢查見上表。接下來照 D-111 的順序，從 [backlog 的 v1 任務](backlog.md#v1-需要做的任務)挑下一批。
 
