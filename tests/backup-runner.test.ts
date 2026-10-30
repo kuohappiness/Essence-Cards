@@ -295,3 +295,20 @@ void test('L2 B1：同次載入發現記的那份失效（被刪掉）時，重�
   await done;
   assert.equal(runner.status().ready, true);
 });
+
+void test('L2 B3：手動備份先開始、check 後到時共用同一個結果；前一份失敗就是失敗，不另做一份', async () => {
+  const { runner, memory } = setup();
+  let release = (): void => {};
+  memory.control.holdPrepare = new Promise(resolve => { release = resolve; });
+  memory.control.failPrepare = '外接硬碟沒接上';
+  // 只有第一次準備位置失敗：check 若在失敗之後另做一份，就會成功並把失敗蓋掉。
+  memory.control.failTimes = 1;
+  const manual = runner.backup();
+  const check = runner.check();
+  release();
+  await Promise.all([manual, check]);
+  assert.equal(memory.control.prepares, 1);
+  assert.equal(memory.control.writes, 0);
+  assert.equal(runner.status().ready, false);
+  assert.equal(runner.status().failure?.by, 'manual');
+});

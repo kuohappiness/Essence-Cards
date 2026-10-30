@@ -164,7 +164,8 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
   return {
     check() {
       checking ??= (async () => {
-        if (current) await current;
+        // 已經有一份在做：共用它的結果，不在它做完之後重新判斷、另做一份（Codex L2 B3）。
+        if (current) return current;
         const last = store.last();
         if (!last || last.build !== build || !await verified(last)) {
           // 已經知道沒有對得到的成功備份：先關閘門再重做（Codex L2 B1），不能等重做的第一步之後。
