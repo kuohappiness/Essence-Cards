@@ -120,15 +120,27 @@ const moduleBoundaries = {
       if (message) context.report({ node, message });
     }
     /**
-     * 這個 require（識別字、字串或樣板字串）只是名稱，不是拿載入器來用：`.require` 成員（另由 MemberExpression 擋）、物件字面值與類別的
-     * 屬性名、型別裡的成員名與字面值型別。解構（ObjectPattern）的屬性名不算名稱：`const { require: load } = window` 是取出載入器（Codex L2 B5）。
+     * 識別字 require 只是名稱，不是拿載入器來用：`.require` 成員（另由 MemberExpression 擋）、物件字面值與類別的屬性名、型別裡的成員名。
+     * 解構（ObjectPattern）的屬性名不算名稱：`const { require: load } = window` 是取出載入器（Codex L2 B5）。
      */
     function onlyName(node) {
       const parent = node.parent;
       if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) return true;
       if (parent.type === 'Property' && parent.key === node && parent.parent.type === 'ObjectExpression') return true;
       if ((parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') && parent.key === node) return true;
-      return parent.type === 'TSPropertySignature' || parent.type === 'TSMethodSignature' || parent.type === 'TSLiteralType';
+      return parent.type === 'TSPropertySignature' || parent.type === 'TSMethodSignature';
+    }
+    /**
+     * 內容剛好是 'require' 的字串或樣板字串用來取出載入器的位置：計算的成員（`window['require']`）、解構的屬性名
+     * （`{ 'require': load }`、`{ [`require`]: load }`）、`Reflect` 的引數（`Reflect.get(window, 'require')`）。其他地方是普通的
+     * 字串資料，不擋（Codex 再審 C2）；先存進變數再取的寫法不在這道檢查的範圍。
+     */
+    function takesLoader(node) {
+      const parent = node.parent;
+      if (parent.type === 'MemberExpression' && parent.property === node && parent.computed) return true;
+      if (parent.type === 'Property' && parent.key === node && parent.parent.type === 'ObjectPattern') return true;
+      const callee = parent.type === 'CallExpression' && parent.arguments.includes(node) ? parent.callee : null;
+      return callee?.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'Reflect';
     }
     const banRequire = inSrc && !devRequire;
     const report = node => { context.report({ node, message: requireMessage }); };
@@ -144,15 +156,15 @@ const moduleBoundaries = {
       TSExternalModuleReference(node) { check(node, node.expression); },
       // 技術債「D-148 的檢查會漏掉別的 require 寫法」：require(…)、const load = require、window.require、module.require、
       // globalThis['require']、require.call、解構取出（識別字、字串、樣板字串、簡寫、解構賦值）、Reflect.get(window, 'require') 都擋：
-      // 識別字 require 與內容剛好是 'require' 的字串只要不是名稱就擋（Codex L2 B5）。
+      // 識別字 require 只要不是名稱就擋（Codex L2 B5）；內容剛好是 'require' 的字串只在取出載入器的位置擋（Codex 再審 C2）。
       Identifier(node) {
         if (banRequire && node.name === 'require' && !onlyName(node)) report(node);
       },
       Literal(node) {
-        if (banRequire && node.value === 'require' && !onlyName(node)) report(node);
+        if (banRequire && node.value === 'require' && takesLoader(node)) report(node);
       },
       TemplateLiteral(node) {
-        if (banRequire && node.expressions.length === 0 && node.quasis[0]?.value.cooked === 'require' && !onlyName(node)) report(node);
+        if (banRequire && node.expressions.length === 0 && node.quasis[0]?.value.cooked === 'require' && takesLoader(node)) report(node);
       },
       MemberExpression(node) {
         if (banRequire && !node.computed && node.property.type === 'Identifier' && node.property.name === 'require') report(node);

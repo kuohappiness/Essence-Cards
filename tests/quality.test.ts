@@ -353,6 +353,10 @@ void test('D-148 Node 與 Electron 只在 src/desktop/，require 的各種寫法
     ['src/obsidian/a.ts', "let load: unknown; ({ require: load } = window as unknown as { require: unknown }); void load;", true],
     ['src/obsidian/a.ts', "const load = Reflect.get(window, 'require') as (name: string) => unknown; load('fs');", true],
     ['src/obsidian/a.ts', "type T = 'require'; const a: T[] = []; void a;", false],
+    // Codex 再審 C2：普通的字串資料不是取出載入器，不擋。
+    ['src/obsidian/a.ts', "export const text = 'require';", false],
+    ['src/obsidian/a.ts', "export const labels = ['require'];", false],
+    ['src/obsidian/a.ts', "export const text = `require`;", false],
     ['src/desktop/a.ts', "const fs = require('node:fs/promises');", true],
     ['src/obsidian/dev-x.ts', "const load = (window as unknown as { require?: (name: string) => unknown }).require;", false],
     ['src/obsidian/a.ts', "const o = { require: 1 }; type T = { require: () => void }; interface U { require(): void }", false],
