@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 的 E1、E6、E8 在下一次 iPhone 實機測試；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債三列等觸發點 | iPhone 實機測試 | [任務說明](../tasks/icloud-placeholders.md) |
-| 維修與查修的準備 | 盤點完成，缺口 G1～G3；G1 定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)），任務說明寫好、還沒開工 | 本機照[任務說明](../tasks/error-log.md)做（學生每天使用前）；Claude 再問 G2、G3 要不要延後 | 使用者（排本機開工）、Claude | [規畫](plans/maintenance.md) |
+| 維修與查修的準備 | 盤點完成，缺口 G1～G3；G1 定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)）、G2 定案（[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)），同一份任務說明、還沒開工 | 本機照[任務說明](../tasks/error-log.md)做（學生每天使用前）；Claude 再問 G3 要不要延後 | 使用者（排本機開工）、Claude | [規畫](plans/maintenance.md) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做；R6 (a) 併進 backlog「`tests/`、`tools/` 沒有型別檢查」那一列 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成，`0.1.0` 已裝到正式使用的 vault；外掛內備份與還原的任務說明已寫 | 第一部分（備份）的程式與 Windows 實機做完，在分支 `claude/plugin-backup-1`；設定頁依功能分區（D-156）。等 Codex L2，之後合併（使用者決定）與正式安裝。還原畫面放到 v1 結案前（使用者 2026-10-29） | 使用者（開 Codex） | [外掛內備份任務說明](../tasks/plugin-backup.md)、[L2 審查請求](../tasks/plugin-backup-1-review.md)、[規畫](plans/updates.md) |
@@ -48,6 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-30 | 學生在複習畫面回報問題定案（[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)，使用者指出學生打字不可信）：上方一個旗子，點一個選項，卡與時間由外掛帶入，記進錯誤紀錄；併進[錯誤紀錄的任務](../tasks/error-log.md)第 8 節 |
 | 2026-10-30 | 外掛架構逐環節檢視整串完成：環節 3（學習狀態模組）談定（[討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 3 的結論〉）：打字卡的彎引號、特殊空白與連續空白不算錯，照打可以跳過（[D-158](decisions.md#d-158-打字卡看起來一樣的字元與多按的空白不算錯照打可以跳過)）；當天採用的錯題補強另有練習的選項（[D-159](decisions.md#d-159-當天採用的錯題補強今天的份不變另有一個練習的選項)）；紀錄寫入與讀取的修補記進 [backlog 技術債](backlog.md#技術債) |
 | 2026-10-30 | 外掛架構逐環節檢視的環節 2（卡組模組）談定（[討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 2 的結論〉）：重複的學習目標 ID 先停、家長選（[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)）；寫錯的目標要看得到、連結裡的 `^id` 被搬走等記進 [backlog 技術債](backlog.md#技術債)，D-047 列回 v1 任務 |
 | 2026-10-30 | 設定頁依功能分區、不寫「給家長」（[D-156](decisions.md#d-156-設定頁依功能分區不寫給家長)，使用者看外掛內備份的設定頁截圖時提出）：分複習、學期、AI 製卡、備份四區；入口的「給家長」另外問 |
@@ -57,4 +58,3 @@ flowchart LR
 | 2026-10-29 | 雲端佔位檔的 Windows 實測與存檔受阻的提示（[任務說明](../tasks/icloud-placeholders.md)〈結果〉，合併進 `main` 的 `9c07caa`，754 個測試）：追加寫入舊內容不變；iCloud 停著時讀取 5 ms 失敗、剛重開時卡 60 秒；iCloud 沒在跑時追加的紀錄不會上傳（使用者選不改程式、記技術債）；受阻時存檔、按鈕與小視窗都說「讀取完成後請再按一次存檔」 |
 | 2026-10-29 | 更新防線第二部分合併進 `main`（`1308e58`，[任務說明](../tasks/update-safeguards.md)、[L2 報告與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）：每台裝置記版本行，讀不懂的卡組與紀錄先停著、不出題也不寫；Codex L2 加三次再審後通過，合併後 747 個測試通過；開發命令結果檔改記 BUILD（`b6b39bb`），回看按鈕與比較轉接器記技術債 |
 | 2026-10-29 | `state` 的讀寫先後與寫入協調合併進 `main`（`70ba562`，[任務說明](../tasks/state-writes.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-writes-review.md>)）：寫入排成一列、先讀完待讀、一個門檻，存檔寫進磁碟並核對後才採用；Codex L2 三輪後通過，合併後 673 個測試通過；V6 記成已知限制（[討論稿](<../Claude Codex Discussion/2026-10-29-save-external-write.md>)） |
-| 2026-10-29 | 更新防線第一部分合併進 `main`（`8aa3078`，[任務說明](../tasks/update-safeguards.md)、[查核與回應](<../Claude Codex Discussion/2026-10-29-update-safeguards-1-review.md>)）：備份、還原工具、發布前比較、安裝的擋法與更新命令；Codex 四輪查核的發現都已修，R4 與無鎖空檔記技術債 |
