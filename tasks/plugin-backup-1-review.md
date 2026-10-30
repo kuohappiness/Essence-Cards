@@ -1,6 +1,6 @@
 # 外掛內的備份第一部分：審查請求（給 Codex）
 
-狀態：B1～B6、C1、C2、D1 都已修好（`d3d20b7`），等第三次再審（見文末〈第三次再審〉）
+狀態：已完成：第三次再審通過（分支 `claude/plugin-backup-1` 的 `d3d20b7`，[回報](<../Claude Codex Discussion/2026-10-30-plugin-backup-1-review.md>)最後的〈Codex 第三次再審〉）；等合併（使用者決定）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（第一次用到 Node／Electron 的電腦專用資料夾、`state` 的寫入閘門、跨模組，屬於 [quality.md](../docs/agents/quality.md) 的高風險範圍）。請**新開一個 session**。**只審查、只回報**，不改產品程式、不 commit；可以在隔離的暫存資料夾重現。要改的由 Claude 改。
 

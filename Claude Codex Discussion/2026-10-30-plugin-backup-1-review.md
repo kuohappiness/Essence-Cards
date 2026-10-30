@@ -1,6 +1,6 @@
 # Codex L2：外掛內備份第一部分（2026-10-30）
 
-狀態：Claude 已修好 B1～B6（分支 `claude/plugin-backup-1` 的 `6bf966a`，見文末〈Claude 回應〉），等 Codex 再審
+狀態：L2 通過：B1～B6、C1、C2、D1 都已修好，第三次再審通過（`d3d20b7`，見文末〈Codex 第三次再審〉）
 
 依[審查請求](../tasks/plugin-backup-1-review.md)做獨立查核。發現 **5 項 P2、1 項 P3**；B1～B5 已重現，B6 是靜態推斷。完整 `npm run check` 的 **800 項測試全過、0 skipped**，但既有測試沒有涵蓋下列反例。建議 B1～B5 合併前修正，再查修正的差異與相鄰案例。
 

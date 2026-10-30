@@ -1,6 +1,6 @@
 # 外掛內的備份與還原（給 Claude，本機執行）
 
-狀態：第 0 步格式查核一致（[查核請求](plugin-backup-format-review.md)）；第一部分程式與 Windows 實機完成（見〈結果：第一部分〉），等 Codex L2（[審查請求](plugin-backup-1-review.md)）；第二部分（還原畫面）使用者 2026-10-29 選放到 v1 結案前，這次只做第一部分
+狀態：第 0 步格式查核一致（[查核請求](plugin-backup-format-review.md)）；第一部分程式與 Windows 實機完成（見〈結果：第一部分〉），Codex L2 通過（[審查請求](plugin-backup-1-review.md)，`d3d20b7`），等合併（使用者決定）；第二部分（還原畫面）使用者 2026-10-29 選放到 v1 結案前，這次只做第一部分
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-ID 與這份說明做完）。第一次用到 Node／Electron（[D-148](../docs/decisions.md#d-148-電腦專用的主機接點)），又改 `src/state/` 的寫入閘門，屬於高風險範圍：第 0 步先請 Codex 查核格式（D-140 第 4 點），兩個部分各自在合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
