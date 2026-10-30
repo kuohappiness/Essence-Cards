@@ -399,3 +399,27 @@ void test('L2 再審 C1：手動備份連清理都做完之後，過時的核對
   assert.equal(runner.status().ready, true);
   assert.equal(runner.status().failure, null);
 });
+
+for (const [why, prepare] of [
+  ['記的那份不見了（該重做 new-version）', (memory: ReturnType<typeof memoryHost>, last: LastBackup) => { memory.folder(DEFAULT).delete(last.name); }],
+  ['記的那份還在但超過 30 天（該做 monthly）', () => {}],
+] as const) {
+  void test(`L2 第二次再審 D1：check 核對期間停用外掛，${why}，核對回來後不準備位置、不送新狀態，check 安靜結束`, async () => {
+    const memory = memoryHost();
+    let now = NOW;
+    const { runner, saved, statuses } = setup({ memory, now: () => now });
+    await runner.check();
+    prepare(memory, saved.last!);
+    now = NOW + 31 * DAY;
+    let releaseRead = (): void => {};
+    memory.control.holdRead = new Promise(resolve => { releaseRead = resolve; });
+    const check = runner.check();
+    await new Promise(resolve => setImmediate(resolve));
+    const prepares = memory.control.prepares, seen = statuses.length;
+    runner.cancel();
+    releaseRead();
+    await check;
+    assert.equal(memory.control.prepares, prepares);
+    assert.equal(statuses.length, seen);
+  });
+}

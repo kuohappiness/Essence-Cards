@@ -147,6 +147,8 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
       set({ running: by });
       let step = '準備備份位置';
       try {
+        // 停用之後不開始第一個會動到磁碟的步驟（建資料夾），不是做完才停（Codex 第二次再審 D1）。
+        stop();
         const real = await host.prepare(store.folder() ?? options.defaultFolder);
         stop();
         step = '讀 vault';
@@ -176,6 +178,8 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
         const seen = started;
         const last = store.last();
         const ok = !!last && last.build === build && await verified(last);
+        // 核對期間外掛停用了：安靜結束，不開始任何新的動作（Codex 第二次再審 D1）。
+        if (cancelled) return;
         // 核對期間有別的備份開始過（例如手動）：它的結果比這次核對新，不拿過時的結果關閘門或另做一份，
         // 還在做就共用它的結果（Codex 再審 C1）。
         if (started !== seen) return current ?? undefined;
