@@ -16,6 +16,7 @@ import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, saveBlocked, type Params } from './dev-cloud.ts';
 import { versionCheck } from './dev-version.ts';
+import { errorProbe } from './dev-errors.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
 /** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；結果檔的 plugin 記它，才核對得到跑的是哪一次建置。 */
@@ -92,6 +93,8 @@ const commands: Record<string, DevCommand> = {
   // D-154 第 2 點的 Windows 對照：受阻時按一次存檔（用 state-load §8 的獨占鎖做出讀不到）。
   'save-blocked': { name: 'Essence 開發：受阻時按存檔', run: (host, _ids, params) => saveBlocked({ app: host.app, state: host.state, saver: host.ids?.saver ?? null, notices: listener => host.on('notice', listener) }, params), desktop: true, root: CLOUD_ROOT },
   // 更新防線第二部分（任務說明 2-1、2-2）：版本行、「版本」命令的通知、需要新版的卡組；截圖寫在 Essence W5/結果/。
+  // tasks/error-log.md §7：正式版的錯誤紀錄與複習畫面的回報（D-155、D-160）。
+  'error-probe': { name: 'Essence 開發：錯誤紀錄實測', run: errorProbe, desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
 
