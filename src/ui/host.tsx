@@ -42,7 +42,8 @@ export function openReview(options: OpenOptions): ReviewHandle {
   // 不然焦點跑到被蓋住的 Obsidian（2026-10-27 用 Electron 送真的 Shift+Tab 實測），之後的快捷鍵都到不了複習畫面。
   element.addEventListener('keydown', event => {
     if (event.key !== 'Tab') return;
-    const items = Array.from(element.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(item => item.getClientRects().length > 0);
+    // inert 的不算（回報的選單開著時背後那幾塊，Codex L2 的 R1）：Tab 只在選單裡繞。
+    const items = Array.from(element.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(item => item.getClientRects().length > 0 && !item.closest('[inert]'));
     const index = items.findIndex(item => item === document.activeElement);
     if (!items.length) { event.preventDefault(); return; }
     if (event.shiftKey ? index <= 0 : index === -1 || index === items.length - 1) {

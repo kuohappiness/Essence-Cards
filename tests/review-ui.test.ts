@@ -632,3 +632,28 @@ void test('§8 打字卡打到一半回報：回來時字還在、還在同一�
   await o.ui.settle();
   assert.deepEqual(ratings(o), [['g1', 'miss'], ['t1', 'miss']], '關掉選單後照常');
 });
+
+// Codex L2 的 R1：選單開著時背後的東西不能取得焦點、不能操作（inert），打字卡的輸入框就算收到輸入也不改字。
+void test('§8 R1 選單開著時：上方列、卡片、底部按鈕都是 inert；輸入框的變更不作用；關上後恢復', async t => {
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: autoDeck }, props: { onReport: () => {} } });
+  const inert = (): unknown[] => ['ec-top', 'ec-prog', 'ec-stage'].map(name => o.ui.find(name)[0].props.inert);
+  assert.deepEqual(inert(), [false, false, false]);
+  o.ui.click(flag(o.ui)[0]);
+  assert.deepEqual(inert(), [true, true, true]);
+  assert.equal(o.ui.find('ec-report')[0].props.inert, undefined, '選單本身不是 inert');
+  const input = o.ui.find('ec-input')[0];
+  (input.props.onChange as (event: unknown) => void)({ currentTarget: { value: 'z' } });
+  await o.ui.settle();
+  const view = o.session.view();
+  assert.ok(view.kind === 'card' && view.card.typed?.input === '', '選單開著：字沒變');
+  choose(o.ui, '取消');
+  assert.deepEqual(inert(), [false, false, false]);
+  (o.ui.find('ec-input')[0].props.onChange as (event: unknown) => void)({ currentTarget: { value: 'w' } });
+  await o.ui.settle();
+  const after = o.session.view();
+  assert.ok(after.kind === 'card' && after.card.typed?.input === 'w', '關上之後照常打字');
+  // 不是打字卡（自然）：底部那一排也 inert。
+  const plain = await open(t, { subject: '自然' }, { props: { onReport: () => {} } });
+  plain.ui.click(flag(plain.ui)[0]);
+  assert.equal(plain.ui.find('ec-actions')[0].props.inert, true);
+});

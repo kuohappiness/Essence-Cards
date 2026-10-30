@@ -320,7 +320,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const english = view.kind === 'card' && view.card.english;
   const typing = view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing ? view.card.typed : null;
   return <div className="ec-app" ref={appEl} tabIndex={-1} onKeyDown={onKey}>
-    <div className="ec-top">
+    {/* 回報的選單開著時，背後的東西不能取得焦點也不能操作（inert，Codex L2 的 R1）：Tab 只在選單裡走 */}
+    <div className="ec-top" inert={reporting}>
       <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>
       {top.viewing
         ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
@@ -333,8 +334,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
         : <span aria-hidden="true" />}
       <button type="button" className="ec-ico" aria-label="結束複習" onClick={props.close}><Icon type="close" /></button>
     </div>
-    <div className="ec-prog" aria-hidden="true"><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
-    <div className={'ec-stage' + (typing ? ' is-typing' : '')} ref={stage} onClick={event => {
+    <div className="ec-prog" aria-hidden="true" inert={reporting}><i style={{ width: String((top.fraction ?? 0) * 100) + '%', visibility: top.fraction === null ? 'hidden' : 'visible' }} /></div>
+    <div className={'ec-stage' + (typing ? ' is-typing' : '')} ref={stage} inert={reporting} onClick={event => {
       if (reporting || view.kind !== 'card' || view.card.viewing || performance.now() < suppressClick.current || (event.target as HTMLElement).closest('button,input,a,audio')) return;
       // 打字卡：點卡片任何地方都叫出鍵盤（D-145：輸入框在空格裡，點得到的範圍比原本那一整行小）。
       if (view.card.typed) { if (!view.card.typed.finished) inputEl.current?.focus({ preventScroll: true }); return; }
@@ -343,13 +344,13 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} session={session} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot}
+        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
           qRef={questionEl} sticky={stickyQuestion} actions={typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />}
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
     </div>
     {/* 打字中沒有底部那一排：「沒印象」「確認」在題目正下方（TypedActions） */}
-    {!typing && <div className="ec-actions">
+    {!typing && <div className="ec-actions" inert={reporting}>
       {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>結束複習</button>}
       {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} />}
     </div>}
@@ -402,11 +403,13 @@ function Done({ done, session, close }: { done: DoneView; session: Session; clos
 }
 
 interface CardProps {
-  view: CardView; app: App; session: Session; speech: Speech;
+  view: CardView; app: App; speech: Speech;
   materials: (deckPath: string) => readonly string[];
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  /** 打字卡的輸入框改了字（回報的選單開著時 Review 不交給 session）。 */
+  onInput: (value: string) => void;
   /** 題目裡的空格：undefined 是題目還沒渲染好，null 是題目沒有 ＿＿（輸入框放在題目下面）。 */
   slot: HTMLElement | null | undefined;
   onSlot: (slot: HTMLElement | null) => void;
@@ -418,7 +421,7 @@ interface CardProps {
   onPainted: () => void;
   onFail: (side: 'front' | 'back', error: unknown, path: string) => void;
 }
-function Card({ view, app, session, speech, materials, openLink, tipOpen, setTipOpen, inputRef, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
+function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
   const prompt = card.prompt;
   const question = prompt.kind === 'qa' ? prompt.question : prompt.text;
@@ -442,7 +445,7 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
   const live = typing?.step === 3 && typing.live?.typed.length ? typing.live : null;
   const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
     : typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span>{live && <span className="ec-live"><Letters letters={live.typed} mode="typed" /></span>}</div> : null;
-  const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { session.input(event.currentTarget.value); }}
+  const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { onInput(event.currentTarget.value); }}
     placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
     autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />;
   // 拼對（第 1 步，或目前這張的第 2 步，Codex L2 F7）：打勾加答案。回看時照第 1 步（§2-5），第 1 步拼錯的顯示當時的比對。
