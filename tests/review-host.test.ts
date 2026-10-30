@@ -89,7 +89,8 @@ async function setup(t: TestContext): Promise<Harness> {
   }, module, module.exports, doc, { innerHeight: HEIGHT, visualViewport: viewport }, { now: () => Date.now() },
   (callback: () => void) => frames.push(callback), class {});
 
-  const speech = { stopped: 0, say() {}, stop() { speech.stopped++; } };
+  // 這個替身不出聲，一直是沒在念的狀態：whenIdle 照 Speech 的約定馬上回報（D-145）。
+  const speech = { stopped: 0, say() {}, stop() { speech.stopped++; }, whenIdle(callback: () => void) { callback(); return () => {}; } };
   const visibility = (to: 'hidden' | 'visible'): void => { doc.visibilityState = to; doc.dispatch('visibilitychange'); };
   return {
     memory, speech,

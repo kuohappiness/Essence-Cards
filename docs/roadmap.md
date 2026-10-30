@@ -10,7 +10,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 的 E1、E6、E8 在下一次 iPhone 實機測試；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債三列等觸發點 | iPhone 實機測試 | [任務說明](../tasks/icloud-placeholders.md) |
 | 維修與查修的準備 | 盤點完成，缺口 G1～G3；使用者同意 G1（正式版把錯誤記下來），位置與格式的討論稿寫好 | Codex 查核；一致後交使用者確認，寫成 D-ID 與任務說明 | 使用者（開 Codex） | [規畫](plans/maintenance.md)、[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>) |
-| 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做；R6 (a) 併進 backlog「`tests/`、`tools/` 沒有型別檢查」那一列 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
+| 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R6 (a) 隨環節 9 的技術債做完（見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成，`0.1.0` 已裝到正式使用的 vault；外掛內備份與還原的任務說明已寫 | 第 0 步的格式查核已一致；本機在分支 `claude/plugin-backup-1` 做第一部分（備份），設定頁的版面截圖給使用者看。還原畫面放到 v1 結案前（使用者 2026-10-29） | Claude | [外掛內備份任務說明](../tasks/plugin-backup.md)、[格式查核請求](../tasks/plugin-backup-format-review.md)、[規畫](plans/updates.md) |
 | 外掛架構逐環節檢視 | 環節 1、4、5、6、7、8、9 已談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)；環節 4、5、6、9 的施工記進 [backlog 技術債](backlog.md#技術債)，環節 5 的存檔受阻提示已隨雲端佔位檔任務合併；環節 9 有四列觸發點已到） | 環節 2（卡組模組）：Claude 寫分析與提案，交 Codex | Claude | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
@@ -48,7 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
-| 2026-10-30 | 外掛架構檢查環節 9 的技術債（分支 `claude/zealous-williams-bb5446`，[結論](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 9 的結論〉）：擋 git 指令的 hook 也接 PowerShell，加擋 `--no-verify`、`commit -n`、`-c core.hooksPath`，`git.exe`、大小寫不同、`-C`／`-c` 開頭的寫法不再漏擋，`--force-if-includes` 不再誤擋（`2596f53`，PowerShell 實測等合併後）；pre-commit 的完整檢查改用 dot reporter，通過的測試只印點，失敗時錯誤與 exit code 照常傳回 |
+| 2026-10-30 | 外掛架構檢查環節 9 的技術債（分支 `claude/zealous-williams-bb5446`，[結論](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 9 的結論〉）：擋 git 指令的 hook 也接 PowerShell，加擋 `--no-verify`、`commit -n`、`-c core.hooksPath`，`git.exe`、大小寫不同、`-C`／`-c` 開頭的寫法不再漏擋，`--force-if-includes` 不再誤擋（`2596f53`，PowerShell 實測等合併後）；pre-commit 的完整檢查改用 dot reporter，通過的測試只印點，失敗時錯誤與 exit code 照常傳回（`976a7f4`）；`tests/`、`tools/` 加進型別檢查，修好 9 個錯（`speech` 替身補上 `whenIdle`），ESLint 不再用預設專案，替身檔頭補 R6 (a) 的三點限制 |
 | 2026-10-30 | `state/index.ts` 原樣拆檔合併進 `main`（`0e3e8a4`，[任務說明](../tasks/state-split.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）：拆成讀取層 `reads.ts`、寫入 `writes.ts`、`ids.ts`、組合 `index.ts`，只搬不改行為，更新防線第二部分一起整合；Codex L2 沒有要修的，Windows 輪流對照各 5 次全過，755 個測試通過 |
 | 2026-10-29 | 更新防線完成，第一個正式版 `0.1.0`（tag `v0.1.0`，`a4922fa`，[任務說明](../tasks/update-safeguards.md) §3）裝到正式使用的 vault：第一次安裝沒有卡組與紀錄可備份、沒有舊版可比，用 `install-vault` 照正式版的擋法裝，讀回雜湊相同，電腦與 iPhone 重開後都記下 `0.1.0+a4922fa` 的版本行；升版時改了 7 個寫死版號的測試 |
 | 2026-10-29 | 雲端佔位檔的 Windows 實測與存檔受阻的提示（[任務說明](../tasks/icloud-placeholders.md)〈結果〉，合併進 `main` 的 `9c07caa`，754 個測試）：追加寫入舊內容不變；iCloud 停著時讀取 5 ms 失敗、剛重開時卡 60 秒；iCloud 沒在跑時追加的紀錄不會上傳（使用者選不改程式、記技術債）；受阻時存檔、按鈕與小視窗都說「讀取完成後請再按一次存檔」 |
