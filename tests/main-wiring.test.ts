@@ -16,7 +16,7 @@ const bundled = await bundle(false);
 /** 開發版（給 iPhone 的開發命令也在裡面）。 */
 const devBundled = await bundle(true);
 
-interface PluginLike { onload(): void; onunload(): void; state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean> } | null }
+interface PluginLike { onload(): void; onunload(): void; state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean>; onChange(listener: () => void): () => void } | null }
 
 /** 建好替身、載入外掛（正式版或開發版）並建立外掛物件。 */
 function host(texts: Record<string, string>, options: Omit<StubOptions, 'texts'> = {}, code = bundled) {
@@ -214,4 +214,136 @@ void test('開發命令的結果檔：plugin 是建置版本 BUILD，不是 mani
   const path = [...h.texts.keys()].find(key => key.startsWith('Essence W5/結果/unread '));
   assert.ok(path, '有結果檔');
   assert.equal((JSON.parse(h.text(path) ?? '{}') as { plugin?: string }).plugin, '0.0.1+test');
+});
+
+// tasks/error-log.md §2：主機建立唯一的記錄器，report()、每一處 console.error、畫面的錯與 window 的補網都交給它（D-155）。
+/** 複習畫面換成替身：openReview 交給測試（stub.obsidian.__openReview），主機傳進去的回呼可以直接叫。 */
+const reviewBundled = (await build({
+  absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', write: false, logLevel: 'silent',
+  external: ['obsidian', '@codemirror/state', '@codemirror/view'], define: { 'process.env.NODE_ENV': '"production"', DEV: 'false', BUILD: '"0.0.1+test"' },
+  plugins: [{
+    name: 'ui-stub',
+    setup(builder) {
+      builder.onResolve({ filter: /\/ui\/index\.ts$/ }, () => ({ path: 'ui', namespace: 'stub' }));
+      builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: "export function registerStart() {} export function openReview(options) { return require('obsidian').__openReview(options); }", loader: 'js' }));
+    },
+  }],
+})).outputFiles[0].text;
+
+interface Line { where: string; msg?: string; path?: string; stack?: string; kind?: string; lt?: string; v?: string }
+/** 這台的錯誤紀錄（當月的檔）裡的每一行。 */
+function errorLines(h: ReturnType<typeof host>): Line[] {
+  const path = [...h.texts.keys()].find(key => /^Essence Cards\/紀錄\/錯誤\/\d{4}-\d{2} Windows-[0-9a-f]{4} 錯誤\.jsonl$/.test(key));
+  return path ? (h.text(path) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Line) : [];
+}
+/** 帶這個外掛自己程式位置的錯誤（Obsidian 載入外掛時的 stack 寫法）。 */
+function ownError(message: string, frame = 'plugin:essence-cards:1:2345'): Error {
+  const error = Error(message);
+  error.stack = `Error: ${message}\n    at x (${frame})`;
+  return error;
+}
+const errorEvent = (error: unknown): Event => Object.assign(new Event('error'), { error });
+const rejection = (reason: unknown): Event => Object.assign(new Event('unhandledrejection'), { reason });
+
+void test('§2 接線：read、write、close、listener 都記進錯誤紀錄，where 照 syntax.md §9', async t => {
+  quiet(t);
+  const unreadable = 'Essence Cards/讀不到.md';
+  let failing = true;
+  const h = host({ ...deck, [unreadable]: '- 目標 ^bbbbbb\n    - Q :: A\n' }, {
+    desktop: true, failRead: path => failing && path === unreadable,
+    // 複習紀錄寫不進去，錯誤紀錄寫得進去。
+    failWrite: path => /^Essence Cards\/紀錄\/[^/]+\.jsonl$/.test(path),
+  });
+  h.plugin.onload();
+  h.layoutReady();
+  assert.ok(h.plugin.state);
+  await h.plugin.state.ready();
+  h.plugin.state.onChange(() => { throw Error('監聽者壞了'); });
+  // 讀不到的那篇 1 秒後重試讀到了，重排：監聽者被叫到（替身的 vault 不送變動通知）。
+  failing = false;
+  await wait(1100);
+  h.plugin.state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
+  await wait(50);
+  h.plugin.onunload();
+  await wait(100);
+  const lines = errorLines(h);
+  assert.deepEqual([...new Set(lines.map(line => line.where))].sort(), ['close', 'listener', 'read', 'write']);
+  assert.equal(lines.find(line => line.where === 'listener')?.msg, '監聽者壞了');
+  assert.equal(lines.find(line => line.where === 'read')?.msg, '讀不到：' + unreadable);
+});
+
+void test('§2 接線：監看不了時記 init（ready() 拒絕不再被吞掉）', async t => {
+  quiet(t);
+  const h = host(deck, { failWatch: true });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready().catch(() => {});
+  await wait(20);
+  assert.deepEqual(errorLines(h).map(line => [line.where, line.msg]), [['init', '監看不了']]);
+});
+
+void test('§2 接線：離開筆記時補 ID 失敗記 fill；外掛事件的監聽者丟錯記 event', async t => {
+  quiet(t);
+  const path = 'Essence Cards/b.md';
+  const h = host({ [path]: '- 新目標\n    - Q :: A\n' }, { desktop: true, failWrite: target => target === path });
+  t.after(() => { h.plugin.onunload(); });
+  (h.plugin as unknown as { on(kind: string, listener: () => void): void }).on('event', () => { throw Error('事件的監聽者壞了'); });
+  h.openTab(path);
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  h.closeTabs();
+  await wait(1300);
+  const lines = errorLines(h);
+  assert.deepEqual([...new Set(lines.map(line => line.where))].sort(), ['event', 'fill']);
+  assert.equal(lines.find(line => line.where === 'fill')?.msg, '寫不進去');
+});
+
+void test('§2 接線：複習畫面的 render（帶卡組的路徑）與 ui 交給記錄器，也印在 console', async t => {
+  const printed: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { printed.push(args); };
+  t.after(() => { console.error = original; });
+  const h = host(deck, {}, reviewBundled);
+  t.after(() => { h.plugin.onunload(); });
+  let options: { onError?: (error: unknown, where: 'render' | 'ui', path?: string) => void } | null = null;
+  h.obsidian.__openReview = (opened: typeof options) => { options = opened; return { session: {}, close() {} }; };
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  (h.plugin as unknown as { startReview(pick: unknown): unknown }).startReview({ subject: '自然' });
+  assert.ok(options);
+  const { onError } = options as { onError?: (error: unknown, where: 'render' | 'ui', path?: string) => void };
+  onError?.(Error('顯示不出來'), 'render', 'Essence Cards/a.md');
+  onError?.(ownError('React 壞了'), 'ui');
+  await wait(20);
+  assert.deepEqual(errorLines(h).map(line => [line.where, line.msg, line.path, line.stack]), [
+    ['render', '顯示不出來', 'Essence Cards/a.md', undefined],
+    ['ui', 'React 壞了', undefined, 'at x (plugin:essence-cards:1:2345)'],
+  ]);
+  assert.deepEqual(printed.map(args => args.slice(0, 2)), [['Essence Cards', 'render'], ['Essence Cards', 'ui']]);
+});
+
+void test('§2-4 補網：window 的 error 與 unhandledrejection 只收自己的程式位置；停用再啟用之後一次錯誤只記一次', async t => {
+  const h = host(deck);
+  const Plugin = (h.plugin as unknown as { constructor: new (app: unknown, manifest: unknown) => PluginLike & { unload(): void } }).constructor;
+  const first = h.plugin as PluginLike & { unload(): void };
+  first.onload();
+  h.layoutReady();
+  await first.state?.ready();
+  // 停用（Obsidian 呼叫 unload，移除 registerDomEvent 登記的監聽）再啟用：新的外掛物件。
+  first.unload();
+  const second = new Plugin(h.app, { id: 'essence-cards', version: '0.0.1' });
+  t.after(() => { second.unload(); });
+  second.onload();
+  await second.state?.ready();
+  h.window.dispatchEvent(errorEvent(ownError('同步拋錯')));
+  h.window.dispatchEvent(rejection(ownError('非同步拒絕', 'plugin:essence-cards:1:99')));
+  // 別的外掛、沒有 stack 的字串、沒有 error 的事件都不收。
+  h.window.dispatchEvent(errorEvent(ownError('別的外掛', 'plugin:essence-cards-x:1:2')));
+  h.window.dispatchEvent(rejection('plugin:essence-cards:1:2'));
+  h.window.dispatchEvent(new Event('error'));
+  await wait(20);
+  assert.deepEqual(errorLines(h).map(line => [line.where, line.msg]), [['uncaught', '同步拋錯'], ['uncaught', '非同步拒絕']]);
 });

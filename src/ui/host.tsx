@@ -17,6 +17,8 @@ export interface OpenOptions {
   pickedAt?: number;
   speech?: Speech;
   onEvent?: (event: ReviewEvent) => void;
+  /** 畫面的錯（D-155）：render 是卡片顯示不出來（path 是卡組），ui 是 React 沒接住的錯。主機印在 console 並記進錯誤紀錄。 */
+  onError?: (error: unknown, where: 'render' | 'ui', path?: string) => void;
   onClose?: () => void;
 }
 export interface ReviewHandle { session: Session; close(): void }
@@ -50,7 +52,13 @@ export function openReview(options: OpenOptions): ReviewHandle {
   document.body.append(element);
   const session = createSession({ state, pick: options.pick });
   const speech = options.speech ?? createSpeech(() => { new Notice(NO_ENGLISH_VOICE); });
-  const root = createRoot(element);
+  // 複習畫面沒有 error boundary，也不加 fallback 畫面：React 沒接住的錯交給主機（D-155 第 2 點）。有傳 onError 才接，
+  // 不然照 React 的預設印在 console。
+  const onError = options.onError;
+  const root = createRoot(element, onError && {
+    onUncaughtError: error => { onError(error, 'ui'); },
+    onRecoverableError: error => { onError(error, 'ui'); },
+  });
   // 量測（開發版的 onEvent）只回報到關閉為止（Codex 第二次再審 R2）：鍵盤量測排在下一幀、畫面的手勢 0.5 秒後才回報，
   // 關閉後才到的一筆，開發的量測會把它算進下一次打開。沒有 onEvent 就是 undefined，畫面也不量。
   let closed = false;
@@ -115,6 +123,7 @@ export function openReview(options: OpenOptions): ReviewHandle {
   };
   root.render(<Review
     app={app} session={session} speech={speech} pickedAt={pickedAt} onEvent={report}
+    onRenderError={onError && ((error, path) => { onError(error, 'render', path); })}
     close={() => { handle.close(); }}
     openLink={(linktext, sourcePath) => { handle.close(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}

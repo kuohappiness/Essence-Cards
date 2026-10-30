@@ -32,6 +32,8 @@ export interface ReviewProps {
   speech: Speech;
   autoRead: { get(): boolean; set(on: boolean): void };
   onEvent?: (event: ReviewEvent) => void;
+  /** 卡片顯示不出來（D-155 的 render）：錯誤與卡組的路徑交給主機記下。 */
+  onRenderError?: (error: unknown, path: string) => void;
   /** 選了科目的時間（performance.now）：第一張卡畫好時量「從選了科目到畫好」，不含選單與 state 載入（L2 自選第 22 點）。 */
   pickedAt: number;
 }
@@ -292,7 +294,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
         {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} session={session} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot}
           qRef={questionEl} sticky={stickyQuestion} actions={typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />}
-          onPainted={painted} onFail={side => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); }} />}
+          onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
     </div>
     {/* 打字中沒有底部那一排：「沒印象」「確認」在題目正下方（TypedActions） */}
@@ -349,7 +351,7 @@ interface CardProps {
   /** 打字中的「沒印象」「確認」：排在題目、提示與比對下面。 */
   actions: React.ReactNode;
   onPainted: () => void;
-  onFail: (side: 'front' | 'back') => void;
+  onFail: (side: 'front' | 'back', error: unknown, path: string) => void;
 }
 function Card({ view, app, session, speech, materials, openLink, tipOpen, setTipOpen, inputRef, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
@@ -390,7 +392,7 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
       {/* 喇叭接在最後一個字後面（D-145，iPhone 回饋），不放在第一行右邊 */}
       <Markdown app={app} text={question} sourcePath={card.deck} mode={prompt.kind === 'cloze' ? 'cloze' : typed ? 'typed' : 'plain'} revealed={revealed && !inline}
         lines={lines} words={typed && revealed ? typed.answer.split(/\s+/) : []} onSlot={lines > 0 ? onSlot : undefined}
-        english={view.english} tail={<Speaker texts={speak(spokenQuestion)} say={say} />} onReady={onPainted} onFail={() => { onFail('front'); }} />
+        english={view.english} tail={<Speaker texts={speak(spokenQuestion)} say={say} />} onReady={onPainted} onFail={(error, path) => { onFail('front', error, path); }} />
     </div>
     {/* 輸入框和撐開空格寬度的隱形文字一起放進空格（同一格疊在線上，見 Review.css 的 .ec-slot） */}
     {inline && slot && typing && createPortal(<><span className="ec-mirror" aria-hidden="true">{typing.input}</span>{input}</>, slot)}
@@ -412,13 +414,13 @@ function Card({ view, app, session, speech, materials, openLink, tipOpen, setTip
           : <><div className="ec-also-row" lang="zh-Hant">也可以：</div>{others.map(other => <div key={other} className="ec-also-row"><span className="ec-also-word" lang="en">{other}</span><Speaker texts={speak(other)} say={say} /></div>)}</>}
       </div>}
       {/* 打字卡的答案已經寫在線上與上面那一行，不再畫答案格（D-145） */}
-      {answer !== null && !typed && <div className="ec-a"><Markdown app={app} text={answer} sourcePath={card.deck} revealed tail={<Speaker texts={speak(answer)} say={say} />} onFail={() => { onFail('back'); }} /></div>}
+      {answer !== null && !typed && <div className="ec-a"><Markdown app={app} text={answer} sourcePath={card.deck} revealed tail={<Speaker texts={speak(answer)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>}
       {/* 背面補充開頭的「記憶錨點：」「例句：」這類名稱自己一行，內容從下一行開始（D-145，iPhone 回饋） */}
       {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => {
         const { label, body } = extraLabel(extra);
         return <div key={index} className="ec-ex-item">
           {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
-          <div className="ec-ex-row"><Markdown app={app} text={body} sourcePath={card.deck} revealed tail={<Speaker texts={speak(body)} say={say} />} /></div>
+          <div className="ec-ex-row"><Markdown app={app} text={body} sourcePath={card.deck} revealed tail={<Speaker texts={speak(body)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>
         </div>;
       })}</div>}
       {hasSource && <div className="ec-tools">

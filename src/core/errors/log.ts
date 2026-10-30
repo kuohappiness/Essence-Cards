@@ -9,7 +9,7 @@ import { formatTime } from '../study/index.ts';
 export const ERROR_FOLDER = 'Essence Cards/紀錄/錯誤';
 
 /** 哪個環節（syntax.md §9 的 `where`）；`report`、`limit` 由記錄器自己寫。 */
-type ErrorWhere = 'read' | 'write' | 'listener' | 'init' | 'render' | 'ui' | 'fill' | 'close' | 'event' | 'uncaught';
+export type ErrorWhere = 'read' | 'write' | 'listener' | 'init' | 'render' | 'ui' | 'fill' | 'close' | 'event' | 'uncaught';
 /** 學生選的那一項（D-160 第 1 點）：內容有錯、顯示不完整或空白、沒反應或卡住、聲音、其他。 */
 type ReportKind = 'content' | 'display' | 'stuck' | 'audio' | 'other';
 /** 學生回報的那張卡：卡組、學習目標 ID 與題目指紋（D-160 第 2 點）。 */

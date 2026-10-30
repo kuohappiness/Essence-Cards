@@ -33,8 +33,10 @@ export interface StubOptions {
   texts?: Record<string, string>;
   /** 這些路徑讀不到。 */
   failRead?: (path: string) => boolean;
-  /** 寫入都失敗。 */
-  failWrite?: boolean;
+  /** 寫入都失敗；給函式時只有它回 true 的路徑寫不進去（建立、追加與 process）。 */
+  failWrite?: boolean | ((path: string) => boolean);
+  /** vault.on 拋錯（監看不了，tasks/error-log.md §2-3）。 */
+  failWatch?: boolean;
   /** Platform.isDesktopApp；預設 false（手機）。 */
   desktop?: boolean;
 }
@@ -113,7 +115,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   let calls = 0, ready = false, before = 0;
   const texts = new Map(Object.entries(options.texts ?? {}));
   const count = (): void => { if (!ready) calls++; };
-  const fail = options.failWrite ? (): Promise<never> => Promise.reject(Error('寫不進去')) : null;
+  const failing = (path: string): boolean => typeof options.failWrite === 'function' ? options.failWrite(path) : !!options.failWrite;
+  const fail = (path: string): Promise<never> | null => failing(path) ? Promise.reject(Error('寫不進去')) : null;
   // 和 Obsidian 一樣，同一篇檔案每次查都是同一個 TFile（新建的才是新物件），改名時物件不變、path 跟著改（Codex 第二次再審的 F3）。
   const nodes = new Map<string, TFile>();
   const node = (path: string): TFile => { let file = nodes.get(path); if (!file) nodes.set(path, file = new TFile(path)); return file; };
@@ -126,13 +129,19 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     // 和 Obsidian 一樣，已經有這個檔時丟錯，不覆寫。
     create: (path: string, text: string) => {
       count(); writes.push('create ' + path);
-      if (fail) return fail();
+      const failed = fail(path);
+      if (failed) return failed;
       if (texts.has(path)) return Promise.reject(Error('File already exists.'));
       texts.set(path, text); nodes.delete(path);
       return Promise.resolve(node(path));
     },
-    append: (file: TFile, text: string) => { count(); writes.push('append ' + file.path); if (fail) return fail(); texts.set(file.path, (texts.get(file.path) ?? '') + text); return Promise.resolve(); },
-    process: (file: TFile, edit: (text: string) => string) => { count(); writes.push('process ' + file.path); texts.set(file.path, edit(texts.get(file.path) ?? '')); return Promise.resolve(''); },
+    append: (file: TFile, text: string) => { count(); writes.push('append ' + file.path); const failed = fail(file.path); if (failed) return failed; texts.set(file.path, (texts.get(file.path) ?? '') + text); return Promise.resolve(); },
+    process: (file: TFile, edit: (text: string) => string) => {
+      count(); writes.push('process ' + file.path);
+      // 只有指定了路徑的 failWrite 才擋 process（全部寫不進去的舊用法只擋紀錄的建立與追加）。
+      if (typeof options.failWrite === 'function' && options.failWrite(file.path)) return Promise.reject(Error('寫不進去'));
+      texts.set(file.path, edit(texts.get(file.path) ?? '')); return Promise.resolve('');
+    },
     modify: (file: TFile, text: string) => { writes.push('modify ' + file.path); texts.set(file.path, text); return Promise.resolve(); },
     delete: (file: TFile) => { writes.push('delete ' + file.path); texts.delete(file.path); nodes.delete(file.path); return Promise.resolve(); },
     rename: (file: TFile, to: string) => {
@@ -147,7 +156,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       read: (path: string) => Promise.resolve(texts.get(path) ?? ''),
       exists: (path: string) => Promise.resolve(texts.has(path)),
     },
-    on: () => { count(); return {}; },
+    on: () => { count(); if (options.failWatch) throw Error('監看不了'); return {}; },
     offref: () => {},
   };
   const layout: (() => void)[] = [];
@@ -175,15 +184,23 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   });
   class Plugin {
     app: unknown; manifest: unknown;
+    /** register 與 registerDomEvent 登記的收尾：unload() 時跑（和 Obsidian 的 Component 一樣）。 */
+    private cleanups: (() => void)[] = [];
     constructor(app: unknown, manifest: unknown) { this.app = app; this.manifest = manifest; }
+    onunload(): void {}
+    /** 停用外掛（Obsidian 呼叫的是這個）：onunload，再移除登記的事件。 */
+    unload(): void { this.onunload(); for (const cleanup of this.cleanups.splice(0)) cleanup(); }
     addCommand(command: Command) { commands.set(command.id, command); return command; }
     addRibbonIcon(icon: string, title: string, callback: (evt: unknown) => unknown) { ribbons.push({ icon, title, callback }); return {}; }
     registerEditorExtension() { extensions++; }
     registerEvent() {}
-    register() {}
+    register(cleanup: () => void) { this.cleanups.push(cleanup); }
     registerInterval(id: number) { return id; }
     registerObsidianProtocolHandler(action: string, handler: (params: Record<string, string>) => void) { protocol.set(action, handler); }
-    registerDomEvent(target: EventTarget, type: string, callback: () => void) { target.addEventListener(type, callback); }
+    registerDomEvent(target: EventTarget, type: string, callback: () => void) {
+      target.addEventListener(type, callback);
+      this.cleanups.push(() => { target.removeEventListener(type, callback); });
+    }
   }
   class Notice { constructor(message: string) { notices.push(message); } }
   class Component { load() {} unload() {} register() {} }

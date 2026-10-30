@@ -9,6 +9,7 @@ import { createState } from '../src/state/index.ts';
 import type { App } from 'obsidian';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
+import type { ReviewProps } from '../src/ui/Review.tsx';
 import { resolveSource } from '../src/ui/sources.ts';
 import { createSpeech, type Speech } from '../src/ui/speech.ts';
 
@@ -34,7 +35,7 @@ const englishText = [
 
 interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void>; idle: (() => void)[] }
 /** holdSpeech：語音替身的 whenIdle 先不回報（當作還在念），測試呼叫 idle 裡的 callback 才算念完。speech：改用這個（真的 createSpeech）。 */
-async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; holdSpeech?: boolean; speech?: Speech } = {}): Promise<Opened> {
+async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; holdSpeech?: boolean; speech?: Speech; props?: Partial<ReviewProps> } = {}): Promise<Opened> {
   const memory = createMemoryFiles(options.texts ?? { [NATURAL]: naturalText, [ENGLISH]: englishText });
   const clock = { now: START };
   const state = createState({ files: memory.files, device: 'PC-test', delay: 30, fillIds: false, now: () => clock.now, offset: () => 480 });
@@ -50,6 +51,7 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
     speech: options.speech ?? { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); idle.length = 0; }, whenIdle: callback => { if (!options.holdSpeech) { callback(); return () => {}; } idle.push(callback); return () => { const at = idle.indexOf(callback); if (at >= 0) idle.splice(at, 1); }; } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
     pickedAt: performance.now(),
+    ...options.props,
   });
   t.after(() => { ui.unmount(); session.close(); });
   return { ui, session, clock, speech, idle, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
@@ -473,4 +475,26 @@ void test('F4 切走超過 60 秒回來：卡回到正面、捲回最上面，�
   assert.ok(view.kind === 'card' && !view.card.revealed);
   assert.equal(stage.current.scrollTop, 0);
   assert.deepEqual(o.speech.slice(before).map(call => call.split(' ')[0]), ['stop', 'say']);
+});
+
+// tasks/error-log.md §2-2：卡片（題目、答案、背面補充）顯示不出來時，錯誤與卡組的路徑經 onRenderError 交給主機。
+void test('§2-2 卡片顯示不出來：Markdown 的 onFail 交出錯誤與卡組的路徑，畫面交給 onRenderError，量測照舊', async t => {
+  const failed: [unknown, string][] = [];
+  const events: unknown[] = [];
+  const o = await open(t, { subject: '自然' }, { props: { onRenderError: (error, path) => { failed.push([error, path]); }, onEvent: event => { events.push(event); } } });
+  o.ui.key(' ');
+  await o.ui.settle();
+  const markdowns: { props: Record<string, unknown> }[] = [];
+  const walk = (node: unknown): void => {
+    if (typeof node !== 'object' || node === null) return;
+    const host = node as { type: string; props: Record<string, unknown>; children: unknown[] };
+    if (host.type === 'markdown') markdowns.push(host);
+    for (const child of host.children) walk(child);
+  };
+  walk(o.ui.root());
+  assert.ok(markdowns.length >= 2, '題目與答案');
+  const error = Error('顯示不出來');
+  for (const markdown of markdowns) (markdown.props.onFail as (error: unknown, path: string) => void)(error, NATURAL);
+  assert.deepEqual(failed, markdowns.map(() => [error, NATURAL]));
+  assert.deepEqual(events.filter(event => (event as { kind: string }).kind === 'render-failed').map(event => (event as { side: string }).side), ['front', ...markdowns.slice(1).map(() => 'back')]);
 });
