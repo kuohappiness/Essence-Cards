@@ -333,3 +333,29 @@ void test('§8 report：月上限與寫不進去照 §1（共用每月 300 行�
   const { log: broken } = setup(failing.files);
   assert.doesNotThrow(() => { broken.report({ kind: 'display', path: DECK, lt: 'a', v: 'b' }); });
 });
+
+// Codex L2 的 R3：只認 stack 裡的 frame，不把錯誤訊息那一行（或多行訊息）當成自己的程式位置。
+void test('§1 R3 訊息裡有 plugin:essence-cards:、frame 全是別人的：不算自己的錯，也不留成 stack', async () => {
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  const other = Error('other-plugin cannot fetch plugin:essence-cards:1:20345');
+  other.stack = ['Error: other-plugin cannot fetch plugin:essence-cards:1:20345', '    at fetcher (plugin:other-plugin:4:5)', '    at app://obsidian.md/app.js:6:7'].join('\n');
+  assert.equal(hasOwnFrame(other), false);
+  // 多行的訊息：第二行看起來像 frame 也不算（V8 的 stack 開頭是整段訊息）。
+  const multiline = Error('第一行\n    at fake (plugin:essence-cards:9:9)');
+  multiline.stack = 'Error: 第一行\n    at fake (plugin:essence-cards:9:9)\n    at real (plugin:other-plugin:1:1)';
+  assert.equal(hasOwnFrame(multiline), false);
+  // 訊息含位址、frame 也有自己的：只留真正的 frame。
+  const mixed = Error('see plugin:essence-cards:1:1');
+  mixed.stack = 'Error: see plugin:essence-cards:1:1\n    at own (plugin:essence-cards:7:8)';
+  assert.equal(hasOwnFrame(mixed), true);
+  log.record('ui', other);
+  log.record('ui', mixed);
+  // WebKit：沒有訊息行；匿名函式、global code、只有位址的 frame 都認得。
+  const webkit = Error('w');
+  webkit.stack = '@plugin:essence-cards:1:2\nglobal code@plugin:essence-cards:3:4\nplugin:essence-cards:5:6\nother@plugin:other-plugin:1:1';
+  log.record('render', webkit);
+  await wait(10);
+  const stacks = lines(memory.texts.get(FILE)).map(line => (JSON.parse(line) as { stack?: string }).stack);
+  assert.deepEqual(stacks, [undefined, 'at own (plugin:essence-cards:7:8)', '@plugin:essence-cards:1:2\nglobal code@plugin:essence-cards:3:4\nplugin:essence-cards:5:6']);
+});

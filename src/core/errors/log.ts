@@ -42,8 +42,12 @@ const MONTH_LINES = 300;
 const MAX_KEYS = 500;
 /** 等待中的寫入（等數行數或 append）最多幾筆，超過丟掉新的。 */
 const MAX_PENDING = 50;
-/** 這個外掛自己的程式位置：`plugin:essence-cards:行:欄`；`plugin:essence-cards-x:` 這種別的外掛不算。 */
-const OWN_FRAME = /plugin:essence-cards:\d+:\d+/;
+/**
+ * 這個外掛自己的一層 frame：位置 `plugin:essence-cards:行:欄` 在那一層的結尾（`plugin:essence-cards-x:` 這種別的外掛不算）。
+ * V8（Windows、Android）寫 `at 名稱 (位置)` 或 `at 位置`；WebKit（iPhone）寫 `名稱@位置`、`@位置` 或只有位置。
+ * 錯誤訊息裡剛好有這個字串的那一行不算（Codex L2 的 R3）。
+ */
+const OWN_FRAME = /^(?:at (?:.*\()?|[^@]*@)?plugin:essence-cards:\d+:\d+\)?$/;
 const UNKNOWN = '（無法轉成文字）';
 
 export function errorLogPath(ms: number, offset: number, device: string): string {
@@ -73,11 +77,16 @@ function describe(value: unknown): string {
   return attempt(() => String(value)) ?? attempt(() => Object.prototype.toString.call(value)) ?? UNKNOWN;
 }
 
-/** stack 裡這個外掛自己的那幾層（去掉前後空白）；沒有 stack 或讀不到時是空的。不拋錯。 */
+/**
+ * stack 裡這個外掛自己的那幾層（去掉前後空白）；沒有 stack 或讀不到時是空的。不拋錯。
+ * V8 的 stack 開頭是 `名稱: 訊息`（訊息可能好幾行），先去掉，訊息裡的字不會被當成 frame；WebKit 的 stack 沒有這一段。
+ */
 function ownFrames(error: unknown): string[] {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return [];
-  const stack = attempt(() => (error as { stack?: unknown }).stack);
-  if (typeof stack !== 'string') return [];
+  const raw = attempt(() => (error as { stack?: unknown }).stack);
+  if (typeof raw !== 'string') return [];
+  const header = attempt(() => Error.prototype.toString.call(error));
+  const stack = header && raw.startsWith(header) ? raw.slice(header.length) : raw;
   return stack.split('\n').map(line => line.trim()).filter(line => OWN_FRAME.test(line));
 }
 
