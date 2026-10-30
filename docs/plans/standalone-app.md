@@ -1,6 +1,6 @@
 # Essence Cards｜獨立 App
 
-狀態：第二階段。2026-10-30 起的方向：Obsidian 仍是首選，先解決綁 iCloud 的同步（最小驗證待使用者決定）；手機端之後要離開 Obsidian 時走網頁版
+狀態：第二階段。2026-10-30 起的方向：Obsidian 仍是首選，先解決綁 iCloud 的同步（最小驗證排在 v1 之後，使用者 2026-10-30）；手機端之後要離開 Obsidian 時走網頁版
 
 [第二階段清單](../backlog.md#第二階段想做的事)｜[文件存放規則](README.md)
 
@@ -9,7 +9,7 @@
 主文是[討論稿](<../../Claude Codex Discussion/2026-10-29-standalone-phone-app.md>)：第一輪（獨立手機 App）、第二輪（卡點是 iCloud）、Codex 回應與 Claude 回應，雙方一致。
 
 - **Obsidian 仍是首選的中介平台**（使用者 2026-10-30，Claude 與 Codex 同意）：難取代的是家長那端的編輯器、知識庫與三個外掛共用的 vault、AI 側欄；卡點只在 iPhone 要靠 iCloud 同步（Windows 實測見 [D-154 的任務說明](../../tasks/icloud-placeholders.md)〈結果〉）。
-- **第一步：外掛自己同步，拿掉 iCloud**：只傳 Essence 需要的檔，經使用者自己的 Dropbox（App 專用資料夾、PKCE 授權，不經 Essence 的伺服器，D-128）。先做一次有終點的最小驗證：電腦的 vault 原地不動、iPhone 另建本機測試 vault、自編資料、一個 Dropbox 帳號；第一關是 iPhone 本機 vault 第一次怎麼裝外掛（候選 BRAT）；驗收照討論稿〈Codex 回應〉第七節，同步規則先補第三節的四個缺口（紀錄不能倒退、設定有多個寫入者、同步範圍不只 `Essence Cards/`、指定一台電腦發布）。驗證完列出剩餘工作量，再決定要不要改 D-004、提前到 v1。💬 要不要安排驗證，等使用者決定。
+- **第一步：外掛自己同步，拿掉 iCloud**：只傳 Essence 需要的檔，經使用者自己的 Dropbox（App 專用資料夾、PKCE 授權，不經 Essence 的伺服器，D-128）。先做一次有終點的最小驗證：電腦的 vault 原地不動、iPhone 另建本機測試 vault、自編資料、一個 Dropbox 帳號；第一關是 iPhone 本機 vault 第一次怎麼裝外掛（候選 BRAT）；驗收照討論稿〈Codex 回應〉第七節，同步規則先補第三節的四個缺口（紀錄不能倒退、設定有多個寫入者、同步範圍不只 `Essence Cards/`、指定一台電腦發布）。驗證完列出剩餘工作量，再決定要不要改 D-004、正式採用。使用者 2026-10-30 決定 v1 之後再安排；v1 照舊用 iCloud（D-154）。其他同步方法（OneDrive、Google Drive、家裡 Wi-Fi、Syncthing 等）的比較見討論稿第二輪第 4 節與文末〈使用者決定〉。
 - **手機端之後要離開 Obsidian 時走網頁版**（使用者 2026-10-30：不付 Apple 開發者費用）：同步只能走雲端硬碟的 API；系統通知不做；本機待傳佇列與持久保存的條件見討論稿〈Codex 回應〉第五節。獨立 App（Capacitor、TestFlight）只留作參考。
 - **現在不為獨立版預作程式改動**：D-110 的核心隔離、`Files` 接點與公開格式已經留好邊界；畫面的宿主接點等真的有第二個宿主再抽。
 
@@ -30,5 +30,5 @@
 
 ## 開工前待決
 
-- 💬 外掛自己同步的最小驗證要不要安排（上節第二點，[討論稿](<../../Claude Codex Discussion/2026-10-29-standalone-phone-app.md>)〈Claude 回應 Codex〉）。
+- 💬 最小驗證做完再決定：要不要改 D-004、改成外掛自己同步（上節第二點，範圍見[討論稿](<../../Claude Codex Discussion/2026-10-29-standalone-phone-app.md>)〈Claude 回應 Codex〉）。
 - 💬 開工前待決：桌面版的技術框架、第一組裝置、家長與學生裝置的存取方式、獨立版編輯與 AI 入口、發布與版本相容方式；兩端寫入的權責與衝突復原規則先在同步的最小驗證裡定；開工時間及與其他第二階段項目的先後另定。同步供應商的檔案存取與離線行為需實測，不能假設各種雲端硬碟都能直接當手機的同步資料夾。[討論過程與參考](../archive/discussions/2026-10-23-standalone-software.md)。

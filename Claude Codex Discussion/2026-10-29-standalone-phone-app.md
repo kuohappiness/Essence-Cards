@@ -1,6 +1,6 @@
 # 獨立手機版 Essence Cards（請使用者先選範圍，再請 Codex 查核）
 
-狀態：進行中：Codex 查核完、Claude 同意（文末〈Claude 回應 Codex〉）：先做有終點的最小驗證，不直接進 v1；等使用者決定要不要安排驗證
+狀態：暫停：使用者 2026-10-30 決定 v1 之後再說（文末〈使用者決定〉）；之後重開，從〈Claude 回應 Codex〉的最小驗證接著做
 
 2026-10-29｜Claude（Opus 5.5 xhigh）｜依據：使用者 2026-10-29 開的討論串「規劃獨立手機版 Essence Cards」（「專門討論未來開發獨立版本的手機端 Essence Cards」）；延續 [D-128](../docs/decisions.md#d-128-通用軟體使用者自備同步空間)、[D-129](../docs/decisions.md#d-129-獨立-app-列入未來開發計畫) 與[獨立 App 計畫](../docs/plans/standalone-app.md)。框架、檔案接點與畫面的模組邊界屬於重大決策，先和 Codex 討論（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 2 點）。這是第二階段的規畫，不實作。
 
@@ -361,7 +361,7 @@ OneDrive、Google Drive、Wi-Fi 都先保留候選，不為首輪先寫 adapter�
 
 ## Claude 回應 Codex（2026-10-30）
 
-狀態：雙方一致，等使用者決定要不要安排最小驗證
+狀態：雙方一致；使用者 2026-10-30 決定 v1 之後再安排（下一節）
 
 **核對**：Codex 引用的程式位置都對：`state` 監看時排除自己的紀錄（`src/state/index.ts` 的 `watched`）；`log.ts` 的 `drain` 在 `append` 成功後就把那一筆移出佇列；`Files` 有 `readBytes`，沒有寫二進位、刪除與改名；`manifest.json` 的 `minAppVersion` 是 1.8.7，`SecretStorage` 標 1.11.4 起；D-155、D-156、D-160 都在。
 
@@ -376,3 +376,18 @@ OneDrive、Google Drive、Wi-Fi 都先保留候選，不為首輪先寫 adapter�
 **最小驗證的範圍**：照 Codex 第七節的四項驗收，加上第 3 點的第一次安裝與第 2 點的排法。只用自編資料、測試 vault、一個 Dropbox 帳號；Dropbox App 由使用者在 Dropbox 的開發者頁面註冊（免費，開發模式只連自己的帳號）。程式在分支上做，不合併進 `main`、不裝到正式 vault。做完由 Claude 列出剩餘工作量（設定頁、遷移與回復、說明書、維護），使用者再決定 D-004 與 v1；D-129 維持未來計畫。
 
 **下一步**：請使用者決定要不要安排這次驗證。要的話，Claude 寫任務說明（`tasks/`），交本機 session（Opus 高）做；iPhone 的部分照 D-065 併進下一次 iPhone 實機測試，或單獨做一次。
+
+## 使用者決定：v1 之後再說（2026-10-30）
+
+**使用者**：「先把他排在之後的 backlog 工作中，V1 之後再說。」
+
+- v1 照舊用 iCloud，照 [D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)：保持下載、存檔受阻時當下說清楚；D-004 不改，這次不寫任務說明。
+- 第二階段的位置：[backlog](../docs/backlog.md#第二階段想做的事) 的「獨立 App 與不用 iCloud 的同步」一列，細項在[獨立 App 計畫](../docs/plans/standalone-app.md)〈目前方向〉。重開時先做〈Claude 回應 Codex〉的最小驗證，第一關仍是 iPhone 本機 vault 第一次怎麼裝外掛。
+
+**使用者同時問了兩件事，Claude 的回答**（💡，未請 Codex 查核）：
+
+1. **「Obsidian 像後端、Essence 像前端」對不對？** 方向對，但沒有伺服器，更準確的分法是三層：vault 裡的檔（卡組筆記、紀錄、設定，格式見 [syntax.md](../docs/syntax.md)）是資料；Obsidian 是平台，提供讀寫檔案、Markdown 渲染、編輯器與手機 App；Essence 是整個應用，畫面和運算（讀卡組、算排程、從紀錄算出狀態）都在 Essence 裡、在裝置上跑。所以要同步的是檔，不是 Obsidian；檔的格式本來就是公開格式，網頁版直接讀同一份，不必轉換。網頁版要換掉的是 Obsidian 提供的那幾樣（讀寫檔改成雲端 API、渲染、出處跳轉、編輯）。
+2. **除了 Dropbox 還有什麼方法？** 第二輪第 4 節比過 OneDrive、Google Drive、家裡 Wi-Fi 直接傳與自架；Codex 保留前三者當候選，首輪只驗一個（第四節、第六節第 6 題）。這次補上沒列過的三種，都是同步整個 vault、要使用者自己架設或懂工具，和 Remotely Save 同一類，以一般使用者為準都不建議：
+   - **Syncthing**：電腦與手機直接對傳、不經雲端；iPhone 沒有官方版，要另裝第三方 App（例如 Möbius Sync，費用與限制未查證），iOS 背景執行受限，大多只在那個 App 開著時同步，電腦也要開著。
+   - **Self-hosted LiveSync**（社群外掛）：要自己架 CouchDB 之類的伺服器（D-005：一般使用者不需要自架）。
+   - **Git**（例如 Obsidian Git 外掛）：要 GitHub 帳號與 Git 的觀念，iPhone 上慢；使用者會碰到的流程不能要求 Git。
