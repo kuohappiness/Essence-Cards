@@ -95,6 +95,8 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
   let status: BackupStatus = { ready: false, checked: false, running: null, last: store.last(), failure: null, cleanup: [] };
   let current: Promise<void> | null = null;
   let checking: Promise<void> | null = null;
+  /** 開始過幾份備份：check 核對完時比對，期間有別的備份開始過，核對的結果就過時了（Codex 再審 C1）。 */
+  let started = 0;
   let cancelled = false;
   function set(patch: Partial<BackupStatus>): void {
     if (cancelled) return;
@@ -141,6 +143,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
   /** 做一份備份；同一時間只做一份，等著的拿同一個結果（失敗就是失敗）。 */
   function run(by: PluginBy): Promise<void> {
     current ??= (async () => {
+      started++;
       set({ running: by });
       let step = '準備備份位置';
       try {
@@ -170,8 +173,13 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
       checking ??= (async () => {
         // 已經有一份在做：共用它的結果，不在它做完之後重新判斷、另做一份（Codex L2 B3）。
         if (current) return current;
+        const seen = started;
         const last = store.last();
-        if (!last || last.build !== build || !await verified(last)) {
+        const ok = !!last && last.build === build && await verified(last);
+        // 核對期間有別的備份開始過（例如手動）：它的結果比這次核對新，不拿過時的結果關閘門或另做一份，
+        // 還在做就共用它的結果（Codex 再審 C1）。
+        if (started !== seen) return current ?? undefined;
+        if (!ok || !last) {
           // 已經知道沒有對得到的成功備份：先關閘門再重做（Codex L2 B1），不能等重做的第一步之後。
           set({ ready: false });
           return run('new-version');

@@ -21,7 +21,7 @@ const DEFAULT = 'C:/備份/Essence';
 function memoryHost() {
   const folders = new Map<string, Map<string, Uint8Array>>();
   const control = {
-    failPrepare: null as string | null, failTimes: Infinity, holdPrepare: null as Promise<void> | null, holdList: null as Promise<void> | null,
+    failPrepare: null as string | null, failTimes: Infinity, holdPrepare: null as Promise<void> | null, holdList: null as Promise<void> | null, holdRead: null as Promise<void> | null,
     failRemove: new Set<string>(), blockRemoves: false, onRemove: null as (() => void) | null, writes: 0, codes: 0, prepares: 0, removes: 0, lists: 0,
   };
   const folder = (path: string): Map<string, Uint8Array> => {
@@ -52,7 +52,10 @@ function memoryHost() {
         return opened.ok ? [{ name, size: bytes.length, sha256: hashBytes(bytes), manifest: opened.value.manifest }] : [];
       });
     },
-    read: (path, name) => Promise.resolve(folders.get(path)?.get(name) ?? null),
+    async read(path, name) {
+      if (control.holdRead) await control.holdRead;
+      return folders.get(path)?.get(name) ?? null;
+    },
     remove(path, backup) {
       control.removes++;
       control.onRemove?.();
@@ -348,4 +351,51 @@ void test('L2 B2：兩次刪除之間停用外掛，下一次刪除不開始', a
   await runner.backup();
   assert.equal(memory.control.removes - removes, 1);
   assert.equal(memory.folder(DEFAULT).size, 12);
+});
+
+/** C1 的共同前段：先成功、刪掉記的那份；check 對舊檔的核對停在讀檔，這時手動備份開始。 */
+async function staleCheck() {
+  const memory = memoryHost();
+  const { runner, saved } = setup({ memory });
+  await runner.check();
+  memory.folder(DEFAULT).delete(saved.last!.name);
+  let releaseRead = (): void => {};
+  memory.control.holdRead = new Promise(resolve => { releaseRead = resolve; });
+  const check = runner.check();
+  await new Promise(resolve => setImmediate(resolve));
+  memory.control.holdRead = null;
+  return { memory, runner, check, releaseRead };
+}
+
+void test('L2 再審 C1：check 核對舊檔期間手動備份成功、還在清理；過時的核對結果不關閘門、不另做一份', async () => {
+  const { memory, runner, check, releaseRead } = await staleCheck();
+  let releaseList = (): void => {};
+  memory.control.holdList = new Promise(resolve => { releaseList = resolve; });
+  const lists = memory.control.lists;
+  const manual = runner.backup();
+  // 手動那一份已經提交成功、停在清理的列檔。
+  await settle(() => memory.control.lists > lists);
+  releaseRead();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(runner.status().ready, true, '手動備份已經成功，過時的核對不能把閘門關回去');
+  releaseList();
+  await Promise.all([check, manual]);
+  assert.equal(runner.status().ready, true);
+  assert.equal(runner.status().failure, null);
+  assert.equal(memory.control.prepares, 2);
+});
+
+void test('L2 再審 C1：手動備份連清理都做完之後，過時的核對才回來；不另做一份，閘門照樣開著', async () => {
+  const { memory, runner, check, releaseRead } = await staleCheck();
+  memory.control.failPrepare = '外接硬碟沒接上';
+  memory.control.failTimes = 0;
+  await runner.backup();
+  assert.equal(runner.status().ready, true);
+  // 若過時的核對另做一份，第二次準備位置會失敗、把閘門關掉。
+  memory.control.failTimes = 1;
+  releaseRead();
+  await check;
+  assert.equal(memory.control.prepares, 2);
+  assert.equal(runner.status().ready, true);
+  assert.equal(runner.status().failure, null);
 });
