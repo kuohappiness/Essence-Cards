@@ -3,20 +3,33 @@ import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
-import { build } from 'esbuild';
+import { build, type Plugin as BuildPlugin } from 'esbuild';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 
 // src/main.ts 的接線（W5 §4-1）：用共用的 obsidian 替身（tests/helpers/obsidian.ts）在 Node 跑正式建置的程式碼，不是 Obsidian 實機。
 const root = fileURLToPath(new URL('../', import.meta.url));
-const bundle = async (dev: boolean) => (await build({
-  absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022',
+const bundle = async (dev: boolean, plugins: BuildPlugin[] = []) => (await build({
+  absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', plugins,
   external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: '"0.0.1+test"' },
 })).outputFiles[0].text;
 const bundled = await bundle(false);
 /** 開發版（給 iPhone 的開發命令也在裡面）。 */
 const devBundled = await bundle(true);
+/** 開發版，複習畫面（src/ui/host.tsx）換成替身：不畫任何東西，關掉時照 host.tsx 送 closed 事件。替身沒有 DOM，畫不了真的畫面。 */
+const devNoScreen = await bundle(true, [{
+  name: 'host-stub',
+  setup(builder) {
+    builder.onResolve({ filter: /\/host\.tsx$/ }, () => ({ path: 'host', namespace: 'stub' }));
+    builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
+      contents: "export function openReview(options) { return { close() { options.onEvent?.({ kind: 'closed' }); options.onClose?.(); } }; }", loader: 'js',
+    }));
+  },
+}]);
 
-interface PluginLike { onload(): void; onunload(): void; state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean> } | null }
+interface PluginLike {
+  onload(): void; onunload(): void; startReview(pick: { subject: string }): { close(): void } | null;
+  state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean> } | null;
+}
 
 /** 建好替身、載入外掛（正式版或開發版）並建立外掛物件。 */
 function host(texts: Record<string, string>, options: Omit<StubOptions, 'texts'> = {}, code = bundled) {
@@ -214,4 +227,22 @@ void test('開發命令的結果檔：plugin 是建置版本 BUILD，不是 mani
   const path = [...h.texts.keys()].find(key => key.startsWith('Essence W5/結果/unread '));
   assert.ok(path, '有結果檔');
   assert.equal((JSON.parse(h.text(path) ?? '{}') as { plugin?: string }).plugin, '0.0.1+test');
+});
+
+// 開發命令的證據 W3 (a)（外掛架構檢查環節 5）：複習畫面的量測（dev-review 的 watchReview）不經過命令那一層，結果檔也要記 BUILD。
+void test('W3 複習畫面的量測結果檔：plugin 也是建置版本 BUILD', async t => {
+  const h = host(deck, { desktop: true }, devNoScreen);
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  await wait(20);
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  const review = h.plugin.startReview({ subject: '自然' });
+  assert.ok(review);
+  review.close();
+  await wait(100);
+  const path = [...h.texts.keys()].find(key => key.startsWith('Essence W6/結果/review '));
+  assert.ok(path, '有量測的結果檔');
+  const result = JSON.parse(h.text(path) ?? '{}') as { plugin?: string; open?: number };
+  assert.deepEqual([result.plugin, typeof result.open], ['0.0.1+test', 'number']);
 });

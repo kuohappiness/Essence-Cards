@@ -145,8 +145,10 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     const meta = JSON.parse(await readFile(out, 'utf8')) as Metafile;
     return Object.entries(Object.values(meta.outputs)[0].inputs).filter(([, input]) => input.bytesInOutput > 0).map(([path]) => path);
   };
-  // 開發命令的模組都叫 src/obsidian/dev.ts 或 dev-*.ts（device.ts 不算），新加的不用改這裡也受檢查。
-  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-[a-z]+)?\.ts$/.test(path);
+  // 開發命令的模組都叫 src/obsidian/dev.ts 或 dev-*.ts（device.ts 不算），新加的不用改這裡也受檢查；
+  // dev- 後面有數字或第二個 - 的也算（開發命令的證據 W3 (b)）。
+  const devOnly = (path: string) => path.startsWith('src/dev/') || /^src\/obsidian\/dev(-[^/]+)?\.ts$/.test(path);
+  assert.deepEqual(['src/obsidian/dev-v2.ts', 'src/obsidian/dev-a-b.ts', 'src/obsidian/device.ts'].map(devOnly), [true, true, false]);
   assert.deepEqual((await included(false)).filter(devOnly), []);
   // I9：CodeMirror 由 Obsidian 提供，沒有另一份被打包進來；編輯器的鎖定在正式版裡。
   for (const dev of [false, true]) {

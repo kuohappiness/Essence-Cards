@@ -18,7 +18,7 @@ import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, saveBlocked, 
 import { versionCheck } from './dev-version.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
-/** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；結果檔的 plugin 記它，才核對得到跑的是哪一次建置。 */
+/** tools/build.mjs 的 define：manifest 的版本加 git commit（同 main.ts）；writeResult 把它寫進每個結果檔的 plugin，才核對得到跑的是哪一次建置。 */
 declare const BUILD: string;
 const root = 'Essence W5';
 const examples = 'Essence Cards/W5 範例/';
@@ -132,7 +132,7 @@ export function registerDev(plugin: Host, load: LoadInfo): void {
     catch (error) { result = { error: error instanceof Error ? error.stack ?? error.message : String(error) }; }
     const path = await writeResult(plugin.app, code, plugin.device, {
       code, device: plugin.device, platform: Platform.isIosApp ? 'ios' : Platform.isAndroidApp ? 'android' : 'desktop',
-      obsidian: apiVersion, plugin: BUILD,
+      obsidian: apiVersion,
       onloadMs: Math.round(load.onloadMs * 10) / 10, filesCallsBeforeLayoutReady: load.beforeLayoutReady(),
       sinceLoadMs: Math.round(startedAt - load.loadedAt), run: runs, ms: Math.round(performance.now() - startedAt), result,
     }, command.root);
@@ -263,12 +263,13 @@ function stampOf(now: Date): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
-async function writeResult(app: App, code: string, device: string, data: unknown, folder = root): Promise<string> {
+/** 開發命令與複習畫面的量測（watchReview）共用的出口：每個結果檔的 plugin 都是 BUILD（W3 (a)）。 */
+async function writeResult(app: App, code: string, device: string, data: Record<string, unknown>, folder = root): Promise<string> {
   const stamp = stampOf(new Date());
   await ensureFolder(app, folder + '/結果');
   let path = `${folder}/結果/${code} ${device} ${stamp}.json`;
   for (let n = 2; app.vault.getAbstractFileByPath(path); n++) path = `${folder}/結果/${code} ${device} ${stamp}-${n}.json`;
-  await app.vault.create(path, JSON.stringify(data, null, 2));
+  await app.vault.create(path, JSON.stringify({ plugin: BUILD, ...data }, null, 2));
   return path;
 }
 
