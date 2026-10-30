@@ -87,7 +87,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
     if (Platform.isDesktopApp) this.ids = this.wireIds();
-    // 設定分頁（D-104）：「給家長」的備份一列；iPhone 上只寫「備份在電腦上做」。
+    // 設定分頁（D-104、D-156 依功能分區）：「備份」一區；iPhone 上只寫「備份在電腦上做」。
     this.settingTab = wireSettings({ plugin: this, backup: () => this.backup, backupError: () => this.backupError });
     // 複習畫面的暫時入口（W6 §3-9）：命令與左側功能區的圖示；入口畫面做好時拿掉。
     registerStart(this, { state: () => this.state, open: pick => { this.startReview(pick); } });

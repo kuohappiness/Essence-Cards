@@ -275,7 +275,7 @@ void test('備份接線：備份位置在 vault 裡時失敗，通知一次、�
   const failure = h.plugin.backup?.runner.status().failure;
   assert.equal(failure?.step, '準備備份位置');
   assert.match(failure?.message ?? '', /在 vault 裡/);
-  assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；學生照常複習。到設定頁看原因']);
+  assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因']);
   assert.equal(h.plugin.state?.writeBlock(), 'backup');
   assert.equal(await h.plugin.state?.fillIds('Essence Cards/b.md'), false);
   assert.equal(h.text('Essence Cards/b.md'), '- 新目標\n    - Q :: A\n');

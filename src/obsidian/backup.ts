@@ -14,7 +14,7 @@ const LAST_KEY = BACKUP_KEYS.last;
 /** 開著時多久看一次要不要做每月的備份（任務說明 §1-4）。 */
 const EVERY = 6 * 60 * 60 * 1000;
 /** 失敗時的通知（§1-6）：入口畫面的「給家長」一區做好之前先用 Obsidian 的通知。 */
-export const BACKUP_NOTICE = 'Essence Cards：備份失敗，暫停修改卡組；學生照常複習。到設定頁看原因';
+export const BACKUP_NOTICE = 'Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因';
 
 export interface BackupHostOptions {
   plugin: Plugin;

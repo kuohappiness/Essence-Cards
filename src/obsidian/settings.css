@@ -1,4 +1,4 @@
-/* 設定頁「給家長」的備份一列（tasks/plugin-backup.md §1-5）：路徑、一行短說明加 ⓘ、點開的三點、不能用時的原因。 */
+/* 設定頁的「備份」一區（D-156、tasks/plugin-backup.md §1-5）：路徑、一行短說明加 ⓘ、點開的三點、不能用時的原因。 */
 .essence-cards-backup-path {
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);

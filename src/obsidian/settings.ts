@@ -3,13 +3,13 @@ import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
 import type { BackupWiring } from './backup.ts';
 
-// 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。這次只有「給家長」一區的「備份」一列（tasks/plugin-backup.md §1-5），
-// 每日時間上限、學期、保持率、AI 製卡之後的任務再加。
+// 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
+// 這次只有「備份」一區（tasks/plugin-backup.md §1-5），複習、學期、AI 製卡之後的任務再加。
 
 const TEXTS = {
-  parents: '給家長',
+  section: '備份',
   phone: '備份在電腦上做',
-  location: '備份位置',
+  location: '位置',
   /** 位置下面只放一行短說明，旁邊的 ⓘ 點開才看到三點（使用者 2026-10-29：整段太長）。 */
   note: '預設存在這台電腦，外掛不會上傳。',
   details: [
@@ -71,14 +71,14 @@ class EssenceSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName(TEXTS.parents).setHeading();
+    new Setting(containerEl).setName(TEXTS.section).setHeading();
     if (!Platform.isDesktopApp) {
-      new Setting(containerEl).setName('備份').setDesc(TEXTS.phone);
+      new Setting(containerEl).setDesc(TEXTS.phone);
       return;
     }
     const backup = this.host.backup();
     if (!backup) {
-      new Setting(containerEl).setName('備份').setDesc(this.host.backupError() ?? TEXTS.loading);
+      new Setting(containerEl).setDesc(this.host.backupError() ?? TEXTS.loading);
       return;
     }
     this.location(containerEl, backup);
