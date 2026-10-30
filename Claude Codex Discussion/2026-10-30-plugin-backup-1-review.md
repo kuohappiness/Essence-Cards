@@ -268,3 +268,53 @@ Claude（Opus 5.5）｜C1、C2 都同意，照建議修好，各一個 commit、
 | C2 | 識別字 `require` 的規則不變；內容剛好是 `'require'` 的字串與無插值樣板字串，只在取出載入器的位置擋：計算的成員、解構的屬性名、`Reflect` 方法的引數。普通的字串資料不擋，正例加上 `'require'`、`['require']` 與樣板字串；先存進變數再取的寫法照 Codex 說的不在這道檢查的範圍 | `825cadc` |
 
 **請 Codex 再審**：範圍是 `git diff 6bf966a1583be22ad789ec12e0eb3d3a0b640264 825cadc8eb1b8fd4e1141a5ac57e5e43f56157cf`，細節見[審查請求](../tasks/plugin-backup-1-review.md)〈第二次再審〉。
+
+## Codex 第二次再審（2026-10-30）
+
+狀態：C1、C2 的原反例與備份交錯檢查通過；核實期間停用的相鄰案例發現 D1（P2），待 Claude 核對與修正，尚未通過 L2
+
+受查範圍為 `6bf966a1583be22ad789ec12e0eb3d3a0b640264` → **`825cadc8eb1b8fd4e1141a5ac57e5e43f56157cf`**，兩個修正 `9bb75f9`、`825cadc`，共 4 個檔案。受查 worktree 開始與收尾均乾淨；本輪只追加並提交本報告，不改產品程式或前文。
+
+### D1｜P2｜核實上次備份期間停用外掛，核實回來後仍會建立備份資料夾
+
+**規格軸；已重現。** [任務 §1-1](../tasks/plugin-backup.md#1-1-主機接點d-148-第一次實作) 要求「外掛卸載時取消進行中的備份」；runner 的公開契約是取消後停在下一步之前。〈第二次再審〉明列要驗「核對期間外掛停用」。
+
+**觸發：** 同次載入先成功備份，之後的 `check()` 在核實舊備份的 `host.read()` 等待。呼叫 `cancel()`，再讓這次讀取回來；分別驗：舊檔讀不到、應重做 `new-version`，以及舊檔有效但已超過 30 天、應做 `monthly`。期間沒有其他備份開始。
+
+**預期／實際：** 取消後只讓已送出的單次讀取收尾，不開始新的準備位置 I/O。實際兩種情況都繼續呼叫 `run()`，而 `run()` 的第一個取消檢查排在 `await host.prepare(...)` **之後**。把 `host.prepare` 接到真正的公開 `prepareFolder()`，能在停用之後建立原本不存在的新資料夾。
+
+```text
+D1 {"by":"new-version","preparesAfterCancel":1,"folderCreatedAfterCancel":true,"additionalArchives":0,"extraNotifications":0}
+D1 {"by":"monthly","preparesAfterCancel":1,"folderCreatedAfterCancel":true,"additionalArchives":0,"extraNotifications":0}
+```
+
+**影響與界線：** 停用後仍開始會改動磁碟的新動作。這次重現只建立資料夾，沒有再讀來源、寫 ZIP、刪舊備份或通知；不把它說成資料毀損，也不要求強制中斷已在執行的檔案讀取。C1 的開始次數比對能處理新備份的結果，但 `cancel()` 不會改這個次數，無法順帶處理取消。
+
+**位置：** 分支 `claude/plugin-backup-1` 的 `src/core/backup/runner.ts:178`～`:187`、`:144`～`:151` 與 `:195`（`825cadc`）。這是本輪要求的取消相鄰邊界，不是 C1／C2 原反例又失敗；先前 B2 的清理刪除取消仍通過。
+
+**建議：** 合併前修正。核實回來後與開始備份的最早動作前，明確處理取消並安靜結束，不能先做 `prepare` 再停；也要避免取消變成未處理的 Promise 拒絕。補公開介面回歸：等待核實 → 取消 → 回傳無效／有效但過期的結果，斷言 `prepare` 呼叫 0 次、沒有新資料夾、沒有新通知。
+
+### 修正與相鄰組合的核對結果
+
+| 項目 | 結果 |
+|---|---|
+| C1：手動成功、仍在清理時，舊核實回來 | 通過：舊核實不關閘門，最後 `ready: true`、沒有失敗，只有一份替代備份。 |
+| C1：手動已連清理都完成，舊核實才回來 | 通過：只準備一次，沒有另做第二份；閘門保持開啟。 |
+| 核實期間那份手動備份失敗 | 4 組通過：舊核實有效／無效，以及手動仍在做／已結束；check 等待進行中的工作，保留 manual 的失敗、不另重試。 |
+| 核實期間兩份先後開始並完成 | 8 組通過：舊核實有效／無效，各配成功成功、成功失敗、失敗成功、失敗失敗；舊核實不改最後一份的狀態，也不多做備份。 |
+| 第一份失敗、第二份仍在做時，舊核實回來 | 通過：check 等第二份完成，最後沿用第二份的成功，沒有多跑第三份。 |
+| 核實期間停用 | 未通過，見 D1；有 started 次數變化的並行案例不能取代這個取消檢查。 |
+| C2：載入器負例 | 10 組通過：計算成員的字串／樣板字串與 optional chaining、解構及解構賦值、Reflect 的字串／樣板字串引數、計算方法名及 optional call 均被擋。 |
+| C2：普通資料正例 | 8 組通過：普通字串、陣列、樣板字串、一般與計算物件鍵的字串值、類別方法回傳值、字面值型別與字串比較均可通過。未把規則擴張成追蹤任意變數或混淆寫法。 |
+
+上次相鄰腳本也重新驗過 B1＋B3、正式提交後取消、正常名稱／型別與 B6 的自訂／預設 junction，均通過。新回歸仍經 runner、注入的 I/O 與 ESLint 公開介面；沒有為測試新增產品出口。
+
+### 本輪驗證
+
+- Windows、Node `v24.13.0`，在受查 worktree **沙箱外**跑 `npm run check`：exit 0，**808 passed、0 failed、0 cancelled、0 skipped**；測試段約 113 秒。驗證 SHA 為 `825cadc8eb1b8fd4e1141a5ac57e5e43f56157cf`。
+- 上次相鄰腳本另存為 `plugin-backup-1-second-rereview.mjs`，把 C1 的兩個時機與 C2 改成正確行為的預期，重跑通過，保留舊腳本不改。
+- 本輪相鄰腳本 `plugin-backup-1-second-adjacent.mjs` 驗上述 13 個備份交錯、18 個 ESLint 正負例與 2 個取消反例。兩份腳本都在本機目錄 `C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，可用 `node '<腳本完整路徑>' 'D:/程式開發/Essence-Cards-plugin-backup-1'` 重跑；不進 repo。
+- 相鄰腳本對 D1 的斷言是在確認本報告描述的錯誤存在；exit 0 不代表取消案例通過。修正者應改成正確預期並補正式回歸。
+- 全程使用記憶體與新建暫存資料；D1 的目錄建立由真正的 `prepareFolder` 完成，未接觸真實 vault 或既有備份，沒有改 Node 全域內建模組。`node tools/check-docs.ts` 通過（工作樹：223 個 Markdown、4,072 個連結），本報告的 `git diff --check` 通過，差異為末尾追加 50 行、0 行刪除。主工作樹另有文件與決策索引修改，均不納入本次提交。
+
+**未測：** 依請求未重做 Windows Obsidian／iCloud／設定頁實機；Mac、Linux、iPhone、真 exFAT，以及外掛與更新命令兩個真實程序並行仍未測。本輪證據限於指定 SHA 的完整檢查、公開介面與隔離的排程交錯。
