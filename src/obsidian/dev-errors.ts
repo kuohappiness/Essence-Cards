@@ -34,10 +34,10 @@ function repeatThrow(): void { throw Error('error-probe：同一個錯誤連續 
 /** 複習畫面的 React 錯誤：effect 裡停止朗讀時拋錯（Review 每次換卡都 speech.stop()）。 */
 function speechThrow(): void { throw Error('error-probe：複習畫面的 effect 拋錯'); }
 
-/** 打開複習畫面、等第一張卡出現（或畫面被 React 卸載），回傳 handle。 */
-async function openCard(host: ProbeHost): Promise<ReviewHandle | null> {
+/** 打開複習畫面、等第一張卡畫出來（React 的 render 不是同步的；畫面被 React 卸載時等到逾時），回傳 handle。 */
+async function openCard(host: ProbeHost, ms = 5000): Promise<ReviewHandle | null> {
   const handle = host.startReview({ subject: '自然' }) ?? host.startReview({ more: true });
-  await until(() => !!overlay()?.querySelector('.ec-q') || !overlay()?.querySelector('.ec-app'));
+  await until(() => !!overlay()?.querySelector('.ec-q'), ms);
   return handle;
 }
 
@@ -72,9 +72,8 @@ export async function errorProbe(host: ProbeHost): Promise<unknown> {
     synth.cancel = speechThrow;
     let handle: ReviewHandle | null = null;
     try {
-      handle = await openCard(host);
-      await sleep(300);
-      steps.ui = { unmounted: !overlay()?.querySelector('.ec-app') };
+      handle = await openCard(host, 1000);
+      steps.ui = { overlay: !!overlay(), unmounted: !overlay()?.querySelector('.ec-app') };
     } finally {
       delete (synth as { cancel?: unknown }).cancel;
       handle?.close();
