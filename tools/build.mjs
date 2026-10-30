@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { resolve, relative } from 'node:path';
+import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
+import { dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -28,20 +28,31 @@ export async function buildVersion(root = defaultRoot) {
  * 建置 main.js 與 styles.css 到 outdir（預設是 repo 根目錄）。dev 加上給 AI 測試與量測的開發命令；正式建置時 DEV 是 false，
  * 整段被拿掉。main.js 第一行寫 `/*! Essence Cards build=<BUILD> dev=<true|false> *\/`：安裝命令與備份工具從產出讀它
  * （D-149 第 4 點：不只看 BUILD 有沒有 .dirty）。
+ * sourcemap：對照表（main.js.map）另外寫到這個路徑（D-155 第 5 點）；用 esbuild 的 external，main.js 逐位元組不變、
+ * 不加 sourceMappingURL。sources 改成相對 repo 根目錄，內容（sourcesContent）一起存，定位時不用那一版的原始碼。
  */
-export async function buildPlugin({ root = defaultRoot, dev = false, outdir = root } = {}) {
+export async function buildPlugin({ root = defaultRoot, dev = false, outdir = root, sourcemap } = {}) {
   const version = await buildVersion(root);
   await mkdir(outdir, { recursive: true });
   const outfile = resolve(outdir, 'main.js');
   const result = await build({
     absWorkingDir: root, entryPoints: ['src/main.ts'], outfile,
     bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
-    jsx: 'automatic', external, metafile: true,
+    jsx: 'automatic', external, metafile: true, sourcemap: sourcemap ? 'external' : false,
     banner: { js: `/*! Essence Cards build=${version} dev=${dev} */` },
     define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: JSON.stringify(version) },
   });
   // 測試用：寫出 esbuild 的 metafile，檢查真正的建置含了哪些檔案（不另抄一份建置選項）。
   if (process.env.ESSENCE_METAFILE) await writeFile(process.env.ESSENCE_METAFILE, JSON.stringify(result.metafile));
+  if (sourcemap) {
+    const map = JSON.parse(await readFile(outfile + '.map', 'utf8'));
+    // esbuild 的 sources 相對輸出資料夾；輸出和 repo 在不同磁碟（例如暫存資料夾在 C:）時是 file: 網址。
+    const absolute = source => source.startsWith('file:') ? fileURLToPath(source) : resolve(outdir, source);
+    map.sources = map.sources.map(source => relative(root, absolute(source)).replaceAll('\\', '/'));
+    await rm(outfile + '.map');
+    await mkdir(dirname(resolve(sourcemap)), { recursive: true });
+    await writeFile(resolve(sourcemap), JSON.stringify(map));
+  }
   const code = await readFile(outfile, 'utf8');
   const requires = [...code.matchAll(/\brequire\(["']([^"']+)["']\)/g)].map(m => m[1]);
   const imports = Object.values(result.metafile.outputs).flatMap(out => out.imports);
@@ -66,4 +77,9 @@ export async function buildPlugin({ root = defaultRoot, dev = false, outdir = ro
   return { version, dev };
 }
 
-if (import.meta.main) await buildPlugin({ dev: process.argv.includes('--dev') });
+if (import.meta.main) {
+  const at = process.argv.indexOf('--sourcemap');
+  const sourcemap = at < 0 ? undefined : process.argv[at + 1];
+  if (at >= 0 && (!sourcemap || sourcemap.startsWith('--'))) throw Error('用法：node tools/build.mjs [--dev] [--sourcemap <對照表的路徑>]');
+  await buildPlugin({ dev: process.argv.includes('--dev'), sourcemap });
+}
