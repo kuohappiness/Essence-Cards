@@ -4,35 +4,36 @@
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-155 與討論稿做完，這份是照做）。
 
-依據：[D-155](../docs/decisions.md#d-155-正式版的錯誤紀錄)、格式 [syntax.md §9](../docs/syntax.md#9-錯誤紀錄)；細節、反例與已重現的問題在[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>)的〈Codex 回應〉與〈Claude 回應〉。為什麼現在：學生開始每天使用之前，正式版遇到錯誤要留得下證據（使用者 2026-10-30 確認）。
+依據：[D-155](../docs/decisions.md#d-155-正式版的錯誤紀錄)、[D-160](../docs/decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)（§8 的回報）、格式 [syntax.md §9](../docs/syntax.md#9-錯誤紀錄)；細節、反例與已重現的問題在[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>)的〈Codex 回應〉與〈Claude 回應〉。為什麼現在：學生開始每天使用之前，正式版遇到錯誤要留得下證據（使用者 2026-10-30 確認）。
 
 ## 排程與分支
 
 - 分支 `claude/error-log`，從 `main` 開；在本機用 `git worktree add ../Essence-Cards-error-log -b claude/error-log main` 開在旁邊，**不要在原資料夾切換分支**。
-- 照下面 §1～§6 的順序，一節一個或幾個 commit（code-quality：一個 commit 只實作一個決定）。§4、§5 和其他節無關，可以先做。
-- 改到 `Files`、`state` 的初始化、還原分類與正式安裝，屬於高風險範圍（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）：全部做完後寫審查請求 `tasks/error-log-review.md`，請新開的 Codex session 做 L2；合併由使用者決定。
+- 照下面 §1～§6、§8 的順序，一節一個或幾個 commit（code-quality：一個 commit 只實作一個決定）；§7 的 Windows 實測放最後。§4、§5 和其他節無關，可以先做；§8 要用 §1、§2 的記錄器與接線。
+- 改到 `Files`、`state` 的初始化、還原分類與正式安裝，屬於高風險範圍（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）：全部做完後寫審查請求 `tasks/error-log-review.md`，請新開的 Codex session 做 L2（§8 的複習畫面一起審）；合併由使用者決定。
 
 ## 基準與開工條件
 
-- 基準是這份說明所在的 commit：`git log -1 --format=%h -- tasks/error-log.md`。開工前 `git diff <那個 commit> -- docs/decisions.md docs/syntax.md src/main.ts src/state/ src/obsidian/files.ts src/core/backup/ src/ui/host.tsx tools/install.ts tools/build.mjs` 看有沒有改過；有改以新版為準，並在回報註明。
-- syntax.md §9 已經定稿（格式查核就是討論稿那一輪），這次不改它；實作發現它寫不通時停下來，回報哪一句、為什麼。
+- 基準是這份說明所在的 commit：`git log -1 --format=%h -- tasks/error-log.md`。開工前 `git diff <那個 commit> -- docs/decisions.md docs/syntax.md src/main.ts src/state/ src/obsidian/files.ts src/core/backup/ src/ui/host.tsx src/ui/Review.tsx tools/install.ts tools/build.mjs` 看有沒有改過；有改以新版為準，並在回報註明。
+- syntax.md §9 已經定稿（格式查核就是討論稿那一輪；`report` 的欄位是 D-160 加的），這次不改它；實作發現它寫不通時停下來，回報哪一句、為什麼。
 - 這份說明沒寫到、做了又很難收回的，停下來問使用者。
 
 ## 必讀範圍
 
 | 讀什麼 | 為什麼 |
 |---|---|
-| D-155、syntax.md §0、§5、§9 | 要做的事與格式 |
+| D-155、D-160、syntax.md §0、§5、§9 | 要做的事與格式 |
 | 討論稿〈Codex 回應〉P3～P7、第 5 節第 1、7 題，〈Claude 回應〉的表 | 已重現的漏接、上限的漏洞、建資料夾的競爭、還原的分類 |
 | `src/main.ts`（`report`、`NOTICES`、`console.error`、`start()` 的 `ready()`）、`src/state/reads.ts`（`start`、`files.watch`）、`src/state/index.ts`（`onError`、`ErrorSource`）、`src/ui/Markdown.tsx`、`src/ui/host.tsx`、`src/obsidian/save.ts`（`leave` 的 `onError`）、`src/obsidian/files.ts`（`create`）、`src/obsidian/dev.ts`（`collectErrors`）、`src/core/backup/plan.ts`、`src/core/study/log.ts`、`tools/install.ts`、`tools/build.mjs`、`eslint.config.js` | 要改或要照著寫的程式 |
 | `tests/main-wiring.test.ts`、`tests/save-wiring.test.ts`、`tests/build.test.ts`、`src/dev/files-contract.ts` | 接線、建置與 `Files` 契約的測試怎麼寫 |
+| `src/ui/Review.tsx`（上方那一排、`onKey`、滑動、自動換卡）、`src/ui/Review.css`、`tests/review-ui.test.ts`、`tests/helpers/review-ui.ts` | §8 的畫面與它的測試 |
 | `.agents/skills/code-quality/SKILL.md` 的「測試」一節、[試作場說明](../experiments/README.md)的〈AI 怎麼測〉 | 測試寫法；Windows 版 Obsidian 的操作方式 |
 
 其他文件不用讀。
 
 ## 限制
 
-1. **可以修改**：`src/core/errors/`（新的）、`src/core/backup/plan.ts`、`src/main.ts`、`src/state/`（只在 §2-3 的初始化補報）、`src/ui/host.tsx`、`src/ui/Markdown.tsx`、`src/obsidian/files.ts`、`src/obsidian/save.ts`、`src/obsidian/dev*.ts` 與新的開發命令檔、`src/dev/files-contract.ts`、`tools/build.mjs`、`tools/install.ts`、新的 `tools/locate.ts`、`package.json` 的 scripts、`eslint.config.js`、`tests/`、`docs/agents/quality.md`、`docs/backlog.md`、`docs/roadmap.md`、這份說明。
+1. **可以修改**：`src/core/errors/`（新的）、`src/core/backup/plan.ts`、`src/main.ts`、`src/state/`（只在 §2-3 的初始化補報）、`src/ui/host.tsx`、`src/ui/Markdown.tsx`、`src/ui/Review.tsx`、`src/ui/Review.css`（只在 §8）、`src/obsidian/files.ts`、`src/obsidian/save.ts`、`src/obsidian/dev*.ts` 與新的開發命令檔、`src/dev/files-contract.ts`、`tools/build.mjs`、`tools/install.ts`、新的 `tools/locate.ts`、`package.json` 的 scripts、`eslint.config.js`、`tests/`、`docs/agents/quality.md`、`docs/backlog.md`、`docs/roadmap.md`、這份說明。
 2. **不改檔案格式**：syntax.md 不動；複習紀錄、備份檔的格式不變。不加套件。
 3. **不碰**：作答的寫入順序（`createLogWriter`）、`flush()`、`close()` 的語意；`tools/backup.ts` 的讀完重檢與 `tools/update-vault.ts` 的 `changedSince`（D-155 代價的最後一點，照現在的做法）。
 4. **實測只動測試 vault**（位置在 Claude 的記憶 `test-vault-location`），不碰正式使用的 vault。**不要用 computer-use 截 Obsidian**；用開發命令看結果。
@@ -43,7 +44,7 @@
 新的核心模組，只靠 `Files`，不碰 Obsidian、Node、畫面；對外只從 `index.ts` 拿。ESLint 的核心規則已經涵蓋 `src/core/**`，照 [D-110](../docs/decisions.md#d-110-v1-外掛的程式結構) 與 `eslint.config.js` 的核心模組規則；它從 `study` 只拿時間的寫法（`formatTime`）。
 
 - `ERROR_FOLDER = 'Essence Cards/紀錄/錯誤'`、`errorLogPath(ms, offset, device)`、`isErrorLogPath(path)`：檔名照 §9。
-- `createErrorLog({ files, device, build, obsidian, now?, offset? })` 回傳 `{ record(where, error, context?: { path?: string }): void }`。`record` 不回傳 Promise、**永遠不拋錯**。
+- `createErrorLog({ files, device, build, obsidian, now?, offset? })` 回傳 `{ record(where, error, context?: { path?: string }): void }`（§8 再加 `report`）。`record` 不回傳 Promise、**永遠不拋錯**。
 - 錯誤轉文字（`Error`、字串、`null`、`undefined`、循環物件、`toString` 會拋錯的物件）、取自己的程式位置（只留含 `plugin:essence-cards:` 的那幾層，`plugin:essence-cards-x:` 這種別的外掛不算）、截斷，全部包在不會拋錯的函式裡。
 - 一行照 §9：欄位順序照表；序列化後超過 2,000 bytes（UTF-8）時依序截短 `stack`、`path`、`msg`，截到放得下。
 - 去重：鍵是 `where`、`path`、第一個自己的程式位置（沒有時 `msg`）；第 1 次寫，第 10、100、1,000……次各寫一行帶 `n`。去重表最多 500 個鍵，超過之後的新鍵照第 1 次寫（月上限仍擋著）。
@@ -111,9 +112,25 @@
 
 ## 7. 實測（開發版，Windows 版 Obsidian）
 
-開發命令 `error-probe` 依序製造：同步拋錯（計時器裡）、非同步拒絕、複習畫面的 React 錯誤（掛一個會拋錯的元件，或讓 `Markdown` 的渲染失敗）、同一個錯誤連續 12 次。讀 `Essence Cards/紀錄/錯誤/` 當月的檔：每種一行、`where` 對、`stack` 有自己的程式位置、連續 12 次只有 2 行（第 1 次與 `n: 10`）。結果寫成結果檔，照試作場的做法。
+開發命令 `error-probe` 依序製造：同步拋錯（計時器裡）、非同步拒絕、複習畫面的 React 錯誤（掛一個會拋錯的元件，或讓 `Markdown` 的渲染失敗）、同一個錯誤連續 12 次。讀 `Essence Cards/紀錄/錯誤/` 當月的檔：每種一行、`where` 對、`stack` 有自己的程式位置、連續 12 次只有 2 行（第 1 次與 `n: 10`）。§8 的回報：在測試 vault 開一次複習，點旗子選一項，當月的檔多一行 `report`，`lt`、`v` 是畫面上那張卡。結果寫成結果檔，照試作場的做法。
 
-**iPhone**：不在這次。完成時在 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」那一列加一項：在 iPhone 跑 `error-probe`，重開 Obsidian 後檔案還在，經 iCloud 回到電腦讀得到，`stack` 的格式和 Windows 一樣。
+**iPhone**：不在這次。完成時在 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」那一列加一項：在 iPhone 跑 `error-probe`，重開 Obsidian 後檔案還在，經 iCloud 回到電腦讀得到，`stack` 的格式和 Windows 一樣；旗子在英文卡（有自動朗讀開關）的上方那一排擠不擠、選單一隻手點不點得到，打字卡鍵盤開著時回報、回來後字還在。
+
+## 8. 複習畫面的回報（D-160）
+
+在 §1、§2 之後做，用同一個記錄器。
+
+- 記錄器加 `report({ kind, path, lt, v }): void`，和 `record` 一樣不回傳 Promise、永遠不拋錯；一行照 syntax.md §9 的 `report`（沒有 `msg`、`stack`）。去重的鍵是 `lt`、`v`、`kind`；月上限、寫不進去就丟照 §1。
+- `Review.tsx` 上方那一排加旗子圖示（`aria-label="回報問題"`），在「結束複習」左邊，「結束複習」仍貼在最右邊；畫面上有卡時才出現，動畫期間停用。回呼從 `openReview` 的選項傳進來（例如 `onReport(kind, card)`），沒有傳就不顯示圖示；元件不拿 `Files`、不 import `main.ts`。
+- 點了開一張選單：D-160 第 1 點的五項加「取消」，文字照那裡；按鈕夠大，iPhone 上一隻手點得到。選單開著時，`onKey` 的按鍵、滑動、點卡片與自動換卡（念完自動換卡、離開一陣子回來的處理）都不作用；Esc 與「取消」關掉。
+- 選一項：交出那張卡（正在回看時是回看的那張）的卡組、`lt`、`v` 與代號，關掉選單；`main.ts` 用 Notice 提示「已記下，可以跟家長說一聲」。卡片的狀態不變（翻開了沒有、打字卡的步驟與已打的字），不寫複習紀錄、不改排程。
+- 樣式用 `Review.css` 與 `tokens.css` 現有的變數（[D-052](../docs/decisions.md#d-052-樣式用純-css)、[D-058](../docs/decisions.md#d-058-複習畫面的樣式)），不加套件。
+
+**驗收**：
+
+- 記錄器（Node）：一筆 `report` 的那一行逐字等於自編的預期字串；同一張卡同一項 12 次只有 2 行；同一張卡不同項、不同卡同一項各算一個。
+- 畫面（`tests/review-ui.test.ts` 的替身）：選單開著時按自評的鍵、滑動、點卡片都不換卡、不寫紀錄；選一項後回呼收到正確的卡組、`lt`、`v`、代號，卡片還是同一張、同一面；回看上一張時回報的是那一張；打字卡打到一半回報，回來時字還在；沒傳回呼、讀取中與完成畫面都沒有圖示。
+- 接線（`tests/main-wiring.test.ts`）：回呼接到記錄器的 `report`，並出一次 Notice。
 
 ## 自我測試
 
@@ -124,9 +141,9 @@
 
 1. 這份說明的狀態行改成實際狀態；文末加〈結果〉：每節的 commit、測試數、Windows 實測的結果檔與 Obsidian 真的撞到時的訊息、對照表定位有沒有偏移。
 2. 寫 `tasks/error-log-review.md`（照 code-quality 的 `review.md` 範本），回覆使用者一段可以貼給新 Codex session 的訊息，建議推理等級：高。
-3. `docs/agents/quality.md` 的「本專案的做法」再加一條維修時怎麼讀：使用者回報問題時先讀 `紀錄/錯誤/` 那段時間的行，用 `build` 找版本，要對原始碼時用 `npm run locate`；紀錄可能因同步、上限或寫入失敗而缺漏，沒有那一行不代表沒發生。
+3. `docs/agents/quality.md` 的「本專案的做法」再加一條維修時怎麼讀：使用者回報問題，或問有沒有學生的回報（`where: "report"`，用 `lt` 找到卡組那一行）時，先讀 `紀錄/錯誤/` 那段時間的行，用 `build` 找版本，要對原始碼時用 `npm run locate`；紀錄可能因同步、上限或寫入失敗而缺漏，沒有那一行不代表沒發生。
 4. roadmap 的「已完成」加一列，backlog 的「正式版的錯誤紀錄」那一列改成實際狀態；合併後移除。
 
 ## 這次不做
 
-畫面與提示；「複製問題報告」命令與查單一目標排程的工具（[規畫](../docs/plans/maintenance.md)的 G2、G3）；讀取很慢或一直不回來的紀錄（[D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測) 第 4 點）；備份重檢與更新命令對錯誤紀錄的特別處理；說明書的那一句（寫說明書時照 D-155 第 7 點）。
+§8 以外的畫面與提示；給家長的回報列表（D-160 第 5 點，第二階段）；「複製問題報告」命令與查單一目標排程的工具（[規畫](../docs/plans/maintenance.md)的 G2、G3）；讀取很慢或一直不回來的紀錄（[D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測) 第 4 點）；備份重檢與更新命令對錯誤紀錄的特別處理；說明書的那一句（寫說明書時照 D-155 第 7 點）。

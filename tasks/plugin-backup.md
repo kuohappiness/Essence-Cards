@@ -1,6 +1,6 @@
 # 外掛內的備份與還原（給 Claude，本機執行）
 
-狀態：第 0 步格式查核一致（[查核請求](plugin-backup-format-review.md)），第一部分進行中；第二部分（還原畫面）使用者 2026-10-29 選放到 v1 結案前，這次只做第一部分
+狀態：第 0 步格式查核一致（[查核請求](plugin-backup-format-review.md)）；第一部分程式與 Windows 實機完成（見〈結果：第一部分〉），Codex L2 通過（[審查請求](plugin-backup-1-review.md)，`d3d20b7`），等合併（使用者決定）；第二部分（還原畫面）使用者 2026-10-29 選放到 v1 結案前，這次只做第一部分
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-ID 與這份說明做完）。第一次用到 Node／Electron（[D-148](../docs/decisions.md#d-148-電腦專用的主機接點)），又改 `src/state/` 的寫入閘門，屬於高風險範圍：第 0 步先請 Codex 查核格式（D-140 第 4 點），兩個部分各自在合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md)）。
 
@@ -175,3 +175,31 @@ backlog「還原的目的地檔名規則在 Mac 與 Linux 只核對過程式」�
 ## 這次不做
 
 排除 Capture 教材（見上）；入口畫面的「給家長」一區（通知先頂著）；設定頁的其他列與 `data.json` 的保存規則（D-149 第 7 點，寫設定頁的其他列時）；每週備份（使用者選每月）；Mac 與 Linux 的實測；給其他家庭的更新管道（第二階段）。
+
+## 結果：第一部分（2026-10-30，Claude Opus 5.5）
+
+程式在分支 `claude/plugin-backup-1`（worktree `../Essence-Cards-plugin-backup-1`），已推上遠端：`43890e7` 讀原始位元組（§1-2）、`245f085` `state` 的備份閘門與存檔按鈕的對應表（§1-4、§1-6）、`5e942e0` 備份程序搬進核心、電腦專用資料夾、時機與清理、設定頁、D-148 的檢查（§1-1、§1-3～§1-8）、`9022713` zip 的 EOCD（§1-8 第 2 列）、`fc1a1cb` 開發命令 `backup` 與實測中修的兩處、`7f0df58` 設定頁改成「備份」一區（D-156）、`99087ae` 合進 `main`（只有文件）。每個 commit 的 pre-commit 都跑完整的 `npm run check`，最後一次 800 項全過。
+
+**基準與開工條件**：基準 `e2cf2f7`。開工後「基準與開工條件」列的檔只有文件改過，都是這個任務自己的：syntax §8 的 `by`、`build`、`vault` 與自動清理（第 0 步與 Codex 格式查核，`34a4669`、`499f945`），隱藏檔不備份與 D-156（`89e687a`）。
+
+**§1-2 `Files.list` 和磁碟**（開發命令 `backup do=files`）：`Essence Cards/` 的 `.md` 4 篇、`.jsonl` 2 份一致；從 Obsidian 以外放進一張 `.png`，不到 1 秒就列出。**以點開頭的檔 Obsidian 不索引**，所以外掛的備份沒有它們；照任務說明停下回報，使用者 2026-10-30 選不備份，寫進 syntax §8，沒有另開 Node 的讀法。
+
+**§1-1 選資料夾與打開資料夾**：Obsidian 1.14.5 叫得到 Electron 的 `remote.dialog.showOpenDialog`：標題「選備份位置」、從目前的位置開始，按取消回傳 `null`、位置不變。叫不到時改用文字欄位貼路徑的備援留著，這次沒用到。`shell.openPath` 打開檔案總管，裡面是真正位置的備份。
+
+**§1-10 Windows 實機**（測試 vault，開發命令的結果檔在 `Essence W5/結果/backup Windows-c50c 2026-10-30 <時分秒>.json`）：
+
+- 載入後自己做了第一份 `new-version`（09:59），閘門打開；重新載入外掛不重做；把 localStorage 記的時間調早 31 天後 `check` 補做了 `monthly`（10:01）。
+- 外接硬碟沒接上（位置設成不存在的 `Q:\`）：失敗寫「準備備份位置：備份位置 Q:\Essence 備份 所在的磁碟找不到（ENOENT）」，閘門關著，存檔按鈕說「備份還沒成功……到設定頁看原因」，同一個原因只通知一次；換回預設位置按「立即備份」後恢復。
+- 卡組是雲端佔位檔（自編的一篇，`attrib -P +U` 後確認有 `RecallOnDataAccess`，停 iCloud；使用者 2026-10-30 同意）：失敗寫「讀 vault：讀不到 Essence Cards/備份佔位測試（卡片）.md（UNKNOWN: unknown error, read）」，通知一次；重開 iCloud 106 秒後檔案下載回來、雜湊和原本相同，「立即備份」成功。之後 `state` 自己的重試還沒輪到那一篇時，存檔仍受阻（原因 `unread`，D-154 已知）；刪掉測試卡組後 `unread` 清空、閘門全開。
+- 設定頁截圖（`Essence W5/結果/備份 Windows-c50c 2026-10-30 101830/`、`132656/`）：一般、ⓘ 點開、選了 vault 裡的位置（當場說明、不換位置）、失敗、恢復。使用者看過版面後提出不寫「給家長」，依功能分區（D-156），已改。
+
+**實測中修的錯**：localStorage 記成完整路徑，下次載入對不到、每次重做備份（接線測試抓到，`5e942e0` 之前修好並加測試）；找不到磁碟時露出 `realpath` 的原文；路徑在單字中間換行。
+
+**其他觀察**：
+
+- **從 Claude 桌面 App 叫起的 Obsidian 在 Claude 的封裝環境（MSIX）裡**：預設位置的實際路徑落在 `Packages\Claude_…\LocalCache\`，外掛照 syntax §8 拒絕（第一次載入就是這樣失敗的）。使用者從開始選單打開 Obsidian 不受影響；AI 測試時改用 `explorer.exe` 轉交 URI，讓 Obsidian 在 Claude App 外面啟動。
+- **Obsidian 1.14 的設定開在另一個視窗**（`app.setting` 的 `popout`）：主視窗的 `capturePage` 拍不到，開發命令改成找標題相同的 Electron 視窗截圖。
+
+**沒有驗的**：Mac 與 Linux；真的 exFAT 外接硬碟（不支援硬連結時改成獨占建立，只有替身測試）；外掛與更新命令真的同時備份（只有單元測試）；iPhone 這次沒有要驗的，手機不載入電腦專用資料夾由替身載入正式 `main.js` 驗過。
+
+**還沒做**：Codex L2（[審查請求](plugin-backup-1-review.md)）；合併之後才刪 backlog 的技術債列、改「更新與相容」那一列與 `docs/plans/updates.md` 的實作順序。§1-8 第 1 列裡「還原寫每個檔時」的那一半屬於第二部分，合併時把那一列改成只剩還原。
