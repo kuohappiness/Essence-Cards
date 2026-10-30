@@ -9,10 +9,11 @@ import { localFolder } from './install.ts';
  * 先確認那一版保存的 main.js 與 main.js.map 的雜湊都和 release.json 相同，再用 Node 內建的 SourceMap 查；對不上就停。
  * 位置寫 stack 裡的 `行:欄`（1 起算，例如 `plugin:essence-cards:1:20345` 的 `1:20345`），也可以貼整個 frame；
  * SourceMap.findEntry 是 0 起算，這裡各減 1。
- * Obsidian 載入外掛時的偏移：見下面 OFFSET（Windows 版 Obsidian 的實測，tasks/error-log.md §7）。
+ * Obsidian 載入外掛時沒有多出行或欄的偏移（Windows 版 Obsidian 1.14.5，2026-10-30 開發命令 error-probe：六個位置都對回拋錯的
+ * 那一行，欄指在 `Error(`；tasks/error-log.md〈結果〉）。iPhone 的 stack 格式待下一次實機測試確認。
  */
 
-/** Obsidian 的 stack 和 main.js 的行、欄差多少（實測結果，見 tasks/error-log.md〈結果〉）。 */
+/** Obsidian 的 stack 和 main.js 的行、欄差多少：實測是 0。之後哪個平台不是 0，改這裡並寫明出處。 */
 const OFFSET = { line: 0, column: 0 };
 
 export interface Located {

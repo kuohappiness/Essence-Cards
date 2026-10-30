@@ -3,7 +3,7 @@ import type { Pick } from '../core/study/index.ts';
 import type { State } from '../state/index.ts';
 import type { ReviewHandle } from '../ui/index.ts';
 import { createObsidianFiles } from './files.ts';
-import { keepRendering } from './dev-review.ts';
+import { capturePng, keepRendering } from './dev-review.ts';
 
 // tasks/error-log.md §7：正式版的錯誤紀錄在 Windows 版 Obsidian 的實測。依序製造幾種錯誤，再讀這台當月的錯誤紀錄。
 // 每一種從自己的一行原始碼拋出，對照表定位（npm run locate）要對回那一行；行號寫在結果檔的 expected。
@@ -11,6 +11,8 @@ import { keepRendering } from './dev-review.ts';
 interface ProbeHost { app: App; device: string; state: State | null; startReview(pick: Pick): ReviewHandle | null }
 
 const FOLDER = 'Essence Cards/紀錄/錯誤';
+/** 截圖的路徑開頭（結果檔旁邊）。 */
+const SHOTS = 'Essence W5/結果/error-probe';
 const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 async function until(check: () => boolean, ms = 5000): Promise<boolean> {
   const end = performance.now() + ms;
@@ -84,14 +86,22 @@ export async function errorProbe(host: ProbeHost): Promise<unknown> {
     const view = review?.session.view();
     const card = view?.kind === 'card' ? { deck: view.card.card.deck, lt: view.card.card.lt, v: view.card.card.prompt.fingerprint } : null;
     const flag = overlay()?.querySelector<HTMLButtonElement>('button[aria-label="回報問題"]');
+    const shots: (string | null)[] = [await capturePng(host.app, `${SHOTS} 旗子.png`)];
     flag?.click();
     await until(() => !!overlay()?.querySelector('.ec-report'));
+    await sleep(300);
+    shots.push(await capturePng(host.app, `${SHOTS} 選單.png`));
     const menu = Array.from(overlay()?.querySelectorAll<HTMLButtonElement>('.ec-report-item') ?? []).map(button => button.textContent ?? '');
     overlay()?.querySelector<HTMLButtonElement>('.ec-report-item[data-kind="other"]')?.click();
     await sleep(100);
     const after = review?.session.view();
-    steps.report = { card, flag: !!flag, menu, menuClosed: !overlay()?.querySelector('.ec-report'), sameCard: after?.kind === 'card' && after.card.card.lt === card?.lt };
+    steps.report = { card, flag: !!flag, menu, menuClosed: !overlay()?.querySelector('.ec-report'), sameCard: after?.kind === 'card' && after.card.card.lt === card?.lt, shots };
     review?.close();
+    // 7. 英文卡的上方那一排最擠（上一張、計數、自動朗讀、旗子、結束）：截一張看（D-160 的代價）。
+    const english = host.startReview({ subject: '英文' });
+    if (english && await until(() => !!overlay()?.querySelector('.ec-auto'), 3000)) steps.english = await capturePng(host.app, `${SHOTS} 英文卡.png`);
+    else steps.english = '沒有英文卡可以打開';
+    english?.close();
   } finally { rendering.restore(); }
 
   // 錯誤紀錄是盡力而為、背景寫：等一下再讀。
