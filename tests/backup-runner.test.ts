@@ -14,10 +14,16 @@ const NOW = Date.UTC(2026, 10, 2, 12, 15, 3, 250);
 const VAULT = { name: 'Essence', path: 'D:/Notes/Essence' };
 const DEFAULT = 'C:/備份/Essence';
 
-/** 記憶體裡的備份資料夾：檔名照 syntax §8 產生；failPrepare 讓「準備備份位置」失敗，failRemove 裡的檔刪不掉。 */
+/**
+ * 記憶體裡的備份資料夾：檔名照 syntax §8 產生。failPrepare 讓「準備備份位置」失敗（failTimes 是只失敗前幾次），holdPrepare、holdList
+ * 讓準備位置、清理時的列檔停在半路；failRemove 裡的檔刪不掉。prepares、removes 記呼叫次數。
+ */
 function memoryHost() {
   const folders = new Map<string, Map<string, Uint8Array>>();
-  const control = { failPrepare: null as string | null, failRemove: new Set<string>(), writes: 0, codes: 0 };
+  const control = {
+    failPrepare: null as string | null, failTimes: Infinity, holdPrepare: null as Promise<void> | null, holdList: null as Promise<void> | null,
+    failRemove: new Set<string>(), writes: 0, codes: 0, prepares: 0, removes: 0, lists: 0,
+  };
   const folder = (path: string): Map<string, Uint8Array> => {
     if (!folders.has(path)) folders.set(path, new Map());
     return folders.get(path)!;
@@ -25,19 +31,30 @@ function memoryHost() {
   const host: BackupHost = {
     vault: VAULT,
     key: path => path.toLowerCase(),
-    prepare: path => control.failPrepare ? Promise.reject(Error(control.failPrepare)) : Promise.resolve((folder(path), path)),
+    async prepare(path) {
+      control.prepares++;
+      if (control.holdPrepare) await control.holdPrepare;
+      if (control.failPrepare && control.failTimes-- > 0) throw Error(control.failPrepare);
+      folder(path);
+      return path;
+    },
     write(path, taken) {
       control.writes++;
       const name = backupName(taken.started, taken.offset, taken.manifest.build, (0xa000 + control.codes++).toString(16));
       folder(path).set(name, taken.zip);
       return Promise.resolve(name);
     },
-    list: path => Promise.resolve([...folder(path)].flatMap(([name, bytes]) => {
-      const opened = openBackup(bytes);
-      return opened.ok ? [{ name, size: bytes.length, sha256: hashBytes(bytes), manifest: opened.value.manifest }] : [];
-    })),
+    async list(path) {
+      control.lists++;
+      if (control.holdList) await control.holdList;
+      return [...folder(path)].flatMap(([name, bytes]) => {
+        const opened = openBackup(bytes);
+        return opened.ok ? [{ name, size: bytes.length, sha256: hashBytes(bytes), manifest: opened.value.manifest }] : [];
+      });
+    },
     read: (path, name) => Promise.resolve(folders.get(path)?.get(name) ?? null),
     remove(path, backup) {
+      control.removes++;
       if (control.failRemove.has(backup.name)) return Promise.reject(Error('刪不掉'));
       folder(path).delete(backup.name);
       return Promise.resolve();
@@ -252,4 +269,29 @@ void test('保留：這次成功的那一份一定留（時鐘倒退、資料夾
   const later = stored('2026-11-20T10:00:00.000+08:00', { code: 'b0b0' });
   assert.deepEqual(stale([...future, later, now]), ['2026-11-01T10:00:00.000+08:00']);
   assert.deepEqual(stale([...future, later, now], now.name), []);
+});
+
+// ── Codex L2 的回歸（Claude Codex Discussion/2026-10-30-plugin-backup-1-review.md）──
+
+/** 等到 until() 成立（每次讓出一輪事件迴圈），最多 200 輪。 */
+async function settle(until: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !until(); i++) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(until(), '等不到預期的狀態');
+}
+
+void test('L2 B1：同次載入發現記的那份失效（被刪掉）時，重做之前先關閘門；新備份完成前一直關著', async () => {
+  const { runner, memory, saved, statuses } = setup();
+  await runner.check();
+  assert.equal(runner.status().ready, true);
+  memory.folder(DEFAULT).delete(saved.last!.name);
+  let release = (): void => {};
+  memory.control.holdPrepare = new Promise(resolve => { release = resolve; });
+  const seen = statuses.length;
+  const done = runner.check();
+  await settle(() => runner.status().running === 'new-version');
+  assert.equal(runner.status().ready, false);
+  assert.ok(statuses.slice(seen).some(status => !status.ready), 'onStatus 要送出 ready: false，外掛才會關 state 的閘門');
+  release();
+  await done;
+  assert.equal(runner.status().ready, true);
 });

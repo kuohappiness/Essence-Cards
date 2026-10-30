@@ -166,7 +166,11 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
       checking ??= (async () => {
         if (current) await current;
         const last = store.last();
-        if (!last || last.build !== build || !await verified(last)) return run('new-version');
+        if (!last || last.build !== build || !await verified(last)) {
+          // 已經知道沒有對得到的成功備份：先關閘門再重做（Codex L2 B1），不能等重做的第一步之後。
+          set({ ready: false });
+          return run('new-version');
+        }
         if (options.now() - last.time > MONTH) return run('monthly');
         // 這次載入失敗過的（例如手動備份失敗），等下一次成功才打開。
         set({ checked: true, last, ready: !status.failure });
