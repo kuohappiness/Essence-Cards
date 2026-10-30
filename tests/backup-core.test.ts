@@ -334,6 +334,18 @@ void test('EOCD：一般註解、註解裡剛好有 EOCD 簽章、註解裡偽�
   assert.equal(opened(withComment(zip, new Uint8Array([0x50, 0x4b, 0x05, 0x06, 1, 2, 3]))), 'ok');
   // 偽造的 EOCD 放在註解最後：它的註解長度 0 剛好到檔尾，但中央目錄不在它前面，不採用。
   assert.equal(opened(withComment(zip, eocd(0, 0, 0, 0))), 'ok');
+  // Codex L2 B4：偽造的候選帶 ZIP64 的標記（筆數 0xffff），也要略過、繼續往前找真正的 EOCD。
+  assert.equal(opened(withComment(zip, eocd(0xffff, 0, 0, 0))), 'ok');
+});
+
+void test('EOCD：唯一的 EOCD 帶 ZIP64 的標記時照舊拒絕（不支援 ZIP64）', () => {
+  const zip = zipOf({ 'Essence Cards/a.md': 'A' }).slice();
+  const view = new DataView(zip.buffer);
+  const end = zip.length - 22;
+  view.setUint16(end + 8, 0xffff, true);
+  view.setUint16(end + 10, 0xffff, true);
+  view.setUint32(end + 16, 0xffffffff, true);
+  assert.equal(opened(zip), '不支援 ZIP64');
 });
 
 void test('EOCD：中央目錄越界、筆數不一致、註解長度對不到檔尾、截短，都被拒絕', () => {

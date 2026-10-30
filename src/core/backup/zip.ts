@@ -22,18 +22,20 @@ export interface OpenedBackup { manifest: BackupManifest; files: Map<string, Uin
 
 /**
  * 中央目錄的結尾（EOCD）的位置（技術債「讀備份時，zip 的註解裡剛好有 EOCD 簽章」）：從檔尾往前找，只採用註解長度剛好到檔尾、
- * 只有一個磁碟、兩個筆數一致、中央目錄剛好接在它前面的那一個；註解裡的簽章或偽造的 EOCD 不採用。找不到回傳錯誤訊息。
+ * 只有一個磁碟、兩個筆數一致、中央目錄剛好接在它前面的那一個；註解裡的簽章或偽造的 EOCD 不採用。帶 ZIP64 標記的候選也只是記下、
+ * 繼續往前找（Codex L2 B4：註解裡的假 ZIP64 候選不能遮住真正的 EOCD）；都找不到時，看過 ZIP64 標記才說不支援 ZIP64。
  */
 function endOfDirectory(bytes: Uint8Array): number | string {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let zip64 = false;
   for (let at = bytes.length - 22; at >= 0 && at >= bytes.length - 22 - 0xffff; at--) {
     if (view.getUint32(at, true) !== 0x06054b50 || at + 22 + view.getUint16(at + 20, true) !== bytes.length) continue;
     const count = view.getUint16(at + 10, true), size = view.getUint32(at + 12, true), offset = view.getUint32(at + 16, true);
     if (view.getUint16(at + 4, true) !== 0 || view.getUint16(at + 6, true) !== 0 || view.getUint16(at + 8, true) !== count) continue;
-    if (count === 0xffff || offset === 0xffffffff) return '不支援 ZIP64';
+    if (count === 0xffff || offset === 0xffffffff) { zip64 = true; continue; }
     if (offset + size === at) return at;
   }
-  return '找不到 zip 的中央目錄';
+  return zip64 ? '不支援 ZIP64' : '找不到 zip 的中央目錄';
 }
 
 /**
