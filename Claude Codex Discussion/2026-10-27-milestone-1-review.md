@@ -1,6 +1,6 @@
 # 第一個里程碑的品質檢查（W1～W6）
 
-狀態：處理中：R1～R5、R7、R8 已在 `main` 做完（〈[處理紀錄](#處理紀錄2026-10-28)〉）；R6、R9 等觸發點；R10 記下即可
+狀態：處理中：R1～R5、R7、R8 已在 `main` 做完（〈[處理紀錄](#處理紀錄2026-10-28)〉）；R6 (a) 併進 [backlog 技術債](../docs/backlog.md#技術債)「`tests/`、`tools/` 沒有型別檢查」那一列（[外掛架構討論稿](2026-10-26-plugin-architecture.md)環節 9 結論第 3 條），R6 (b)、R9 等觸發點；R10 記下即可
 
 2026-10-27｜檢查者：Claude（Opus 5.5）｜性質：code-quality 的[里程碑回顧與安全檢查](../.claude/skills/code-quality/milestone.md)（[D-117](../docs/decisions.md#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點)、[D-119](../docs/decisions.md#d-119-程式品質的-skill-整併成通用的-code-quality)），L1。審查紀錄分三段交給子代理整理，安全檢查照 `security-review` 的流程交給子代理；兩者的關鍵說法 Claude 都抽查過。只提建議，改哪些由使用者決定。
 

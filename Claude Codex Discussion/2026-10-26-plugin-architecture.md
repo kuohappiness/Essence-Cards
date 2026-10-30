@@ -1,6 +1,6 @@
 # Claude／Codex 討論稿：外掛架構的逐環節檢視
 
-狀態：進行中：環節 1、4、5、6、7、8 已談定（4 見〈Claude 回應 Codex：環節 4 第二輪〉、5 見〈環節 5 的結論〉、6 見〈環節 6 的結論〉、7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、8 的主機接點見 [D-148](../docs/decisions.md#d-148-電腦專用的主機接點)）；環節 9 Claude 與 Codex 一致，〈環節 9 的結論〉待使用者確認；之後 2、3
+狀態：進行中：環節 1、4、5、6、7、8、9 已談定（4 見〈Claude 回應 Codex：環節 4 第二輪〉、5 見〈環節 5 的結論〉、6 見〈環節 6 的結論〉、9 見〈環節 9 的結論〉、7 見 [D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、8 的主機接點見 [D-148](../docs/decisions.md#d-148-電腦專用的主機接點)）；之後 2、3
 
 2026-10-26 起。使用者開了專案討論串「優化外掛架構」，由 Claude（Fable）逐環節找問題、寫提案，每個環節先請 Codex 看過，雙方一致後才進下一個環節；談定的結論之後整理成給 Opus 的任務說明（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)）。**這一串只討論，不改程式。**
 
@@ -2369,7 +2369,7 @@ console.log(new Function('select', 'bLine', 'app', 'cm', 'B', 'tokens', js + '; 
 - Q5 不另立「判斷一定放 `src/dev/`」的通則；修 `lock`、`save` 兩個個案；quality.md 把現有 `a3check` 那一句擴大到所有拿來當驗收的開發命令。
 - Q6 照縮小：R6 (a) 只補 RR1 三點；W2 在它用到的 setup 收集並執行清理。
 
-### 環節 9 的結論（Claude 與 Codex 一致，待使用者確認）
+### 環節 9 的結論（Claude 與 Codex 一致，✅ 使用者 2026-10-30 同意七條）
 
 這個環節沒有要你做的產品選擇，都是開發流程的修補。
 
@@ -2393,3 +2393,5 @@ console.log(new Function('select', 'bLine', 'app', 'cm', 'B', 'tokens', js + '; 
 7. **不做**：通用的替身契約、pre-commit 重建暫存區的快照、只跑受影響的測試、換測試框架或訂覆蓋率、現在裝 happy-dom（R6 (b) 照原觸發點）、固定 Node 版本或加版本矩陣、開發命令的結果檔進 repo、`npm audit` 進 pre-commit、合併多次建置。
 
 請使用者確認上面七條。同意後：第 1～5 條寫進 [backlog 技術債](../docs/backlog.md#技術債)，第 5 條的 quality.md 一句與第 6 條一起改；更新這份討論稿的狀態行、roadmap 那一列（下一個環節是 2：卡組模組）與「第一個里程碑的品質檢查」那一列的 R6。
+
+**同意後的施工（2026-10-30）**：第 1～5 條各寫成 [backlog 技術債](../docs/backlog.md#技術債)的一列，第 1～4 條的觸發點寫成「已到：單獨一個小 commit；最晚在下一個改程式（或改 `tests/`、`tests/build.test.ts`）的任務開工時先做」；第 5 條的一句寫進 [quality.md](../docs/agents/quality.md)〈Obsidian 相容性檢查〉；第 6 條改 W2 那一列的完成條件；里程碑報告的狀態行與 roadmap 記下 R6 (a) 併進第 3 條。下一個環節是 2（卡組模組）。
