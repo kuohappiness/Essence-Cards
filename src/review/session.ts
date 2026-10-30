@@ -1,5 +1,5 @@
 import { baseForm } from '../core/deck/index.ts';
-import { checkTyped } from '../core/study/index.ts';
+import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Pick, Rating } from '../core/study/index.ts';
 import type { State } from '../state/index.ts';
 import { crumb } from './crumb.ts';
@@ -159,16 +159,16 @@ interface Current {
   shown: number;
 }
 
-const normalize = (text: string): string => text.trim().toLowerCase();
-
-/** 打字卡的答案與原形：原形是 null、或等於某一個答案（不分大小寫）時跳過第 2 步（D-121）。 */
+/** 打字卡的答案與原形：原形是 null、或和某一個答案比對起來一樣（checkTyped 的規則，D-158）時跳過第 2 步（D-121）。 */
 function hintOf(card: Card): string | null {
   const answers = card.prompt.kind === 'qa' ? card.prompt.typed ?? [] : [];
   const base = baseForm(card.target);
-  if (base === null || answers.some(answer => normalize(answer) === normalize(base))) return null;
+  if (base === null || answers.some(answer => typedKey(answer) === typedKey(base))) return null;
   return base;
 }
 const answersOf = (card: Card): readonly string[] => card.prompt.kind === 'qa' && card.prompt.typed ? card.prompt.typed : [];
+/** 學生打的字對中的那一個答案；沒對中是 undefined。 */
+const matchOf = (card: Card, text: string): string | undefined => answersOf(card).find(answer => typedKey(answer) === typedKey(text));
 /** 能按的自評（D-066、D-116、D-121）：拼對只能記住了／太簡單；拼錯只能差一點／沒印象；按「沒印象」只剩沒印象。 */
 export function allowedFor(first: StepResult | null): readonly Rating[] {
   if (first === null) return RATINGS;
@@ -348,13 +348,13 @@ export function createSession(options: SessionOptions): Session {
       if (!text.trim()) return;
       typed.live = copying(text, typed.copy ?? typed.answer);
       // 照打任何一個答案都能結束；線上寫學生照打的那一個（拼對時寫對中的那一個，W6 §3-4）。
-      if (checkTyped(card.prompt, text)) finish(typed, card, answers.find(answer => normalize(answer) === normalize(text)) ?? typed.answer, false);
+      if (checkTyped(card.prompt, text)) finish(typed, card, matchOf(card, text) ?? typed.answer, false);
       notify();
       return;
     }
     if (!text.trim()) return;
     const ok = checkTyped(card.prompt, text);
-    const matched = answers.find(answer => normalize(answer) === normalize(text)) ?? answers[0] ?? '';
+    const matched = matchOf(card, text) ?? answers[0] ?? '';
     if (typed.step === 1) {
       if (ok) { typed.first = 'right'; finish(typed, card, matched, false); }
       else {

@@ -127,9 +127,21 @@ function compareSubject(a: string | null, b: string | null): number {
   return compareText(a, b);
 }
 
-/** 對中 prompt.typed 的任何一個就算對（D-122）：去掉頭尾空白、不分大小寫，其餘完全相同。不是打字題時丟出錯誤。 */
+/** 打字卡比對的一個單位：一個字元，或一段連續的空白；key 是比對用的寫法，text 是原本的字。 */
+export interface TypedUnit { text: string; key: string }
+
+/**
+ * 打字卡的比對規則只寫在這裡（D-158）：彎的單引號 ‘ ’ 當成 '，空白字元（\p{Zs}）與 Tab 當成空白、連續的算一個，不分大小寫。
+ * 只用在比對，不改卡組的答案與題目指紋；ʼ、＇、雙引號、零寬字元、全形字母照舊不同。不去頭尾的空白（照打還沒打完時要留著尾端）。
+ */
+export function typedUnits(text: string): TypedUnit[] {
+  return (text.match(/[\p{Zs}\t]+|./gsu) ?? []).map(part => ({ text: part, key: /^[\p{Zs}\t]/u.test(part) ? ' ' : part.replace(/[‘’]/g, "'").toLowerCase() }));
+}
+/** 整段字的比對寫法：去掉頭尾空白之後照 typedUnits；兩段的 key 相同就算一樣（D-122、D-158）。 */
+export const typedKey = (text: string): string => typedUnits(text.trim()).map(unit => unit.key).join('');
+
+/** 對中 prompt.typed 的任何一個就算對（D-122、D-158 的 typedKey）。不是打字題時丟出錯誤。 */
 export function checkTyped(prompt: Prompt, input: string): boolean {
   if (prompt.kind !== 'qa' || prompt.typed === null) throw TypeError('不是打字題');
-  const normalize = (text: string): string => text.trim().toLowerCase();
-  return prompt.typed.some(answer => normalize(input) === normalize(answer));
+  return prompt.typed.some(answer => typedKey(input) === typedKey(answer));
 }

@@ -50,6 +50,31 @@ void test('R7 第 3 步照打的即時比對：照位置比，還沒打的不算
   assert.deepEqual(copying('borroww', 'borrow').typed.filter(c => c.bad).map(c => c.char), ['w']);
 });
 
+// D-158：最接近的答案、標錯字母、照打與「也可以」都用核心的同一條比對規則；標出的字照學生打的字。
+void test('R7 D-158 比對：彎的單引號、空白字元與連續的空白不算錯，也不標出', () => {
+  assert.equal(closest("o'clock", ["o'clocks", 'o’clock']), 'o’clock', '’ 和 \' 一樣，最接近的是 o’clock');
+  assert.equal(spelling('O’Clock', "o'clock").ok, true);
+  assert.equal(spelling('look  After ', 'look after').ok, true);
+  const clok = spelling("o'clok", 'o’clock');
+  assert.deepEqual([clok.typed.filter(c => c.bad), clok.expected.filter(c => c.bad).map(c => c.char)], [[], ['c']], '撇號不標，只標漏打的 c');
+  const aftr = spelling('look  aftr', 'look after');
+  assert.deepEqual([aftr.typed.filter(c => c.bad), aftr.expected.filter(c => c.bad).map(c => c.char)], [[], ['e']], '多按的空白不標');
+  assert.equal(aftr.typed.map(c => c.char).join(''), 'look  aftr', '「你拼的」照學生打的字');
+  // 照打還沒打完：只去開頭的空白，尾端的詞間空白留著，照位置比。
+  const prefix = copying('made up ', 'made up his mind');
+  assert.deepEqual([prefix.ok, prefix.typed.map(c => c.char).join(''), prefix.typed.some(c => c.bad), prefix.expected.some(c => c.bad)], [false, 'made up ', false, false]);
+  assert.equal(copying('made  u', 'made up').typed.some(c => c.bad), false, '多按的空白之後照樣對齊');
+  assert.equal(copying('o’c', "o'clock").typed.some(c => c.bad), false);
+  assert.equal(copying('made  up  ', 'made up').ok, true);
+  assert.deepEqual(otherAnswers(["o'clock", 'o’clock'], "o'clock"), [], '「也可以」不列看起來一樣的答案');
+  assert.deepEqual(otherAnswers(['look after', 'take care of'], 'look after'), ['take care of']);
+  // 負例照舊算錯。
+  assert.equal(spelling('dont', "don't").ok, false);
+  assert.equal(spelling('apart', 'a part').ok, false);
+  assert.equal(spelling('oʼclock', "o'clock").ok, false);
+  assert.equal(copying('dont', "don't").typed.some(c => c.bad), true);
+});
+
 void test('R8 英文的部分：例句只念英文；＿＿ 填入答案；單字；全是中文沒有；只有詞性縮寫不念', () => {
   assert.deepEqual(englishParts('例句：Can I borrow your pen? 我可以借你的筆嗎？'), ['Can I borrow your pen?']);
   assert.equal(fillBlank(PHRASE, 'made up his mind'), 'He has already made up his mind to study abroad.');

@@ -1,3 +1,5 @@
+import { typedKey } from '../core/study/index.ts';
+
 // 英文的部分（D-082、D-116）：朗讀只念英文，不念中文翻譯；中翻英的例句把 ＿＿ 換成答案再念。
 
 /** 一個以上的全形底線：打字卡題目裡的空格（D-122）。 */
@@ -42,10 +44,9 @@ export function lineSpeech(text: string): string[] {
   });
 }
 
-/** 「也可以：」要列的答案（D-145）：答案格裡、結果那一行沒寫的其他答案，照答案格的順序；大小寫與前後空白不算（同 checkTyped）。 */
+/** 「也可以：」要列的答案（D-145）：答案格裡、結果那一行沒寫的其他答案，照答案格的順序；和結果那一行比對起來一樣的不列（同 checkTyped，D-158）。 */
 export function otherAnswers(answers: readonly string[], shown: string): string[] {
-  const key = (text: string): string => text.trim().toLowerCase();
-  return answers.filter(answer => key(answer) !== key(shown));
+  return answers.filter(answer => typedKey(answer) !== typedKey(shown));
 }
 
 /** 題目裡英文那一段把第一處 ＿＿ 換成答案；題目沒有 ＿＿ 時回傳 null（只念答案）。 */
