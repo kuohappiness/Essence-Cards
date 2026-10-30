@@ -356,7 +356,7 @@ async function reading(app: App, text: string, path: string): Promise<string[]> 
   } finally { component.unload(); }
 }
 
-/** §2：在 Essence W5/暫存/ 跑 C1～C15；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
+/** §2：在 Essence W5/暫存/ 跑 C1～C16；先清掉上一次留下的暫存檔（只有這個命令會寫那裡）。 */
 async function filesContract(app: App): Promise<unknown> {
   const dir = root + '/暫存';
   const old = app.vault.getAbstractFileByPath(dir);
@@ -370,5 +370,9 @@ async function filesContract(app: App): Promise<unknown> {
     rename: (from, to) => app.vault.rename(entry(from), to),
     remove: path => app.vault.delete(entry(path), true),
   }, dir, { notice: 3000, quiet: 500 });
-  return { passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results };
+  // tasks/error-log.md §4：真的 vault.createFolder 同時建同一個資料夾時拋出什麼（C16 驗的是 Files 已經沿用建好的資料夾）。
+  const race = dir + '/createFolder';
+  const folderRace = (await Promise.allSettled([app.vault.createFolder(race), app.vault.createFolder(race)]))
+    .map(result => result.status === 'fulfilled' ? 'fulfilled' : result.reason instanceof Error ? result.reason.message : String(result.reason));
+  return { passed: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results, folderRace };
 }

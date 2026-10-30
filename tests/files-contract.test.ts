@@ -8,7 +8,7 @@ import type { Files } from '../src/core/files.ts';
 import { createNodeFiles } from '../tools/node-files.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
-// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C15；每個例子一個新的暫存 vault。
+// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C16；每個例子一個新的暫存 vault。
 for (const item of contractCases) {
   void test(`Files 契約 ${item.code}：${item.title}`, async t => {
     const root = await mkdtemp(join(tmpdir(), 'essence-contract-'));

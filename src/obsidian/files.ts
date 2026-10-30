@@ -31,9 +31,20 @@ export function createObsidianFiles(app: App): Files {
     let folder = '';
     for (const part of slash < 0 ? [] : path.slice(0, slash).split('/')) {
       folder = folder ? folder + '/' + part : part;
-      if (!vault.getAbstractFileByPath(folder)) await vault.createFolder(folder);
+      if (!vault.getAbstractFileByPath(folder)) await createFolder(folder);
     }
     await vault.create(path, text);
+  }
+  /**
+   * 建一層資料夾。兩個不同的檔同時第一次寫進同一個不存在的資料夾時會一起建，後到的那個失敗（D-155 第 4 點）：失敗時再查一次，
+   * 已經是資料夾就照常往下（是別的寫入建好的），不是就照原樣拋出。
+   */
+  async function createFolder(folder: string): Promise<void> {
+    try {
+      await vault.createFolder(folder);
+    } catch (error) {
+      if (!(vault.getAbstractFileByPath(folder) instanceof TFolder)) throw error;
+    }
   }
   /** 資料夾裡的每個檔（含子資料夾）；檔案就是它自己。 */
   function inside(entry: TAbstractFile): TFile[] {
