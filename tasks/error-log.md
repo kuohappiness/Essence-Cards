@@ -1,6 +1,6 @@
 # 正式版的錯誤紀錄（給 Claude，本機執行）
 
-狀態：程式與 Windows 實測做完，在分支 `claude/error-log`；Codex L2 通過（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）；等使用者決定合併
+狀態：已合併進 `main`（`87a0d2c`）；Codex L2 通過（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）。iPhone 的部分在下一次 iPhone 實機測試，說明書的句子跟說明書一起寫
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-155 與討論稿做完，這份是照做）。
 
