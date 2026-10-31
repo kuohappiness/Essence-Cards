@@ -1,6 +1,6 @@
-import { BLANK, englishBreak, glueArticles, tailStart } from '../review/index.ts';
+import { BLANK, closingRun, englishBreak, glueArticles, tailStart } from '../review/index.ts';
 
-// Obsidian 渲染出來的卡片內容的後處理（D-145）：打字卡的空格、中文後面的英文換行、冠詞連著下一個字、喇叭接在最後一個字後面。
+// Obsidian 渲染出來的卡片內容的後處理（D-145）：打字卡的空格、中文後面的英文換行、冠詞連著下一個字、空格後面的標點不換到下一行、喇叭接在最後一個字後面。
 // 只改一般的 HTML 文字；圖、SVG、公式、嵌入、程式碼與填空、空格自己的內容一律不動（Codex 審查 F3）。
 // 開發命令 md-cases 用 Obsidian 真的渲染器跑這些情況（Node 沒有 DOM），結果檔看 checks。
 
@@ -31,10 +31,11 @@ function guarded(node: Node, root: Node): boolean {
 const blockOf = (node: Node, container: HTMLElement): Element => node.parentElement?.closest(BLOCK) ?? container;
 
 /**
- * Markdown.tsx 渲染完的全部處理（md-cases 也用它）：填空題的 <mark> 換成空格、打字卡第一處 ＿＿ 換成線、英文卡的冠詞、
+ * Markdown.tsx 渲染完的全部處理（md-cases 也用它）：填空題的 <mark> 換成空格、打字卡第一處 ＿＿ 換成線、英文卡的冠詞、空格連著後面的標點、
  * 喇叭那一格。回傳放線的那一格（找不到 ＿＿ 或不是打字卡時是 null）與喇叭那一格。
  */
 export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed'; lines: number; english: boolean }): { slot: HTMLElement | null; tail: HTMLElement } {
+  const blanks: HTMLElement[] = [];
   if (options.mode === 'cloze') {
     for (const mark of Array.from(container.querySelectorAll('mark'))) {
       if (guarded(mark, container)) continue;
@@ -45,11 +46,31 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
       answer.textContent = mark.textContent;
       blank.append(answer);
       mark.replaceWith(blank);
+      blanks.push(blank);
     }
   }
   const slot = options.mode === 'typed' ? insertLines(container, options.lines) : null;
+  if (slot) blanks.push(slot);
   if (options.english) glueText(container);
+  blanks.forEach(glueClosing);
   return { slot, tail: attachTail(container) };
+}
+
+/**
+ * 空格和緊接在後面的標點包在一起（.ec-glue，不換行）：「有 攪拌 ，」的逗號不會被換到下一行開頭（backlog 技術債）。
+ * 中間沒有可以斷行的地方，不靠各瀏覽器怎麼判斷空格和標點的交界能不能斷行（Chromium 會斷，md-cases 量得到）。
+ * 只看同一層緊接的文字（==…== 與 ＿＿ 後面直接寫的標點）；中間有空白的不包。最後是標點時，喇叭那一格也在裡面（attachTail）。
+ */
+function glueClosing(blank: HTMLElement): void {
+  const next = blank.nextSibling;
+  if (!(next instanceof Text)) return;
+  const run = closingRun(next.textContent ?? '');
+  if (!run) return;
+  next.splitText(run);
+  const glue = document.createElement('span');
+  glue.className = 'ec-glue';
+  blank.before(glue);
+  glue.append(blank, next);
 }
 
 /** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線；回傳放線的那一格，找不到 ＿＿ 時是 null。 */
