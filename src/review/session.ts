@@ -1,5 +1,5 @@
 import { baseForm } from '../core/deck/index.ts';
-import { checkTyped } from '../core/study/index.ts';
+import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Pick, Rating } from '../core/study/index.ts';
 import type { State } from '../state/index.ts';
 import { crumb } from './crumb.ts';
@@ -46,7 +46,7 @@ export interface TypedView {
   input: string;
   /** 三步走完（答案出現、可以自評）。 */
   finished: boolean;
-  /** 第 3 步沒有「沒印象」；第 1、2 步有。 */
+  /** 有跳過的按鈕：第 1、2 步是「沒印象」；第 3 步一開始沒有，照打送出一次還是不對之後是「跳過」（D-158）。 */
   canSkip: boolean;
 }
 
@@ -116,7 +116,7 @@ export interface Session {
   input(text: string): void;
   /** 「確認」（打字卡）。 */
   submit(): void;
-  /** 「沒印象」按鈕（打字卡第 1、2 步）。 */
+  /** 「沒印象」按鈕（打字卡第 1、2 步）；第 3 步照打錯過一次之後是「跳過」：這張走完，照平常自評，不另寫紀錄（D-158）。 */
   skip(): void;
   /** 自評；回看時是改評分。回傳有沒有真的算數（0.3 秒內、不能按的評分不算）。 */
   rate(rating: Rating): boolean;
@@ -159,16 +159,16 @@ interface Current {
   shown: number;
 }
 
-const normalize = (text: string): string => text.trim().toLowerCase();
-
-/** 打字卡的答案與原形：原形是 null、或等於某一個答案（不分大小寫）時跳過第 2 步（D-121）。 */
+/** 打字卡的答案與原形：原形是 null、或和某一個答案比對起來一樣（checkTyped 的規則，D-158）時跳過第 2 步（D-121）。 */
 function hintOf(card: Card): string | null {
   const answers = card.prompt.kind === 'qa' ? card.prompt.typed ?? [] : [];
   const base = baseForm(card.target);
-  if (base === null || answers.some(answer => normalize(answer) === normalize(base))) return null;
+  if (base === null || answers.some(answer => typedKey(answer) === typedKey(base))) return null;
   return base;
 }
 const answersOf = (card: Card): readonly string[] => card.prompt.kind === 'qa' && card.prompt.typed ? card.prompt.typed : [];
+/** 學生打的字對中的那一個答案；沒對中是 undefined。 */
+const matchOf = (card: Card, text: string): string | undefined => answersOf(card).find(answer => typedKey(answer) === typedKey(text));
 /** 能按的自評（D-066、D-116、D-121）：拼對只能記住了／太簡單；拼錯只能差一點／沒印象；按「沒印象」只剩沒印象。 */
 export function allowedFor(first: StepResult | null): readonly Rating[] {
   if (first === null) return RATINGS;
@@ -347,14 +347,15 @@ export function createSession(options: SessionOptions): Session {
     if (typed.step === 3) {
       if (!text.trim()) return;
       typed.live = copying(text, typed.copy ?? typed.answer);
-      // 照打任何一個答案都能結束；線上寫學生照打的那一個（拼對時寫對中的那一個，W6 §3-4）。
-      if (checkTyped(card.prompt, text)) finish(typed, card, answers.find(answer => normalize(answer) === normalize(text)) ?? typed.answer, false);
+      // 照打任何一個答案都能結束；線上寫學生照打的那一個（拼對時寫對中的那一個，W6 §3-4）。還是不對就可以跳過（D-158）。
+      if (checkTyped(card.prompt, text)) finish(typed, card, matchOf(card, text) ?? typed.answer, false);
+      else typed.canSkip = true;
       notify();
       return;
     }
     if (!text.trim()) return;
     const ok = checkTyped(card.prompt, text);
-    const matched = answers.find(answer => normalize(answer) === normalize(text)) ?? answers[0] ?? '';
+    const matched = matchOf(card, text) ?? answers[0] ?? '';
     if (typed.step === 1) {
       if (ok) { typed.first = 'right'; finish(typed, card, matched, false); }
       else {
@@ -374,7 +375,14 @@ export function createSession(options: SessionOptions): Session {
   function skip(): void {
     if (!current?.typed || current.typed.finished || viewing !== null) return;
     const { card, typed } = current;
-    if (typed.step === 3) return;
+    if (typed.step === 3) {
+      // 跳過照打（D-158）：線上寫照打的那一個；答案進第 3 步時已經念過，不再念。
+      if (!typed.canSkip) return;
+      spoken();
+      finish(typed, card, typed.copy ?? typed.answer, false);
+      notify();
+      return;
+    }
     spoken();
     const text = typed.input;
     if (typed.step === 1) {

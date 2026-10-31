@@ -335,7 +335,7 @@ void test('T11 入口排序：考試範圍的先、剩比較多的先、學業�
   assert.deepEqual(none.subjects.map(row => row.inExam), [false, false, false, false]);
 });
 
-void test('T12 打字卡：去掉頭尾空白、不分大小寫，其餘完全相同', () => {
+void test('T12 打字卡：去掉頭尾空白、不分大小寫、連續的空白當成一個（D-158），其餘完全相同', () => {
   const deck = deckEntry(ENGLISH, { 科目: '英文' }, [
     '- borrow 中翻英 ^z1', '    - 借入 :: borrow', '- look after 中翻英 ^z2', '    - 照顧 :: look after',
     '- borrow 英翻中 ^e1', '    - borrow :: 借入', '- after 中翻英 ^z3', '    - ==after== 之後',
@@ -350,17 +350,48 @@ void test('T12 打字卡：去掉頭尾空白、不分大小寫，其餘完全�
   assert.equal(checkTyped(prompt('z1'), 'borow'), false);
   assert.equal(checkTyped(prompt('z1'), 'borrow.'), false);
   assert.equal(checkTyped(prompt('z2'), 'Look After'), true);
-  assert.equal(checkTyped(prompt('z2'), 'look  after'), false);
+  assert.equal(checkTyped(prompt('z2'), 'look  after'), true);
   assert.throws(() => checkTyped(prompt('e1'), 'borrow'), TypeError);
   assert.throws(() => checkTyped(prompt('z3'), 'after'), TypeError);
   // R3（D-122）：對中任何一個答案就算對；比對規則每一個都相同。
   assert.equal(checkTyped(prompt('z4'), 'made up his mind'), true);
   assert.equal(checkTyped(prompt('z4'), ' Made His Mind Up '), true);
-  assert.equal(checkTyped(prompt('z4'), 'made his mind  up'), false);
+  assert.equal(checkTyped(prompt('z4'), 'made his mind  up'), true);
   assert.equal(checkTyped(prompt('z4'), 'decided'), false);
   const state = input([deck], log(), at('10-24'));
   const typed = card(nextCard(planToday(state), state, { subject: '英文' }));
   assert.deepEqual([typed.lt, typed.typed, typed.isNew], ['z2', true, true]);
+});
+
+// D-158：從網頁或 PDF 複製的答案常帶彎引號與不換行空白；只換列出的字元，其他照舊算錯。
+void test('T12 D-158 打字卡：彎的單引號當成 \'，空白字元與 Tab 當成空白；ʼ、＇、雙引號、零寬字元、全形字母、撇號與空白的有無照舊算錯', () => {
+  const deck = deckEntry(ENGLISH, { 科目: '英文' }, [
+    '- o’clock 中翻英 ^q1', '    - 現在七點。It is seven ＿＿. :: o’clock',
+    "- o'clock 中翻英 ^q2", "    - 現在七點。It is seven ＿＿. :: o'clock",
+    '- look after 中翻英 ^q3', '    - 照顧 :: look after',
+    "- make up one's mind 中翻英 ^q4", '    - 下定決心 :: made up his mind | made his mind up',
+    "- don't 中翻英 ^q5", "    - 不要 :: don't",
+    '- a part 中翻英 ^q6', '    - 一部分 :: a part',
+    '- apart 中翻英 ^q7', '    - 分開 :: apart',
+  ]);
+  const prompt = (id: string): Prompt => {
+    const found = deck.deck.targets.find(target => target.id === id);
+    assert.ok(found);
+    return found.prompts[0];
+  };
+  assert.equal(checkTyped(prompt('q1'), "o'clock"), true, '答案是 ’，打 \'');
+  assert.equal(checkTyped(prompt('q1'), 'o’clock'), true);
+  assert.equal(checkTyped(prompt('q2'), 'o’clock'), true, '答案是 \'，打 ’');
+  assert.equal(checkTyped(prompt('q2'), 'o‘clock'), true, '‘ 也當成 \'');
+  assert.equal(checkTyped(prompt('q3'), 'look after'), true, '答案中間是不換行空白');
+  assert.equal(checkTyped(prompt('q3'), 'Look　After'), true, '全形空白');
+  assert.equal(checkTyped(prompt('q3'), 'look\tafter'), true, 'Tab');
+  assert.equal(checkTyped(prompt('q3'), 'look   after'), true, '混在一起的空白也當成一個');
+  assert.equal(checkTyped(prompt('q4'), 'made his mind up'), true, '第二個答案也適用');
+  for (const [id, text] of [
+    ['q2', 'oʼclock'], ['q2', 'o＇clock'], ['q2', 'o"clock'], ['q2', 'o“clock'], ['q2', "o'​clock"], ['q2', "ｏ'clock"],
+    ['q5', 'dont'], ['q6', 'apart'], ['q7', 'a part'], ['q3', 'lookafter'],
+  ] as const) assert.equal(checkTyped(prompt(id), text), false, `${id} 打 ${text}`);
 });
 
 void test('T13 固定性：卡組與紀錄來源的順序不影響結果，planToday 不改輸入', () => {

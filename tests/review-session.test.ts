@@ -224,6 +224,95 @@ void test('R5 原形等於答案（borrow）或去掉括號後等於答案（lig
   assert.ok(h.log()[2].endsWith(',"typed":"skip","retry":"not-needed"}'), h.log()[2]);
 });
 
+// D-158：答案從網頁或 PDF 複製來，帶著彎引號或不換行空白；q1 的名稱是 '、答案是 ’，q2 反過來。
+const CURLY = 'Essence Cards/國二上/英文/L2（卡片）.md';
+const curlyText = [
+  '---', '年級學期: 國二上', '科目: 英文', '單元: L2', '---',
+  "- o'clock 中翻英 ^q1", '    - 現在七點。It is seven ＿＿. :: o’clock',
+  '- o’clock 中翻英 ^q2', "    - 現在七點。It is seven ＿＿. :: o'clock",
+  '- look after 中翻英 ^q3', '    - 照顧 :: look after',
+  '',
+].join('\n');
+
+void test('R5 D-158 彎引號與空白字元：第 1 步就結束、typed: right，線上寫答案原本的字', async t => {
+  const h = await setup(t, { [CURLY]: curlyText });
+  const s = await h.open({ subject: '英文' });
+  for (const [id, text, answer] of [['q1', "o'clock", 'o’clock'], ['q2', 'O’Clock', "o'clock"], ['q3', 'look  after', 'look after']]) {
+    assert.equal(lt(s.view()), id);
+    s.input(text); s.submit();
+    const view = typed(s.view());
+    assert.deepEqual([view.finished, view.first, view.second, view.answer, view.step], [true, 'right', null, answer, 1], `${id} 打 ${text}`);
+    assert.deepEqual(card(s.view()).allowed, ['good', 'easy']);
+    await rateLater(h, s, 'good');
+    assert.deepEqual(last(h.log()), { ...last(h.log()), lt: id, r: 'good', typed: 'right' });
+  }
+});
+
+void test('R5 D-158 原形和答案只差彎引號：第 1 步拼錯直接第 3 步，retry: not-needed；照打 \' 也能結束', async t => {
+  const h = await setup(t, { [CURLY]: curlyText });
+  const s = await h.open({ subject: '英文' });
+  s.input('oclock'); s.submit();
+  const view = typed(s.view());
+  assert.deepEqual([view.step, view.first, view.second, view.hint, view.copy], [3, 'wrong', 'not-needed', null, 'o’clock']);
+  s.input("o'clock");
+  assert.equal(typed(s.view()).live?.typed.some(l => l.bad), false, '照打的 \' 不標出');
+  s.submit();
+  assert.equal(typed(s.view()).finished, true);
+  await rateLater(h, s, 'near');
+  assert.ok(h.log()[0].endsWith(',"typed":"wrong","retry":"not-needed"}'), h.log()[0]);
+});
+
+void test('R5 D-158 照打送出一次還是不對才能跳過：按了這張結束，照平常選評分，紀錄和照打完一樣', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  s.input('made up my mind'); s.submit();
+  s.input('made up his mand'); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).canSkip], [3, false], '剛進第 3 步不能跳過');
+  s.skip();
+  assert.equal(typed(s.view()).finished, false);
+  s.input('   '); s.submit();
+  assert.equal(typed(s.view()).canSkip, false, '空白送出不算一次');
+  s.input('made up his mnd'); s.submit();
+  let view = typed(s.view());
+  assert.deepEqual([view.step, view.finished, view.canSkip], [3, false, true], '照打錯一次之後可以跳過');
+  assert.deepEqual(card(s.view()).allowed, []);
+  s.skip();
+  view = typed(s.view());
+  assert.deepEqual([view.step, view.finished, view.canSkip, view.answer, view.live, view.first, view.second], [3, true, false, 'made up his mind', null, 'wrong', 'wrong']);
+  assert.equal(card(s.view()).autoRead, null, '進第 3 步時已經念過答案，跳過不再念');
+  assert.deepEqual(card(s.view()).allowed, ['miss', 'near']);
+  s.input('made up his mind'); s.submit();
+  assert.equal(typed(s.view()).input, 'made up his mnd', '走完之後不再收輸入');
+  await rateLater(h, s, 'near');
+  assert.deepEqual(h.log().length, 1);
+  const entry = JSON.parse(h.log()[0]) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(entry).sort(), ['lt', 'r', 'retry', 't', 'typed', 'v'], '跳過不另寫進紀錄');
+  assert.deepEqual([entry.typed, entry.retry], ['wrong', 'wrong']);
+  // 第 1 步按「沒印象」的照打也一樣：跳過後只剩沒印象。
+  assert.equal(lt(s.view()), 'z2');
+  s.skip(); s.input('borrow'); s.submit();
+  await rateLater(h, s, 'miss');
+  assert.equal(lt(s.view()), 'z3');
+  s.skip(); s.input('lite'); s.submit();
+  s.skip();
+  assert.deepEqual([typed(s.view()).finished, card(s.view()).allowed], [true, ['miss']]);
+  assert.equal(s.rateOnly(), true);
+  await h.state.flush();
+  assert.ok(h.log()[2].endsWith(',"typed":"skip","retry":"not-needed"}'), h.log()[2]);
+});
+
+void test('R5 D-158 第 2 步多按的空白與不換行空白不算錯：retry: right，能選的評分照第 1 步', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  s.input('made up my mind'); s.submit();
+  s.input('made  up his mind'); s.submit();
+  const view = typed(s.view());
+  assert.deepEqual([view.finished, view.first, view.second, view.answer], [true, 'wrong', 'right', 'made up his mind']);
+  assert.deepEqual(card(s.view()).allowed, ['miss', 'near']);
+  await rateLater(h, s, 'near');
+  assert.ok(h.log()[0].includes('"typed":"wrong","retry":"right"'), h.log()[0]);
+});
+
 // W6 §5 R5 最後一列（格式查核 F6）：只用 Session 的公開介面寫不出非法組合。
 void test('R5 寫不出非法組合：沒有 typed 就沒有 retry；typed: right 沒有 retry；typed: wrong／skip 一定有 retry', async t => {
   const h = await setup(t);

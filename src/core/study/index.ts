@@ -4,6 +4,7 @@ export { LOG_FOLDER, logPath, createLogWriter } from './log.ts';
 export { appendLine, isLogPath, mergeHistory, readHistory } from './history.ts';
 export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';
 export { planToday } from './plan.ts';
-export { nextCard, progress, checkTyped } from './session.ts';
+export { nextCard, progress, checkTyped, typedKey, typedUnits } from './session.ts';
 export type { Rating, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, LogWriter, History, Memory } from './types.ts';
+export type { TypedUnit } from './session.ts';
 export type { DeckEntry, Settings, ExamScope, TodayInput, Lane, QueueItem, Today, Pick, Card, Next, SubjectRow, Progress } from './types.ts';
