@@ -116,7 +116,7 @@ void test('發布前比較：開兩個 worktree 各跑轉接器；同一個 comm
   const install = (dir: string): Promise<void> => symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
   const same = await compareVersions({ backup, old: first, new: first, root: repo, install, now: () => NOW });
   assert.deepEqual([same.old.result.ok ? 'ok' : same.old.result.reason, same.comparable, same.differences], ['ok', true, []]);
-  assert.match(same.old.build, /^0\.1\.0\+[0-9a-f]{7,}$/);
+  assert.match(same.old.build, /^0\.2\.0\+[0-9a-f]{7,}$/);
   const text = await readFile(same.report, 'utf8');
   assert.match(text, new RegExp('輸入的 SHA-256：' + same.zip));
   assert.match(text, /限制：考試範圍（`exam`）目前是 null/);
