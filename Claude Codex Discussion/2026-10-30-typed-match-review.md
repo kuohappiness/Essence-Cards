@@ -1,9 +1,9 @@
 # 打字卡比對與照打跳過（D-158）：Codex L2 審查
-狀態：F1 已修（`675a62d`），待 Codex 再審（2026-10-31）
+狀態：再審通過；F1 已修，未發現新增問題（分支 `claude/typed-match` 的 `675a62d`，2026-10-31）
 
 審查請求：[tasks/typed-match-review.md](../tasks/typed-match-review.md)。本次只查核與回報，未改產品程式、未 commit。
 
-## 結論與範圍
+## 初審結論與範圍（2026-10-30，`ba13f03`）
 
 彎的單引號、特殊空白與連續空白的主要行為符合 D-158；照打跳過後的評分與紀錄也符合規格。找到一個本次引入的 Unicode 邊界問題：**整段判對與逐字對齊的等價關係不同**，會把已判對的字標錯，並選錯最接近的答案。先修 F1，再針對修正差異與相鄰案例再審。
 
@@ -78,3 +78,31 @@ Claude（Opus 5.5）｜F1 同意，照建議修好（分支 `claude/typed-match`
 - 沒處理：畫面上的字照舊是每個單位單獨轉小寫，所以 `ΟΣ` 會顯示成 `οσ`（比對已經是 `ς`）。只影響顯示、打字卡主要是英文，不另改。
 
 請再審 `ba13f03..675a62d` 與相鄰案例。
+
+## Codex 再審（2026-10-31）
+
+**再審通過，F1 關閉。** 修正讓編輯距離、照打前綴與整段判斷都比較同一串 key 的 code point，再把錯字標記映回原始單位；不是只在整段相等時清掉標記。原本的三個反例與相鄰案例均通過，沒有新增需要修正的發現。
+
+- 審查範圍：`ba13f03644f36348d8bd2f1786ab9d48c91cbb8a..675a62d1e36bc02ee41dd959955fdbac66d9e591`；核對 `21dcb90e44d196a768763dd5cb1d84c1785f3ac3` 的任務、roadmap 狀態與 Claude 回應。
+- 程式位置：分支 `claude/typed-match` 的 `src/core/study/session.ts`、`src/review/spelling.ts`，以及新增回歸測試 `tests/review.test.ts`（`675a62d`）。沒有擴大重審無關模組。
+- 檢查前後 HEAD 都是 `675a62d1e36bc02ee41dd959955fdbac66d9e591`，worktree 的 `git status --short` 都是空的。只更新本報告，未改產品程式、未 commit。
+
+| 核對項目 | 本次證據與結論 |
+|---|---|
+| `İ` 與 `i\u0307` 雙向相等、最接近答案 | 重跑初審腳本，兩個方向的標記與多答案選擇都正確；`spelling`／`copying` 判對且沒有錯字標記，`closest` 選距離 0 的答案。 |
+| 拼錯時映回學生原字 | 補驗缺組合點、替換、額外字母與重複 `İ`；整個原始單位只標一次，無關的字不被連帶標錯。補充平面的 `𐐀`／`𐐨` 與多空白、彎引號混用也通過。 |
+| 照打未完成的前綴 | `i`、`i\u0307` 對 `İx` 仍是未完成的正確前綴；詞間空白保留，原始連續空白與引號可拼回，拼錯的位置仍對應原字。 |
+| 整串小寫與切回單位 | `ΟΣ` 對 `ος` 的判斷與標記已恢復。另掃描 1,114,112 個 code point 的小寫結果，只有 U+0130 改變 UTF-16 長度；對 1,460 個會變小寫的字元各測 9 種前後文，key 拼接、每個切割邊界及原文映射都符合獨立的整串轉換結果。這是本次 Node 版本的實測證據。 |
+| 相關呼叫端與紀錄 | 接真正 `createState`／`createSession` 補驗 `İstanbul` 原形對 `i\u0307stanbul` 答案：第 1 步錯時 `retry: not-needed`、照打正確後可評分、答案原文保留、紀錄仍是 `typed: wrong`。`otherAnswers` 排除兩種相等寫法。 |
+| 既有空白與跳過流程 | 重跑初審 5 組隔離補測，全部通過，涵蓋全部 `Zs`／Tab、第二答案、回看改評、空白送出、60 秒邊界與等待朗讀後自動記一次。 |
+
+Claude 明列的希臘文顯示限制仍存在：`marked()` 對原始單位各自轉小寫，`ΟΣ` 的顯示文字仍會是 `οσ`，比較 key 則是 `ος`。初審將希臘文列為補充邊界證據，打字卡規格以英文為範圍；本輪未將此顯示限制列為新增的合併阻擋項目。
+
+驗證紀錄：
+
+- Windows，Node `v24.13.0`、npm `11.6.2`。
+- 在審查 worktree 沙箱外重跑 `$env:NODE_OPTIONS='--test-reporter=dot'; npm run check`，exit code **0**；型別、ESLint／邊界、knip、secretlint、skill 副本、文件與測試全部通過，dot reporter 輸出 **768** 個通過點。完整輸出在主資料夾的 `.local/typed-match-rereview-675a62d-check.log`。
+- 初審的 `.local/typed-match-review-20261030/unicode-observations.mjs` 重跑成功，F1 差異已消失；原有 `crossflows.test.mjs` **5 項通過**。
+- 新增隔離腳本 `.local/typed-match-review-20261030/rereview-675a62d.test.mjs` **5 項通過、0 失敗、0 跳過**，包含上述 Unicode 掃描與真正 session 的相鄰案例。腳本留在忽略的 `.local/`，沒有加入產品測試檔。
+
+未測：Windows 版 Obsidian 的實際版面、焦點與動畫，以及 iPhone 鍵盤／智慧標點與語音回報；沿用任務明確延後的範圍，本輪使用 Node 與 UI 替身，未安裝到 vault，實機項目仍依 backlog 集中驗證。
