@@ -734,3 +734,26 @@ void test('D1 saved、stale、受阻照原本的意思：有寫法有問題的�
     assert.deepEqual(notified, expected, result.kind);
   }
 });
+
+// Codex L2 的 F1：按下存檔、補好 ID，寫進磁碟（view.save）之前家長又改了答案。通知照採用的內容：寫對改成寫錯只列問題，
+// 寫錯改成寫對算新增。
+void test('D1 F1 寫進磁碟之前改了答案：通知照採用的內容，不把寫錯的報成已加入', async t => {
+  const valid = '- 能說明 C\n    - QC :: AC\n', invalid = '- 能說明 C\n    - QC ::\n';
+  for (const [before, after, expected] of [
+    [valid, invalid, ['筆記已自動儲存；有 1 個學習目標寫法有問題，暫時不會出題\n第 2 行〈能說明 C〉：' + NO_ANSWER]],
+    [invalid, valid, ['1 個學習目標已加入複習']],
+  ] as const) {
+    const h = await blockedSetup(t, before, 'none');
+    const write = h.view.save;
+    let begin = () => {}, release = () => {};
+    const started = new Promise<void>(resolve => { begin = resolve; });
+    h.view.save = () => { begin(); return new Promise<void>(resolve => { release = () => { void write().then(resolve); }; }); };
+    const saving = h.saver.save(h.view);
+    await started;
+    h.view.value = h.view.value.replace(before.split('\n')[1], after.split('\n')[1]);
+    release();
+    await saving;
+    assert.deepEqual(h.notices, expected, after === invalid ? '寫對改成寫錯' : '寫錯改成寫對');
+    assert.equal(ids(h.view.value).length, 1);
+  }
+});

@@ -767,3 +767,25 @@ for (const where of ['apply', 'persist'] as const) void test(`L2 R2 續：${wher
   assert.equal(h.texts.get(P), Ca);
   assert.equal(editor.value, Ca);
 });
+
+// Codex L2 的 F1（tasks/malformed-targets-review.md、技術債 D1）：補好 ID、寫進磁碟之前家長又改了答案，核對讀取照「預期的變更都在」採用；
+// 新增的數照實際採用的內容算（寫錯的不算加入複習），和 deckStatus、今天的份一致，不照準備時的文字。兩個方向都測。
+const NO_ANSWER_C = '- 能說明 C\n    - QC ::\n';
+for (const [before, after, added] of [[C, NO_ANSWER_C, 0], [NO_ANSWER_C, C, 1]] as const) {
+  void test(`F1 寫入途中改了答案（${added ? '寫錯改成寫對' : '寫對改成寫錯'}）：新增的數照採用的內容算，和 deckStatus、今天的份一致`, async t => {
+    const h = await setup(t, { [P]: before });
+    const editor = createMemoryEditor(h, P, before);
+    const held = editor.hold();
+    const saving = h.state.save(editor);
+    await held.started;
+    assert.equal(editor.value, before.replace('能說明 C', '能說明 C ^aaaaaa'), '已補上 ID、還沒寫進磁碟');
+    editor.value = after.replace('能說明 C', '能說明 C ^aaaaaa');
+    held.release();
+    assert.deepEqual(await saving, { kind: 'done', added });
+    assert.equal(h.texts.get(P), editor.value);
+    assert.equal(h.state.deckStatus(P).malformed.length, 1 - added);
+    assert.deepEqual(h.state.today().share.map(item => item.lt), added ? ['aaaaaa'] : []);
+    h.clean();
+    h.samePlan();
+  });
+}
