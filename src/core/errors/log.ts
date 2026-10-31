@@ -83,7 +83,8 @@ function describe(value: unknown): string {
  * stack 裡這個外掛自己的那幾層（去掉前後空白）；沒有 stack 或讀不到時是空的。不拋錯。
  * V8 的 stack 開頭是 `名稱: 訊息`（訊息可能好幾行），先去掉，訊息裡的字不會被當成 frame；WebKit 的 stack 沒有這一段。
  * 開頭確認不了時（Codex 再審的 F2：name 讀了會拋錯、toString 被改、名稱或訊息在 stack 產生後改過），找得到訊息就去掉到訊息
- * 結尾為止；連訊息都找不到、而 stack 是 V8 的寫法，就分不出哪幾行是訊息：寧可一層都不算，也不收進別人的錯。
+ * 結尾為止（訊息要從第一行開始，標頭在第一行；Codex 第三輪的 G1：不在 frame 裡找）；連訊息都找不到，就分不出哪幾行是訊息：
+ * 寧可一層都不算，也不收進別人的錯。這個退路只用在 V8 的寫法：WebKit 的 stack 本來就沒有訊息那一段，照原樣只認 frame。
  */
 function ownFrames(error: unknown): string[] {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return [];
@@ -92,10 +93,12 @@ function ownFrames(error: unknown): string[] {
   const frames = (stack: string): string[] => stack.split('\n').map(line => line.trim()).filter(line => OWN_FRAME.test(line));
   const header = attempt(() => Error.prototype.toString.call(error));
   if (header && raw.startsWith(header)) return frames(raw.slice(header.length));
+  if (!V8_FRAME.test(raw)) return frames(raw);
   const message = attempt(() => (error as { message?: unknown }).message);
   const at = typeof message === 'string' && message ? raw.indexOf(message) : -1;
-  if (at >= 0) return frames(raw.slice(at + (message as string).length));
-  return V8_FRAME.test(raw) ? [] : frames(raw);
+  const firstLine = raw.indexOf('\n');
+  if (at >= 0 && (firstLine < 0 || at < firstLine)) return frames(raw.slice(at + (message as string).length));
+  return [];
 }
 
 /** window 的 error 與 unhandledrejection 只收這個（D-155 第 2 點的補網）：stack 裡有這個外掛自己的程式位置。 */

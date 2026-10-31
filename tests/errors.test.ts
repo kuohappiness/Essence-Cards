@@ -400,3 +400,21 @@ void test('§1 F2 訊息的範圍確認不了時不誤收；name 拋錯但找得
   webkit.stack = 'onload@plugin:essence-cards:1:2';
   assert.equal(hasOwnFrame(webkit), true, 'WebKit');
 });
+
+// Codex 第三輪的 G1：WebKit 的 stack 沒有訊息那一段；訊息剛好是 frame 位址的一部分時，不能拿來切 stack。
+// V8 的訊息只從第一行開始找（標頭在第一行），也不會在 frame 裡找到。
+void test('§1 G1 訊息是 frame 位址的一部分：WebKit 照樣留下自己的 frame；V8 也照樣留', () => {
+  for (const message of ['1:2', 'essence-cards', 'unrelated']) {
+    const webkit = Error(message);
+    webkit.stack = 'load@plugin:essence-cards:1:2';
+    assert.equal(hasOwnFrame(webkit), true, 'WebKit：' + message);
+  }
+  // V8：標頭對不上（名稱讀了會拋錯），訊息剛好是位址的一部分；第一行找得到訊息，後面的 frame 照樣留。
+  const v8 = Object.defineProperty(Error('1:2'), 'name', { get() { throw Error('name-unavailable'); } });
+  v8.stack = 'Error: 1:2\n    at load (plugin:essence-cards:1:2)';
+  assert.equal(hasOwnFrame(v8), true, 'V8');
+  // V8：訊息只出現在 frame 裡（第一行沒有）：分不出訊息範圍，一層都不算（F2 的取捨）。
+  const inFrame = Object.defineProperty(Error('essence-cards:1'), 'name', { get() { throw Error('name-unavailable'); } });
+  inFrame.stack = 'Error: changed\n    at load (plugin:essence-cards:1:2)';
+  assert.equal(hasOwnFrame(inFrame), false, 'V8 訊息只在 frame 裡');
+});
