@@ -1,17 +1,27 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { EditorHandle, IdIssue, IdIssueKind, State, WriteBlock, WriteResult } from '../state/index.ts';
+import type { EditorHandle, IdIssue, IdIssueKind, Malformed, State, WriteBlock, WriteResult } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
 // 存檔按鈕、待處理問題的小視窗與離開筆記時的備援（W5 §8-6、D-134），只在電腦接上。
 // 家長不必知道 ID 存在：文字只說「加入複習」「進度連結」。
 
 export const TIPS = {
-  done: '筆記已自動儲存；學習目標都已加入複習',
+  // 不說「都已加入複習」：還沒到期、別篇需要新版、草稿、暫停的目標也不出題，按鈕不能承諾（技術債 D1）。
+  done: '筆記已自動儲存；沒有發現需要處理的地方',
   missing: (n: number) => `筆記已自動儲存；有 ${n} 個學習目標尚未加入複習`,
   issues: (n: number) => `有 ${n} 個學習目標的進度連結需要處理`,
+  /** 寫錯的不算（技術債 D1）。 */
   added: (n: number) => `${n} 個學習目標已加入複習`,
+  /** 寫法有問題、暫時不會出題的目標（技術債 D1）；按鈕說明與存檔後的通知都用。 */
+  malformed: (n: number) => `筆記已自動儲存；有 ${n} 個學習目標寫法有問題，暫時不會出題`,
+  /** 存檔後新增的數和寫法有問題的合成一次通知（技術債 D1）。 */
+  addedMalformed: (added: number, n: number) => `${added} 個學習目標已加入複習；有 ${n} 個學習目標寫法有問題，暫時不會出題`,
+  /** 通知裡一個寫法有問題的目標；line 從 1 算。 */
+  problem: (line: number, name: string, reason: string) => `第 ${line} 行〈${name}〉：${reason}`,
+  /** 通知只列前幾個，其餘的數。 */
+  more: (n: number) => `另有 ${n} 個`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
   failed: '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔',
   /** 受阻：還沒讀完或有檔案讀不到（D-154 第 2 點）；按鈕說明與小視窗也用這一句。 */
@@ -28,6 +38,10 @@ export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
 };
 /** 離開筆記之後等多久才補（毫秒）。 */
 const LEAVE_DELAY = 1000;
+/** 存檔後的通知最多列幾個寫法有問題的目標（介面建議，技術債 D1）。 */
+const SHOWN = 3;
+/** 通知裡的短句，依問題種類（不比對中文訊息）；沒列的用解析時那一句。 */
+const SHORT: Partial<Record<Malformed['code'], string>> = { 'typed-answer-invalid': '中翻英的答案只能是英文單字或片語' };
 export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號' };
 
 export interface SaveHost {
@@ -75,11 +89,24 @@ const BLOCKED: Partial<Record<WriteBlock, string>> = { loading: TIPS.blocked, un
 const blockedTip = (result: WriteResult): string | null => result.kind === 'blocked' && result.reason !== 'needs-update' ? BLOCKED[result.reason] ?? null : null;
 
 /**
- * 存檔結果的提示；text 是按下時編輯器裡的文字。需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。
- * 受阻但目標都有 ID、unchanged、saved 與其他 blocked 不提示。
+ * done、unchanged 的提示（技術債 D1）：新增的數（寫錯的不算）和寫法有問題的目標合成一次，問題照行號列前 SHOWN 個（行號、名稱、原因），
+ * 其餘寫「另有 N 個」。都沒有時不提示。
  */
-function saveTip(result: WriteResult, text: string): string | null {
-  if (result.kind === 'done') return result.added ? TIPS.added(result.added) : null;
+function doneTip(added: number, malformed: readonly Malformed[]): string | null {
+  if (!malformed.length) return added ? TIPS.added(added) : null;
+  const head = added ? TIPS.addedMalformed(added, malformed.length) : TIPS.malformed(malformed.length);
+  const lines = malformed.slice(0, SHOWN).map(target => TIPS.problem(target.at + 1, target.name, SHORT[target.code] ?? target.reason));
+  if (malformed.length > SHOWN) lines.push(TIPS.more(malformed.length - SHOWN));
+  return [head, ...lines].join('\n');
+}
+
+/**
+ * 存檔結果的提示；text 是按下時編輯器裡的文字，malformed 是存檔之後 state 看到的寫法有問題的目標。done、unchanged 照 doneTip；
+ * 需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。受阻但目標都有 ID、saved 與其他 blocked 不提示。
+ */
+function saveTip(result: WriteResult, text: string, malformed: readonly Malformed[]): string | null {
+  if (result.kind === 'done') return doneTip(result.added, malformed);
+  if (result.kind === 'unchanged') return doneTip(0, malformed);
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
   if (result.kind === 'blocked' && result.reason === 'needs-update') return TIPS.needsUpdate;
@@ -88,31 +115,42 @@ function saveTip(result: WriteResult, text: string): string | null {
   return null;
 }
 
-/** 一篇卡組按鈕的樣子：需要新版、沒有要做的、有目標還沒有 ID、有待處理的問題。 */
-function buttonLook(status: { missing: number; issues: IdIssue[]; needsUpdate?: true }): { kind: 'needs-update' | 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+const KINDS = ['needs-update', 'done', 'missing', 'issues', 'malformed'] as const;
+/**
+ * 一篇卡組按鈕的樣子：需要新版、有待處理的問題、有目標寫法有問題（技術債 D1：按下去補 ID 並在通知列出問題，所以排在沒有 ID 前面）、
+ * 有目標還沒有 ID、沒有要做的。
+ */
+function buttonLook(status: { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true }): { kind: (typeof KINDS)[number]; icon: string; tip: string } {
   if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
+  if (status.malformed.length) return { kind: 'malformed', icon: 'alert-triangle', tip: TIPS.malformed(status.malformed.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
 }
 
+/** 外掛的存活（技術債 W2）：卸載後是 false；開著的小視窗記在 modals，卸載時關掉。 */
+interface Life { alive: () => boolean; modals: Set<Modal> }
+
 class IssuesModal extends Modal {
   private readonly host: SaveHost;
   private readonly view: MarkdownView;
+  private readonly life: Life;
   private stop: (() => void) | null = null;
   /** 按下還原或當成新的、結果還沒回來：重畫時按鈕照樣停用，再按不另外排一份（Codex L2 的 R3）。 */
   private waiting = false;
-  constructor(app: App, host: SaveHost, view: MarkdownView) {
+  constructor(app: App, host: SaveHost, view: MarkdownView, life: Life) {
     super(app);
     this.host = host;
     this.view = view;
+    this.life = life;
   }
   onOpen(): void {
+    this.life.modals.add(this);
     // 卡組重讀後問題可能變了（內容改過的問題換成新的物件，舊的不能寫回）：跟著重畫，家長看到的就是現在的內容。
     this.stop = this.host.state()?.onChange(() => { this.render(); }) ?? null;
     this.render();
   }
-  onClose(): void { this.stop?.(); this.stop = null; this.contentEl.empty(); }
+  onClose(): void { this.life.modals.delete(this); this.stop?.(); this.stop = null; this.contentEl.empty(); }
   private render(): void {
     const state = this.host.state(), path = this.view.file?.path;
     const issues = state && path ? state.deckStatus(path).issues : [];
@@ -137,13 +175,15 @@ class IssuesModal extends Modal {
     this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = true; });
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
+      // 外掛已經卸載（小視窗也關了）：不提示（技術債 W2）。
+      if (!this.life.alive()) return;
       // saved：已寫進磁碟、state 還在核對，和按存檔收到 saved 一樣不提示（環節 5 結論第 1 條的 B6）。
       if (result.kind === 'done' || result.kind === 'saved') { this.render(); return; }
       // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
       // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
-      this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue()) ?? TIPS.stale);
+      this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue(), []) ?? TIPS.stale);
       this.close();
-    }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
+    }, (error: unknown) => { this.waiting = false; this.host.onError(error); if (this.life.alive()) this.close(); });
   }
 }
 
@@ -159,6 +199,23 @@ export function wireSave(host: SaveHost): Saver {
   const buttons = new Map<MarkdownView, HTMLElement>();
   /** 上一次知道開著的檔（離開筆記的備援用）；start() 或第一次 layout-change 之前是 null。 */
   let open: Set<string> | null = null;
+
+  /**
+   * 技術債 W2：Obsidian 卸載外掛時不會拿掉 addAction 加的按鈕（Windows 1.14.5 用 URI 的 reload 重現：每重新啟用一次，同一個分頁就多一個，
+   * 舊的說明停在當時、按了沒反應）。卸載時拿掉按鈕、關掉小視窗、取消還沒到期的補 ID；之後晚回來的存檔、小視窗的結果與 ready() 都不碰畫面。
+   */
+  let alive = true;
+  const life: Life = { alive: () => alive, modals: new Set() };
+  /** 離開筆記之後排好、還沒到期的補 ID。 */
+  const timers = new Set<number>();
+  plugin.register(() => {
+    alive = false;
+    for (const id of timers) window.clearTimeout(id);
+    timers.clear();
+    for (const modal of [...life.modals]) modal.close();
+    for (const button of buttons.values()) button.remove();
+    buttons.clear();
+  });
 
   /**
    * 按鈕說明的受阻原因（D-154、D-150）：依 state 目前所知（writeBlock）。已經在等 ready() 的 state 讀完時更新按鈕；
@@ -184,16 +241,24 @@ export function wireSave(host: SaveHost): Saver {
     if (running) return running;
     const text = view.editor.getValue();
     const job = state.save(editorOf(view, path)).then(result => {
-      const tip = saveTip(result, text);
+      // 卸載之後才回來：不提示、不加回按鈕、不開小視窗（技術債 W2）。
+      if (!alive) return;
+      const tip = saveTip(result, text, state.deckStatus(path).malformed);
       if (tip) host.notify(tip);
       refresh();
-      if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view).open();
-    }).catch(host.onError).finally(() => { saving.delete(path); });
+      if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view, life).open();
+    }).catch(host.onError).finally(() => {
+      saving.delete(path);
+      // 開發命令 save 點按鈕之後等這一筆，確定是這次點擊觸發的存檔結束了（技術債 N1）。
+      host.log?.('存檔結束 ' + path);
+    });
     saving.set(path, job);
     return job;
   }
 
   function refresh(): void {
+    // 卸載之後（例如晚完成的 ready()）不再加回按鈕（技術債 W2）。
+    if (!alive) return;
     const state = host.state();
     const seen = new Set<MarkdownView>();
     for (const leaf of app.workspace.getLeavesOfType('markdown')) {
@@ -215,7 +280,7 @@ export function wireSave(host: SaveHost): Saver {
       }
       setIcon(button, look.icon);
       button.setAttribute('aria-label', tip);
-      for (const kind of ['needs-update', 'done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
+      for (const kind of KINDS) button.toggleClass('is-' + kind, kind === look.kind);
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。
     for (const [view, button] of buttons) if (!seen.has(view)) { button.remove(); buttons.delete(view); }
@@ -246,15 +311,17 @@ export function wireSave(host: SaveHost): Saver {
     const now = openPaths();
     const state = host.state();
     if (open && state) for (const path of open) if (!now.has(path) && isDeckPath(path)) {
-      // 等編輯器把最後打的字存進檔案，再讀檔補；這段時間又打開了就不補。
+      // 等編輯器把最後打的字存進檔案，再讀檔補；這段時間又打開了就不補。卸載時取消（技術債 W2）。
       host.log?.('離開 ' + path);
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
         if (openPaths().has(path)) { host.log?.('又打開了，不補 ' + path); return; }
         host.state()?.fillIds(path).then(changed => {
           // 補完之後 state 怎麼看這一篇（開發命令查備援的時序用）。
           host.log?.('補 ' + path + ' → ' + String(changed) + '；' + JSON.stringify(host.state()?.deckStatus(path)));
         }, host.onError);
       }, LEAVE_DELAY);
+      timers.add(timer);
     }
     open = now;
     refresh();

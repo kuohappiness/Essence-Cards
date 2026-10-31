@@ -1,4 +1,4 @@
-import { MarkdownView, TFile } from 'obsidian';
+import { displayTooltip, MarkdownView, TFile } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
 import { StateEffect, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -8,7 +8,8 @@ import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
 import { leafPath, removeTestPaths } from './dev-events.ts';
-import { keepRendering } from './dev-review.ts';
+import { movedUp } from '../dev/move.ts';
+import { capturePng, keepRendering } from './dev-review.ts';
 import { createObsidianFiles } from './files.ts';
 
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
@@ -123,10 +124,13 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
     }],
     // 縮排之後那一行不是最上層的目標（不再鎖），ID 仍在它自己那一行的最後。
     ['清單縮排（Tab）', () => { select(bLine + 3); key('Tab'); return { ok: /^\s+- 能說明溶解 \^p7q2w8$/m.test(cm.state.doc.toString()) && tokens().join() === 'k3m9x2', note: JSON.stringify(cm.state.doc.toString()) }; }],
+    // 命令要真的執行、那一行真的往上移（技術債 N1）：原本只看 B 那一行還在，命令沒執行也算通過。
     ['上下移動整行（命令 editor:swap-line-up）', () => {
       select(bLine + 3);
-      (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('editor:swap-line-up');
-      return { ok: cm.state.doc.toString().split('\n').includes(B) && tokens().length === 2, note: JSON.stringify(cm.state.doc.toString()) };
+      const before = cm.state.doc.toString();
+      const executed = (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('editor:swap-line-up');
+      const after = cm.state.doc.toString();
+      return { ok: movedUp(executed, before, after, B) && tokens().length === 2, note: '執行：' + String(executed) + '；' + JSON.stringify(after) };
     }],
     ['Undo／Redo', () => {
       select(nameEnd); type('的現象');
@@ -248,10 +252,20 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   // 前一次留下沒關的小視窗先關掉。
   Array.from(document.querySelectorAll('.modal-container')).filter(el => el.querySelector('.essence-cards-issue')).forEach(el => { el.remove(); });
   const button = (view: MarkdownView) => view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
+  /**
+   * 點存檔按鈕，等這次點擊觸發的存檔結束（save.ts 記的「存檔結束」；技術債 N1）：不自己呼叫 save 代替，
+   * 按鈕不在或點了沒有觸發存檔就回傳 false。
+   */
+  const click = async (view: MarkdownView): Promise<boolean> => {
+    const el = button(view), path = view.file?.path, at = host.devLog.events.length;
+    if (!el || !path) return false;
+    el.click();
+    return until(() => host.devLog.events.slice(at).some(event => event.endsWith(' 存檔結束 ' + path)), 15000);
+  };
   const look = (view: MarkdownView) => {
     host.devLog.save?.refresh();
     const el = button(view);
-    return el ? { tip: el.getAttribute('aria-label'), kind: ['done', 'missing', 'issues'].find(kind => el.hasClass('is-' + kind)) } : null;
+    return el ? { tip: el.getAttribute('aria-label'), kind: ['done', 'missing', 'issues', 'malformed', 'needs-update'].find(kind => el.hasClass('is-' + kind)) } : null;
   };
   // 每個情境一篇新的、沒有 ID 的卡組。不改寫舊的：直接改寫會被當成在編輯器以外弄丟 ID（那正是 §8-5 要抓的）；
   // 也不刪了再建同名檔：iCloud 會把那個檔鎖住一段時間（2026-10-25 實測）。
@@ -279,9 +293,8 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   editor.setSelection({ line: target, ch: 6 }, { line: target, ch: 9 });
   const selectedBefore = { text: editor.getSelection(), from: editor.getCursor('from'), to: editor.getCursor('to') };
   const notices = host.devLog.notices.length;
-  button(first.view)?.click();
-  // 按鈕的存檔要等寫進磁碟、核對讀取之後才有結果（tasks/state-writes.md §7）：同一篇還沒結束時 save 回傳同一個 Promise。
-  await host.devLog.save?.save(first.view);
+  // 按鈕的存檔要等寫進磁碟、核對讀取之後才有結果（tasks/state-writes.md §7）。
+  out.clickedFill = await click(first.view);
   const filled = editor.getValue();
   out.filled = filled;
   out.notice = host.devLog.notices.slice(notices);
@@ -307,8 +320,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   out.issues = look(first.view);
   out.beforeClick = { editorReloaded: !editor.getValue().includes(id), editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })) };
   out.issuesExpected = TIPS.issues(1);
-  button(first.view)?.click();
-  await host.devLog.save?.save(first.view);
+  out.clickedIssues = await click(first.view);
   await sleep(300);
   out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
   const modal = Array.from(document.querySelectorAll('.modal-container .essence-cards-issue')).at(-1);
@@ -343,16 +355,14 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   file = await fresh();
   const stale = await open(app, file);
   await until(() => { host.devLog.save?.refresh(); return !!button(stale.view); });
-  button(stale.view)?.click();
-  await host.devLog.save?.save(stale.view);
+  out.clickedStaleFill = await click(stale.view);
   await sleep(2500);
   const staleFilled = stale.view.editor.getValue();
   const staleId = /能說明蒸發 \^([a-z0-9]{6})/.exec(staleFilled)?.[1] ?? '';
   await app.vault.adapter.write(trial, staleFilled.replace(' ^' + staleId, ''));
   await until(() => state.deckStatus(trial).issues.length === 1);
   await until(() => !stale.view.editor.getValue().includes(staleId), 3000);
-  button(stale.view)?.click();
-  await host.devLog.save?.save(stale.view);
+  out.clickedStaleIssue = await click(stale.view);
   await sleep(300);
   const oldButton = restoreButton();
   const edited = staleFilled.replace(' ^' + staleId, '').replace('水變成水蒸氣叫什麼？', '水加熱變成水蒸氣叫什麼？');
@@ -371,8 +381,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   await until(() => { host.devLog.save?.refresh(); return !!button(typed.view); });
   addTarget(typed.view);
   const typedNotices = host.devLog.notices.length;
-  button(typed.view)?.click();
-  await host.devLog.save?.save(typed.view);
+  out.clickedTyped = await click(typed.view);
   out.typedNotice = host.devLog.notices.slice(typedNotices);
   typed.leaf.detach();
   await sleep(2500);
@@ -421,6 +430,8 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const folder = app.vault.getAbstractFileByPath(TRIAL_FOLDER);
   if (folder) await app.vault.delete(folder, true);
   out.checks = {
+    // 每一次點擊都觸發了存檔、也等到它結束（技術債 N1）。
+    clicked: [out.clickedFill, out.clickedIssues, out.clickedStaleFill, out.clickedStaleIssue, out.clickedTyped].every(Boolean),
     staleModal: (out.staleModal as { oldButtonGone: boolean; restored: boolean }).oldButtonGone && (out.staleModal as { restored: boolean }).restored,
     typedNotice: (out.typedNotice as string[]).includes(TIPS.added(3)),
     closeRightAway: (out.closeRightAway as { hasTyped: boolean; ids: number; issues: number }).hasTyped && (out.closeRightAway as { ids: number }).ids === 3 && (out.closeRightAway as { issues: number }).issues === 0,
@@ -434,10 +445,153 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
     selection: out.selectionSame,
     done: (out.done as { tip?: string } | null)?.tip === TIPS.done,
     undo: out.undoRestores,
+    redo: out.redoAgain,
     issues: (out.issues as { tip?: string } | null)?.tip === TIPS.issues(1),
     modal: JSON.stringify(out.modal) === JSON.stringify(out.modalExpected),
     restored: out.restored && out.modalClosed,
     leave: out.leaveOk,
+  };
+  return out;
+}
+
+/**
+ * 技術債 W2：停用再啟用外掛（URI 的 reload）後，舊的存檔按鈕與小視窗會不會留在畫面上。分幾步用 URI 的 do 參數執行，中間由 AI 送 reload：
+ * open 建一篇沒有 ID 的卡組開在分頁；count 數那個分頁裡的存檔按鈕（每個的說明），click 再點每一個按鈕、等 2 秒，看提示與按鈕；
+ * late 加一個沒有 ID 的目標、點最新的按鈕之後馬上停用再啟用外掛（存檔的結果在卸載後才回來），等 3 秒數按鈕與畫面上的提示；close 關分頁、刪掉這篇。
+ */
+const W2_DECK = 'Essence Cards/W5 範例/重新啟用 W2（卡片）.md';
+export async function w2Check(host: IdsHost, step: string | undefined): Promise<unknown> {
+  const { app } = host;
+  const leaves = () => app.workspace.getLeavesOfType('markdown').filter(leaf => leafPath(leaf) === W2_DECK);
+  const buttons = () => leaves().flatMap(leaf => leaf.view instanceof MarkdownView ? Array.from(leaf.view.containerEl.querySelectorAll<HTMLElement>('.essence-cards-save')) : []);
+  const count = () => ({ tabs: leaves().length, buttons: buttons().map(el => el.getAttribute('aria-label')),
+    notices: Array.from(document.querySelectorAll('.notice')).map(el => el.textContent),
+    modals: document.querySelectorAll('.modal-container .essence-cards-issue').length });
+  if (step === 'open') {
+    if (!app.vault.getFileByPath(W2_DECK)) await writeFile(app, W2_DECK, TRIAL_TEXT);
+    const file = app.vault.getFileByPath(W2_DECK);
+    if (!file) throw Error('建不出 ' + W2_DECK);
+    if (!leaves().length) await open(app, file);
+    await until(() => { host.devLog.save?.refresh(); return buttons().length > 0; });
+    return count();
+  }
+  if (step === 'count') return count();
+  if (step === 'click') {
+    const before = count();
+    for (const el of buttons()) el.click();
+    await sleep(2000);
+    return { before, after: count() };
+  }
+  if (step === 'late') {
+    const plugins = (app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
+    // 加一個沒有 ID 的目標，這次存檔才有結果要回報；點最新的按鈕（addAction 加在最前面）。
+    const view = leaves()[0]?.view;
+    if (view instanceof MarkdownView) view.editor.replaceRange('- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n', { line: view.editor.lastLine(), ch: 0 });
+    const before = count();
+    buttons()[0]?.click();
+    await plugins.disablePlugin('essence-cards');
+    await plugins.enablePlugin('essence-cards');
+    await sleep(3000);
+    return { before, after: count() };
+  }
+  if (step === 'close') {
+    for (const leaf of leaves()) leaf.detach();
+    const file = app.vault.getFileByPath(W2_DECK);
+    if (file) await app.vault.delete(file);
+    return count();
+  }
+  throw Error('do 要是 open、count、click、late 或 close');
+}
+
+/** save-tips 的卡組：四個寫法有問題的目標（中翻英寫了中文、KK 音標的方括號、:: 底下沒有答案），兩個寫對的；都沒有 ID。 */
+const TIPS_DECK = '---\n科目: 英文\n---\n- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n- 能說明蒸發\n    - 水變成水蒸氣叫什麼？ ::\n'
+  + '- return 中翻英\n    - 歸還 :: return [rɪˈtɝn]\n- 能說明凝結\n    - 水蒸氣變成水叫什麼？ ::\n- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n';
+/** 改好的寫法：每一組是題目那一行要換的字（ID 所在的目標行不動）。 */
+const TIPS_FIXES: [string, string][] = [['借入 :: 借入', '借入 :: borrow'], ['水變成水蒸氣叫什麼？ ::', '水變成水蒸氣叫什麼？ :: 蒸發'],
+  ['return [rɪˈtɝn]', 'return'], ['水蒸氣變成水叫什麼？ ::', '水蒸氣變成水叫什麼？ :: 凝結']];
+
+/**
+ * 存檔按鈕在有目標寫法有問題時的說明與通知（技術債 D1），交使用者看過再定文字：建一篇卡組（TIPS_DECK），截按鈕的說明、
+ * 點按鈕存檔後的通知，再在編輯器裡改好，等 state 重讀後截沒有要做時的說明；淺色、深色各一張。截圖寫在 folder，結束時刪掉這篇。
+ */
+export async function saveTips(host: IdsHost, folder: string): Promise<unknown> {
+  const { app } = host;
+  const state = host.state;
+  if (!state) throw Error('state 還沒建立');
+  await state.ready();
+  const rendering = keepRendering();
+  const out: Record<string, unknown> = { shots: [] };
+  const trial = `${TRIAL_FOLDER}/提醒 ${Date.now().toString(36)}（卡片）.md`;
+  const dark = document.body.classList.contains('theme-dark');
+  try {
+    await ensureFolder(app, folder);
+    const file = await writeFile(app, trial, TIPS_DECK);
+    out.readMalformed = await until(() => state.deckStatus(trial).malformed.length === 4);
+    const { leaf, view } = await open(app, file);
+    const button = () => view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
+    let count = 0;
+    /** 淺色與深色各截一張（用 body 的 class 切換，不改設定），再換回原本的。 */
+    const shoot = async (name: string): Promise<void> => {
+      for (const theme of dark ? ['dark', 'light'] : ['light', 'dark']) {
+        document.body.classList.toggle('theme-dark', theme === 'dark');
+        document.body.classList.toggle('theme-light', theme === 'light');
+        await sleep(250);
+        const path = await capturePng(app, `${folder}/${String(++count).padStart(2, '0')} ${name} ${theme === 'dark' ? '深色' : '淺色'}.png`);
+        if (path) (out.shots as string[]).push(path);
+      }
+      document.body.classList.toggle('theme-dark', dark);
+      document.body.classList.toggle('theme-light', !dark);
+    };
+    /**
+     * 顯示按鈕的說明（滑鼠移上去時的那一個；DOM 事件叫不出 Obsidian 的 tooltip，用 displayTooltip），先拿掉畫面上的通知
+     * （會蓋住標題列的按鈕）；回傳按鈕的樣子與畫面上的說明。
+     */
+    const hover = async (): Promise<{ kind: string | undefined; label: string | null; tooltip: string | null }> => {
+      host.devLog.save?.refresh();
+      document.querySelectorAll('.notice').forEach(el => { el.remove(); });
+      const el = button(), label = el?.getAttribute('aria-label') ?? null;
+      if (el && label) displayTooltip(el, label, { placement: 'bottom' });
+      await sleep(500);
+      return { kind: ['done', 'missing', 'issues', 'malformed', 'needs-update'].find(kind => el?.hasClass('is-' + kind)), label,
+        tooltip: document.querySelector('.tooltip')?.textContent ?? null };
+    };
+    const away = () => { document.querySelectorAll('.tooltip').forEach(el => { el.remove(); }); };
+    out.before = await hover();
+    await shoot('按鈕說明 寫法有問題');
+    away();
+    const at = host.devLog.events.length, notices = host.devLog.notices.length;
+    button()?.click();
+    out.clicked = await until(() => host.devLog.events.slice(at).some(event => event.endsWith(' 存檔結束 ' + trial)), 15000);
+    out.notice = host.devLog.notices.slice(notices);
+    await sleep(300);
+    await shoot('存檔後的通知');
+    // 在編輯器裡改好：只換題目那幾行的字，存檔補上的 ID 留著（整篇取代會被鎖定當成刪掉目標）。
+    out.filled = view.editor.getValue();
+    for (const [from, to] of TIPS_FIXES) {
+      const start = view.editor.getValue().indexOf(from);
+      if (start >= 0) view.editor.replaceRange(to, view.editor.offsetToPos(start), view.editor.offsetToPos(start + from.length));
+    }
+    out.fixed = view.editor.getValue();
+    out.readFixed = await until(() => { host.devLog.save?.refresh(); return state.deckStatus(trial).malformed.length === 0; }, 10000);
+    out.after = await hover();
+    await shoot('按鈕說明 改好之後');
+    away();
+    leaf.detach();
+  } finally {
+    rendering.restore();
+    // 剛寫過的檔 iCloud 可能鎖住一陣子（EBUSY，2026-10-31）：隔 2 秒再試，最後還是刪不掉就記下來，不蓋掉結果。
+    for (let i = 0; i < 5 && app.vault.getFileByPath(trial); i++) {
+      try { await app.vault.delete(app.vault.getFileByPath(trial)!); }
+      catch (error) { out.cleanup = String(error); await sleep(2000); }
+    }
+    if (!app.vault.getFileByPath(trial)) delete out.cleanup;
+  }
+  const before = out.before as { label: string | null }, after = out.after as { label: string | null } | undefined;
+  out.checks = {
+    clicked: out.clicked === true,
+    before: before.label === TIPS.malformed(4),
+    notice: (out.notice as string[]).length === 1 && (out.notice as string[])[0].startsWith(TIPS.addedMalformed(2, 4) + '\n'),
+    after: after?.label === TIPS.done,
   };
   return out;
 }

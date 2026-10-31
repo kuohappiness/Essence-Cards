@@ -1,6 +1,6 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath } from '../core/deck/index.ts';
-import { confirms } from './ids.ts';
+import { confirmed } from './ids.ts';
 import type { Prepared } from './ids.ts';
 import type { Life, Reads } from './reads.ts';
 
@@ -26,7 +26,7 @@ export type WriteBlock = 'phone' | 'loading' | 'closed' | 'backup' | 'unread';
 
 /** Cards 改卡組的結果。 */
 export type WriteResult =
-  /** 核對讀取確認寫成了。added：這次新配上 ID 的目標數（還原、當成新的不算）。 */
+  /** 核對讀取確認寫成了。added：這次新配上 ID、在核對採用的內容裡寫法沒有問題的目標數（寫錯的照樣配 ID，但不出題，技術債 D1；還原、當成新的不算）。 */
   | { kind: 'done'; added: number }
   /** 沒有要改的（含不是卡組）。 */
   | { kind: 'unchanged' }
@@ -263,11 +263,14 @@ export function createWrites(options: WritesOptions) {
       checks.delete(path);
       if (text === null) check.settle({ kind: 'stale' });
       else if (check.output === null || !check.prepared) check.settle(check.fallback);
-      else if (text === check.output || confirms(text, check.prepared.expect)) {
+      else {
+        // 一字不差時預期的變更當然都在；新增的數照讀到的這份算，不照準備時的（技術債 D1，Codex L2 的 F1）。
+        const added = confirmed(text, check.prepared);
+        if (added === null) { check.settle({ kind: 'stale' }); return; }
         check.prepared.record?.();
         options.wrote(path, check.output);
-        check.settle({ kind: 'done', added: check.prepared.added });
-      } else check.settle({ kind: 'stale' });
+        check.settle({ kind: 'done', added });
+      }
     },
     /** 這篇這次讀不到：等核對的先回 saved（沒改字的回原本的結果），核對留著，之後第一次讀到時照同一套規則採用。 */
     unreadable(path: string): void {

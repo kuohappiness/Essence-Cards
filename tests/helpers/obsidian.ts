@@ -70,7 +70,9 @@ class FakeMarkdownView {
   addAction(icon: string, label: string, click: () => void) {
     const action = { icon, label, click };
     this.actions.push(action);
-    return { addClass() {}, setAttribute(name: string, value: string) { if (name === 'aria-label') action.label = value; }, toggleClass() {}, remove() {} };
+    return { addClass() {}, setAttribute(name: string, value: string) { if (name === 'aria-label') action.label = value; }, toggleClass() {},
+      // 和 DOM 的 remove 一樣：按鈕從標題列拿掉（技術債 W2 的測試看它）。
+      remove: () => { const at = this.actions.indexOf(action); if (at >= 0) this.actions.splice(at, 1); } };
   }
 }
 
@@ -82,8 +84,8 @@ export interface ObsidianStub {
   commands: Map<string, Command>;
   ribbons: { icon: string; title: string; callback: (evt: unknown) => unknown }[];
   extensions: () => number;
-  /** open() 過的 Modal：open 時呼叫 onOpen、close 時呼叫 onClose。 */
-  modals: { titleEl: FakeEl; contentEl: FakeEl; close(): void }[];
+  /** open() 過的 Modal：open 時呼叫 onOpen、close 時呼叫 onClose；isOpen 是開著沒。 */
+  modals: { titleEl: FakeEl; contentEl: FakeEl; isOpen: boolean; close(): void }[];
   /** registerObsidianProtocolHandler 收到的處理函式，照 action。 */
   protocol: Map<string, (params: Record<string, string>) => void>;
   /** 寫入 vault 的動作與路徑。 */
@@ -249,9 +251,10 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     contentEl = new FakeEl();
     onOpen?(): void;
     onClose?(): void;
+    isOpen = false;
     constructor(app: unknown) { this.app = app; }
-    open() { modals.push(this); this.onOpen?.(); }
-    close() { this.onClose?.(); }
+    open() { modals.push(this); this.isOpen = true; this.onOpen?.(); }
+    close() { this.isOpen = false; this.onClose?.(); }
   }
   class SuggestModal extends Modal {}
   class PluginSettingTab {

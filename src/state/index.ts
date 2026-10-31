@@ -7,8 +7,8 @@ import type { Life, Texts } from './reads.ts';
 import { createWrites } from './writes.ts';
 import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
-import type { IdIssue, Prepared } from './ids.ts';
-export type { IdIssue, IdIssueKind } from './ids.ts';
+import type { IdIssue, Malformed, Prepared } from './ids.ts';
+export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, parseTime, planToday, progress } from '../core/study/index.ts';
 import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
@@ -111,10 +111,11 @@ export interface State {
   /** 停止監看、等紀錄寫完。 */
   close(): Promise<void>;
   /**
-   * 這一篇有幾個目標還沒有 ID（不含待處理的），以及待處理的問題。按鈕用。需要新版的卡組只回 needsUpdate（沒有要補的、
-   * 沒有可以處理的問題：Cards 不寫它）。
+   * 這一篇有幾個目標還沒有 ID（不含待處理的）、待處理的問題，以及寫法有問題、暫時不會出題的目標（技術債 D1），都依 state 最近讀到的內容。
+   * 存檔按鈕用。malformed 只涵蓋寫法的問題，不代表其餘的目標都會出題（還沒到期、別篇需要新版、草稿、暫停等）。
+   * 需要新版的卡組只回 needsUpdate（沒有要補的、沒有可以處理的問題：Cards 不寫它）。
    */
-  deckStatus(path: string): { missing: number; issues: IdIssue[]; needsUpdate?: true };
+  deckStatus(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true };
   /** 存檔（開著的筆記）：排進寫入的那一列，補 ID、歸位、改縮排，寫進磁碟並核對後才採用。 */
   save(editor: EditorHandle): Promise<WriteResult>;
   /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
@@ -402,7 +403,7 @@ export function createState(options: StateOptions): State {
       return loading;
     },
     unread: () => [...unread].sort(),
-    deckStatus: path => !life.loaded ? { missing: 0, issues: [] } : gated.includes(path) ? { missing: 0, issues: [], needsUpdate: true } : tracker.status(path),
+    deckStatus: path => !life.loaded ? { missing: 0, issues: [], malformed: [] } : gated.includes(path) ? { missing: 0, issues: [], malformed: [], needsUpdate: true } : tracker.status(path),
     save: editor => writes.enqueue(() => writes.edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
     // 問題已經跟著改名搬到別的路徑：不是這個編輯器的那一篇，不準備（stale）。
     resolve: (issue, choice, editor) => writes.enqueue(() => writes.edit(editor, text => issue.path === editor.path ? track(editor.path, () => tracker.resolve(issue, choice, text)) : null, { kind: 'stale' })),
