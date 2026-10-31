@@ -500,3 +500,47 @@ void test('W3 複習畫面的量測結果檔：plugin 也是建置版本 BUILD',
   const result = JSON.parse(h.text(path) ?? '{}') as { plugin?: string; open?: number };
   assert.deepEqual([result.plugin, typeof result.open], ['0.0.1+test', 'number']);
 });
+
+// D-155 補充（使用者 2026-10-31）：外掛內備份的錯也記進錯誤紀錄。備份失敗記 backup（同一個原因這次載入一次），
+// 電腦上載入備份功能失敗記 init；state 初始化已經報過的不再記。
+void test('D-155 補充：備份失敗記一行 backup（帶原本的錯誤），再看一次狀態也不多記', async t => {
+  const vaultPath = tempDir();
+  const h = host({ 'Essence Cards/b.md': '- 新目標\n    - Q :: A\n' }, { desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': join(vaultPath, '備份') } });
+  t.after(() => { h.plugin.onunload(); });
+  quiet(t);
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  for (let i = 0; i < 300 && !h.plugin.backup?.runner.status().failure; i++) await wait(10);
+  // 同一個原因再失敗一次（手動再做一次）：通知與紀錄都不多。
+  await (h.plugin.backup?.runner as unknown as { backup(): Promise<void> }).backup();
+  await wait(50);
+  const lines = errorLines(h);
+  assert.deepEqual(lines.map(line => line.where), ['backup']);
+  assert.match(lines[0].msg ?? '', /在 vault 裡/);
+});
+
+void test('D-155 補充：電腦上載入備份功能失敗記一行 init；state 初始化已經報過的不再記一次', async t => {
+  quiet(t);
+  // 這個 vault 不在這台電腦的資料夾裡（adapter 不是 FileSystemAdapter）：備份功能載入失敗。
+  const h = host(deck, { desktop: true, vaultPath: undefined });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(50);
+  assert.deepEqual(errorLines(h).map(line => [line.where, line.msg]), [['init', '這個 vault 不在這台電腦的資料夾裡']]);
+  // 監看不了：state 已經記了 init；備份那邊等 ready() 拿到同一個拒絕，不再記。
+  const watch = host(deck, { desktop: true, failWatch: true });
+  t.after(() => { watch.plugin.onunload(); });
+  const printed: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { printed.push(args); };
+  t.after(() => { console.error = original; });
+  watch.plugin.onload();
+  watch.layoutReady();
+  await watch.plugin.state?.ready().catch(() => {});
+  await wait(100);
+  assert.deepEqual(errorLines(watch).map(line => [line.where, line.msg]), [['init', '監看不了']]);
+  assert.equal(printed.filter(args => args.some(arg => arg instanceof Error && arg.message === '監看不了')).length, 1, 'console 也只印一次');
+});

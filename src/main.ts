@@ -31,6 +31,10 @@ const NOTICES: Partial<Record<ErrorSource, string>> = {
 const UPDATE_NOTICE = 'Essence Cards：有內容需要新版才讀得懂，請更新外掛';
 /** 學生在複習畫面回報之後的提示（D-160 第 3 點）；記錄器盡力而為，寫不進去時也照樣這樣說（D-160 的代價）。 */
 const REPORT_NOTICE = '已記下，可以跟家長說一聲';
+/** startBackup 裡 state.ready() 的拒絕（已經經過 onError 記下）：和載入備份功能本身的失敗分開，不再記一次（D-155 補充）。 */
+class ReadyFailed extends Error {
+  constructor(cause: unknown) { super('state 沒有讀完', { cause }); }
+}
 /** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
 const VERSION_WAIT = 2000;
 
@@ -237,14 +241,18 @@ export default class EssenceCardsPlugin extends Plugin {
         plugin: this, desktop, files, build: BUILD,
         changed: status => { this.state?.backupReady(status.ready); this.ids?.saver.refresh(); this.settingTab?.refresh(); },
         notify: message => { new Notice(message); this.emit('notice', message); },
+        failed: error => { this.fail('backup', error); },
       });
       this.settingTab?.refresh();
-      await this.state?.ready();
+      // ready() 的拒絕已經經過 onError（state 的 init 或 read）記下，或是停用：下面不再記一次。
+      await this.state?.ready().catch((error: unknown) => { throw new ReadyFailed(error); });
       if (!this.unloaded) this.backup.start();
     } catch (error) {
       if (this.unloaded) return;
-      console.error('Essence Cards：備份', error);
-      this.backupError = '備份的功能載入失敗：' + (error instanceof Error ? error.message : String(error));
+      // 電腦上載入備份功能失敗：照 D-155 補充記 init（印在 console 並記進錯誤紀錄）；state 已經記過的不再記。
+      if (!(error instanceof ReadyFailed)) this.fail('init', error);
+      const cause = error instanceof ReadyFailed ? error.cause : error;
+      this.backupError = '備份的功能載入失敗：' + (cause instanceof Error ? cause.message : String(cause));
       new Notice(BACKUP_NOTICE);
       this.emit('notice', BACKUP_NOTICE);
       this.settingTab?.refresh();

@@ -25,6 +25,8 @@ export interface BackupHostOptions {
   /** 狀態變了：main.ts 更新 state 的閘門、存檔按鈕與設定頁。 */
   changed: (status: BackupStatus) => void;
   notify: (message: string) => void;
+  /** 備份失敗：交給錯誤紀錄（D-155 補充）。同一個原因這次載入只交一次，和通知一樣。 */
+  failed: (error: unknown) => void;
 }
 
 /** wireBackup 交回的：設定頁用的動作與狀態。 */
@@ -97,6 +99,7 @@ export function wireBackup(host: BackupHostOptions): BackupWiring {
       const key = failure.step + '\n' + failure.message;
       if (warned.has(key)) return;
       warned.add(key);
+      host.failed(failure.error);
       host.notify(BACKUP_NOTICE);
     },
   });

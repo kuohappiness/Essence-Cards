@@ -145,7 +145,10 @@ void test('同時兩個要求只做一份：check 與「立即備份」一起來
   await Promise.all([failing.runner.check(), failing.runner.backup()]);
   assert.equal(failing.memory.control.writes, 0);
   assert.equal(failing.runner.status().ready, false);
-  assert.deepEqual({ ...failing.runner.status().failure, time: 0 }, { by: 'new-version', step: '準備備份位置', message: '外接硬碟沒接上', time: 0 });
+  const { error, ...failure } = failing.runner.status().failure ?? { error: null };
+  assert.deepEqual({ ...failure, time: 0 }, { by: 'new-version', step: '準備備份位置', message: '外接硬碟沒接上', time: 0 });
+  // 原本的錯一起留著，給錯誤紀錄（D-155 補充）。
+  assert.equal((error as Error).message, '外接硬碟沒接上');
 });
 
 void test('失敗：閘門關著、不刪既有的備份；之後成功就恢復；手動備份失敗後，30 天內的 check 不會自己打開', async () => {
