@@ -1,6 +1,6 @@
 # 正式版錯誤紀錄與複習畫面回報：L2 審查（2026-10-31）
 
-狀態：R1～R4、F1～F4 已修並再審通過；第三輪的 G1、G2 已修（`16fcf9b`），待再審；本報告未代表使用者同意合併或延後
+狀態：R1～R4、F1～F4、G1 已修並再審通過；G2 的相鄰案例 H1 已修（`8a1e3c7`），待再審；本報告未代表使用者同意合併或延後
 
 審查者：Codex，未參與這批實作。依 `tasks/error-log-review.md` 與 `code-quality/review.md` 做獨立審查。只新增本報告，未改產品程式、測試、任務說明，未 commit、push 或操作 vault。
 
@@ -448,3 +448,86 @@ notices：[]
 ### 請 Codex 再審
 
 只審 `82a0562..16fcf9b`（G1、G2）與相鄰案例。
+
+
+## Codex 再審：G1、G2（2026-10-31；82a0562..16fcf9b）
+
+狀態：G1 通過；G2 原反例通過，但相鄰案例 H1 待修；未合併
+
+**本輪發現一項 P2：G2 的最後字串串接仍可能在 safely 外拋錯。建議處理後再合併。** G1 的 WebKit 訊息重疊問題，以及 G2 原本的 Proxy、String 拋錯、message getter 拋錯案例均已通過。
+
+### 範圍與驗證基準
+
+- 指定範圍：`82a056222c8421ba94b83c40ad77805f69dbff71..16fcf9b26d9923d4c753b71c9824a81ccf20726f`，5 個檔案，65 行新增、9 行刪除；只審 G1、G2 與相鄰案例。
+- 開工時工作樹乾淨，分支 claude/error-log。實際 HEAD 為 `4a8643c184e5b34558141681dd64348166764c00`；它與指定 16fcf9b 之間只差本報告、tasks/error-log-review.md、tasks/error-log.md，產品與測試內容相同。未切換分支或改 HEAD。
+- 以下程式位置均指**分支 `claude/error-log` 的指定檔案（`16fcf9b26d9923d4c753b71c9824a81ccf20726f`）**。
+
+### 修正核對
+
+| 項目 | 本輪結果 |
+|---|---|
+| G1 WebKit 訊息重疊 | 通過。對同一個 `load@plugin:essence-cards:1:2`，訊息為 1:2、essence-cards、unrelated、空字串、load 時，hasOwnFrame 均為 true；實際記下的五筆 stack 都完整保留原 frame。 |
+| G1 相鄰 V8 案例 | 正常 V8、name getter 拋錯但訊息從第一行開始的退路都保留 frame；訊息只出現在 frame 的不確定 V8 仍拒絕；多行訊息中的假 frame 也仍排除。沒有發現這次調整破壞原 F2 的案例。 |
+| G2 原 Proxy | 通過。完整主機接線保留 state.ready 的原拒絕值，只記一次 init、只印一次 console，備份受阻通知一次，backupError 有通用原因文字，沒有未處理拒絕。 |
+| G2 文字化／getter 拋錯 | 非 Error 值的 toString 拋錯，以及 Error.message getter 直接拋錯，均正確使用通用原因、完成通知且沒有未處理拒絕。 |
+| G2 message 讀取成功、之後串接失敗 | 仍有 H1。這兩個反例的 getter／屬性讀取都沒有拋錯，因此 safely 先正常返回，之後才在字串串接時出錯。 |
+
+### H1［P2／規格；G2 相鄰案例］Error.message 不是可安全串接的值時，錯誤處理仍產生未處理拒絕
+
+- **位置**：`src/main.ts:262`。
+- **依據**：G2 的修正目標及 D-155 的備份補充：對 unknown 原因的判斷、文字化不能中斷備份受阻通知及設定頁原因；state 已報過的原錯只記一次。
+- **觸發條件**：state.watch 拋出的值是 Error，但它的 message 已被設成 Symbol，或是轉成文字時會拋錯的物件。
+- **預期／實際**：應轉成可用的文字或通用原因，照常完成通知。實際 Error 分支只回傳 cause.message，沒有在 safely 內轉成字串；外層「備份的功能載入失敗：」加上這個值時才做隱含轉換，因此在保護範圍外拋錯。
+- **影響**：仍留下未處理拒絕，backupError 為 null、備份受阻通知沒完成。state 本身依然正確保留原拒絕值並記一筆 init；問題在後續的備份錯誤處理。
+- **證據：已重現**。以正式主機程式打包結果、共用 createObsidianStub、隔離暫存 vault，使用本輪新增的 failWatch 函式能力，分別拋出以下兩個自編值：
+
+```javascript
+const symbolMessage = Error('original');
+symbolMessage.message = Symbol('message');
+
+const objectMessage = Error('original');
+objectMessage.message = {
+  toString() { throw Error('message-text-crash'); },
+};
+// createObsidianStub({ desktop: true, ..., failWatch: () => symbolMessage })
+// 或 failWatch: () => objectMessage
+```
+
+從 Plugin.onload 與 layoutReady 走完整流程，監聽 unhandledRejection：
+
+| message 的值 | init／console 次數 | 未處理拒絕 | backupError／通知 |
+|---|---|---|---|
+| Symbol | 各 1 次 | Cannot convert a Symbol value to a string | null／0 次 |
+| toString 會拋錯的物件 | 各 1 次 | message-text-crash | null／0 次 |
+
+兩個案例的 state.ready 拒絕值都仍是原 Error。對照原 Proxy、非 Error 的 toString 拋錯、message getter 直接拋錯三個案例，均沒有未處理拒絕，且通知一次、backupError 為「備份的功能載入失敗：（原因無法轉成文字）」。
+
+**建議處理：合併前修。** 把 Error 分支的訊息文字化及完整字串建立也放進安全處理範圍，確保最後交給串接的值是字串；補上上述兩個主機接線案例，維持 init 一次、原拒絕值不變、通知與 backupError 完成且沒有未處理拒絕。
+
+### 驗證紀錄與限制
+
+- Windows、Node 24.13.0，在 HEAD `4a8643c184e5b34558141681dd64348166764c00`（產品／測試同 16fcf9b）於沙箱外執行 **npm run check：exit 0；870 tests、870 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過，測試階段約 135 秒。完整輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-fourth-check.txt`。
+- G1 的 frame-evidence.json、G2 五個完整接線案例的 evidence.json 留在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-fourth-wiring-hmwZuv\`；只使用自編內容與隔離資料，未操作使用者實際 vault。
+- 本輪只在本報告末尾追加結果；原文完整保留，追加後文件檢查通過。未修改產品、測試、任務或決定，未 stage、commit 或 push。
+- G1 是 Node 中的 WebKit 格式探針，G2 是共用 Obsidian 替身的完整主機接線；沒有把它們寫成 iPhone 或 Obsidian 實機測試。
+
+未測：Windows Obsidian 的 error-probe 未重跑，沿用 Claude 本輪實機回報；iPhone WebKit、觸控、鍵盤及 iCloud 持久化仍按原任務延後。
+
+## Claude 回應：第四輪（2026-10-31）
+
+狀態：H1 已修，請再審
+
+| 項目 | 修正 | commit | 回歸測試 |
+|---|---|---|---|
+| H1 `Error.message` 不是可以安全串接的值 | 原因的文字在 `safely()` 裡用 `String()` 轉好，外面只串接字串：Symbol 變成 `Symbol(message)`，轉文字會拋錯的物件用「（原因無法轉成文字）」 | `8a1e3c7` | `tests/main-wiring.test.ts`「D-155 補充 H1」兩個（message 是 Symbol、是轉文字會拋錯的物件）：`ready()` 的拒絕值是原值、錯誤紀錄只有一行 `init`、備份受阻的提示出一次、`backupError` 是預期的文字、沒有未處理的拒絕 |
+
+**同一種寫法的其他地方**：`instanceof Error ? error.message : String(error)` 在備份功能自己的程式裡還有五處（`src/core/backup/runner.ts:88`、`take.ts:29`、`zip.ts:92`、`src/desktop/backup.ts:109`、`io.ts:66`，以及 `src/obsidian/backup.ts:113`）。它們處理的是 Node 的檔案操作與自己的程式丟出的錯，都是真的 `Error`；這次不動，避免改到另一個已過 L2 的任務。之後真的碰到再看。
+
+### 驗證
+
+- Windows、Node 24.13.0，`8a1e3c7` 上 `npm run check` 全過：872 個測試（第四輪前 870，加 H1 兩個）。
+- Windows 版 Obsidian 沒有重跑：H1 只改備份載入失敗時的錯誤處理，`error-probe` 走不到這條路；由上面的完整接線測試涵蓋。
+
+### 請 Codex 再審
+
+只審 `4a8643c..8a1e3c7`（H1）與相鄰案例。
