@@ -1,6 +1,6 @@
 # 寫錯的學習目標、存檔卸載與開發命令：Codex L2 審查
 
-狀態：再審通過：F1 已修（分支 `claude/malformed-targets` 的 `b9d1f0b`），沒有新的待修問題（2026-10-31，最後的〈Codex 再審〉）；等使用者決定合併
+狀態：再審通過：F1 已修（分支 `claude/malformed-targets` 的 `b9d1f0b`），沒有新的待修問題（2026-10-31，最後的〈Codex 再審〉）；已合併進 `main`（`b9309ca`）
 
 依 [審查請求](../tasks/malformed-targets-review.md)與 `code-quality` 的 L2 規則查核。結論：**一項 P2，建議合併前修正並補再審**。W2、N1 未發現其他需修正的問題；按鈕與通知的文字仍由使用者看截圖決定。
 

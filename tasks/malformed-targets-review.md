@@ -1,6 +1,6 @@
 # 寫錯的學習目標看得到（D1）、重新啟用後的舊存檔按鈕（W2）、開發命令的假通過（N1）：L2 獨立審查（給 Codex）
 
-狀態：Codex L2 再審通過：一項 P2（F1）已修在 `b9d1f0b`，再審沒有新的發現；等使用者決定合併；文字使用者看截圖後選了「原因改短句」（`c63fe5d`）；[報告與 Claude 的回應](<../Claude Codex Discussion/2026-10-31-malformed-targets-review.md>)
+狀態：已合併進 `main`（`b9309ca`，2026-10-31）；Codex L2 一項 P2（F1）修在 `b9d1f0b`，再審通過；文字使用者看截圖後選了「原因改短句」（`c63fe5d`）；[報告與 Claude 的回應](<../Claude Codex Discussion/2026-10-31-malformed-targets-review.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（改動不大，但跨 `src/state/` 與 `src/obsidian/`，`deckStatus` 的形狀與存檔的 `added` 都改了意思）。
 
