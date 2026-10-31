@@ -1,4 +1,4 @@
-import { MarkdownView, TFile } from 'obsidian';
+import { displayTooltip, MarkdownView, TFile } from 'obsidian';
 import type { App, WorkspaceLeaf } from 'obsidian';
 import { StateEffect, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -493,16 +493,20 @@ export async function saveTips(host: IdsHost, folder: string): Promise<unknown> 
       document.body.classList.toggle('theme-dark', dark);
       document.body.classList.toggle('theme-light', !dark);
     };
-    /** 滑鼠移到按鈕上，讓 Obsidian 顯示說明；回傳按鈕的樣子與畫面上的說明。 */
+    /**
+     * 顯示按鈕的說明（滑鼠移上去時的那一個；DOM 事件叫不出 Obsidian 的 tooltip，用 displayTooltip），先拿掉畫面上的通知
+     * （會蓋住標題列的按鈕）；回傳按鈕的樣子與畫面上的說明。
+     */
     const hover = async (): Promise<{ kind: string | undefined; label: string | null; tooltip: string | null }> => {
       host.devLog.save?.refresh();
-      const el = button();
-      for (const type of ['mouseover', 'mouseenter']) el?.dispatchEvent(new MouseEvent(type, { bubbles: true }));
-      await sleep(800);
-      return { kind: ['done', 'missing', 'issues', 'malformed', 'needs-update'].find(kind => el?.hasClass('is-' + kind)), label: el?.getAttribute('aria-label') ?? null,
+      document.querySelectorAll('.notice').forEach(el => { el.remove(); });
+      const el = button(), label = el?.getAttribute('aria-label') ?? null;
+      if (el && label) displayTooltip(el, label, { placement: 'bottom' });
+      await sleep(500);
+      return { kind: ['done', 'missing', 'issues', 'malformed', 'needs-update'].find(kind => el?.hasClass('is-' + kind)), label,
         tooltip: document.querySelector('.tooltip')?.textContent ?? null };
     };
-    const away = () => { button()?.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); };
+    const away = () => { document.querySelectorAll('.tooltip').forEach(el => { el.remove(); }); };
     out.before = await hover();
     await shoot('按鈕說明 寫法有問題');
     away();
@@ -526,8 +530,12 @@ export async function saveTips(host: IdsHost, folder: string): Promise<unknown> 
     leaf.detach();
   } finally {
     rendering.restore();
-    const created = app.vault.getFileByPath(trial);
-    if (created) await app.vault.delete(created);
+    // 剛寫過的檔 iCloud 可能鎖住一陣子（EBUSY，2026-10-31）：隔 2 秒再試，最後還是刪不掉就記下來，不蓋掉結果。
+    for (let i = 0; i < 5 && app.vault.getFileByPath(trial); i++) {
+      try { await app.vault.delete(app.vault.getFileByPath(trial)!); }
+      catch (error) { out.cleanup = String(error); await sleep(2000); }
+    }
+    if (!app.vault.getFileByPath(trial)) delete out.cleanup;
   }
   const before = out.before as { label: string | null }, after = out.after as { label: string | null } | undefined;
   out.checks = {
