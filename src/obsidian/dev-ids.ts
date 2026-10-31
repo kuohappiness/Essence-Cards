@@ -9,7 +9,7 @@ import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
 import { leafPath, removeTestPaths } from './dev-events.ts';
 import { movedUp } from '../dev/move.ts';
-import { keepRendering } from './dev-review.ts';
+import { capturePng, keepRendering } from './dev-review.ts';
 import { createObsidianFiles } from './files.ts';
 
 // 開發命令 lock 與 save（W5 §8-7 的 I7、I8）：只在開發版建置。AI 在 Windows 版 Obsidian 用 URI 執行，
@@ -265,7 +265,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const look = (view: MarkdownView) => {
     host.devLog.save?.refresh();
     const el = button(view);
-    return el ? { tip: el.getAttribute('aria-label'), kind: ['done', 'missing', 'issues'].find(kind => el.hasClass('is-' + kind)) } : null;
+    return el ? { tip: el.getAttribute('aria-label'), kind: ['done', 'missing', 'issues', 'malformed', 'needs-update'].find(kind => el.hasClass('is-' + kind)) } : null;
   };
   // 每個情境一篇新的、沒有 ID 的卡組。不改寫舊的：直接改寫會被當成在編輯器以外弄丟 ID（那正是 §8-5 要抓的）；
   // 也不刪了再建同名檔：iCloud 會把那個檔鎖住一段時間（2026-10-25 實測）。
@@ -450,6 +450,91 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
     modal: JSON.stringify(out.modal) === JSON.stringify(out.modalExpected),
     restored: out.restored && out.modalClosed,
     leave: out.leaveOk,
+  };
+  return out;
+}
+
+/** save-tips 的卡組：四個寫法有問題的目標（中翻英寫了中文、KK 音標的方括號、:: 底下沒有答案），兩個寫對的；都沒有 ID。 */
+const TIPS_DECK = '---\n科目: 英文\n---\n- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n- 能說明蒸發\n    - 水變成水蒸氣叫什麼？ ::\n'
+  + '- return 中翻英\n    - 歸還 :: return [rɪˈtɝn]\n- 能說明凝結\n    - 水蒸氣變成水叫什麼？ ::\n- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n';
+/** 改好的寫法：每一組是題目那一行要換的字（ID 所在的目標行不動）。 */
+const TIPS_FIXES: [string, string][] = [['借入 :: 借入', '借入 :: borrow'], ['水變成水蒸氣叫什麼？ ::', '水變成水蒸氣叫什麼？ :: 蒸發'],
+  ['return [rɪˈtɝn]', 'return'], ['水蒸氣變成水叫什麼？ ::', '水蒸氣變成水叫什麼？ :: 凝結']];
+
+/**
+ * 存檔按鈕在有目標寫法有問題時的說明與通知（技術債 D1），交使用者看過再定文字：建一篇卡組（TIPS_DECK），截按鈕的說明、
+ * 點按鈕存檔後的通知，再在編輯器裡改好，等 state 重讀後截沒有要做時的說明；淺色、深色各一張。截圖寫在 folder，結束時刪掉這篇。
+ */
+export async function saveTips(host: IdsHost, folder: string): Promise<unknown> {
+  const { app } = host;
+  const state = host.state;
+  if (!state) throw Error('state 還沒建立');
+  await state.ready();
+  const rendering = keepRendering();
+  const out: Record<string, unknown> = { shots: [] };
+  const trial = `${TRIAL_FOLDER}/提醒 ${Date.now().toString(36)}（卡片）.md`;
+  const dark = document.body.classList.contains('theme-dark');
+  try {
+    await ensureFolder(app, folder);
+    const file = await writeFile(app, trial, TIPS_DECK);
+    out.readMalformed = await until(() => state.deckStatus(trial).malformed.length === 4);
+    const { leaf, view } = await open(app, file);
+    const button = () => view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
+    let count = 0;
+    /** 淺色與深色各截一張（用 body 的 class 切換，不改設定），再換回原本的。 */
+    const shoot = async (name: string): Promise<void> => {
+      for (const theme of dark ? ['dark', 'light'] : ['light', 'dark']) {
+        document.body.classList.toggle('theme-dark', theme === 'dark');
+        document.body.classList.toggle('theme-light', theme === 'light');
+        await sleep(250);
+        const path = await capturePng(app, `${folder}/${String(++count).padStart(2, '0')} ${name} ${theme === 'dark' ? '深色' : '淺色'}.png`);
+        if (path) (out.shots as string[]).push(path);
+      }
+      document.body.classList.toggle('theme-dark', dark);
+      document.body.classList.toggle('theme-light', !dark);
+    };
+    /** 滑鼠移到按鈕上，讓 Obsidian 顯示說明；回傳按鈕的樣子與畫面上的說明。 */
+    const hover = async (): Promise<{ kind: string | undefined; label: string | null; tooltip: string | null }> => {
+      host.devLog.save?.refresh();
+      const el = button();
+      for (const type of ['mouseover', 'mouseenter']) el?.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+      await sleep(800);
+      return { kind: ['done', 'missing', 'issues', 'malformed', 'needs-update'].find(kind => el?.hasClass('is-' + kind)), label: el?.getAttribute('aria-label') ?? null,
+        tooltip: document.querySelector('.tooltip')?.textContent ?? null };
+    };
+    const away = () => { button()?.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); };
+    out.before = await hover();
+    await shoot('按鈕說明 寫法有問題');
+    away();
+    const at = host.devLog.events.length, notices = host.devLog.notices.length;
+    button()?.click();
+    out.clicked = await until(() => host.devLog.events.slice(at).some(event => event.endsWith(' 存檔結束 ' + trial)), 15000);
+    out.notice = host.devLog.notices.slice(notices);
+    await sleep(300);
+    await shoot('存檔後的通知');
+    // 在編輯器裡改好：只換題目那幾行的字，存檔補上的 ID 留著（整篇取代會被鎖定當成刪掉目標）。
+    out.filled = view.editor.getValue();
+    for (const [from, to] of TIPS_FIXES) {
+      const start = view.editor.getValue().indexOf(from);
+      if (start >= 0) view.editor.replaceRange(to, view.editor.offsetToPos(start), view.editor.offsetToPos(start + from.length));
+    }
+    out.fixed = view.editor.getValue();
+    out.readFixed = await until(() => { host.devLog.save?.refresh(); return state.deckStatus(trial).malformed.length === 0; }, 10000);
+    out.after = await hover();
+    await shoot('按鈕說明 改好之後');
+    away();
+    leaf.detach();
+  } finally {
+    rendering.restore();
+    const created = app.vault.getFileByPath(trial);
+    if (created) await app.vault.delete(created);
+  }
+  const before = out.before as { label: string | null }, after = out.after as { label: string | null } | undefined;
+  out.checks = {
+    clicked: out.clicked === true,
+    before: before.label === TIPS.malformed(4),
+    notice: (out.notice as string[]).length === 1 && (out.notice as string[])[0].startsWith(TIPS.addedMalformed(2, 4) + '\n'),
+    after: after?.label === TIPS.done,
   };
   return out;
 }

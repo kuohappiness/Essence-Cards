@@ -5,7 +5,7 @@ import { encodeEntry, planToday } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { IdIssue, State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
-import { fillText, resolveText } from './helpers/editor.ts';
+import { createMemoryEditor, fillText, resolveText } from './helpers/editor.ts';
 
 // W5 §8-5、§8-7 I3～I6：補 ID、弄丟的偵測與家長的選擇。「外部改檔」是記憶體 Files 的 write／remove／rename（技術債 A9），
 // 通知同步送出；`settle()` 用假計時器讓 delay 過去、跑完重讀，同一次載入裡偵測。
@@ -73,7 +73,7 @@ const I4vault = {
 
 void test('I4 補 ID：fillIds 避開別篇與紀錄裡的 ID，第二次不改字，today 與 deckStatus 跟著更新', async t => {
   const h = await setup(t, I4vault);
-  assert.deepEqual(h.state.deckStatus('Essence Cards/補.md'), { missing: 2, issues: [] });
+  assert.deepEqual(h.state.deckStatus('Essence Cards/補.md'), { missing: 2, issues: [], malformed: [] });
   assert.equal(await h.state.fillIds('Essence Cards/補.md'), true);
   assert.equal(h.read('Essence Cards/補.md'), I4filled);
   assert.equal(await h.state.fillIds('Essence Cards/補.md'), false);
@@ -81,7 +81,7 @@ void test('I4 補 ID：fillIds 避開別篇與紀錄裡的 ID，第二次不改�
   assert.equal(await h.fillText('Essence Cards/補.md', I4filled), I4filled);
   await h.settle();
   assert.ok(share(h.state).includes('aaaaac') && share(h.state).includes('aaaaad'), share(h.state).join());
-  assert.deepEqual(h.state.deckStatus('Essence Cards/補.md'), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus('Essence Cards/補.md'), { missing: 0, issues: [], malformed: [] });
 });
 
 void test('I4 fillIds: false（手機）：不讀、不寫，fillText 回傳原文', async t => {
@@ -348,7 +348,7 @@ for (const order of [['P', 'O'], ['O', 'P']]) void test('F5 同一批跨檔搬�
   h.texts.set(O, B + A);
   h.notify(...order.map(name => name === 'P' ? P : O));
   await h.settle();
-  assert.deepEqual([h.state.deckStatus(P), h.state.deckStatus(O)], [{ missing: 1, issues: [] }, { missing: 0, issues: [] }]);
+  assert.deepEqual([h.state.deckStatus(P), h.state.deckStatus(O)], [{ missing: 1, issues: [], malformed: [] }, { missing: 0, issues: [], malformed: [] }]);
 });
 
 void test('F5 同一批交換兩篇的目標、搬出同時新增：沒有問題', async t => {
@@ -369,7 +369,7 @@ void test('離開筆記的補 ID 寫不進去時，state 不採用沒寫成的�
   assert.equal(h.state.deckStatus(P).missing, 1);
   h.control.failModify = false;
   assert.equal(await h.state.fillIds(P), true);
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   // 寫不進去那次配出的 aaaaaa 仍算用過（不再配出），所以是 aaaaab。
   assert.equal(h.texts.get(P), B + '- 能說明 C ^aaaaab\n    - QC :: AC\n');
 });
@@ -393,7 +393,7 @@ for (const order of [['P', 'LOG'], ['LOG', 'P']]) void test('R2 同一批讀到�
   h.notify(...order.map(name => name === 'P' ? P : LOG));
   await h.settle();
   assert.equal(h.state.history().reviews.length, 1);
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
 });
 
 // ---- 同一批通知的順序不影響結果（第一個里程碑回顧的 R2：F5 與 R2 都是「同一批的順序」，R2 是 F5 的修正帶進來的） ----
@@ -525,4 +525,43 @@ void test('S8 對照：紀錄一開始就讀得到時不產生問題；讀不到
   assert.deepEqual(h.issues(), [issue]);
   assert.ok(!share(h.state).includes('bbbbbb'));
   samePlan(h.state);
+});
+
+// 技術債 D1（外掛架構檢查環節 2 結論第 1 條）：寫錯的學習目標照樣配到 ID，卻不出題（plan 排除 ok:false）。deckStatus 依 state 最近讀到的
+// 內容列出這些目標：每個目標一筆（以目標那一行去重）、帶目標那一行、第一個問題那一行（都從 0 算）、名稱與原因（解析時給家長看的那一句）；
+// ambiguous-id 已經是待處理的問題，不再算一次。原因的字照 src/core/deck/parse.ts。
+const TYPED_REASON = '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式';
+const NO_ANSWER = '這一題 :: 的底下沒有答案';
+
+void test('D1 中翻英的答案寫了中文：deckStatus 列出它；存檔照樣配 ID，但新增的數不算它、今天的份沒有它；改好之後就不列', async t => {
+  const typed = '- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n';
+  const h = await setup(t, { [P]: typed });
+  const wrong = [{ line: 0, at: 1, name: 'borrow 中翻英', reason: TYPED_REASON }];
+  assert.deepEqual(h.state.deckStatus(P), { missing: 2, issues: [], malformed: wrong });
+  const editor = createMemoryEditor(h, P, typed);
+  assert.deepEqual(await h.state.save(editor), { kind: 'done', added: 1 }, '只有 lend 算新增');
+  const filled = '- borrow 中翻英 ^aaaaaa\n    - 借入 :: 借入\n- lend 中翻英 ^aaaaab\n    - 借出 :: lend\n';
+  assert.equal(editor.value, filled);
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: wrong });
+  assert.deepEqual(share(h.state), ['aaaaab']);
+  await h.edit(P, filled.replace('借入 :: 借入', '借入 :: borrow'));
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
+  assert.deepEqual(share(h.state).sort(), ['aaaaaa', 'aaaaab']);
+});
+
+void test('D1 :: 底下沒有答案、:: 左邊沒有題目：每個目標只列一次（原因用它第一個問題），照行號排；寫對的目標不列', async t => {
+  const deck = '- 能說明蒸發\n    - 水變成水蒸氣叫什麼？ ::\n- 能說明凝結 ^b23456\n    - 水蒸氣變成水叫什麼？ :: 凝結\n'
+    + '- 能說明沸騰\n    -  :: 100 度\n    - 沸騰時冒出什麼？ ::\n';
+  const h = await setup(t, { [P]: deck });
+  assert.deepEqual(h.state.deckStatus(P).malformed, [
+    { line: 0, at: 1, name: '能說明蒸發', reason: NO_ANSWER },
+    { line: 4, at: 5, name: '能說明沸騰', reason: '這一題 :: 的左邊沒有題目' },
+  ]);
+});
+
+void test('D1 ambiguous-id 不重複算：只有兩個 ID 的目標不列（它在待處理的問題裡）；同時沒寫答案的，照那個原因列', async t => {
+  const h = await setup(t, { [P]: A.replace(' ^k3m9x2', ' ^k3m9x2 和 ^p7q2w8') + B + '- 能說明 D ^d23456 和 ^e23456\n    - QD ::\n' });
+  const status = h.state.deckStatus(P);
+  assert.deepEqual(plain(status.issues).map(issue => [issue.kind, issue.line]), [['ambiguous', 0], ['ambiguous', 5]]);
+  assert.deepEqual(status.malformed, [{ line: 5, at: 6, name: '能說明 D 和', reason: NO_ANSWER }]);
 });

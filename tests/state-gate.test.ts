@@ -45,8 +45,8 @@ void test('2-2 需要版本比這台新：整篇不出題、不在 decks()，列
   assert.deepEqual(h.share(), ['bbbbbb']);
   assert.deepEqual(h.state.decks().map(d => d.path), [P]);
   assert.deepEqual(h.state.blocked(), { decks: [NEW], targets: [], all: false });
-  assert.deepEqual(h.state.deckStatus(NEW), { missing: 0, issues: [], needsUpdate: true });
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(NEW), { missing: 0, issues: [], malformed: [], needsUpdate: true });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
 });
 
 void test('2-2 需要版本讀得懂（相同或較舊）：照常；格式不對與屬性區壞掉而含「需要版本」都算讀不懂', async t => {

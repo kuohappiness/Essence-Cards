@@ -10,7 +10,7 @@ import type { IdsWiring, PluginEvent, PluginEvents } from '../main.ts';
 import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
-import { lockTest, saveFlow, saveTest, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
+import { lockTest, saveFlow, saveTest, saveTips, t1Close, t1Prep, type DevLog, type IdsHost } from './dev-ids.ts';
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
@@ -57,6 +57,8 @@ const commands: Record<string, DevCommand> = {
   // 第二部分（W5 §8-7 的 I7、I8）。
   lock: { name: 'Essence 開發：鎖住 ID', run: (_host, ids) => lockTest(ids), desktop: true },
   save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
+  // 技術債 D1：寫法有問題時存檔按鈕的說明與通知，截圖寫在 Essence W5/結果/存檔提醒 …/。
+  'save-tips': { name: 'Essence 開發：存檔按鈕的提醒（截圖）', run: (_host, ids) => saveTips(ids, `${root}/結果/存檔提醒 ${stampOf(new Date())}`), desktop: true },
   // tasks/state-writes.md §9：存檔排進寫入的那一列、view.save() 加核對讀取（V1～V7）。
   'save-flow': { name: 'Essence 開發：存檔流程', run: (_host, ids) => saveFlow(ids), desktop: true },
   t1prep: { name: 'Essence 開發：重新啟用前開兩篇卡組', run: (_host, ids) => t1Prep(ids), desktop: true },

@@ -18,6 +18,25 @@ export interface IdIssue {
   restore: string | null;
 }
 
+/**
+ * 寫法有問題、暫時不會出題的學習目標（技術債 D1、syntax.md §2-10）：line 是目標那一行、at 是它第一個問題那一行（都從 0 算），
+ * reason 是那個問題給家長看的原因（解析時寫的那一句）。
+ */
+export interface Malformed { line: number; at: number; name: string; reason: string }
+/**
+ * 這一版寫法有問題的目標：解析時的 error（目標的 ok 是 false），不含 ambiguous-id（它已經是待處理的問題，小視窗會列）；
+ * 同一個目標只列一次，原因用它第一個問題（problems 照行號排好）。
+ */
+function malformedOf(deck: Deck): Malformed[] {
+  const found = new Map<number, Malformed>();
+  for (const problem of deck.problems) {
+    if (problem.level !== 'error' || problem.code === 'ambiguous-id' || problem.targetLine === null || found.has(problem.targetLine)) continue;
+    const target = deck.targets.find(t => t.line === problem.targetLine);
+    if (target) found.set(target.line, { line: target.line, at: problem.line, name: target.name, reason: problem.message });
+  }
+  return [...found.values()].sort((a, b) => a.line - b.line);
+}
+
 /** 待處理的問題；issue 是交給畫面的同一個物件，重讀時更新它的行號與名稱，resolve 靠它認出是哪一個。 */
 interface Pending {
   issue: IdIssue;
@@ -32,7 +51,7 @@ interface Pending {
 /** 寫入的預期變更（tasks/state-writes.md §4 第 2 點）：這個 ID 在名稱是 name 的目標的行尾。 */
 export interface Expected { id: string; name: string }
 /**
- * 一份寫入的準備：要寫回的文字、預期的變更、這次新配的 ID 數，以及延後到採用時才做的記錄（還原、當成新的）。
+ * 一份寫入的準備：要寫回的文字、預期的變更、這次新配上 ID 而且寫法沒有問題的目標數（技術債 D1），以及延後到採用時才做的記錄（還原、當成新的）。
  * 準備只預留 ID（配出的立刻記進 seen）：不採用輸出、不解除待處理、不記 removed（§4 第 1 點）。
  */
 export interface Prepared { text: string; expect: Expected[]; added: number; record: (() => void) | null }
@@ -185,9 +204,8 @@ export function createIdTracker(options: IdTrackerOptions) {
     for (const { id } of result.assigned) seen.add(id);
     return { text: result.text, ids: result.assigned.map(({ id }) => id) };
   }
-  /** 這些 ID 在寫回的文字裡所在目標的名稱。 */
-  function expected(text: string, ids: readonly string[]): Expected[] {
-    const targets = parseDeck(text).targets;
+  /** 這些 ID 在寫回的文字（已解析的目標）裡所在目標的名稱。 */
+  function expected(targets: readonly Target[], ids: readonly string[]): Expected[] {
     return ids.flatMap(id => targets.filter(t => t.id === id).map(t => ({ id, name: t.name })));
   }
 
@@ -209,10 +227,11 @@ export function createIdTracker(options: IdTrackerOptions) {
     },
     issues: (path: string): IdIssue[] => (pending.get(path) ?? []).map(item => item.issue),
     lines,
-    status(path: string): { missing: number; issues: IdIssue[] } {
-      const text = texts.get(path);
+    /** 寫法有問題的目標從最近一版已解析的卡組拿，不另外解析（技術債 A8、D1）。 */
+    status(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[] } {
+      const text = texts.get(path), deck = versions.get(path);
       const missing = text === undefined ? 0 : assignIds(text, { taken: new Set(), skip: lines(path) }).assigned.length;
-      return { missing, issues: (pending.get(path) ?? []).map(item => item.issue) };
+      return { missing, issues: (pending.get(path) ?? []).map(item => item.issue), malformed: deck ? malformedOf(deck) : [] };
     },
     /**
      * 讀不到的卡組與紀錄都讀到了（state-load §3-2）：暫定的 changed 換成的 ID 現在出現在紀錄裡（那份紀錄讀不到時才被當成
@@ -237,7 +256,10 @@ export function createIdTracker(options: IdTrackerOptions) {
     fill(path: string, text: string): Prepared {
       if (texts.get(path) !== text) observeText(path, text, true);
       const next = reserve(text, lines(path));
-      return { text: next.text, expect: expected(next.text, next.ids), added: next.ids.length, record: null };
+      const targets = parseDeck(next.text).targets;
+      // 寫法有問題的目標照樣配 ID（之後改好就不用再存一次），但不出題，不算加入複習（技術債 D1）。
+      const added = next.ids.filter(id => targets.some(t => t.id === id && t.ok)).length;
+      return { text: next.text, expect: expected(targets, next.ids), added, record: null };
     },
     /**
      * 家長選了之後的準備：問題已不在、內容改過（問題物件已換新）、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。
@@ -270,7 +292,7 @@ export function createIdTracker(options: IdTrackerOptions) {
         const filled = reserve(bare, skip);
         next = filled.text;
         // 這個目標配到的那一個：同名、行號最近的新 ID（隱含目標補上 ID 時會多一行）。
-        const mine = expected(next, filled.ids).filter(e => e.name === target.name);
+        const mine = expected(parseDeck(next).targets, filled.ids).filter(e => e.name === target.name);
         const lineOf = (each: Expected) => parseDeck(next as string).targets.find(t => t.id === each.id)?.line ?? Infinity;
         id = mine.sort((a, b) => Math.abs(lineOf(a) - target.line) - Math.abs(lineOf(b) - target.line))[0]?.id;
       }

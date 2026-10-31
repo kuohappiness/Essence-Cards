@@ -1,17 +1,27 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { EditorHandle, IdIssue, IdIssueKind, State, WriteBlock, WriteResult } from '../state/index.ts';
+import type { EditorHandle, IdIssue, IdIssueKind, Malformed, State, WriteBlock, WriteResult } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
 // 存檔按鈕、待處理問題的小視窗與離開筆記時的備援（W5 §8-6、D-134），只在電腦接上。
 // 家長不必知道 ID 存在：文字只說「加入複習」「進度連結」。
 
 export const TIPS = {
-  done: '筆記已自動儲存；學習目標都已加入複習',
+  // 不說「都已加入複習」：還沒到期、別篇需要新版、草稿、暫停的目標也不出題，按鈕不能承諾（技術債 D1）。
+  done: '筆記已自動儲存；沒有發現需要處理的地方',
   missing: (n: number) => `筆記已自動儲存；有 ${n} 個學習目標尚未加入複習`,
   issues: (n: number) => `有 ${n} 個學習目標的進度連結需要處理`,
+  /** 寫錯的不算（技術債 D1）。 */
   added: (n: number) => `${n} 個學習目標已加入複習`,
+  /** 寫法有問題、暫時不會出題的目標（技術債 D1）；按鈕說明與存檔後的通知都用。 */
+  malformed: (n: number) => `筆記已自動儲存；有 ${n} 個學習目標寫法有問題，暫時不會出題`,
+  /** 存檔後新增的數和寫法有問題的合成一次通知（技術債 D1）。 */
+  addedMalformed: (added: number, n: number) => `${added} 個學習目標已加入複習；有 ${n} 個學習目標寫法有問題，暫時不會出題`,
+  /** 通知裡一個寫法有問題的目標；line 從 1 算。 */
+  problem: (line: number, name: string, reason: string) => `第 ${line} 行〈${name}〉：${reason}`,
+  /** 通知只列前幾個，其餘的數。 */
+  more: (n: number) => `另有 ${n} 個`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
   failed: '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔',
   /** 受阻：還沒讀完或有檔案讀不到（D-154 第 2 點）；按鈕說明與小視窗也用這一句。 */
@@ -28,6 +38,8 @@ export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
 };
 /** 離開筆記之後等多久才補（毫秒）。 */
 const LEAVE_DELAY = 1000;
+/** 存檔後的通知最多列幾個寫法有問題的目標（介面建議，技術債 D1）。 */
+const SHOWN = 3;
 export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號' };
 
 export interface SaveHost {
@@ -75,11 +87,24 @@ const BLOCKED: Partial<Record<WriteBlock, string>> = { loading: TIPS.blocked, un
 const blockedTip = (result: WriteResult): string | null => result.kind === 'blocked' && result.reason !== 'needs-update' ? BLOCKED[result.reason] ?? null : null;
 
 /**
- * 存檔結果的提示；text 是按下時編輯器裡的文字。需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。
- * 受阻但目標都有 ID、unchanged、saved 與其他 blocked 不提示。
+ * done、unchanged 的提示（技術債 D1）：新增的數（寫錯的不算）和寫法有問題的目標合成一次，問題照行號列前 SHOWN 個（行號、名稱、原因），
+ * 其餘寫「另有 N 個」。都沒有時不提示。
  */
-function saveTip(result: WriteResult, text: string): string | null {
-  if (result.kind === 'done') return result.added ? TIPS.added(result.added) : null;
+function doneTip(added: number, malformed: readonly Malformed[]): string | null {
+  if (!malformed.length) return added ? TIPS.added(added) : null;
+  const head = added ? TIPS.addedMalformed(added, malformed.length) : TIPS.malformed(malformed.length);
+  const lines = malformed.slice(0, SHOWN).map(target => TIPS.problem(target.at + 1, target.name, target.reason));
+  if (malformed.length > SHOWN) lines.push(TIPS.more(malformed.length - SHOWN));
+  return [head, ...lines].join('\n');
+}
+
+/**
+ * 存檔結果的提示；text 是按下時編輯器裡的文字，malformed 是存檔之後 state 看到的寫法有問題的目標。done、unchanged 照 doneTip；
+ * 需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。受阻但目標都有 ID、saved 與其他 blocked 不提示。
+ */
+function saveTip(result: WriteResult, text: string, malformed: readonly Malformed[]): string | null {
+  if (result.kind === 'done') return doneTip(result.added, malformed);
+  if (result.kind === 'unchanged') return doneTip(0, malformed);
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
   if (result.kind === 'blocked' && result.reason === 'needs-update') return TIPS.needsUpdate;
@@ -88,10 +113,15 @@ function saveTip(result: WriteResult, text: string): string | null {
   return null;
 }
 
-/** 一篇卡組按鈕的樣子：需要新版、沒有要做的、有目標還沒有 ID、有待處理的問題。 */
-function buttonLook(status: { missing: number; issues: IdIssue[]; needsUpdate?: true }): { kind: 'needs-update' | 'done' | 'missing' | 'issues'; icon: string; tip: string } {
+const KINDS = ['needs-update', 'done', 'missing', 'issues', 'malformed'] as const;
+/**
+ * 一篇卡組按鈕的樣子：需要新版、有待處理的問題、有目標寫法有問題（技術債 D1：按下去補 ID 並在通知列出問題，所以排在沒有 ID 前面）、
+ * 有目標還沒有 ID、沒有要做的。
+ */
+function buttonLook(status: { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true }): { kind: (typeof KINDS)[number]; icon: string; tip: string } {
   if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
+  if (status.malformed.length) return { kind: 'malformed', icon: 'alert-triangle', tip: TIPS.malformed(status.malformed.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
 }
@@ -141,7 +171,7 @@ class IssuesModal extends Modal {
       if (result.kind === 'done' || result.kind === 'saved') { this.render(); return; }
       // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
       // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
-      this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue()) ?? TIPS.stale);
+      this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue(), []) ?? TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
   }
@@ -184,7 +214,7 @@ export function wireSave(host: SaveHost): Saver {
     if (running) return running;
     const text = view.editor.getValue();
     const job = state.save(editorOf(view, path)).then(result => {
-      const tip = saveTip(result, text);
+      const tip = saveTip(result, text, state.deckStatus(path).malformed);
       if (tip) host.notify(tip);
       refresh();
       if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view).open();
@@ -219,7 +249,7 @@ export function wireSave(host: SaveHost): Saver {
       }
       setIcon(button, look.icon);
       button.setAttribute('aria-label', tip);
-      for (const kind of ['needs-update', 'done', 'missing', 'issues']) button.toggleClass('is-' + kind, kind === look.kind);
+      for (const kind of KINDS) button.toggleClass('is-' + kind, kind === look.kind);
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。
     for (const [view, button] of buttons) if (!seen.has(view)) { button.remove(); buttons.delete(view); }

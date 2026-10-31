@@ -11,11 +11,12 @@
   user-select: none;
 }
 
-/* 存檔按鈕：沒有要做的是淡的，有目標還沒有編號時醒目，有待處理的問題時警示，需要新版的外掛時提醒。 */
+/* 存檔按鈕：沒有要做的是淡的，有目標還沒有編號時醒目，有待處理的問題時警示，需要新版的外掛或有目標寫法有問題時提醒。 */
 .essence-cards-save.is-done { opacity: 0.4; }
 .essence-cards-save.is-missing { color: var(--interactive-accent); }
 .essence-cards-save.is-issues { color: var(--text-error); }
-.essence-cards-save.is-needs-update { color: var(--text-warning); }
+.essence-cards-save.is-needs-update,
+.essence-cards-save.is-malformed { color: var(--text-warning); }
 
 .essence-cards-issue + .essence-cards-issue {
   margin-top: var(--size-4-4);

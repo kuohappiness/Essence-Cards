@@ -29,7 +29,7 @@ function setup() {
   let intervals = 0;
   const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { intervals++; return id; } };
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; opened(path: string): void; start(): void } }>(code);
-  const state = { deckStatus: () => ({ missing: 1, issues: [] }), fillIds: (path: string) => { fills.push(path); return Promise.resolve(true); }, onChange: () => () => {}, ...loadedState };
+  const state = { deckStatus: () => ({ missing: 1, issues: [], malformed: [] }), fillIds: (path: string) => { fills.push(path); return Promise.resolve(true); }, onChange: () => () => {}, ...loadedState };
   const saver = wireSave({ plugin, state: () => state, notify() {}, onError() {} });
   return { saver, leaves: stub.leaves, leaf: stub.leaf, deferred: stub.deferred, fills, fire: stub.fire, intervals: () => intervals };
 }
@@ -185,7 +185,7 @@ void test('2-2 需要新版的卡組：按鈕說明需要更新，存檔被擋�
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
   const notified: string[] = [];
   const state = {
-    deckStatus: () => ({ missing: 0, issues: [], needsUpdate: true }), onChange: () => () => {}, ...loadedState,
+    deckStatus: () => ({ missing: 0, issues: [], malformed: [], needsUpdate: true }), onChange: () => () => {}, ...loadedState,
     save: () => Promise.resolve({ kind: 'blocked', reason: 'needs-update' }),
   };
   const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
@@ -210,7 +210,7 @@ void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同
   const handles: Handle[] = [];
   let finish: () => void = () => {};
   const state = {
-    deckStatus: () => ({ missing: 0, issues: [] }), onChange: () => () => {}, ...loadedState,
+    deckStatus: () => ({ missing: 0, issues: [], malformed: [] }), onChange: () => () => {}, ...loadedState,
     save: (editor: Handle) => { handles.push(editor); return new Promise(resolve => { finish = () => { resolve({ kind: 'unchanged' }); }; }); },
   };
   const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
@@ -245,7 +245,7 @@ void test('N1 按鈕觸發的存檔結束後才記「存檔結束」：開發命
   const log: string[] = [];
   let finish: () => void = () => {};
   const state = {
-    deckStatus: () => ({ missing: 1, issues: [] }), onChange: () => () => {}, ...loadedState,
+    deckStatus: () => ({ missing: 1, issues: [], malformed: [] }), onChange: () => () => {}, ...loadedState,
     save: () => new Promise(resolve => { finish = () => { resolve({ kind: 'done', added: 1 }); }; }),
   };
   const saver = wireSave({ plugin, state: () => state, notify() { log.push('提示'); }, onError(error: unknown) { throw error; }, log(event: string) { log.push(event); } });
@@ -273,7 +273,7 @@ void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一
   const choices: string[] = [];
   let finish: (result: unknown) => void = () => {};
   const state = {
-    deckStatus: () => ({ missing: 0, issues: [issue] }), ...loadedState,
+    deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), ...loadedState,
     onChange: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     save: () => Promise.resolve({ kind: 'unchanged' }),
     resolve: (_issue: unknown, choice: string) => { choices.push(choice); return new Promise(resolve => { finish = resolve; }); },
@@ -301,6 +301,7 @@ void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一
 // 用真的 state（記憶體 Files）做出「還沒讀完」與「讀不到」；替身的 view 把 Editor 的交易套用到自己的文字，save() 把文字寫進
 // 記憶體 Files（Obsidian 的 view.save），編輯器裡的文字一開始就已經自動存檔（和磁碟相同）。
 const BLOCKED = '筆記已自動儲存；暫時無法把新目標加入複習，讀取完成後請再按一次存檔';
+const DONE = '筆記已自動儲存；沒有發現需要處理的地方';
 const OTHER = 'Essence Cards/Q.md';
 const WITH_IDS = '- 能說明蒸發 ^aaaaaa\n    - 水變成水蒸氣叫什麼？ :: 蒸發\n';
 const NEW_TARGET = WITH_IDS + '- 能說明凝結\n    - 水蒸氣變成水叫什麼？ :: 凝結\n';
@@ -359,7 +360,8 @@ void test('B1 有檔案讀不到、文字有沒 ID 的目標：按存檔不改�
   assert.deepEqual(h.notices, [BLOCKED, '1 個學習目標已加入複習']);
   assert.equal(ids(h.view.value).length, 2);
   assert.equal(h.memory.texts.get(DECK), h.view.value);
-  assert.equal(h.tip(), '筆記已自動儲存；學習目標都已加入複習');
+  // 技術債 D1：沒有要做的時候不承諾會出題（還沒到期、別篇需要新版、草稿、暫停都不出題）。
+  assert.equal(h.tip(), DONE);
 });
 
 void test('B2 還沒讀完（ready() 還沒完成）：同 B1；讀完之後按鈕回到原本的說明，再按照常補', async t => {
@@ -435,7 +437,7 @@ void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
     const notified: string[] = [];
     const state = {
-      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
+      deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), onChange: () => () => {}, ...loadedState,
       save: () => Promise.resolve({ kind: 'unchanged' }),
       resolve: () => Promise.resolve(result),
     };
@@ -457,7 +459,7 @@ void test('B4 補：受阻時小視窗的問題目標本身有 ID（changed）�
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'changed', restore: 'k3m9x2' };
     const notified: string[] = [];
     const state = {
-      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
+      deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), onChange: () => () => {}, ...loadedState,
       save: () => Promise.resolve({ kind: 'blocked', reason }),
       resolve: () => Promise.resolve({ kind: 'blocked', reason }),
     };
@@ -482,7 +484,7 @@ void test('B6 小視窗按「還原」或「當成新的」收到 saved：不提
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
     const notified: string[] = [];
     const state = {
-      deckStatus: () => ({ missing: 0, issues: [issue] }), onChange: () => () => {}, ...loadedState,
+      deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), onChange: () => () => {}, ...loadedState,
       save: () => Promise.resolve({ kind: 'unchanged' }),
       resolve: () => Promise.resolve({ kind: 'saved' }),
     };
@@ -500,7 +502,7 @@ void test('B7 需要新版、同時有讀不到的檔：按鈕說需要新版；
   const NEEDS = '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習';
   const deck = '---\n科目: 自然\n需要版本: 9.0.0\n---\n' + NEW_TARGET;
   const h = await blockedSetup(t, deck, 'unread');
-  assert.deepEqual(h.state.deckStatus(DECK), { missing: 0, issues: [], needsUpdate: true });
+  assert.deepEqual(h.state.deckStatus(DECK), { missing: 0, issues: [], malformed: [], needsUpdate: true });
   assert.equal(h.tip(), NEEDS);
   await h.saver.save(h.view);
   assert.deepEqual(h.notices, [BLOCKED]);
@@ -526,4 +528,83 @@ void test('備份還沒成功、文字有沒 ID 的目標：按鈕說明與存�
   assert.equal(h.tip(), '筆記已自動儲存；有 1 個學習目標尚未加入複習');
   await h.saver.save(h.view);
   assert.deepEqual(h.notices, [BACKUP, '1 個學習目標已加入複習']);
+});
+
+// 技術債 D1（外掛架構檢查環節 2 結論第 1 條）：有寫法有問題的目標時，按鈕換成提醒的樣子；存檔後的通知把新增的數和問題合成一次，
+// 最多列三個目標（行號從 1 算、名稱、原因），其餘寫「另有 N 個」；寫錯的不算新增。saved、stale、受阻照原本的意思。
+// 用真的 state（記憶體 Files）；原因的字照 src/core/deck/parse.ts。
+const TYPED_REASON = '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式';
+const NO_ANSWER = '這一題 :: 的底下沒有答案';
+const MALFORMED_ONE = '筆記已自動儲存；有 1 個學習目標寫法有問題，暫時不會出題';
+const TYPED_DECK = '- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n';
+
+void test('D1 中翻英的答案寫了中文：按鈕提醒；按存檔補上 ID，通知新增 1 個並列出問題；再按只列問題；改好之後按鈕回到沒有要做', async t => {
+  const h = await blockedSetup(t, TYPED_DECK, 'none');
+  assert.equal(h.tip(), MALFORMED_ONE, '還沒存檔、兩個都沒有 ID 時也先提醒');
+  await h.saver.save(h.view);
+  const problem = '第 2 行〈borrow 中翻英〉：' + TYPED_REASON;
+  assert.deepEqual(h.notices, ['1 個學習目標已加入複習；有 1 個學習目標寫法有問題，暫時不會出題\n' + problem]);
+  assert.equal(ids(h.view.value).length, 2, '寫錯的也配 ID，改好之後不用再存一次');
+  assert.equal(h.tip(), MALFORMED_ONE);
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices.at(-1), MALFORMED_ONE + '\n' + problem, '沒有要補的（unchanged）也列出問題');
+  const fixed = h.view.value.replace('借入 :: 借入', '借入 :: borrow');
+  h.view.value = fixed;
+  h.memory.write(DECK, fixed);
+  await h.settle();
+  assert.equal(h.tip(), DONE);
+  await h.saver.save(h.view);
+  assert.equal(h.notices.length, 2, '都沒有問題、沒有要補的：不提示');
+});
+
+void test('D1 五個目標寫法有問題（:: 底下沒有答案、KK 音標的方括號）：通知照行號列前三個，其餘寫「另有 2 個」；行號從 1 算、算上屬性區', async t => {
+  const deck = '---\n科目: 英文\n---\n'
+    + '- borrow 中翻英 ^b23456\n    - 借入 :: borrow [ˈbɑroʊ]\n'
+    + '- 能說明蒸發 ^c23456\n    - 水變成水蒸氣叫什麼？ ::\n'
+    + '- 能說明凝結 ^d23456\n    - 水蒸氣變成水叫什麼？ ::\n'
+    + '- 能說明沸騰 ^e23456\n    - 水沸騰時是幾度？ :: 100 度\n'
+    + '- 能說明昇華 ^f23456\n    - 乾冰變成氣體叫什麼？ ::\n'
+    + '- 能說明凝固 ^g23456\n    - 水變成冰叫什麼？ ::\n';
+  const h = await blockedSetup(t, deck, 'none');
+  assert.equal(h.tip(), '筆記已自動儲存；有 5 個學習目標寫法有問題，暫時不會出題');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [[
+    '筆記已自動儲存；有 5 個學習目標寫法有問題，暫時不會出題',
+    '第 5 行〈borrow 中翻英〉：' + TYPED_REASON,
+    '第 7 行〈能說明蒸發〉：' + NO_ANSWER,
+    '第 9 行〈能說明凝結〉：' + NO_ANSWER,
+    '另有 2 個',
+  ].join('\n')]);
+  assert.equal(h.view.value, deck, '都有 ID，不改字');
+});
+
+void test('D1 ambiguous-id 不重複算：只有兩個 ID 的目標，按鈕照待處理的問題、不提寫法；存檔不列它', async t => {
+  const h = await blockedSetup(t, '- 能說明蒸發 ^aaaaaa 和 ^bbbbbc\n    - 水變成水蒸氣叫什麼？ :: 蒸發\n', 'none');
+  assert.equal(h.tip(), '有 1 個學習目標的進度連結需要處理');
+  await h.saver.save(h.view);
+  assert.deepEqual(h.notices, [], '沒有寫法的問題可列');
+  assert.equal(h.modals.length, 1, '待處理的問題照樣開小視窗');
+});
+
+void test('D1 saved、stale、受阻照原本的意思：有寫法有問題的目標也不另外列', async () => {
+  const malformed = [{ line: 0, at: 1, name: 'borrow 中翻英', reason: TYPED_REASON }];
+  for (const [result, expected] of [
+    [{ kind: 'saved' }, []],
+    [{ kind: 'stale' }, ['這篇筆記剛剛改過，請再按一次存檔']],
+    [{ kind: 'blocked', reason: 'unread' }, [BLOCKED]],
+  ] as const) {
+    const stub = createObsidianStub();
+    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+    const notified: string[] = [];
+    const state = {
+      deckStatus: () => ({ missing: 0, issues: [], malformed }), onChange: () => () => {}, ...loadedState,
+      save: () => Promise.resolve(result),
+    };
+    const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+    const view = stub.leaf(DECK).view as { value: string };
+    view.value = '- borrow 中翻英\n    - 借入 :: 借入\n';
+    await saver.save(view);
+    assert.deepEqual(notified, expected, result.kind);
+  }
 });

@@ -26,7 +26,7 @@ export type WriteBlock = 'phone' | 'loading' | 'closed' | 'backup' | 'unread';
 
 /** Cards 改卡組的結果。 */
 export type WriteResult =
-  /** 核對讀取確認寫成了。added：這次新配上 ID 的目標數（還原、當成新的不算）。 */
+  /** 核對讀取確認寫成了。added：這次新配上 ID 而且寫法沒有問題的目標數（寫錯的照樣配 ID，但不出題，技術債 D1；還原、當成新的不算）。 */
   | { kind: 'done'; added: number }
   /** 沒有要改的（含不是卡組）。 */
   | { kind: 'unchanged' }

@@ -73,7 +73,7 @@ for (const landed of ['舊文字', 'null', 'reject'] as const) void test('M1 fil
   assert.equal(h.texts.get(P), Ca);
   await h.flush();
   h.clean();
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   await h.settle();
   h.clean();
   h.samePlan();
@@ -94,7 +94,7 @@ void test('S20 fillIds 版：寫入有結果之前不讀這一篇；有結果之
   await h.flush();
   assert.deepEqual(h.reads.slice(reads), [P]);
   h.clean();
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   await h.settle();
   assert.deepEqual(h.reads.slice(reads), [P]);
   h.samePlan();
@@ -159,7 +159,7 @@ void test('§4 fillIds 核對：寫成後家長又打了別的字，預期的 ID
   held.release();
   assert.equal(await filling, true);
   h.clean();
-  assert.deepEqual(h.state.deckStatus(P), { missing: 1, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 1, issues: [], malformed: [] });
 
   const lost = await setup(t, { [P]: C });
   const held2 = lost.holdModify(P);
@@ -169,7 +169,7 @@ void test('§4 fillIds 核對：寫成後家長又打了別的字，預期的 ID
   held2.release();
   assert.equal(await filling2, false);
   lost.clean();
-  assert.deepEqual(lost.state.deckStatus(P), { missing: 2, issues: [] });
+  assert.deepEqual(lost.state.deckStatus(P), { missing: 2, issues: [], malformed: [] });
   // 預留過的 aaaaaa 不再配出。
   assert.equal(await lost.state.fillIds(P), true);
   assert.equal(lost.texts.get(P), '- 能說明 C ^aaaaab\n    - QC :: AC\n- 能說明 D ^aaaaac\n    - QD :: AD\n');
@@ -193,7 +193,7 @@ void test('S18 fillIds 版：寫成後核對讀不到也回 true（已寫進檔�
   assert.deepEqual(h.state.unread(), []);
   assert.equal(h.changed(), changes + 1);
   h.clean();
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   h.samePlan();
 });
 
@@ -267,7 +267,7 @@ void test('S12 N1：只送通知（磁碟沒變）就立刻存檔，存檔前後
   await h.settle();
   h.clean();
   assert.equal(h.texts.get(P), Ca);
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   h.samePlan();
 });
 
@@ -401,7 +401,7 @@ void test('S16 寫入失敗：persist reject 是 failed，state 不改回編輯�
   assert.equal(editor.value, Ca, 'state 不把編輯器改回去');
   assert.equal(h.texts.get(P), C);
   await h.flush();
-  assert.deepEqual(h.state.deckStatus(P), { missing: 1, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 1, issues: [], malformed: [] });
   // 家長按 Undo 之後再存一次。
   editor.value = C;
   editor.fail = false;
@@ -412,7 +412,7 @@ void test('S16 寫入失敗：persist reject 是 failed，state 不改回編輯�
   const m = await setup(t, { [P]: C });
   m.control.failModify = true;
   await assert.rejects(m.state.fillIds(P));
-  assert.deepEqual(m.state.deckStatus(P), { missing: 1, issues: [] });
+  assert.deepEqual(m.state.deckStatus(P), { missing: 1, issues: [], malformed: [] });
   m.control.failModify = false;
   assert.equal(await m.state.fillIds(P), true);
   assert.equal(m.texts.get(P), Cb);
@@ -462,7 +462,7 @@ void test('S18 已保存、核對讀不到：saved，門檻擋住別篇；恢復
   assert.deepEqual(h.state.unread(), []);
   assert.equal(h.changed(), changes + 1);
   h.clean();
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   h.samePlan();
 });
 
@@ -570,7 +570,7 @@ void test('S24 關閉：排隊中的回 blocked closed；persist 延遲中 close
   const again = createState({ files: h.files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0 });
   t.after(() => again.close());
   await again.ready();
-  assert.deepEqual(again.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(again.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   assert.deepEqual(again.decks().find(entry => entry.path === P)?.deck.targets.map(target => target.id), ['aaaaaa']);
 });
 
@@ -584,7 +584,7 @@ void test('S24 還沒 ready 與關閉之後：save、resolve 回 blocked loading
   assert.deepEqual(await state.resolve(issue, 'new', editor), { kind: 'blocked', reason: 'loading' });
   assert.equal(await state.fillIds(P), false);
   assert.throws(() => state.today());
-  assert.deepEqual(state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   await state.ready();
   await state.close();
   assert.deepEqual(await state.save(editor), { kind: 'blocked', reason: 'closed' });
@@ -617,7 +617,7 @@ void test('S28 寫入卡住：persist 一直不回來，逾時後 failed、放�
   await h.settle();
   h.clean();
   h.clean(A);
-  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [] });
+  assert.deepEqual(h.state.deckStatus(P), { missing: 0, issues: [], malformed: [] });
   h.samePlan();
 });
 
