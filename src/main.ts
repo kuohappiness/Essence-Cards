@@ -256,10 +256,12 @@ export default class EssenceCardsPlugin extends Plugin {
       if (this.unloaded) return;
       // 電腦上載入備份功能失敗：照 D-155 補充記 init（印在 console 並記進錯誤紀錄）；state 已經記過的不再記。
       // 拒絕的值可能是查原型、讀 message 或轉文字就拋錯的值（Codex 第三輪的 G2）：判斷與轉文字都包起來，提示與設定頁照常。
+      // message 讀得到也不一定是字串（Symbol、轉文字會拋錯的物件，第四輪的 H1）：在保護範圍裡用 String() 轉好，外面只接字串。
       const ready = safely(() => error instanceof ReadyFailed, false);
       if (!ready) this.fail('init', error);
       const cause: unknown = ready ? (error as ReadyFailed).cause : error;
-      this.backupError = '備份的功能載入失敗：' + safely(() => cause instanceof Error ? cause.message : String(cause), '（原因無法轉成文字）');
+      const reason = safely(() => String(cause instanceof Error ? cause.message : cause), '（原因無法轉成文字）');
+      this.backupError = '備份的功能載入失敗：' + reason;
       new Notice(BACKUP_NOTICE);
       this.emit('notice', BACKUP_NOTICE);
       this.settingTab?.refresh();

@@ -566,3 +566,28 @@ void test('D-155 補充 G2：state 拒絕的值不准查原型時，備份的錯
   assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因']);
   assert.deepEqual(unhandled, []);
 });
+
+// Codex 第四輪的 H1：Error.message 是 Symbol 或轉文字會拋錯的物件時，讀得到，但串接成原因時才出錯；整個原因要在保護範圍內做成字串。
+for (const [name, message, shown] of [
+  ['Symbol', Symbol('message'), '備份的功能載入失敗：Symbol(message)'],
+  ['轉文字會拋錯的物件', { toString() { throw Error('message-text-crash'); } }, '備份的功能載入失敗：（原因無法轉成文字）'],
+] as const) void test(`D-155 補充 H1：state 拒絕的 Error.message 是${name}時，備份的錯誤處理照常提示、不留下未處理的拒絕`, async t => {
+  quiet(t);
+  const unhandled: unknown[] = [];
+  const listener = (reason: unknown): void => { unhandled.push(reason instanceof Error ? reason.message : 'not an Error'); };
+  process.on('unhandledRejection', listener);
+  t.after(() => { process.off('unhandledRejection', listener); });
+  const original = Error('original');
+  (original as { message: unknown }).message = message;
+  const h = host(deck, { desktop: true, failWatch: () => original });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  const reason = await h.plugin.state?.ready().then(() => null, (error: unknown) => error);
+  assert.equal(reason, original);
+  await wait(100);
+  assert.deepEqual(errorLines(h).map(line => line.where), ['init']);
+  assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因']);
+  assert.equal((h.plugin as unknown as { backupError: string | null }).backupError, shown);
+  assert.deepEqual(unhandled, []);
+});
