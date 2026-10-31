@@ -76,7 +76,7 @@ flowchart LR
 | Essence Cards（本 repo） | 製卡、複習、檢核、排程、選用的 AI 輔助 | ✅ |
 | Essence Capture（另一個 repo，[骨架](https://github.com/kuohappiness/Essence-Capture) 2026-10-20 建立；程式延到 Cards 的複習閉環完成後，[D-111](decisions.md#d-111-v1-的開發順序capture-延後)） | 知識入口：來源 → 可讀、可編輯的 Obsidian 筆記；v1 先做 PDF 與圖片的忠實轉錄，成為教材庫（[D-076](decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)）；教材庫是共用、唯讀的文件，可以分享給很多學生，個人回饋只留在卡組與錯題本（[D-093](decisions.md#d-093-教材庫共用個人回饋留在錯題本)）；給通用型使用者，不限學生 | ✅ |
 | 題庫（Cards 內的獨立模組，第二階段討論） | 計算與應用題、選擇題、考古題模擬考；題目寫在題庫筆記，和閃卡共用今日佇列、排程與複習紀錄（[D-090](decisions.md#d-090-題庫併入-cards變式題以題型排程)） | ✅ 方向；細節見[第二階段規畫](plans/practice.md) |
-| Essence Mindmap（暫定名，未來，尚未建立） | 把知識架構視覺化（D-076）；使用者未來想開發的 Obsidian 心智圖外掛；Cards 保留對接的彈性（[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)） | ✅ 需求；做法 💡 |
+| Essence Mindboard（未來，尚未建立） | 把知識架構視覺化（D-076）；使用者未來想開發的 Obsidian 心智圖外掛；Cards 保留對接的彈性（[D-056](decisions.md#d-056-保留和心智圖外掛對接的彈性)） | ✅ 需求；做法 💡 |
 
 已確認 ✅（[D-006](decisions.md#d-006-兩個獨立外掛)、[D-008](decisions.md#d-008-學習紀錄與來源修改)、[D-009](decisions.md#d-009-一般筆記可直接使用)）：
 
