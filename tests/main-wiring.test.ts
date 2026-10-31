@@ -425,6 +425,7 @@ void test('備份接線：電腦上 state 讀完之後自己做一份 new-versio
 });
 
 void test('備份接線：備份位置在 vault 裡時失敗，通知一次、閘門關著（存檔受阻），不寫卡組', async t => {
+  quiet(t);
   const vaultPath = tempDir();
   const h = host({ 'Essence Cards/b.md': '- 新目標\n    - Q :: A\n' }, { desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': join(vaultPath, '備份') } });
   t.after(() => { h.plugin.onunload(); });
@@ -543,4 +544,25 @@ void test('D-155 補充：電腦上載入備份功能失敗記一行 init；stat
   await wait(100);
   assert.deepEqual(errorLines(watch).map(line => [line.where, line.msg]), [['init', '監看不了']]);
   assert.equal(printed.filter(args => args.some(arg => arg instanceof Error && arg.message === '監看不了')).length, 1, 'console 也只印一次');
+});
+
+// Codex 第三輪的 G2：state 的拒絕值是不准查原型的 Proxy（F3 的同一個值）時，備份那邊的錯誤處理也不能自己拋錯：
+// init 只有 state 那一行，備份受阻的提示照常出，沒有未處理的拒絕。
+void test('D-155 補充 G2：state 拒絕的值不准查原型時，備份的錯誤處理照常提示、不留下未處理的拒絕', async t => {
+  quiet(t);
+  const unhandled: unknown[] = [];
+  const listener = (reason: unknown): void => { unhandled.push(reason instanceof Error ? reason.message : 'not an Error'); };
+  process.on('unhandledRejection', listener);
+  t.after(() => { process.off('unhandledRejection', listener); });
+  const original = new Proxy({}, { getPrototypeOf() { throw Error('prototype-check-crash'); } });
+  const h = host(deck, { desktop: true, failWatch: () => original });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  const reason = await h.plugin.state?.ready().then(() => null, (error: unknown) => error);
+  assert.equal(reason, original);
+  await wait(100);
+  assert.deepEqual(errorLines(h).map(line => line.where), ['init']);
+  assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因']);
+  assert.deepEqual(unhandled, []);
 });

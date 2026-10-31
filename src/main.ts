@@ -35,6 +35,11 @@ const REPORT_NOTICE = '已記下，可以跟家長說一聲';
 class ReadyFailed extends Error {
   constructor(cause: unknown) { super('state 沒有讀完', { cause }); }
 }
+/** 跑跑看；拋錯就用 fallback（錯誤處理裡判斷不明的值時用：判斷本身不能再拋錯）。 */
+function safely<T>(get: () => T, fallback: T): T {
+  // 拋錯就是那個值不准這樣查或轉文字；照 fallback 繼續，原本的錯已經交給記錄器或接著交。
+  try { return get(); } catch { return fallback; }
+}
 /** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
 const VERSION_WAIT = 2000;
 
@@ -250,9 +255,11 @@ export default class EssenceCardsPlugin extends Plugin {
     } catch (error) {
       if (this.unloaded) return;
       // 電腦上載入備份功能失敗：照 D-155 補充記 init（印在 console 並記進錯誤紀錄）；state 已經記過的不再記。
-      if (!(error instanceof ReadyFailed)) this.fail('init', error);
-      const cause = error instanceof ReadyFailed ? error.cause : error;
-      this.backupError = '備份的功能載入失敗：' + (cause instanceof Error ? cause.message : String(cause));
+      // 拒絕的值可能是查原型、讀 message 或轉文字就拋錯的值（Codex 第三輪的 G2）：判斷與轉文字都包起來，提示與設定頁照常。
+      const ready = safely(() => error instanceof ReadyFailed, false);
+      if (!ready) this.fail('init', error);
+      const cause: unknown = ready ? (error as ReadyFailed).cause : error;
+      this.backupError = '備份的功能載入失敗：' + safely(() => cause instanceof Error ? cause.message : String(cause), '（原因無法轉成文字）');
       new Notice(BACKUP_NOTICE);
       this.emit('notice', BACKUP_NOTICE);
       this.settingTab?.refresh();

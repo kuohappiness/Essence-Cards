@@ -40,8 +40,8 @@ export interface StubOptions {
   failRead?: (path: string) => boolean;
   /** 寫入都失敗；給函式時只有它回 true 的路徑寫不進去（建立、追加與 process）。 */
   failWrite?: boolean | ((path: string) => boolean);
-  /** vault.on 拋錯（監看不了，tasks/error-log.md §2-3）。 */
-  failWatch?: boolean;
+  /** vault.on 拋錯（監看不了，tasks/error-log.md §2-3）；給函式時拋出它回傳的值（不一定是 Error）。 */
+  failWatch?: boolean | (() => unknown);
   /** Platform.isDesktopApp；預設 false（手機）。 */
   desktop?: boolean;
   /**
@@ -186,7 +186,13 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     },
     createFolder: (path: string) => { count(); writes.push('folder ' + path); return Promise.resolve(); },
     adapter: options.vaultPath ? Object.assign(new FileSystemAdapter(), adapter) : adapter,
-    on: () => { count(); if (options.failWatch) throw Error('監看不了'); return {}; },
+    on: () => {
+      count();
+      // 測試要能拋出不是 Error 的值（例如不准查原型的 Proxy）。
+      if (typeof options.failWatch === 'function') throw options.failWatch();
+      if (options.failWatch) throw Error('監看不了');
+      return {};
+    },
     offref: () => {},
   };
   const storage = new Map(Object.entries(options.localStorage ?? {}));
