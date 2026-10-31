@@ -188,7 +188,11 @@ export function wireSave(host: SaveHost): Saver {
       if (tip) host.notify(tip);
       refresh();
       if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view).open();
-    }).catch(host.onError).finally(() => { saving.delete(path); });
+    }).catch(host.onError).finally(() => {
+      saving.delete(path);
+      // 開發命令 save 點按鈕之後等這一筆，確定是這次點擊觸發的存檔結束了（技術債 N1）。
+      host.log?.('存檔結束 ' + path);
+    });
     saving.set(path, job);
     return job;
   }

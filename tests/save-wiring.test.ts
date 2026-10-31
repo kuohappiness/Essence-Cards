@@ -236,6 +236,32 @@ void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同
   assert.equal(handles.length, 2, '上一份結束之後再按，排新的一份');
 });
 
+// 技術債 N1：開發命令 save 只點按鈕、等這次點擊觸發的存檔結束（不再自己呼叫 save 代替）。存檔結束（提示、按鈕、小視窗都處理完）
+// 才記「存檔結束 路徑」；點擊之前、存檔還沒結束時沒有這一筆。
+void test('N1 按鈕觸發的存檔結束後才記「存檔結束」：開發命令等這一筆，不自己呼叫 save', async () => {
+  const stub = createObsidianStub();
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void } }>(code);
+  const log: string[] = [];
+  let finish: () => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 1, issues: [] }), onChange: () => () => {}, ...loadedState,
+    save: () => new Promise(resolve => { finish = () => { resolve({ kind: 'done', added: 1 }); }; }),
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() { log.push('提示'); }, onError(error: unknown) { throw error; }, log(event: string) { log.push(event); } });
+  const leaf = stub.leaf(DECK);
+  stub.leaves.push(leaf);
+  saver.refresh();
+  await wait(0);
+  assert.deepEqual(log, [], '還沒點');
+  (leaf.view as { actions: { click(): void }[] }).actions[0].click();
+  await wait(0);
+  assert.deepEqual(log, [], '存檔還沒結束');
+  finish();
+  await wait(0);
+  assert.deepEqual(log, ['提示', '存檔結束 ' + DECK]);
+});
+
 // Codex L2 的 R3（tasks/state-writes.md §7）：小視窗按下還原或當成新的之後，結果回來之前兩個按鈕都停用；這段時間別篇的讀取
 // 讓小視窗重畫（onChange）也一樣，再按不另外排一份。結果回來才解除。
 void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一份；結果回來後才解除', async () => {

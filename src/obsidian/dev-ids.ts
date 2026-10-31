@@ -8,6 +8,7 @@ import type { State } from '../state/index.ts';
 import type { IdToken } from './lock.ts';
 import { BUTTONS, MESSAGES, TIPS, type Saver } from './save.ts';
 import { leafPath, removeTestPaths } from './dev-events.ts';
+import { movedUp } from '../dev/move.ts';
 import { keepRendering } from './dev-review.ts';
 import { createObsidianFiles } from './files.ts';
 
@@ -123,10 +124,13 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
     }],
     // 縮排之後那一行不是最上層的目標（不再鎖），ID 仍在它自己那一行的最後。
     ['清單縮排（Tab）', () => { select(bLine + 3); key('Tab'); return { ok: /^\s+- 能說明溶解 \^p7q2w8$/m.test(cm.state.doc.toString()) && tokens().join() === 'k3m9x2', note: JSON.stringify(cm.state.doc.toString()) }; }],
+    // 命令要真的執行、那一行真的往上移（技術債 N1）：原本只看 B 那一行還在，命令沒執行也算通過。
     ['上下移動整行（命令 editor:swap-line-up）', () => {
       select(bLine + 3);
-      (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('editor:swap-line-up');
-      return { ok: cm.state.doc.toString().split('\n').includes(B) && tokens().length === 2, note: JSON.stringify(cm.state.doc.toString()) };
+      const before = cm.state.doc.toString();
+      const executed = (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById('editor:swap-line-up');
+      const after = cm.state.doc.toString();
+      return { ok: movedUp(executed, before, after, B) && tokens().length === 2, note: '執行：' + String(executed) + '；' + JSON.stringify(after) };
     }],
     ['Undo／Redo', () => {
       select(nameEnd); type('的現象');
@@ -248,6 +252,16 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   // 前一次留下沒關的小視窗先關掉。
   Array.from(document.querySelectorAll('.modal-container')).filter(el => el.querySelector('.essence-cards-issue')).forEach(el => { el.remove(); });
   const button = (view: MarkdownView) => view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
+  /**
+   * 點存檔按鈕，等這次點擊觸發的存檔結束（save.ts 記的「存檔結束」；技術債 N1）：不自己呼叫 save 代替，
+   * 按鈕不在或點了沒有觸發存檔就回傳 false。
+   */
+  const click = async (view: MarkdownView): Promise<boolean> => {
+    const el = button(view), path = view.file?.path, at = host.devLog.events.length;
+    if (!el || !path) return false;
+    el.click();
+    return until(() => host.devLog.events.slice(at).some(event => event.endsWith(' 存檔結束 ' + path)), 15000);
+  };
   const look = (view: MarkdownView) => {
     host.devLog.save?.refresh();
     const el = button(view);
@@ -279,9 +293,8 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   editor.setSelection({ line: target, ch: 6 }, { line: target, ch: 9 });
   const selectedBefore = { text: editor.getSelection(), from: editor.getCursor('from'), to: editor.getCursor('to') };
   const notices = host.devLog.notices.length;
-  button(first.view)?.click();
-  // 按鈕的存檔要等寫進磁碟、核對讀取之後才有結果（tasks/state-writes.md §7）：同一篇還沒結束時 save 回傳同一個 Promise。
-  await host.devLog.save?.save(first.view);
+  // 按鈕的存檔要等寫進磁碟、核對讀取之後才有結果（tasks/state-writes.md §7）。
+  out.clickedFill = await click(first.view);
   const filled = editor.getValue();
   out.filled = filled;
   out.notice = host.devLog.notices.slice(notices);
@@ -307,8 +320,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   out.issues = look(first.view);
   out.beforeClick = { editorReloaded: !editor.getValue().includes(id), editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })) };
   out.issuesExpected = TIPS.issues(1);
-  button(first.view)?.click();
-  await host.devLog.save?.save(first.view);
+  out.clickedIssues = await click(first.view);
   await sleep(300);
   out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
   const modal = Array.from(document.querySelectorAll('.modal-container .essence-cards-issue')).at(-1);
@@ -343,16 +355,14 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   file = await fresh();
   const stale = await open(app, file);
   await until(() => { host.devLog.save?.refresh(); return !!button(stale.view); });
-  button(stale.view)?.click();
-  await host.devLog.save?.save(stale.view);
+  out.clickedStaleFill = await click(stale.view);
   await sleep(2500);
   const staleFilled = stale.view.editor.getValue();
   const staleId = /能說明蒸發 \^([a-z0-9]{6})/.exec(staleFilled)?.[1] ?? '';
   await app.vault.adapter.write(trial, staleFilled.replace(' ^' + staleId, ''));
   await until(() => state.deckStatus(trial).issues.length === 1);
   await until(() => !stale.view.editor.getValue().includes(staleId), 3000);
-  button(stale.view)?.click();
-  await host.devLog.save?.save(stale.view);
+  out.clickedStaleIssue = await click(stale.view);
   await sleep(300);
   const oldButton = restoreButton();
   const edited = staleFilled.replace(' ^' + staleId, '').replace('水變成水蒸氣叫什麼？', '水加熱變成水蒸氣叫什麼？');
@@ -371,8 +381,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   await until(() => { host.devLog.save?.refresh(); return !!button(typed.view); });
   addTarget(typed.view);
   const typedNotices = host.devLog.notices.length;
-  button(typed.view)?.click();
-  await host.devLog.save?.save(typed.view);
+  out.clickedTyped = await click(typed.view);
   out.typedNotice = host.devLog.notices.slice(typedNotices);
   typed.leaf.detach();
   await sleep(2500);
@@ -421,6 +430,8 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const folder = app.vault.getAbstractFileByPath(TRIAL_FOLDER);
   if (folder) await app.vault.delete(folder, true);
   out.checks = {
+    // 每一次點擊都觸發了存檔、也等到它結束（技術債 N1）。
+    clicked: [out.clickedFill, out.clickedIssues, out.clickedStaleFill, out.clickedStaleIssue, out.clickedTyped].every(Boolean),
     staleModal: (out.staleModal as { oldButtonGone: boolean; restored: boolean }).oldButtonGone && (out.staleModal as { restored: boolean }).restored,
     typedNotice: (out.typedNotice as string[]).includes(TIPS.added(3)),
     closeRightAway: (out.closeRightAway as { hasTyped: boolean; ids: number; issues: number }).hasTyped && (out.closeRightAway as { ids: number }).ids === 3 && (out.closeRightAway as { issues: number }).issues === 0,
@@ -434,6 +445,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
     selection: out.selectionSame,
     done: (out.done as { tip?: string } | null)?.tip === TIPS.done,
     undo: out.undoRestores,
+    redo: out.redoAgain,
     issues: (out.issues as { tip?: string } | null)?.tip === TIPS.issues(1),
     modal: JSON.stringify(out.modal) === JSON.stringify(out.modalExpected),
     restored: out.restored && out.modalClosed,
