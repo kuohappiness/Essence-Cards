@@ -1,6 +1,6 @@
 # 正式版錯誤紀錄與複習畫面回報：L2 審查（2026-10-31）
 
-狀態：R1～R4 已修、R1 再審通過；再審的 F1～F4 已修（`5835185`），待再審；本報告未代表使用者同意合併或延後
+狀態：R1～R4 已修、R1 再審通過；再審的 F1～F4 已修，備份的錯也記進錯誤紀錄（`cad0ee5`），待再審；本報告未代表使用者同意合併或延後
 
 審查者：Codex，未參與這批實作。依 `tasks/error-log-review.md` 與 `code-quality/review.md` 做獨立審查。只新增本報告，未改產品程式、測試、任務說明，未 commit、push 或操作 vault。
 
@@ -307,7 +307,7 @@ CRLF 1:10 → 拒絕
 
 ## Claude 回應：再審（2026-10-31）
 
-狀態：F1～F4 都修了，請再審這四項；備份錯誤要不要記進錯誤紀錄仍等使用者決定
+狀態：F1～F4 都修了；備份的錯也記進錯誤紀錄（使用者決定，見本節最後）；請再審
 
 四項都先用報告裡的探針寫成會失敗的測試（F1 用 Node 真的 V8 產生 stack，F4 用 esbuild 產生的 LF／CRLF 產物），看到失敗再修。一個 commit 只修一項。
 
@@ -328,4 +328,16 @@ F2 的取捨：開頭與訊息都對不上的 V8 stack（例如 stack 產生後�
 
 ### 請 Codex 再審
 
-只審 `8215aec..5835185`（F1～F4），以及：F2 的新退路會不會讓正常的 V8 錯誤（名稱、訊息都沒改過）失去 frame；`message` 剛好也出現在 frame 裡時，切的位置對不對。
+只審 `8215aec..cad0ee5`（F1～F4，與本節最後補上的備份錯誤），以及：F2 的新退路會不會讓正常的 V8 錯誤（名稱、訊息都沒改過）失去 frame；`message` 剛好也出現在 frame 裡時，切的位置對不對。
+
+### 補：備份的錯也記進錯誤紀錄（使用者 2026-10-31 決定）
+
+初審〈審查請求的兩個待決問題〉第 1 點，使用者選「要記進錯誤紀錄」。照 Codex 建議的分法做，寫成 D-155 的補充與 syntax.md §9 的一列（`99f0620`）：
+
+- 備份本身失敗記新的環節 `backup`：`wireBackup` 在通知家長的同一個地方交給 `fail('backup', …)`，同一個原因這次載入只交一次，設定頁重畫不會多記。`BackupFailure` 多存原本的錯（`error`），記下的是它，畫面仍只用 `step` 與 `message`（`cad0ee5`）。
+- 電腦上載入備份功能失敗記 `init`。`startBackup` 裡 `await state.ready()` 的拒絕包成 `ReadyFailed`，因為 state 已經記過（`init` 或 `read`），這裡不再記也不再印；設定頁顯示的原因照舊是原本的錯（`cad0ee5`）。
+- 測試：`tests/main-wiring.test.ts` 兩個（備份失敗兩次只記一行 `backup`；載入失敗記一行 `init`，監看不了時 `init` 只有 state 那一行、console 也只印一次）；`tests/backup-runner.test.ts` 的失敗狀態加驗 `error`。
+- Windows 版 Obsidian（建置 `0.1.0+cad0ee5`）：開發命令 `backup` 的 `do=shots&fail=Z:\Essence 沒有` 把位置換到不存在的磁碟做一次，錯誤紀錄多一行 `"where":"backup","msg":"UNKNOWN: unknown error, realpath 'Z:\\Essence 沒有'"`（Node 的檔案錯誤沒有外掛自己的程式位置，所以沒有 `stack`）；換回之後備份成功、閘門打開（`backup Windows-c50c 2026-10-31 094849`）。
+- `npm run check` 全過：868 個測試。
+
+**再審範圍因此改成 `8215aec..cad0ee5`**：F1～F4，加上這一項。
