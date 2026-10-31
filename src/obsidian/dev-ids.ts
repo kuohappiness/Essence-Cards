@@ -454,6 +454,55 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   return out;
 }
 
+/**
+ * 技術債 W2：停用再啟用外掛（URI 的 reload）後，舊的存檔按鈕與小視窗會不會留在畫面上。分幾步用 URI 的 do 參數執行，中間由 AI 送 reload：
+ * open 建一篇沒有 ID 的卡組開在分頁；count 數那個分頁裡的存檔按鈕（每個的說明），click 再點每一個按鈕、等 2 秒，看提示與按鈕；
+ * late 加一個沒有 ID 的目標、點最新的按鈕之後馬上停用再啟用外掛（存檔的結果在卸載後才回來），等 3 秒數按鈕與畫面上的提示；close 關分頁、刪掉這篇。
+ */
+const W2_DECK = 'Essence Cards/W5 範例/重新啟用 W2（卡片）.md';
+export async function w2Check(host: IdsHost, step: string | undefined): Promise<unknown> {
+  const { app } = host;
+  const leaves = () => app.workspace.getLeavesOfType('markdown').filter(leaf => leafPath(leaf) === W2_DECK);
+  const buttons = () => leaves().flatMap(leaf => leaf.view instanceof MarkdownView ? Array.from(leaf.view.containerEl.querySelectorAll<HTMLElement>('.essence-cards-save')) : []);
+  const count = () => ({ tabs: leaves().length, buttons: buttons().map(el => el.getAttribute('aria-label')),
+    notices: Array.from(document.querySelectorAll('.notice')).map(el => el.textContent),
+    modals: document.querySelectorAll('.modal-container .essence-cards-issue').length });
+  if (step === 'open') {
+    if (!app.vault.getFileByPath(W2_DECK)) await writeFile(app, W2_DECK, TRIAL_TEXT);
+    const file = app.vault.getFileByPath(W2_DECK);
+    if (!file) throw Error('建不出 ' + W2_DECK);
+    if (!leaves().length) await open(app, file);
+    await until(() => { host.devLog.save?.refresh(); return buttons().length > 0; });
+    return count();
+  }
+  if (step === 'count') return count();
+  if (step === 'click') {
+    const before = count();
+    for (const el of buttons()) el.click();
+    await sleep(2000);
+    return { before, after: count() };
+  }
+  if (step === 'late') {
+    const plugins = (app as unknown as { plugins: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void> } }).plugins;
+    // 加一個沒有 ID 的目標，這次存檔才有結果要回報；點最新的按鈕（addAction 加在最前面）。
+    const view = leaves()[0]?.view;
+    if (view instanceof MarkdownView) view.editor.replaceRange('- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n', { line: view.editor.lastLine(), ch: 0 });
+    const before = count();
+    buttons()[0]?.click();
+    await plugins.disablePlugin('essence-cards');
+    await plugins.enablePlugin('essence-cards');
+    await sleep(3000);
+    return { before, after: count() };
+  }
+  if (step === 'close') {
+    for (const leaf of leaves()) leaf.detach();
+    const file = app.vault.getFileByPath(W2_DECK);
+    if (file) await app.vault.delete(file);
+    return count();
+  }
+  throw Error('do 要是 open、count、click、late 或 close');
+}
+
 /** save-tips 的卡組：四個寫法有問題的目標（中翻英寫了中文、KK 音標的方括號、:: 底下沒有答案），兩個寫對的；都沒有 ID。 */
 const TIPS_DECK = '---\n科目: 英文\n---\n- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n- 能說明蒸發\n    - 水變成水蒸氣叫什麼？ ::\n'
   + '- return 中翻英\n    - 歸還 :: return [rɪˈtɝn]\n- 能說明凝結\n    - 水蒸氣變成水叫什麼？ ::\n- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n';

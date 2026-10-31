@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { createObsidianStub } from './helpers/obsidian.ts';
+import { createObsidianStub, type ObsidianStub } from './helpers/obsidian.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { createState } from '../src/state/index.ts';
 
@@ -23,83 +23,209 @@ const DECK = 'Essence Cards/P.md';
 /** 替身的 state 已經讀完、沒有讀不到的檔、沒有受阻（存檔按鈕判斷受阻用，D-154）。 */
 const loadedState = { ready: () => Promise.resolve(), unread: () => [], writeBlock: () => null };
 
-function setup() {
+/** 替身的外掛：register 登記的收尾在 unload() 時照登記的順序跑（和 Obsidian 的 Component 一樣；技術債 W2）。 */
+function pluginOf(stub: ObsidianStub, onInterval = () => {}) {
+  const cleanups: (() => void)[] = [];
+  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { onInterval(); return id; },
+    register(cleanup: () => void) { cleanups.push(cleanup); } };
+  return { plugin, unload: () => { for (const cleanup of cleanups.splice(0)) cleanup(); } };
+}
+const flush = () => new Promise<void>(resolve => { setImmediate(resolve); });
+
+/**
+ * 離開筆記的備援：假計時器只推進 save.ts 自己的 1 秒延遲（技術債 W2；原本每次真的等 1.1 秒）。要在建立替身之前開，替身的
+ * window.setTimeout 才是假的；一個測試只開一次。elapse 推進之後讓 Promise 與排好的事件走完（不用 runAll 跳過中間）。
+ */
+const timed = new WeakSet<TestContext>();
+function setup(t: TestContext) {
+  if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
   const stub = createObsidianStub();
   const fills: string[] = [];
   let intervals = 0;
-  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { intervals++; return id; } };
+  const { plugin, unload } = pluginOf(stub, () => { intervals++; });
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; opened(path: string): void; start(): void } }>(code);
   const state = { deckStatus: () => ({ missing: 1, issues: [], malformed: [] }), fillIds: (path: string) => { fills.push(path); return Promise.resolve(true); }, onChange: () => () => {}, ...loadedState };
   const saver = wireSave({ plugin, state: () => state, notify() {}, onError() {} });
-  return { saver, leaves: stub.leaves, leaf: stub.leaf, deferred: stub.deferred, fills, fire: stub.fire, intervals: () => intervals };
+  const elapse = async (ms: number) => { t.mock.timers.tick(ms); await flush(); };
+  return { saver, leaves: stub.leaves, leaf: stub.leaf, deferred: stub.deferred, fills, fire: stub.fire, intervals: () => intervals, elapse, unload };
 }
 
-void test('R3 背景分頁只開不改就關掉：開的時候與關的時候各有 layout-change（實測 A3 步驟 1、2），關掉後補一次', async () => {
-  const h = setup();
+void test('R3 背景分頁只開不改就關掉：開的時候與關的時候各有 layout-change（實測 A3 步驟 1、2），關掉後補一次', async t => {
+  const h = setup(t);
   h.fire('layout-change');
   h.leaves.push(h.leaf(DECK));
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [], '開著時不補');
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
-  assert.deepEqual(h.fills, [DECK]);
+  await h.elapse(999);
+  assert.deepEqual(h.fills, [], '1 秒到期之前不補');
+  await h.elapse(1);
+  assert.deepEqual(h.fills, [DECK], '剛好 1 秒時補');
 });
 
-void test('開完馬上關（只在關之後送一次 layout-change，a3check 的 C1）：編輯器建立時記下，關掉後補一次', async () => {
-  const h = setup();
+// 技術債 W2：每次關掉各排一次（重排不取消前一次）；到期時又開著的不補。關、開、再關都在 1 秒內：第一次到期時沒開著就補，
+// 第二次到期再補一次（fillIds 沒有要改的就不改字）。
+void test('W2 重排：關、開、再關都在 1 秒內，兩次關各自到期時補；到期時又開著的那一次不補', async t => {
+  const h = setup(t);
+  h.leaves.push(h.leaf(DECK));
+  h.fire('layout-change');
+  h.leaves.length = 0;
+  h.fire('layout-change');
+  await h.elapse(500);
+  h.leaves.push(h.leaf(DECK));
+  h.fire('layout-change');
+  await h.elapse(100);
+  h.leaves.length = 0;
+  h.fire('layout-change');
+  await h.elapse(400);
+  assert.deepEqual(h.fills, [DECK], '第一次關的到期');
+  await h.elapse(599);
+  assert.deepEqual(h.fills, [DECK]);
+  await h.elapse(1);
+  assert.deepEqual(h.fills, [DECK, DECK], '第二次關的到期');
+  h.leaves.push(h.leaf(DECK));
+  h.fire('layout-change');
+  h.leaves.length = 0;
+  h.fire('layout-change');
+  h.leaves.push(h.leaf(DECK));
+  await h.elapse(1000);
+  assert.deepEqual(h.fills, [DECK, DECK], '到期時又開著（還沒送 layout-change）：不補');
+});
+
+// 技術債 W2（Windows 1.14.5 用 URI 的 reload 重現：每重新啟用一次，同一個分頁就多一個存檔按鈕，舊的說明停在當時、按了沒反應）：
+// 卸載時拿掉按鈕、關掉小視窗、取消還沒到期的補 ID；之後晚回來的存檔、小視窗與 ready() 都不碰畫面。
+void test('W2 卸載：拿掉存檔按鈕、關掉小視窗，還沒到期的補 ID 取消', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const stub = createObsidianStub();
+  const { plugin, unload } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
+  const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  const fills: string[] = [];
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), onChange: () => () => {}, ...loadedState,
+    save: () => Promise.resolve({ kind: 'unchanged' }), fillIds: (path: string) => { fills.push(path); return Promise.resolve(true); },
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  const leaf = stub.leaf(DECK), other = stub.leaf('Essence Cards/Q.md');
+  stub.leaves.push(leaf, other);
+  stub.fire('layout-change');
+  await flush();
+  assert.equal((leaf.view as { actions: unknown[] }).actions.length, 1);
+  await saver.save(leaf.view);
+  assert.equal(stub.modals.length, 1);
+  stub.leaves.splice(1, 1);
+  stub.fire('layout-change');
+  unload();
+  assert.deepEqual([(leaf.view as { actions: unknown[] }).actions.length, stub.modals[0].isOpen], [0, false]);
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.deepEqual(fills, [], '卸載前排的補 ID 不跑');
+  saver.refresh();
+  assert.equal((leaf.view as { actions: unknown[] }).actions.length, 0, '卸載後 refresh 不加回按鈕');
+});
+
+void test('W2 卸載之後才回來：存檔的結果不提示、不加回按鈕、不開小視窗；ready() 完成也不加回按鈕', async () => {
+  const stub = createObsidianStub();
+  const { plugin, unload } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
+  const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  const notified: string[] = [];
+  let finish: () => void = () => {}, ready: () => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), onChange: () => () => {}, unread: () => [], writeBlock: () => null,
+    ready: () => new Promise<void>(resolve => { ready = resolve; }),
+    save: () => new Promise(resolve => { finish = () => { resolve({ kind: 'done', added: 1 }); }; }),
+  };
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+  const leaf = stub.leaf(DECK);
+  stub.leaves.push(leaf);
+  saver.refresh();
+  const saving = saver.save(leaf.view);
+  unload();
+  finish();
+  ready();
+  await saving;
+  await flush();
+  assert.deepEqual([notified, (leaf.view as { actions: unknown[] }).actions.length, stub.modals.length], [[], 0, 0]);
+});
+
+void test('W2 卸載之後小視窗的結果才回來：不提示（原本會說「剛剛改過」）', async () => {
+  const stub = createObsidianStub();
+  const { plugin, unload } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  const notified: string[] = [];
+  let finish: (result: unknown) => void = () => {};
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [issue], malformed: [] }), onChange: () => () => {}, ...loadedState,
+    save: () => Promise.resolve({ kind: 'unchanged' }),
+    resolve: () => new Promise(resolve => { finish = resolve; }),
+  };
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+  await saver.save(stub.leaf(DECK).view);
+  stub.modals[0].contentEl.querySelectorAll('button')[0].click();
+  unload();
+  assert.equal(stub.modals[0].isOpen, false);
+  finish({ kind: 'stale' });
+  await flush();
+  assert.deepEqual(notified, []);
+});
+
+void test('開完馬上關（只在關之後送一次 layout-change，a3check 的 C1）：編輯器建立時記下，關掉後補一次', async t => {
+  const h = setup(t);
   h.fire('layout-change');
   h.leaves.push(h.leaf(DECK));
   h.saver.opened(DECK);
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [DECK]);
 });
 
-void test('開、換篇、關都很快（a3check 的 C3）：兩篇的編輯器各建立一次，關掉後各補一次', async () => {
-  const h = setup();
+void test('開、換篇、關都很快（a3check 的 C3）：兩篇的編輯器各建立一次，關掉後各補一次', async t => {
+  const h = setup(t);
   const other = 'Essence Cards/Q.md';
   h.fire('layout-change');
   h.saver.opened(DECK);
   h.saver.opened(other);
   h.saver.opened('其他/筆記.md');
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills.sort(), [DECK, other]);
 });
 
 // 條件模型：1.14.5 只在冷啟動看到未載入的分頁（那種由 start() 接住，見 T1 的測試）；之後才出現的未載入分頁沒有實機證據，
 // 這裡只確認 openPaths() 從 viewState 拿得到檔名。
-void test('還沒載入的分頁在啟動之後出現：出現與關掉都送 layout-change 時，關掉後補一次', async () => {
-  const h = setup();
+void test('還沒載入的分頁在啟動之後出現：出現與關掉都送 layout-change 時，關掉後補一次', async t => {
+  const h = setup(t);
   h.fire('layout-change');
   h.leaves.push(h.deferred(DECK));
   h.fire('layout-change');
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [DECK]);
 });
 
-void test('背景轉成前景（只切焦點）不補，最後關掉才補一次', async () => {
-  const h = setup();
+void test('背景轉成前景（只切焦點）不補，最後關掉才補一次', async t => {
+  const h = setup(t);
   h.fire('layout-change');
   h.leaves.push(h.leaf(DECK));
   h.fire('layout-change');
   h.fire('active-leaf-change');
   h.fire('file-open');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, []);
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [DECK]);
 });
 
-void test('啟動時只記下開著哪些不補；重複的事件、refresh 與 start 不補；另一個分頁還開著不補；不是卡組不補；最後一個關掉補一次', async () => {
-  const h = setup();
+void test('啟動時只記下開著哪些不補；重複的事件、refresh 與 start 不補；另一個分頁還開著不補；不是卡組不補；最後一個關掉補一次', async t => {
+  const h = setup(t);
   h.leaves.push(h.leaf(DECK), h.deferred(DECK), h.leaf('其他/筆記.md'));
   h.saver.start();
   h.fire('layout-change');
@@ -110,69 +236,69 @@ void test('啟動時只記下開著哪些不補；重複的事件、refresh 與 
   h.fire('layout-change');
   h.leaves.pop();
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [], '還有一個未載入的分頁開著那篇');
   h.leaves.length = 0;
   h.fire('layout-change');
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [DECK], '只補一次');
 });
 
-void test('只切換分頁（只送 active-leaf-change、file-open，實測 A3 步驟 9、10）不改基準：之後關掉照樣補一次', async () => {
-  const h = setup();
+void test('只切換分頁（只送 active-leaf-change、file-open，實測 A3 步驟 9、10）不改基準：之後關掉照樣補一次', async t => {
+  const h = setup(t);
   h.leaves.push(h.leaf(DECK), h.leaf('Essence Cards/Q.md'));
   h.fire('layout-change');
   h.fire('active-leaf-change');
   h.fire('file-open');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, []);
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills.sort(), [DECK, 'Essence Cards/Q.md']);
 });
 
-void test('關掉之後、補之前又打開了（還沒送 layout-change）不補；之後再關掉補一次', async () => {
-  const h = setup();
+void test('關掉之後、補之前又打開了（還沒送 layout-change）不補；之後再關掉補一次', async t => {
+  const h = setup(t);
   h.leaves.push(h.leaf(DECK));
   h.fire('layout-change');
   h.leaves.length = 0;
   h.fire('layout-change');
   h.leaves.push(h.leaf(DECK));
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, []);
   h.fire('layout-change');
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, [DECK]);
 });
 
-void test('在啟動的第一個事件之前看到的不算（還不知道誰開著）；沒有定時掃分頁', async () => {
-  const h = setup();
+void test('在啟動的第一個事件之前看到的不算（還不知道誰開著）；沒有定時掃分頁', async t => {
+  const h = setup(t);
   h.saver.refresh();
   h.leaves.push(h.leaf(DECK));
   h.saver.opened(DECK);
   h.saver.refresh();
   h.leaves.length = 0;
   h.fire('layout-change');
-  await wait(1100);
+  await h.elapse(1000);
   assert.deepEqual(h.fills, []);
   assert.equal(h.intervals(), 0);
 });
 
 // Codex 第三次審查的 T1：重新啟用外掛時 layout 已經 ready，第一個分頁事件可能就是關掉原本開著的卡組。
-void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不補），第一個事件就是關掉也補一次', async () => {
+void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不補），第一個事件就是關掉也補一次', async t => {
   for (const make of ['leaf', 'deferred'] as const) {
-    const h = setup();
+    const h = setup(t);
     h.leaves.push(h[make](DECK));
     h.saver.start();
-    await wait(1100);
+    await h.elapse(1000);
     assert.deepEqual(h.fills, [], '啟用時不補');
     h.leaves.length = 0;
     h.fire('layout-change');
-    await wait(1100);
+    await h.elapse(1000);
     assert.deepEqual(h.fills, [DECK]);
   }
 });
@@ -181,7 +307,7 @@ void test('T1 重新啟用外掛：layout ready 時記下開著的分頁（不�
 // 不說「都已加入複習」（同 D-154 的原則）；按下去只提示，不開待處理的小視窗。
 void test('2-2 需要新版的卡組：按鈕說明需要更新，存檔被擋時提示同一句，不開待處理的小視窗', async () => {
   const stub = createObsidianStub();
-  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { plugin } = pluginOf(stub);
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
   const notified: string[] = [];
   const state = {
@@ -204,7 +330,7 @@ void test('2-2 需要新版的卡組：按鈕說明需要更新，存檔被擋�
 // S27（tasks/state-writes.md §7）：存檔交給 state 的 EditorHandle 照按下時的那一篇；按鈕連按只排一份。
 void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同時 apply 回傳 false、persist 呼叫 view.save()；連按只排一份', async () => {
   const stub = createObsidianStub();
-  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { plugin } = pluginOf(stub);
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
   interface Handle { path: string; text(): string | null; apply(before: string, after: string): boolean; persist(): Promise<void> }
   const handles: Handle[] = [];
@@ -240,7 +366,7 @@ void test('S27 存檔的 EditorHandle：換篇後 text() 是 null、內容不同
 // 才記「存檔結束 路徑」；點擊之前、存檔還沒結束時沒有這一筆。
 void test('N1 按鈕觸發的存檔結束後才記「存檔結束」：開發命令等這一筆，不自己呼叫 save', async () => {
   const stub = createObsidianStub();
-  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { plugin } = pluginOf(stub);
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void } }>(code);
   const log: string[] = [];
   let finish: () => void = () => {};
@@ -266,7 +392,7 @@ void test('N1 按鈕觸發的存檔結束後才記「存檔結束」：開發命
 // 讓小視窗重畫（onChange）也一樣，再按不另外排一份。結果回來才解除。
 void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一份；結果回來後才解除', async () => {
   const stub = createObsidianStub();
-  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { plugin } = pluginOf(stub);
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
   const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
   const listeners = new Set<() => void>();
@@ -318,7 +444,7 @@ async function blockedSetup(t: TestContext, deck: string, block: 'unread' | 'loa
   const ready = state.ready();
   if (block !== 'loading') await ready;
   const stub = createObsidianStub();
-  const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+  const { plugin } = pluginOf(stub);
   const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
   const notices: string[] = [];
   const saver = wireSave({ plugin, state: () => state, notify(message: string) { notices.push(message); }, onError(error: unknown) { throw error; } });
@@ -432,7 +558,7 @@ void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛
     [{ kind: 'failed', error: Error('寫不進去') }, '這篇筆記暫時存不進去，學習目標還沒加入複習；請稍後再按一次存檔'],
   ] as const) {
     const stub = createObsidianStub();
-    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { plugin } = pluginOf(stub);
     const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
     const notified: string[] = [];
@@ -454,7 +580,7 @@ void test('L2 R1 小視窗收到 blocked needs-update：提示需要更新外掛
 void test('B4 補：受阻時小視窗的問題目標本身有 ID（changed）：提示受阻那一句', async () => {
   for (const reason of ['unread', 'loading'] as const) {
     const stub = createObsidianStub();
-    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { plugin } = pluginOf(stub);
     const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'changed', restore: 'k3m9x2' };
     const notified: string[] = [];
@@ -479,7 +605,7 @@ void test('B4 補：受阻時小視窗的問題目標本身有 ID（changed）�
 void test('B6 小視窗按「還原」或「當成新的」收到 saved：不提示', async () => {
   for (const button of [0, 1]) {
     const stub = createObsidianStub();
-    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { plugin } = pluginOf(stub);
     const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
     const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
     const notified: string[] = [];
@@ -594,7 +720,7 @@ void test('D1 saved、stale、受阻照原本的意思：有寫法有問題的�
     [{ kind: 'blocked', reason: 'unread' }, [BLOCKED]],
   ] as const) {
     const stub = createObsidianStub();
-    const plugin = { app: stub.app, addCommand() {}, registerEvent() {}, registerInterval(id: number) { return id; } };
+    const { plugin } = pluginOf(stub);
     const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
     const notified: string[] = [];
     const state = {

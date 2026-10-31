@@ -126,23 +126,29 @@ function buttonLook(status: { missing: number; issues: IdIssue[]; malformed: Mal
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
 }
 
+/** 外掛的存活（技術債 W2）：卸載後是 false；開著的小視窗記在 modals，卸載時關掉。 */
+interface Life { alive: () => boolean; modals: Set<Modal> }
+
 class IssuesModal extends Modal {
   private readonly host: SaveHost;
   private readonly view: MarkdownView;
+  private readonly life: Life;
   private stop: (() => void) | null = null;
   /** 按下還原或當成新的、結果還沒回來：重畫時按鈕照樣停用，再按不另外排一份（Codex L2 的 R3）。 */
   private waiting = false;
-  constructor(app: App, host: SaveHost, view: MarkdownView) {
+  constructor(app: App, host: SaveHost, view: MarkdownView, life: Life) {
     super(app);
     this.host = host;
     this.view = view;
+    this.life = life;
   }
   onOpen(): void {
+    this.life.modals.add(this);
     // 卡組重讀後問題可能變了（內容改過的問題換成新的物件，舊的不能寫回）：跟著重畫，家長看到的就是現在的內容。
     this.stop = this.host.state()?.onChange(() => { this.render(); }) ?? null;
     this.render();
   }
-  onClose(): void { this.stop?.(); this.stop = null; this.contentEl.empty(); }
+  onClose(): void { this.life.modals.delete(this); this.stop?.(); this.stop = null; this.contentEl.empty(); }
   private render(): void {
     const state = this.host.state(), path = this.view.file?.path;
     const issues = state && path ? state.deckStatus(path).issues : [];
@@ -167,13 +173,15 @@ class IssuesModal extends Modal {
     this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = true; });
     state.resolve(issue, choice, editorOf(this.view, path)).then(result => {
       this.waiting = false;
+      // 外掛已經卸載（小視窗也關了）：不提示（技術債 W2）。
+      if (!this.life.alive()) return;
       // saved：已寫進磁碟、state 還在核對，和按存檔收到 saved 一樣不提示（環節 5 結論第 1 條的 B6）。
       if (result.kind === 'done' || result.kind === 'saved') { this.render(); return; }
       // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
       // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
       this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue(), []) ?? TIPS.stale);
       this.close();
-    }, (error: unknown) => { this.waiting = false; this.host.onError(error); this.close(); });
+    }, (error: unknown) => { this.waiting = false; this.host.onError(error); if (this.life.alive()) this.close(); });
   }
 }
 
@@ -189,6 +197,23 @@ export function wireSave(host: SaveHost): Saver {
   const buttons = new Map<MarkdownView, HTMLElement>();
   /** 上一次知道開著的檔（離開筆記的備援用）；start() 或第一次 layout-change 之前是 null。 */
   let open: Set<string> | null = null;
+
+  /**
+   * 技術債 W2：Obsidian 卸載外掛時不會拿掉 addAction 加的按鈕（Windows 1.14.5 用 URI 的 reload 重現：每重新啟用一次，同一個分頁就多一個，
+   * 舊的說明停在當時、按了沒反應）。卸載時拿掉按鈕、關掉小視窗、取消還沒到期的補 ID；之後晚回來的存檔、小視窗的結果與 ready() 都不碰畫面。
+   */
+  let alive = true;
+  const life: Life = { alive: () => alive, modals: new Set() };
+  /** 離開筆記之後排好、還沒到期的補 ID。 */
+  const timers = new Set<number>();
+  plugin.register(() => {
+    alive = false;
+    for (const id of timers) window.clearTimeout(id);
+    timers.clear();
+    for (const modal of [...life.modals]) modal.close();
+    for (const button of buttons.values()) button.remove();
+    buttons.clear();
+  });
 
   /**
    * 按鈕說明的受阻原因（D-154、D-150）：依 state 目前所知（writeBlock）。已經在等 ready() 的 state 讀完時更新按鈕；
@@ -214,10 +239,12 @@ export function wireSave(host: SaveHost): Saver {
     if (running) return running;
     const text = view.editor.getValue();
     const job = state.save(editorOf(view, path)).then(result => {
+      // 卸載之後才回來：不提示、不加回按鈕、不開小視窗（技術債 W2）。
+      if (!alive) return;
       const tip = saveTip(result, text, state.deckStatus(path).malformed);
       if (tip) host.notify(tip);
       refresh();
-      if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view).open();
+      if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view, life).open();
     }).catch(host.onError).finally(() => {
       saving.delete(path);
       // 開發命令 save 點按鈕之後等這一筆，確定是這次點擊觸發的存檔結束了（技術債 N1）。
@@ -228,6 +255,8 @@ export function wireSave(host: SaveHost): Saver {
   }
 
   function refresh(): void {
+    // 卸載之後（例如晚完成的 ready()）不再加回按鈕（技術債 W2）。
+    if (!alive) return;
     const state = host.state();
     const seen = new Set<MarkdownView>();
     for (const leaf of app.workspace.getLeavesOfType('markdown')) {
@@ -280,15 +309,17 @@ export function wireSave(host: SaveHost): Saver {
     const now = openPaths();
     const state = host.state();
     if (open && state) for (const path of open) if (!now.has(path) && isDeckPath(path)) {
-      // 等編輯器把最後打的字存進檔案，再讀檔補；這段時間又打開了就不補。
+      // 等編輯器把最後打的字存進檔案，再讀檔補；這段時間又打開了就不補。卸載時取消（技術債 W2）。
       host.log?.('離開 ' + path);
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
         if (openPaths().has(path)) { host.log?.('又打開了，不補 ' + path); return; }
         host.state()?.fillIds(path).then(changed => {
           // 補完之後 state 怎麼看這一篇（開發命令查備援的時序用）。
           host.log?.('補 ' + path + ' → ' + String(changed) + '；' + JSON.stringify(host.state()?.deckStatus(path)));
         }, host.onError);
       }, LEAVE_DELAY);
+      timers.add(timer);
     }
     open = now;
     refresh();
