@@ -309,6 +309,29 @@ void test('每台裝置最後回報的版本：need 讀不懂的版本行不算�
   assert.deepEqual(rows(null), ['0.1.0+1a2b3c4']);
 });
 
+// tasks/error-log.md §5（D-155 第 6 點）：還原的清單不列 `紀錄/錯誤/`，也不補回；AI 輸出快照與複習紀錄照舊。
+void test('§5 還原計畫：錯誤紀錄不見、同名不同內容、備份後才有，都不出現在計畫裡；其他照舊', () => {
+  const errors = 'Essence Cards/紀錄/錯誤/2026-10 iPhone-7f3a 錯誤.jsonl';
+  const changed = 'Essence Cards/紀錄/錯誤/2026-10 Windows-2c9e 錯誤.jsonl';
+  const added = 'Essence Cards/紀錄/錯誤/2026-11 iPhone-7f3a 錯誤.jsonl';
+  const log = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
+  const line = (t: string): string => `{"t":"${t}","lt":"aaa111","r":"good","v":"12345678"}`;
+  const result = plan({
+    [errors]: '{"where":"read"}\n', [changed]: '{"where":"ui"}\n',
+    'Essence Cards/紀錄/AI 輸出/快照.md': '舊', 'Essence Cards/紀錄/AI 輸出/不見的快照.md': '快照',
+    [log]: line('2026-10-16T20:15:03.250+08:00') + '\n' + line('2026-10-17T20:15:03.250+08:00') + '\n',
+  }, {
+    [changed]: '{"where":"ui"}\n{"where":"render"}\n', [added]: '{"where":"init"}\n',
+    'Essence Cards/紀錄/AI 輸出/快照.md': '新',
+    [log]: line('2026-10-16T20:15:03.250+08:00') + '\n',
+  });
+  assert.deepEqual(summary(result.files), [
+    'Essence Cards/紀錄/AI 輸出/不見的快照.md missing restore',
+    'Essence Cards/紀錄/AI 輸出/快照.md changed blocked：紀錄裡的檔只補不見的：同名但內容不同，列成衝突']);
+  assert.deepEqual(result.logs, [{ source: '2026-10 iPhone-7f3a', lines: [line('2026-10-17T20:15:03.250+08:00')] }]);
+  assert.deepEqual(result.order, ['Essence Cards/紀錄/AI 輸出/不見的快照.md']);
+});
+
 // 技術債「讀備份時，zip 的註解裡剛好有 EOCD 簽章」：先依檔尾與長度辨認有效的 EOCD，嚴格名稱檢查與解壓用同一份結構。
 /** 在 zip 的 EOCD 後面接上註解（改註解長度欄位）。 */
 function withComment(zip: Uint8Array, comment: Uint8Array): Uint8Array {

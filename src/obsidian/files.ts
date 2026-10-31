@@ -15,6 +15,7 @@ export function createObsidianFiles(app: App): Files {
   // 同一個路徑的 modify / append 排隊，和 Node 版相同（大小寫不同視為同一個檔，頂多多排隊）。
   function serial(path: string, action: () => Promise<void>): Promise<void> {
     const key = path.normalize('NFC').toLowerCase();
+    // 前一份的失敗已經由 next 交回它自己的呼叫端：這裡與下面清掉排隊的 .catch 只是不讓它擋住下一份、不留下沒人接的拒絕。
     const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
     pending.set(key, next);
     void next.finally(() => { if (pending.get(key) === next) pending.delete(key); }).catch(() => {});
@@ -30,9 +31,20 @@ export function createObsidianFiles(app: App): Files {
     let folder = '';
     for (const part of slash < 0 ? [] : path.slice(0, slash).split('/')) {
       folder = folder ? folder + '/' + part : part;
-      if (!vault.getAbstractFileByPath(folder)) await vault.createFolder(folder);
+      if (!vault.getAbstractFileByPath(folder)) await createFolder(folder);
     }
     await vault.create(path, text);
+  }
+  /**
+   * 建一層資料夾。兩個不同的檔同時第一次寫進同一個不存在的資料夾時會一起建，後到的那個失敗（D-155 第 4 點）：失敗時再查一次，
+   * 已經是資料夾就照常往下（是別的寫入建好的），不是就照原樣拋出。
+   */
+  async function createFolder(folder: string): Promise<void> {
+    try {
+      await vault.createFolder(folder);
+    } catch (error) {
+      if (!(vault.getAbstractFileByPath(folder) instanceof TFolder)) throw error;
+    }
   }
   /** 資料夾裡的每個檔（含子資料夾）；檔案就是它自己。 */
   function inside(entry: TAbstractFile): TFile[] {

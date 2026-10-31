@@ -158,7 +158,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-backup.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-backup.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-errors.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {
@@ -194,6 +194,26 @@ void test('A6 @codemirror/state、@codemirror/view 的開發相依和 obsidian �
     const installed = JSON.parse(await readFile(join(root, 'node_modules', name, 'package.json'), 'utf8')) as { version: string };
     assert.equal(installed.version, obsidian.peerDependencies[name], name + ' 實際裝的版本');
   }
+});
+
+// tasks/error-log.md §6（D-155 第 5 點）：正式安裝另外存對照表；加上 --sourcemap 時 main.js 逐位元組不變。
+void test('§6 --sourcemap：同一份輸入加不加，main.js 逐位元組相同、沒有 sourceMappingURL；對照表寫到指定的路徑，sources 相對 repo', async t => {
+  const plain = await mkdtemp(join(tmpdir(), 'essence-map-'));
+  const mapped = await mkdtemp(join(tmpdir(), 'essence-map-'));
+  t.after(async () => { await rm(plain, { recursive: true, force: true }); await rm(mapped, { recursive: true, force: true }); });
+  const { buildPlugin } = await import('../tools/build.mjs');
+  const target = join(mapped, 'saved', 'main.js.map');
+  await buildPlugin({ root, outdir: plain });
+  await buildPlugin({ root, outdir: mapped, sourcemap: target });
+  const code = await readFile(join(mapped, 'main.js'));
+  assert.ok(code.equals(await readFile(join(plain, 'main.js'))), 'main.js 逐位元組相同');
+  assert.ok(!code.toString('utf8').includes('sourceMappingURL'));
+  assert.deepEqual(await tree(mapped), ['main.js', 'saved/main.js.map', 'styles.css'], '輸出資料夾裡沒有多一個 main.js.map');
+  const map = JSON.parse(await readFile(target, 'utf8')) as { version: number; sources: string[]; sourcesContent: string[] };
+  assert.equal(map.version, 3);
+  assert.ok(map.sources.includes('src/main.ts'), map.sources.slice(0, 5).join(', '));
+  assert.ok(map.sources.every(source => !source.includes('\\') &&!source.startsWith('..')), '相對 repo、用 /');
+  assert.equal(map.sourcesContent.length, map.sources.length);
 });
 
 // D-148 第 3 點（建置）：Node 與 Electron 只在 src/desktop/ 引入、只能用明列的；src/desktop/ 只由 main.ts 動態載入。

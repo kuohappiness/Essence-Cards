@@ -30,7 +30,7 @@ void test('設定頁選位置：經過連結（junction）選的位置記成實�
   const link = join(outside, '捷徑');
   await symlink(target, link, 'junction');
   const { plugin } = fakePlugin();
-  const wiring = wireBackup({ plugin, desktop: await createDesktop(vault), files: createMemoryFiles().files, build: '0.2.0+1a2b3c4', changed() {}, notify() {} });
+  const wiring = wireBackup({ plugin, desktop: await createDesktop(vault), files: createMemoryFiles().files, build: '0.2.0+1a2b3c4', changed() {}, notify() {}, failed() {} });
   assert.equal(wiring.custom(), null);
   assert.equal(await wiring.useFolder(link), null);
   assert.equal(wiring.custom(), await realpath(target));

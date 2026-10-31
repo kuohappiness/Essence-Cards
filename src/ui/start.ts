@@ -34,10 +34,11 @@ export function registerStart(plugin: Plugin, options: StartOptions): void {
     const state = options.state();
     if (!state) { new Notice('Essence Cards：正在讀取卡組…'); return; }
     let loaded = true;
+    // 還沒 ready 時 progress() 丟錯是預期的（State 的註解），不是故障。
     try { state.progress(); } catch { loaded = false; }
     if (!loaded) {
       new Notice('Essence Cards：正在讀取卡組…');
-      // 讀不到時 state 自己重試並由外掛提示；這裡只等讀完（停用外掛才會 reject）。
+      // 讀不到時 state 自己重試並由外掛提示；這裡只等讀完。reject 是停用外掛，或程式的錯（已經經過 onError 記下）。
       try { await state.ready(); } catch { return; }
     }
     const rows = startRows(state.progress());

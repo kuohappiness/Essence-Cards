@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 
 /**
- * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2）。Node 的測試與 Obsidian 的開發命令跑同一份；
+ * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4）。Node 的測試與 Obsidian 的開發命令跑同一份；
  * 改名與刪除不在 Files 介面裡，由兩邊各自提供（Node 用 node:fs，Obsidian 用 vault.rename、vault.delete）。
  */
 export interface ContractOps {
@@ -214,6 +214,16 @@ export const contractCases: readonly ContractCase[] = [
       same(await files.readBytes(`${dir}/沒有.md`), null, 'readBytes 不存在的檔');
     },
   },
+  {
+    // tasks/error-log.md §4：錯誤紀錄與複習紀錄同時第一次寫，會一起建 `紀錄/`（Codex 用替身重現，D-155 第 4 點）。
+    code: 'C17', title: '不存在的資料夾裡同時 append 兩個不同的檔，兩個都成功、各一行',
+    async run({ files, dir }) {
+      const paths = [`${dir}/new/a.jsonl`, `${dir}/new/b.jsonl`];
+      const results = await Promise.allSettled(paths.map(path => files.append(path, 'line')));
+      same(results.map(result => result.status === 'rejected' ? String(result.reason) : result.status), ['fulfilled', 'fulfilled'], 'append');
+      for (const path of paths) same(await files.read(path), 'line\n', `read(${path})`);
+    },
+  },
 ];
 
 /** 跑一個例子；每個例子用 dir 底下自己代號的資料夾，彼此不共用檔案。 */
@@ -227,7 +237,7 @@ export async function runContractCase(item: ContractCase, files: Files, ops: Con
   }
 }
 
-/** 依序跑 C1～C16；dir 要是空的（或不存在）。 */
+/** 依序跑 C1～C17；dir 要是空的（或不存在）。 */
 export async function runFilesContract(files: Files, ops: ContractOps, dir: string, wait: ContractWait): Promise<ContractResult[]> {
   const results: ContractResult[] = [];
   for (const item of contractCases) results.push(await runContractCase(item, files, ops, dir, wait));

@@ -1,8 +1,9 @@
-import { editorInfoField, FileSystemAdapter, Notice, Platform, Plugin } from 'obsidian';
+import { apiVersion, editorInfoField, FileSystemAdapter, Notice, Platform, Plugin } from 'obsidian';
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import { isDeckPath } from './core/deck/index.ts';
+import { createErrorLog, hasOwnFrame, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
@@ -28,6 +29,17 @@ const NOTICES: Partial<Record<ErrorSource, string>> = {
 };
 /** 有內容需要新版才讀得懂（任務說明 2-2）：入口的「給家長」一區做好之前，載入時用通知提示一次。 */
 const UPDATE_NOTICE = 'Essence Cards：有內容需要新版才讀得懂，請更新外掛';
+/** 學生在複習畫面回報之後的提示（D-160 第 3 點）；記錄器盡力而為，寫不進去時也照樣這樣說（D-160 的代價）。 */
+const REPORT_NOTICE = '已記下，可以跟家長說一聲';
+/** startBackup 裡 state.ready() 的拒絕（已經經過 onError 記下）：和載入備份功能本身的失敗分開，不再記一次（D-155 補充）。 */
+class ReadyFailed extends Error {
+  constructor(cause: unknown) { super('state 沒有讀完', { cause }); }
+}
+/** 跑跑看；拋錯就用 fallback（錯誤處理裡判斷不明的值時用：判斷本身不能再拋錯）。 */
+function safely<T>(get: () => T, fallback: T): T {
+  // 拋錯就是那個值不准這樣查或轉文字；照 fallback 繼續，原本的錯已經交給記錄器或接著交。
+  try { return get(); } catch { return fallback; }
+}
 /** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
 const VERSION_WAIT = 2000;
 
@@ -73,6 +85,8 @@ export default class EssenceCardsPlugin extends Plugin {
   private settingTab: { refresh: () => void } | null = null;
   /** 這次載入已經提示過的來源：同一種只提示一次。 */
   private warned = new Set<ErrorSource>();
+  /** 錯誤紀錄（D-155）：onload 裡裝置碼確定之後建立；這個外掛自己的錯都經過它。建立之前什麼都不記。 */
+  private errors: ErrorLog = { record() {}, report() {} };
   private unloaded = false;
   private readonly listeners: { [K in PluginEvent]: Set<(value: PluginEvents[K]) => void> } = { notice: new Set(), event: new Set(), removed: new Set(), review: new Set() };
 
@@ -80,6 +94,13 @@ export default class EssenceCardsPlugin extends Plugin {
     const loadedAt = performance.now();
     // 只註冊命令與事件，不讀任何檔案：layout ready 之前 Obsidian 會對每個檔案發 create（§4-1）。
     this.device = loadDeviceCode(this.app);
+    let files: Files = createObsidianFiles(this.app);
+    // 錯誤紀錄等 layout ready 才讀寫：之前 vault 的索引還不完整，數不到當月的行數（D-155 第 3 點）。
+    const layoutReady = new Promise<void>(resolve => { this.app.workspace.onLayoutReady(resolve); });
+    this.errors = createErrorLog({ files, device: this.device, build: BUILD, obsidian: apiVersion, after: layoutReady });
+    // 補網（D-155 第 2 點）：只收 stack 有這個外掛自己程式位置的；registerDomEvent 在停用時自動移除。瀏覽器已經印在 console。
+    this.registerDomEvent(window, 'error', event => { if (hasOwnFrame(event.error)) this.errors.record('uncaught', event.error); });
+    this.registerDomEvent(window, 'unhandledrejection', event => { if (hasOwnFrame(event.reason)) this.errors.record('uncaught', event.reason); });
     this.addCommand({
       id: 'version',
       name: '版本',
@@ -91,7 +112,6 @@ export default class EssenceCardsPlugin extends Plugin {
     this.settingTab = wireSettings({ plugin: this, backup: () => this.backup, backupError: () => this.backupError });
     // 複習畫面的暫時入口（W6 §3-9）：命令與左側功能區的圖示；入口畫面做好時拿掉。
     registerStart(this, { state: () => this.state, open: pick => { this.startReview(pick); } });
-    let files: Files = createObsidianFiles(this.app);
     let calls = (): number => 0;
     let beforeLayoutReady: number | null = null;
     this.app.workspace.onLayoutReady(() => {
@@ -115,7 +135,7 @@ export default class EssenceCardsPlugin extends Plugin {
     this.unloaded = true;
     // 外掛停用時一起關掉複習畫面（什麼都不寫，D-074）。
     this.review?.close();
-    this.state?.close().catch((error: unknown) => { console.error('Essence Cards', error); });
+    this.state?.close().catch((error: unknown) => { this.fail('close', error); });
   }
 
   /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
@@ -126,6 +146,9 @@ export default class EssenceCardsPlugin extends Plugin {
     this.review = openReview({
       app: this.app, state: this.state, pick, pickedAt,
       onEvent: event => { this.emit('review', event); },
+      onError: (error, where, path) => { this.fail(where, error, path); },
+      // 學生的回報（D-160）：記進錯誤紀錄，不寫複習紀錄、不改排程；提示照第 3 點。
+      onReport: (kind, card) => { this.errors.report({ kind, path: card.deck, lt: card.lt, v: card.v }); new Notice(REPORT_NOTICE); },
       onClose: () => { this.review = null; },
     });
     return this.review;
@@ -140,7 +163,7 @@ export default class EssenceCardsPlugin extends Plugin {
 
   private emit<K extends PluginEvent>(kind: K, value: PluginEvents[K]): void {
     for (const listener of this.listeners[kind]) {
-      try { listener(value); } catch (error) { console.error('Essence Cards', kind, error); }
+      try { listener(value); } catch (error) { this.fail('event', error); }
     }
   }
 
@@ -168,7 +191,7 @@ export default class EssenceCardsPlugin extends Plugin {
       plugin: this,
       state: () => this.state,
       notify: message => { new Notice(message); this.emit('notice', message); },
-      onError: error => { console.error('Essence Cards：離開筆記時補學習目標 ID 失敗', error); },
+      onError: error => { this.fail('fill', error); },
       log: event => { this.emit('event', stamp(event)); },
     });
     // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開完馬上關時，Obsidian 只在關之後送一次 layout-change（技術債 A3，a3check 的 C1、C3）。
@@ -176,8 +199,14 @@ export default class EssenceCardsPlugin extends Plugin {
     return { tokens: lock.tokens, saver };
   }
 
+  /** 這個外掛自己的錯：照舊印在 console，再交給錯誤紀錄（where 照 syntax.md §9）。 */
+  private fail(where: ErrorWhere, error: unknown, path?: string): void {
+    console.error('Essence Cards', where, error);
+    this.errors.record(where, error, path === undefined ? undefined : { path });
+  }
+
   private report(error: unknown, source: ErrorSource): void {
-    console.error('Essence Cards', source, error);
+    this.fail(source, error);
     const notice = NOTICES[source];
     if (!notice || this.warned.has(source)) return;
     this.warned.add(source);
@@ -187,6 +216,7 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 「版本」命令（任務說明 2-1）：先等排隊的紀錄寫完，這台的版本行才照實顯示；寫不完也照樣顯示。 */
   private async showVersion(): Promise<void> {
     const state = this.state;
+    // 寫不進去已經經過 onError（write）記下；版本命令照樣顯示，版本行標成還沒寫成。
     if (state) await Promise.race([state.flush().catch(() => {}), new Promise(resolve => window.setTimeout(resolve, VERSION_WAIT))]);
     // 內容好幾行、要對著看：留到使用者關掉。
     new Notice(versionText(BUILD, this.device, this.state), 0);
@@ -216,14 +246,22 @@ export default class EssenceCardsPlugin extends Plugin {
         plugin: this, desktop, files, build: BUILD,
         changed: status => { this.state?.backupReady(status.ready); this.ids?.saver.refresh(); this.settingTab?.refresh(); },
         notify: message => { new Notice(message); this.emit('notice', message); },
+        failed: error => { this.fail('backup', error); },
       });
       this.settingTab?.refresh();
-      await this.state?.ready();
+      // ready() 的拒絕已經經過 onError（state 的 init 或 read）記下，或是停用：下面不再記一次。
+      await this.state?.ready().catch((error: unknown) => { throw new ReadyFailed(error); });
       if (!this.unloaded) this.backup.start();
     } catch (error) {
       if (this.unloaded) return;
-      console.error('Essence Cards：備份', error);
-      this.backupError = '備份的功能載入失敗：' + (error instanceof Error ? error.message : String(error));
+      // 電腦上載入備份功能失敗：照 D-155 補充記 init（印在 console 並記進錯誤紀錄）；state 已經記過的不再記。
+      // 拒絕的值可能是查原型、讀 message 或轉文字就拋錯的值（Codex 第三輪的 G2）：判斷與轉文字都包起來，提示與設定頁照常。
+      // message 讀得到也不一定是字串（Symbol、轉文字會拋錯的物件，第四輪的 H1）：在保護範圍裡用 String() 轉好，外面只接字串。
+      const ready = safely(() => error instanceof ReadyFailed, false);
+      if (!ready) this.fail('init', error);
+      const cause: unknown = ready ? (error as ReadyFailed).cause : error;
+      const reason = safely(() => String(cause instanceof Error ? cause.message : cause), '（原因無法轉成文字）');
+      this.backupError = '備份的功能載入失敗：' + reason;
       new Notice(BACKUP_NOTICE);
       this.emit('notice', BACKUP_NOTICE);
       this.settingTab?.refresh();
@@ -242,7 +280,8 @@ export default class EssenceCardsPlugin extends Plugin {
     // 卡組重讀之後更新存檔按鈕的樣子。
     this.state.onChange(() => { this.ids?.saver.refresh(); this.warnUpdate(); });
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
-    // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。
+    // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。程式本身的錯已經經過 onError（read 或 init，
+    // tasks/error-log.md §2-3），停用不是故障，所以這裡只接住。
     this.state.ready().then(() => { this.ids?.saver.refresh(); this.warnUpdate(); }, () => {});
   }
 }

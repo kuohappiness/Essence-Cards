@@ -1,6 +1,6 @@
 # 正式版的錯誤紀錄（給 Claude，本機執行）
 
-狀態：還沒開工
+狀態：程式與 Windows 實測做完，在分支 `claude/error-log`；Codex L2 通過（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）；等使用者決定合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-155 與討論稿做完，這份是照做）。
 
@@ -147,3 +147,41 @@
 ## 這次不做
 
 §8 以外的畫面與提示；給家長的回報列表（D-160 第 5 點，第二階段）；「複製問題報告」命令與查單一目標排程的工具（[規畫](../docs/plans/maintenance.md)的 G2、G3）；讀取很慢或一直不回來的紀錄（[D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測) 第 4 點）；備份重檢與更新命令對錯誤紀錄的特別處理；說明書的那一句（寫說明書時照 D-155 第 7 點）。
+
+## 結果
+
+### 實作（2026-10-30～31，Opus 5.5）
+
+基準 `b456a20`；開工時「基準與開工條件」列的檔都沒改過。分支 `claude/error-log` 從 `main` 的 `1e6b00a` 開，在 `../Essence-Cards-error-log`。做完後把 `origin/main`（`eda8739`，含外掛內備份第一部分）合進來：`f1eb85d`，衝突的處理見[審查請求](error-log-review.md)〈實作者自己選的做法〉。syntax.md 沒改；複習紀錄與備份檔的格式沒變；沒加套件。
+
+| 節 | commit | 新的測試 |
+|---|---|---|
+| §1 記錄器 | `ac3a98f` | `tests/errors.test.ts` 14 個（欄位與順序逐字比 syntax.md §9 的範例、截斷、非 Error 值、自己的程式位置、去重、500 個鍵、月上限、讀不到、換月、寫不進去、時區不合法、`after`） |
+| §2-3 初始化的漏報 | `ac51f6e` | `tests/state-init.test.ts` 5 個 |
+| §2 接線 | `b64a0ed` | `tests/main-wiring.test.ts` 5 個、`tests/review-host.test.ts` 1 個、`tests/review-ui.test.ts` 1 個；`tests/helpers/obsidian.ts` 加 `unload()`、指定路徑的 `failWrite`、`failWatch` |
+| §2-4 `no-console` | `5730026` | `tests/quality.test.ts` 1 個 |
+| §3 每個 `catch` 都要交代 | `2ec81e8` | 文件與註解（`docs/agents/quality.md`、7 處空的 `catch`／`.catch()` 補理由） |
+| §4 同時建資料夾 | `f8a5596`、`97768e2` | 契約 C17（Node、記憶體版）、`tests/obsidian-files.test.ts` 2 個 |
+| §5 還原不列 | `1b4624c` | `tests/backup-core.test.ts` 1 個 |
+| §6 對照表 | `2621dd3`、`1d00ce9`、`2bd98c1`、`6f4afa5` | `tests/build.test.ts` 1 個、`tests/install.test.ts` 改 1 個、`tests/locate.test.ts` 2 個 |
+| §8 回報 | `e173f63`、`549803f`、`773d4fe` | `tests/errors.test.ts` 2 個、`tests/review-ui.test.ts` 4 個（另改「上方列四格」成五格）、`tests/review-host.test.ts` 1 個、`tests/main-wiring.test.ts` 1 個 |
+| §7 開發命令 | `657c0ab`、`05c4b36`、`6f4afa5` | `error-probe`（`src/obsidian/dev-errors.ts`） |
+
+每個新行為先看到測試失敗再改（§1 的模組不存在、§2-3 的兩個漏報、§4 的 `Folder already exists.`、§5 的三種分類、§6 的對照表沒存、§8 的四個畫面測試）。合併 `origin/main` 之後 `npm run check` 全過（測試數見審查請求）；`npm run build` 的 `main.js` 只 require `obsidian`、`@codemirror/state`、`@codemirror/view`（電腦專用的資料夾照 D-148 另外載入，是合併進來的備份）。
+
+**§2-3 選了 `init`**：`ErrorSource` 加 `'init'`（syntax.md §9 本來就有這個 `where`）。`state.ready()` 的拒絕：讀取那一列已經報過 `read` 的不再報；`close()` 之後不報；其他（`files.watch()` 拋錯、首次排程 `planToday` 或版本行拋錯）報一次 `init`。
+
+**§3 改到的空 `catch`**：`src/main.ts`（版本命令的 `flush`）、`src/obsidian/files.ts`（排隊）、`src/obsidian/save.ts`（`ready()`）、`src/state/writes.ts`（寫入的那一列）、`src/core/study/log.ts`（背景寫入）、`src/ui/start.ts` 兩處。回傳結果或問題清單的 `catch`（備份清單、zip、卡組屬性、紀錄解析）不是空的，沒有動。
+
+### Windows 實測（2026-10-30～31，測試 vault，Obsidian 1.14.5）
+
+結果檔在測試 vault 的 `Essence W5/結果/`，全名是「`<命令> Windows-c50c <日期> <時間>.json`」。最後一次是合併後的建置 `0.1.0+f1eb85d.dirty`（只有文件還沒提交）：`files 2026-10-31 000327`、`error-probe 2026-10-31 000349`。合併前在 `05c4b36`、`773d4fe` 各跑過一次，結果相同。
+
+- **`files`**：C1～C17 全部通過。**Obsidian 真的撞到時的訊息**：對已經存在的資料夾 `vault.createFolder` 拋 `Folder already exists.`（`folderExists`）；兩個 `createFolder` 同時送出、都還沒完成時兩個都成功（`folderRace`）。所以會撞到的是 Codex 替身重現的那個順序：`Files` 先查不到資料夾，輪到它建時另一個寫入已經建好；§4 的修正正是接住這一種。
+- **`error-probe`**（六種，每種一行、`where` 對、`stack` 都帶 `plugin:essence-cards:行:欄`）：計時器裡同步拋錯與非同步拒絕都是 `uncaught`；同一個錯誤 12 次剛好 2 行（第 1 次與 `n: 10`）；卡片顯示不出來是 `render`，帶卡組的路徑；複習畫面的 React 錯誤（effect 裡拋錯）是 `ui`，畫面被 React 卸載（沒有 fallback 畫面，照 D-155）；回報：在測試 vault 開複習，點旗子、選「其他」，當月的檔多一行 `report`，`kind`、`path`、`lt`、`v` 和畫面上那張卡相同，卡片沒換、選單關上。`others` 是空的（沒有多記別的錯）。
+- **對照表定位**：同一次建置另外輸出 `main.js.map`（`node tools/build.mjs --dev --sourcemap`，產出的 `main.js` 和裝進 vault 的 SHA-256 相同），用 `tools/locate.ts` 的 `locate()` 查錯誤紀錄裡的五個位置，**都對到拋錯的那一行**（欄指在 `Error(`），例如 `233:50 → src/obsidian/dev-errors.ts:33:36`。**Obsidian 載入外掛時沒有多出行或欄的偏移**，寫在 `tools/locate.ts` 的註解（`OFFSET` 是 0）。
+- **畫面**（`error-probe 旗子.png`、`選單.png`、`英文卡.png`）：旗子在 ✕ 左邊；選單從下方升起，五項加「取消」，每列 52px；英文卡那一排（上一張、計數、自動朗讀、旗子、✕）在寬視窗不擠。第一輪截圖看到深色主題下遮罩反而把畫面調亮、選單畫了白色的焦點框，`773d4fe` 修掉。iPhone 寬度沒截（在 iPhone 實機測試看）。
+
+**沒做的**：iPhone 的部分照說明不在這次，已加進 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」那一列。滑動手勢在選單開著時不作用，只在程式裡擋（`reportingRef`），Node 的畫面替身沒有觸控，Windows 也沒送觸控事件，iPhone 實機時一起看。說明書的三句（D-155 第 7 點、D-160 第 6 點）跟說明書一起寫。
+
+**L2 之後的補充（2026-10-31）**：使用者決定外掛內備份的錯也記進錯誤紀錄（D-155 的補充、syntax.md §9 加 `backup`，`99f0620`）：備份失敗記 `backup`、電腦上載入備份功能失敗記 `init`（`cad0ee5`）。Windows 實測做出一次備份失敗，錯誤紀錄多一行 `backup`；細節在[審查報告](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)〈Claude 回應：再審〉最後。

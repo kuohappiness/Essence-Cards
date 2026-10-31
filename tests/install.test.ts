@@ -3,7 +3,7 @@ import { gitEnv } from '../tools/git.ts';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { cp, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes } from '../src/core/backup/index.ts';
@@ -113,13 +113,16 @@ void test('安裝：正式安裝先建置到暫存資料夾，產物與雜湊存
   assert.deepEqual([result.kind, result.version, result.build], ['release', '0.0.1', '0.0.1+' + git(dir, 'rev-parse', '--short', 'HEAD')]);
   assert.deepEqual(await readdir(dir), before);
   const folder = join(local, 'releases', '0.0.1');
-  assert.deepEqual((await readdir(folder)).sort(), ['main.js', 'manifest.json', 'release.json', 'styles.css']);
+  // 對照表和產物一起存在本機（D-155 第 5 點），雜湊記進 release.json；不裝進 vault。
+  assert.deepEqual((await readdir(folder)).sort(), ['main.js', 'main.js.map', 'manifest.json', 'release.json', 'styles.css']);
   const release = JSON.parse(await readFile(join(folder, 'release.json'), 'utf8')) as { commit: string; build: string; sha256: Record<string, string> };
   assert.equal(release.commit, head);
   for (const name of ['main.js', 'manifest.json', 'styles.css']) {
     const installed = new Uint8Array(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)));
     assert.equal(hashBytes(installed), release.sha256[name], name);
   }
+  assert.equal(hashBytes(new Uint8Array(await readFile(join(folder, 'main.js.map')))), release.sha256['main.js.map']);
+  assert.deepEqual(await plugin(vault), ['main.js', 'manifest.json', 'styles.css']);
   assert.match(await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8'), /^\/\*! Essence Cards build=0\.0\.1\+[0-9a-f]+ dev=false \*\//);
   // 開發命令的 URI 帶引號，不和裝置碼的 "essence-cards-device" 混淆（同 build.test.ts）。
   assert.ok(!(await readFile(join(vault, '.obsidian/plugins/essence-cards/main.js'), 'utf8')).includes('"essence-cards-dev"'));
@@ -137,6 +140,13 @@ void test('安裝：正式安裝先建置到暫存資料夾，產物與雜湊存
   const back = await installVault({ vault: other, release: '0.0.1', local });
   assert.deepEqual([back.kind, back.version, back.build], ['release', '0.0.1', release.build]);
   assert.deepEqual(await readFile(join(other, '.obsidian/plugins/essence-cards/main.js')), await readFile(join(folder, 'main.js')));
+  // 舊的版本沒有對照表（0.1.0 之前就裝了的）照常能退回。
+  const saved = await readFile(join(folder, 'release.json'), 'utf8');
+  const { 'main.js.map': _map, ...withoutMap } = release.sha256;
+  await writeFile(join(folder, 'release.json'), JSON.stringify({ ...release, sha256: withoutMap }));
+  await rm(join(folder, 'main.js.map'));
+  assert.equal((await installVault({ vault: other, release: '0.0.1', local })).build, release.build);
+  await writeFile(join(folder, 'release.json'), saved);
   await writeFile(join(folder, 'styles.css'), 'tampered');
   await assert.rejects(installVault({ vault: other, release: '0.0.1', local }), /styles\.css 和 release\.json 記的雜湊不同/);
   await assert.rejects(installVault({ vault: other, release: '9.9.9', local }), /沒有 9\.9\.9 的正式產物/);

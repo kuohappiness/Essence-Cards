@@ -7,6 +7,14 @@ import { isLogPath, LOG_FOLDER } from '../core/study/index.ts';
  * 只分出讀到了什麼，不碰 tracker、不解析卡組、不合併紀錄：那些在組合那一層（index.ts）。
  */
 
+/**
+ * close() 讓第一次載入放棄時的拒絕原因（tasks/error-log.md §2-3、Codex L2 的 R2）：ready() 拒絕時用它分辨「停用造成的」與
+ * 「程式的錯」，不看拒絕當下關閉了沒有（程式的錯之後同一輪又 close() 時，錯誤照樣要報）。
+ */
+export class Closed extends Error {
+  constructor(options?: { cause?: unknown }) { super('state 已關閉，沒有讀完', options); }
+}
+
 /** 第一次載入完成了沒有、關閉了沒有。由 index.ts 建立並改值，讀取層與寫入只讀。 */
 export interface Life { loaded: boolean; closed: boolean }
 /** 一批讀到的結果：路徑 → 文字；null 是不存在。 */
@@ -150,12 +158,13 @@ export function createReads(options: ReadsOptions) {
       try {
         lists = await Promise.all([listDeckPaths(files), files.list(LOG_FOLDER).then(paths => paths.filter(isLogPath))]);
       } catch (error) {
-        if (life.closed) throw error;
+        // 已經關閉時列不出來，是停用中途的結果，不是故障：不報、不重試。
+        if (life.closed) throw new Closed({ cause: error });
         failures++;
         onError(error);
         // 回呼裡 close() 了就不等（Codex state-load L2 的 F2）；等的期間 close() 會提早叫醒。
         if (!life.closed) await pause(retryDelay());
-        if (life.closed) throw Error('state 已關閉，沒有讀完');
+        if (life.closed) throw new Closed();
         continue;
       }
       failures = 0;

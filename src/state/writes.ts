@@ -117,6 +117,7 @@ export function createWrites(options: WritesOptions) {
   /** 排進寫入的那一列；排隊時就記下對象，輪到時才取最新的文字。 */
   function enqueue(job: () => Promise<WriteResult>): Promise<WriteResult> {
     const next = writes.then(job);
+    // 失敗由 next 交回排這份工作的呼叫端；這一列只是接著排下一份。
     writes = next.catch(() => {});
     return next;
   }

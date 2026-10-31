@@ -250,4 +250,8 @@ export default tseslint.config(
     files: ui,
     rules: { 'no-restricted-imports': restricted([fsrs, coreEntry, stateEntry, viewFiles, viewNames]) },
   },
+  // 產品程式的錯要交給錯誤紀錄（D-155 第 2 點），不是只印在 console：只有下面幾個先印 console 再交出錯誤的地方可以用。
+  // main.ts 的 fail() 印了再記；Markdown.tsx 印出顯示不出來的那篇，再經 onFail 交給主機；開發命令（dev*.ts、src/dev/）本來就印。
+  { files: ['src/**/*.{ts,tsx}'], rules: { 'no-console': 'error' } },
+  { files: ['src/main.ts', 'src/ui/Markdown.tsx', 'src/obsidian/dev*.ts', 'src/dev/**/*.{ts,tsx}'], rules: { 'no-console': 'off' } },
 );

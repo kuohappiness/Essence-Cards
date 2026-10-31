@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 的 E1、E6、E8 在下一次 iPhone 實機測試；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債三列等觸發點 | iPhone 實機測試 | [任務說明](../tasks/icloud-placeholders.md) |
-| 正式版的錯誤紀錄與回報 | 已定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)、[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)），任務說明寫好、還沒開工 | 本機照[任務說明](../tasks/error-log.md)做（學生每天使用前），合併前 L2 | 使用者（排本機開工） | [任務說明](../tasks/error-log.md) |
+| 正式版的錯誤紀錄與回報 | 已定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)、[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)）；程式與 Windows 實測做完，在分支 `claude/error-log`（任務說明〈結果〉）；Codex L2 通過（五輪） | 合併（使用者決定），之後隨外掛內備份一起正式安裝；iPhone 的部分在下一次 iPhone 實機測試；說明書的三句跟說明書一起寫 | 使用者（決定合併） | [任務說明](../tasks/error-log.md)、[L2 審查請求](../tasks/error-log-review.md) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R6 (a) 隨環節 9 的技術債做完（見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成，`0.1.0` 已裝到正式使用的 vault；外掛內備份的第一部分（備份）已合併進 `main`（`7a12688`，見已完成） | 任務說明第 3 步：使用者 2026-10-31 同意安裝，選擇等打字卡比對（D-158）與錯誤紀錄（D-155、D-160）都過 L2、合併後一起裝，省一次電腦與 iPhone 的重開確認；到時升版號、打 tag、裝到正式使用的 vault，確認外掛自己做出第一份備份。還原畫面（第二部分）放到 v1 結案前（使用者 2026-10-29） | 打字卡與錯誤紀錄的 L2、合併 | [外掛內備份任務說明](../tasks/plugin-backup.md)、[規畫](plans/updates.md) |
@@ -48,6 +48,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-31 | 正式版的錯誤紀錄與複習畫面的回報合併進 `main`（[任務說明](../tasks/error-log.md)〈結果〉、[L2 報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）：每台裝置每月一個 `紀錄/錯誤/` 檔、只記自己的錯（含備份失敗，D-155 補充）；初始化的漏報、同時建資料夾、還原不列它都修好；正式安裝存對照表，`npm run locate` 對回原始碼；複習畫面上方的旗子；Codex L2 五輪後通過 |
 | 2026-10-30 | 預覽卡片定案（[D-161](decisions.md#d-161-預覽卡片不記錄不動排程設定頁打開才有)）：家長快速看版型，不寫紀錄、不動排程；設定頁打開才顯示，手機電腦都有；v1 和範圍與目錄一起做 |
 | 2026-10-30 | 外掛內的備份第一部分合併進 `main`（`7a12688`，[任務說明](../tasks/plugin-backup.md)〈結果：第一部分〉、[L2 報告](<../Claude Codex Discussion/2026-10-30-plugin-backup-1-review.md>)）：電腦上新版改寫前、每月一次、隨時手動備份，沒成功前停寫卡組、複習照常；Node／Electron 只在 `src/desktop/`（D-148）；設定頁的「備份」一區（D-156）；Codex L2 三次再審後通過，合併後 815 個測試通過 |
 | 2026-10-30 | 外掛架構檢查環節 9 的四列與環節 5 的 W3 (a)(b) 合併進 `main`（分支 `claude/zealous-williams-bb5446`，[討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 9 的結論〉）：擋 git 指令的 hook 也接 PowerShell、加擋跳過 hook 的寫法（`2596f53`；合併時用 PowerShell 工具實測：含 `git stash` 的一行被擋、`--force-if-includes` 不擋）；pre-commit 改用 dot reporter（`976a7f4`）；`tests/`、`tools/` 加進型別檢查、修好 9 個錯（`cea60a3`）；建置測試建到暫存資料夾（`e2e8fa5`）；結果檔都記 `BUILD`、正式版檢查涵蓋 `dev-*.ts`（`c13f516`） |
@@ -57,4 +58,3 @@ flowchart LR
 | 2026-10-30 | 外掛架構逐環節檢視的環節 2（卡組模組）談定（[討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 2 的結論〉）：重複的學習目標 ID 先停、家長選（[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)）；寫錯的目標要看得到、連結裡的 `^id` 被搬走等記進 [backlog 技術債](backlog.md#技術債)，D-047 列回 v1 任務 |
 | 2026-10-30 | 設定頁依功能分區、不寫「給家長」（[D-156](decisions.md#d-156-設定頁依功能分區不寫給家長)，使用者看外掛內備份的設定頁截圖時提出）：分複習、學期、AI 製卡、備份四區；入口的「給家長」另外問 |
 | 2026-10-30 | 正式版的錯誤紀錄定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)，[討論稿](<../Claude Codex Discussion/2026-10-29-error-log.md>)）：每台裝置每月一個小檔在 `紀錄/錯誤/`，只記自己的錯、有去重與上限、寫不進去就丟；正式安裝存對照表；還原不列它。[任務說明](../tasks/error-log.md)交本機 |
-| 2026-10-30 | `state/index.ts` 原樣拆檔合併進 `main`（`0e3e8a4`，[任務說明](../tasks/state-split.md)、[L2 報告](<../Claude Codex Discussion/2026-10-29-state-split-review.md>)）：拆成讀取層 `reads.ts`、寫入 `writes.ts`、`ids.ts`、組合 `index.ts`，只搬不改行為，更新防線第二部分一起整合；Codex L2 沒有要修的，Windows 輪流對照各 5 次全過，755 個測試通過 |

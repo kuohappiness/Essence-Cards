@@ -60,7 +60,10 @@ interface Page {
   frame(): void;
   /** 最近一次交給畫面（Review）的 props。 */
   review(): ReviewProps;
+  /** 最近一次 createRoot 收到的選項（React root 的錯誤回呼）。 */
+  rootOptions(): RootOptions | undefined;
 }
+interface RootOptions { onUncaughtError?: (error: unknown) => void; onRecoverableError?: (error: unknown) => void }
 interface Harness { memory: MemoryFiles; speech: Speech & { stopped: number }; page: Page }
 
 async function setup(t: TestContext): Promise<Harness> {
@@ -78,12 +81,13 @@ async function setup(t: TestContext): Promise<Harness> {
   const viewport = Object.assign(new Target(), { height: HEIGHT, offsetTop: 0, scale: 1 });
   const frames: (() => void)[] = [];
   let rendered: ReviewProps | null = null;
+  let rootOptions: RootOptions | undefined;
   const module = { exports: {} as { openReview: (options: OpenOptions) => ReviewHandle } };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const run = new Function('require', 'module', 'exports', 'document', 'window', 'performance', 'requestAnimationFrame', 'HTMLElement', source) as (...args: unknown[]) => void;
   run((name: string) => {
     if (name === 'obsidian') return { Notice: class {} };
-    if (name === 'react-dom/client') return { createRoot: () => ({ render(element: { props: ReviewProps }) { rendered = element.props; }, unmount() {} }) };
+    if (name === 'react-dom/client') return { createRoot: (_element: unknown, options?: RootOptions) => (rootOptions = options, { render(element: { props: ReviewProps }) { rendered = element.props; }, unmount() {} }) };
     if (name === 'react/jsx-runtime') return { jsx: (type: unknown, props: unknown) => ({ type, props }) };
     throw Error('host 替身沒有這個模組：' + name);
   }, module, module.exports, doc, { innerHeight: HEIGHT, visualViewport: viewport }, { now: () => Date.now() },
@@ -101,6 +105,7 @@ async function setup(t: TestContext): Promise<Harness> {
       viewport(height) { viewport.height = height; viewport.dispatch('resize'); },
       frame() { for (const callback of frames.splice(0)) callback(); },
       review() { if (!rendered) throw Error('還沒畫'); return rendered; },
+      rootOptions: () => rootOptions,
     },
   };
 }
@@ -169,4 +174,43 @@ void test('R2 關閉之後不再回報已經排好的量測（鍵盤、畫面的
   second.close();
   h.page.frame();
   assert.deepEqual(kinds().slice(4), [`keyboard ${String(HEIGHT)}`, 'closed'], '第二次打開沒有上一次的樣本');
+});
+
+// tasks/error-log.md §2-2：React root 沒接住的錯（ui）與卡片顯示不出來（render，帶卡組的路徑）交給主機；沒傳 onError 時照 React 的預設。
+void test('§2-2 React root 的 onUncaughtError、onRecoverableError 與畫面的 onRenderError 交給 onError', async t => {
+  const h = await setup(t);
+  const got: [string, unknown, string | undefined][] = [];
+  const handle = h.page.open({ pick: { subject: '自然' }, speech: h.speech, onError: (error, where, path) => { got.push([where, error, path]); } });
+  t.after(() => { handle.close(); });
+  const options = h.page.rootOptions();
+  const crash = Error('React 壞了'), recover = Error('補救了'), render = Error('顯示不出來');
+  options?.onUncaughtError?.(crash);
+  options?.onRecoverableError?.(recover);
+  h.page.review().onRenderError?.(render, NATURAL);
+  assert.deepEqual(got, [['ui', crash, undefined], ['ui', recover, undefined], ['render', render, NATURAL]]);
+  handle.close();
+  // 沒傳 onError：createRoot 不帶選項，畫面也沒有 onRenderError。
+  const plain = h.page.open({ pick: { subject: '自然' }, speech: h.speech });
+  t.after(() => { plain.close(); });
+  assert.equal(h.page.rootOptions(), undefined);
+  assert.equal(h.page.review().onRenderError, undefined);
+});
+
+// tasks/error-log.md §8（D-160 第 3 點）：回報的選單開著時，離開超過 60 秒回來也不從頭開始；選單關上之後照舊。
+void test('§8 選單開著時切走超過 60 秒：卡片不重設；onReport 原樣交給畫面', async t => {
+  const h = await setup(t);
+  const onReport = (): void => {};
+  const handle = h.page.open({ pick: { subject: '自然' }, speech: h.speech, onReport });
+  t.after(() => { handle.close(); });
+  await handle.session.ready();
+  assert.equal(h.page.review().onReport, onReport);
+  const shown = (): number => { const view = handle.session.view(); return view.kind === 'card' ? view.card.shown : -1; };
+  const away = (ms: number): void => { h.page.hide(); t.mock.timers.tick(ms); h.page.show(); };
+  handle.session.reveal();
+  h.page.review().onMenu?.(true);
+  away(AWAY_LIMIT + 1);
+  assert.equal(shown(), 0, '選單開著：不重設');
+  h.page.review().onMenu?.(false);
+  away(AWAY_LIMIT + 1);
+  assert.equal(shown(), 1, '選單關上：照舊從頭開始');
 });

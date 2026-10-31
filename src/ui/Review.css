@@ -1,7 +1,7 @@
 /* 複習畫面（W6 §3）：版面、字級、間距照樣式稿 entry-and-reveal.html 與試作外掛的 Review.css；顏色與節奏用 tokens.css 的變數。 */
 .ec-fullscreen { position: fixed; inset: 0; z-index: 1000000; box-sizing: border-box; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); background: #FAFAF9; outline: none; }
 body.theme-dark .ec-fullscreen { background: #121314; }
-.ec-app { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: var(--ec-size-base)/1.5 var(--ec-font-ui); -webkit-tap-highlight-color: transparent; outline: none; }
+.ec-app { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: var(--ec-size-base)/1.5 var(--ec-font-ui); -webkit-tap-highlight-color: transparent; outline: none; }
 .ec-app * { box-sizing: border-box; }
 .ec-app button { font: inherit; color: inherit; cursor: pointer; box-shadow: none; -webkit-appearance: none; appearance: none; }
 .ec-app button:disabled { cursor: default; opacity: .3; }
@@ -12,8 +12,8 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app .ec-ico:not(:disabled):active { background: var(--ec-press); }
 .ec-app .ec-ico.sm { width: 40px; height: 40px; }
 
-/* 上方列：‹、還剩 N 張／回到目前 ›、自動朗讀、✕；底下一條細進度條 */
-.ec-top { flex: none; display: grid; grid-template-columns: var(--ec-touch) 1fr auto var(--ec-touch); align-items: center; padding: 6px 10px 0; }
+/* 上方列：‹、還剩 N 張／回到目前 ›、自動朗讀、回報的旗子（D-160）、✕；底下一條細進度條。沒有開關或旗子時那一格是空的、寬度 0 */
+.ec-top { flex: none; display: grid; grid-template-columns: var(--ec-touch) 1fr auto auto var(--ec-touch); align-items: center; padding: 6px 10px 0; }
 .ec-count { text-align: center; font-size: 14px; color: var(--ec-muted); font-variant-numeric: tabular-nums; }
 .ec-app .ec-return { justify-self: center; display: inline-flex; align-items: center; gap: 2px; min-height: var(--ec-touch); padding: 0 4px 0 10px; border: 0; background: none; color: var(--ec-ink); font-size: 14px; font-weight: 500; }
 .ec-auto { display: inline-flex; align-items: center; gap: 6px; min-height: var(--ec-touch); padding: 0 6px; font-size: var(--ec-size-meta); color: var(--ec-muted); cursor: pointer; position: relative; }
@@ -129,7 +129,20 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app .ec-start { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 50px; margin-top: 22px; padding: 0 20px; border: 1px solid var(--ec-ink); border-radius: 16px; background: var(--ec-ink); color: var(--ec-page); font-size: var(--ec-size-button); font-weight: 600; letter-spacing: .04em; }
 .ec-app .ec-start:active { opacity: .86; }
 
+/* 回報的選單（D-160）：蓋住整個畫面，從下方升起；每一項一整列、至少 52px 高，一隻手的拇指點得到；底下讓出 iPhone 的主畫面條 */
+/* 遮罩淺色、深色主題都用黑色調暗（--ec-ink 在深色主題是淺色，會把畫面調亮）；選單本身拿到焦點時不畫外框，按鈕的照畫 */
+.ec-report { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: flex-end; background: rgb(0 0 0 / .35); animation: ec-fade-in .16s ease-out; }
+.ec-report-sheet { display: flex; flex-direction: column; max-width: 560px; width: 100%; margin: 0 auto; padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px)); border-radius: var(--ec-radius) var(--ec-radius) 0 0; background: var(--ec-page); animation: ec-sheet-in .2s ease-out; }
+.ec-app .ec-report-sheet:focus, .ec-app .ec-report-sheet:focus-visible { outline: none; }
+.ec-app .ec-report-item { width: 100%; min-height: 52px; padding: 12px 20px; border: 0; border-radius: 0; background: none; color: var(--ec-ink); font-size: var(--ec-size-base); line-height: 1.4; }
+.ec-app .ec-report-item + .ec-report-item { border-top: 1px solid var(--ec-line); }
+.ec-app .ec-report-item:not(:disabled):active { background: var(--ec-press); }
+.ec-app .ec-report-item + .ec-report-cancel { margin-top: 6px; border-top: 6px solid var(--ec-press); color: var(--ec-muted); text-align: center; }
+@keyframes ec-fade-in { from { opacity: 0; } }
+@keyframes ec-sheet-in { from { transform: translateY(24px); opacity: 0; } }
+
 @media (prefers-reduced-motion: reduce) {
   .ec-answer, .ec-rates, .ec-line.ec-filled .ec-line-word { animation: none; }
+  .ec-report, .ec-report-sheet { animation: none; }
   .ec-prog i, .ec-auto i, .ec-auto i::after { transition: none; }
 }

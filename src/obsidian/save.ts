@@ -168,6 +168,7 @@ export function wireSave(host: SaveHost): Saver {
   function blockTip(state: State): string | null {
     if (!watched.has(state)) {
       watched.add(state);
+      // ready() 拒絕已經經過 onError 記下（tasks/error-log.md §2-3），或是停用外掛；按鈕維持受阻。
       state.ready().then(refresh, () => {});
     }
     const reason = state.writeBlock();

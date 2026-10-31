@@ -20,8 +20,8 @@ export interface MarkdownProps {
   /** 打字卡：線的條數與寫在線上的字（照空白切）。 */
   lines?: number;
   words?: readonly string[];
-  /** 渲染失敗（錯誤已記在 console）。 */
-  onFail?: (error: unknown) => void;
+  /** 渲染失敗（錯誤已記在 console）：交出錯誤與 sourcePath，由主機記進錯誤紀錄（D-155）。 */
+  onFail?: (error: unknown, sourcePath: string) => void;
   /** 渲染好（第一張卡畫好的量測用）。 */
   onReady?: () => void;
   className?: string;
@@ -80,7 +80,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
         note.className = 'ec-render-failed';
         note.textContent = '這張卡顯示不出來';
         container.append(note);
-        latest.current.onFail?.(error);
+        latest.current.onFail?.(error, sourcePath);
       }
     })();
     return () => {

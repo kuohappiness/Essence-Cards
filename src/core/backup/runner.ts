@@ -37,7 +37,8 @@ interface BackupStore {
   saveLast(last: LastBackup): void;
 }
 
-interface BackupFailure { by: PluginBy; step: string; message: string; time: number }
+/** error 是原本的錯（記進錯誤紀錄用，D-155 補充）；畫面只用 step 與 message。 */
+interface BackupFailure { by: PluginBy; step: string; message: string; time: number; error: unknown }
 export interface BackupStatus {
   /** 寫入閘門：這個建置版本有一份對得到的成功備份，而且這次載入之後沒有失敗過（失敗了要再成功一次）。 */
   ready: boolean;
@@ -164,7 +165,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
         if (cleanup.length) set({ cleanup });
       } catch (error) {
         if (error instanceof Cancelled) return;
-        set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now() } });
+        set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now(), error } });
       }
     })().finally(() => { current = null; });
     return current;
