@@ -1,7 +1,7 @@
 {
   "id": "essence-cards",
   "name": "Essence Cards",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.8.7",
   "description": "以學習目標為單位的卡片複習。",
   "author": "Essence Cards",

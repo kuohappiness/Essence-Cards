@@ -34,7 +34,7 @@ void test('備份：檔名、清單與內容照 syntax §8，讀回來的雜湊�
   assert.deepEqual(manifest.absent, ['.obsidian/plugins/essence-cards/data.json']);
   assert.deepEqual([manifest.format, manifest.version, manifest.build, manifest.by, manifest.started, manifest.vault.config, manifest.excluded, manifest.notes],
     ['essence-cards-backup', 1, '0.1.0+1a2b3c4', 'backup', '2026-11-02T20:15:03.250+08:00', '.obsidian', [], []]);
-  assert.match(manifest.tool, /^0\.1\.0\+[0-9a-f]{7,}(\.dirty)?$/);
+  assert.match(manifest.tool, /^0\.2\.0\+[0-9a-f]{7,}(\.dirty)?$/);
   assert.equal(manifest.vault.name, 'Vault');
   assert.deepEqual(files.get('Essence Cards/附件/圖.png'), image);
   assert.equal(text(files.get(LOG)), line + '\n');

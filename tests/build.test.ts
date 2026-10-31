@@ -57,7 +57,7 @@ void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault
   const { stdout } = await run(process.execPath, ['--input-type=module', '-e', script, out], { cwd: root });
   // W5 §8-2 第 2 點：編輯器的鎖定用 Obsidian 提供的 CodeMirror。
   // D-148：Node 與 Electron 只由 src/desktop/ 引入，另外列出。
-  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; desktop: electron, node:crypto, node:fs\/promises, node:os, node:path; version 0\.1\.0\+[0-9a-f]{7,}(\.dirty)?\n/);
+  assert.match(stdout, /main\.js \d+ bytes; require: @codemirror\/state, @codemirror\/view, obsidian; desktop: electron, node:crypto, node:fs\/promises, node:os, node:path; version 0\.2\.0\+[0-9a-f]{7,}(\.dirty)?\n/);
   assert.deepEqual(await tree(out), ['main.js', 'styles.css']);
   assert.deepEqual(await tree(join(root, 'src')), before);
   // 安裝到測試 vault 會在專案根目錄建置再複製（tools/install.ts），所以用暫存專案。
@@ -68,7 +68,7 @@ void test('W1 建置只 require Obsidian 提供的套件；安裝到測試 vault
     assert.deepEqual(await readFile(join(vault, '.obsidian/plugins/essence-cards', name)), await readFile(join(dir, name)));
   }
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as Record<string, unknown>;
-  assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.1.0', '1.8.7', false]);
+  assert.deepEqual([manifest.id, manifest.name, manifest.version, manifest.minAppVersion, manifest.isDesktopOnly], ['essence-cards', 'Essence Cards', '0.2.0', '1.8.7', false]);
 });
 
 void test('W1 沒有 CSS 時 styles.css 是空字串，隔離在暫存專案', async t => {
@@ -94,7 +94,7 @@ void test('W1 新增模組資料夾與 CSS 不會誤報：建置成功、只 req
     'state/a.ts': 'export const a = "a";', 'dev/b.ts': 'export const b = "b";', 'obsidian/c.css': 'c{}',
   });
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: obsidian; desktop: ; version 0\.1\.0(\+\S+)?\n/);
+  assert.match(stdout, /require: obsidian; desktop: ; version 0\.2\.0(\+\S+)?\n/);
   assert.equal(await readFile(join(dir, 'styles.css'), 'utf8'), 'c{}');
 });
 void test('W1 安裝指令拒絕未給 vault，不寫入預設路徑', async () => {
@@ -132,7 +132,7 @@ void test('W5 W6 開發命令只在 --dev 建置：正式的 main.js 不含 URI�
   const dev = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(dev.includes(mark), '開發版缺 ' + mark);
   const { stdout } = await run(process.execPath, ['tools/build.mjs'], { cwd: dir });
-  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; desktop: electron, node:crypto, node:fs\/promises, node:os, node:path; version 0\.1\.0(\+\S+)?\n/);
+  assert.match(stdout, /require: @codemirror\/state, @codemirror\/view, obsidian; desktop: electron, node:crypto, node:fs\/promises, node:os, node:path; version 0\.2\.0(\+\S+)?\n/);
   const production = await readFile(join(dir, 'main.js'), 'utf8');
   for (const mark of marks) assert.ok(!production.includes(mark), '正式版含有 ' + mark);
 });
