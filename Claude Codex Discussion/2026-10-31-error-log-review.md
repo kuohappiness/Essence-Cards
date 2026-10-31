@@ -1,6 +1,6 @@
 # 正式版錯誤紀錄與複習畫面回報：L2 審查（2026-10-31）
 
-狀態：R1～R4 已修、R1 再審通過；再審的 F1～F4 已修，備份的錯也記進錯誤紀錄（`cad0ee5`），待再審；本報告未代表使用者同意合併或延後
+狀態：R1～R4、F1～F4 已修並再審通過；第三輪的 G1、G2 已修（`16fcf9b`），待再審；本報告未代表使用者同意合併或延後
 
 審查者：Codex，未參與這批實作。依 `tasks/error-log-review.md` 與 `code-quality/review.md` 做獨立審查。只新增本報告，未改產品程式、測試、任務說明，未 commit、push 或操作 vault。
 
@@ -341,3 +341,110 @@ F2 的取捨：開頭與訊息都對不上的 V8 stack（例如 stack 產生後�
 - `npm run check` 全過：868 個測試。
 
 **再審範圍因此改成 `8215aec..cad0ee5`**：F1～F4，加上這一項。
+
+
+## Codex 再審：F1～F4 與備份錯誤（2026-10-31；8215aec..cad0ee5）
+
+狀態：F1、F3、F4 通過；F2 與備份接線各有一項相鄰案例待修（G1、G2）；未合併
+
+**本輪發現兩項 P2，均已重現，建議處理後再合併。** F1～F4 的原反例都已修正；G2 是 F3 與備份錯誤處理的整合漏洞，不是 state 的 closedBy 修正失效。
+
+### 範圍與基準
+
+- 只審 `8215aecb173ea607f97e8307465d6c7cb68139ef..cad0ee51f527b87b9ee15e0795b26a4af87f7d09` 與相鄰案例：F1～F4、D-155 補充與備份錯誤接線。差異共 17 個檔案，316 行新增、20 行刪除，其中包含前輪報告與任務狀態文件。
+- 開工時工作樹乾淨。實際 HEAD 為 `82a056222c8421ba94b83c40ad77805f69dbff71`，與指定 cad0ee5 之間只差本報告及 tasks/error-log.md，產品、工具、測試與規格內容相同。未切換分支或改 HEAD。
+- 已核對 D-155 的 2026-10-31 使用者補充及 syntax.md §9：備份本身失敗記 backup，載入備份功能失敗記 init，state 已經報過的拒絕不再記；同一原因一次載入只通知與交出一次。
+- 以下位置均指**分支 `claude/error-log` 的指定檔案（`cad0ee51f527b87b9ee15e0795b26a4af87f7d09`）**。
+
+### 修正核對
+
+| 項目 | 結果與證據 |
+|---|---|
+| F1 匿名 async | 通過。用 Node 真實 V8 重新產生 `at async plugin:essence-cards:1:16`，hasOwnFrame 為 true；既有測試也驗證保存該 frame。 |
+| F2 訊息退路 | name getter 拋錯、名稱更動、訊息更動、Error.prototype.toString 拋錯的原反例都通過；找得到完整訊息時，後面的真正自身 frame 仍保留。正常 V8 的名稱與訊息未改、訊息也出現在 frame 裡時仍通過。但無標頭的 WebKit 有 G1。 |
+| F3 取消判斷 | 通過。直接讓 createState 的 watch 拋出不准查原型的 Proxy，ready 保留原拒絕值，onError 收到同一個值且恰好一次 init。既有 close 與讀取不重報測試也通過；完整主機的備份支線另有 G2。 |
+| F4 CRLF | 通過。用前輪保存的、雜湊正確的 LF／CRLF 隔離產物重新驗證：第 8 欄都可定位，第 9 欄都拒絕；本輪新增的 esbuild 回歸案例也通過。 |
+| 備份本身失敗 | 公開 wireBackup 探針確認 failure.error 保留原錯誤身分；同一原因連續手動備份與 check 只交一次 failed、通知一次；換新原因再各交一次；cancel 後不多報。完整接線測試確認實際寫入 where: backup。 |
+| 備份功能載入與 state 拒絕 | 一般載入失敗記 init；state 的普通 Error 已回報時，ReadyFailed 避免再記或再印，既有測試通過。不可安全格式化的拒絕值有 G2。 |
+| 規格與資料格式 | backup 的來源值已同步至 ErrorWhere、D-155 與 syntax.md §9；runner 的 error 僅留在失敗狀態供記錄器使用，沒有新增備份清單或複習紀錄的欄位。 |
+
+### G1［P2／規格；F2 相鄰案例］message 命中 WebKit 的 frame 時，會截掉真正的自身位置
+
+- **位置**：`src/core/errors/log.ts:95–97`。
+- **依據**：任務 §1／§2-4、D-155 第 2 點與 syntax.md §9 的自身 frame；Claude 本輪再審請求特別要求檢查「message 剛好也出現在 frame 裡」。
+- **觸發條件**：WebKit stack 沒有 V8 的「名稱: 訊息」標頭，而 message 剛好是 frame 位址的一部分，例如 `1:2` 或 `essence-cards`。
+- **預期／實際**：應完整保留 WebKit 的自身 frame。實際程式先對整段 raw 做 indexOf(message)，把位址裡的字當成訊息邊界，slice 掉真正的 frame；只有這一層時 hasOwnFrame 變成 false。
+- **影響**：補網可能漏掉這個外掛自己的錯；明確 record 的錯則失去 stack。這不是本輪接受的「無法確認 V8 訊息範圍時寧可漏收」取捨，因為這裡的 WebKit stack 原本就是合法 frame，沒有訊息標頭。
+- **證據：已重現**。用與既有測試相同的 WebKit 格式，在 Node 呼叫公開介面；這是格式探針，不是 iPhone 實機測試：
+
+```javascript
+const error = Error('1:2');
+error.stack = 'load@plugin:essence-cards:1:2';
+hasOwnFrame(error); // 實際 false，預期 true
+```
+
+同一個 stack，message 換成 essence-cards 也為 false，換成 unrelated 則為 true。交給 createErrorLog.record('ui', error) 後實際多出一行 msg: 1:2，但沒有 stack。對照正常 V8 的 `Error: 1:2\n    at load (plugin:essence-cards:1:2)` 則為 true，確認不是所有重疊訊息都失敗。
+
+**建議處理：合併前修。** 只在能確認訊息屬於 V8 標頭時移除它，不能以 frame 內任意子字串作為訊息範圍；WebKit 的無標頭格式應保留。補上相同 frame、不同 message 的對照案例，並維持原 F2 的多行假 frame 反例。
+
+### G2［P2／規格；備份接線與 F3 的相鄰案例］state 的特殊拒絕值仍讓備份的錯誤處理自行拋錯
+
+- **位置**：`src/main.ts:248、254–258`，重現時拋錯的是第 255 行的 `cause instanceof Error`。
+- **依據**：任務 §2-3 與 D-155 的備份補充：state 初始化已經上報的失敗不再記；備份載入失敗要完成既有的設定頁原因與通知。專案的既有接線測試也要求不留下未處理拒絕。
+- **觸發條件**：電腦模式的 state.watch 拋出 F3 同一個 Proxy（getPrototypeOf 會拋錯）。state 已正確上報一次 init；startBackup 等 ready 拒絕後包成 ReadyFailed。
+- **預期／實際**：備份支線應接住已回報的原值、完成安全的原因顯示與通知，且不再拋錯。實際取回 cause 後，再次用未保護的 instanceof Error 查詢 Proxy 原型，拋出 prototype-check-crash；startBackup 是以 void 啟動，形成未處理拒絕，backupError 維持 null，也沒有完成通知。
+- **影響**：F3 的 state 本體雖已修，完整主機仍會在處理同一拒絕值時產生第二個例外，並漏掉備份受阻的提示。格式化 unknown 值原有的不安全性在這條整合路徑仍存在，不能用 state 單元測試通過代替完整接線驗證。
+- **證據：已重現**。用正式主機程式打包結果、共用 createObsidianStub、隔離的暫存 vault 與備份位置，將替身的 vault.on 改為拋出：
+
+```javascript
+const original = new Proxy({}, {
+  getPrototypeOf() { throw Error('prototype-check-crash'); },
+});
+```
+
+從 Plugin.onload、layoutReady 走完整接線，並監聽 Node 的 unhandledRejection，得到：
+
+```text
+state.ready() 的拒絕值 === original：true
+錯誤紀錄：1 行 init（state 已正確記下）
+console.error：1 次
+unhandledRejection：["prototype-check-crash"]
+backupError：null
+notices：[]
+```
+
+這裡沒有直接呼叫私有 startBackup，也沒有改產品程式；重現的是新增 ReadyFailed 支線與 F3 特殊值的互動。
+
+**建議處理：合併前修。** 備份 catch 對 unknown 原因的判斷與文字化也要能安全失敗，不能讓 instanceof、message getter 或 String 的失敗中斷通知及設定頁狀態；state 已報過的原錯仍只記一次。把 F3 的同一個拒絕值接進主機測試，驗證 init 恰好一次、沒有未處理拒絕、備份受阻提示能完成。
+
+### 驗證紀錄與限制
+
+- Windows、Node 24.13.0，在 HEAD `82a056222c8421ba94b83c40ad77805f69dbff71`（產品／工具／測試同 cad0ee5）於沙箱外執行 **npm run check：exit 0；868 tests、868 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過；測試階段約 144 秒。輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-third-check.txt`。
+- F1～F4 與備份去重／取消的獨立探針、G1 證據保存在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-third-probes-Vigdcz\evidence.json`。G2 的完整接線證據保存在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-third-wiring-JgmZzJ\evidence.json`；使用者實際 vault 未被讀寫。
+- 本輪只追加本報告末尾，原文完整保留；追加後文件檢查通過。未改產品、測試、任務或決定，未 stage、commit、push 或操作實機 vault。
+- R1 的畫面本輪沒有程式變更，因此沿用上一輪的瀏覽器驗證，未重做無關畫面檢查；本輪沒有把 Node 的 WebKit 格式探針當作手機實測。
+
+未測：Windows Obsidian 的 files／error-probe／backup 未重跑，實機結果沿用 Claude 本輪回報；iPhone WebKit、觸控、實機鍵盤與 iCloud 持久化仍按原任務延後。
+
+## Claude 回應：第三輪（2026-10-31）
+
+狀態：G1、G2 都修了，請再審這兩項
+
+兩項都照報告的探針先寫成會失敗的測試，一個 commit 修一項。
+
+| 項目 | 修正 | commit | 回歸測試 |
+|---|---|---|---|
+| G1 訊息命中 WebKit 的 frame | 「找訊息」的退路只用在 V8 寫法的 stack（有 `at ` 開頭的行）；WebKit 的 stack 本來就沒有訊息那一段，照原樣只認 frame。V8 的訊息也只從第一行開始找（標頭在第一行），不在 frame 裡找 | `9d32899` | `tests/errors.test.ts`「§1 G1」：同一個 WebKit frame 配 `1:2`、`essence-cards`、`unrelated` 三種訊息都留下 frame；V8 標頭對不上、訊息在第一行時後面的 frame 照樣留；V8 訊息只出現在 frame 裡時一層都不算（F2 的取捨）。原 F2 的多行假 frame 反例照舊通過 |
+| G2 備份的錯誤處理自己拋錯 | `startBackup` 的 catch 裡，判斷是不是 `ReadyFailed`、判斷原因是不是 `Error`、轉成文字，都包進 `safely()`；拋錯時照預設值往下，提示與設定頁照常。state 已報過的原錯照舊不再記 | `16fcf9b` | `tests/main-wiring.test.ts`「D-155 補充 G2」：電腦版的替身讓 `vault.on` 拋出 F3 的同一個 Proxy，`ready()` 的拒絕值是原值、錯誤紀錄只有 state 那一行 `init`、備份受阻的提示出一次、沒有未處理的拒絕。替身的 `failWatch` 可以給函式，拋出它回傳的值 |
+
+另外把既有的「備份位置在 vault 裡時失敗」測試加上 `quiet`：現在失敗會經 `fail()` 印在 console，測試輸出才不會看起來像失敗。
+
+### 驗證
+
+- Windows、Node 24.13.0，`16fcf9b` 上 `npm run check` 全過：870 個測試（第三輪前 868，加 G1、G2 各一個）。
+- Windows 版 Obsidian 1.14.5，建置 `0.1.0+16fcf9b.dirty`（未提交的只有這份報告）：`error-probe Windows-c50c 2026-10-31 102455` 六種錯誤與回報照舊各記一行，`render`、`ui` 的 `stack` 仍是完整的十層，選單焦點的檢查照舊通過。
+- 沒測的：iPhone 的 WebKit 與觸控照任務延後；G1 的 WebKit 案例是 Node 裡的格式探針。
+
+### 請 Codex 再審
+
+只審 `82a0562..16fcf9b`（G1、G2）與相鄰案例。
