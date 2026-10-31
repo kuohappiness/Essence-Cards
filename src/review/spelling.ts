@@ -7,8 +7,11 @@ export interface Spelling { ok: boolean; typed: Letter[]; expected: Letter[] }
 
 // 比對的單位與規則都是核心的 typedUnits（D-158）：彎的單引號、空白字元與連續的空白不算錯也不標出；畫面上寫的是原本的字（小寫）。
 const letters = (text: string): TypedUnit[] => typedUnits(text.trim());
-const keys = (units: TypedUnit[]): string[] => units.map(unit => unit.key);
-const letter = (unit: TypedUnit, bad: boolean): Letter => ({ char: unit.text.toLowerCase(), bad });
+/** 對齊用的一格：key 的一個 code point，和它屬於第幾個單位。照 code point 對齊，標記才和整段的 typedKey 一致（İ 對 i 加 U+0307）。 */
+interface Slot { key: string; unit: number }
+const slots = (units: TypedUnit[]): Slot[] => units.flatMap((unit, i) => [...unit.key].map(key => ({ key, unit: i })));
+/** 單位裡有任何一格錯，整個單位標出來。 */
+const marked = (units: TypedUnit[], bad: Set<number>): Letter[] => units.map((unit, i) => ({ char: unit.text.toLowerCase(), bad: bad.has(i) }));
 
 /** 編輯距離表（Levenshtein）。 */
 function table(a: string[], b: string[]): number[][] {
@@ -20,18 +23,19 @@ function table(a: string[], b: string[]): number[][] {
 /** 逐字比對（移植試作外掛的 spelling）：大小寫、前後空白與 D-158 的字元不算錯；用編輯距離對齊，插入、缺漏、錯字都標在對應的位置。 */
 export function spelling(input: string, answer: string): Spelling {
   const a = letters(input), b = letters(answer);
-  const ka = keys(a), kb = keys(b);
+  const sa = slots(a), sb = slots(b);
+  const ka = sa.map(slot => slot.key), kb = sb.map(slot => slot.key);
   const d = table(ka, kb);
-  const typed: Letter[] = [], expected: Letter[] = [];
-  let i = a.length, j = b.length;
+  const badA = new Set<number>(), badB = new Set<number>();
+  let i = sa.length, j = sb.length;
   while (i || j) {
     if (i && j && d[i][j] === d[i - 1][j - 1] + Number(ka[i - 1] !== kb[j - 1])) {
-      const bad = ka[i - 1] !== kb[j - 1];
-      typed.unshift(letter(a[--i], bad)); expected.unshift(letter(b[--j], bad));
-    } else if (j && d[i][j] === d[i][j - 1] + 1) expected.unshift(letter(b[--j], true));
-    else typed.unshift(letter(a[--i], true));
+      i--; j--;
+      if (ka[i] !== kb[j]) { badA.add(sa[i].unit); badB.add(sb[j].unit); }
+    } else if (j && d[i][j] === d[i][j - 1] + 1) badB.add(sb[--j].unit);
+    else badA.add(sa[--i].unit);
   }
-  return { ok: typedKey(input) === typedKey(answer), typed, expected };
+  return { ok: typedKey(input) === typedKey(answer), typed: marked(a, badA), expected: marked(b, badB) };
 }
 
 /**
@@ -42,16 +46,19 @@ export function spelling(input: string, answer: string): Spelling {
  */
 export function copying(input: string, answer: string): Spelling {
   const a = typedUnits(input.trimStart()), b = letters(answer);
-  return {
-    ok: typedKey(input) === typedKey(answer),
-    typed: a.map((unit, i) => letter(unit, unit.key !== b[i]?.key)),
-    expected: b.map((unit, i) => letter(unit, i < a.length && a[i].key !== unit.key)),
-  };
+  const sa = slots(a), sb = slots(b);
+  const badA = new Set<number>(), badB = new Set<number>();
+  sa.forEach((slot, i) => {
+    if (slot.key === sb[i]?.key) return;
+    badA.add(slot.unit);
+    if (i < sb.length) badB.add(sb[i].unit);
+  });
+  return { ok: typedKey(input) === typedKey(answer), typed: marked(a, badA), expected: marked(b, badB) };
 }
 
-/** 編輯距離（大小寫、前後空白與 D-158 的字元不算）。 */
+/** 編輯距離（大小寫、前後空白與 D-158 的字元不算；照 typedKey 的 code point 算）。 */
 function distance(input: string, answer: string): number {
-  const a = keys(letters(input)), b = keys(letters(answer));
+  const a = [...typedKey(input)], b = [...typedKey(answer)];
   return table(a, b)[a.length][b.length];
 }
 

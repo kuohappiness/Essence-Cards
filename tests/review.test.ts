@@ -75,6 +75,22 @@ void test('R7 D-158 比對：彎的單引號、空白字元與連續的空白不
   assert.equal(copying('dont', "don't").typed.some(c => c.bad), true);
 });
 
+void test('R7 D-158 比對：小寫後變成兩個 code point 的字母，判對、標記與最接近的答案一致（Codex L2 F1）', () => {
+  // İ（U+0130）小寫是 i 加 U+0307；另一邊直接打 i 加 U+0307。
+  for (const [input, answer] of [['İstanbul', 'i̇stanbul'], ['i̇stanbul', 'İstanbul']]) {
+    const spelled = spelling(input, answer), copied = copying(input, answer);
+    assert.deepEqual([spelled.ok, spelled.typed.some(c => c.bad), spelled.expected.some(c => c.bad)], [true, false, false], `spelling ${input}`);
+    assert.deepEqual([copied.ok, copied.typed.some(c => c.bad), copied.expected.some(c => c.bad)], [true, false, false], `copying ${input}`);
+  }
+  assert.equal(closest('İstanbulx', ['İstanbuly', 'i̇stanbulx']), 'i̇stanbulx', '和輸入一樣的答案距離 0');
+  assert.equal(closest('i̇stanbulx', ['i̇stanbuly', 'İstanbulx']), 'İstanbulx');
+  const wrong = spelling('İstanbol', 'i̇stanbul');
+  assert.deepEqual([wrong.typed.filter(c => c.bad).map(c => c.char), wrong.expected.filter(c => c.bad).map(c => c.char)], [['o'], ['u']], '拼錯時照樣只標錯的字母');
+  // 整串一起小寫：詞尾的 Σ 是 ς（和改版前一樣）。
+  assert.equal(spelling('ΟΣ', 'ος').ok, true);
+  assert.equal(spelling('ΟΣ', 'ος').typed.some(c => c.bad), false);
+});
+
 void test('R8 英文的部分：例句只念英文；＿＿ 填入答案；單字；全是中文沒有；只有詞性縮寫不念', () => {
   assert.deepEqual(englishParts('例句：Can I borrow your pen? 我可以借你的筆嗎？'), ['Can I borrow your pen?']);
   assert.equal(fillBlank(PHRASE, 'made up his mind'), 'He has already made up his mind to study abroad.');

@@ -127,15 +127,23 @@ function compareSubject(a: string | null, b: string | null): number {
   return compareText(a, b);
 }
 
-/** 打字卡比對的一個單位：一個字元，或一段連續的空白；key 是比對用的寫法，text 是原本的字。 */
+/**
+ * 打字卡比對的一個單位：一個字元，或一段連續的空白；key 是比對用的寫法，text 是原本的字。
+ * key 可能不只一個 code point（İ 小寫後是 i 加 U+0307），逐字比對要照 key 的 code point 比，才和整段的 typedKey 一致。
+ */
 export interface TypedUnit { text: string; key: string }
 
 /**
  * 打字卡的比對規則只寫在這裡（D-158）：彎的單引號 ‘ ’ 當成 '，空白字元（\p{Zs}）與 Tab 當成空白、連續的算一個，不分大小寫。
  * 只用在比對，不改卡組的答案與題目指紋；ʼ、＇、雙引號、零寬字元、全形字母照舊不同。不去頭尾的空白（照打還沒打完時要留著尾端）。
+ * 小寫整串一起轉（詞尾的 Σ 要看前後文才知道是 ς），再照每個單位單獨轉小寫的長度切回去：小寫後的長度不受前後文影響（2026-10-31 逐一驗過所有 code point）。
  */
 export function typedUnits(text: string): TypedUnit[] {
-  return (text.match(/[\p{Zs}\t]+|./gsu) ?? []).map(part => ({ text: part, key: /^[\p{Zs}\t]/u.test(part) ? ' ' : part.replace(/[‘’]/g, "'").toLowerCase() }));
+  const parts = text.match(/[\p{Zs}\t]+|./gsu) ?? [];
+  const plain = parts.map(part => /^[\p{Zs}\t]/u.test(part) ? ' ' : part.replace(/[‘’]/g, "'"));
+  const lower = plain.join('').toLowerCase();
+  let at = 0;
+  return parts.map((part, i) => ({ text: part, key: lower.slice(at, at += plain[i].toLowerCase().length) }));
 }
 /** 整段字的比對寫法：去掉頭尾空白之後照 typedUnits；兩段的 key 相同就算一樣（D-122、D-158）。 */
 export const typedKey = (text: string): string => typedUnits(text.trim()).map(unit => unit.key).join('');
