@@ -1,6 +1,6 @@
 # 正式版的錯誤紀錄（給 Claude，本機執行）
 
-狀態：程式與 Windows 實測做完，在分支 `claude/error-log`；Codex L2 的 R1～R4、F1～F4、G1、G2 與第四輪的 H1 已修（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)），待再審，合併由使用者決定
+狀態：程式與 Windows 實測做完，在分支 `claude/error-log`；Codex L2 通過（[報告與回應](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)）；等使用者決定合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-155 與討論稿做完，這份是照做）。
 

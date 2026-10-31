@@ -1,6 +1,6 @@
 # 正式版錯誤紀錄與複習畫面回報：L2 審查（2026-10-31）
 
-狀態：R1～R4、F1～F4、G1 已修並再審通過；G2 的相鄰案例 H1 已修（`8a1e3c7`），待再審；本報告未代表使用者同意合併或延後
+狀態：L2 通過（R1～R4、F1～F4、G1、G2、H1 都修好並再審通過，最後一輪審 `8a1e3c7`）；等使用者決定合併；本報告未代表使用者同意合併或延後
 
 審查者：Codex，未參與這批實作。依 `tasks/error-log-review.md` 與 `code-quality/review.md` 做獨立審查。只新增本報告，未改產品程式、測試、任務說明，未 commit、push 或操作 vault。
 
@@ -531,3 +531,38 @@ objectMessage.message = {
 ### 請 Codex 再審
 
 只審 `4a8643c..8a1e3c7`（H1）與相鄰案例。
+
+
+## Codex 再審：H1（2026-10-31；4a8643c..8a1e3c7）
+
+狀態：H1 再審通過；本輪無新增發現；未合併，合併由使用者決定
+
+**H1 的兩個反例與相鄰案例均通過，沒有發現本輪修正造成的新問題。** 原因的 String 轉換現在完整位於 safely 內，外面只串接已完成的字串，沒有再出現前輪的未處理拒絕。
+
+### 範圍與基準
+
+- 只審 `4a8643c184e5b34558141681dd64348166764c00..8a1e3c7e3475ea529795bb4a5c808c12dc8bc97f` 與 H1 相鄰案例。差異只有 src/main.ts 與 tests/main-wiring.test.ts：28 行新增、1 行刪除。
+- 開工時分支 claude/error-log、工作樹乾淨；實際 HEAD 為 `71ac9c201551b7cdad3d6c3da5a6f76cc3ef61ea`。與指定 8a1e3c7 之間只差本報告及兩份任務文件，產品與測試內容相同；未切換分支或改 HEAD。
+- 程式核對位置：**分支 `claude/error-log` 的 `src/main.ts:263–264`（`8a1e3c7e3475ea529795bb4a5c808c12dc8bc97f`）**；並核對新增的兩個主機接線回歸測試。
+
+### 獨立重驗
+
+從公開的 Plugin.onload、layoutReady 與共用 Obsidian 替身走完整主機接線，使用自編內容、隔離暫存 vault 與備份位置，共 16 個案例全部通過：
+
+| 案例 | 結果 |
+|---|---|
+| H1：Error.message 是 Symbol | backupError 為「備份的功能載入失敗：Symbol(message)」，通知一次，沒有未處理拒絕。 |
+| H1：Error.message 的物件轉文字會拋錯 | backupError 使用「（原因無法轉成文字）」的退路，通知一次，沒有未處理拒絕。 |
+| G2 相鄰失敗 | 不准查原型的 Proxy、非 Error 的 toString 拋錯、message getter 拋錯、message 物件的 Symbol.toPrimitive 拋錯，全部完成通用原因與通知。 |
+| 一般錯誤與值 | 普通 Error、null、undefined、Symbol、字串、數字，以及 Error.message 是數字或可正常轉文字的物件，原因文字均符合各自的字面預期。 |
+| 備份載入本身失敗 | 不經 ReadyFailed 的載入支線，分別拋出 message 是 Symbol、message 物件轉文字會拋錯的 Error，也都完成原因與通知。 |
+
+14 個 state.ready 拒絕案例均保留原拒絕值，錯誤紀錄恰好一行 init、console 恰好一次、備份受阻通知恰好一次；另兩個備份載入案例中 state 正常 ready，備份支線也各只記一次 init。全部 16 個案例都沒有未處理拒絕。證據保存在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-h1-wiring-BtseTm\evidence.json`。
+
+### 完整檢查與限制
+
+- Windows、Node 24.13.0，在 HEAD `71ac9c201551b7cdad3d6c3da5a6f76cc3ef61ea`（產品／測試同 8a1e3c7）於沙箱外執行 **npm run check：exit 0；872 tests、872 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過；測試階段約 137 秒。完整輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-h1-check.txt`。
+- 這次通過涵蓋 H1 的備份載入錯誤處理與相鄰支線；Claude 提到其他模組中未修改的同形寫法，沒有擴大成另一輪審查。
+- 只在本報告末尾追加結果，原文完整保留；追加後文件檢查通過。未改產品、測試、任務或決定，未 stage、commit、push 或操作使用者實際 vault。
+
+未測：Windows Obsidian 實機未重跑（H1 的拒絕值由完整主機接線替身驗證，error-probe 不會製造這些值）；iPhone WebKit、觸控、鍵盤與 iCloud 持久化仍按原任務延後。

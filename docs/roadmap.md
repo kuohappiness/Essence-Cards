@@ -9,7 +9,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 工作 | 狀態 | 下一步 | 等誰 | 入口 |
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 的 E1、E6、E8 在下一次 iPhone 實機測試；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債三列等觸發點 | iPhone 實機測試 | [任務說明](../tasks/icloud-placeholders.md) |
-| 正式版的錯誤紀錄與回報 | 已定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)、[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)）；程式與 Windows 實測做完，在分支 `claude/error-log`（任務說明〈結果〉） | 新開的 Codex session 做 L2，之後合併（使用者決定）；iPhone 的部分在下一次 iPhone 實機測試；說明書的三句跟說明書一起寫 | 使用者（開 Codex） | [任務說明](../tasks/error-log.md)、[L2 審查請求](../tasks/error-log-review.md) |
+| 正式版的錯誤紀錄與回報 | 已定案（[D-155](decisions.md#d-155-正式版的錯誤紀錄)、[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)）；程式與 Windows 實測做完，在分支 `claude/error-log`（任務說明〈結果〉）；Codex L2 通過（五輪） | 合併（使用者決定），之後隨外掛內備份一起正式安裝；iPhone 的部分在下一次 iPhone 實機測試；說明書的三句跟說明書一起寫 | 使用者（決定合併） | [任務說明](../tasks/error-log.md)、[L2 審查請求](../tasks/error-log-review.md) |
 | 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R6 (a) 隨環節 9 的技術債做完（見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.1 第一次試用完 | 決定地名配特色要不要出卡與四點修改，改成 v0.2，再用 Sol 對照 2-1 | 使用者 | [預設](card-rules/elementary-social.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成，`0.1.0` 已裝到正式使用的 vault；外掛內備份的第一部分（備份）已合併進 `main`（`7a12688`，見已完成） | 任務說明第 3 步：升版號、打 tag、裝到正式使用的 vault，確認外掛自己做出第一份備份（裝之前問使用者）。還原畫面（第二部分）放到 v1 結案前（使用者 2026-10-29） | 使用者（同意正式安裝） | [外掛內備份任務說明](../tasks/plugin-backup.md)、[規畫](plans/updates.md) |
