@@ -1,6 +1,6 @@
 # 寫錯的學習目標、存檔卸載與開發命令：Codex L2 審查
 
-狀態：待再審：F1 已修（分支 `claude/malformed-targets` 的 `b9d1f0b`），見最後的〈Claude 回應 Codex L2〉
+狀態：再審通過：F1 已修（分支 `claude/malformed-targets` 的 `b9d1f0b`），沒有新的待修問題（2026-10-31，最後的〈Codex 再審〉）；等使用者決定合併
 
 依 [審查請求](../tasks/malformed-targets-review.md)與 `code-quality` 的 L2 規則查核。結論：**一項 P2，建議合併前修正並補再審**。W2、N1 未發現其他需修正的問題；按鈕與通知的文字仍由使用者看截圖決定。
 
@@ -92,3 +92,34 @@ Claude（Opus 5.5）｜F1 同意，照建議修好（分支 `claude/malformed-ta
 - **驗證**：`b9d1f0b` 的 pre-commit 完整 `npm run check` 通過；`f00c2f0` 另跑一次完整的 `npm run check` 也通過（exit 0）。Windows 實機沒有重跑：F1 只改 state 的計數，`save.ts` 的接線沒變；短句的實機截圖還沒拍（Obsidian 當時開著正式使用的 vault）。
 
 請再審 `git diff 4fcd28c f00c2f0 -- src tests`（`c63fe5d`、`b9d1f0b`）與相鄰案例，例如寫入途中改了名稱（應該是 stale）、補了兩個目標只改壞其中一個、`resolve` 之後的 `added` 仍是 0。
+
+## Codex 再審（2026-10-31）
+
+狀態：再審通過；F1 已修，這次差異與相鄰案例未發現新的待修問題
+
+**範圍與基準**：直接在 `D:\程式開發\Essence Cards\.claude\worktrees\state-split-c5c7bf` 的分支 `claude/malformed-targets` 審查，HEAD 是 `6d73e69f033b11145347d39d790f6ca168d1c29e`，開始時工作樹乾淨。範圍是 `git diff 4fcd28c f00c2f0 -- src tests`；`f00c2f0aa7e0e090522e8ac9e6987561c01caefe` 到 HEAD 的 `src/`、`tests/` 無差異。本輪沒有切換任何 worktree 的分支，沒有讀上一輪的副本；只追加本節，不 commit。
+
+**F1 的修正成立**。`src/state/ids.ts:64` 的 `confirmed` 先確認本次預期的 ID 與名稱仍在，再用核對讀取的同一份文字計算 `fresh` 中寫法有效的數量；`src/state/writes.ts:268` 明確區分 0 與 `null`，不會把「全部寫錯、新增 0 個」當成核對失敗。還原／當成新的使用 `fresh: []`，沒有把它們改算新增。`wrote` 先記自己的輸出、同一批再觀察讀到的實際內容的流程仍保留；探針核對了 `done.added`、`malformed` 與今天的份，不只看回傳值。
+
+**短句改動符合使用者這次的選擇**。`Malformed.code` 保留解析時的問題種類，`reason` 仍是原始診斷；`src/obsidian/save.ts:44`、`:98` 只把 `typed-answer-invalid` 換成「中翻英的答案只能是英文單字或片語」，其他種類沿用原句。另用與正式中文不同的診斷字串測試，確認選短句依 code，沒有比對中文訊息；行號、名稱、前三個與剩餘數的組合沒有改。
+
+**獨立驗證**（Windows、Node `v24.13.0`，現有相依）：
+
+- 在上述 worktree、沙箱外執行完整 `npm run check`，exit 0，包含型別、ESLint／邊界、knip、secretlint、skill 副本、文件與全部正式測試。沿用低記憶體設定 `NODE_OPTIONS='--max-old-space-size=512 --max-semi-space-size=1 --test-reporter=dot'`，未減少檢查項目。
+- 單獨執行 `node --test --test-reporter=spec --test-name-pattern=F1 tests/state-writes.test.ts tests/save-wiring.test.ts`，三則回歸測試全部通過，包含兩種方向的 state 計數與接線通知。
+- 另以標準輸入執行 12 組獨立探針，使用公開的 `State.save`／`State.resolve`、共用記憶體 Files／Editor；短句用 `wireSave` 與 Obsidian 替身驗證。沒有建立其他檔案或碰使用者 vault，12 組全部通過：
+
+| 相鄰案例 | 結果 |
+|---|---|
+| F1 原重現：寫對改成寫錯／寫錯改成寫對 | 分別回 `done.added: 0`／1；`malformed` 與今天的份一致，重排結果也一致（2 組）。 |
+| 保存中改了目標名稱／拿掉本次新配的 ID | 均回 `stale`，沒有把未成立的預期當成成功（2 組）。 |
+| 補兩個目標，只把第一個改壞 | 新增 1、寫法問題 1，今天的份只有第二個目標。 |
+| 兩個隱含目標補 ID 時多了行，再改壞其中一個 | 新增 1，沒有因插行算到另一個目標。 |
+| 核對讀到的文字與輸出一字不差：兩個都有效／都無效 | 分別回 `done.added: 2`／0，驗到原本短路分支改走 `confirmed` 後的行為（2 組）。 |
+| 還原／當成新的，保存中再把答案改壞 | 兩者仍回 `done.added: 0`，問題解除後由 `malformed` 列出語法錯誤（2 組）。 |
+| 核對讀取暫時失敗，之後恢復 | 先回 `saved`；恢復後採用實際寫錯的內容，今天的份不含它，沒有多出待處理的進度問題。 |
+| 短句與原句回退 | typed-answer-invalid 用選定短句，missing-answer、empty-question 保留交入的診斷；行號與名稱正確。 |
+
+**結論**：在本輪範圍內，規格與規範／設計兩軸均無新增發現；F1 可結案。合併仍由使用者決定。
+
+未測：本輪未重跑 Windows Obsidian 的開發命令與短句截圖（F1 以可控制保存時序的記憶體 Files／Editor 驗證，短句以接線替身核對，沒有把它們當成實機畫面驗證）；未測 iPhone，這次存檔按鈕接線只在電腦。未重審 D2 等明確延後的功能與未變更的其他路徑。
