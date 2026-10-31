@@ -40,6 +40,8 @@ export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
 const LEAVE_DELAY = 1000;
 /** 存檔後的通知最多列幾個寫法有問題的目標（介面建議，技術債 D1）。 */
 const SHOWN = 3;
+/** 通知裡的短句，依問題種類（不比對中文訊息）；沒列的用解析時那一句。 */
+const SHORT: Partial<Record<Malformed['code'], string>> = { 'typed-answer-invalid': '中翻英的答案只能是英文單字或片語' };
 export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號' };
 
 export interface SaveHost {
@@ -93,7 +95,7 @@ const blockedTip = (result: WriteResult): string | null => result.kind === 'bloc
 function doneTip(added: number, malformed: readonly Malformed[]): string | null {
   if (!malformed.length) return added ? TIPS.added(added) : null;
   const head = added ? TIPS.addedMalformed(added, malformed.length) : TIPS.malformed(malformed.length);
-  const lines = malformed.slice(0, SHOWN).map(target => TIPS.problem(target.at + 1, target.name, target.reason));
+  const lines = malformed.slice(0, SHOWN).map(target => TIPS.problem(target.at + 1, target.name, SHORT[target.code] ?? target.reason));
   if (malformed.length > SHOWN) lines.push(TIPS.more(malformed.length - SHOWN));
   return [head, ...lines].join('\n');
 }

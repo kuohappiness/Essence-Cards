@@ -528,7 +528,7 @@ void test('S8 對照：紀錄一開始就讀得到時不產生問題；讀不到
 });
 
 // 技術債 D1（外掛架構檢查環節 2 結論第 1 條）：寫錯的學習目標照樣配到 ID，卻不出題（plan 排除 ok:false）。deckStatus 依 state 最近讀到的
-// 內容列出這些目標：每個目標一筆（以目標那一行去重）、帶目標那一行、第一個問題那一行（都從 0 算）、名稱與原因（解析時給家長看的那一句）；
+// 內容列出這些目標：每個目標一筆（以目標那一行去重）、帶目標那一行、第一個問題那一行（都從 0 算）、名稱、問題種類與原因（解析時給家長看的那一句）；
 // ambiguous-id 已經是待處理的問題，不再算一次。原因的字照 src/core/deck/parse.ts。
 const TYPED_REASON = '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式';
 const NO_ANSWER = '這一題 :: 的底下沒有答案';
@@ -536,7 +536,7 @@ const NO_ANSWER = '這一題 :: 的底下沒有答案';
 void test('D1 中翻英的答案寫了中文：deckStatus 列出它；存檔照樣配 ID，但新增的數不算它、今天的份沒有它；改好之後就不列', async t => {
   const typed = '- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n';
   const h = await setup(t, { [P]: typed });
-  const wrong = [{ line: 0, at: 1, name: 'borrow 中翻英', reason: TYPED_REASON }];
+  const wrong = [{ line: 0, at: 1, name: 'borrow 中翻英', code: 'typed-answer-invalid', reason: TYPED_REASON }];
   assert.deepEqual(h.state.deckStatus(P), { missing: 2, issues: [], malformed: wrong });
   const editor = createMemoryEditor(h, P, typed);
   assert.deepEqual(await h.state.save(editor), { kind: 'done', added: 1 }, '只有 lend 算新增');
@@ -554,8 +554,8 @@ void test('D1 :: 底下沒有答案、:: 左邊沒有題目：每個目標只列
     + '- 能說明沸騰\n    -  :: 100 度\n    - 沸騰時冒出什麼？ ::\n';
   const h = await setup(t, { [P]: deck });
   assert.deepEqual(h.state.deckStatus(P).malformed, [
-    { line: 0, at: 1, name: '能說明蒸發', reason: NO_ANSWER },
-    { line: 4, at: 5, name: '能說明沸騰', reason: '這一題 :: 的左邊沒有題目' },
+    { line: 0, at: 1, name: '能說明蒸發', code: 'missing-answer', reason: NO_ANSWER },
+    { line: 4, at: 5, name: '能說明沸騰', code: 'empty-question', reason: '這一題 :: 的左邊沒有題目' },
   ]);
 });
 
@@ -563,5 +563,5 @@ void test('D1 ambiguous-id 不重複算：只有兩個 ID 的目標不列（它�
   const h = await setup(t, { [P]: A.replace(' ^k3m9x2', ' ^k3m9x2 和 ^p7q2w8') + B + '- 能說明 D ^d23456 和 ^e23456\n    - QD ::\n' });
   const status = h.state.deckStatus(P);
   assert.deepEqual(plain(status.issues).map(issue => [issue.kind, issue.line]), [['ambiguous', 0], ['ambiguous', 5]]);
-  assert.deepEqual(status.malformed, [{ line: 5, at: 6, name: '能說明 D 和', reason: NO_ANSWER }]);
+  assert.deepEqual(status.malformed, [{ line: 5, at: 6, name: '能說明 D 和', code: 'missing-answer', reason: NO_ANSWER }]);
 });

@@ -658,8 +658,8 @@ void test('備份還沒成功、文字有沒 ID 的目標：按鈕說明與存�
 
 // 技術債 D1（外掛架構檢查環節 2 結論第 1 條）：有寫法有問題的目標時，按鈕換成提醒的樣子；存檔後的通知把新增的數和問題合成一次，
 // 最多列三個目標（行號從 1 算、名稱、原因），其餘寫「另有 N 個」；寫錯的不算新增。saved、stale、受阻照原本的意思。
-// 用真的 state（記憶體 Files）；原因的字照 src/core/deck/parse.ts。
-const TYPED_REASON = '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式';
+// 用真的 state（記憶體 Files）；原因的字照 src/core/deck/parse.ts，只有中翻英的那一句在通知裡換成短句（使用者 2026-10-31 看截圖選的）。
+const TYPED_REASON = '中翻英的答案只能是英文單字或片語';
 const NO_ANSWER = '這一題 :: 的底下沒有答案';
 const MALFORMED_ONE = '筆記已自動儲存；有 1 個學習目標寫法有問題，暫時不會出題';
 const TYPED_DECK = '- borrow 中翻英\n    - 借入 :: 借入\n- lend 中翻英\n    - 借出 :: lend\n';
@@ -713,7 +713,7 @@ void test('D1 ambiguous-id 不重複算：只有兩個 ID 的目標，按鈕照�
 });
 
 void test('D1 saved、stale、受阻照原本的意思：有寫法有問題的目標也不另外列', async () => {
-  const malformed = [{ line: 0, at: 1, name: 'borrow 中翻英', reason: TYPED_REASON }];
+  const malformed = [{ line: 0, at: 1, name: 'borrow 中翻英', code: 'typed-answer-invalid', reason: TYPED_REASON }];
   for (const [result, expected] of [
     [{ kind: 'saved' }, []],
     [{ kind: 'stale' }, ['這篇筆記剛剛改過，請再按一次存檔']],

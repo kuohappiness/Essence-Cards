@@ -1,5 +1,5 @@
 import { assignIds, blockIds, parseDeck, setTargetId } from '../core/deck/index.ts';
-import type { Deck, Target } from '../core/deck/index.ts';
+import type { Deck, ProblemCode, Target } from '../core/deck/index.ts';
 
 export type IdIssueKind = 'lost' | 'changed' | 'ambiguous';
 /**
@@ -22,7 +22,7 @@ export interface IdIssue {
  * 寫法有問題、暫時不會出題的學習目標（技術債 D1、syntax.md §2-10）：line 是目標那一行、at 是它第一個問題那一行（都從 0 算），
  * reason 是那個問題給家長看的原因（解析時寫的那一句）。
  */
-export interface Malformed { line: number; at: number; name: string; reason: string }
+export interface Malformed { line: number; at: number; name: string; code: ProblemCode; reason: string }
 /**
  * 這一版寫法有問題的目標：解析時的 error（目標的 ok 是 false），不含 ambiguous-id（它已經是待處理的問題，小視窗會列）；
  * 同一個目標只列一次，原因用它第一個問題（problems 照行號排好）。
@@ -32,7 +32,7 @@ function malformedOf(deck: Deck): Malformed[] {
   for (const problem of deck.problems) {
     if (problem.level !== 'error' || problem.code === 'ambiguous-id' || problem.targetLine === null || found.has(problem.targetLine)) continue;
     const target = deck.targets.find(t => t.line === problem.targetLine);
-    if (target) found.set(target.line, { line: target.line, at: problem.line, name: target.name, reason: problem.message });
+    if (target) found.set(target.line, { line: target.line, at: problem.line, name: target.name, code: problem.code, reason: problem.message });
   }
   return [...found.values()].sort((a, b) => a.line - b.line);
 }
