@@ -18,7 +18,7 @@
 ### 發現與修正
 
 - 遺漏：product §5〈之後〉內容深化的願景「Concept 層」（`45e8928~1`），只剩 [架構 §1](../docs/architecture.md#1-術語表) 的術語，沒有進第二階段清單 → 補進 [知識庫](../docs/plans/learning-growth.md#1-知識庫)（`0756315`）。
-- 原意：product §5 的「Capture 的其他來源：影片、網頁、整理成好讀的筆記」搬過去只剩「影片、網頁等來源」，D-076 仍寫「整理成好讀的筆記，之後再做」→ [Capture 的其他來源](../docs/plans/ai-and-ecosystem.md#capture-的其他來源)補回（`ad87380`）。
+- 原意：product §5 的「Capture 的其他來源：影片、網頁、整理成好讀的筆記」搬過去只剩「影片、網頁等來源」，D-076 仍寫「整理成好讀的筆記，之後再做」→ [Capture 的其他來源](../docs/plans/capture.md#影片網頁來源與整理成好讀的筆記)補回（`ad87380`）。
 - 來源：backlog〈其他待決〉「多家庭的規則回饋」的父項「產品核心討論（D-114）留下的」沒搬 → [多家庭](../docs/plans/ai-and-ecosystem.md#多家庭的規則回饋)補回產品核心討論與 D-114（`ad87380`）。
 - 來源：backlog「錯題的之後評估」的「使用者 2026-10-20 在錯題討論提出；已定的部分見 D-113」縮成「使用者 2026-10-20 提出」→ [錯題擷取](../docs/plans/ai-and-ecosystem.md#錯題擷取的模型分工)補回（`ad87380`）。
 - 來源：〈2026-10-09 新點子〉「教材庫串起三個外掛」的「另見上方『AI 規劃』」，在新檔裡沒有這個標題 → 改連同一檔的〈NotebookLM 與其他上游的待評估〉（`ad87380`）。
@@ -31,7 +31,7 @@
 **1. 「開始做 Capture 前先找現成專案」放 v1 還是第二階段**
 
 - 依據：統整前在 backlog〈2026-10-09 新點子〉，狀態「Capture 開工時」（使用者 2026-10-14）。Capture 的 PDF／圖片轉錄在 v1（[D-076](../docs/decisions.md#d-076-capture-是知識入口教材轉錄成教材庫)），排在 Cards 複習閉環之後開工（[D-111](../docs/decisions.md#d-111-v1-的開發順序capture-延後)），所以「Capture 開工時」落在 v1 裡。
-- 現在：[ai-and-ecosystem〈Capture 的其他來源〉](../docs/plans/ai-and-ecosystem.md#capture-的其他來源)，backlog 第二階段表「Capture 的影片、網頁來源與開工前研究」。
+- 現在：[ai-and-ecosystem〈Capture 的其他來源〉](../docs/plans/capture.md#影片網頁來源與整理成好讀的筆記)，backlog 第二階段表「Capture 的影片、網頁來源與開工前研究」。
 - 放 v1：Capture 一開工就會照做；代價是 v1 任務表多一列，工作本來就要在開工時做。
 - 放第二階段（現狀）：和影片、網頁來源放一起；代價是 v1 開工 Capture 時只看 v1 任務表的人會漏掉，等做影片、網頁時才研究，PDF／圖片的做法已經定型。
 - 💡 Claude 建議放 v1：backlog〈v1 需要做的任務〉加一列，細項仍連到 plans。

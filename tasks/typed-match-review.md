@@ -1,6 +1,6 @@
 # 打字卡的比對與照打的跳過（D-158）：L2 獨立審查（給 Codex）
 
-狀態：待審
+狀態：Codex L2 通過：F1 已修（分支 `claude/typed-match` 的 `675a62d`），再審通過、沒有新增發現（2026-10-31，[回報](<../Claude Codex Discussion/2026-10-30-typed-match-review.md>)最後的〈Codex 再審〉）；等使用者決定合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（改動不大，但比對規則同時決定判對、能選的評分與畫面上標出的字母，五個地方要一致）。
 
