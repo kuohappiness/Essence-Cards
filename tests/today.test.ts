@@ -469,6 +469,11 @@ void test('D-157 第 19 項重複的 ID 不參與配對：英翻中是重複的�
     assert.deepEqual(ids(plan.share), ['z', 'z2'], word);
     assert.equal(card(nextCard(plan, input(decks, log([at('10-24'), 'z', 'good']), at('10-24', '19:05:00.000')), { subject: '英文' })).lt, 'z2', word);
   }
+  // 配對也不算：重複的英翻中今天作答過（衝突出現之前），不影響「再複習一些」裡它的中翻英。
+  const copied = [pair('a.md', 'borrow', 'e', 'z'), pair('b.md', 'borrow', 'e', 'z2')];
+  const later = planToday(input(copied, log(), at('10-24'), { cap: 0 }));
+  assert.deepEqual(ids(later.more), ['z', 'z2']);
+  assert.equal(card(nextCard(later, input(copied, log([at('10-24'), 'e', 'good']), at('10-24', '19:05:00.000')), { more: true })).lt, 'z');
   // 中翻英是重複的：英翻中不受影響。
   assert.deepEqual(ids(planToday(input([pair('a.md', 'borrow', 'e1', 'z'), pair('b.md', 'lend', 'e2', 'z')], log(), at('10-24'))).share), ['e1', 'e2']);
 });

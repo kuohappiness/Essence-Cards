@@ -845,13 +845,14 @@ void test('D-157 第 8、10 項回看：衝突期間不能改評分；衝突解�
 });
 
 void test('D-157 回看中目前這張被換掉：回到目前時不補播自動朗讀（D-084）', async t => {
-  const words = ['a', 'b', 'c'].map(word => '- ' + word + ' 英翻中 ^' + word + word + word + '\n    - ' + word + ' :: 意思\n').join('');
+  const words = ['borrow', 'lend', 'return'].map(word => '- ' + word + ' 英翻中 ^' + word + '\n    - ' + word + ' :: 意思\n').join('');
   const h = await setup(t, { [ENGLISH]: '---\n科目: 英文\n---\n' + words });
   const s = await h.open({ subject: '英文' });
   const first = lt(s.view());
   s.reveal();
   await rateLater(h, s, 'good');
   const second = lt(s.view());
+  assert.ok(card(s.view()).autoRead, '英翻中一出現就念');
   s.back();
   assert.equal(lt(s.view()), first);
   h.write(COPY_DECK, copyOf(second));
