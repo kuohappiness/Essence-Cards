@@ -55,7 +55,6 @@ export function assignIds(text: string, options: AssignOptions): AssignResult {
   // 行中被認得的 ID 與 ambiguous-id 的候選也不能配給別的目標。
   const named = deck.targets.flatMap(target => [...(target.id ? [target.id] : []), ...(target.idCandidates ?? [])]);
   const used = new Set([...options.taken, ...existing, ...named]);
-  const seen = new Set<string>();
   const random = options.random ?? Math.random;
   function nextId(): string {
     let id = '';
@@ -86,16 +85,15 @@ export function assignIds(text: string, options: AssignOptions): AssignResult {
   const fallbackEol = lines.find(line => line.eol)?.eol ?? '\n';
   let added = 0, moved = false;
   for (const target of deck.targets) {
-    // 待處理的目標不補、不移動；它的 ID 仍算在重複的判斷裡。ambiguous-id 不動，等家長選（D-134）。
-    if (options.skip?.has(target.line)) { if (target.id) seen.add(target.id); continue; }
+    // 待處理的目標不補、不移動。ambiguous-id 不動，等家長選（D-134）。
+    if (options.skip?.has(target.line)) continue;
     if (target.idCandidates) continue;
     if (target.implicit) {
       const syntax = questionSyntax(target.name);
       if (!target.name || syntax.colon >= 0 || syntax.blanks.length) continue;
     }
-    const duplicate = target.id !== null && seen.has(target.id);
-    if (target.id) seen.add(target.id);
-    if (target.id && !duplicate && !options.replace?.has(target.id)) {
+    // 已經有 ID 的一律不換：重複的由家長選（D-157），不靠呼叫端記得傳 skip。
+    if (target.id) {
       // 歸位：行中的 ID 移回行尾，其他字一字不動。
       const raw = output[target.line].raw;
       const found = nameIds(raw);

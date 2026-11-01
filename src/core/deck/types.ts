@@ -61,7 +61,6 @@ export type ProblemCode =
   | 'misplaced-id' | 'ambiguous-id';
 export interface AssignOptions {
   taken: ReadonlySet<string>;
-  replace?: ReadonlySet<string>;
   random?: () => number;
   /** 這些行的目標不補、不移動、不改縮排（待處理的，W5 §8-5）。 */
   skip?: ReadonlySet<number>;

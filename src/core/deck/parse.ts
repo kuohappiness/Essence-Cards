@@ -217,7 +217,7 @@ export function parseDeck(text: string): Deck {
       continue;
     }
     if (target.id) {
-      if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和前面的重複，補 ID 時會換新');
+      if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
       seenIds.add(target.id);
     }
     targets.push(target);

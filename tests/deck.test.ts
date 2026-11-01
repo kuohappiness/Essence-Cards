@@ -503,22 +503,22 @@ void test('assignIds implicit 的多行題目名稱接成一行，原本題目�
   assert.equal(parsed.targets[0].id, 'aaaaaa');
   assert.equal(qa(parsed.targets[0].prompts[0]).question, 'Question\ncontinuation');
 });
-void test('assignIds 重複 ID、replace、taken、已有 ID 與固定 random 衝突', () => {
-  const text = '- A ^same\n  - Q :: A\n- B ^same\n  - Q :: A\n- C ^replace\n  - Q :: A\n- D\n  - Q :: A\n- E ^aaaaac\n  - Q :: A';
-  const parsed = parseDeck(text); assert.deepEqual(parsed.problems.map(p => p.code), ['duplicate-id']);
-  const result = assignIds(text, { taken: new Set(['aaaaaa', 'aaaaab']), replace: new Set(['replace']), random: () => 0 });
-  assert.deepEqual(result.assigned, [{ line: 2, id: 'aaaaad' }, { line: 4, id: 'aaaaae' }, { line: 6, id: 'aaaaaf' }]);
-  const ids = parseDeck(result.text).targets.map(t => t.id);
-  assert.equal(ids[0], 'same'); assert.ok(ids.every(Boolean)); assert.equal(new Set(ids).size, ids.length);
+void test('D-157 第 20 項 assignIds 已有 ID 的一律不換：重複的兩個都不動，第三個沒有 ID 的照補（避開 taken 與固定 random 衝突）', () => {
+  const text = '- A ^same\n  - Q :: A\n- B ^same\n  - Q :: A\n- C\n  - Q :: A\n- D ^aaaaac\n  - Q :: A';
+  const result = assignIds(text, { taken: new Set(['aaaaaa', 'aaaaab']), random: () => 0 });
+  assert.deepEqual(result.assigned, [{ line: 4, id: 'aaaaad' }]);
+  assert.equal(result.text, '- A ^same\n  - Q :: A\n- B ^same\n  - Q :: A\n- C ^aaaaad\n  - Q :: A\n- D ^aaaaac\n  - Q :: A');
+  assert.deepEqual(assignIds(result.text, { taken: new Set(), random: () => 0 }), { text: result.text, assigned: [] });
+});
+void test('D-157 第 20 項 duplicate-id 只標同一篇後面那一個、是 hint，兩個目標的 ok 都是 true，文字不提換新', () => {
+  const parsed = parseDeck('- A ^same\n  - Q :: A\n- B ^same\n  - R :: B\n');
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.level, p.line, p.targetLine]), [['duplicate-id', 'hint', 2, 2]]);
+  assert.deepEqual(parsed.targets.map(t => [t.id, t.ok]), [['same', true], ['same', true]]);
+  assert.equal(parsed.problems[0].message, '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
 });
 void test('assignIds 避開一般筆記與題目行已有的區塊 ID', () => {
   const text = '- 筆記 ^aaaaaa\n- 目標\n  - Q :: A ^aaaaab';
   assert.deepEqual(assignIds(text, { taken: new Set(), random: () => 0 }).assigned, [{ line: 1, id: 'aaaaac' }]);
-});
-void test('replace 中的 ID 包括第一次出現也全換', () => {
-  const text = '- A ^same\n  - Q :: A\n- B ^same\n  - Q :: A';
-  const result = assignIds(text, { taken: new Set(), replace: new Set(['same']), random: () => 0 });
-  assert.deepEqual(parseDeck(result.text).targets.map(t => t.id), ['aaaaaa', 'aaaaab']);
 });
 void test('assignIds 多次插入後回報新行號', () => {
   const result = assignIds('- Q :: A\n- B :: C\n- C\n  - D :: E', { taken: new Set(), random: () => 0 });
@@ -584,13 +584,13 @@ for (const [text, name] of [['- :: 答案', ''], ['- ==  == :: x', ''], ['- ====
   if (text === '- :: 答案') assert.ok(parsed.problems.some(p => p.code === 'empty-question'));
 });
 
-void test('N1 跳過 implicit 不影響其他目標的 replace、taken 與重複 ID', () => {
-  const text = '- :: 答案 ^same\n- A ^same\n  - Q :: A\n- B ^same\n  - R :: B';
-  const result = assignIds(text, { taken: new Set(['aaaaaa']), replace: new Set(['same']), random: () => 0 });
+void test('N1 跳過 implicit 不影響其他目標的 taken 與已有的 ID', () => {
+  const text = '- :: 答案 ^same\n- A ^same\n  - Q :: A\n- B\n  - R :: B';
+  const result = assignIds(text, { taken: new Set(['aaaaaa']), random: () => 0 });
   assert.ok(result.text.startsWith('- :: 答案 ^same\n'));
-  assert.deepEqual(result.assigned, [{ line: 1, id: 'aaaaab' }, { line: 3, id: 'aaaaac' }]);
+  assert.deepEqual(result.assigned, [{ line: 3, id: 'aaaaab' }]);
   const parsed = parseDeck(result.text);
-  assert.deepEqual(parsed.targets.map(t => t.id), [null, 'aaaaab', 'aaaaac']);
+  assert.deepEqual(parsed.targets.map(t => t.id), [null, 'same', 'aaaaab']);
   assert.ok(parsed.problems.some(p => p.code === 'empty-question'));
 });
 
@@ -743,10 +743,11 @@ void test('I2 ambiguous-id 的行不動、不配 ID；它的候選也不會配�
   assert.deepEqual(result.assigned, [{ line: 2, id: 'aaaaac' }]);
 });
 
-void test('I2 行中的 ID 和別的目標重複時換新，行中那個也拿掉', () => {
+void test('I2 行中的 ID 和別的目標重複時也不換，只移回行尾（state 交給 skip 的連移動都不做，D-157）', () => {
   const text = '- 目標一 ^k3m9x2\n    - Q :: A\n- 目標二 ^k3m9x2 尾巴\n    - R :: B';
   const result = assignIds(text, { taken: new Set(), random: () => 0 });
-  assert.equal(result.text, '- 目標一 ^k3m9x2\n    - Q :: A\n- 目標二 尾巴 ^aaaaaa\n    - R :: B');
+  assert.deepEqual(result, { text: '- 目標一 ^k3m9x2\n    - Q :: A\n- 目標二 尾巴 ^k3m9x2\n    - R :: B', assigned: [] });
+  assert.equal(assignIds(text, { taken: new Set(), skip: new Set([2]), random: () => 0 }).text, text);
 });
 
 void test('I2 setTargetId：設成指定 ID、拿掉、不是目標的行回傳 null', () => {
@@ -818,8 +819,10 @@ after(() => {
     assert.deepEqual(twice.assigned, [], context + '：第二次重新配 ID');
     assert.equal(after.targets.length, before.targets.length, context + '：目標數改變');
     assert.deepEqual(fingerprints(once.text), fingerprints(text), context + '：題目指紋多重集合改變');
-    const ids = after.targets.map(t => t.id).filter(id => id !== null);
-    assert.equal(new Set(ids).size, ids.length, context + '：ID 重複');
+    // 新配的 ID 彼此不重複、也不和原本的重複；原本就重複的不動（D-157）。
+    const known = new Set(before.targets.flatMap(t => t.id ?? []));
+    const added = after.targets.map(t => t.id).filter(id => id !== null && !known.has(id));
+    assert.equal(new Set(added).size, added.length, context + '：新配的 ID 重複');
     for (let i = 0; i < after.targets.length; i++) {
       const original = before.targets[i];
       const unsafeName = !original.name || parse('- ' + original.name).targets.length > 0;
@@ -830,7 +833,7 @@ after(() => {
         assert.deepEqual([after.targets[i].id, after.targets[i].idCandidates], [null, original.idCandidates], context + '：ambiguous-id 被改動');
       } else assert.ok(after.targets[i].id, context + '：缺少 ID');
       // 原本就有的 ID（包括行中被認得的）補 ID 之後不變。
-      if (original.id && !before.targets.some((other, j) => j < i && other.id === original.id)) assert.equal(after.targets[i].id, original.id, context + '：既有 ID 改變');
+      if (original.id) assert.equal(after.targets[i].id, original.id, context + '：既有 ID 改變');
       const promptContent = (prompts: Prompt[]) => prompts.map(({ line, fingerprint, ...content }) => content);
       assert.deepEqual(promptContent(after.targets[i].prompts), promptContent(before.targets[i].prompts), context + '：題目內容改變');
     }
