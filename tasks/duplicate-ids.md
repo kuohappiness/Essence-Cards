@@ -1,6 +1,6 @@
 # 重複的學習目標 ID：先停、家長選（D-157，給 Claude，本機執行）
 
-狀態：程式完成，在分支 `claude/reverent-wing-577df1`（最後一個程式的 commit `b78d45d`），等 Codex L2（[審查請求](duplicate-ids-review.md)）；§9 的 Windows 實機通過；小視窗的文字使用者看截圖定了（2026-11-02，見 §3-3）。格式查核完成（[查核請求](duplicate-ids-format-review.md)、[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)：四項 P2、三項 P3 都已寫進這份說明與 syntax §2-3、§2-10）
+狀態：程式完成，在分支 `claude/reverent-wing-577df1`（最後一個程式的 commit `d145505`），Codex L2 一項 P2 修在 `0dba117`、`d145505`，等再審（[審查請求](duplicate-ids-review.md)）；§9 的 Windows 實機通過（在修正之前的 `b78d45d`，再審通過後在要合併的 commit 重跑 `duplicates`）；小視窗的文字使用者看截圖定了（2026-11-02，見 §3-3）。格式查核完成（[查核請求](duplicate-ids-format-review.md)、[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)：四項 P2、三項 P3 都已寫進這份說明與 syntax §2-3、§2-10）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-157 與這份說明做完）。改 `src/state/`、學習目標 ID 與寫回卡組筆記，屬於高風險範圍：開工前先請 Codex 查核格式（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -78,7 +78,7 @@
 ### 3-2 家長選「這一個是新加的」
 
 - **待處理多一種**：`IdIssueKind` 加 `'duplicate'`。每個衝突的目標在它那一篇有一個問題，`restore` 是 null（沒有可以還原的）；另外帶 `others`：同一個 ID 的其他目標（路徑、行號、名稱）。
-- **物件身分**（Codex F2）：`duplicate` 的選擇綁定顯示時的那一行。行號、名稱、題目指紋或 ID 任一個變了，就換新的問題物件，舊的回 `stale`（副本同名同題時可能互換位置，不能靠最近的行號猜）。只有 `others` 變了（別的目標改動）時保留同一個物件、原地更新 `others`。小視窗收到 `onChange` 會重畫，家長看到的是新的物件。`lost`、`changed`、`ambiguous` 的追蹤規則不改。
+- **物件身分**（Codex F2）：`duplicate` 的選擇綁定顯示時的那一行。行號、名稱、題目指紋或 ID 任一個變了，就換新的問題物件，舊的回 `stale`（副本同名同題時可能互換位置，不能靠最近的行號猜）。只有 `others` 變了（別的目標改動）時保留同一個物件、原地更新 `others`。小視窗收到 `onChange` 會重畫，家長看到的是新的物件。`lost`、`changed`、`ambiguous` 的追蹤規則不改；例外（Codex L2 的 F1）：`changed` 的未知 ID 在這一版或上一版不只一個目標在用時，還要同名或至少一題相同才算同一個目標，否則還原的選項會交給另一個目標。
 - **`resolve(issue, 'new', editor)`**：
   - 送出時核對（D-134：寫回前重新確認）：編輯器的那一篇是 `issue.path`（別篇的不能從這裡改，`src/state/index.ts:409`）；用編輯器現在的文字重新比對（可能比 `state` 讀到的新），`issue.line` 那一行還是同一個目標（名稱、題目指紋、ID 相同），而且這個 ID 照 `state` 所知加上這份文字仍然有兩個以上的目標。不成立回 `stale`，問題照目前的內容重算。
   - 只換那一行的 ID（D-034 的格式；避開 `taken`：見過的、紀錄裡的、刻意拿掉的、待處理問題的 `restore`）。同一篇其他衝突的目標、待處理的目標不動；同一篇其他沒有 ID 的目標照一般規則補（和現在的「當成新的」相同）；別篇不動。
@@ -100,7 +100,7 @@
 - **連結裡的 `^id`（D5，Codex I1）**：這次不改 `setTargetId`、`nameIds`、`maskLinks`、`lock.ts`，D5 的觸發點不到，那一列照舊留著。已知限制照舊：`- A [資料 [補充] ^b4rw7k](note.md)` 會被認成 ID `b4rw7k`，選「新加的」時連結裡的字會被拿掉。衝突的判斷以 `parseDeck` 的結果為準，不另寫一份只給衝突用的連結辨識。施工時發現非改它們不可，就把 D5 的完成條件一起帶進來。
 - **紀錄**：複習紀錄的格式不變（syntax §5，不加欄位、不寫新種類的行）。被選中的那一個用新 ID 從頭複習；舊 ID 的紀錄不改，留給之後只剩下的那一個沿用。
 - **刻意拿掉**（Codex F1，所有種類都適用）：任何問題的選項（`duplicate`、`changed`、`ambiguous` 的 `new` 與 `restore`）採用寫回時，被拿掉的 ID 照採用後的內容與 `state` 所知的其他內容仍在別的學習目標上，就不記成刻意拿掉（現在一律記，`src/state/ids.ts:311`）。家長在編輯器裡刪掉副本整個目標時，`removedInEditor` 報來的 ID 若照 `state` 所知仍在別篇的目標上，也不記（Claude 補的；同一篇裡還有這個 ID 時 `lock.ts` 本來就不報，`src/obsidian/lock.ts:273`）。否則之後那個目標弄丟 ID 會偵測不到（D-134）。
-- **同一個目標同時是待處理（`lost`、`changed`）與衝突**：兩個問題都列；家長處理其中一個之後，另一個照目前的內容重算。
+- **同一個目標同時是待處理（`lost`、`changed`）與衝突**：兩個問題都列；家長處理其中一個之後，另一個照目前的內容重算。選了「新加的」時，這個目標的問題一起結束，不移給還用著舊 ID 的副本（Codex L2 的 F1）。
 
 ### 3-3 家長看得到（文字照 §9 截圖再定）
 
@@ -166,7 +166,7 @@
 14. `ambiguous-id`：先載入 `- A ^b4rw7k`，改成同一行有 `^b4rw7k` 與 `^p7q2w8`（`ambiguous`，`restore` 是 `b4rw7k`），別篇再加 `- B ^b4rw7k`：不列 `duplicate`，`ambiguous` 照原本待處理；選「還原」回 `stale`（原本的檢查，`src/state/ids.ts` 的 `resolve`）。
 15. 需要新版的卡組：(a) 一個讀得懂的目標和它同是 `b4rw7k`：不列衝突，讀得懂的那一個照原本停。(b)（Codex F4）讀得懂的 A、B 和需要新版的 C 都是 `b4rw7k`：A、B 列 `duplicate`、`others` 不含 C；家長選 A 是新加的之後，A 用新 ID 照常出，B 不再有問題、仍然不出、`canAnswer` 是 false。
 16. 跨層：另一份先被待處理拿掉。載入 `- borrow ^aaaaaa` 加題目，在 Obsidian 以外把 ID 改成 `^bbbbbb`（`changed` 待處理），再在別篇加 `- lend ^bbbbbb` 加題目：`lend` 不出，`conflicts()` 列出兩個 `bbbbbb` 的目標。
-17. 同一個目標同時是 `changed` 與衝突：兩個問題都列；選「當成新的」之後兩個都消失。
+17. 同一個目標同時是 `changed` 與衝突：兩個問題都列；選「當成新的」之後兩個都消失。另一個副本在同一篇也一樣：它沒有問題、照常出題（Codex L2 的 F1）。
 18. 重開之後照目前的內容重算：衝突還在時新開的 `state` 照停；解除後寫回的檔，新開的 `state` 沒有衝突。
 
 **核心與畫面**：
