@@ -746,6 +746,121 @@ void test('2-2 複習中途別台裝置的紀錄出現讀不懂的行、停掉�
   assert.equal(lt(s.view()), 'a2');
 });
 
+// D-157 第 8、10 項：ID 變成重複的，已顯示的卡失效。作答只帶 lt 與指紋，衝突解除後分不出這張是哪一個目標的。
+const COPY_DECK = 'Essence Cards/副本（卡片）.md';
+const copyOf = (id: string) => '- 副本 ^' + id + '\n    - 副本的題目 :: 副本的答案\n';
+const answered = (lines: string[]) => lines.flatMap(line => { const entry = parseLine(line); return entry?.kind === 'review' ? [entry.lt] : []; });
+
+void test('D-157 第 8 項顯示的卡加入副本：畫面換掉這張，什麼都不寫', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  s.reveal();
+  h.write(COPY_DECK, copyOf('a1'));
+  await h.settle();
+  assert.equal(lt(s.view()), 'a2');
+  assert.equal(card(s.view()).revealed, false);
+  await h.state.flush();
+  assert.deepEqual(h.log(), []);
+  assert.deepEqual(s.history(), []);
+});
+
+void test('D-157 第 8 項打字卡打到一半也一樣：換掉這張，不另外提示', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  assert.equal(lt(s.view()), 'z1');
+  s.input('made up');
+  h.write(COPY_DECK, copyOf('z1'));
+  await h.settle();
+  assert.notEqual(lt(s.view()), 'z1');
+  assert.equal(typed(s.view()).input, '');
+  await h.state.flush();
+  assert.deepEqual(h.log(), []);
+});
+
+void test('D-157 第 8 項只剩這一張：換成完成畫面；衝突解除後又出現', async t => {
+  const only = '---\n科目: 自然\n---\n- 能說明 ^a1\n    - 題目 :: 答案\n';
+  const h = await setup(t, { [NATURAL]: only });
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  h.write(COPY_DECK, copyOf('a1'));
+  await h.settle();
+  assert.equal(s.view().kind, 'done');
+  h.remove(COPY_DECK);
+  await h.settle();
+  assert.equal(lt(s.view()), 'a1');
+});
+
+void test('D-157 第 8 項不在衝突裡的卡不換：別的 ID 重複時目前這張照常作答', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  h.write(COPY_DECK, copyOf('a2'));
+  await h.settle();
+  assert.equal(lt(s.view()), 'a1');
+  s.reveal();
+  await rateLater(h, s, 'good');
+  assert.deepEqual(answered(h.log()), ['a1']);
+  assert.equal(s.view().kind, 'done', 'a2 不出');
+});
+
+void test('D-157 第 8、10 項回看：衝突期間不能改評分；衝突解除後，衝突前做過的那張也不能改；之後重新抽到、作答的照常', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '自然' });
+  assert.equal(lt(s.view()), 'a1');
+  s.reveal();
+  await rateLater(h, s, 'miss');
+  assert.equal(lt(s.view()), 'a2');
+  h.write(COPY_DECK, copyOf('a1'));
+  await h.settle();
+  assert.equal(lt(s.view()), 'a2', '目前這張不在衝突裡');
+  s.back();
+  assert.equal(lt(s.view()), 'a1');
+  assert.deepEqual(card(s.view()).allowed, []);
+  assert.equal(s.rate('good'), false);
+  await h.state.flush();
+  assert.deepEqual(answered(h.log()), ['a1']);
+  assert.equal(h.log().length, 1, '改評分的取消也沒有寫');
+  // 刪掉副本：a1 又能作答，但回看裡衝突前做過的那張不能改。
+  h.remove(COPY_DECK);
+  await h.settle();
+  assert.equal(h.state.canAnswer('a1'), true);
+  assert.deepEqual(card(s.view()).allowed, []);
+  assert.equal(s.rate('good'), false);
+  await h.state.flush();
+  assert.equal(h.log().length, 1);
+  // 之後做完 a2，a1 重新抽到（答錯提早出）：這次的作答照常寫，也能改評分。
+  s.toCurrent();
+  s.reveal();
+  await rateLater(h, s, 'good');
+  assert.equal(lt(s.view()), 'a1');
+  s.reveal();
+  await rateLater(h, s, 'good');
+  assert.deepEqual(answered(h.log()), ['a1', 'a2', 'a1']);
+  s.back();
+  assert.deepEqual(card(s.view()).allowed, ['miss', 'near', 'good', 'easy']);
+  assert.equal(s.rate('easy'), true);
+  await h.state.flush();
+  assert.deepEqual(answered(h.log()).at(-1), 'a1');
+});
+
+void test('D-157 回看中目前這張被換掉：回到目前時不補播自動朗讀（D-084）', async t => {
+  const words = ['a', 'b', 'c'].map(word => '- ' + word + ' 英翻中 ^' + word + word + word + '\n    - ' + word + ' :: 意思\n').join('');
+  const h = await setup(t, { [ENGLISH]: '---\n科目: 英文\n---\n' + words });
+  const s = await h.open({ subject: '英文' });
+  const first = lt(s.view());
+  s.reveal();
+  await rateLater(h, s, 'good');
+  const second = lt(s.view());
+  s.back();
+  assert.equal(lt(s.view()), first);
+  h.write(COPY_DECK, copyOf(second));
+  await h.settle();
+  s.toCurrent();
+  assert.notEqual(lt(s.view()), second);
+  assert.equal(card(s.view()).autoRead, null);
+});
+
 // S25（tasks/state-writes.md §6、外掛架構討論稿環節 4 Codex 第二輪的重現）：回看改評分會先取消原本那一筆；
 // 取消的那一筆早於今天的份的開始時，今天的份要重排，不能留著用被取消那一筆算的記憶。
 void test('S25 跨 04:00 回看改評分：今天的份重排，和 planToday(input()) 相同；同一天的取消不重排', async t => {

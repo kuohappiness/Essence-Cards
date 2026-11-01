@@ -226,9 +226,16 @@ export function createSession(options: SessionOptions): Session {
   });
   // 卡組或別台裝置的紀錄改變：目前這一張不換，上方的「還剩幾張」照新的 progress 重算（W6 §2-1）。
   // 在完成畫面（沒有目前這張）時重新問 next：別台裝置可能做完了別科，也可能又有卡（Codex L2 F2）。
+  // 例外是 ID 變成重複的（D-157）：作答只帶 lt 與指紋，衝突解除後分不出這張是哪一個目標的。目前這張丟掉、重新取卡，什麼都不寫
+  // （回看中換掉的，回到目前時不補播自動朗讀，D-084）；回看裡這個 ID 的卡之後都不能改評分，衝突解除後也一樣。
   const unsubscribe = state.onChange(() => {
     if (!loaded) return;
-    if (!current) load();
+    const conflicted = new Set(state.conflicts().map(each => each.id));
+    for (const entry of done) if (conflicted.has(entry.card.lt)) entry.changeable = [];
+    if (current && conflicted.has(current.card.lt)) {
+      load();
+      if (viewing !== null) spoken();
+    } else if (!current) load();
     notify();
   });
 
