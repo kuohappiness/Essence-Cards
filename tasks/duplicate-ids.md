@@ -1,6 +1,6 @@
 # 重複的學習目標 ID：先停、家長選（D-157，給 Claude，本機執行）
 
-狀態：格式查核完成（[查核請求](duplicate-ids-format-review.md)、[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)：四項 P2、三項 P3 都已寫進這份說明與 syntax §2-3、§2-10）；程式還沒開工
+狀態：程式完成，在分支 `claude/reverent-wing-577df1`（最後一個程式的 commit `b78d45d`），等 Codex L2（[審查請求](duplicate-ids-review.md)）；§9 的 Windows 實機通過；小視窗的文字使用者看截圖定了（2026-11-02，見 §3-3）。格式查核完成（[查核請求](duplicate-ids-format-review.md)、[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)：四項 P2、三項 P3 都已寫進這份說明與 syntax §2-3、§2-10）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-157 與這份說明做完）。改 `src/state/`、學習目標 ID 與寫回卡組筆記，屬於高風險範圍：開工前先請 Codex 查核格式（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -103,6 +103,8 @@
 - **同一個目標同時是待處理（`lost`、`changed`）與衝突**：兩個問題都列；家長處理其中一個之後，另一個照目前的內容重算。
 
 ### 3-3 家長看得到（文字照 §9 截圖再定）
+
+定案（使用者 2026-11-02 看截圖）：小視窗的說明只寫一次，不是下面提案的每一列一句：「下面的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。選要改寫成新內容的那一個：它會從頭複習；只剩一個時，那一個沿用原本的進度。」每一列寫「第 N 行〈名稱〉」與「同一個編號也用在：…」，別種問題排在前面；存檔按鈕的說明與離開筆記的通知照提案。
 
 - **存檔按鈕**：有 `duplicate` 問題時照現有待處理的樣子（⚠、`TIPS.issues`）。
 - **按存檔時跳出小視窗**：沿用現有的開法（存檔之後 `deckStatus(path).issues` 不是空的就開，`src/obsidian/save.ts:249`）。每個 `duplicate` 問題一列：說明（提案「〈名稱〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題」），列出 `others`（同一篇寫「第 N 行〈名稱〉」；別篇寫「〈卡組〉第 N 行〈名稱〉」，可以點，打開那一篇、捲到那一行），按鈕「這一個是新加的，從頭複習」。兩個名稱一樣時（貼上之後還沒改字就按存檔），家長只能靠行號分：文字要讓家長選「要改寫成新內容的那一個」。
