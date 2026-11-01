@@ -323,7 +323,7 @@ export function createIdTracker(options: IdTrackerOptions) {
     /**
      * 家長選了之後的準備：問題已不在、內容改過（問題物件已換新）、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。
      * duplicate 只能選 new（restore 是 null，選還原一樣回傳 null）；這份文字裡這個 ID 已經不重複時，問題已不在。
-     * 「拿掉這個問題、被換掉的 ID 記成刻意拿掉、還原的 ID 記成見過」放在 record，採用時才做；在那之前問題還在，
+     * 「拿掉這個目標的問題、被換掉的 ID 記成刻意拿掉、還原的 ID 記成見過」放在 record，採用時才做；在那之前問題還在，
      * 還原的 ID 照舊經由問題的 restore 留在 taken() 裡。
      */
     resolve(issue: IdIssue, choice: 'restore' | 'new', text: string): Prepared | null {
@@ -359,8 +359,9 @@ export function createIdTracker(options: IdTrackerOptions) {
       if (next === null || id === undefined) return null;
       const output = next;
       return { text: output, expect: [{ id, name: target.name }], fresh: [], record() {
+        // 這個目標的問題一起結束：選的是 duplicate 時，它的 changed 留著的話，重讀時會跟著舊 ID 移到另一個副本（Codex L2 的 F1）。
         const items = pending.get(path) ?? [];
-        const rest = items.filter(each => each !== item);
+        const rest = items.filter(each => each.issue.line !== target.line);
         if (rest.length !== items.length) {
           revision++;
           if (rest.length) pending.set(path, rest); else pending.delete(path);

@@ -524,6 +524,49 @@ void test('第 17 項同一個目標同時是 changed 與衝突：兩個問題�
   }
 });
 
+// Codex L2 的 F1：同一篇的另一個副本也用這個 ID 時，changed 不能跟著 ID 移過去：還原選項要有原目標身分的證據（D-134）。
+const named = (name: string, id: string) => '- ' + name + ' ^' + id + '\n    - ' + name + ' :: ' + name + ' 的答案\n';
+const copied = (_name: string, id: string) => '- 同名 ^' + id + '\n    - 同一題 :: 同一個答案\n';
+const brief = (issues: IdIssue[]) => issues.map(({ line, name, kind, restore }) => ({ line, name, kind, restore }));
+/** A 從 aaaaaa 被外部改成 bbbbbb（changed），同一篇再出現另一個用 bbbbbb 的 B。 */
+async function changedThenCopied(t: TestContext, make: (name: string, id: string) => string): Promise<Harness> {
+  const h = await setup(t, { [P]: make('A', 'aaaaaa') });
+  await h.edit(P, make('A', 'bbbbbb'));
+  await h.edit(P, make('A', 'bbbbbb') + make('B', 'bbbbbb'));
+  assert.deepEqual(h.state.deckStatus(P).issues.map(({ line, kind, restore }) => ({ line, kind, restore })), [
+    { line: 0, kind: 'changed', restore: 'aaaaaa' },
+    { line: 0, kind: 'duplicate', restore: null },
+    { line: 2, kind: 'duplicate', restore: null },
+  ]);
+  return h;
+}
+
+for (const [label, make] of [['內容不同', named], ['整段複製、同名同題', copied]] as const) for (const kind of ['duplicate', 'changed']) {
+  void test('F1 同一篇（' + label + '）：選 A 的 ' + kind + ' 當成新的，A 的兩個問題一起結束，B 沒有問題、照常出題', async t => {
+    const h = await changedThenCopied(t, make);
+    const issue = h.state.deckStatus(P).issues.find(each => each.line === 0 && each.kind === kind);
+    assert.ok(issue);
+    assert.equal((await h.state.resolve(issue, 'new', createMemoryEditor(h, P, make('A', 'bbbbbb') + make('B', 'bbbbbb')))).kind, 'done');
+    assert.equal(h.texts.get(P), make('A', 'aaaaab') + make('B', 'bbbbbb'));
+    assert.deepEqual(h.state.deckStatus(P).issues, []);
+    assert.deepEqual(h.state.conflicts(), []);
+    assert.deepEqual(h.share().sort(), ['aaaaab', 'bbbbbb']);
+  });
+}
+
+void test('F1 選 B 是新加的：A 本來就有的 changed 留著、還能還原；B 換新 ID', async t => {
+  const h = await changedThenCopied(t, named);
+  assert.equal((await h.state.resolve(issueAt(h, P, 2), 'new', createMemoryEditor(h, P, named('A', 'bbbbbb') + named('B', 'bbbbbb')))).kind, 'done');
+  const after = named('A', 'bbbbbb') + named('B', 'aaaaab');
+  assert.equal(h.texts.get(P), after);
+  assert.deepEqual(h.state.conflicts(), []);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: 'A', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.deepEqual(h.share(), ['aaaaab']);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, after))).kind, 'done');
+  assert.equal(h.texts.get(P), named('A', 'aaaaaa') + named('B', 'aaaaab'));
+  assert.deepEqual(h.state.deckStatus(P).issues, []);
+});
+
 void test('第 18 項解除後寫回的檔，新開的 state 沒有衝突', async t => {
   const text = ORIGINAL + COPY;
   const h = await setup(t, { [P]: text });
