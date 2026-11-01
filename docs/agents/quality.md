@@ -76,7 +76,7 @@
 - **怎麼發現新版**：開發命令的結果檔會記 Obsidian 的版本（`obsidian` 欄位），AI 在 Windows 版 Obsidian 跑開發命令時看到比上面新的次版本就做；每個里程碑結束時也查一次 Obsidian 的改版說明。
 - **三層**：
   1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `package.json` 的開發相依改成一樣，跑 `npm run check`。
-  2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（`npm run install-vault -- <測試 vault> --dev`；`lock`、`save` 在 W5 第二部分合併後才有），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 現在有會假通過的情境，先照 [backlog 技術債](../backlog.md#技術債)那一列修（外掛架構討論稿環節 9 結論第 5 條）。
+  2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（`npm run install-vault -- <測試 vault> --dev`；`lock`、`save` 在 W5 第二部分合併後才有），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 會假通過的情境已修（`b9309ca`，外掛架構討論稿環節 9 結論第 5 條）：`save` 的 `checks.clicked` 也要是 true。
   3. 讀改版說明裡和這幾點有關的條目：編輯器與 CodeMirror、Markdown 解析與閱讀模式（清單、區塊 ID）、檔案與 vault 的事件、iOS 與同步；每一點寫一句結論。
 - **結果**：寫進 roadmap 的已完成，通過就更新上面的版本；有不相容先寫失敗測試再修（高風險範圍做 L2）。iPhone 的部分記進下一次 iPhone 實機測試的清單。
 
