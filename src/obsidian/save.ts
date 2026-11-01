@@ -38,10 +38,11 @@ export const MESSAGES: Record<IdIssueKind, (name: string, line: number) => strin
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
   changed: name => `〈${name}〉的編號和原本的不一樣。`,
   ambiguous: name => `〈${name}〉那一行有兩個編號。`,
-  duplicate: (name, line) => `第 ${line} 行〈${name}〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。要改寫成新內容的是這一行，就選下面的按鈕。`,
+  duplicate: (name, line) => `第 ${line} 行〈${name}〉`,
 };
-/** duplicate 的 others：同一篇、別篇（可以點，打開那一篇、捲到那一行）。line 從 1 算。 */
-const OTHERS = {
+/** duplicate 的說明與 others：說明在小視窗裡只寫一次（使用者 2026-11-02 看截圖後選的）；others 分同一篇、別篇（可以點，打開那一篇、捲到那一行）。line 從 1 算。 */
+const DUPLICATE = {
+  intro: '下面的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。選要改寫成新內容的那一個：它會從頭複習；只剩一個時，那一個沿用原本的進度。',
   head: '同一個編號也用在：',
   same: (line: number, name: string) => `第 ${line} 行〈${name}〉`,
   other: (deck: string, line: number, name: string) => `〈${deck}〉第 ${line} 行〈${name}〉`,
@@ -169,25 +170,29 @@ class IssuesModal extends Modal {
     if (!issues.length) { this.close(); return; }
     this.titleEl.setText(TIPS.issues(issues.length));
     this.contentEl.empty();
-    for (const issue of issues) {
+    // duplicate 排在最後、前面寫一次說明：說明寫「下面的」，不能蓋到別種問題。
+    for (const issue of issues.filter(each => each.kind !== 'duplicate')) {
       const row = this.contentEl.createDiv({ cls: 'essence-cards-issue' });
       row.createEl('p', { text: MESSAGES[issue.kind](issue.name, issue.line + 1) });
-      if (issue.kind === 'duplicate') { this.renderDuplicate(row, issue); continue; }
       const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
       if (issue.restore) buttons.createEl('button', { text: BUTTONS.restore, cls: 'mod-cta' }).addEventListener('click', () => { this.choose(issue, 'restore'); });
       else row.createEl('p', { text: BUTTONS.unsure, cls: 'essence-cards-issue-note' });
       buttons.createEl('button', { text: BUTTONS.fresh }).addEventListener('click', () => { this.choose(issue, 'new'); });
     }
+    const duplicates = issues.filter(each => each.kind === 'duplicate');
+    if (duplicates.length) this.contentEl.createEl('p', { text: DUPLICATE.intro, cls: 'essence-cards-issue-intro' });
+    for (const issue of duplicates) this.renderDuplicate(issue);
     this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = this.waiting; });
   }
   /** duplicate 的一列（D-157）：同一個編號的其他目標與「這一個是新加的」；沒有可以還原的，別篇的不能從這裡改，只能打開來看。 */
-  private renderDuplicate(row: HTMLElement, issue: IdIssue): void {
-    row.createEl('p', { text: OTHERS.head, cls: 'essence-cards-issue-note' });
-    const list = row.createEl('ul', { cls: 'essence-cards-issue-others' });
-    for (const other of issue.others ?? []) {
-      const item = list.createEl('li');
-      if (other.path === issue.path) item.setText(OTHERS.same(other.line + 1, other.name));
-      else item.createEl('a', { text: OTHERS.other(deckName(other.path), other.line + 1, other.name), cls: 'essence-cards-issue-link' }).addEventListener('click', () => { this.jump(other); });
+  private renderDuplicate(issue: IdIssue): void {
+    const row = this.contentEl.createDiv({ cls: 'essence-cards-issue' });
+    row.createEl('p', { text: MESSAGES.duplicate(issue.name, issue.line + 1) });
+    const note = row.createEl('p', { text: DUPLICATE.head, cls: 'essence-cards-issue-note' });
+    for (const [index, other] of (issue.others ?? []).entries()) {
+      if (index) note.createEl('span', { text: '、' });
+      if (other.path === issue.path) note.createEl('span', { text: DUPLICATE.same(other.line + 1, other.name) });
+      else note.createEl('a', { text: DUPLICATE.other(deckName(other.path), other.line + 1, other.name), cls: 'essence-cards-issue-link' }).addEventListener('click', () => { this.jump(other); });
     }
     row.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: BUTTONS.duplicate, cls: 'mod-cta' }).addEventListener('click', () => { this.choose(issue, 'new'); });
   }

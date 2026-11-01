@@ -18,12 +18,12 @@
 .essence-cards-save.is-needs-update,
 .essence-cards-save.is-malformed { color: var(--text-warning); }
 
-.essence-cards-issue + .essence-cards-issue {
+.essence-cards-issue + .essence-cards-issue,
+.essence-cards-issue + .essence-cards-issue-intro {
   margin-top: var(--size-4-4);
   padding-top: var(--size-4-4);
   border-top: 1px solid var(--background-modifier-border);
 }
 .essence-cards-issue-buttons { display: flex; flex-wrap: wrap; gap: var(--size-4-2); }
 .essence-cards-issue-note { color: var(--text-muted); font-size: var(--font-ui-small); }
-.essence-cards-issue-others { color: var(--text-muted); font-size: var(--font-ui-small); }
 .essence-cards-issue-link { color: var(--text-accent); text-decoration: underline; cursor: pointer; }

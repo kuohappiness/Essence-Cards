@@ -443,8 +443,12 @@ void test('D-157 小視窗：duplicate 列出 others，同一篇只有文字、�
   const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
   await saver.save(stub.leaf(DECK).view);
   const modal = stub.modals[0];
-  assert.equal(modal.contentEl.querySelectorAll('p')[0].text, '第 3 行〈lend 英翻中〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。要改寫成新內容的是這一行，就選下面的按鈕。');
-  assert.deepEqual(modal.contentEl.querySelectorAll('li').map(item => item.text), ['第 1 行〈borrow 英翻中〉', '']);
+  assert.deepEqual(modal.contentEl.querySelectorAll('p').map(item => item.text), [
+    '下面的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。選要改寫成新內容的那一個：它會從頭複習；只剩一個時，那一個沿用原本的進度。',
+    '第 3 行〈lend 英翻中〉',
+    '同一個編號也用在：',
+  ]);
+  assert.deepEqual(modal.contentEl.querySelectorAll('span').map(item => item.text), ['第 1 行〈borrow 英翻中〉', '、']);
   const links = modal.contentEl.querySelectorAll('a');
   assert.deepEqual(links.map(link => link.text), ['〈別篇〉第 5 行〈loan 英翻中〉']);
   const buttons = modal.contentEl.querySelectorAll('button');
@@ -465,13 +469,32 @@ void test('D-157 小視窗：真的 state 從存檔到選：只換選的那一�
   assert.equal(h.view.value, original + copy, '按存檔不換號');
   assert.equal(h.modals.length, 1);
   const modal = h.modals[0];
-  assert.deepEqual(modal.contentEl.querySelectorAll('li').map(item => item.text), ['第 3 行〈lend 英翻中〉', '第 1 行〈borrow 英翻中〉']);
+  assert.deepEqual(modal.contentEl.querySelectorAll('p').map(item => item.text).filter(text => text.startsWith('第')), ['第 1 行〈borrow 英翻中〉', '第 3 行〈lend 英翻中〉']);
+  assert.deepEqual(modal.contentEl.querySelectorAll('span').map(item => item.text), ['第 3 行〈lend 英翻中〉', '第 1 行〈borrow 英翻中〉']);
   modal.contentEl.querySelectorAll('button')[1].click();
   await h.settle();
   assert.equal(h.view.value, original + '- lend 英翻中 ^aaaaaa\n    - lend :: 借出\n');
   assert.equal(modal.isOpen, false);
   assert.deepEqual(h.notices, []);
   assert.equal(h.tip(), DONE);
+});
+
+void test('D-157 小視窗：同時有別種問題時，那些排在前面，duplicate 的說明只寫一次、在它們後面', async () => {
+  const stub = createObsidianStub();
+  const { plugin } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  const lost = { path: DECK, line: 5, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  const second = { ...DUP, line: 7, name: 'loan 英翻中' };
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [DUP, lost, second], malformed: [] }), onChange: () => () => {}, ...loadedState,
+    save: () => Promise.resolve({ kind: 'unchanged' }),
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  await saver.save(stub.leaf(DECK).view);
+  assert.deepEqual(stub.modals[0].contentEl.querySelectorAll('p').map(item => item.text.slice(0, 8)), [
+    '〈能說明 C〉原', '下面的學習目標用', '第 3 行〈le', '同一個編號也用在', '第 8 行〈lo', '同一個編號也用在',
+  ]);
+  assert.deepEqual(stub.modals[0].contentEl.querySelectorAll('button').map(button => button.text), ['還原原本的進度', '當成新的學習目標，從頭複習', '這一個是新加的，從頭複習', '這一個是新加的，從頭複習']);
 });
 
 for (const [label, fill, notices] of [

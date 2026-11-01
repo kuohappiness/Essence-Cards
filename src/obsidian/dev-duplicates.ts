@@ -15,7 +15,10 @@ const goal = (name: string, id: string): string => `- ${name} 英翻中 ^${id}\n
 const FILLERS = 40;
 
 const rows = (): HTMLElement[] => Array.from(document.querySelectorAll<HTMLElement>('.modal-container .essence-cards-issue'));
-const rowTexts = () => rows().map(row => ({ text: row.querySelector('p')?.textContent ?? null, others: Array.from(row.querySelectorAll('li')).map(item => item.textContent), buttons: Array.from(row.querySelectorAll('button')).map(button => button.textContent) }));
+const rowTexts = () => ({
+  intro: document.querySelector('.modal-container .essence-cards-issue-intro')?.textContent ?? null,
+  rows: rows().map(row => ({ text: row.querySelector('p')?.textContent ?? null, others: row.querySelector('.essence-cards-issue-note')?.textContent ?? null, buttons: Array.from(row.querySelectorAll('button')).map(button => button.textContent) })),
+});
 function closeModals(): void {
   document.querySelectorAll<HTMLElement>('.modal-container .modal-close-button').forEach(el => { el.click(); });
 }
