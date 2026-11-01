@@ -1,10 +1,11 @@
 import { assignIds, blockIds, findDuplicateIds, parseDeck, setTargetId } from '../core/deck/index.ts';
-import type { Deck, DuplicateId, ProblemCode, Target } from '../core/deck/index.ts';
+import type { Deck, DuplicateId, DuplicateTarget, ProblemCode, Target } from '../core/deck/index.ts';
 
-export type IdIssueKind = 'lost' | 'changed' | 'ambiguous';
+export type IdIssueKind = 'lost' | 'changed' | 'ambiguous' | 'duplicate';
 /**
  * 待處理的問題。state 用物件身分認出是哪一個問題（技術債 A12）：畫面不能複製這個物件，要把拿到的同一個物件交回 resolve。
- * 內容沒變的重讀原地更新行號、保留同一個物件；內容改過就換一個新物件，舊的不能再寫回（D-134）。
+ * 內容沒變的重讀原地更新行號、保留同一個物件；內容改過就換一個新物件，舊的不能再寫回（D-134）。duplicate 綁定顯示時的那一行：
+ * 行號或那個目標的內容一變就換新物件（副本同名同題時可能互換位置，不能靠最近的行號猜，Codex 格式查核 F2）；只有 others 變了時保留物件、原地更新。
  */
 export interface IdIssue {
   path: string;
@@ -12,10 +13,12 @@ export interface IdIssue {
   line: number;
   /** 目標名稱，給家長看。 */
   name: string;
-  /** lost：原本的 ID 不見了；changed：換成一個沒見過的 ID；ambiguous：那一行有兩個 ID。 */
+  /** lost：原本的 ID 不見了；changed：換成一個沒見過的 ID；ambiguous：那一行有兩個 ID；duplicate：別的目標也用這個 ID（D-157）。 */
   kind: IdIssueKind;
-  /** 能確定的原本 ID；null 時只能當成新的。 */
+  /** 能確定的原本 ID；null 時只能當成新的。duplicate 一定是 null。 */
   restore: string | null;
+  /** 只有 duplicate 才有：同一個 ID 的其他目標，照路徑、行號排。 */
+  others?: readonly DuplicateTarget[];
 }
 
 /**
@@ -47,6 +50,9 @@ interface Pending {
   /** 有卡組或紀錄讀不到時找到的：占用資訊不完整，等都讀到了再由 confirm() 核對（state-load §3-2）。 */
   provisional: boolean;
 }
+
+/** 用了重複 ID 的目標的問題（D-157）；key 是那個目標這一版的全部內容，含行號、名稱、題目指紋與 ID，一變就換新的問題物件。 */
+interface Conflicted { issue: IdIssue; key: string }
 
 /** 寫入的預期變更（tasks/state-writes.md §4 第 2 點）：這個 ID 在名稱是 name 的目標的行尾。 */
 export interface Expected { id: string; name: string }
@@ -99,6 +105,7 @@ export function createIdTracker(options: IdTrackerOptions) {
   let duplicates: DuplicateId[] = [];
   let duplicateIds = new Set<string>();
   let stale = false;
+  const conflicted = new Map<string, Conflicted[]>();
 
   const targetIds = (deck: Deck): string[] => deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])]);
   function presentOf(text: string, deck: Deck): Set<string> {
@@ -109,6 +116,12 @@ export function createIdTracker(options: IdTrackerOptions) {
   function elsewhere(path: string): Set<string> {
     const ids = new Set<string>();
     for (const [other, set] of present) if (other !== path) for (const id of set) ids.add(id);
+    return ids;
+  }
+  /** 別篇的學習目標用著的 ID：還在別的目標上的 ID 不算刻意拿掉，否則那個目標之後弄丟 ID 會偵測不到（D-134、Codex 格式查核 F1）。 */
+  function onOtherTargets(path: string): Set<string> {
+    const ids = new Set<string>();
+    for (const [other, deck] of versions) if (other !== path) for (const id of targetIds(deck)) ids.add(id);
     return ids;
   }
   const idless = (t: Target): boolean => t.id === null && !t.idCandidates;
@@ -150,6 +163,23 @@ export function createIdTracker(options: IdTrackerOptions) {
     stale = false;
     duplicates = findDuplicateIds([...versions].filter(([, deck]) => options.readable(deck)).map(([path, deck]) => ({ path, deck })));
     duplicateIds = new Set(duplicates.map(each => each.id));
+    const next = new Map<string, Conflicted[]>();
+    let kept = 0;
+    for (const { targets } of duplicates) for (const target of targets) {
+      const key = JSON.stringify(versions.get(target.path)?.targets.find(t => t.line === target.line));
+      const others = targets.filter(other => other !== target);
+      const old = conflicted.get(target.path)?.find(each => each.key === key);
+      if (old) {
+        kept++;
+        if (JSON.stringify(old.issue.others) !== JSON.stringify(others)) { old.issue.others = others; revision++; }
+      } else revision++;
+      const item = old ?? { issue: { path: target.path, line: target.line, name: target.name, kind: 'duplicate' as const, restore: null, others }, key };
+      next.set(target.path, [...next.get(target.path) ?? [], item]);
+    }
+    // 有舊的問題沒留下來：那個目標不再衝突，或內容改了（上面已經換新物件）。
+    if ([...conflicted.values()].reduce((sum, items) => sum + items.length, 0) !== kept) revision++;
+    conflicted.clear();
+    for (const [path, items] of next) conflicted.set(path, items);
   }
   function observeOne({ path, text, deck, prev, prevPresent, now }: { path: string; text: string; deck: Deck; prev: Deck | undefined; prevPresent: Set<string>; now: Set<string> }, detect: boolean): void {
     const old = pending.get(path) ?? [];
@@ -244,19 +274,19 @@ export function createIdTracker(options: IdTrackerOptions) {
     },
     /** 改名：上一版與待處理的問題搬到新路徑，再照一般的重讀比對。 */
     move(from: string, to: string): void {
-      for (const map of [texts, versions, present, pending] as Map<string, unknown>[]) {
+      for (const map of [texts, versions, present, pending, conflicted] as Map<string, unknown>[]) {
         if (map.has(from)) { map.set(to, map.get(from)); map.delete(from); }
       }
-      for (const item of pending.get(to) ?? []) item.issue.path = to;
+      for (const item of [...pending.get(to) ?? [], ...conflicted.get(to) ?? []]) item.issue.path = to;
       stale = true;
     },
-    issues: (path: string): IdIssue[] => (pending.get(path) ?? []).map(item => item.issue),
     lines,
     /** 寫法有問題的目標從最近一版已解析的卡組拿，不另外解析（技術債 A8、D1）。 */
     status(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[] } {
       const text = texts.get(path), deck = versions.get(path);
       const missing = text === undefined ? 0 : assignIds(text, { taken: new Set(), skip: lines(path) }).assigned.length;
-      return { missing, issues: (pending.get(path) ?? []).map(item => item.issue), malformed: deck ? malformedOf(deck) : [] };
+      const issues = [...pending.get(path) ?? [], ...conflicted.get(path) ?? []].map(item => item.issue).sort((a, b) => a.line - b.line);
+      return { missing, issues, malformed: deck ? malformedOf(deck) : [] };
     },
     /**
      * 讀不到的卡組與紀錄都讀到了（state-load §3-2）：暫定的 changed 換成的 ID 現在出現在紀錄裡（那份紀錄讀不到時才被當成
@@ -272,7 +302,11 @@ export function createIdTracker(options: IdTrackerOptions) {
         if (kept.length) pending.set(path, kept); else pending.delete(path);
       }
     },
-    removed(ids: readonly string[]): void { for (const id of ids) removed.add(id); },
+    /** 編輯器裡拿掉了這些 ID（lock 只在同一篇沒有這個 ID 時才報）：還在別篇的目標上的不算刻意拿掉。 */
+    removed(path: string, ids: readonly string[]): void {
+      const others = onOtherTargets(path);
+      for (const id of ids) if (!others.has(id)) removed.add(id);
+    },
     restored(ids: readonly string[]): void { for (const id of ids) removed.delete(id); },
     /**
      * 存檔的準備：先把這份文字當成新版本比對（可能比讀到的新；先觀察原文再配號），再照一般規則補。只預留 ID，
@@ -286,13 +320,14 @@ export function createIdTracker(options: IdTrackerOptions) {
     },
     /**
      * 家長選了之後的準備：問題已不在、內容改過（問題物件已換新）、目標不在、或還原的 ID 已經在別處時回傳 null，問題保留。
+     * duplicate 只能選 new（restore 是 null，選還原一樣回傳 null）；這份文字裡這個 ID 已經不重複時，問題已不在。
      * 「拿掉這個問題、被換掉的 ID 記成刻意拿掉、還原的 ID 記成見過」放在 record，採用時才做；在那之前問題還在，
      * 還原的 ID 照舊經由問題的 restore 留在 taken() 裡。
      */
     resolve(issue: IdIssue, choice: 'restore' | 'new', text: string): Prepared | null {
       const path = issue.path;
       if (texts.get(path) !== text) observeText(path, text, true);
-      const item = (pending.get(path) ?? []).find(each => each.issue === issue);
+      const item = [...pending.get(path) ?? [], ...conflicted.get(path) ?? []].find(each => each.issue === issue);
       if (!item) return null;
       const target = versions.get(path)?.targets.find(t => t.line === issue.line);
       if (!target) return null;
@@ -320,15 +355,17 @@ export function createIdTracker(options: IdTrackerOptions) {
         id = mine.sort((a, b) => Math.abs(lineOf(a) - target.line) - Math.abs(lineOf(b) - target.line))[0]?.id;
       }
       if (next === null || id === undefined) return null;
-      return { text: next, expect: [{ id, name: target.name }], fresh: [], record() {
+      const output = next;
+      return { text: output, expect: [{ id, name: target.name }], fresh: [], record() {
         const items = pending.get(path) ?? [];
         const rest = items.filter(each => each !== item);
         if (rest.length !== items.length) {
           revision++;
           if (rest.length) pending.set(path, rest); else pending.delete(path);
         }
-        // 自己寫回時拿掉的 ID（被換掉的、當成新的拿掉的候選）不算弄丟。
-        for (const each of own) if (each !== restore) removed.add(each);
+        // 自己寫回時拿掉的 ID（被換掉的、當成新的拿掉的候選）不算弄丟；採用後還在別的目標上的除外（Codex 格式查核 F1）。
+        const inUse = new Set([...targetIds(parseDeck(output)), ...onOtherTargets(path)]);
+        for (const each of own) if (each !== restore && !inUse.has(each)) removed.add(each);
         if (restore) seen.add(restore);
       } };
     },

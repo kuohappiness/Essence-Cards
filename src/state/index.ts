@@ -117,14 +117,17 @@ export interface State {
   /** 停止監看、等紀錄寫完。 */
   close(): Promise<void>;
   /**
-   * 這一篇有幾個目標還沒有 ID（不含待處理的）、待處理的問題，以及寫法有問題、暫時不會出題的目標（技術債 D1），都依 state 最近讀到的內容。
+   * 這一篇有幾個目標還沒有 ID（不含待處理的）、待處理的問題（含用了重複 ID 的目標，D-157），以及寫法有問題、暫時不會出題的目標（技術債 D1），都依 state 最近讀到的內容。
    * 存檔按鈕用。malformed 只涵蓋寫法的問題，不代表其餘的目標都會出題（還沒到期、別篇需要新版、草稿、暫停等）。
    * 需要新版的卡組只回 needsUpdate（沒有要補的、沒有可以處理的問題：Cards 不寫它）。
    */
   deckStatus(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true };
   /** 存檔（開著的筆記）：排進寫入的那一列，補 ID、歸位、改縮排，寫進磁碟並核對後才採用。 */
   save(editor: EditorHandle): Promise<WriteResult>;
-  /** 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。 */
+  /**
+   * 家長在小視窗選了之後：同上；證據不再成立時是 stale，問題保留。duplicate 只能選 new：只換那一行的 ID，同一篇其他衝突的目標與別篇都不動；
+   * 選 restore 回 stale（D-157）。
+   */
   resolve(issue: IdIssue, choice: 'restore' | 'new', editor: EditorHandle): Promise<WriteResult>;
   /**
    * 離開筆記時（沒開著的檔）：排進同一列，在 modify 的回呼裡補；不存在時不建立。核對後補上了（done）或已寫進檔、核對還沒讀到（saved）
@@ -424,7 +427,7 @@ export function createState(options: StateOptions): State {
     },
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
-    removedInEditor(_path, ids) { tracker.removed(ids); },
+    removedInEditor(path, ids) { tracker.removed(path, ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },
     decks: () => deckList,
     blocked: () => ({ decks: gated, targets: history.held, all: history.incomplete }),

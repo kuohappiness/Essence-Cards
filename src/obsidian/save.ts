@@ -35,6 +35,7 @@ export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
   changed: name => `〈${name}〉的編號和原本的不一樣。`,
   ambiguous: name => `〈${name}〉那一行有兩個編號。`,
+  duplicate: name => `〈${name}〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。`,
 };
 /** 離開筆記之後等多久才補（毫秒）。 */
 const LEAVE_DELAY = 1000;
