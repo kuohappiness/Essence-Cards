@@ -133,13 +133,19 @@ export function createIdTracker(options: IdTrackerOptions) {
     return { issue: { path, line: target.line, name: target.name, kind, restore: target.implicit ? null : restore },
       id: target.id, candidates: target.idCandidates ?? [], fingerprints: target.prompts.map(p => p.fingerprint), provisional: options.partial() };
   }
-  /** 這一版裡哪個目標是同一個待處理的目標：同樣的未知 ID、同樣的候選、同樣的名稱，或至少一題相同；平手取行號最近的。 */
-  function match(item: Pending, targets: readonly Target[], used: ReadonlySet<Target>): Target | null {
+  /**
+   * 這一版裡哪個目標是同一個待處理的目標：同樣的未知 ID、同樣的候選、同樣的名稱，或至少一題相同；平手取行號最近的。
+   * 這個未知 ID 不只一個目標在用（這一版或上一版，D-157）時，ID 認不出是哪一個，還要同名或至少一題相同：還原的選項不能交給另一個目標（D-134、Codex L2 的 F1）。
+   */
+  function match(item: Pending, targets: readonly Target[], before: readonly Target[], used: ReadonlySet<Target>): Target | null {
+    const sameId = (t: Target): boolean => item.issue.kind === 'changed' && t.id === item.id;
+    const shared = targets.filter(sameId).length > 1 || before.filter(sameId).length > 1;
     let best: Target | null = null, bestScore = 0;
     for (const target of targets) {
       if (used.has(target)) continue;
-      if (target.id !== null && !(item.issue.kind === 'changed' && target.id === item.id)) continue;
-      const score = item.issue.kind === 'changed' && target.id === item.id ? 4
+      if (target.id !== null && !sameId(target)) continue;
+      if (shared && sameId(target) && target.name !== item.issue.name && !sharesPrompt(target, item.fingerprints)) continue;
+      const score = sameId(target) ? 4
         : target.idCandidates && item.candidates.length && sameSet(target.idCandidates, item.candidates) ? 3
         : target.name === item.issue.name ? 2
         : sharesPrompt(target, item.fingerprints) ? 1 : 0;
@@ -189,7 +195,7 @@ export function createIdTracker(options: IdTrackerOptions) {
     const used = new Set<Target>();
     const kept: Pending[] = [], unmatched: Pending[] = [];
     for (const item of old) {
-      const target = match(item, deck.targets, used);
+      const target = match(item, deck.targets, prev?.targets ?? [], used);
       if (!target) { unmatched.push(item); continue; }
       used.add(target);
       const fingerprints = target.prompts.map(p => p.fingerprint);
