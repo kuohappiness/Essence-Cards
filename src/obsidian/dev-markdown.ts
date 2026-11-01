@@ -1,5 +1,6 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { postProcess } from '../ui/rendered.ts';
+import { capturePng, keepRendering, W6_ROOT } from './dev-review.ts';
 
 // 開發命令 md-cases（Codex 審查 F3～F5、再查 R2～R4）：用 Obsidian 真的渲染器跑 rendered.ts 的後處理，量喇叭和最後一個字在不在同一行。
 // Node 的測試沒有 DOM，這些情況只能在 Obsidian 裡驗；結果檔每個情況一列，ok 是 false 的看 html 與數字。
@@ -8,13 +9,27 @@ import { postProcess } from '../ui/rendered.ts';
  * expect：這個情況要成立的事（結果檔的 ok）。rendered：渲染完、後處理之前接在最後的 HTML（模擬已經載入好的嵌入：
  * 寫進 Markdown 的 .internal-embed 會讓渲染器去載入那份筆記，沒有 src 時出錯）。
  */
-interface Case { name: string; text: string; rendered?: string; mode?: 'plain' | 'cloze' | 'typed'; lines?: number; english?: boolean; width?: number; expect: (r: Row) => boolean }
+interface Case {
+  name: string; text: string; rendered?: string; mode?: 'plain' | 'cloze' | 'typed'; lines?: number; english?: boolean; width?: number;
+  /** 翻面後（同 Markdown.tsx 的 applyState）：填空的答案出現，打字卡的線寫上 words。 */
+  revealed?: boolean; words?: string[];
+  /** false：沒有喇叭（中翻英的正面，答案出現前沒有）。 */
+  speaker?: boolean;
+  expect: (r: Row) => boolean;
+}
 type Row = Awaited<ReturnType<typeof runCase>>;
 
 /** 喇叭和最後一個字同一行、不超出、喇叭在連結外面。 */
 const together = (r: Row): boolean => r.sameLine === true && r.overflow === false && r.tailInLink === false && r.linkHasButton === false;
 /** 受保護的內容（count 個）原樣不動，喇叭不在裡面。 */
 const untouched = (count: number) => (r: Row): boolean => r.protectedSame && r.protectedCount === count && !r.tailInProtected;
+/** 每個空格和緊接在後面的字（chars 也算前面緊接的這幾個字）在同一行，而且不超出。 */
+const stuck = (chars = '') => (r: Row): boolean => r.beside.length > 0 && !r.overflow
+  && r.beside.every(b => b.same || (b.side === 'before' && !chars.includes(b.char)));
+/** 同上，喇叭也沒有單獨掉到下一行。 */
+const stuckWithSpeaker = (chars = '') => (r: Row): boolean => stuck(chars)(r) && r.sameLine === true;
+/** 空格後面沒有標點：喇叭沒有單獨掉到下一行，也不超出。 */
+const speakerStays = (r: Row): boolean => r.sameLine === true && !r.overflow;
 
 const IMAGE = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><rect width="120" height="40" fill="#ccc"/></svg>');
 // 再查 R4：長連結自己可以換行，最後一個字和喇叭照樣同一行；換幾種行寬讓行尾剩下的空間不一樣（每 12px 一格，比喇叭窄，
@@ -26,6 +41,28 @@ const LONG_LINKS: [string, number[]][] = [
   ['Read [the story of how a tiny seed grows into a tall tree](https://example.com)', sweep(150, 330, 12)],
   ['Read [a very long link text that goes on](https://example.com)', [150, 176, 210, 250]],
   ['請看[光合作用需要陽光、水和二氧化碳的說明](https://example.com)', [150, 176, 210, 250]],
+];
+// 技術債（backlog）：空格後面緊接的標點不和空格分開換行（W6 畫面修改的再查：「有 攪拌 」後面的逗號被換到下一行開頭）。
+// 每 6px 一格（比一個字窄），行尾剩下的空間一定會有幾格落在「放得下空格、放不下標點」；正面（空的空格）和背面（填上答案）都量。
+// 最後一個是很長的答案：線排滿一行時，標點接在後面也不超出。空格、句號和喇叭連在一起比一行還寬時一定超出（約 165px 以下），所以「填空在結尾」從 168px 起量。
+const BESIDE: [string, Omit<Case, 'name' | 'width'>, number[]][] = [
+  ['填空接全形標點', { text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', expect: stuck() }, sweep(150, 330, 6)],
+  ['填空接全形標點（背面）', { text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', revealed: true, expect: stuck() }, sweep(150, 330, 6)],
+  ['填空在結尾', { text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze', expect: stuckWithSpeaker() }, sweep(168, 330, 6)],
+  ['填空在括號裡', { text: '把糖放進水裡，再「==攪拌==」一下，糖溶解得比較快。', mode: 'cloze', expect: stuck('「') }, sweep(150, 330, 6)],
+  ['填空在結尾沒有標點', { text: '植物行光合作用時，需要的能量來自==陽光==', mode: 'cloze', expect: speakerStays }, sweep(168, 330, 6)],
+  ['打字卡在結尾沒有標點', { text: '他昨天弄丟了鑰匙。He lost his ＿＿', mode: 'typed', lines: 1, english: true, expect: speakerStays }, sweep(150, 330, 6)],
+  ['打字卡接句點', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡接全形問號', { text: '我可以借你的筆嗎？Can I borrow your ＿＿？', mode: 'typed', lines: 1, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡接句點（背面）', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, revealed: true, words: ['abroad'], expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡四個字接句點', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡四個字接句點（背面）', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'], expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡在括號裡', { text: 'You have to (＿＿) today.', mode: 'typed', lines: 2, english: true, expect: stuckWithSpeaker('(') }, sweep(150, 330, 6)],
+  // 手機一行放得下四條線：沒有喇叭時不用為了標點或喇叭拆成兩列。
+  ['打字卡四個字接句點（正面）', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, speaker: false, expect: r => stuck()(r) && r.lineRows === 1 }, [338]],
+  ['打字卡四個字在結尾（正面）', { text: '他終於下定決心了。He finally ＿＿', mode: 'typed', lines: 4, english: true, speaker: false, expect: r => !r.overflow && r.lineRows === 1 }, [338]],
+  ['打字卡長答案在括號裡', { text: 'He has already (＿＿).', mode: 'typed', lines: 6, english: true, expect: stuckWithSpeaker('(') }, sweep(150, 330, 30)],
+  ['打字卡長答案接句點', { text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 30)],
 ];
 const CASES: Case[] = [
   // F3：圖、公式、嵌入的內容原樣不動，喇叭接在後面。
@@ -47,6 +84,7 @@ const CASES: Case[] = [
   ...LONG_LINKS.flatMap(([text, widths], index) => widths.map(width => ({ name: `長連結 ${String(index + 1)} ${String(width)}px`, text, width, expect: together }))),
   { name: '英文結尾 150px', text: 'He has already made up his mind to study abroad.', width: 150, english: true, expect: r => r.sameLine === true && !r.overflow },
   { name: '中文結尾 150px', text: '光合作用需要陽光、水和二氧化碳。', width: 150, expect: r => r.sameLine === true && !r.overflow },
+  ...BESIDE.flatMap(([name, item, widths]) => widths.map(width => ({ ...item, name: `${name} ${String(width)}px`, width }))),
 ];
 
 /** 和 Review.tsx 的 Speaker 一樣大小的喇叭（只量版面，不接朗讀）。 */
@@ -65,6 +103,51 @@ function speaker(): HTMLElement {
 
 const PROTECTED = 'svg, math, mjx-container, .math, img, .internal-embed, code';
 const middle = (rect: DOMRect): number => rect.top + rect.height / 2;
+const frames = () => new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); });
+
+/** 同 Markdown.tsx 的 applyState（翻面後）：填空的答案出現，打字卡的字照順序寫在線上。 */
+function reveal(container: HTMLElement, words: readonly string[]): void {
+  for (const blank of Array.from(container.querySelectorAll('.ec-blank'))) blank.classList.add('ec-filled');
+  container.querySelectorAll('.ec-line').forEach((line, index) => {
+    line.classList.add('ec-filled');
+    const word = line.querySelector('.ec-line-word');
+    if (word) word.textContent = words[index] ?? '';
+  });
+}
+
+/**
+ * 每個空格前後緊接的字（中間有空白的不算）和緊鄰的線在不在同一列：字的中線落在那條線的上下緣之間。
+ * 前面的字比第一條線，後面的字比最後一條線（打字卡的線排成好幾列時，句點要跟著最後一條，不是落在整格的範圍裡就算）。
+ * 填空整個就是一條線。字照文件順序找，跳過線上的字與答案，所以標點放在 .ec-slot 裡面或外面都量得到。
+ */
+function besideBlanks(container: HTMLElement): { side: 'before' | 'after'; char: string; same: boolean }[] {
+  const texts: Text[] = [];
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node instanceof Text && node.textContent && !node.parentElement?.closest('.ec-line-word, .ec-blank-answer, .ec-mirror')) texts.push(node);
+  }
+  const charBeside = (node: Text | undefined, side: 'before' | 'after', line: Element) => {
+    if (!node) return [];
+    const text = node.textContent ?? '';
+    const index = side === 'before' ? text.length - 1 : 0;
+    const char = text.charAt(index);
+    if (/\s/u.test(char)) return [];
+    const range = document.createRange();
+    range.setStart(node, index);
+    range.setEnd(node, index + 1);
+    const rect = Array.from(range.getClientRects()).find(item => item.width > 0);
+    const box = line.getBoundingClientRect();
+    return rect ? [{ side, char, same: middle(rect) > box.top && middle(rect) < box.bottom }] : [];
+  };
+  return Array.from(container.querySelectorAll<HTMLElement>('.ec-blank, .ec-slot')).flatMap(blank => {
+    const lines = blank.matches('.ec-slot') ? Array.from(blank.querySelectorAll('.ec-line')) : [blank];
+    const first = lines[0];
+    const last = lines[lines.length - 1];
+    const before = texts.filter(node => (first.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).at(-1);
+    const after = texts.find(node => (last.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+    return [...charBeside(before, 'before', first), ...charBeside(after, 'after', last)];
+  });
+}
 
 async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) {
   const card = document.createElement('article');
@@ -85,11 +168,12 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
   component.load();
   try {
     await MarkdownRenderer.render(app, item.text, container, '', component);
-    await new Promise<void>(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); });
+    await frames();
     if (item.rendered) container.insertAdjacentHTML('beforeend', item.rendered);
     const before =Array.from(container.querySelectorAll(PROTECTED)).map(el => el.outerHTML);
     const { tail } = postProcess(container, { mode: item.mode ?? 'plain', lines: item.lines ?? 0, english: !!item.english });
-    tail.append(speaker());
+    if (item.revealed) reveal(container, item.words ?? []);
+    if (item.speaker !== false) tail.append(speaker());
     const after = Array.from(container.querySelectorAll(PROTECTED)).map(el => el.outerHTML);
     const button = tail.querySelector('button');
     // 最後一個字：喇叭那一格裡的文字（連結也算）；沒有文字時是喇叭前面那個內容。
@@ -121,6 +205,8 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
       breaks: breaks.length,
       afterBreak: breaks.map(br => (br.nextSibling?.textContent ?? '').slice(0, 12)),
       glued: (container.textContent ?? '').includes('a '),
+      beside: besideBlanks(container),
+      lineRows: new Set(Array.from(container.querySelectorAll('.ec-line')).map(line => Math.round(line.getBoundingClientRect().top))).size,
       html: container.innerHTML.slice(0, 800),
     };
   } finally {
@@ -128,8 +214,41 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
   }
 }
 
-/** md-cases：每個情況一列，ok 是那個情況的 expect 成立。 */
+/** 給人看的那張圖的情況（結果檔的數字看不出好不好看）。 */
+const SHOWN: (Omit<Case, 'name' | 'width' | 'expect'> & { label: string })[] = [
+  { label: '填空 正面', text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze' },
+  { label: '填空 背面', text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', revealed: true },
+  { label: '填空在結尾', text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze' },
+  { label: '填空在括號裡', text: '把糖放進水裡，再「==攪拌==」一下，糖溶解得比較快。', mode: 'cloze' },
+  { label: '打字卡 一個字接句點', text: '他昨天弄丟了鑰匙。He lost his ＿＿.', mode: 'typed', lines: 1, english: true, speaker: false },
+  { label: '打字卡 四個字接句點 正面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, speaker: false },
+  { label: '打字卡 四個字接句點 背面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'] },
+  { label: '打字卡 六個字接句點', text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, speaker: false },
+];
+
+/** 手機一行的寬度（iPhone 390px 扣掉左右留白）把 SHOWN 排在一起，整個視窗截一張圖；回傳路徑（拿不到 webContents 時是 null）。 */
+async function shownCases(app: App): Promise<string | null> {
+  const page = document.createElement('div');
+  page.className = 'ec-app';
+  page.style.cssText = 'position:fixed;inset:0;z-index:9999;display:grid;grid-template-columns:repeat(2,360px);align-content:start;gap:4px 24px;padding:12px;background:var(--ec-page);color:var(--ec-ink)';
+  document.body.append(page);
+  try {
+    for (const { label, ...item } of SHOWN) {
+      const cell = page.appendChild(document.createElement('div'));
+      cell.appendChild(document.createElement('div')).textContent = label;
+      await runCase(app, cell.appendChild(document.createElement('div')), { ...item, name: label, width: 338 });
+    }
+    await frames();
+    return await capturePng(app, `${W6_ROOT}/結果/內容後處理 ${String(Date.now())}.png`);
+  } finally {
+    page.remove();
+  }
+}
+
+/** md-cases：每個情況一列，ok 是那個情況的 expect 成立；shot 是給人看的那張圖。 */
 export async function markdownCases(app: App): Promise<unknown> {
+  // 每個情況都等 requestAnimationFrame：視窗被遮住時它不跑，命令會一直等、沒有結果檔（2026-11-02）。
+  const rendering = keepRendering();
   const root = document.createElement('div');
   root.className = 'ec-app';
   root.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;visibility:hidden;pointer-events:none;z-index:-1';
@@ -140,8 +259,9 @@ export async function markdownCases(app: App): Promise<unknown> {
       const row = await runCase(app, root, item);
       rows.push({ ok: item.expect(row), ...row });
     }
-    return { allOk: rows.every(r => r.ok), failed: rows.filter(r => !r.ok).map(r => r.name), rows };
+    return { allOk: rows.every(r => r.ok), failed: rows.filter(r => !r.ok).map(r => r.name), shot: await shownCases(app), rows };
   } finally {
     root.remove();
+    rendering.restore();
   }
 }

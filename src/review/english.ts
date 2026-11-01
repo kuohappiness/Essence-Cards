@@ -89,6 +89,19 @@ export function tailStart(text: string): number {
   return /\S+$/u.exec(trimmed)?.index ?? trimmed.length;
 }
 
+/**
+ * 空格後面緊接的標點要和空格一起換行（backlog 技術債：「有 攪拌 ，」的逗號被換到下一行開頭）：開頭連續幾個不能放在行首的標點
+ * （UTF-16 長度）。算的是結束的括號與引號、其他標點（，。、；：？！…… 與英文的 . , ? !）；開括號、破折號、空白與字不算。
+ */
+export function closingRun(text: string): number {
+  return /^[\p{Pe}\p{Pf}\p{Po}]*/u.exec(text)?.[0].length ?? 0;
+}
+
+/** 空格前面緊接的開括號要和空格一起換行（「「」不會留在行尾）：結尾連續幾個開始的括號與引號（UTF-16 長度）。 */
+export function openingRun(text: string): number {
+  return /[\p{Ps}\p{Pi}]*$/u.exec(text)?.[0].length ?? 0;
+}
+
 /** 打字卡要畫幾條線：題目裡有 ＿＿ 時是第一個答案的字數（照空白切，D-122）；沒有 ＿＿ 時 0 條。 */
 export function blankCount(question: string, typed: readonly string[] | null): number {
   if (!typed?.length || !BLANK.test(question)) return 0;
