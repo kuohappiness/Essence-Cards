@@ -19,8 +19,8 @@ import { createObsidianFiles } from './files.ts';
 export interface DevLog { notices: string[]; events: string[]; removed: { path: string; ids: string[] }[]; tokens: ((state: EditorState) => IdToken[]) | null; save: Saver | null }
 export interface IdsHost { app: App; readonly state: State | null; devLog: DevLog }
 
-const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
-async function until(check: () => boolean, ms = 8000): Promise<boolean> {
+export const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+export async function until(check: () => boolean, ms = 8000): Promise<boolean> {
   const end = performance.now() + ms;
   while (performance.now() < end) { if (check()) return true; await sleep(50); }
   return check();
@@ -32,18 +32,34 @@ async function ensureFolder(app: App, folder: string): Promise<void> {
     if (!app.vault.getAbstractFileByPath(path)) await app.vault.createFolder(path);
   }
 }
-async function writeFile(app: App, path: string, text: string): Promise<TFile> {
+export async function writeFile(app: App, path: string, text: string): Promise<TFile> {
   await ensureFolder(app, path.slice(0, path.lastIndexOf('/')));
   const found = app.vault.getFileByPath(path);
   if (found) { await app.vault.modify(found, text); return found; }
   return app.vault.create(path, text);
 }
-async function open(app: App, file: TFile): Promise<{ leaf: WorkspaceLeaf; view: MarkdownView; cm: EditorView }> {
+export async function openTab(app: App, file: TFile): Promise<{ leaf: WorkspaceLeaf; view: MarkdownView; cm: EditorView }> {
   const leaf = app.workspace.getLeaf('tab');
   await leaf.openFile(file);
   const view = leaf.view;
   if (!(view instanceof MarkdownView)) throw Error('不是 Markdown 分頁');
   return { leaf, view, cm: (view.editor as unknown as { cm: EditorView }).cm };
+}
+/** 截圖：淺色與深色各一張（用 body 的 class 切換，不改設定），再換回原本的；寫在 folder，路徑記進 shots。 */
+export function shooter(app: App, folder: string, shots: string[]): (name: string) => Promise<void> {
+  const dark = document.body.classList.contains('theme-dark');
+  return async name => {
+    await ensureFolder(app, folder);
+    for (const theme of dark ? ['dark', 'light'] : ['light', 'dark']) {
+      document.body.classList.toggle('theme-dark', theme === 'dark');
+      document.body.classList.toggle('theme-light', theme === 'light');
+      await sleep(250);
+      const path = await capturePng(app, `${folder}/${String(shots.length + 1).padStart(2, '0')} ${name} ${theme === 'dark' ? '深色' : '淺色'}.png`);
+      if (path) shots.push(path);
+    }
+    document.body.classList.toggle('theme-dark', dark);
+    document.body.classList.toggle('theme-light', !dark);
+  };
 }
 /** 每一個最上層、有 ID 的目標行剛好一個 ID 在行尾；名稱中間沒有程式格式的 ID。 */
 function invariant(text: string): string[] {
@@ -70,7 +86,7 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
   const file = await writeFile(app, folder + '/鎖定測試.md', BASE);
   const other = await writeFile(app, folder + '/鎖定測試 另一篇.md', '- 別的目標 ^aaaaaa\n    - Q :: A\n');
   await writeFile(app, folder + '/鎖定測試 連結.md', '[[鎖定測試#^k3m9x2]]\n');
-  const { leaf, view, cm } = await open(app, file);
+  const { leaf, view, cm } = await openTab(app, file);
   const tokens = () => (host.devLog.tokens?.(cm.state) ?? []).map(t => t.id);
   const removedSince = (count: number) => host.devLog.removed.slice(count).flatMap(entry => entry.ids);
   const key = (name: string, init: KeyboardEventInit = {}) => {
@@ -162,7 +178,7 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
       const count = host.devLog.removed.length;
       select(0, bLine);
       const cut = clip('cut');
-      const second = await open(app, other);
+      const second = await openTab(app, other);
       second.cm.dispatch({ selection: { anchor: second.cm.state.doc.length } });
       second.cm.focus();
       const data = new DataTransfer();
@@ -192,7 +208,7 @@ export async function lockTest(host: IdsHost): Promise<unknown> {
       return { ok: cm.state.doc.toString() === '新內容' && removedSince(count).sort().join() === 'k3m9x2,p7q2w8' };
     }],
     ['同一篇開兩個分頁：另一個分頁看到同樣的文字與鎖定', async () => {
-      const second = await open(app, file);
+      const second = await openTab(app, file);
       app.workspace.setActiveLeaf(leaf, { focus: true });
       select(nameEnd); type('丙');
       const same = await until(() => second.cm.state.doc.toString() === cm.state.doc.toString(), 3000);
@@ -279,11 +295,11 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   }
   // 1. 兩個目標沒有 ID：醒目。不是卡組的筆記沒有按鈕。
   let file = await fresh();
-  const first = await open(app, file);
+  const first = await openTab(app, file);
   out.missing = look(first.view);
   out.missingExpected = TIPS.missing(2);
   const plain = await writeFile(app, 'Essence W5/暫存/一般筆記.md', '一般筆記\n');
-  const other = await open(app, plain);
+  const other = await openTab(app, plain);
   out.plainNoteHasButton = !!button(other.view);
   other.leaf.detach();
   // 2. 按存檔：補好、提示、按鈕變淡；游標與選取沒變；Undo 一次復原。
@@ -338,9 +354,9 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   file = await fresh();
   const timeline: { step: string; hasIds: boolean; text: string }[] = [];
   const snap = async (step: string) => { const text = await app.vault.read(file); timeline.push({ step, hasIds: /\^[a-z0-9]{6}$/m.test(text), text }); };
-  const one = await open(app, file);
+  const one = await openTab(app, file);
   await sleep(2000); await snap('開在一個分頁（等 2 秒）');
-  const two = await open(app, file);
+  const two = await openTab(app, file);
   one.leaf.detach();
   await sleep(2000); await snap('開到第二個分頁並關掉一個（等 2 秒）');
   two.leaf.detach();
@@ -353,7 +369,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   const addTarget = (view: MarkdownView) => { view.editor.replaceRange('- 能說明沸騰\n    - 水沸騰時是幾度？ :: 100 度\n', { line: view.editor.lastLine(), ch: 0 }); };
   // 5.（F1）小視窗開著時，那個目標的題目在 Obsidian 以外改了：小視窗換成現在的內容（舊的按鈕不在了），新的「還原」照常。
   file = await fresh();
-  const stale = await open(app, file);
+  const stale = await openTab(app, file);
   await until(() => { host.devLog.save?.refresh(); return !!button(stale.view); });
   out.clickedStaleFill = await click(stale.view);
   await sleep(2500);
@@ -377,7 +393,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   await sleep(2500);
   // 6. 打完字、還沒重讀就按存檔：提示的數量是這次真的補上的。
   file = await fresh();
-  const typed = await open(app, file);
+  const typed = await openTab(app, file);
   await until(() => { host.devLog.save?.refresh(); return !!button(typed.view); });
   addTarget(typed.view);
   const typedNotices = host.devLog.notices.length;
@@ -387,7 +403,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   await sleep(2500);
   // 7. 打完字馬上關分頁：檔案裡有剛打的字，也補了 ID，沒有誤報。
   file = await fresh();
-  const quick = await open(app, file);
+  const quick = await openTab(app, file);
   addTarget(quick.view);
   quick.leaf.detach();
   await sleep(2500);
@@ -396,7 +412,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   // 8. 改名開著的卡組：舊路徑不補、新路徑還開著也不補，沒有問題；關掉之後在新路徑補。
   file = await fresh();
   const renamedPath = trial.replace('（卡片）', ' 改名（卡片）');
-  const renaming = await open(app, file);
+  const renaming = await openTab(app, file);
   await app.vault.rename(file, renamedPath);
   await sleep(2500);
   const whileOpen = await app.vault.read(file);
@@ -407,7 +423,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   out.rename = { whileOpen: idCount(whileOpen), issues: renameIssues, afterClose: idCount(afterClose) };
   // 9. 開在另一個視窗：主視窗的分頁關掉時另一個視窗還開著，不補；那個視窗也關掉之後才補。
   file = await fresh();
-  const inMain = await open(app, file);
+  const inMain = await openTab(app, file);
   const popout = app.workspace.openPopoutLeaf();
   await popout.openFile(file);
   await sleep(500);
@@ -471,7 +487,7 @@ export async function w2Check(host: IdsHost, step: string | undefined): Promise<
     if (!app.vault.getFileByPath(W2_DECK)) await writeFile(app, W2_DECK, TRIAL_TEXT);
     const file = app.vault.getFileByPath(W2_DECK);
     if (!file) throw Error('建不出 ' + W2_DECK);
-    if (!leaves().length) await open(app, file);
+    if (!leaves().length) await openTab(app, file);
     await until(() => { host.devLog.save?.refresh(); return buttons().length > 0; });
     return count();
   }
@@ -520,28 +536,15 @@ export async function saveTips(host: IdsHost, folder: string): Promise<unknown> 
   if (!state) throw Error('state 還沒建立');
   await state.ready();
   const rendering = keepRendering();
-  const out: Record<string, unknown> = { shots: [] };
+  const shots: string[] = [];
+  const out: Record<string, unknown> = { shots };
   const trial = `${TRIAL_FOLDER}/提醒 ${Date.now().toString(36)}（卡片）.md`;
-  const dark = document.body.classList.contains('theme-dark');
+  const shoot = shooter(app, folder, shots);
   try {
-    await ensureFolder(app, folder);
     const file = await writeFile(app, trial, TIPS_DECK);
     out.readMalformed = await until(() => state.deckStatus(trial).malformed.length === 4);
-    const { leaf, view } = await open(app, file);
+    const { leaf, view } = await openTab(app, file);
     const button = () => view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
-    let count = 0;
-    /** 淺色與深色各截一張（用 body 的 class 切換，不改設定），再換回原本的。 */
-    const shoot = async (name: string): Promise<void> => {
-      for (const theme of dark ? ['dark', 'light'] : ['light', 'dark']) {
-        document.body.classList.toggle('theme-dark', theme === 'dark');
-        document.body.classList.toggle('theme-light', theme === 'light');
-        await sleep(250);
-        const path = await capturePng(app, `${folder}/${String(++count).padStart(2, '0')} ${name} ${theme === 'dark' ? '深色' : '淺色'}.png`);
-        if (path) (out.shots as string[]).push(path);
-      }
-      document.body.classList.toggle('theme-dark', dark);
-      document.body.classList.toggle('theme-light', !dark);
-    };
     /**
      * 顯示按鈕的說明（滑鼠移上去時的那一個；DOM 事件叫不出 Obsidian 的 tooltip，用 displayTooltip），先拿掉畫面上的通知
      * （會蓋住標題列的按鈕）；回傳按鈕的樣子與畫面上的說明。
@@ -711,7 +714,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     // V1 一般的存檔。
     {
       const { file, path } = await fresh();
-      const { leaf, view } = await open(app, file);
+      const { leaf, view } = await openTab(app, file);
       await sleep(500);
       const persist = watchPersist(view, path);
       const before = notices();
@@ -729,7 +732,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     // V2 N1：打一個字，等到這篇的 modify 事件（自動存檔）後 100 ms 內按存檔；之後 3 秒每 50 ms 看一次 deckStatus。
     {
       const { file, path } = await fresh();
-      const { leaf, view } = await open(app, file);
+      const { leaf, view } = await openTab(app, file);
       await sleep(500);
       rec.take();
       let modified = 0;
@@ -759,7 +762,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     // V3 同一個 tick 連按兩次按鈕。
     {
       const { file, path } = await fresh();
-      const { leaf, view } = await open(app, file);
+      const { leaf, view } = await openTab(app, file);
       await until(() => { saver.refresh(); return !!view.containerEl.querySelector('.essence-cards-save'); });
       const button = view.containerEl.querySelector<HTMLElement>('.essence-cards-save');
       const before = notices();
@@ -773,8 +776,8 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     // V4 兩個分頁開同一篇，在其中一個按存檔。
     {
       const { file, path } = await fresh();
-      const one = await open(app, file);
-      const two = await open(app, file);
+      const one = await openTab(app, file);
+      const two = await openTab(app, file);
       await sleep(500);
       const saving = saver.save(one.view);
       const steps = [await snap('Promise 完成前', path, one.view)];
@@ -790,7 +793,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     {
       const { file, path } = await fresh();
       const other = await fresh();
-      const { leaf, view } = await open(app, file);
+      const { leaf, view } = await openTab(app, file);
       await sleep(500);
       const before = notices();
       const saving = saver.save(view);
@@ -808,7 +811,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
       // 要在存檔一回來就看，之後補上的另外記。
       {
         const first = await fresh(), queued = await fresh(), target = await fresh();
-        const a = await open(app, first.file), b = await open(app, queued.file);
+        const a = await openTab(app, first.file), b = await openTab(app, queued.file);
         await sleep(500);
         let release = (): void => {};
         const gate = new Promise<void>(resolve => { release = resolve; });
@@ -831,7 +834,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
         b.leaf.detach();
       }
       const renamed = await fresh();
-      const tab = await open(app, renamed.file);
+      const tab = await openTab(app, renamed.file);
       await sleep(500);
       const newPath = renamed.path.replace('（卡片）', ' 改名（卡片）');
       const listed = (await files.list(FLOW_FOLDER)).length;
@@ -850,7 +853,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
       const results: Record<string, unknown>[] = [];
       for (const wait of [0, 50, 200]) {
         const { file, path } = await fresh();
-        const { leaf, view } = await open(app, file);
+        const { leaf, view } = await openTab(app, file);
         await sleep(500);
         rec.take();
         const written = app.vault.adapter.write(path, FLOW_TEXT + FLOW_B);
@@ -868,7 +871,7 @@ export async function saveFlow(host: IdsHost): Promise<unknown> {
     // V7 保存失敗：試著讓檔案暫時唯讀。
     {
       const { file, path } = await fresh();
-      const { leaf, view } = await open(app, file);
+      const { leaf, view } = await openTab(app, file);
       await sleep(500);
       const load = (window as unknown as { require?: (name: string) => unknown }).require;
       const fs = load?.('fs') as { chmodSync(path: string, mode: number): void } | undefined;

@@ -11,6 +11,7 @@ import type { ReviewHandle } from '../ui/index.ts';
 import type { Pick } from '../core/study/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { lockTest, saveFlow, saveTest, saveTips, t1Close, t1Prep, w2Check, type DevLog, type IdsHost } from './dev-ids.ts';
+import { duplicatesCheck } from './dev-duplicates.ts';
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
@@ -59,6 +60,8 @@ const commands: Record<string, DevCommand> = {
   save: { name: 'Essence 開發：存檔按鈕與備援', run: (_host, ids) => saveTest(ids), desktop: true },
   // 技術債 D1：寫法有問題時存檔按鈕的說明與通知，截圖寫在 Essence W5/結果/存檔提醒 …/。
   'save-tips': { name: 'Essence 開發：存檔按鈕的提醒（截圖）', run: (_host, ids) => saveTips(ids, `${root}/結果/存檔提醒 ${stampOf(new Date())}`), desktop: true },
+  // D-157（tasks/duplicate-ids.md §9）：三種貼法、小視窗、跳轉與離開筆記的通知，截圖寫在 Essence W5/結果/重複 …/。
+  duplicates: { name: 'Essence 開發：重複的學習目標 ID（截圖）', run: (_host, ids) => duplicatesCheck(ids, `${root}/結果/重複 ${stampOf(new Date())}`), desktop: true },
   // 技術債 W2：重新啟用外掛後舊的存檔按鈕（URI 的 do 參數：open、count、click、late、close）。
   w2: { name: 'Essence 開發：重新啟用後的存檔按鈕', run: (_host, ids, params) => w2Check(ids, params.do), desktop: true },
   // tasks/state-writes.md §9：存檔排進寫入的那一列、view.save() 加核對讀取（V1～V7）。
