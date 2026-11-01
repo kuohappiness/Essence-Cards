@@ -1,6 +1,6 @@
 # 重複的學習目標 ID 開工前的格式查核（給 Codex）
 
-狀態：等 Codex 查核（使用者開新的 Codex session）
+狀態：已完成（[Codex 的報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)，`ea746e5`；F1～F4、I1～I3 都已寫進[任務說明](duplicate-ids.md)與 syntax §2-3、§2-10）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**，不要用查過外掛架構討論稿環節 2、3 的那一個。
 
