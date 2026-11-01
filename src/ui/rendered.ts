@@ -56,10 +56,19 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   return { slot, tail: attachTail(container) };
 }
 
+/** 在 element 前面放一個空的 .ec-glue（裡面不換行），由呼叫的地方把內容照順序放進去。 */
+function gluedAround(element: Element): HTMLElement {
+  const glue = document.createElement('span');
+  glue.className = 'ec-glue';
+  element.before(glue);
+  return glue;
+}
+
 /**
  * 空格和緊接在前後的標點包在一起（.ec-glue，不換行）：「有 攪拌 ，」的逗號不會被換到下一行開頭，「「」不會留在行尾（backlog 技術債）。
  * 中間沒有可以斷行的地方，不靠各瀏覽器怎麼判斷空格和標點的交界能不能斷行（Chromium 會斷，md-cases 量得到）。
  * 只看同一層緊接的文字（==…== 與 ＿＿ 前後直接寫的標點）；中間有空白的不包。最後是標點時，喇叭那一格也在裡面（attachTail）。
+ * 打字卡後面的標點已經在線那一格裡（closeLastLine），這裡只會包到前面的開括號。
  */
 function gluePunctuation(blank: HTMLElement): void {
   const before = blank.previousSibling instanceof Text ? blank.previousSibling : null;
@@ -67,9 +76,7 @@ function gluePunctuation(blank: HTMLElement): void {
   const opening = before ? openingRun(before.textContent ?? '') : 0;
   const closing = after ? closingRun(after.textContent ?? '') : 0;
   if (!opening && !closing) return;
-  const glue = document.createElement('span');
-  glue.className = 'ec-glue';
-  blank.before(glue);
+  const glue = gluedAround(blank);
   if (before && opening) glue.append(before.splitText(before.length - opening));
   glue.append(blank);
   if (after && closing) {
@@ -100,10 +107,27 @@ function insertLines(container: HTMLElement, lines: number): HTMLElement | null 
     const after = node.splitText(match.index);
     after.textContent = text.slice(match.index + match[0].length);
     node.parentNode?.insertBefore(slot, after);
+    closeLastLine(blanks, after);
     breakBeforeEnglish(container, node);
     return slot;
   }
   return null;
+}
+
+/**
+ * 打字卡的空格後面緊接的標點，和最後一條線包成一格（.ec-line-end，不換行）：線排成幾列，標點都緊跟著最後一條線。
+ * 不放在線的外面：線排滿一列換行時，外面的標點會留在第一列後面（made up his . 下一列才是 mind）。
+ * 打字途中線藏起來，標點也一起藏（Markdown.css 的 .ec-slot）；喇叭在空格外面，照常看得到。
+ */
+function closeLastLine(blanks: HTMLElement, after: Text): void {
+  const run = closingRun(after.textContent ?? '');
+  const last = blanks.lastElementChild;
+  if (!run || !last) return;
+  after.splitText(run);
+  const end = document.createElement('span');
+  end.className = 'ec-line-end';
+  last.before(end);
+  end.append(last, after);
 }
 
 /**
@@ -164,7 +188,9 @@ function lastContent(node: Node): Text | Element | null {
  *   整個連結放進那一格；連結裡最後一個字以外的文字包進 .ec-tail-wrap 照常換行，長連結也不超出，最後一個字和喇叭不分開
  *   （Codex 再查 R4）。連結本身跟著那一格不換行：最後一個字、</a> 與喇叭之間沒有可以斷行的地方，不靠各瀏覽器怎麼判斷
  *   元素交界能不能斷行（WebKit 可能和 Chromium 不同）。
- * - 最後是圖、公式、嵌入、空格：原樣不動，喇叭接在它後面（Codex 審查 F3）。
+ * - 最後是圖、公式、嵌入：原樣不動，喇叭接在它後面（Codex 審查 F3）。
+ * - 最後是空格：同樣不動裡面，空格和喇叭包進 .ec-glue，喇叭不會單獨掉到下一行。打字卡的喇叭不放進線那一格（.ec-line-end）：
+ *   第 3 步照著打時就有喇叭，那時輸入框蓋在線上，線也藏起來了。
  */
 function attachTail(container: HTMLElement): HTMLElement {
   const tail = document.createElement('span');
@@ -185,7 +211,14 @@ function attachTail(container: HTMLElement): HTMLElement {
     tail.append(link);
     return tail;
   }
-  if (last instanceof Element) { last.after(tail); return tail; }
+  if (last instanceof Element) {
+    if (last.matches('.ec-slot, .ec-blank') && !last.parentElement?.matches('.ec-glue')) {
+      const glue = gluedAround(last);
+      glue.append(last);
+    }
+    last.after(tail);
+    return tail;
+  }
   const rest = last.splitText(tailStart(last.textContent ?? ''));
   rest.replaceWith(tail);
   tail.append(rest);

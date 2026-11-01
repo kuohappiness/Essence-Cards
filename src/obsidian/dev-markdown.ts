@@ -24,6 +24,10 @@ const untouched = (count: number) => (r: Row): boolean => r.protectedSame && r.p
 /** 每個空格和緊接在後面的字（chars 也算前面緊接的這幾個字）在同一行，而且不超出。 */
 const stuck = (chars = '') => (r: Row): boolean => r.beside.length > 0 && !r.overflow
   && r.beside.every(b => b.same || (b.side === 'before' && !chars.includes(b.char)));
+/** 同上，喇叭也沒有單獨掉到下一行。 */
+const stuckWithSpeaker = (chars = '') => (r: Row): boolean => stuck(chars)(r) && r.sameLine === true;
+/** 空格後面沒有標點：喇叭沒有單獨掉到下一行，也不超出。 */
+const speakerStays = (r: Row): boolean => r.sameLine === true && !r.overflow;
 
 const IMAGE = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><rect width="120" height="40" fill="#ccc"/></svg>');
 // 再查 R4：長連結自己可以換行，最後一個字和喇叭照樣同一行；換幾種行寬讓行尾剩下的空間不一樣（每 12px 一格，比喇叭窄，
@@ -42,16 +46,18 @@ const LONG_LINKS: [string, number[]][] = [
 const BESIDE: [string, Omit<Case, 'name' | 'width'>, number[]][] = [
   ['填空接全形標點', { text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', expect: stuck() }, sweep(150, 330, 6)],
   ['填空接全形標點（背面）', { text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', revealed: true, expect: stuck() }, sweep(150, 330, 6)],
-  ['填空在結尾', { text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze', expect: r => stuck()(r) && r.sameLine === true }, sweep(168, 330, 6)],
+  ['填空在結尾', { text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze', expect: stuckWithSpeaker() }, sweep(168, 330, 6)],
   ['填空在括號裡', { text: '把糖放進水裡，再「==攪拌==」一下，糖溶解得比較快。', mode: 'cloze', expect: stuck('「') }, sweep(150, 330, 6)],
-  ['打字卡接句點', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, expect: stuck() }, sweep(150, 330, 6)],
-  ['打字卡接全形問號', { text: '我可以借你的筆嗎？Can I borrow your ＿＿？', mode: 'typed', lines: 1, english: true, expect: stuck() }, sweep(150, 330, 6)],
-  ['打字卡接句點（背面）', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, revealed: true, words: ['abroad'], expect: stuck() }, sweep(150, 330, 6)],
-  ['打字卡四個字接句點', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, expect: stuck() }, sweep(150, 330, 6)],
-  ['打字卡四個字接句點（背面）', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'], expect: stuck() }, sweep(150, 330, 6)],
-  ['打字卡在括號裡', { text: 'You have to (＿＿) today.', mode: 'typed', lines: 2, english: true, expect: stuck('(') }, sweep(150, 330, 6)],
-  ['打字卡長答案在括號裡', { text: 'He has already (＿＿).', mode: 'typed', lines: 6, english: true, expect: stuck('(') }, sweep(150, 330, 30)],
-  ['打字卡長答案接句點', { text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, expect: stuck() }, sweep(150, 330, 30)],
+  ['填空在結尾沒有標點', { text: '植物行光合作用時，需要的能量來自==陽光==', mode: 'cloze', expect: speakerStays }, sweep(168, 330, 6)],
+  ['打字卡在結尾沒有標點', { text: '他昨天弄丟了鑰匙。He lost his ＿＿', mode: 'typed', lines: 1, english: true, expect: speakerStays }, sweep(150, 330, 6)],
+  ['打字卡接句點', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡接全形問號', { text: '我可以借你的筆嗎？Can I borrow your ＿＿？', mode: 'typed', lines: 1, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡接句點（背面）', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, revealed: true, words: ['abroad'], expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡四個字接句點', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡四個字接句點（背面）', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'], expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
+  ['打字卡在括號裡', { text: 'You have to (＿＿) today.', mode: 'typed', lines: 2, english: true, expect: stuckWithSpeaker('(') }, sweep(150, 330, 6)],
+  ['打字卡長答案在括號裡', { text: 'He has already (＿＿).', mode: 'typed', lines: 6, english: true, expect: stuckWithSpeaker('(') }, sweep(150, 330, 30)],
+  ['打字卡長答案接句點', { text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 30)],
 ];
 const CASES: Case[] = [
   // F3：圖、公式、嵌入的內容原樣不動，喇叭接在後面。
