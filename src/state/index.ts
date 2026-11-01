@@ -1,6 +1,7 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { Deck, Target } from '../core/deck/index.ts';
+import type { Deck, DuplicateId, Target } from '../core/deck/index.ts';
+export type { DuplicateId, DuplicateTarget } from '../core/deck/index.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
@@ -54,7 +55,7 @@ export interface LoadTimings { decks: number; history: number; plan: number; tot
 
 /**
  * 各方法在 ready 之前與 close() 之後的行為集中寫在這裡（技術債 A11），各方法的註解不再重複：
- * - 還沒 ready：input、today、next、progress、answer 丟錯；deckStatus 回空；save、resolve 回 blocked loading；fillIds 回 false。
+ * - 還沒 ready：input、today、next、progress、answer 丟錯；deckStatus、conflicts 回空；save、resolve 回 blocked loading；fillIds 回 false。
  * - close() 之後：save、resolve 回 blocked closed；fillIds 回 false；不再通知 onChange 的監聽者；其他方法照常。
  */
 export interface State {
@@ -92,11 +93,16 @@ export interface State {
    * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。取消的那一筆早於今天的份的開始（例如複習到 03:59、過了 04:00 回看改評分）時，
    * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
    * 牽涉的學習目標不能作答（canAnswer）時什麼都不寫、回傳 null（任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；
-   * 找不到那一筆的取消照舊寫。卡組的狀態變更，那一篇需要新版時也不寫。
+   * 找不到那一筆的取消照舊寫，ID 重複時的取消也照寫（D-157）。卡組的狀態變更，那一篇需要新版時也不寫。
    */
   answer(entry: NewEntry): string | null;
-  /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的 ID 都不能。 */
+  /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的、重複的（conflicts()）ID 都不能。 */
   canAnswer(lt: string): boolean;
+  /**
+   * 用了同一個學習目標 ID 的目標（D-157、syntax.md §2-3）：範圍是讀得懂的卡組（decks()），依 state 最近讀到的內容（讀不到的那一篇用上一次的）；
+   * 每次讀到新內容照目前的內容重算，不看讀到的先後。待處理的目標照樣占著它的 ID，需要新版的卡組不算在內。這些目標都不出題、不收新的作答。
+   */
+  conflicts(): readonly DuplicateId[];
   /**
    * 「版本」命令用（任務說明 2-1、syntax.md §5-1）。build：這次的 BUILD，沒傳是 null。own：這台的版本行；waiting 是自己的
    * 紀錄還沒都讀到（本機歷史待讀取，讀到才比），same 是最後一行已經是這個 BUILD，queued 是排進寫入、還沒有 flush 確認寫成，
@@ -187,7 +193,7 @@ export function createState(options: StateOptions): State {
     if (seenIds?.of !== history) seenIds = { of: history, ids: new Set(history.seen) };
     return seenIds.ids;
   }
-  const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0 });
+  const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck) });
 
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
   function record(entry: NewEntry): string {
@@ -217,7 +223,7 @@ export function createState(options: StateOptions): State {
     record({ set: 'app', val: options.build });
     appState = 'queued';
   }
-  /** 給 planToday 的卡組：拿掉待處理的目標（W5 §8-5：不出題）。 */
+  /** 給 planToday 的卡組：拿掉待處理與用了重複 ID 的目標（W5 §8-5、D-157：不出題）。 */
   let planList: DeckEntry[] = [];
   /** 需要新版的卡組（路徑照字串排序）與它們的 ID（候選也算）。 */
   let gated: string[] = [];
@@ -235,15 +241,17 @@ export function createState(options: StateOptions): State {
       return entry.deck.targets.some(drop) ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !drop(t)) } } : entry;
     });
   }
-  /** 能寫這個目標的紀錄：不是讀不懂的紀錄行停掉的、紀錄不是不完整、不在需要新版的卡組裡（§5-2、§2-1）。 */
-  const answerable = (lt: string): boolean => !history.incomplete && !history.held.includes(lt) && !gatedIds.has(lt);
+  /** 這個目標的紀錄讀得懂：不是讀不懂的紀錄行停掉的、紀錄不是不完整、不在需要新版的卡組裡（§5-2、§2-1）。 */
+  const readableLog = (lt: string): boolean => !history.incomplete && !history.held.includes(lt) && !gatedIds.has(lt);
+  /** 能寫這個目標新的作答與狀態變更：上面的門檻，加上它的 ID 沒有重複（D-157）。 */
+  const answerable = (lt: string): boolean => readableLog(lt) && !tracker.isDuplicate(lt);
   /**
-   * answer 能不能寫這一行。分類和 encodeEntry 同一個順序（Codex L2 的 F2）：有 undo 就是取消，看它指到的每一筆作答（多帶的欄位
-   * 不寫出、也不看；找不到那一筆照舊寫）；有 set 是變更，學習目標看 lt，卡組的狀態是從卡組的內容得出的，需要新版的卡組不寫（§2-1）；
+   * answer 能不能寫這一行。分類和 encodeEntry 同一個順序（Codex L2 的 F2）：有 undo 就是取消，看它指到的每一筆作答的紀錄門檻（多帶的欄位
+   * 不寫出、也不看；找不到那一筆照舊寫；不因 ID 重複擋：不能只因重複就禁止撤銷先前的誤記，D-157）；有 set 是變更，學習目標看 lt，卡組的狀態是從卡組的內容得出的，需要新版的卡組不寫（§2-1）；
    * 其他是作答，看 lt。
    */
   function permits(entry: NewEntry): boolean {
-    if ('undo' in entry) return history.reviews.every(review => review.t !== entry.undo || answerable(review.lt));
+    if ('undo' in entry) return history.reviews.every(review => review.t !== entry.undo || readableLog(review.lt));
     if ('set' in entry) return 'deck' in entry ? !gated.includes(entry.deck) : 'lt' in entry ? answerable(entry.lt) : true;
     return answerable(entry.lt);
   }
@@ -421,6 +429,7 @@ export function createState(options: StateOptions): State {
     decks: () => deckList,
     blocked: () => ({ decks: gated, targets: history.held, all: history.incomplete }),
     canAnswer: answerable,
+    conflicts: () => life.loaded ? tracker.duplicates() : [],
     history: () => history,
     input,
     today: () => fresh().today,

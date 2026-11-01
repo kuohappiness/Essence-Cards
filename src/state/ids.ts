@@ -1,5 +1,5 @@
-import { assignIds, blockIds, parseDeck, setTargetId } from '../core/deck/index.ts';
-import type { Deck, ProblemCode, Target } from '../core/deck/index.ts';
+import { assignIds, blockIds, findDuplicateIds, parseDeck, setTargetId } from '../core/deck/index.ts';
+import type { Deck, DuplicateId, ProblemCode, Target } from '../core/deck/index.ts';
 
 export type IdIssueKind = 'lost' | 'changed' | 'ambiguous';
 /**
@@ -73,6 +73,8 @@ export interface IdTrackerOptions {
   logIds: () => ReadonlySet<string>;
   /** 有卡組或紀錄讀不到（占用資訊不完整）：這時找到的問題是暫定的。 */
   partial: () => boolean;
+  /** 這份卡組這一版讀得懂；需要新版的不參與重複 ID 的判斷（D-157）。 */
+  readable: (deck: Deck) => boolean;
 }
 
 /**
@@ -93,6 +95,10 @@ export function createIdTracker(options: IdTrackerOptions) {
   const removed = new Set<string>();
   /** pending 改變時加一，state 用來決定要不要重排。 */
   let revision = 0;
+  /** 重複的 ID（D-157）：不記住讀到的先後，每次內容變了就照目前的內容重算。observe 的結尾算；forget、move 之後一定接著 observe。 */
+  let duplicates: DuplicateId[] = [];
+  let duplicateIds = new Set<string>();
+  let stale = false;
 
   const targetIds = (deck: Deck): string[] => deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])]);
   function presentOf(text: string, deck: Deck): Set<string> {
@@ -137,6 +143,13 @@ export function createIdTracker(options: IdTrackerOptions) {
     const batch = entries.map(entry => ({ ...entry, prev: versions.get(entry.path), prevPresent: present.get(entry.path) ?? new Set<string>(), now: presentOf(entry.text, entry.deck) }));
     for (const entry of batch) present.set(entry.path, entry.now);
     for (const entry of batch) observeOne(entry, detect);
+    if (entries.length) stale = true;
+    if (stale) refreshDuplicates();
+  }
+  function refreshDuplicates(): void {
+    stale = false;
+    duplicates = findDuplicateIds([...versions].filter(([, deck]) => options.readable(deck)).map(([path, deck]) => ({ path, deck })));
+    duplicateIds = new Set(duplicates.map(each => each.id));
   }
   function observeOne({ path, text, deck, prev, prevPresent, now }: { path: string; text: string; deck: Deck; prev: Deck | undefined; prevPresent: Set<string>; now: Set<string> }, detect: boolean): void {
     const old = pending.get(path) ?? [];
@@ -195,8 +208,11 @@ export function createIdTracker(options: IdTrackerOptions) {
   }
   const observeText = (path: string, text: string, detect: boolean): void => { observe([{ path, text, deck: parseDeck(text) }], detect); };
 
+  /** 待處理與用了重複 ID 的目標那幾行：不出題、不補、不移動（W5 §8-5、D-157）。 */
   function lines(path: string): Set<number> {
-    return new Set((pending.get(path) ?? []).map(item => item.issue.line));
+    const skip = new Set((pending.get(path) ?? []).map(item => item.issue.line));
+    for (const { targets } of duplicates) for (const target of targets) if (target.path === path) skip.add(target.line);
+    return skip;
   }
   function taken(): Set<string> {
     const ids = new Set([...seen, ...options.logIds(), ...removed]);
@@ -218,10 +234,13 @@ export function createIdTracker(options: IdTrackerOptions) {
     revision: () => revision,
     text: (path: string) => texts.get(path),
     observe,
+    duplicates: (): readonly DuplicateId[] => duplicates,
+    isDuplicate: (id: string): boolean => duplicateIds.has(id),
     /** 卡組刪掉了：它的待處理問題跟著消失（那個目標被刪掉）。 */
     forget(path: string): void {
       if (pending.delete(path)) revision++;
       texts.delete(path); versions.delete(path); present.delete(path);
+      stale = true;
     },
     /** 改名：上一版與待處理的問題搬到新路徑，再照一般的重讀比對。 */
     move(from: string, to: string): void {
@@ -229,6 +248,7 @@ export function createIdTracker(options: IdTrackerOptions) {
         if (map.has(from)) { map.set(to, map.get(from)); map.delete(from); }
       }
       for (const item of pending.get(to) ?? []) item.issue.path = to;
+      stale = true;
     },
     issues: (path: string): IdIssue[] => (pending.get(path) ?? []).map(item => item.issue),
     lines,
