@@ -34,7 +34,7 @@ void test('state 對外只透過 index 匯出 createState 與裝置碼', async (
 });
 void test('deck 對外只透過指定 index 匯出', async () => {
   const module = await import('../src/core/deck/index.ts');
-  assert.deepEqual(Object.keys(module).sort(), ['assignIds', 'baseForm', 'blockIds', 'findDuplicateIds', 'isDeckPath', 'listDeckPaths', 'nameIds', 'parseDeck', 'readDecks', 'setTargetId']);
+  assert.deepEqual(Object.keys(module).sort(), ['assignIds', 'baseForm', 'blockIds', 'isDeckPath', 'listDeckPaths', 'nameIds', 'parseDeck', 'readDecks', 'setTargetId']);
 });
 
 void test('src 裡只有 study/fsrs.ts 能 import、export、動態 import 或 require ts-fsrs', async () => {
@@ -60,5 +60,5 @@ void test('src 裡只有 study/fsrs.ts 能 import、export、動態 import 或 r
 // readHistory、readDecks 給 tools/bench-study.ts 與測試用，產品程式走 state（技術債 A5、D-105）；parseTime 給備份清單的時間檢查（syntax §8）。
 void test('study 只匯出任務指定的公開介面，不洩漏 ts-fsrs 的型別或類別', async () => {
   const module = await import('../src/core/study/index.ts');
-  assert.deepEqual(Object.keys(module).sort(), ['LOG_FOLDER', 'appendLine', 'checkTyped', 'createLogWriter', 'dayOf', 'dayStart', 'dueAt', 'encodeEntry', 'formatTime', 'intervalDays', 'isLogPath', 'logPath', 'mergeHistory', 'nextCard', 'parseLine', 'parseTime', 'planToday', 'progress', 'readHistory', 'recall', 'replay', 'review', 'typedKey', 'typedUnits'].sort());
+  assert.deepEqual(Object.keys(module).sort(), ['LOG_FOLDER', 'appendLine', 'checkTyped', 'createLogWriter', 'dayOf', 'dayStart', 'dueAt', 'encodeEntry', 'findDuplicateIds', 'formatTime', 'intervalDays', 'isLogPath', 'logPath', 'mergeHistory', 'nextCard', 'parseLine', 'parseTime', 'planToday', 'progress', 'readHistory', 'recall', 'replay', 'review', 'typedKey', 'typedUnits'].sort());
 });

@@ -1,4 +1,4 @@
-import type { Deck } from './types.ts';
+import type { Deck } from '../deck/index.ts';
 
 /** 用了重複 ID 的一個學習目標；line 從 0 算。 */
 export interface DuplicateTarget { path: string; line: number; name: string }

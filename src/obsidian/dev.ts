@@ -197,7 +197,7 @@ async function today(host: Host): Promise<unknown> {
     decks: state.decks().map(d => d.path),
     day: value.day, offset: value.offset,
     share: value.share.map(item => item.lt), more: value.more.map(item => item.lt),
-    problems: value.problems.slice(0, limit),
+    conflicts: state.conflicts().slice(0, limit).map(({ id, targets }) => ({ id, targets: targets.map(({ path, line }) => ({ path, line })) })),
     progress: state.progress(),
   };
 }

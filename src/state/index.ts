@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { Deck, DuplicateId, Target } from '../core/deck/index.ts';
-export type { DuplicateId, DuplicateTarget } from '../core/deck/index.ts';
+import type { Deck, Target } from '../core/deck/index.ts';
+export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
@@ -11,7 +11,7 @@ export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, parseTime, planToday, progress } from '../core/study/index.ts';
-import type { DeckEntry, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
+import type { DeckEntry, DuplicateId, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
 import type { VersionReport } from '../core/backup/index.ts';

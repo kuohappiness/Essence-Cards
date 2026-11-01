@@ -1,4 +1,5 @@
 import type { Target } from '../deck/index.ts';
+import { findDuplicateIds } from './duplicates.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { dayOf, dayStart } from './time.ts';
 import type { DeckEntry, Lane, Memory, QueueItem, ReviewEntry, Slot, Today, TodayInput } from './types.ts';
@@ -67,7 +68,6 @@ export function planToday(input: TodayInput): Today {
   const reviews = input.history.reviews;
   const day = dayOf(input.now, offset);
   const start = dayStart(day, offset), end = dayStart(day + 1, offset);
-  const problems: Today['problems'] = [];
   const decks = [...input.decks].sort((a, b) => compareText(a.path, b.path));
 
   const levels = new Set<string>(), categories = new Set<string>();
@@ -77,33 +77,23 @@ export function planToday(input: TodayInput): Today {
     else categories.add(label);
   }
 
-  // ID 的歸屬：好幾篇啟用的卡組有同一個 ID 時，照路徑第一篇的算，同一篇照行號第一個。
-  // 出卡、配對與科目都照這個歸屬；只在草稿、暫停的卡組裡的 ID，科目用路徑第一篇的。
+  // 前提是 state 交進來的 ID 不重複（D-157：用了重複 ID 的目標已經拿掉）。直接收到重複的 ID 時（測試、發布前比較的轉接器）是防呆：
+  // 不照位置或路徑決定誰保留，輸入裡這個 ID 的目標都不出、不占配對、作答不算進估秒。只看輸入裡的，不冒充檢查過 state 已經拿掉的。
+  const duplicated = new Set(findDuplicateIds(decks).map(each => each.id));
   const subjectOf = new Map<string, string | null>();
-  const owner = new Map<string, { path: string; target: Target }>();
   const chosen: { entry: DeckEntry; target: Target; id: string }[] = [];
-  // 讀不懂的紀錄行停掉的目標（syntax.md §5-2）：照樣占著 ID 的歸屬，只是不排程。
+  // 讀不懂的紀錄行停掉的目標（syntax.md §5-2）：只是不排程，科目與配對照算。
   const held = new Set(input.history.held);
   const stopped = (id: string): boolean => input.history.incomplete || held.has(id);
   for (const entry of decks) {
     const { props, targets } = entry.deck;
-    if (props.isTranscript || props.status !== 'active') {
-      for (const target of targets) if (target.id !== null && !subjectOf.has(target.id)) subjectOf.set(target.id, props.subject);
-      continue;
-    }
+    const active = !props.isTranscript && props.status === 'active';
     const filtered = props.categories.some(category => categories.has(category));
     for (const target of targets) {
       const id = target.id;
-      if (id === null) continue;
-      const first = owner.get(id);
-      if (first !== undefined) {
-        // 同一篇裡的重複 W2 已經回報。
-        if (first.path !== entry.path) problems.push({ deck: entry.path, line: target.line, message: '學習目標 ID ' + id + ' 和「' + first.path + '」重複，這一篇的不出' });
-        continue;
-      }
-      owner.set(id, { path: entry.path, target });
+      if (id === null || duplicated.has(id)) continue;
       subjectOf.set(id, props.subject);
-      if (target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance) && !stopped(id)) chosen.push({ entry, target, id });
+      if (active && target.ok && !target.fields.paused && target.prompts.length > 0 && !filtered && !levels.has(target.fields.importance) && !stopped(id)) chosen.push({ entry, target, id });
     }
   }
 
@@ -137,14 +127,14 @@ export function planToday(input: TodayInput): Today {
   const shows = (c: Candidate): boolean => c.due === null || c.due < end;
   const remembered = (c: Candidate): boolean => c.memory !== null && (c.memory.last.r === 'good' || c.memory.last.r === 'easy') && !shows(c);
 
-  // 英文的兩個方向：同一篇裡 pairKey 相同，各方向取行號小的；重複而被排除的目標不算。
+  // 英文的兩個方向：同一篇裡 pairKey 相同，各方向取行號小的；重複的 ID 不算，另一個方向照「這個方向不在」排。
   const pairOf = new Map<string, string>();
   const dropped = new Set<string>();
   for (const entry of decks) {
     if (entry.deck.props.isTranscript || entry.deck.props.status !== 'active') continue;
     const pairs = new Map<string, { en?: Target; zh?: Target }>();
     for (const target of entry.deck.targets) {
-      if (target.pairKey === null || target.direction === null || target.id === null || owner.get(target.id)?.target !== target) continue;
+      if (target.pairKey === null || target.direction === null || target.id === null || duplicated.has(target.id)) continue;
       const pair = pairs.get(target.pairKey) ?? {};
       const side = target.direction === 'en-zh' ? 'en' : 'zh';
       if (!pair[side] || target.line < pair[side].line) pair[side] = target;
@@ -181,7 +171,7 @@ export function planToday(input: TodayInput): Today {
     slots.set(c.id, { target: c.target, pair: pairOf.get(c.id) ?? null, memory: c.memory, retention: c.retention, inExam: c.inExam,
       correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map<string, number>() });
   }
-  return { day, offset, share, more, problems, slots };
+  return { day, offset, share, more, slots };
 }
 
 function compareInLane(a: Candidate, b: Candidate): number {

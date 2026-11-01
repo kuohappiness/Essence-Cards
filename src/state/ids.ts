@@ -1,5 +1,7 @@
-import { assignIds, blockIds, findDuplicateIds, parseDeck, setTargetId } from '../core/deck/index.ts';
-import type { Deck, DuplicateId, DuplicateTarget, ProblemCode, Target } from '../core/deck/index.ts';
+import { assignIds, blockIds, parseDeck, setTargetId } from '../core/deck/index.ts';
+import type { Deck, ProblemCode, Target } from '../core/deck/index.ts';
+import { findDuplicateIds } from '../core/study/index.ts';
+import type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
 
 export type IdIssueKind = 'lost' | 'changed' | 'ambiguous' | 'duplicate';
 /**

@@ -4,6 +4,8 @@ export { LOG_FOLDER, logPath, createLogWriter } from './log.ts';
 export { appendLine, isLogPath, mergeHistory, readHistory } from './history.ts';
 export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';
 export { planToday } from './plan.ts';
+export { findDuplicateIds } from './duplicates.ts';
+export type { DuplicateId, DuplicateTarget } from './duplicates.ts';
 export { nextCard, progress, checkTyped, typedKey, typedUnits } from './session.ts';
 export type { Rating, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, LogWriter, History, Memory } from './types.ts';
 export type { TypedUnit } from './session.ts';

@@ -248,7 +248,7 @@ void test('T7 出哪一題：基本題、答錯再出同一題、進階題輪流
   assert.equal(choose([[at('10-24', '18:00:00.000'), 'p', 'good', p0], [at('10-24', '18:00:10.000'), 'p', 'miss', 'deadbeef']]), '問題一');
 });
 
-void test('T8 候選：草稿、暫停、轉錄稿、暫停的目標、寫錯、沒有 ID 不出；重複 ID 照路徑第一篇', () => {
+void test('T8 候選：草稿、暫停、轉錄稿、暫停的目標、寫錯、沒有 ID 不出；重複的 ID 都不出（D-157）', () => {
   const decks = [
     deckEntry('5 複製.md', { 科目: '自然' }, [goal('g5'), goal('g4')]),
     deckEntry('1 草稿.md', { 狀態: '草稿' }, [goal('d1')]),
@@ -258,13 +258,27 @@ void test('T8 候選：草稿、暫停、轉錄稿、暫停的目標、寫錯、
   ];
   assert.equal(decks[4].deck.targets.find(target => target.id === 'g3')?.ok, false);
   const plan = planToday(input(decks, log(), at('10-24')));
-  assert.deepEqual(ids(plan.share), ['g1', 'g4', 'g5']);
-  assert.deepEqual(plan.share.map(item => item.deck), ['4 啟用.md', '4 啟用.md', '5 複製.md']);
-  assert.deepEqual(plan.problems.map(problem => [problem.deck, problem.line]), [['5 複製.md', 5]]);
-  assert.match(plan.problems[0].message, /g4.*4 啟用\.md/);
+  assert.deepEqual(ids(plan.share), ['g1', 'g5']);
+  assert.deepEqual(plan.share.map(item => item.deck), ['4 啟用.md', '5 複製.md']);
   // 紀錄裡有、卡組裡沒有的目標不影響結果。
   const ghost = planToday(input(decks, log([A, 'gone', 'good'], [at('10-23'), 'gone', 'miss']), at('10-24')));
   assert.deepEqual([ghost.share, ghost.more], [plan.share, plan.more]);
+});
+
+void test('D-157 第 19 項 planToday 直接收到重複的 ID：不丟錯、都不出，其他目標照常；不看位置或路徑', () => {
+  const copy = deckEntry('5 複製.md', { 科目: '自然' }, [goal('dup')]);
+  const live = deckEntry('4 啟用.md', { 科目: '自然' }, [goal('dup'), goal('g1')]);
+  for (const decks of [[copy, live], [live, copy]]) assert.deepEqual(ids(planToday(input(decks, log(), at('10-24'))).share), ['g1']);
+  // 同一篇裡的重複也一樣。
+  const inside = deckEntry('同一篇.md', { 科目: '自然' }, [goal('dup'), goal('dup'), goal('g2')]);
+  assert.deepEqual(ids(planToday(input([inside], log(), at('10-24'))).share), ['g2']);
+  // 草稿、暫停的卡組裡的副本讓啟用的也不出。
+  for (const status of ['草稿', '暫停']) {
+    const paused = deckEntry('1 副本.md', { 狀態: status }, [goal('dup')]);
+    assert.deepEqual(ids(planToday(input([paused, live], log(), at('10-24'))).share), ['g1'], status);
+  }
+  // 少了副本就恢復，用的是原本的紀錄。
+  assert.deepEqual(lanes(planToday(input([live], log([A, 'dup', 'good']), at('10-24')))), [['dup', 'due'], ['g1', 'new']]);
 });
 
 void test('T9 濾網：分類完全相同、重要性冒號全形半形都認；濾掉期間的作答照算', () => {
@@ -442,30 +456,32 @@ void test('T14 三年份防退化：planToday 1000 ms、作答後 nextCard＋pro
   assert.ok(median(steps) < 100, 'nextCard + progress ' + median(steps).toFixed(2) + ' ms，防退化門檻 100 ms');
 });
 
-void test('L2-F1 被排除的重複 ID 不參與配對：不汙染原本的配對，也不壓掉不相干的目標', () => {
+void test('D-157 第 19 項重複的 ID 不參與配對：英翻中是重複的時，中翻英照「英翻中不在」排，互不影響', () => {
   const pair = (path: string, word: string, en: string, zh: string) => deckEntry(path, { 科目: '英文' }, [
     '- ' + word + ' 英翻中 ^' + en, '    - ' + word + ' :: 意思', '- ' + word + ' 中翻英 ^' + zh, '    - 意思 :: ' + word,
   ]);
-  const next = (decks: DeckEntry[], rows: Row[]) => {
-    const plan = planToday(input(decks, log(), at('10-24'), { cap: 0 }));
-    assert.deepEqual(ids(plan.more), ['e', 'z2']);
-    return nextCard(plan, input(decks, log(...rows), at('10-24', '19:05:00.000')), { more: true });
-  };
-  // b.md 的 e 是複製來的副本：a.md 的 z 作答過，a.md 的 e 照樣跳過。
-  assert.equal(card(next([pair('a.md', 'borrow', 'e', 'z'), pair('b.md', 'borrow', 'e', 'z2')], [[at('10-24'), 'z', 'good']])).lt, 'z2');
-  // b.md 改成別的字：它的中翻英作答過，不影響 a.md 的 borrow。
-  assert.equal(card(next([pair('a.md', 'borrow', 'e', 'z'), pair('b.md', 'lend', 'e', 'z2')], [[at('10-24'), 'z2', 'good']])).lt, 'e');
+  // 英翻中在的時候，中翻英要等它「記得」才出。
+  assert.deepEqual(ids(planToday(input([pair('a.md', 'borrow', 'e', 'z')], log(), at('10-24'))).share), ['e']);
+  // b.md 的 e 是複製來的副本：e 兩邊都不出，兩篇的中翻英都照「英翻中不在」排；另一邊的作答也不影響。
+  for (const word of ['borrow', 'lend']) {
+    const decks = [pair('a.md', 'borrow', 'e', 'z'), pair('b.md', word, 'e', 'z2')];
+    const plan = planToday(input(decks, log(), at('10-24')));
+    assert.deepEqual(ids(plan.share), ['z', 'z2'], word);
+    assert.equal(card(nextCard(plan, input(decks, log([at('10-24'), 'z', 'good']), at('10-24', '19:05:00.000')), { subject: '英文' })).lt, 'z2', word);
+  }
+  // 中翻英是重複的：英翻中不受影響。
+  assert.deepEqual(ids(planToday(input([pair('a.md', 'borrow', 'e1', 'z'), pair('b.md', 'lend', 'e2', 'z')], log(), at('10-24'))).share), ['e1', 'e2']);
 });
 
-void test('L2-F2 秒數算在有效的那篇卡組：草稿或暫停的卡組有同一個 ID 也不搶走科目', () => {
+void test('D-157 第 19 項重複的 ID 的作答不算進估秒：草稿或暫停的卡組有同一個 ID 時，那些作答不算；少了副本才算', () => {
   const natural = deckEntry('b.md', { 科目: '自然' }, [goal('old'), goal('n1'), goal('n2')]);
   const rows: Row[] = Array.from({ length: 31 }, (_, i) => [local(Date.parse(at('10-20', '20:00:00.000')) + i * 10_000), 'old', 'good']);
+  const plan = planToday(input([natural], log(...rows), at('10-24'), { cap: 20 / 60 }));
+  assert.deepEqual([ids(plan.share), ids(plan.more), plan.share[0].seconds], [['n1', 'n2'], [], 10]);
   for (const status of ['草稿', '暫停']) {
     const copy = deckEntry('a.md', { 科目: '英文', 狀態: status }, [goal('old')]);
-    for (const decks of [[natural], [copy, natural]]) {
-      const plan = planToday(input(decks, log(...rows), at('10-24'), { cap: 20 / 60 }));
-      assert.deepEqual([ids(plan.share), ids(plan.more), plan.share[0].seconds], [['n1', 'n2'], [], 10], status);
-    }
+    const stopped = planToday(input([copy, natural], log(...rows), at('10-24'), { cap: 20 / 60 }));
+    assert.deepEqual([ids(stopped.share), ids(stopped.more), stopped.share[0].seconds], [['n1'], ['n2'], 15], status);
   }
 });
 
