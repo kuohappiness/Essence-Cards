@@ -32,8 +32,10 @@
 .ec-app .ec-q input.ec-blank-input:not(:placeholder-shown) { border-bottom-color: var(--ec-ink); }
 .ec-slot:has(.ec-blank-input:not(:placeholder-shown)) > .ec-lines { visibility: hidden; }
 
-/* 空格和緊接在後面的標點一起換行（rendered.ts 的 .ec-glue）：標點不會被換到下一行開頭 */
+/* 空格和緊接在前後的標點一起換行（rendered.ts 的 .ec-glue）：逗號不會被換到下一行開頭，開括號不會留在行尾。
+   線排滿一行時，空格留出旁邊的位置，標點才不會超出畫面：兩個全形標點（2em）、空格自己的左右邊距（.3em）、接在後面的喇叭（42px） */
 .ec-glue { white-space: nowrap; }
+.ec-glue > .ec-slot { max-width: calc(100% - 2.3em - 42px); }
 
 /* 答案的粗體重點：粗體加一條細的紫色底線（D-068、D-070） */
 .ec-a strong, .ec-a .ec-blank-answer, .ec-mark { background: none; color: inherit; font-weight: 700; text-decoration-line: underline; text-decoration-color: var(--ec-key); text-decoration-thickness: 2px; text-underline-offset: .32em; text-decoration-skip-ink: none; }

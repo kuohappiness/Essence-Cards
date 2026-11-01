@@ -1,4 +1,4 @@
-import { BLANK, closingRun, englishBreak, glueArticles, tailStart } from '../review/index.ts';
+import { BLANK, closingRun, englishBreak, glueArticles, openingRun, tailStart } from '../review/index.ts';
 
 // Obsidian 渲染出來的卡片內容的後處理（D-145）：打字卡的空格、中文後面的英文換行、冠詞連著下一個字、空格後面的標點不換到下一行、喇叭接在最後一個字後面。
 // 只改一般的 HTML 文字；圖、SVG、公式、嵌入、程式碼與填空、空格自己的內容一律不動（Codex 審查 F3）。
@@ -52,25 +52,30 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
   const slot = options.mode === 'typed' ? insertLines(container, options.lines) : null;
   if (slot) blanks.push(slot);
   if (options.english) glueText(container);
-  blanks.forEach(glueClosing);
+  blanks.forEach(gluePunctuation);
   return { slot, tail: attachTail(container) };
 }
 
 /**
- * 空格和緊接在後面的標點包在一起（.ec-glue，不換行）：「有 攪拌 ，」的逗號不會被換到下一行開頭（backlog 技術債）。
+ * 空格和緊接在前後的標點包在一起（.ec-glue，不換行）：「有 攪拌 ，」的逗號不會被換到下一行開頭，「「」不會留在行尾（backlog 技術債）。
  * 中間沒有可以斷行的地方，不靠各瀏覽器怎麼判斷空格和標點的交界能不能斷行（Chromium 會斷，md-cases 量得到）。
- * 只看同一層緊接的文字（==…== 與 ＿＿ 後面直接寫的標點）；中間有空白的不包。最後是標點時，喇叭那一格也在裡面（attachTail）。
+ * 只看同一層緊接的文字（==…== 與 ＿＿ 前後直接寫的標點）；中間有空白的不包。最後是標點時，喇叭那一格也在裡面（attachTail）。
  */
-function glueClosing(blank: HTMLElement): void {
-  const next = blank.nextSibling;
-  if (!(next instanceof Text)) return;
-  const run = closingRun(next.textContent ?? '');
-  if (!run) return;
-  next.splitText(run);
+function gluePunctuation(blank: HTMLElement): void {
+  const before = blank.previousSibling instanceof Text ? blank.previousSibling : null;
+  const after = blank.nextSibling instanceof Text ? blank.nextSibling : null;
+  const opening = before ? openingRun(before.textContent ?? '') : 0;
+  const closing = after ? closingRun(after.textContent ?? '') : 0;
+  if (!opening && !closing) return;
   const glue = document.createElement('span');
   glue.className = 'ec-glue';
   blank.before(glue);
-  glue.append(blank, next);
+  if (before && opening) glue.append(before.splitText(before.length - opening));
+  glue.append(blank);
+  if (after && closing) {
+    after.splitText(closing);
+    glue.append(after);
+  }
 }
 
 /** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線；回傳放線的那一格，找不到 ＿＿ 時是 null。 */

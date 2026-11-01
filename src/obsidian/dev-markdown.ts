@@ -38,11 +38,11 @@ const LONG_LINKS: [string, number[]][] = [
 ];
 // 技術債（backlog）：空格後面緊接的標點不和空格分開換行（W6 畫面修改的再查：「有 攪拌 」後面的逗號被換到下一行開頭）。
 // 每 6px 一格（比一個字窄），行尾剩下的空間一定會有幾格落在「放得下空格、放不下標點」；正面（空的空格）和背面（填上答案）都量。
-// 最後一個是很長的答案：線排滿一行時，標點接在後面也不超出。
+// 最後一個是很長的答案：線排滿一行時，標點接在後面也不超出。空格、句號和喇叭連在一起比一行還寬時一定超出（約 165px 以下），所以「填空在結尾」從 168px 起量。
 const BESIDE: [string, Omit<Case, 'name' | 'width'>, number[]][] = [
   ['填空接全形標點', { text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', expect: stuck() }, sweep(150, 330, 6)],
   ['填空接全形標點（背面）', { text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', revealed: true, expect: stuck() }, sweep(150, 330, 6)],
-  ['填空在結尾', { text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze', expect: r => stuck()(r) && r.sameLine === true }, sweep(150, 330, 6)],
+  ['填空在結尾', { text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze', expect: r => stuck()(r) && r.sameLine === true }, sweep(168, 330, 6)],
   ['填空在括號裡', { text: '把糖放進水裡，再「==攪拌==」一下，糖溶解得比較快。', mode: 'cloze', expect: stuck('「') }, sweep(150, 330, 6)],
   ['打字卡接句點', { text: '他已經下定決心要出國讀書。He has already made up his mind to study ＿＿.', mode: 'typed', lines: 1, english: true, expect: stuck() }, sweep(150, 330, 6)],
   ['打字卡接全形問號', { text: '我可以借你的筆嗎？Can I borrow your ＿＿？', mode: 'typed', lines: 1, english: true, expect: stuck() }, sweep(150, 330, 6)],
