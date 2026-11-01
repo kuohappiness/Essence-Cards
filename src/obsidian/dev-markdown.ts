@@ -13,6 +13,8 @@ interface Case {
   name: string; text: string; rendered?: string; mode?: 'plain' | 'cloze' | 'typed'; lines?: number; english?: boolean; width?: number;
   /** 翻面後（同 Markdown.tsx 的 applyState）：填空的答案出現，打字卡的線寫上 words。 */
   revealed?: boolean; words?: string[];
+  /** false：沒有喇叭（中翻英的正面，答案出現前沒有）。 */
+  speaker?: boolean;
   expect: (r: Row) => boolean;
 }
 type Row = Awaited<ReturnType<typeof runCase>>;
@@ -56,6 +58,9 @@ const BESIDE: [string, Omit<Case, 'name' | 'width'>, number[]][] = [
   ['打字卡四個字接句點', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
   ['打字卡四個字接句點（背面）', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'], expect: stuckWithSpeaker() }, sweep(150, 330, 6)],
   ['打字卡在括號裡', { text: 'You have to (＿＿) today.', mode: 'typed', lines: 2, english: true, expect: stuckWithSpeaker('(') }, sweep(150, 330, 6)],
+  // 手機一行放得下四條線：沒有喇叭時不用為了標點或喇叭拆成兩列。
+  ['打字卡四個字接句點（正面）', { text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, speaker: false, expect: r => stuck()(r) && r.lineRows === 1 }, [338]],
+  ['打字卡四個字在結尾（正面）', { text: '他終於下定決心了。He finally ＿＿', mode: 'typed', lines: 4, english: true, speaker: false, expect: r => !r.overflow && r.lineRows === 1 }, [338]],
   ['打字卡長答案在括號裡', { text: 'He has already (＿＿).', mode: 'typed', lines: 6, english: true, expect: stuckWithSpeaker('(') }, sweep(150, 330, 30)],
   ['打字卡長答案接句點', { text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, expect: stuckWithSpeaker() }, sweep(150, 330, 30)],
 ];
@@ -168,7 +173,7 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
     const before =Array.from(container.querySelectorAll(PROTECTED)).map(el => el.outerHTML);
     const { tail } = postProcess(container, { mode: item.mode ?? 'plain', lines: item.lines ?? 0, english: !!item.english });
     if (item.revealed) reveal(container, item.words ?? []);
-    tail.append(speaker());
+    if (item.speaker !== false) tail.append(speaker());
     const after = Array.from(container.querySelectorAll(PROTECTED)).map(el => el.outerHTML);
     const button = tail.querySelector('button');
     // 最後一個字：喇叭那一格裡的文字（連結也算）；沒有文字時是喇叭前面那個內容。
@@ -201,6 +206,7 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
       afterBreak: breaks.map(br => (br.nextSibling?.textContent ?? '').slice(0, 12)),
       glued: (container.textContent ?? '').includes('a '),
       beside: besideBlanks(container),
+      lineRows: new Set(Array.from(container.querySelectorAll('.ec-line')).map(line => Math.round(line.getBoundingClientRect().top))).size,
       html: container.innerHTML.slice(0, 800),
     };
   } finally {
@@ -214,10 +220,10 @@ const SHOWN: (Omit<Case, 'name' | 'width' | 'expect'> & { label: string })[] = [
   { label: '填空 背面', text: '水溫越==高==、顆粒越==小==、有==攪拌==，糖溶解得越快。', mode: 'cloze', revealed: true },
   { label: '填空在結尾', text: '植物行光合作用時，需要的能量來自==陽光==。', mode: 'cloze' },
   { label: '填空在括號裡', text: '把糖放進水裡，再「==攪拌==」一下，糖溶解得比較快。', mode: 'cloze' },
-  { label: '打字卡 一個字接句點', text: '他昨天弄丟了鑰匙。He lost his ＿＿.', mode: 'typed', lines: 1, english: true },
-  { label: '打字卡 四個字接句點 正面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true },
+  { label: '打字卡 一個字接句點', text: '他昨天弄丟了鑰匙。He lost his ＿＿.', mode: 'typed', lines: 1, english: true, speaker: false },
+  { label: '打字卡 四個字接句點 正面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, speaker: false },
   { label: '打字卡 四個字接句點 背面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'] },
-  { label: '打字卡 六個字接句點', text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true },
+  { label: '打字卡 六個字接句點', text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, speaker: false },
 ];
 
 /** 手機一行的寬度（iPhone 390px 扣掉左右留白）把 SHOWN 排在一起，整個視窗截一張圖；回傳路徑（拿不到 webContents 時是 null）。 */

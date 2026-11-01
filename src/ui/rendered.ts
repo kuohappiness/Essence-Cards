@@ -77,7 +77,10 @@ function gluePunctuation(blank: HTMLElement): void {
   const closing = after ? closingRun(after.textContent ?? '') : 0;
   if (!opening && !closing) return;
   const glue = gluedAround(blank);
-  if (before && opening) glue.append(before.splitText(before.length - opening));
+  if (before && opening) {
+    glue.classList.add('has-opening');
+    glue.append(before.splitText(before.length - opening));
+  }
   glue.append(blank);
   if (after && closing) {
     after.splitText(closing);
