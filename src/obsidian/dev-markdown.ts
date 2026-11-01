@@ -1,5 +1,6 @@
 import { Component, MarkdownRenderer, type App } from 'obsidian';
 import { postProcess } from '../ui/rendered.ts';
+import { keepRendering } from './dev-review.ts';
 
 // 開發命令 md-cases（Codex 審查 F3～F5、再查 R2～R4）：用 Obsidian 真的渲染器跑 rendered.ts 的後處理，量喇叭和最後一個字在不在同一行。
 // Node 的測試沒有 DOM，這些情況只能在 Obsidian 裡驗；結果檔每個情況一列，ok 是 false 的看 html 與數字。
@@ -195,6 +196,8 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
 
 /** md-cases：每個情況一列，ok 是那個情況的 expect 成立。 */
 export async function markdownCases(app: App): Promise<unknown> {
+  // 每個情況都等 requestAnimationFrame：視窗被遮住時它不跑，命令會一直等、沒有結果檔（2026-11-02）。
+  const rendering = keepRendering();
   const root = document.createElement('div');
   root.className = 'ec-app';
   root.style.cssText = 'position:fixed;left:0;top:0;width:auto;height:auto;visibility:hidden;pointer-events:none;z-index:-1';
@@ -208,5 +211,6 @@ export async function markdownCases(app: App): Promise<unknown> {
     return { allOk: rows.every(r => r.ok), failed: rows.filter(r => !r.ok).map(r => r.name), rows };
   } finally {
     root.remove();
+    rendering.restore();
   }
 }
