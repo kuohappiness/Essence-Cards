@@ -423,6 +423,107 @@ void test('L2 R3 小視窗等待中重畫：按鈕維持停用、不另外排一
   assert.ok(buttons().every(button => !button.disabled), '結果回來後解除');
 });
 
+// D-157 第 21 項：用了重複 ID 的目標。小視窗的文字等 §9 截圖給使用者看過再定。
+const DUP = { path: DECK, line: 2, name: 'lend 英翻中', kind: 'duplicate', restore: null, others: [
+  { path: DECK, line: 0, name: 'borrow 英翻中' },
+  { path: 'Essence Cards/單元/別篇.md', line: 4, name: 'loan 英翻中' },
+] };
+void test('D-157 小視窗：duplicate 列出 others，同一篇只有文字、別篇的可以跳轉；按鈕呼叫 resolve(issue, new)，沒有還原的選項', async () => {
+  const stub = createObsidianStub();
+  const { plugin } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { save(view: unknown): Promise<void> } }>(code);
+  const opened: unknown[][] = [];
+  (stub.app.workspace as { openLinkText: unknown }).openLinkText = (...args: unknown[]) => { opened.push(args); return Promise.resolve(); };
+  const choices: unknown[][] = [];
+  const state = {
+    deckStatus: () => ({ missing: 0, issues: [DUP], malformed: [] }), onChange: () => () => {}, ...loadedState,
+    save: () => Promise.resolve({ kind: 'unchanged' }),
+    resolve: (issue: unknown, choice: string) => { choices.push([issue, choice]); return Promise.resolve({ kind: 'done', added: 0 }); },
+  };
+  const saver = wireSave({ plugin, state: () => state, notify() {}, onError(error: unknown) { throw error; } });
+  await saver.save(stub.leaf(DECK).view);
+  const modal = stub.modals[0];
+  assert.equal(modal.contentEl.querySelectorAll('p')[0].text, '第 3 行〈lend 英翻中〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。要改寫成新內容的是這一行，就選下面的按鈕。');
+  assert.deepEqual(modal.contentEl.querySelectorAll('li').map(item => item.text), ['第 1 行〈borrow 英翻中〉', '']);
+  const links = modal.contentEl.querySelectorAll('a');
+  assert.deepEqual(links.map(link => link.text), ['〈別篇〉第 5 行〈loan 英翻中〉']);
+  const buttons = modal.contentEl.querySelectorAll('button');
+  assert.deepEqual(buttons.map(button => button.text), ['這一個是新加的，從頭複習']);
+  buttons[0].click();
+  assert.deepEqual(choices, [[DUP, 'new']]);
+  await wait(0);
+  links[0].click();
+  assert.deepEqual(opened, [['Essence Cards/單元/別篇.md', '', 'tab', { eState: { line: 4 } }]]);
+  assert.equal(modal.isOpen, false, '跳轉時關掉小視窗才看得到');
+});
+
+void test('D-157 小視窗：真的 state 從存檔到選：只換選的那一行，兩個目標都處理完小視窗自己關', async t => {
+  const original = '- borrow 英翻中 ^b4rw7k\n    - borrow :: 借入\n', copy = '- lend 英翻中 ^b4rw7k\n    - lend :: 借出\n';
+  const h = await blockedSetup(t, original + copy, 'none');
+  assert.equal(h.tip(), '有 2 個學習目標的進度連結需要處理');
+  await h.saver.save(h.view);
+  assert.equal(h.view.value, original + copy, '按存檔不換號');
+  assert.equal(h.modals.length, 1);
+  const modal = h.modals[0];
+  assert.deepEqual(modal.contentEl.querySelectorAll('li').map(item => item.text), ['第 3 行〈lend 英翻中〉', '第 1 行〈borrow 英翻中〉']);
+  modal.contentEl.querySelectorAll('button')[1].click();
+  await h.settle();
+  assert.equal(h.view.value, original + '- lend 英翻中 ^aaaaaa\n    - lend :: 借出\n');
+  assert.equal(modal.isOpen, false);
+  assert.deepEqual(h.notices, []);
+  assert.equal(h.tip(), DONE);
+});
+
+for (const [label, fill, notices] of [
+  ['補完回 false', () => Promise.resolve(false), ['〈P〉有 1 個學習目標和別的目標用了同一個編號，先都不出題；打開這篇按存檔，選哪一個是新加的']],
+  ['補完回 true', () => Promise.resolve(true), ['〈P〉有 1 個學習目標和別的目標用了同一個編號，先都不出題；打開這篇按存檔，選哪一個是新加的']],
+  ['補 ID 失敗交給 onError、不通知', () => Promise.reject(Error('寫不進去')), []],
+] as const) void test('D-157 離開筆記時有衝突就通知一次、不開小視窗：' + label, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const stub = createObsidianStub();
+  const { plugin } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => unknown }>(code);
+  const seen: string[] = [], errors: unknown[] = [];
+  const state = { deckStatus: () => ({ missing: 0, issues: [DUP], malformed: [] }), fillIds: fill, onChange: () => () => {}, ...loadedState };
+  wireSave({ plugin, state: () => state, notify(message: string) { seen.push(message); }, onError(error: unknown) { errors.push(error); } });
+  stub.leaves.push(stub.leaf(DECK));
+  stub.fire('layout-change');
+  stub.leaves.length = 0;
+  stub.fire('layout-change');
+  t.mock.timers.tick(1000);
+  await flush();
+  assert.deepEqual(seen, notices);
+  assert.equal(errors.length, notices.length ? 0 : 1);
+  assert.equal(stub.modals.length, 0);
+});
+
+void test('D-157 離開筆記時：沒有衝突不通知（其他待處理也不說）；卸載後不通知', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const leave = async (issues: unknown[], before: (unload: () => void) => void) => {
+    const stub = createObsidianStub();
+    const { plugin, unload } = pluginOf(stub);
+    const { wireSave } = stub.load<{ wireSave: (host: unknown) => unknown }>(code);
+    const seen: string[] = [];
+    let finish: (value: boolean) => void = () => {};
+    const state = { deckStatus: () => ({ missing: 0, issues, malformed: [] }), fillIds: () => new Promise<boolean>(resolve => { finish = resolve; }), onChange: () => () => {}, ...loadedState };
+    wireSave({ plugin, state: () => state, notify(message: string) { seen.push(message); }, onError(error: unknown) { throw error; } });
+    stub.leaves.push(stub.leaf(DECK));
+    stub.fire('layout-change');
+    stub.leaves.length = 0;
+    stub.fire('layout-change');
+    t.mock.timers.tick(1000);
+    await flush();
+    before(unload);
+    finish(false);
+    await flush();
+    return seen;
+  };
+  assert.deepEqual(await leave([], () => {}), []);
+  assert.deepEqual(await leave([{ path: DECK, line: 0, name: 'A', kind: 'lost', restore: 'k3m9x2' }], () => {}), []);
+  assert.equal((await leave([DUP], () => {})).length, 1);
+  assert.deepEqual(await leave([DUP], unload => { unload(); }), []);
+});
+
 // D-154 第 2 點（tasks/icloud-placeholders.md §2）：存檔受阻（這台電腦會補 ID，但還沒讀完或有檔案讀不到）時當下說清楚。
 // 用真的 state（記憶體 Files）做出「還沒讀完」與「讀不到」；替身的 view 把 Editor 的交易套用到自己的文字，save() 把文字寫進
 // 記憶體 Files（Obsidian 的 view.save），編輯器裡的文字一開始就已經自動存檔（和磁碟相同）。

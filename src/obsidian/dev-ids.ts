@@ -325,7 +325,7 @@ export async function saveTest(host: IdsHost): Promise<unknown> {
   out.afterClick = { editor: editor.getValue(), issues: state.deckStatus(trial).issues.map(issue => ({ ...issue })), events: host.devLog.events.slice(events) };
   const modal = Array.from(document.querySelectorAll('.modal-container .essence-cards-issue')).at(-1);
   out.modal = { text: modal?.querySelector('p')?.textContent, buttons: Array.from(modal?.querySelectorAll('button') ?? []).map(b => b.textContent) };
-  out.modalExpected = { text: MESSAGES.lost('能說明蒸發'), buttons: [BUTTONS.restore, BUTTONS.fresh] };
+  out.modalExpected = { text: MESSAGES.lost('能說明蒸發', 1), buttons: [BUTTONS.restore, BUTTONS.fresh] };
   (modal?.querySelector('button.mod-cta') as HTMLElement | null)?.click();
   await sleep(300);
   out.restored = editor.getValue().includes('能說明蒸發 ^' + id);

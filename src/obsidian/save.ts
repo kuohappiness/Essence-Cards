@@ -1,7 +1,7 @@
 import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
-import type { EditorHandle, IdIssue, IdIssueKind, Malformed, State, WriteBlock, WriteResult } from '../state/index.ts';
+import type { DuplicateTarget, EditorHandle, IdIssue, IdIssueKind, Malformed, State, WriteBlock, WriteResult } from '../state/index.ts';
 import { textChanges } from './diff.ts';
 
 // 存檔按鈕、待處理問題的小視窗與離開筆記時的備援（W5 §8-6、D-134），只在電腦接上。
@@ -30,12 +30,21 @@ export const TIPS = {
   needsUpdate: '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習',
   /** 受阻：這台電腦還沒有一份成功的備份（D-150 第 3 點，外掛內備份任務說明 §1-6）；按鈕說明與小視窗也用這一句。 */
   backup: '筆記已自動儲存；備份還沒成功，先不把新目標加入複習，到設定頁看原因',
+  /** 離開筆記時那一篇有重複的編號（D-157）；deck 是卡組的名稱。 */
+  duplicates: (deck: string, n: number) => `〈${deck}〉有 ${n} 個學習目標和別的目標用了同一個編號，先都不出題；打開這篇按存檔，選哪一個是新加的`,
 };
-export const MESSAGES: Record<IdIssueKind, (name: string) => string> = {
+/** line 從 1 算：兩個名稱一樣時（貼上之後還沒改字就按存檔），家長只能靠行號分（D-157）。 */
+export const MESSAGES: Record<IdIssueKind, (name: string, line: number) => string> = {
   lost: name => `〈${name}〉原本的編號不見了（可能在 Obsidian 以外改過這篇筆記）。`,
   changed: name => `〈${name}〉的編號和原本的不一樣。`,
   ambiguous: name => `〈${name}〉那一行有兩個編號。`,
-  duplicate: name => `〈${name}〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。`,
+  duplicate: (name, line) => `第 ${line} 行〈${name}〉和別的學習目標用了同一個編號（可能是整段複製來改的），先都不出題。要改寫成新內容的是這一行，就選下面的按鈕。`,
+};
+/** duplicate 的 others：同一篇、別篇（可以點，打開那一篇、捲到那一行）。line 從 1 算。 */
+const OTHERS = {
+  head: '同一個編號也用在：',
+  same: (line: number, name: string) => `第 ${line} 行〈${name}〉`,
+  other: (deck: string, line: number, name: string) => `〈${deck}〉第 ${line} 行〈${name}〉`,
 };
 /** 離開筆記之後等多久才補（毫秒）。 */
 const LEAVE_DELAY = 1000;
@@ -43,7 +52,9 @@ const LEAVE_DELAY = 1000;
 const SHOWN = 3;
 /** 通知裡的短句，依問題種類（不比對中文訊息）；沒列的用解析時那一句。 */
 const SHORT: Partial<Record<Malformed['code'], string>> = { 'typed-answer-invalid': '中翻英的答案只能是英文單字或片語' };
-export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號' };
+export const BUTTONS = { restore: '還原原本的進度', fresh: '當成新的學習目標，從頭複習', unsure: '找不到可以確定的原本編號', duplicate: '這一個是新加的，從頭複習' };
+/** 卡組給家長看的名稱：檔名，不含 .md。 */
+const deckName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 
 export interface SaveHost {
   plugin: Plugin;
@@ -160,13 +171,30 @@ class IssuesModal extends Modal {
     this.contentEl.empty();
     for (const issue of issues) {
       const row = this.contentEl.createDiv({ cls: 'essence-cards-issue' });
-      row.createEl('p', { text: MESSAGES[issue.kind](issue.name) });
+      row.createEl('p', { text: MESSAGES[issue.kind](issue.name, issue.line + 1) });
+      if (issue.kind === 'duplicate') { this.renderDuplicate(row, issue); continue; }
       const buttons = row.createDiv({ cls: 'essence-cards-issue-buttons' });
       if (issue.restore) buttons.createEl('button', { text: BUTTONS.restore, cls: 'mod-cta' }).addEventListener('click', () => { this.choose(issue, 'restore'); });
       else row.createEl('p', { text: BUTTONS.unsure, cls: 'essence-cards-issue-note' });
       buttons.createEl('button', { text: BUTTONS.fresh }).addEventListener('click', () => { this.choose(issue, 'new'); });
     }
     this.contentEl.querySelectorAll('button').forEach(button => { button.disabled = this.waiting; });
+  }
+  /** duplicate 的一列（D-157）：同一個編號的其他目標與「這一個是新加的」；沒有可以還原的，別篇的不能從這裡改，只能打開來看。 */
+  private renderDuplicate(row: HTMLElement, issue: IdIssue): void {
+    row.createEl('p', { text: OTHERS.head, cls: 'essence-cards-issue-note' });
+    const list = row.createEl('ul', { cls: 'essence-cards-issue-others' });
+    for (const other of issue.others ?? []) {
+      const item = list.createEl('li');
+      if (other.path === issue.path) item.setText(OTHERS.same(other.line + 1, other.name));
+      else item.createEl('a', { text: OTHERS.other(deckName(other.path), other.line + 1, other.name), cls: 'essence-cards-issue-link' }).addEventListener('click', () => { this.jump(other); });
+    }
+    row.createDiv({ cls: 'essence-cards-issue-buttons' }).createEl('button', { text: BUTTONS.duplicate, cls: 'mod-cta' }).addEventListener('click', () => { this.choose(issue, 'new'); });
+  }
+  /** 打開別篇、捲到那一行；小視窗關掉才看得到，開在新分頁，原本那篇還開著。 */
+  private jump(other: DuplicateTarget): void {
+    this.close();
+    this.app.workspace.openLinkText(other.path, '', 'tab', { eState: { line: other.line } }).catch(this.host.onError);
   }
   private choose(issue: IdIssue, choice: 'restore' | 'new'): void {
     const state = this.host.state(), path = this.view.file?.path;
@@ -320,6 +348,9 @@ export function wireSave(host: SaveHost): Saver {
         host.state()?.fillIds(path).then(changed => {
           // 補完之後 state 怎麼看這一篇（開發命令查備援的時序用）。
           host.log?.('補 ' + path + ' → ' + String(changed) + '；' + JSON.stringify(host.state()?.deckStatus(path)));
+          // 重複的編號離開時只說一次、不開小視窗（D-157）；卸載之後不提示（技術債 W2）。
+          const duplicates = host.state()?.deckStatus(path).issues.filter(issue => issue.kind === 'duplicate').length ?? 0;
+          if (alive && duplicates) host.notify(TIPS.duplicates(deckName(path), duplicates));
         }, host.onError);
       }, LEAVE_DELAY);
       timers.add(timer);
