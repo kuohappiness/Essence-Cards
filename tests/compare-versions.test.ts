@@ -10,7 +10,7 @@ import { backupVault } from '../tools/backup.ts';
 import { snapshot } from '../tools/compare/adapter.ts';
 import type { AdapterInput } from '../tools/compare/adapter.ts';
 import { diffSnapshots } from '../tools/compare/snapshot.ts';
-import type { AdapterResult, Snapshot } from '../tools/compare/snapshot.ts';
+import type { AdapterResult, Snapshot, TodaySnap } from '../tools/compare/snapshot.ts';
 import { compareVersions } from '../tools/compare-versions.ts';
 import { goal, makeVault, review, tempFolder } from './helpers/vault.ts';
 
@@ -112,6 +112,14 @@ void test('比較：讀取閘門的改變都抓得到；一邊沒有重複 ID �
   assert.deepEqual(diffSnapshots(gated(), base(), time), ['Essence Cards/A.md：需要新版才讀得懂 → 讀得懂']);
   assert.deepEqual(diffSnapshots(base(), gated(), time), ['Essence Cards/A.md：讀得懂 → 需要新版才讀得懂']);
   assert.deepEqual(diffSnapshots(gated(), gated(), time), []);
+});
+
+void test('比較：今天的份順序不同一定報，ID 裡有分隔符也一樣；從 share 搬到 more 也算（Codex 第五次審查 F6）', () => {
+  const today = (...items: [TodaySnap['list'], string][]): Snapshot => ({ ...base(), today: items.map(([list, lt]) =>
+    ({ list, lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, prompt: null, direction: null })) });
+  assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'a,share:a']), today(['share', 'a,share:a'], ['share', 'a']), time), ['今天的份的順序不同：a、a,share:a → a,share:a、a']);
+  assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'b']), today(['share', 'a'], ['share', 'b']), time), []);
+  assert.deepEqual(diffSnapshots(today(['share', 'a']), today(['more', 'a']), time), ['今天的份的順序不同：a → a', '今天的份裡 a 的 list："share" → "more"']);
 });
 
 void test('比較：ID 剛好是每個物件都有的名稱時還是一個 ID，只在一邊也報得出來', async () => {

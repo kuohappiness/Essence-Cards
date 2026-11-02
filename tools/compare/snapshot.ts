@@ -142,8 +142,9 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
     const show = (value: number | null | 'stopped' | undefined): string => value === undefined ? '（沒有這個目標）' : value === null ? '（新卡）' : value === 'stopped' ? '（停掉了）' : time(value);
     out.push(`${id} 的下次到期：${show(a)} → ${show(b)}`);
   }
-  const order = (list: TodaySnap[]): string => list.map(item => item.list + ':' + item.lt).join(',');
-  if (order(before.today) !== order(after.today)) {
+  // 比結構，不用分隔符接起來：ID 只查是字串，`a,share:a` 接起來會和別的順序一樣（Codex 第五次審查 F6）。
+  const order = (list: TodaySnap[]): string[][] => list.map(item => [item.list, item.lt]);
+  if (!same(order(before.today), order(after.today))) {
     out.push(`今天的份的順序不同：${before.today.map(item => item.lt).join('、') || '（沒有）'} → ${after.today.map(item => item.lt).join('、') || '（沒有）'}`);
   }
   const todayA = new Map(before.today.map(item => [item.lt, item]));
