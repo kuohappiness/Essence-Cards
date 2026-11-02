@@ -43,9 +43,13 @@ export interface CatalogIndex {
   unit(key: string): UnitNode | null;
   /** 找單元（跨單元的出處用）：同一個年級學期、科目與編號。 */
   find(term: string, subject: string, code: string): UnitNode | null;
+  /** 單元現在可以練的目標 ID：目錄的數字與按鈕、當日卡與全部卡的選卡都是這一份。全部暫停或全部草稿的單元是空的（targets 留著參照）。 */
+  unitTargets(key: string): readonly string[];
   /** 這一篇啟用中、沒有被停掉的目標 ID；不是啟用的卡組是空的。 */
   deckTargets(path: string): readonly string[];
 }
+
+const practiced = (unit: UnitNode): readonly UnitTarget[] => unit.status === 'active' ? unit.targets : [];
 
 const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([term, subject, code]);
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
@@ -178,6 +182,10 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
     units, others, unresolved,
     unit: key => nodes.get(key) ?? null,
     find: (term, subject, code) => nodes.get(unitKey(term, subject, code)) ?? null,
+    unitTargets(key) {
+      const unit = nodes.get(key);
+      return unit ? practiced(unit).map(target => target.id) : [];
+    },
     deckTargets: path => deckIds.get(path) ?? [],
   };
 }
@@ -222,7 +230,7 @@ function latestTerm(terms: readonly string[]): string | null {
 export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>): Catalog {
   const view = (unit: UnitNode): UnitView => {
     // 全部暫停：標「暫停」、數字 0；全部是草稿：不顯示數字（§3）。兩種都沒有可以練的目標。
-    const targets = unit.status === 'active' ? unit.targets.map(target => ({ ...target, color: colors.get(target.id) ?? 'new' })) : [];
+    const targets = practiced(unit).map(target => ({ ...target, color: colors.get(target.id) ?? 'new' }));
     return {
       ...unit, targets, color: unitColor(targets.map(target => target.color)),
       count: unit.status === 'draft' ? null : targets.length,

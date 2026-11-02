@@ -214,6 +214,31 @@ void test('§5 中途把目標改暫停，總數減一；卡組筆記的全部�
   assert.equal(view.kind === 'done' && view.done.title, '這篇練完了！');
 });
 
+// Codex L2 的 F2：別的單元寫過來的目標，收的那個單元全部暫停或改草稿時，目錄、選卡、還剩幾張都是 0。
+for (const status of ['暫停', '草稿']) {
+  void test(`§3 §5 單元改成全部${status}：當日卡、全部卡和目錄用同一份目標集合`, async t => {
+    const owner = HEAD('2-2') + '- 目標 x ^x\n    - 出處：2-1 p.3\n    - x 的題目 :: 答\n';
+    const off = `---\n年級學期: 國二上\n科目: 自然\n單元: "2-1"\n狀態: ${status}\n---\n` + targets('b');
+    const h = await setup(t, { [DECK]: HEAD('2-1') + targets('b'), [OTHER]: owner });
+    const round = h.round();
+    const s = await h.open(round);
+    assert.equal(remaining(s.view()), '還剩 2 張');
+    assert.deepEqual(h.state.scope({ unit: UNIT }), { done: 0, total: 2 });
+    h.write(DECK, off);
+    await h.settle();
+    const row = h.state.catalog().terms[0].subjects[0].units[0];
+    assert.equal(row.count, status === '暫停' ? 0 : null);
+    assert.deepEqual([row.today, row.targets], [0, []]);
+    for (const pick of [round, { unit: UNIT }]) {
+      assert.deepEqual(h.state.scope(pick), { done: 0, total: 0 }, JSON.stringify(pick));
+      assert.equal(h.state.next(pick).kind, 'done', JSON.stringify(pick));
+    }
+    assert.equal(remaining(s.view()), '還剩 0 張');
+    // 目標本身還在：擁有者的單元照樣算。
+    assert.deepEqual(h.state.catalog().terms[0].subjects[0].units[1].targets.map(target => target.id), ['x']);
+  });
+}
+
 void test('§5 重排（換日以外）不改已完成數', async t => {
   const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b', 'c') });
   const s = await h.open({ unit: UNIT });

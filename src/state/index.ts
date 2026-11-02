@@ -314,7 +314,7 @@ export function createState(options: StateOptions): State {
   /** 範圍換成 study 的 Pick：目標集合照現在的索引算，所以中途改暫停時總數跟著變。 */
   function studyPick(pick: StudyPick): Pick {
     if ('unit' in pick) {
-      const targets = (catalogIndex().unit(pick.unit)?.targets ?? []).map(target => target.id);
+      const targets = catalogIndex().unitTargets(pick.unit);
       return 'since' in pick ? { targets, since: pick.since } : { targets };
     }
     if ('deck' in pick && 'since' in pick) return { targets: catalogIndex().deckTargets(pick.deck), since: pick.since };
