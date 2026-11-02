@@ -64,7 +64,7 @@ const showConflict = ({ id, targets }: Conflict): string => `${id}（${targets.m
 /** 這一版擋下來的內容，給報告看：沒有差異時也要看得到，例如舊版沒有的判斷、新版找到的重複 ID。 */
 export function gateLines(gates: Gates): string[] {
   return [
-    `需要新版才讀得懂的卡組：${gates.decks.join('、') || '沒有'}`,
+    `需要新版才讀得懂的卡組：${gates.decks.length ? gates.decks.join('、') + '（內容沒有比到）' : '沒有'}`,
     `讀不懂的紀錄行停掉的學習目標：${gates.held.join('、') || '沒有'}`,
     `整份紀錄不完整（全部學習目標都停）：${gates.incomplete ? '是' : '否'}`,
     `重複的學習目標 ID（這些目標都停）：${gates.conflicts === null ? '這一版沒有這個判斷' : gates.conflicts.map(showConflict).join('；') || '沒有'}`,

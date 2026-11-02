@@ -250,7 +250,7 @@ void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘�
   assert.equal(result.comparable, true);
   assert.ok(result.differences.length > 0);
   const text = await readFile(result.report, 'utf8');
-  assert.match(text, /舊版：\n\n- 需要新版才讀得懂的卡組：Essence Cards\/C\.md\n- 讀不懂的紀錄行停掉的學習目標：hld111\n- 整份紀錄不完整（全部學習目標都停）：否\n- 重複的學習目標 ID（這些目標都停）：這一版沒有這個判斷\n/);
+  assert.match(text, /舊版：\n\n- 需要新版才讀得懂的卡組：Essence Cards\/C\.md（內容沒有比到）\n- 讀不懂的紀錄行停掉的學習目標：hld111\n- 整份紀錄不完整（全部學習目標都停）：否\n- 重複的學習目標 ID（這些目標都停）：這一版沒有這個判斷\n/);
   assert.match(text, /新版：\n\n[^]*- 重複的學習目標 ID（這些目標都停）：dup111（Essence Cards\/A\.md 第 3 行「第一份」、Essence Cards\/B\.md 第 1 行「第二份」）\n/);
   assert.match(text, /## 差異（\d+ 項）/);
   assert.match(text, /今天的份的順序不同：aaa111、dup111、new111 → aaa111、new111/);
