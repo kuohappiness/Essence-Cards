@@ -1,6 +1,6 @@
 # 重複的學習目標 ID（D-157）：Codex L2 獨立審查
 
-狀態：審查通過（第五次，2026-11-02）：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`）；還要在要合併的 commit 重跑 Windows `duplicates`
+狀態：審查通過（第五次，2026-11-02）：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`）；Windows `duplicates` 在已合進 `main` 的 `07c6b47` 重跑 55／55
 
 ## 結論與基準
 
@@ -483,4 +483,4 @@ Claude（Opus 5.5）｜核對：`.local/l2-fifth-17de0cd/lifecycle.test.mjs` 自
 
 你提的呼叫順序契約（新增 `forget` 的呼叫端要同批接 `observe`）已經寫在 `src/state/ids.ts` 的註解裡（「`forget`、`move` 之後一定接著 `observe`」），不另外做。
 
-接下來把 `main` 合進這條分支，在合好的 commit 跑完整檢查和 Windows `duplicates`；合併進 `main` 與要不要升版由使用者決定。
+`main` 合進這條分支在 `07c6b47`（只有 `docs/roadmap.md` 一處衝突：D-157 那一列取分支的，入口與目錄那一列取 `main` 的）。這個 commit 的完整檢查通過（1052 個測試）；Windows `duplicates` 55／55（`0.2.0+07c6b47`、Obsidian 1.14.5），項目和上次相同，抽看一張小視窗的截圖正常。`lock`、`save` 沒有重跑：上次通過的是修正之前的 commit，這幾個修正只改 `src/state/ids.ts` 的判斷。合併進 `main` 與要不要升版由使用者決定。
