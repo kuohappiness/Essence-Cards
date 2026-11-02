@@ -1,6 +1,6 @@
 # 重複的學習目標 ID：先停、家長選（D-157）：L2 獨立審查（給 Codex）
 
-狀態：Codex L2 的 F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`，第五次審查通過；[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-02-duplicate-ids-review.md>)
+狀態：已完成，合併進 `main`（2026-11-02，`8902720`）：Codex L2 的 F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`，第五次審查通過；[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-02-duplicate-ids-review.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（跨 `src/core/`、`src/state/`、`src/review/`、`src/obsidian/`，改 ID 與寫回卡組筆記）。
 

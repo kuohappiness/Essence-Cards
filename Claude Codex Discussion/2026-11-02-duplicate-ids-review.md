@@ -1,6 +1,6 @@
 # 重複的學習目標 ID（D-157）：Codex L2 獨立審查
 
-狀態：審查通過（第五次，2026-11-02）：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`）；Windows `duplicates` 在已合進 `main` 的 `07c6b47` 重跑 55／55
+狀態：已完成，合併進 `main`（2026-11-02，`8902720`）：第五次審查通過；F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`）；Windows `duplicates` 在已合進 `main` 的 `07c6b47` 重跑 55／55
 
 ## 結論與基準
 
