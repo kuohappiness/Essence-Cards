@@ -109,6 +109,25 @@ void test('§6 勾「以後不再提醒」後同一台裝置不再出現，清�
   assert.equal(h.stub.modals.length, count + 1);
 });
 
+// Codex L2 的 F1：提醒開著時停用外掛，之後什麼都不能開、不能寫。
+void test('§1 §6 提醒開著時停用外掛：提醒關掉；再按開始練習不開複習、不記「不再提醒」；命令也不作用', async t => {
+  const h = await setup(t);
+  const view = h.open(ACTIVE);
+  h.activate(view);
+  h.button(view, '全部卡')?.click();
+  const modal = h.stub.modals.at(-1);
+  assert.ok(modal?.isOpen);
+  const [, begin] = modal.contentEl.querySelectorAll('button');
+  (modal.contentEl.querySelectorAll('input')[0] as unknown as { checked: boolean }).checked = true;
+  h.unload();
+  assert.equal(modal.isOpen, false);
+  begin.click();
+  assert.deepEqual(h.starts, []);
+  assert.equal(h.stub.storage(NO_REMIND), null);
+  assert.equal(h.commands.get('full-deck')?.checkCallback(true), false);
+  assert.equal(h.commands.get('preview')?.checkCallback(true), false);
+});
+
 void test('§6 §7 開關外掛後按鈕不重複（W2 的回歸）：卸載時拿掉；再接一次只有一顆', async t => {
   const h = await setup(t, { [PREVIEW_ON]: true });
   const view = h.open(ACTIVE);

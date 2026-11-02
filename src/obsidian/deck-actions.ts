@@ -26,13 +26,17 @@ export interface DeckActionsHost {
 /** 全部卡按下去先出的提醒（D-146 的原文）：12 是這一輪的目標數；只記這台裝置。目錄的全部卡不提醒。 */
 class RemindModal extends Modal {
   private readonly count: number;
-  private readonly begin: () => void;
-  constructor(app: App, count: number, begin: () => void) {
+  private readonly modals: Set<Modal>;
+  /** 按了開始練習；off 是有沒有勾「以後不再提醒」。 */
+  private readonly begin: (off: boolean) => void;
+  constructor(app: App, count: number, modals: Set<Modal>, begin: (off: boolean) => void) {
     super(app);
     this.count = count;
+    this.modals = modals;
     this.begin = begin;
   }
   onOpen(): void {
+    this.modals.add(this);
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl('p', { text: `將開始完整練習本篇的 ${String(this.count)} 個學習目標。` });
@@ -44,12 +48,12 @@ class RemindModal extends Modal {
     const buttons = contentEl.createDiv({ cls: 'essence-cards-issue-buttons' });
     buttons.createEl('button', { text: '取消' }).addEventListener('click', () => { this.close(); });
     buttons.createEl('button', { text: '開始練習', cls: 'mod-cta' }).addEventListener('click', () => {
-      if (box.checked) noRemind.set(this.app, true);
+      const off = box.checked;
       this.close();
-      this.begin();
+      this.begin(off);
     });
   }
-  onClose(): void { this.contentEl.empty(); }
+  onClose(): void { this.modals.delete(this); this.contentEl.empty(); }
 }
 
 export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } {
@@ -57,9 +61,12 @@ export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } 
   const { app } = plugin;
   const full = new Map<MarkdownView, HTMLElement>();
   const previews = new Map<MarkdownView, HTMLElement>();
+  /** 開著的提醒：停用外掛時關掉（任務說明 §1：停用之後什麼都不寫）。 */
+  const modals = new Set<Modal>();
   let alive = true;
   plugin.register(() => {
     alive = false;
+    for (const modal of [...modals]) modal.close();
     for (const buttons of [full, previews]) {
       for (const button of buttons.values()) button.remove();
       buttons.clear();
@@ -67,10 +74,10 @@ export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } 
   });
 
   /** 全部卡的目標：只有啟用的卡組、可出的目標；草稿、暫停、轉錄稿、一般筆記是空的（§6）。 */
-  const targetsOf = (path: string): readonly string[] => host.state()?.deckTargets(path) ?? [];
+  const targetsOf = (path: string): readonly string[] => alive ? host.state()?.deckTargets(path) ?? [] : [];
   /** 預覽：開關打開，而且是讀得懂的卡組；草稿、暫停也可以（§7）。需要新版的不在 state.decks() 裡，不能照舊的讀法顯示。 */
   function canPreview(path: string): boolean {
-    if (!previewButton.get(app)) return false;
+    if (!alive || !previewButton.get(app)) return false;
     const entry = host.state()?.decks().find(each => each.path === path);
     return !!entry && !entry.deck.props.isTranscript;
   }
@@ -80,11 +87,17 @@ export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } 
     if (!count) return;
     // 一輪從按下去的時間算（D-163 第 4 點）：提醒開著時，從按「開始練習」算。
     const begin = (): void => { host.start({ deck: path, since: Date.now() }); };
-    if (noRemind.get(app)) begin();
-    else new RemindModal(app, count, begin).open();
+    if (noRemind.get(app)) { begin(); return; }
+    new RemindModal(app, count, modals, off => {
+      // 提醒開著時停用了外掛：什麼都不做（任務說明 §1）。
+      if (!alive) return;
+      if (off) noRemind.set(app, true);
+      begin();
+    }).open();
   }
   /** 內容讀編輯器目前的文字：看到的就是畫面上寫的（§7）。 */
   function openPreview(view: MarkdownView, path: string): void {
+    if (!alive) return;
     const session = createPreview({ path, deck: parseDeck(view.editor.getValue()), reveal: previewReveal.get(app) });
     if (session) host.preview(session);
     else host.notify(NO_PREVIEW);

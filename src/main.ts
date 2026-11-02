@@ -162,7 +162,8 @@ export default class EssenceCardsPlugin extends Plugin {
 
   /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
   startReview(pick: StudyPick): ReviewHandle | null {
-    if (!this.state) return null;
+    // 停用之後不開畫面，也就不會記錄作答（什麼都不寫，D-074）。
+    if (!this.state || this.unloaded) return null;
     const pickedAt = performance.now();
     this.review?.close();
     this.review = openReview({
@@ -179,7 +180,7 @@ export default class EssenceCardsPlugin extends Plugin {
 
   /** 預覽（D-161）：不記錄，沒有回報的旗子；結束時回筆記。 */
   private startPreview(session: Session): void {
-    if (!this.state) return;
+    if (!this.state || this.unloaded) return;
     this.review?.close();
     this.review = openPreview({
       app: this.app, state: this.state,
@@ -190,7 +191,8 @@ export default class EssenceCardsPlugin extends Plugin {
   }
 
   /** 打開入口或目錄：全螢幕，還沒讀完也能開（寫「正在讀取卡組…」）。已經開著就換畫面。 */
-  openEntry(screen: 'entry' | 'catalog' = 'entry'): EntryHandle {
+  openEntry(screen: 'entry' | 'catalog' = 'entry'): EntryHandle | null {
+    if (this.unloaded) return null;
     if (this.entry) { this.entry.show(screen); return this.entry; }
     this.entry = openEntry({
       app: this.app, state: () => this.state, screen,

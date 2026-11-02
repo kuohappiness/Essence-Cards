@@ -228,6 +228,7 @@ void test('§8 電腦上有內容需要新版：不跳通知，狀態列寫一�
 });
 
 void test('§8 手機模式：狀態列沒有，需要新版的通知還在；讀不到的通知也在', async t => {
+  quiet(t);
   const newer = 'Essence Cards/新寫法.md';
   const h = host({ ...deck, [newer]: '---\n需要版本: 9.0.0\n---\n- 目標 ^bbbbbb\n    - Q :: A\n' });
   t.after(() => { h.plugin.onunload(); });
@@ -247,6 +248,7 @@ void test('§8 手機模式：狀態列沒有，需要新版的通知還在；�
 });
 
 void test('§8 狀態列跟著 unread：從有變沒有時一行消失，不用重開', async t => {
+  quiet(t);
   let failing = true;
   const h = host(deck, { desktop: true, failRead: path => failing && path === 'Essence Cards/a.md' });
   t.after(() => { h.plugin.onunload(); });
@@ -281,8 +283,14 @@ void test('§1 圖示與命令打開入口，「目錄」直接開目錄；開�
   assert.deepEqual(closes, ['show catalog'], '已經開著就換畫面，不開第二層');
   h.plugin.onunload();
   assert.ok(closes.includes('close'), '停用外掛時入口關掉');
+  // Codex L2 的 F1：停用之後不開畫面，也就不會寫紀錄。
+  const before = opened.length;
   h.commands.get('open-catalog')?.callback?.();
-  assert.equal(opened.at(-1)?.screen, 'catalog');
+  assert.equal(opened.length, before, '停用之後不開入口');
+  let reviews = 0;
+  h.obsidian.__openReview = () => { reviews++; return { close() {}, session: {} }; };
+  assert.equal(h.plugin.startReview({ subject: '自然' }), null);
+  assert.equal(reviews, 0, '停用之後不開複習');
 });
 
 void test('§1 複習中點出處：複習與入口都關掉，筆記開在最上層；複習關掉時入口的數字重新取', async t => {
