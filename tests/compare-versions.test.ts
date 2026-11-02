@@ -58,7 +58,7 @@ void test('比較：沒 ID 的目標多出或消失、題目指紋、問題與�
   const after = base();
   after.decks[0].targets.push({ key: '@4:新的', id: null, name: '新的', line: 4, ok: true, fingerprints: ['33333333'], importance: 'medium', paused: false, direction: null });
   after.decks[0].targets[0].fingerprints = ['44444444'];
-  after.decks[0].problems = ['4 error missing-answer'];
+  after.decks[0].problems = [{ line: 4, level: 'error', code: 'missing-answer' }];
   after.decks[0].props.status = 'paused';
   assert.deepEqual(diffSnapshots(base(), after, time), [
     'Essence Cards/A.md 的屬性 status："active" → "paused"',
@@ -83,10 +83,11 @@ void test('比較：同一個 key 出現好幾次（重複的 ID）時每一個�
   const more = twice();
   more.decks[0].targets.push({ ...more.decks[0].targets[1], name: 'Third', line: 4 });
   assert.deepEqual(diffSnapshots(twice(), more, time), ['Essence Cards/A.md 的 abc234 出現次數：2 → 3']);
+  const duplicate = { line: 2, level: 'error', code: 'duplicate-id' };
   const problems = base();
-  problems.decks[0].problems = ['2 error duplicate-id', '2 error duplicate-id'];
+  problems.decks[0].problems = [duplicate, duplicate];
   const fewer = base();
-  fewer.decks[0].problems = ['2 error duplicate-id'];
+  fewer.decks[0].problems = [duplicate];
   assert.deepEqual(diffSnapshots(problems, fewer, time), ['Essence Cards/A.md 少了問題：2 error duplicate-id']);
 });
 
@@ -120,6 +121,22 @@ void test('比較：今天的份順序不同一定報，ID 裡有分隔符也一
   assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'a,share:a']), today(['share', 'a,share:a'], ['share', 'a']), time), ['今天的份的順序不同：a、a,share:a → a,share:a、a']);
   assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'b']), today(['share', 'a'], ['share', 'b']), time), []);
   assert.deepEqual(diffSnapshots(today(['share', 'a']), today(['more', 'a']), time), ['今天的份的順序不同：a → a', '今天的份裡 a 的 list："share" → "more"']);
+});
+
+void test('比較：單元與問題的切法不同就是不同，接起來的字串一樣也要報', () => {
+  const withUnit = (code: string, name: string): Snapshot => {
+    const snap = base();
+    snap.decks[0].props.unit = { code, name };
+    return snap;
+  };
+  assert.deepEqual(diffSnapshots(withUnit('L1', 'Back to School'), withUnit('L1 Back', 'to School'), time),
+    ['Essence Cards/A.md 的屬性 unit：{"code":"L1","name":"Back to School"} → {"code":"L1 Back","name":"to School"}']);
+  const withProblem = (level: string, code: string): Snapshot => {
+    const snap = base();
+    snap.decks[0].problems = [{ line: 1, level, code }];
+    return snap;
+  };
+  assert.deepEqual(diffSnapshots(withProblem('a b', 'c'), withProblem('a', 'b c'), time), ['Essence Cards/A.md 少了問題：1 a b c', 'Essence Cards/A.md 多了問題：1 a b c']);
 });
 
 void test('比較：ID 剛好是每個物件都有的名稱時還是一個 ID，只在一邊也報得出來', async () => {
@@ -302,13 +319,13 @@ void test('送給比較端的每個值都要符合比較資料的形狀：換了
     [A]: '---\n年級學期: 國二上\n科目: 英文\n單元: L1 Back to School\n分類:\n  - 單字\n狀態: 啟用\n---\n\n- borrow 英翻中 ^b4rw7k\n    - borrow :: v. 借入\n        - 例句：Can I borrow your pen?\n    - 重要性：高\n- uniform 英翻中 ^u6vf2m\n    - uniform :: n. 制服\n    - 狀態：暫停\n- 寫錯的目標 ^k3m9x2\n    - 題目 ::\n- 還沒有 ID 的目標\n    - 題目 :: 答案\n',
     [LOG]: review('2026-10-20T20:00:00.000+08:00', 'b4rw7k') + '\n',
   } };
-  const props = { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: 'L1 Back to School', categories: ['單字'] };
+  const props = { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, categories: ['單字'] };
   for (const dir of [await deployed(t), root]) {
     const snap = await snapshot(dir, full);
     assert.deepEqual(snap.decks[0].props, props);
     assert.deepEqual(snap.decks[0].targets.map(target => [target.key, target.ok, target.direction, target.paused, target.importance]), [
       ['b4rw7k', true, 'en-zh', false, 'high'], ['u6vf2m', true, 'en-zh', true, 'medium'], ['k3m9x2', false, null, false, 'medium'], ['@18:還沒有 ID 的目標', true, null, false, 'medium']]);
-    assert.deepEqual(snap.decks[0].problems, ['17 error missing-answer']);
+    assert.deepEqual(snap.decks[0].problems, [{ line: 17, level: 'error', code: 'missing-answer' }]);
     assert.deepEqual(JSON.parse(JSON.stringify(snap)), snap);
   }
 
@@ -461,9 +478,9 @@ const fakeGood = () => ({
 });
 const fakeSnapshot: Snapshot = {
   gates: { decks: [C], held: ['hld111'], incomplete: false, conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }] },
-  decks: [{ path: A, props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: 'L1 Back', categories: ['單字'] },
+  decks: [{ path: A, props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back' }, categories: ['單字'] },
     targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh' }],
-    problems: ['1 error x'] }],
+    problems: [{ line: 1, level: 'error', code: 'x' }] }],
   due: { aaa111: NOW + 0.5 },
   today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, prompt: '11111111', direction: 'en-zh' }],
   days: days(1),

@@ -14,13 +14,14 @@ interface TargetSnap {
   paused: boolean;
   direction: string | null;
 }
+interface Problem { line: number; level: string; code: string }
+// 單元與問題的欄位分開放，不接成字串：`L1 Back` ＋ `to School` 接起來和 `L1` ＋ `Back to School` 一樣，切法變了比不出來。
 export interface DeckSnap {
   path: string;
   /** 會影響排程的屬性。 */
-  props: { status: string; isTranscript: boolean; term: string | null; subject: string | null; unit: string | null; categories: string[] };
+  props: { status: string; isTranscript: boolean; term: string | null; subject: string | null; unit: { code: string; name: string } | null; categories: string[] };
   targets: TargetSnap[];
-  /** 問題清單：`<行> <level> <code>`。 */
-  problems: string[];
+  problems: Problem[];
 }
 export interface TodaySnap {
   list: 'share' | 'more';
@@ -59,6 +60,7 @@ export interface Snapshot {
 export type AdapterResult = { ok: true; snapshot: Snapshot } | { ok: false; reason: string };
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+const showProblem = ({ line, level, code }: Problem): string => `${line} ${level} ${code}`;
 const showConflict = ({ id, targets }: Conflict): string => `${id}（${targets.map(target => `${target.path} 第 ${target.line + 1} 行「${target.name}」`).join('、')}）`;
 
 /** 這一版擋下來的內容，給報告看：沒有差異時也要看得到，例如舊版沒有的判斷、新版找到的重複 ID。 */
@@ -132,9 +134,9 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
         }
       }
     }
-    const problemsA = groupBy(a.problems, problem => problem), problemsB = groupBy(b.problems, problem => problem);
-    for (const [problem, list] of problemsA) for (let i = problemsB.get(problem)?.length ?? 0; i < list.length; i++) out.push(`${path} 少了問題：${problem}`);
-    for (const [problem, list] of problemsB) for (let i = problemsA.get(problem)?.length ?? 0; i < list.length; i++) out.push(`${path} 多了問題：${problem}`);
+    const problemsA = groupBy(a.problems, problem => JSON.stringify(problem)), problemsB = groupBy(b.problems, problem => JSON.stringify(problem));
+    for (const [key, list] of problemsA) for (let i = problemsB.get(key)?.length ?? 0; i < list.length; i++) out.push(`${path} 少了問題：${showProblem(list[0])}`);
+    for (const [key, list] of problemsB) for (let i = problemsA.get(key)?.length ?? 0; i < list.length; i++) out.push(`${path} 多了問題：${showProblem(list[0])}`);
   }
   for (const id of [...new Set([...Object.keys(before.due), ...Object.keys(after.due)])].sort()) {
     // 只在一邊的 ID 可能叫 constructor：另一邊取到的是每個物件都有的函式，不是沒有這個目標。

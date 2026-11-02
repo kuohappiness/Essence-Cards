@@ -130,7 +130,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
     path: text(path, 'decks() 的 path'),
     props: { status: text(props.status, 'props.status'), isTranscript: yesNo(props.isTranscript, 'props.isTranscript'),
       term: textOrNull(props.term, 'props.term'), subject: textOrNull(props.subject, 'props.subject'),
-      unit: props.unit === null ? null : (text(props.unit.code, 'props.unit') + ' ' + text(props.unit.name, 'props.unit')).trim(),
+      unit: props.unit === null ? null : { code: text(props.unit.code, 'props.unit'), name: text(props.unit.name, 'props.unit') },
       categories: strings(props.categories, 'props.categories') },
     targets: array<TargetLike>(targets, 'targets').map(target => {
       const id = textOrNull(target.id, 'target.id'), name = text(target.name, 'target.name'), line = integer(target.line, 'target.line');
@@ -140,7 +140,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
         direction: textOrNull(target.direction, 'target.direction') };
     }),
     problems: array<ProblemLike>(problems, 'problems').map(problem =>
-      `${integer(problem.line, 'problems 的 line')} ${text(problem.level, 'problems 的 level')} ${text(problem.code, 'problems 的 code')}`),
+      ({ line: integer(problem.line, 'problems 的 line'), level: text(problem.level, 'problems 的 level'), code: text(problem.code, 'problems 的 code') })),
   })), deck => deck.path, 'decks() 的 path');
 
   const todayInput = state.input();
