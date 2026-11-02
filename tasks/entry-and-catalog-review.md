@@ -1,6 +1,6 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：第一輪審完（[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)），F1～F6 都修了，待再審修正的部分（[第二輪](#再審第二輪)）。只審查，不改產品程式。
+狀態：第二輪審完（[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）：第一輪的修正都通過；R2-F1 等使用者決定，修完再審那一段。只審查，不改產品程式。
 
 ## 再審（第二輪）
 
