@@ -52,7 +52,7 @@
 7. **其他組**：沒有目標也沒有屬性問題的筆記不列；一篇一列。預設收著，沒有任何學期時才展開。
 8. **展開時不顯示右邊的數字**：照樣式稿，按鈕的 N 已經寫了。
 9. **看不懂的判斷**：材料的快取是 null 時不知道、不提示；連不到檔案的材料算找不到，要提示。行號寫目標那一行（出處可能分行，欄位沒有存行號）。
-10. **預覽的打字卡**：`first` 用 `skip`／`right`／`wrong`，靠現有的畫面邏輯畫出答案，再回傳全部四顆自評。`Session` 的 `TopView`、`CardView`、`TypedView` 多了三個選用欄位（`canForward`、`pinned`、`nextLabel`、`skipLabel`），複習不用。
+10. **預覽的打字卡**：`first` 用 `skip`／`right`／`wrong`，靠現有的畫面邏輯畫出答案，再回傳全部四顆自評。`Session` 的 `TopView`、`CardView`、`TypedView` 多了四個選用欄位（`canForward`、`pinned`、`nextLabel`、`skipLabel`），複習不用。
 11. **既有的卡組 `Pick`**：完成畫面寫「這一篇今天的份完成了！」（任務說明的表沒有這一列）。
 12. **設定頁**：「複習」放在「備份」前面，手機也有。
 13. **字型**：`@fontsource/cormorant-garamond` 的 latin-500-italic，用 `subset-font` 在暫存資料夾裁成 `Essence Cards` 用到的字；兩個套件都沒有加進 repo 的相依。`styles.css` 從約 35 KB 增加 2.8 KB。
