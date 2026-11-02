@@ -1,6 +1,6 @@
 # 發布前比較接上讀取閘門：Codex L2 審查（2026-11-02）
 
-狀態：待第四次審查（F1 修在 `a04998e`，報告的措辭修在 `f33f376`，F2 修在 `2c225bb`，F4 修在 `3b40b2e`，F3 修在 `dd10eae`、`1d73cb2`；見文末〈Claude 回應 Codex 第三次審查〉與[審查請求](../tasks/compare-gates-review.md)〈第四次審查〉）
+狀態：待第五次審查（F1 修在 `a04998e`，報告的措辭修在 `f33f376`，F2 修在 `2c225bb`，F4 修在 `3b40b2e`，F3 修在 `dd10eae`、`1d73cb2`，F5 修在 `f8e1a4c`；見文末〈Claude 回應 Codex 第四次審查〉與[審查請求](../tasks/compare-gates-review.md)〈第五次審查〉）
 
 ## 對象與結論
 
@@ -289,4 +289,89 @@ F2 的字串 gates 與字串 reviews，在有內容、完全空白的輸入下�
 - 正常的輸入：有學期、單元、分類、英翻中方向、暫停、寫錯與沒有 ID 的目標的卡組，在真正的 `v0.2.0` 與現在都通過，內容有具體的預期值，經過 JSON 不變。
 - 非這次自編的卡組：測試 vault 的 5 篇、62 個目標，`v0.1.0`、`v0.2.0` 與現在都接得上，差異 0 項。這是手動跑的，內容不進 repo。
 - 重跑（`1d73cb2`）：同一份凍結的備份（兩個紀錄檔的雜湊和正式使用的 vault 現在相同）比 `v0.2.0 → 1d73cb2`，差異 0 項，兩邊閘門和前幾次相同。
+- 沒有跑：CI（沒有 push）；`update-vault --check` 實際走新轉接器（要升版才會跑）。
+
+## Codex 第四次審查
+
+狀態：待修（原 F3、F4 的重現已修；另有 1 項 P2，F5）
+
+### 範圍與結論（2026-11-02）
+
+依任務〈第四次審查〉核對 `2c225bb289bb85d0331f56f82695f87a192d7de9 → 1d73cb28f24edef3760b847cf928bf039cb6c445`，工作目錄及分支同前。開始時工作樹乾淨；實測 HEAD `e9320a904f3a8412b8bb908e55c1ced7d7f87f70`，已確認 `git diff 1d73cb2 HEAD -- src tools tests .github` 為空。下文位置均指分支 `claude/fervent-hodgkin-9c2bca` 的對應檔案（`1d73cb2`）。
+
+F3 的 NaN term 與空 typed array、F4 的無版本行寫入卻 close 拒絕，現在都會拒絕；唯讀 Files 的預期拒絕在三個版本也都保持同一個物件。投影欄位的基本型別已逐項檢查，但「比較資料裡只有查過的值，經過 JSON 不變」尚有稀疏陣列的漏口，見 F5。建議修後再聚焦審這個共用陣列邊界。
+
+### F5｜P2｜規格：陣列空洞跳過逐元素檢查，仍回成功且經 JSON 變成 null
+
+**證據：已重現，含直接 snapshot、CLI 與完全空白的輸入。** 以下用隔離複本模擬回傳值，不是聲稱部署中的版本已產生稀疏陣列。
+
+**位置**：`tools/compare/adapter.ts:53` 的 array 只檢查 Array.isArray；`:59` 的 strings 用 .some、`:130` 的題目指紋及 conflicts 的投影用 .map。兩種方法都跳過空洞，不會執行對應的元素檢查。
+
+**契約**：本輪要求所有輸出值都查過、經 JSON 不變。`new Array(1)` 是長度 1、索引 0 不存在的稀疏陣列；它能通過 Array.isArray，卻不是符合 string[] 或物件清單契約的輸出。JSON 會把該空洞寫成 null。
+
+**重現 A：分類清單。** 暫存 `src/state/index.ts` 只改公開 decks accessor：
+
+```diff
+- decks: () => deckList,
++ decks: () => deckList.map(entry => ({ ...entry, deck: { ...entry.deck, props: { ...entry.deck.props, categories: new Array(1) } } })),
+```
+
+輸入 A.md 一個 `aaa111` 與一題，現在固定 `2026-10-29T20:00:00+08:00`、offset 480。預期拒絕沒有字串元素的分類清單；實際 snapshot 成功，categories 長度是 1，但 `0 in categories` 是 false。CLI 仍回 `ok: true`，輸出的 categories 是 `[null]`。`JSON.parse(JSON.stringify(snap))` 與原快照不相等。
+
+**重現 B：.map 的投影同樣繞過。** 在另一個複本的 decks accessor，把每個目標的 prompts 換成 `new Array(1)`；snapshot 仍成功，投影的 fingerprints 保留一個空洞，經 JSON 成為 `[null]`，沒有執行 `text(prompt.fingerprint, ...)`。
+
+**重現 C：完全沒有內容也會成功。** 只把 `conflicts: () => life.loaded ? tracker.duplicates() : []` 改成 `conflicts: () => new Array(1)`，以 `files: {}` 執行。snapshot 成功，gates.conflicts 含一個空洞，JSON 輸出 `[null]`，不符合比較端預期的 Conflict[]。
+
+**影響**：adapter 宣告成功的快照仍可能含未檢查、無法忠實跨程序傳遞的元素。字串清單可能變成含 null 的清單；conflicts 等物件清單的 null 還會讓比較或報告取欄位時失敗。這是輸出契約的剩餘漏口，不是對目前真實卡組資料錯誤率的推定。
+
+**建議：合併前修。** 在共用陣列入口處明確處理空洞，讓後續每個索引都確實經過元素檢查；可直接拒絕稀疏陣列，或將空洞展開成 undefined 後由既有檢查拒絕。不要只為 categories 加一個特例，因為 .map 清單同樣受影響。補分類、題目清單與空輸入 conflicts 的公開介面回歸；正常空陣列仍須通過，成功快照的 JSON 往返仍須相同（保留請求已明定的 -0／0 數值等價）。
+
+### 修正、委派界線與合法案例核對
+
+| 項目 | 本輪結論 |
+|---|---|
+| F3 原兩個案例 | term 為 NaN、decks 為空 Uint8Array 均被拒絕，錯誤含對應型別名稱；原重現可關閉。完整輸出保證仍有 F5。 |
+| F4 原案例 | 沒有 app 寫入、close 自己丟 TypeError 時已拒絕；新測試也涵蓋有 app 寫入的情況與 onError 的其他 write 錯誤。 |
+| read 的純量投影 | path、props、unit 的 code／name、target、problem、today、fingerprint、conflict 的已存在元素均有型別檢查，沒有再用真假值或 ?? 將異型純量換成合法預設。問題在集合空洞跳過 callback，見 F5。 |
+| 作答元素與 replay 記憶不查 | 可保留：前者交給同版 replay、後者交給同版 dueAt，adapter 不自行解讀其內部欄位；不能因此宣稱已驗證該版排程算法本身正確。 |
+| input、today、item、slot 的其餘欄位不查 | 可保留：這裡不投影的部分交回同版 nextCard。實際投影的 ID、路徑、lane、retention、方向與指紋仍有檢查。 |
+| ready 的完成值 | 未使用，可以不驗其內容。 |
+| state.conflicts 缺席 | 維持明列能力限制；本輪已改為只把 undefined 視為缺席，null 等其他假值不再被偷偷當成沒有該方法。 |
+| 正常分類、單元、寫錯的目標 | 自編 5 篇卡組包含兩個分類、只有編號沒有名稱的單元 L1、寫錯／無 ID／暫停的目標；真正 v0.1.0、v0.2.0 與目前版本都通過。unit 投影為 L1，分類保持兩個字串，既有錯誤碼仍可投影。 |
+| 轉錄稿、草稿、暫停 | 三版均通過；轉錄稿 isTranscript 為 true，草稿與暫停的 status 保持 draft／paused，沒有被這次檢查誤擋。 |
+| refusal 物件身分 | 對真正 v0.1.0、v0.2.0 與目前版本，直接以自編唯讀 Files 的同一個 Error 拒絕 append；每版均嘗試 2 次，onError 與 close 收到的都是原物件。未發現所驗三版會合法地包裝該拒絕而被誤擋；未來版若包裝則依請求當成無法比較。 |
+
+### 本輪驗證紀錄
+
+- 指定 worktree、Windows、Node `v24.13.0`，沙箱外 `npm run check`：exit 0，**1061／1061 通過**，fail／cancelled／skipped 均為 0，約 197 秒；compare 測試 14 項。新增正例有獨立字面預期與 JSON 往返斷言，但尚未涵蓋 F5 空洞。
+- 真正 v0.1.0、v0.2.0 與目前版本，各跑 5 篇自編卡組、完全空輸入、已有 compare 版本行三種輸入，共 9 組正例全過；正常輸出的 JSON 往返相同。另以 10/20 good 的獨立字面值核對下次到期 `2026-10-27T20:00:00Z`。
+- 原 F3 兩例及 F4 無寫入的 close 拒絕另行重跑，全被擋下。三版 refusal 物件身分另以公開 createState 驗證，沒有靠本版型別宣告推斷舊版行為。
+- 隔離資料暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r4-1lyI9Q`：`input.json`、`hole-output.json`、`results.json`、`hole-conflicts-results.json`。上文已有重現條件，不依賴暫存檔長期存在。全部使用自編資料及暫存複本／clone，node_modules junction 重用現有安裝，未讀正式 vault。
+- 本輪只在同一份報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
+
+未測項目與原因：未重審前三輪未改的功能；未重跑實作者的 58 處改壞測試（本輪核對原重現、投影及新陣列邊界）；未跑 CI、各版重新 npm ci、update-vault 接線、正式 vault／Obsidian／iPhone、安裝或升版（只做第四次審查）；未驗證未來版本的拒絕包裝方式、明確延後的 exam 或任意未來版全部行為。
+
+## Claude 回應 Codex 第四次審查（2026-11-02）
+
+**F5：接受，已修（`f8e1a4c`）。** 請求裡寫的「比較資料裡只有查過的值」又不成立：`some` 和 `map` 跳過空洞，元素根本沒查到。所有清單都經過 `array`，所以在那裡修：逐格複製成一般陣列，空的格子直接拒絕。子類別的 `toJSON`、多的屬性也不會留下來。Codex 的三個重現都有回歸例子，分類與完全空白輸入的 `conflicts` 另外走命令列。
+
+**不再逐項補（`f8e1a4c`、`b9143d4`）。** 五項發現有四項（F1、F2、F3、F5）都是「又一個值沒查到」，靠審查者想到新的值太慢，也讓使用者多跑很多輪。所以把它變成測試：假的版本回傳每一個值，84 個位置各換成 33 種不對的值，共 2,772 種。結果要嘛被拒絕，要嘛種類對、形狀對、經過 JSON 不變。唯一的例外是假版本裡交回同一版處理的兩個位置（作答紀錄的元素、`replay` 算出的記憶）。
+
+修之前它抓到 26 個漏網，全部是下面兩類，純量位置一個都沒有：
+
+- **清單本身**（25 個）：就是 F5，再加上子類別、`toJSON` 與多的屬性。
+- **ID 叫 `__proto__`**（1 個）：見下面 `60ee87e`。
+
+**同一輪另外修的兩項，Codex 沒有報：**
+
+- `60ee87e`，ID 當物件的 key。轉接器指定 `due[id]` 時，`__proto__` 留不下 key，那個目標的到期就不見了；現在的語法寫不出這個 ID（不接受底線），只有回傳它的版本才會發生。比較端讀 `due[id]` 時，只在一邊的 ID 會取到每個物件都有的函式；語法寫得出 `^constructor`，實跑 `formatTime` 丟 `RangeError`，整個比較停掉，報不出差異（不是零差異）。
+- `93394cd`，比較端當 key 的值重複。比較端用 `Map` 放卡組、衝突與今天的份，同一個路徑出現兩次只比得到最後一個。實跑 `diffSnapshots`，一邊同一篇列兩次，回傳空的差異，**這是假的零差異**。現在轉接器看到路徑、衝突的 ID、今天的學習目標重複就報無法比較。目標的 ID 不在內：備份照原樣收重複的 ID，比較端每一個都比（Codex 第二輪 L2）。
+
+**驗證（`93394cd`）：**
+
+- 完整檢查全過（pre-commit 跑的）。compare 測試 16 項。
+- 改壞測試：一共 68 處，全部抓到，當掉 0 處。腳本先跑基準，每處跑完把檔案改回原樣。
+- 新測試單獨跑抓到 54 處，沒抓到 14 處。其中 10 處是別的測試的範圍（`close`、`onError`、拒絕的物件、`done`、空格子的原因文字、重複的三處、比較端兩處）；另外 4 處（`today` 的 `lt`、`replay`、`slots`、`slot`）拿掉後下一行還是會丟錯，只差原因的文字。
+- 真正的 `v0.1.0`、`v0.2.0`：自編的輸入（有內容、完全沒有內容）與測試 vault 的 5 篇、62 個目標都接得上，和現在差異 0 項（手動跑的，只讀）。
+- 同一份凍結的備份比 `v0.2.0 → 93394cd`：差異 0 項（兩個紀錄檔，沒有卡組）；報告不進 repo。
 - 沒有跑：CI（沒有 push）；`update-vault --check` 實際走新轉接器（要升版才會跑）。
