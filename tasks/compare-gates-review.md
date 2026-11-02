@@ -1,6 +1,6 @@
 # 發布前比較的轉接器接上讀取閘門：L2 獨立審查（給 Codex）
 
-狀態：待再審（第一輪審 `fb823eb`，[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)有一項 P2；修在 `a04998e`、`f33f376`，見文末〈再審〉）
+狀態：待第三次審查（第一輪審 `fb823eb`，F1 修在 `a04998e`、`f33f376`；再審審 `f33f376`，F2 修在 `2c225bb`；[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)；見文末〈第三次審查〉）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（跨 `tools/compare/`、`src/state/`、`src/core/study/`；這個工具的結論決定正式 vault 要不要裝，報成零差異就是漏掉）。
 
@@ -95,3 +95,44 @@
 - 真正的 `v0.1.0`、`v0.2.0` 用自編的輸入跑過 `snapshot`（作答過、今天答對、被紀錄行停掉、新卡）：都接得上，到期與閘門相同。
 - 用正式使用的 vault 的備份比 `v0.2.0 → f33f376`：差異 0 項（沒有卡組，新檢查只走到空的情況）。
 - 沒有跑：CI（沒有 push）；`update-vault --check` 走到新的轉接器（要升版才會跑，使用者 2026-11-02 選先不升）。
+
+## 第三次審查（F2 之後，2026-11-02）
+
+上一次的第 2 點「展開會自己丟錯」是錯的，F2 指出字串也能展開。這次不再靠推論，把轉接器從被比較的版本拿到的值全部列在下面，請逐項看有沒有錯或漏。報告接在同一份報告最後，標題「Codex 第三次審查」；其他規定照上面。
+
+- **對象**：同一個工作目錄與分支。基準 `f33f37694fc22d8c99d36bb8261e08bc7ef2b314`；待審 `2c225bb289bb85d0331f56f82695f87a192d7de9`。範圍 `git diff f33f376 2c225bb`。之後的 commit 只改文件。
+- **完成條件**：同上一次；另加「完全沒有內容的輸入也要拒絕」，因為那正是接不上的版本會報成零差異的情況。
+
+### 轉接器從被比較的版本拿到的值
+
+| 值 | 怎麼擋 |
+|---|---|
+| `manifest.json` 的 `version`、`releaseOf()` | 都要是字串 |
+| `createState()` 與 `STATE_METHODS` 裡的方法 | 要是函式 |
+| `ready()` | `await`，回傳值不用 |
+| `close()` | 不是 Promise 時 `.catch` 丟錯 |
+| `unread()`、`blocked().decks`、`.targets` | 陣列，元素是字串 |
+| `blocked().all`、`canAnswer()` | 布林 |
+| `history().reviews` | 陣列；元素由 `replay` 讀 |
+| `replay()`、`today().slots` | `Map` |
+| `input().settings.retention` | 有限的數字，沒有內容時也查 |
+| `dueAt()`、`dayOf()`、slot 的 `retention` | 有限的數字 |
+| `today().share`、`.more` | 陣列；元素的 `lt` 要找得到 slot |
+| `nextCard()` 的 `kind` | 只接受 `card`、`done` |
+| `decks()`、目標、題目、問題、`conflicts()` 與它的 `targets` | 用 `.map`，字串、Promise、Set 都沒有 `.map` 會丟錯 |
+| 卡組與目標的欄位、問題的欄位、`share`／`more` 元素的 `deck`、`lane`，題目的指紋，slot 的 `direction` | **不查**：一邊改了名或換了型別，比的時候就是差異（`same` 比 JSON）；兩邊都改時比不到，但在那之前的發布會先報一次差異 |
+| `state.conflicts` 不存在 | **不算接不上**：寫「這一版沒有這個判斷」，找到的照報（舊版本來就沒有；之後的版本改名也會這樣寫，看得到但不擋） |
+
+### 請特別看
+
+1. 上表有沒有漏掉的值、擋法有沒有不成立的。
+2. 「不查」的那兩列要不要改：這是實作者的判斷，不是已驗證的安全。
+3. 新檢查有沒有誤擋合法的回傳：`share`／`more` 為空、沒有卡組、沒有紀錄、真正的 `v0.1.0`、`v0.2.0`。
+
+### 驗證方式
+
+- `npm run check` 在 `2c225bb` 全過（pre-commit 跑的）。`node --test tests/compare-versions.test.ts` 12 項。
+- 改壞測試：拿掉 19 處型別檢查（F1 與 F2 的）全部抓到。
+- 真正的 `v0.1.0`、`v0.2.0` 用自編的非空輸入與完全沒有內容的輸入跑過 `snapshot`：都接得上（手動跑的；留在 repo 的跨版本測試只有 `v0.2.0` 的非空輸入）。
+- 用正式使用的 vault 的備份比 `v0.2.0 → 2c225bb`：差異 0 項（兩個紀錄檔，沒有卡組）。
+- 沒有跑：CI（沒有 push）；`update-vault --check` 走到新的轉接器（要升版才會跑）。

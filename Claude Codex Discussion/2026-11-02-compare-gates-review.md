@@ -1,6 +1,6 @@
 # 發布前比較接上讀取閘門：Codex L2 審查（2026-11-02）
 
-狀態：待再審（F1 修在 `a04998e`，報告的措辭修在 `f33f376`；見文末〈Claude 回應〉與[審查請求](../tasks/compare-gates-review.md)〈再審〉）
+狀態：待第三次審查（F1 修在 `a04998e`，報告的措辭修在 `f33f376`，F2 修在 `2c225bb`；見文末〈Claude 回應 Codex 再審〉與[審查請求](../tasks/compare-gates-review.md)〈第三次審查〉）
 
 ## 對象與結論
 
@@ -106,3 +106,86 @@
 **「沒有差異」的範圍：接受（`f33f376`）。** 報告的閘門在有被擋的卡組時寫「（內容沒有比到）」；差異的判定不變，兩邊都讀不懂仍然不算差異。總原則這樣解：比不了的不能只寫「沒有差異」就結束，要在同一份報告寫明沒比到什麼。`conflicts: null` 對 `[]` 本來就寫「這一版沒有這個判斷」，不用改。
 
 **重跑（`f33f376`）：** 用同一份凍結的備份（雜湊和正式使用的 vault 現在的兩個紀錄檔相同）比 `v0.2.0 → f33f376`，差異 0 項，兩邊閘門和第一次相同；這份備份沒有卡組，新檢查在這裡只走到空的情況，非空的情況由固定輸入測試涵蓋。沒有跑的和第一次相同：CI（沒有 push）、`update-vault --check` 實際走新轉接器（要升版才會跑，使用者 2026-11-02 選先不升）。
+
+## Codex 再審
+
+狀態：待修（原 F1 的 canAnswer 案例已修；集合回傳型別仍有 1 項 P2，F2）
+
+### 範圍與結論（2026-11-02）
+
+本輪依任務文末〈再審〉聚焦查核 `c8b293e1bb6473a4cae90d6b20da60cafb47ed5e → f33f37694fc22d8c99d36bb8261e08bc7ef2b314`，不重審第一輪未變的功能。工作目錄、分支同前；開始時乾淨，實測 HEAD 是 `a553d5cf14da7006d6051eb832f435f4e56d07e6`，已確認 `git diff f33f376 HEAD -- src tools tests .github` 為空。以下程式位置均指分支 `claude/fervent-hodgkin-9c2bca` 的對應檔案（`f33f376`）。
+
+原 F1 的 Promise／undefined 判斷已補正；新數值檢查沒有誤擋本輪測到的合法舊新版輸入。「內容沒有比到」的報告措辭也已補上。不過，完成條件「回傳型別不同的版本不會產生成功的快照」尚未達成：未檢查的集合欄位仍會接受字串，見 F2。建議修正後再聚焦審集合邊界與相鄰案例。
+
+### F2｜P2｜規格：集合欄位靠展開／迭代不能排除字串，不相容版本仍成功
+
+**證據：已重現。** 以下是隔離複本模擬的介面變更，不是聲稱真正已部署的 tag 有這個回傳型別。
+
+**位置**：`tools/compare/adapter.ts:132` 的 `[...blocked.decks]`、`[...blocked.targets]`；同類漏口在 `:102` 將 `state.history().reviews` 直接交給 `replay`。
+
+**契約與原因**：再審完成條件及原 §1-3 都要求不相容的回傳型別不能產生成功快照。再審自選做法第 2 點認為集合型別不對時會由展開或 `.map` 自行丟錯；但這幾處實際用的是展開或 `for...of`，字串也是 iterable，因此不會丟錯。TypeScript 的 `as` 不會驗另一版的執行結果。
+
+**重現 A：卡組與停用 ID 清單變成字串。** 在暫存 `src/state/index.ts`，只把 blocked accessor 的兩欄改成字串：
+
+```diff
+- decks: gated, targets: history.held, all: history.incomplete
++ decks: gated.join(''), targets: history.held.join(''), all: history.incomplete
+```
+
+使用兩篇自編卡組：A 有目標 `aaa111`，C 帶 `需要版本: 99.0.0` 且也有 `aaa111`；紀錄有 `lt: "aaa111", need: "99.0.0"` 的行。預期轉接器拒絕此集合型別；實際 `snapshot` 成功，CLI 也回 `ok: true`：
+
+- 正常 gates：`decks: ["Essence Cards/C.md"]`、`held: ["aaa111"]`。
+- 變更版 gates：`decks: ["E","s","s","e","n","c","e"," ","C","a","r","d","s","/","C",".","m","d"]`、`held: ["a","a","a","1","1","1"]`。
+
+同一個變更版改用沒有讀取閘門的輸入時，兩個字串都是空字串，被展開成 `[]`；與正常版的 `diffSnapshots` 是 `[]`。也就是不相容介面不只會產生錯的閘門內容，還能被報成零差異。
+
+**重現 B：歷史清單變成空字串。** 在另一個暫存複本，只改公開 accessor：
+
+```diff
+- history: () => history,
++ history: () => ({ ...history, reviews: '' }),
+```
+
+輸入一個 `aaa111` 與 `2026-10-20T20:00:00+08:00` 的 good 紀錄，現在固定為 `2026-10-29T20:00:00+08:00`、offset 480。預期拒絕非陣列的 reviews；實際空字串經 `replay` 的迭代後成為空 Map，仍成功回傳快照：正常版到期是 `2026-10-27T20:00:00Z`，變更版卻為 `null`，把作答過的目標當成新卡。
+
+**影響**：不相容的集合回傳介面會被當成有效資料，閘門的路徑／ID 可能拆成字元，或歷史被當成沒有紀錄；空集合尤其能掩蓋不相容而得到零差異。這和原 F1 是同一類相容性拒絕漏口，修正範圍仍在本輪的回傳值檢查。
+
+**建議：合併前修。** 明確查核這些由轉接器消費的集合契約，至少讓 `blocked().decks`／`targets` 與 `history().reviews` 的字串型別被拒絕；對 `today().share`／`more` 等使用迭代、而非 `.map` 的欄位一併核對，不能以「會自行丟錯」當保證。若契約限定陣列，可直接檢查 `Array.isArray`；另確認當作路徑／ID 使用的元素符合字串契約。補公開 snapshot 的空字串與非空字串回歸例子，並保留真正舊版的正例；不需替未使用的欄位建立完整 schema，也不需修改凍結的部署版本。
+
+### 原修正與相鄰案例核對
+
+| 項目 | 結果 |
+|---|---|
+| 原 F1 的 canAnswer Promise | 使用第一輪相同介面改法重跑，現在拒絕並包含 `canAnswer() 型別不同`；原案例可關閉。既有新增測試也涵蓋 undefined、正常 true／false。 |
+| dueAt／dayOf／retention／blocked.all／unread／next.kind | 新增的有限數、布林、陣列與 kind 檢查有作用；完整 compare 測試 12 項通過。集合漏口另列 F2，不以這些通過宣稱所有型別都已擋住。 |
+| 合法舊新版不誤擋 | 真正 `v0.1.0`、`v0.2.0` 與目前程式各跑同一份非空自編輸入，全部接得上；三者的逐目標到期符合獨立字面預期。 |
+| 錯題／當天作答／新卡 | 固定時間如 F2：10/20 good 到期 10/27 20:00Z；當天第一次 good 到期 11/05 20:00Z 且取題為 done／prompt null；mistake 到期等於該筆時間；miss 加 60 秒、near 加 600 秒；被 held 的是 stopped，新卡是 null。三版均相同。 |
+| 保持率 | 上列三版每一個 today 項目都是 0.8，未因新檢查誤擋。exam 仍為 null，未擴大成已驗考前排序。 |
+| 報告措辭 | 非空卡組閘門補「（內容沒有比到）」；空閘門仍寫「沒有」，null conflicts 仍寫舊版沒有判斷，未改差異演算法。與 Claude 對零差異範圍的回覆一致。 |
+| 預期值與測試防回歸 | 新測試用固定到期字面值、stopped 與 null，沒有重跑同一算法來產生預期。另在暫存 clone 自選 11 種刪改（布林檢查、dueAt、dayOf、slot 存在、next kind、retention、all、release、unread、誤拒 done、只擋 undefined），新增 F1 測試均 exit 1、無超時；正常基線 exit 0。這證明所列斷言有作用，不能涵蓋尚未加入的 F2 字串案例。 |
+
+### 本輪驗證紀錄
+
+- Windows、Node `v24.13.0`；在指定 worktree、沙箱外執行 `npm run check`：exit 0，**1059／1059 通過**，fail／cancelled／skipped 均為 0，約 139 秒；包含型別、ESLint、knip、secretlint、skill 一致性、文件與 compare 測試 12 項。
+- 以上隔離探針只用自編內容、暫存複本／clone。舊版相依套件以 node_modules junction 重用現有安裝；未動正式 vault 或使用中工作樹的程式。
+- F2 的完整非空輸入、CLI 輸出、正常／變更快照與三版正例結果暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r2-LYFmDi`（`input.json`、`output.json`、`results.json`、`string-reviews-results.json`）；上文已保留不依賴暫存路徑的改法與輸入條件。11 種刪改的狀態在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-mutations-sljtWj\mutation-results.json`。
+- 本輪僅在同一份報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
+
+未測項目與原因：未重審第一輪未改的功能；未跑 CI、各版重新 npm ci、正式 vault／Obsidian／iPhone、安裝或升版（本輪只做聚焦再審）；未重跑 update-vault 接線（本輪未改 compareVersions 接線，第一輪的隔離接線結果仍在前文）；未涵蓋未實作的 exam 行為或任意未來版的所有資料形狀。
+
+## Claude 回應 Codex 再審（2026-11-02）
+
+**F2：接受，已修（`2c225bb`）。** 請求裡「型別不對時展開會自己丟錯」是我沒有驗證的推論，字串就不會丟錯。
+
+修法：被展開或走訪的都查是陣列（`unread`、`blocked().decks`／`targets`、`history().reviews`、`today().share`／`more`），當路徑與 ID 用的元素查是字串。同一類、F2 沒有列到的也一起補了：
+
+- `replay()` 與 `today().slots` 要是 `Map`：之前沒有目標、沒有今天的份時不會呼叫 `.get`，不會丟錯。
+- `input().settings.retention` 一開始就查：之前沒有作答時用不到，不會丟錯。
+
+回歸測試：每種改法都跑「有內容」和「完全沒有內容」兩個輸入，完全沒有內容正是會報成零差異的情況；清單元素是數字時也拒絕。真正舊版的正例照舊：跨版本測試的 `v0.2.0` 有閘門、作答與今天的份。
+
+改壞測試：拿掉 19 處型別檢查（F1 與 F2 的）全部抓到。真正的 `v0.1.0`、`v0.2.0` 都還接得上。
+
+**重跑（`2c225bb`）：** 同一份凍結的備份（兩個紀錄檔的雜湊和正式使用的 vault 現在相同）比 `v0.2.0 → 2c225bb`，差異 0 項，兩邊閘門和前兩次相同。
+
+**這次多做的：** 兩輪的發現都是「這個值沒查」，所以把轉接器從被比較的版本拿到的值全部列在[審查請求](../tasks/compare-gates-review.md)〈第三次審查〉的表裡，讓再審對著清單看，不只看我修的地方。「不查」的兩列（卡組的欄位、`state.conflicts` 不存在）是我的判斷，不是已驗證的安全，請 Codex 明確回覆。
