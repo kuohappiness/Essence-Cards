@@ -88,7 +88,7 @@ void test('D-167 同一個目標寫到同一個單元好幾次：單元只列一
 });
 
 void test('D-167 有否定字的不算；國二上 2-1, p.44 與乾淨的列表算；連結裡的字不算', () => {
-  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1, p.44'], b: ['出處：國二上 2-1、2-2'], c: ['出處：不要算國二上 2-1、國二上 2-2 不考這個'], d: ['出處：[[國二上 2-1]]'] });
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1, p.44'], b: ['出處：國二上 2-1、2-2'], c: ['出處：不要算國二上 2-1、國二上 2-2 不考這個'], d: ['出處：[[國二上 2-1]]'], e: ['出處：「附錄,國二上 2-1 p.20」'] });
   const others = ['2-1', '2-2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
   const index = buildIndex([owner, ...others]);
   assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a', 'b']);

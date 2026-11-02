@@ -50,9 +50,9 @@ export const codeKey = (code: string): string => tidy(code).trim().toLowerCase()
 /** 材料標題的比對鍵（只影響連結）：全半形、大小寫、空白、上下標不分。 */
 export const headingKey = (text: string): string => tidy(text).toLowerCase().replace(/\s/g, '').replace(/[₀-₉]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2080 + 48)).replace(/[¹²³]/g, c => ({ '¹': '1', '²': '2', '³': '3' })[c] ?? c);
 
-// ── 連結先藏起來，裡面的字不動 ──
+// ── 連結與「標題」先藏起來，裡面的字不動 ──
 
-const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s、﹑，；,;｜|]+/g;
+const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、﹑，；,;｜|]+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
 
@@ -63,6 +63,8 @@ function decodedPath(path: string): string {
 
 /** 連結的目標；網址不是位置（null）。 */
 function linkTarget(raw: string): SourceLink | null {
+  const quoted = /^「([^」]+)」$/.exec(raw);
+  if (quoted) return { kind: 'heading', heading: quoted[1] };
   const wiki = /^!?(\[\[|［［)\s*([^\]］]*?)\s*(?:\]\]|］］)$/.exec(raw);
   if (wiki) {
     const inner = wiki[1] === '［［' ? tidy(wiki[2]) : wiki[2];
@@ -163,7 +165,6 @@ function scan(text: string, tokens: readonly string[]): { found: Found[]; left: 
     masked = masked.slice(0, at) + ' '.repeat(match[0].length) + masked.slice(at + match[0].length);
   };
   for (const match of [...masked.matchAll(TOKEN)]) take(match, linkTarget(tokens[Number(match[1])]));
-  for (const match of [...masked.matchAll(/「([^」]+)」/g)]) take(match, { kind: 'heading', heading: match[1] });
   for (const match of [...masked.matchAll(/(?<![^ ])#([^ #,、;/]+)/g)]) take(match, { kind: 'heading', heading: match[1] });
   for (const match of [...masked.matchAll(/(圖|表|例題|範例|figure|fig|table|example)\.? ?(\d+)[-.](\d+) ?(?:\(? ?([A-Za-z]) ?\)?(?![A-Za-z0-9]))?/gi)]) take(match, { kind: 'block', id: `${BLOCK[match[1].toLowerCase()]}${match[2]}-${match[3]}${match[4]?.toLowerCase() ?? ''}` });
   for (const match of [...masked.matchAll(/(?<![A-Za-z0-9-])第? ?(\d+)-(\d+) ?(圖|表|例題)/g)]) take(match, { kind: 'block', id: `${BLOCK[match[3]]}${match[1]}-${match[2]}` });
