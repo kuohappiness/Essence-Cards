@@ -1,6 +1,6 @@
 # 發布前比較的轉接器接上讀取閘門：L2 獨立審查（給 Codex）
 
-狀態：待審（待審 commit `fb823eb`）
+狀態：待再審（第一輪審 `fb823eb`，[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)有一項 P2；修在 `a04998e`、`f33f376`，見文末〈再審〉）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（跨 `tools/compare/`、`src/state/`、`src/core/study/`；這個工具的結論決定正式 vault 要不要裝，報成零差異就是漏掉）。
 
@@ -62,3 +62,36 @@
 ## 回報
 
 每項發現寫觸發條件、預期／實際、影響、位置與證據，並區分「已重現」「靜態推斷」「待驗證」。可以回報「規格本身有漏洞」。標題下第一行寫狀態。
+
+## 再審（F1 之後，2026-11-02）
+
+聚焦再審這段修正與相鄰案例，不必整包重審（[review.md](../.claude/skills/code-quality/review.md)〈修正後收尾〉）。報告接在[同一份報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)最後，標題「Codex 再審」；先看那裡的〈Claude 回應 Codex L2〉。其他規定照上面。
+
+- **對象**：同一個工作目錄與分支。基準 `c8b293e1bb6473a4cae90d6b20da60cafb47ed5e`；待審 `f33f37694fc22d8c99d36bb8261e08bc7ef2b314`。範圍 `git diff c8b293e f33f376`：`a04998e`（F1）、`f33f376`（報告的措辭）。之後的 commit 只改文件。
+- **完成條件**：回傳型別不同的版本不會產生成功的快照；真正的 `v0.1.0`、`v0.2.0` 與現在的版本不會被誤擋。
+
+### 實作者自己選的做法
+
+1. **不只修 `canAnswer`**：拿來判斷或算數、型別錯了不會自己丟錯的都查：`canAnswer`、`unread`、`blocked().all`、`dueAt`、`dayOf`、今天的份的 slot 與 `retention`、`nextCard` 的 `kind`、`releaseOf`。
+2. **沒查的（請看有沒有漏）**：
+   - 型別不對時展開或 `.map` 會自己丟錯：`blocked().decks`、`targets`，`decks()`，`history().reviews`，`today().share`、`more`，`conflicts()`。
+   - `ready()` 的回傳值不用。
+   - `input()` 回傳 Promise 時，`settings.retention` 與 `nextCard` 要用到才會丟錯；沒有作答、也沒有今天的份時不丟，但那時也沒有東西用到它。
+   - 卡組的欄位（`props`、目標的欄位、`problems`）與 slot 的 `direction`：一邊改了名，比的時候就是差異。兩邊都改名時比不到，但在那之前的發布會先報一次差異。
+3. **`nextCard` 只接受 `card` 與 `done`**：`stale` 當成接不上，因為比較時時間是固定的。今天已經答對的是 `done`，有測試。
+4. **`releaseOf` 回傳的不是字串**：和版號不是正式版號同一個訊息（「讀取能力不明」），不另外分。
+5. **報告的措辭**：只有被擋的卡組那一行加「（內容沒有比到）」；差異的判定不變，主控台摘要照舊不印閘門。
+
+### 請特別看
+
+1. 新檢查會不會誤擋合法的回傳：例如錯題的到期（`last.src === 'mistake'`）、當天的作答、考試範圍以外的保持率。
+2. 轉接器裡還有沒有靠真假值或 `?.`、`??` 把型別不同的值放過去的地方。
+3. 測試的預期值是不是獨立來源；拿掉檢查時擋不擋得住。
+
+### 驗證方式
+
+- `npm run check` 在 `f33f376` 全過（pre-commit 跑的）。`node --test tests/compare-versions.test.ts` 12 項。
+- 改壞測試：拿掉 11 處新檢查全部抓到（`a04998e` 提交前跑的，`f33f376` 只改報告的一行字）。
+- 真正的 `v0.1.0`、`v0.2.0` 用自編的輸入跑過 `snapshot`（作答過、今天答對、被紀錄行停掉、新卡）：都接得上，到期與閘門相同。
+- 用正式使用的 vault 的備份比 `v0.2.0 → f33f376`：差異 0 項（沒有卡組，新檢查只走到空的情況）。
+- 沒有跑：CI（沒有 push）；`update-vault --check` 走到新的轉接器（要升版才會跑，使用者 2026-11-02 選先不升）。
