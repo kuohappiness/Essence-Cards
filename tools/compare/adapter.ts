@@ -66,6 +66,11 @@ function map<V>(value: unknown, name: string): Map<string, V> {
   if (!(value instanceof Map)) throw wrongType(name);
   return value as Map<string, V>;
 }
+/** 比較端拿這些值當 key，重複時只比得到最後一個，其他的不同也是零差異。目標的 ID 不在內：備份照原樣收重複的 ID，比較端每一個都比。 */
+function unique<T>(list: T[], key: (each: T) => string, name: string): T[] {
+  if (new Set(list.map(key)).size !== list.length) throw Error(`這個版本的 ${name} 重複`);
+  return list;
+}
 
 /** 凍結的輸入：監看不做事（內容不會變），寫入一律拒絕並記下來。 */
 function frozen(texts: Record<string, string>) {
@@ -121,7 +126,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   const [nextCard, replay, dueAt, dayOf] = ['nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name));
   const dayNumber = (at: number): number => integer(dayOf(at, input.offset), 'dayOf()');
   const blocked = state.blocked();
-  const deckSnaps: DeckSnap[] = array<{ path: unknown; deck: DeckLike }>(state.decks(), 'decks()').map(({ path, deck: { props, targets, problems } }) => ({
+  const deckSnaps = unique<DeckSnap>(array<{ path: unknown; deck: DeckLike }>(state.decks(), 'decks()').map(({ path, deck: { props, targets, problems } }) => ({
     path: text(path, 'decks() 的 path'),
     props: { status: text(props.status, 'props.status'), isTranscript: yesNo(props.isTranscript, 'props.isTranscript'),
       term: textOrNull(props.term, 'props.term'), subject: textOrNull(props.subject, 'props.subject'),
@@ -136,7 +141,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
     }),
     problems: array<ProblemLike>(problems, 'problems').map(problem =>
       `${integer(problem.line, 'problems 的 line')} ${text(problem.level, 'problems 的 level')} ${text(problem.code, 'problems 的 code')}`),
-  }));
+  })), deck => deck.path, 'decks() 的 path');
 
   const todayInput = state.input();
   const retention = finite(todayInput.settings.retention, 'input().settings.retention');
@@ -176,12 +181,12 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   return {
     gates: { decks: strings(blocked.decks, 'blocked().decks'), held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),
       // 這個方法不存在是舊版本來就沒有這個判斷，報告會寫出來；存在就要回傳對的清單。
-      conflicts: state.conflicts === undefined ? null : array<ConflictLike>(state.conflicts(), 'conflicts()').map(each => ({
+      conflicts: state.conflicts === undefined ? null : unique(array<ConflictLike>(state.conflicts(), 'conflicts()').map(each => ({
         id: text(each.id, 'conflicts() 的 id'),
         targets: array<{ path: unknown; line: unknown; name: unknown }>(each.targets, 'conflicts() 的 targets').map(({ path, line, name }) => ({
           path: text(path, 'conflicts() 的 path'), line: integer(line, 'conflicts() 的 line'), name: text(name, 'conflicts() 的 name') })),
-      })) },
-    decks: deckSnaps, due: Object.fromEntries(due), today: items, days,
+      })), each => each.id, 'conflicts() 的 id') },
+    decks: deckSnaps, due: Object.fromEntries(due), today: unique(items, item => item.lt, 'today() 的 lt'), days,
   };
 }
 

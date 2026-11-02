@@ -336,8 +336,12 @@ void test('送給比較端的每個值都要符合比較資料的形狀：換了
     ['decks', conflict(hole), /decks\(\).*型別不同/],
     ['conflicts', conflict(hole), /conflicts\(\).*型別不同/],
     ['conflicts', conflict([{ id: 'x', targets: hole }]), /conflicts\(\).*targets.*型別不同/],
+    ['conflicts', conflict([{ id: 'x', targets: [] }, { id: 'x', targets: [] }]), /conflicts\(\).*重複/],
   ];
   const withContent: [keyof typeof hooks.broken, Change, RegExp][] = [
+    // 比較端拿路徑與學習目標當 key，重複時只比得到最後一個，其他的不同也是零差異。
+    ['decks', ((list: Entry[]) => [...list, ...list]), /decks\(\).*重複/],
+    ['today', ((today: Today) => ({ ...today, share: [...today.share, ...today.share] })), /today\(\).*重複/],
     ['decks', ((list: Entry[]) => list.map(entry => ({ ...entry, path: 5 }))), /path.*型別不同/],
     ['decks', prop({ status: undefined }), /status.*型別不同/],
     ['decks', prop({ isTranscript: 'no' }), /isTranscript.*型別不同/],
@@ -441,7 +445,8 @@ const fakeGood = () => ({
     blocked: { decks: [C], targets: ['hld111'], all: false },
     canAnswer: true,
     input: { settings: { retention: 0.9 } },
-    today: { share: [{ lt: 'aaa111', deck: A, lane: 'due' }], more: [{ lt: 'aaa111', deck: A, lane: 'new' }], slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
+    today: { share: [{ lt: 'aaa111', deck: A, lane: 'due' }], more: [{ lt: 'bbb222', deck: A, lane: 'new' }],
+      slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }], ['bbb222', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
     conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }],
   },
   study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 0.5, dayOf: 20000, nextCard: { kind: 'card', card: { prompt: { fingerprint: '11111111' } } } },
@@ -452,7 +457,7 @@ const fakeSnapshot: Snapshot = {
     targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh' }],
     problems: ['1 error x'] }],
   due: { aaa111: NOW + 0.5 },
-  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'aaa111', deck: A, lane: 'new', retention: 0.8, prompt: '11111111', direction: 'en-zh' }],
+  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, prompt: '11111111', direction: 'en-zh' }],
   days: days(1),
 };
 const WRONG: [string, () => unknown][] = [
