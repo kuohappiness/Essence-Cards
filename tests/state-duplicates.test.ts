@@ -819,6 +819,58 @@ for (const [label, order] of [['先通知這一篇', [P, Q]], ['先通知別篇'
   });
 }
 
+// Codex 第四次審查的 R3：同一批刪掉的卡組還算「這一批之前」的目標；只留這一批的證據，不記跨批的歷史。
+for (const [label, order] of [['先通知這一篇', [P, Q]], ['先通知別篇', [Q, P]]] as const) {
+  void test('R3 同一批把別篇整個刪掉、B 搬來取代 A（' + label + '）：和清空那一篇一樣，還原選項不跟著 ID 交給 B', async t => {
+    const h = await changedThenElsewhere(t);
+    const old = h.state.deckStatus(P).issues.find(each => each.kind === 'changed');
+    assert.ok(old);
+    const after = twin('B', 'bbbbbb');
+    h.texts.set(P, after);
+    h.texts.delete(Q);
+    h.notify(...order);
+    await h.settle();
+    assert.deepEqual(h.state.deckStatus(P).issues, []);
+    assert.deepEqual(h.state.conflicts(), []);
+    const editor = createMemoryEditor(h, P, after);
+    assert.equal((await h.state.resolve(old, 'restore', editor)).kind, 'stale');
+    assert.equal(editor.value, after);
+  });
+
+  void test('R3 同一批把別篇整個刪掉、改了 A 的題目（' + label + '）：這一批之前還在共用，認不出是哪一個，changed 結束', async t => {
+    const h = await changedThenElsewhere(t);
+    h.texts.set(P, twin('A 改過', 'bbbbbb'));
+    h.texts.delete(Q);
+    h.notify(...order);
+    await h.settle();
+    assert.deepEqual(h.state.deckStatus(P).issues, []);
+    assert.deepEqual(h.state.conflicts(), []);
+  });
+}
+
+void test('R3 對照：同一批把別篇整個刪掉、A 只拿掉 ID（內容沒變）：changed 留在 A；還原寫回 A', async t => {
+  const h = await changedThenElsewhere(t);
+  const after = twin('A', null);
+  h.texts.set(P, after);
+  h.texts.delete(Q);
+  h.notify(P, Q);
+  await h.settle();
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, after))).kind, 'done');
+  assert.equal(h.texts.get(P), twin('A', 'aaaaaa'));
+});
+
+void test('R3 對照：需要新版的卡組同一批刪掉，本來就不算共用，A 改了題目還是 A 的', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  await h.edit(Q, '---\n需要版本: 9.0.0\n---\n' + twin('B', 'bbbbbb'));
+  h.texts.set(P, twin('A 改過', 'bbbbbb'));
+  h.texts.delete(Q);
+  h.notify(P, Q);
+  await h.settle();
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
 void test('R2 對照：別篇的副本不在了，共用就結束，A 改了題目也還是 A 的', async t => {
   const h = await changedThenElsewhere(t);
   h.remove(Q);

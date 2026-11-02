@@ -108,6 +108,8 @@ export function createIdTracker(options: IdTrackerOptions) {
   let duplicateIds = new Set<string>();
   let stale = false;
   const conflicted = new Map<string, Conflicted[]>();
+  /** 這一批刪掉的卡組：「這一批之前」的目標還要算它們，只留到接著的那次 observe，不記跨批的歷史（Codex 第四次審查的 R3）。 */
+  let forgotten: Deck[] = [];
 
   const targetIds = (deck: Deck): string[] => deck.targets.flatMap(t => [...(t.id ? [t.id] : []), ...(t.idCandidates ?? [])]);
   function presentOf(text: string, deck: Deck): Set<string> {
@@ -172,7 +174,8 @@ export function createIdTracker(options: IdTrackerOptions) {
     for (const entry of batch) present.set(entry.path, entry.now);
     // 這一批之前、之後各篇讀得懂的目標：ID 共用和重複 ID 看的範圍一樣，不分同篇別篇，也不因通知的先後而不同（Codex 第三次審查的 R2）。
     const readableTargets = (decks: Iterable<Deck>): Target[] => [...decks].filter(deck => options.readable(deck)).flatMap(deck => deck.targets);
-    const before = readableTargets(versions.values());
+    const before = readableTargets([...versions.values(), ...forgotten]);
+    forgotten = [];
     const after = readableTargets(new Map([...versions, ...entries.map(({ path, deck }) => [path, deck] as const)]).values());
     for (const entry of batch) observeOne(entry, detect, after, before);
     if (entries.length) stale = true;
@@ -295,6 +298,8 @@ export function createIdTracker(options: IdTrackerOptions) {
     /** 卡組刪掉了：它的待處理問題跟著消失（那個目標被刪掉）。 */
     forget(path: string): void {
       if (pending.delete(path)) revision++;
+      const deck = versions.get(path);
+      if (deck) forgotten.push(deck);
       texts.delete(path); versions.delete(path); present.delete(path);
       stale = true;
     },
