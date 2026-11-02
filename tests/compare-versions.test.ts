@@ -444,14 +444,14 @@ const fakeGood = () => ({
     today: { share: [{ lt: 'aaa111', deck: A, lane: 'due' }], more: [{ lt: 'aaa111', deck: A, lane: 'new' }], slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
     conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }],
   },
-  study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 1000, dayOf: 20000, nextCard: { kind: 'card', card: { prompt: { fingerprint: '11111111' } } } },
+  study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 0.5, dayOf: 20000, nextCard: { kind: 'card', card: { prompt: { fingerprint: '11111111' } } } },
 });
 const fakeSnapshot: Snapshot = {
   gates: { decks: [C], held: ['hld111'], incomplete: false, conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }] },
   decks: [{ path: A, props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: 'L1 Back', categories: ['單字'] },
     targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh' }],
     problems: ['1 error x'] }],
-  due: { aaa111: NOW + 1000 },
+  due: { aaa111: NOW + 0.5 },
   today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'aaa111', deck: A, lane: 'new', retention: 0.8, prompt: '11111111', direction: 'en-zh' }],
   days: days(1),
 };
@@ -478,6 +478,18 @@ function replaced(value: unknown, [key, ...rest]: Position, wrong: unknown): unk
   if (Array.isArray(value)) return (value as unknown[]).map((each, i) => i === key ? replaced(each, rest, wrong) : each);
   const fields = value as Record<string, unknown>;
   return { ...fields, [key]: replaced(fields[key], rest, wrong) };
+}
+const at = (value: unknown, position: Position): unknown => position.reduce<unknown>((each, key) =>
+  each instanceof Map ? (each as Map<unknown, unknown>).get(key) : (each as Record<string | number, unknown>)[key], value);
+const kind = (value: unknown): string => typeof value === 'number' ? (Number.isInteger(value) ? 'integer' : Number.isFinite(value) ? 'number' : 'NaN')
+  : typeof value === 'object' ? Object.prototype.toString.call(value) : typeof value;
+// 交回同一版處理、轉接器不讀內容的（〈第四次審查〉的表）；其他位置型別不對就要拒絕。只影響分支的值（canAnswer、unread）不會進比較資料，看輸出看不出來（Codex L2 F1）。
+const OPAQUE = new Set(['state.history.reviews.0', 'study.replay.aaa111']);
+const CAN_BE_NULL = new Set<string | number | undefined>(['id', 'term', 'subject', 'unit', 'direction']);
+/** 這個位置該不該接受這個值：和正常的值同一種；小數的位置也接受整數；能是 null 的欄位。 */
+function fits(good: unknown, value: unknown, position: Position): boolean {
+  if (OPAQUE.has(position.join('.')) || kind(good) === kind(value)) return true;
+  return kind(good) === 'number' && kind(value) === 'integer' || value === null && CAN_BE_NULL.has(position.at(-1));
 }
 const NULLABLE = new Set(['id', 'term', 'subject', 'unit', 'direction', 'prompt', 'conflicts']);
 /** 比較資料的形狀：和正常的那一份同型別；能是 null 的欄位才能是 null。 */
@@ -515,10 +527,12 @@ void test('被比較的版本回傳的每個位置換成每一種不對的值：
   const escaped: string[] = [];
   let refused = 0;
   for (const position of positions(fakeGood()).filter(each => each.length > 1)) for (const [name, make] of WRONG) {
-    hooks.fake = replaced(fakeGood(), position, make());
+    const value = make();
+    hooks.fake = replaced(fakeGood(), position, value);
     let out: Snapshot;
     try { out = await snapshot(dir, input); } catch { refused++; continue; }
     try {
+      assert.ok(fits(at(fakeGood(), position), value, position));
       assert.deepEqual(JSON.parse(JSON.stringify(out)), out);
       const { due, ...rest } = out, { due: _due, ...goodRest } = fakeSnapshot;
       sameShape(rest, goodRest, 'snapshot');
