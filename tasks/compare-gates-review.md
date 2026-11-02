@@ -1,6 +1,6 @@
 # 發布前比較的轉接器接上讀取閘門：L2 獨立審查（給 Codex）
 
-狀態：待第六次審查（第一輪審 `fb823eb`，F1 修在 `a04998e`、`f33f376`；再審審 `f33f376`，F2 修在 `2c225bb`；第三次審 `2c225bb`，F4 修在 `3b40b2e`，F3 修在 `dd10eae`、`1d73cb2`；第四次審 `1d73cb2`，F5 修在 `f8e1a4c`；第五次審 `93394cd`，F6 修在 `f1523e1`，F7 修在 `1077e1a`；[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)；見文末〈第六次審查〉）
+狀態：再審通過，已合併進 `main`（第六次審 `3c6cd96` 沒有新發現；第一輪審 `fb823eb`，F1 修在 `a04998e`、`f33f376`；再審審 `f33f376`，F2 修在 `2c225bb`；第三次審 `2c225bb`，F4 修在 `3b40b2e`，F3 修在 `dd10eae`、`1d73cb2`；第四次審 `1d73cb2`，F5 修在 `f8e1a4c`；第五次審 `93394cd`，F6 修在 `f1523e1`，F7 修在 `1077e1a`；[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**（跨 `tools/compare/`、`src/state/`、`src/core/study/`；這個工具的結論決定正式 vault 要不要裝，報成零差異就是漏掉）。
 
