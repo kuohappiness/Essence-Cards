@@ -142,6 +142,9 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
     problems: array<ProblemLike>(problems, 'problems').map(problem =>
       ({ line: integer(problem.line, 'problems 的 line'), level: text(problem.level, 'problems 的 level'), code: text(problem.code, 'problems 的 code') })),
   })), deck => deck.path, 'decks() 的 path');
+  // 讀不懂的卡組內容不進 decks：比較端兩邊都擋下就不比內容，一邊有內容也比不到。
+  const gated = strings(blocked.decks, 'blocked().decks');
+  if (deckSnaps.some(deck => gated.includes(deck.path))) throw Error('這個版本的 decks() 有 blocked().decks 擋下的卡組');
 
   const todayInput = state.input();
   const retention = finite(todayInput.settings.retention, 'input().settings.retention');
@@ -179,7 +182,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
     }
   }
   return {
-    gates: { decks: strings(blocked.decks, 'blocked().decks'), held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),
+    gates: { decks: gated, held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),
       // 這個方法不存在是舊版本來就沒有這個判斷，報告會寫出來；存在就要回傳對的清單。
       conflicts: state.conflicts === undefined ? null : unique(array<ConflictLike>(state.conflicts(), 'conflicts()').map(each => ({
         id: text(each.id, 'conflicts() 的 id'),

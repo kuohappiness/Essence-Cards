@@ -573,6 +573,10 @@ void test('被比較的版本回傳的每個位置換成每一種不對的值：
   }
   assert.deepEqual(escaped, []);
   assert.ok(refused > 500, String(refused));
+
+  // 型別都對，內容矛盾：擋下的卡組又有內容。比較端兩邊都擋下就不比內容，這一份差異比不到。
+  hooks.fake = replaced(fakeGood(), ['state', 'blocked', 'decks'], [A]);
+  await assert.rejects(snapshot(dir, input), /decks\(\).*擋下/);
 });
 
 void test('比較：比較資料裡任何一個值不同都報得出來，少了一筆也是，兩個方向都要（Codex 第五次審查 F7）', () => {
