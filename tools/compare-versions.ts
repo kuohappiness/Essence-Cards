@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { hashBytes, openBackup } from '../src/core/backup/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import type { AdapterInput } from './compare/adapter.ts';
-import { diffSnapshots } from './compare/snapshot.ts';
+import { diffSnapshots, gateLines } from './compare/snapshot.ts';
 import { git, gitEnv } from './git.ts';
 import type { AdapterResult } from './compare/snapshot.ts';
 
@@ -16,7 +16,7 @@ const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
 
-export const LIMITS = '考試範圍（`exam`）目前是 null：沒有比到考前提高的保持率與考前的排序。設定用外掛的預設（每日 30 分鐘、保持率 0.8、沒有濾網）。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。';
+export const LIMITS = '考試範圍（`exam`）目前是 null：沒有比到考前提高的保持率與考前的排序。設定用外掛的預設（每日 30 分鐘、保持率 0.8、沒有濾網）。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
 
 export interface CompareOptions {
   /** 凍結的輸入：1-1 的備份檔。 */
@@ -31,6 +31,8 @@ export interface CompareOptions {
   /** 測試用：在 worktree 裡裝相依套件，預設照那個版本的 lockfile `npm ci`。 */
   install?: (dir: string) => Promise<void>;
   now?: () => number;
+  /** 一個版本的轉接器最多跑多久（毫秒），預設 5 分鐘；超過就是無法比較（那一版的 state 可能一直重試）。 */
+  timeout?: number;
 }
 export interface Side { commit: string; build: string; result: AdapterResult }
 export interface CompareResult { report: string; zip: string; old: Side; new: Side; comparable: boolean; differences: string[] }
@@ -41,7 +43,7 @@ const npmCi = async (dir: string): Promise<void> => {
 };
 
 /** 一個版本：開 worktree、裝相依、在自己的 Node 程序跑轉接器；結束後拿掉 worktree。接不上就是 ok: false。 */
-async function side(root: string, ref: string, input: string, work: string, install: (dir: string) => Promise<void>): Promise<Side> {
+async function side(root: string, ref: string, input: string, work: string, install: (dir: string) => Promise<void>, timeout: number): Promise<Side> {
   const commit = git(root, ['rev-parse', '--verify', ref + '^{commit}']);
   const version = (JSON.parse(git(root, ['show', commit + ':manifest.json'])) as { version: string }).version;
   const build = version + '+' + git(root, ['rev-parse', '--short', commit]);
@@ -50,21 +52,22 @@ async function side(root: string, ref: string, input: string, work: string, inst
   git(root, ['worktree', 'add', '--detach', dir, commit]);
   try {
     await install(dir);
-    try { await run(process.execPath, [ADAPTER, dir, input, output], { cwd: dir, env: gitEnv(), maxBuffer: 64 * 1024 * 1024 }); }
+    try { await run(process.execPath, [ADAPTER, dir, input, output], { cwd: dir, env: gitEnv(), maxBuffer: 64 * 1024 * 1024, timeout }); }
     catch (error) { return { commit, build, result: { ok: false, reason: '轉接器沒有跑完：' + (error as Error).message } }; }
     return { commit, build, result: JSON.parse(await readFile(output, 'utf8')) as AdapterResult };
   } finally {
     // 不用 git worktree remove：Windows 上它會順著 junction 刪掉連結指到的內容（2026-10-29 測試的 node_modules junction
     // 因此把 repo 的 node_modules 刪光）。Node 的 rm 只拿掉連結本身；資料夾刪掉之後 prune 掉 git 的紀錄。
-    await rm(dir, { recursive: true, force: true });
+    // maxRetries：超時被砍掉的程序，Windows 可能還沒放開檔案。
+    await rm(dir, { recursive: true, force: true, maxRetries: 5 });
     try { git(root, ['worktree', 'prune']); } catch { /* 不影響結果 */ }
   }
 }
 
 /**
  * 發布前比較（D-149 第 5 點、任務說明 1-3）：用備份當凍結的輸入（記下 zip 的雜湊），兩個版本各自讀一次，
- * 比每篇卡組的學習目標、題目指紋、問題、會影響排程的屬性，以及每個目標的下次到期、今天的份與未來 30 天每天的到期數。
- * 報告寫到備份檔旁邊（不進 repo，D-003）。
+ * 比每篇卡組的學習目標、題目指紋、問題、會影響排程的屬性，那一版擋下來的內容（需要新版、停掉的目標、整份紀錄不完整、重複的 ID），
+ * 以及每個目標的下次到期、今天的份與未來 30 天每天的到期數。報告寫到備份檔旁邊（不進 repo，D-003）。
  */
 export async function compareVersions(options: CompareOptions): Promise<CompareResult> {
   const root = options.root ?? defaultRoot;
@@ -83,8 +86,9 @@ export async function compareVersions(options: CompareOptions): Promise<CompareR
   try {
     const input = join(work, 'input.json');
     await writeFile(input, JSON.stringify({ now: started.at, offset: started.offset, files } satisfies AdapterInput));
-    old = await side(root, options.old, input, work, options.install ?? npmCi);
-    next = await side(root, options.new, input, work, options.install ?? npmCi);
+    const timeout = options.timeout ?? 5 * 60_000;
+    old = await side(root, options.old, input, work, options.install ?? npmCi, timeout);
+    next = await side(root, options.new, input, work, options.install ?? npmCi, timeout);
   } finally {
     await rm(work, { recursive: true, force: true });
     try { git(root, ['worktree', 'prune']); } catch { /* 不影響結果 */ }
@@ -99,9 +103,14 @@ export async function compareVersions(options: CompareOptions): Promise<CompareR
     `- 輸入：${options.backup}`, `- 輸入的 SHA-256：${zip}`, `- 「現在」：備份開始的時間 ${opened.value.manifest.started}`,
     `- 舊版：${old.build}（${old.commit}）`, `- 新版：${next.build}（${next.commit}）`, `- 比較時間：${stamp}`, `- 限制：${LIMITS}`, '',
   ];
+  const sides = [['舊版', old], ['新版', next]] as const;
+  lines.push('## 讀取閘門', '');
+  for (const [name, one] of sides) {
+    if (one.result.ok) lines.push(`${name}：`, '', ...gateLines(one.result.snapshot.gates).map(line => '- ' + line), '');
+  }
   if (!comparable) {
     lines.push('## 無法比較', '');
-    for (const [name, one] of [['舊版', old], ['新版', next]] as const) if (!one.result.ok) lines.push(`- ${name}：${one.result.reason}`);
+    for (const [name, one] of sides) if (!one.result.ok) lines.push(`- ${name}：${one.result.reason}`);
   } else if (differences.length === 0) lines.push('## 差異', '', '沒有差異。');
   else lines.push(`## 差異（${differences.length} 項）`, '', '每一項都要對得到這一版的更新說明（tag 的說明）。', '', ...differences.map(line => '- ' + line));
   const folder = options.out ?? dirname(options.backup);
