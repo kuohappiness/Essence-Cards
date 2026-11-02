@@ -134,19 +134,19 @@ export function createIdTracker(options: IdTrackerOptions) {
     return { issue: { path, line: target.line, name: target.name, kind, restore: target.implicit ? null : restore },
       id: target.id, candidates: target.idCandidates ?? [], fingerprints: target.prompts.map(p => p.fingerprint), provisional: options.partial() };
   }
-  /** 這個問題的未知 ID 是不是這個目標用著的；只有 changed 才有未知 ID，ID 被拿掉之後就沒有了。 */
-  const holds = (item: Pending, t: Target): boolean => item.issue.kind === 'changed' && item.id !== null && t.id === item.id;
-  /** 這個未知 ID 不只一個目標在用（這一版或上一版，D-157）：ID 認不出是哪一個。 */
-  const idShared = (item: Pending, targets: readonly Target[], before: readonly Target[]): boolean =>
-    targets.filter(t => holds(item, t)).length > 1 || before.filter(t => holds(item, t)).length > 1;
+  /** 這個問題有未知 ID：只有 changed 才有，ID 被拿掉之後就沒有了。 */
+  const unknownId = (item: Pending): boolean => item.issue.kind === 'changed' && item.id !== null;
+  const holds = (item: Pending, t: Target): boolean => unknownId(item) && t.id === item.id;
+  /** 這個未知 ID 不只一個目標在用（這一批之後或之前，D-157）：ID 認不出是哪一個。 */
+  const idShared = (item: Pending, after: readonly Target[], before: readonly Target[]): boolean =>
+    after.filter(t => holds(item, t)).length > 1 || before.filter(t => holds(item, t)).length > 1;
   const sameContent = (item: Pending, t: Target): boolean => t.name === item.issue.name && samePrompts(t, item.fingerprints);
   /**
    * 這一版裡哪個目標是同一個待處理的目標：同樣的未知 ID、同樣的候選、同樣的名稱，或至少一題相同；平手取行號最近的。
-   * 這個未知 ID 共用時，同名或幾題相同也認不出：只有名稱和題目都沒變的才算，還原的選項只跟著一樣的內容，不能交給另一個目標（D-134、Codex L2 的 F1、再審的 R1）。
+   * 這個未知 ID 共用時（shared），同名或幾題相同也認不出：只有名稱和題目都沒變的才算，還原的選項只跟著一樣的內容，不能交給另一個目標（D-134、Codex L2 的 F1、再審的 R1）。
    */
-  function match(item: Pending, targets: readonly Target[], before: readonly Target[], used: ReadonlySet<Target>): Target | null {
+  function match(item: Pending, targets: readonly Target[], shared: boolean, used: ReadonlySet<Target>): Target | null {
     const sameId = (t: Target): boolean => holds(item, t);
-    const shared = idShared(item, targets, before);
     let best: Target | null = null, bestScore = 0;
     for (const target of targets) {
       if (used.has(target)) continue;
@@ -170,7 +170,11 @@ export function createIdTracker(options: IdTrackerOptions) {
   function observe(entries: readonly { path: string; text: string; deck: Deck }[], detect: boolean): void {
     const batch = entries.map(entry => ({ ...entry, prev: versions.get(entry.path), prevPresent: present.get(entry.path) ?? new Set<string>(), now: presentOf(entry.text, entry.deck) }));
     for (const entry of batch) present.set(entry.path, entry.now);
-    for (const entry of batch) observeOne(entry, detect);
+    // 這一批之前、之後各篇讀得懂的目標：ID 共用和重複 ID 看的範圍一樣，不分同篇別篇，也不因通知的先後而不同（Codex 第三次審查的 R2）。
+    const readableTargets = (decks: Iterable<Deck>): Target[] => [...decks].filter(deck => options.readable(deck)).flatMap(deck => deck.targets);
+    const before = readableTargets(versions.values());
+    const after = readableTargets(new Map([...versions, ...entries.map(({ path, deck }) => [path, deck] as const)]).values());
+    for (const entry of batch) observeOne(entry, detect, after, before);
     if (entries.length) stale = true;
     if (stale) refreshDuplicates();
   }
@@ -196,13 +200,13 @@ export function createIdTracker(options: IdTrackerOptions) {
     conflicted.clear();
     for (const [path, items] of next) conflicted.set(path, items);
   }
-  function observeOne({ path, text, deck, prev, prevPresent, now }: { path: string; text: string; deck: Deck; prev: Deck | undefined; prevPresent: Set<string>; now: Set<string> }, detect: boolean): void {
+  function observeOne({ path, text, deck, prev, prevPresent, now }: { path: string; text: string; deck: Deck; prev: Deck | undefined; prevPresent: Set<string>; now: Set<string> }, detect: boolean, after: readonly Target[], before: readonly Target[]): void {
     const old = pending.get(path) ?? [];
     const oldLines = new Set(old.map(item => item.issue.line));
     const used = new Set<Target>();
     const kept: Pending[] = [], unmatched: Pending[] = [];
     for (const item of old) {
-      const target = match(item, deck.targets, prev?.targets ?? [], used);
+      const target = match(item, deck.targets, idShared(item, after, before), used);
       if (!target) {
         // 用著這個 ID 的目標沒有變少：那個目標多半還在，只是認不出是哪一個，不算「改得認不出來」，不能當證據把還原的選項交給新出現的目標（Codex 再審的 R1）。
         const left = deck.targets.filter(t => holds(item, t)).length;
@@ -244,9 +248,10 @@ export function createIdTracker(options: IdTrackerOptions) {
       // 兩者都有才是問題；證據也包括這次認不出來的待處理問題（那個目標可能被改得認不出來）。
       const evidence = missing.length + unmatched.length;
       if (evidence && appeared.length) {
-        // 認不出來的問題的未知 ID 共用時，新出現的目標內容也要一樣，才拿得到還原的選項（Codex 再審的 R1）。
+        // 認不出來的問題有未知 ID 時，新出現的目標內容也要一樣，才拿得到還原的選項：只剩這一個證據，表示那個 ID 還在別的地方（別的目標、別篇不是目標的一行）或是刻意拿掉的，
+        // 這些都說不出新的目標和原本的目標有關（Codex 再審的 R1、第三次審查的 R2）。
         const single = evidence !== 1 || appeared.length !== 1 ? null
-          : missing[0] ?? (idShared(unmatched[0], deck.targets, prev.targets) && !sameContent(unmatched[0], appeared[0][0]) ? null : unmatched[0].issue.restore);
+          : missing[0] ?? (unknownId(unmatched[0]) && !sameContent(unmatched[0], appeared[0][0]) ? null : unmatched[0].issue.restore);
         for (const [target, kind] of appeared) fresh.push(make(path, target, kind, single));
       }
     }

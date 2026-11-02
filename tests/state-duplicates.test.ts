@@ -707,6 +707,192 @@ void test('R1 ID 共用時改了 A 的題目，同一次又新增一個目標：
   ]);
 });
 
+// Codex 第三次審查的 R2：ID 共用不分同篇別篇；認不出來的問題有未知 ID 時，不管那個 ID 還在哪裡，還原選項都只跟著一樣的內容（D-134）。
+const unrelated = '- 新的\n    - 新題 :: 新答案\n';
+/** 和 changedThenCopied 一樣，但 B 在別篇。 */
+async function changedThenElsewhere(t: TestContext): Promise<Harness> {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  await h.edit(Q, twin('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [
+    { line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' },
+    { line: 0, name: '同名', kind: 'duplicate', restore: null },
+  ]);
+  return h;
+}
+
+for (const [label, added, kind] of [
+  ['沒有 ID', unrelated, 'lost'],
+  ['有新的 ID', '- 新的 ^cccccc\n    - 新題 :: 新答案\n', 'changed'],
+] as const) {
+  void test('R2 同一次刪掉 A、新增無關的目標（' + label + '）：副本在別篇、同篇或沒有副本，都拿不到還原選項', async t => {
+    const other = await changedThenElsewhere(t);
+    await other.edit(P, added);
+    assert.deepEqual(brief(other.state.deckStatus(P).issues), [{ line: 0, name: '新的', kind, restore: null }]);
+    assert.deepEqual(other.state.conflicts(), []);
+    const editor = createMemoryEditor(other, P, added);
+    assert.equal((await other.state.resolve(other.state.deckStatus(P).issues[0], 'restore', editor)).kind, 'stale');
+    assert.equal(editor.value, added);
+
+    const same = await changedThenCopied(t, twin);
+    await same.edit(P, twin('B', 'bbbbbb') + added);
+    assert.deepEqual(brief(same.state.deckStatus(P).issues), [{ line: 2, name: '新的', kind, restore: null }]);
+
+    const alone = await setup(t, { [P]: twin('A', 'aaaaaa') });
+    await alone.edit(P, twin('A', 'bbbbbb'));
+    await alone.edit(P, added);
+    assert.deepEqual(brief(alone.state.deckStatus(P).issues), [{ line: 0, name: '新的', kind, restore: null }]);
+  });
+}
+
+void test('R2 副本在別篇，A 的 ID 又被外部改掉：changed 還是 A 的；還原寫回 A', async t => {
+  const h = await changedThenElsewhere(t);
+  const after = twin('A', 'cccccc');
+  await h.edit(P, after);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.deepEqual(h.state.conflicts(), []);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, after))).kind, 'done');
+  assert.equal(h.texts.get(P), twin('A', 'aaaaaa'));
+});
+
+void test('R2 副本在別篇，A 的 ID 被拿掉：changed 留在 A；還原寫回 A', async t => {
+  const h = await changedThenElsewhere(t);
+  const after = twin('A', null);
+  await h.edit(P, after);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, after))).kind, 'done');
+  assert.equal(h.texts.get(P), twin('A', 'aaaaaa'));
+});
+
+void test('R2 副本在別篇，同一次把 A 的 ID 和題目都改掉：還要家長選，但不給還原選項', async t => {
+  const h = await changedThenElsewhere(t);
+  await h.edit(P, twin('A 改過', 'cccccc'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: null }]);
+});
+
+void test('R2 副本在別篇，同一次把 A 的 ID 拿掉、題目改掉：還要家長選，但不給還原選項', async t => {
+  const h = await changedThenElsewhere(t);
+  await h.edit(P, twin('A 改過', null));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'lost', restore: null }]);
+});
+
+void test('R2 副本在別篇，改了 A 的題目：認不出是哪一個，changed 結束，兩篇的 duplicate 留著要家長選', async t => {
+  const h = await changedThenElsewhere(t);
+  const old = h.state.deckStatus(P).issues.find(each => each.kind === 'changed');
+  assert.ok(old);
+  const after = twin('A 改過', 'bbbbbb');
+  await h.edit(P, after);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'duplicate', restore: null }]);
+  assert.deepEqual(brief(h.state.deckStatus(Q).issues), [{ line: 0, name: '同名', kind: 'duplicate', restore: null }]);
+  assert.equal((await h.state.resolve(old, 'restore', createMemoryEditor(h, P, after))).kind, 'stale');
+  assert.equal(h.texts.get(P), after);
+});
+
+void test('R2 別篇的 B 貼過來取代 A（同一個 ID）：還原選項不跟著 ID 交給 B', async t => {
+  const h = await changedThenElsewhere(t);
+  await h.edit(P, twin('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'duplicate', restore: null }]);
+});
+
+for (const [label, order] of [['先通知這一篇', [P, Q]], ['先通知別篇', [Q, P]]] as const) {
+  void test('R2 同一批把別篇的 B 搬來取代 A（' + label + '）：還原選項不跟著 ID 交給 B', async t => {
+    const h = await changedThenElsewhere(t);
+    h.texts.set(P, twin('B', 'bbbbbb'));
+    h.texts.set(Q, '');
+    h.notify(...order);
+    await h.settle();
+    assert.deepEqual(h.state.deckStatus(P).issues, []);
+    assert.deepEqual(h.state.conflicts(), []);
+  });
+}
+
+for (const [label, order] of [['先通知這一篇', [P, Q]], ['先通知別篇', [Q, P]]] as const) {
+  void test('R2 同一批在別篇新增 B、改了 A 的題目（' + label + '）：認不出是哪一個，changed 結束，兩篇的 duplicate 留著', async t => {
+    const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+    await h.edit(P, twin('A', 'bbbbbb'));
+    h.texts.set(P, twin('A 改過', 'bbbbbb'));
+    h.texts.set(Q, twin('B', 'bbbbbb'));
+    h.notify(...order);
+    await h.settle();
+    assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'duplicate', restore: null }]);
+    assert.deepEqual(brief(h.state.deckStatus(Q).issues), [{ line: 0, name: '同名', kind: 'duplicate', restore: null }]);
+  });
+}
+
+void test('R2 對照：別篇的副本不在了，共用就結束，A 改了題目也還是 A 的', async t => {
+  const h = await changedThenElsewhere(t);
+  h.remove(Q);
+  await h.settle();
+  await h.edit(P, twin('A 改過', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('R2 未知 ID 留在別篇不是目標的一行：同一次刪掉 A、新增無關的目標，拿不到還原選項', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  await h.edit(Q, '一段文字 ^bbbbbb\n');
+  await h.edit(P, unrelated);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '新的', kind: 'lost', restore: null }]);
+});
+
+void test('R2 編輯器裡刪掉 changed 的目標、寫了無關的目標：未知 ID 是刻意拿掉的，新的目標也拿不到還原選項', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  h.state.removedInEditor(P, ['bbbbbb']);
+  await h.edit(P, unrelated);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '新的', kind: 'lost', restore: null }]);
+});
+
+void test('R2 對照：編輯器裡把 changed 的未知 ID 換掉、內容沒變：還是可以還原', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  h.state.removedInEditor(P, ['bbbbbb']);
+  await h.edit(P, twin('A', 'cccccc'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('R2 對照：需要新版的卡組不算共用（不列衝突），A 改了題目還是 A 的，不會什麼問題都不剩', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  await h.edit(Q, '---\n需要版本: 9.0.0\n---\n' + twin('B', 'bbbbbb'));
+  assert.deepEqual(h.state.conflicts(), []);
+  await h.edit(P, twin('A 改過', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('R2 未知 ID 留在需要新版的卡組：同一次刪掉 A、新增無關的目標，拿不到還原選項', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  await h.edit(Q, '---\n需要版本: 9.0.0\n---\n' + twin('B', 'bbbbbb'));
+  await h.edit(P, unrelated);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '新的', kind: 'lost', restore: null }]);
+});
+
+void test('R2 副本在別篇，選 B 是新加的：A 本來就有的 changed 留著、還能還原寫回 A', async t => {
+  const h = await changedThenElsewhere(t);
+  assert.equal((await h.state.resolve(h.state.deckStatus(Q).issues[0], 'new', createMemoryEditor(h, Q, twin('B', 'bbbbbb')))).kind, 'done');
+  assert.equal(h.texts.get(Q), twin('B', 'aaaaab'));
+  assert.deepEqual(h.state.conflicts(), []);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, twin('A', 'bbbbbb')))).kind, 'done');
+  assert.equal(h.texts.get(P), twin('A', 'aaaaaa'));
+  assert.deepEqual(h.state.deckStatus(P).issues, []);
+});
+
+for (const kind of ['duplicate', 'changed']) {
+  void test('R2 副本在別篇，選 A 的 ' + kind + ' 當成新的：A 的兩個問題一起結束，B 沒有問題、照常出題', async t => {
+    const h = await changedThenElsewhere(t);
+    const issue = h.state.deckStatus(P).issues.find(each => each.kind === kind);
+    assert.ok(issue);
+    assert.equal((await h.state.resolve(issue, 'new', createMemoryEditor(h, P, twin('A', 'bbbbbb')))).kind, 'done');
+    assert.equal(h.texts.get(P), twin('A', 'aaaaab'));
+    assert.deepEqual(h.state.deckStatus(P).issues, []);
+    assert.deepEqual(h.state.deckStatus(Q).issues, []);
+    assert.deepEqual(h.state.conflicts(), []);
+    assert.deepEqual(h.share().sort(), ['aaaaab', 'bbbbbb']);
+  });
+}
+
 void test('F1 對照：changed 的 ID 只有一個目標在用時，只靠 ID 認人照舊（名稱與題目都改了也認得）', async t => {
   const h = await setup(t, { [P]: named('A', 'aaaaaa') });
   await h.edit(P, named('A', 'bbbbbb'));
