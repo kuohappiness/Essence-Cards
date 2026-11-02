@@ -47,7 +47,7 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   const idle: (() => void)[] = [];
   let autoOn = options.autoRead ?? false;
   const ui = await renderReview({
-    app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [],
+    app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], units: () => [],
     speech: options.speech ?? { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); idle.length = 0; }, whenIdle: callback => { if (!options.holdSpeech) { callback(); return () => {}; } idle.push(callback); return () => { const at = idle.indexOf(callback); if (at >= 0) idle.splice(at, 1); }; } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
     pickedAt: performance.now(),
@@ -557,7 +557,7 @@ void test('§8 旗子：沒傳 onReport 時沒有；有卡時在「結束複習�
   t.after(() => state.close());
   const session = createSession({ state, pick: { subject: '自然' } });
   t.after(() => { session.close(); });
-  const loading = await renderReview({ app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], speech: { say() {}, stop() {}, whenIdle: () => () => {} }, autoRead: { get: () => false, set() {} }, pickedAt: 0, onReport: () => {} });
+  const loading = await renderReview({ app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], units: () => [], speech: { say() {}, stop() {}, whenIdle: () => () => {} }, autoRead: { get: () => false, set() {} }, pickedAt: 0, onReport: () => {} });
   t.after(() => { loading.unmount(); });
   assert.equal(session.view().kind, 'loading');
   assert.deepEqual(flag(loading), []);

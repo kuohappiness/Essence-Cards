@@ -4,10 +4,10 @@ import { createPortal } from 'react-dom';
 import { animate } from 'motion';
 import type { ReportKind } from '../core/errors/index.ts';
 import type { Rating } from '../core/study/index.ts';
-import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLinks } from '../review/index.ts';
+import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLabel, sourceLinks } from '../review/index.ts';
 import type { Axis, CardView, DoneView, Gesture, Session, Spelling, TypedView } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
-import { firstMaterial, resolveSource } from './sources.ts';
+import { firstMaterial, resolveSource, type MaterialDeck } from './sources.ts';
 import type { Speech } from './speech.ts';
 
 // 複習畫面（W6 §3）：React＋Motion，只把 review 的狀態畫出來、把按鍵與手勢轉成動作，不自己做判斷。
@@ -30,6 +30,8 @@ export interface ReviewProps {
   openLink: (linktext: string, sourcePath: string) => void;
   /** 這篇卡組的「材料」（出處要在哪幾份裡找）。 */
   materials: (deckPath: string) => readonly string[];
+  /** 跨單元的出處的候選（§10）：那個單元的每一篇與它的材料。 */
+  units: (deckPath: string, term: string | null, code: string) => readonly MaterialDeck[];
   speech: Speech;
   autoRead: { get(): boolean; set(on: boolean): void };
   onEvent?: (event: ReviewEvent) => void;
@@ -344,7 +346,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
+        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
           qRef={questionEl} sticky={stickyQuestion} actions={typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />}
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
@@ -405,6 +407,7 @@ function Done({ done, session, close }: { done: DoneView; session: Session; clos
 interface CardProps {
   view: CardView; app: App; speech: Speech;
   materials: (deckPath: string) => readonly string[];
+  units: (deckPath: string, term: string | null, code: string) => readonly MaterialDeck[];
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -421,7 +424,7 @@ interface CardProps {
   onPainted: () => void;
   onFail: (side: 'front' | 'back', error: unknown, path: string) => void;
 }
-function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
+function Card({ view, app, speech, materials, units, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
   const prompt = card.prompt;
   const question = prompt.kind === 'qa' ? prompt.question : prompt.text;
@@ -436,7 +439,7 @@ function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inp
   const inline = typing !== null && lines > 0 && slot !== null;
   const sources = sourceLinks(card.target.fields.sources);
   const deckMaterials = materials(card.deck);
-  const links = sources.map(item => ({ ...item, target: resolveSource(app, card.deck, deckMaterials, item.link) }));
+  const links = sources.map(item => ({ ...item, label: sourceLabel(item), target: resolveSource(app, card.deck, deckMaterials, item.link, (term, code) => units(card.deck, term, code)) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
@@ -494,9 +497,9 @@ function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inp
       {hasSource && <div className="ec-tools">
         <span className={'ec-srcw' + (tipOpen ? ' is-tip' : '')}>
           <button type="button" className="ec-ico sm" aria-label="出處" onClick={() => { setTipOpen(!tipOpen); }}><Icon type="book" /></button>
-          {tipOpen && (links.length ? links : [{ text: '出處', link: { kind: 'text' as const }, target: fallback }]).map((item, index) => item.target
-            ? <button key={index} type="button" className="ec-tip" onClick={() => { openLink(item.target ?? '', card.deck); }}>{item.text} ↗</button>
-            : <span key={index} className="ec-tip is-text">{item.text}</span>)}
+          {tipOpen && (links.length ? links : [{ label: '出處', target: fallback }]).map((item, index) => item.target
+            ? <button key={index} type="button" className="ec-tip" onClick={() => { openLink(item.target ?? '', card.deck); }}>{item.label} ↗</button>
+            : <span key={index} className="ec-tip is-text">{item.label}</span>)}
         </span>
       </div>}
     </div>}

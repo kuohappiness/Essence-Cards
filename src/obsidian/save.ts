@@ -2,6 +2,7 @@ import { MarkdownView, Modal, setIcon } from 'obsidian';
 import type { App, Editor, Plugin, WorkspaceLeaf } from 'obsidian';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { DuplicateTarget, EditorHandle, IdIssue, IdIssueKind, Malformed, State, WriteBlock, WriteResult } from '../state/index.ts';
+import { unreadableSources, type UnreadableSource } from '../ui/sources.ts';
 import { textChanges } from './diff.ts';
 
 // 存檔按鈕、待處理問題的小視窗與離開筆記時的備援（W5 §8-6、D-134），只在電腦接上。
@@ -20,6 +21,11 @@ export const TIPS = {
   addedMalformed: (added: number, n: number) => `${added} 個學習目標已加入複習；有 ${n} 個學習目標寫法有問題，暫時不會出題`,
   /** 通知裡一個寫法有問題的目標；line 從 1 算。 */
   problem: (line: number, name: string, reason: string) => `第 ${line} 行〈${name}〉：${reason}`,
+  /** 屬性寫法有問題（§9-2）與看不懂的出處（§9-5）：按鈕說明與存檔後的通知都用。 */
+  properties: (n: number) => `有 ${n} 個屬性寫法有問題`,
+  sources: (n: number) => `有 ${n} 個出處看不懂`,
+  /** 通知裡一個屬性的問題；line 從 1 算。 */
+  property: (line: number, message: string) => `第 ${line} 行：${message}`,
   /** 通知只列前幾個，其餘的數。 */
   more: (n: number) => `另有 ${n} 個`,
   stale: '這篇筆記剛剛改過，請再按一次存檔',
@@ -105,21 +111,25 @@ const blockedTip = (result: WriteResult): string | null => result.kind === 'bloc
  * done、unchanged 的提示（技術債 D1）：新增的數（寫錯的不算）和寫法有問題的目標合成一次，問題照行號列前 SHOWN 個（行號、名稱、原因），
  * 其餘寫「另有 N 個」。都沒有時不提示。
  */
-function doneTip(added: number, malformed: readonly Malformed[]): string | null {
-  if (!malformed.length) return added ? TIPS.added(added) : null;
-  const head = added ? TIPS.addedMalformed(added, malformed.length) : TIPS.malformed(malformed.length);
-  const lines = malformed.slice(0, SHOWN).map(target => TIPS.problem(target.at + 1, target.name, SHORT[target.code] ?? target.reason));
-  if (malformed.length > SHOWN) lines.push(TIPS.more(malformed.length - SHOWN));
-  return [head, ...lines].join('\n');
+function doneTip(added: number, malformed: readonly Malformed[], hints: DeckHints): string | null {
+  const shown = (lines: string[]): string[] => lines.length > SHOWN ? [...lines.slice(0, SHOWN), TIPS.more(lines.length - SHOWN)] : lines;
+  const parts: string[] = [];
+  if (malformed.length) {
+    parts.push(added ? TIPS.addedMalformed(added, malformed.length) : TIPS.malformed(malformed.length), ...shown(malformed.map(target => TIPS.problem(target.at + 1, target.name, SHORT[target.code] ?? target.reason))));
+  } else if (added) parts.push(TIPS.added(added));
+  if (hints.properties.length) parts.push(TIPS.properties(hints.properties.length), ...shown(hints.properties.map(issue => TIPS.property(issue.line + 1, issue.message))));
+  // 不跳視窗，也不擋補 ID（D-164 第 7 點）。
+  if (hints.sources.length) parts.push(TIPS.sources(hints.sources.length), ...shown(hints.sources.map(source => TIPS.problem(source.line + 1, source.name, source.text))));
+  return parts.length ? parts.join('\n') : null;
 }
 
 /**
  * 存檔結果的提示；text 是按下時編輯器裡的文字，malformed 是存檔之後 state 看到的寫法有問題的目標。done、unchanged 照 doneTip；
  * 需要新版的說要更新外掛；受阻、而且有沒 ID 的目標時說清楚新目標這次沒加入。受阻但目標都有 ID、saved 與其他 blocked 不提示。
  */
-function saveTip(result: WriteResult, text: string, malformed: readonly Malformed[]): string | null {
-  if (result.kind === 'done') return doneTip(result.added, malformed);
-  if (result.kind === 'unchanged') return doneTip(0, malformed);
+function saveTip(result: WriteResult, text: string, malformed: readonly Malformed[], hints: DeckHints = NO_HINTS): string | null {
+  if (result.kind === 'done') return doneTip(result.added, malformed, hints);
+  if (result.kind === 'unchanged') return doneTip(0, malformed, hints);
   if (result.kind === 'stale') return TIPS.stale;
   if (result.kind === 'failed') return TIPS.failed;
   if (result.kind === 'blocked' && result.reason === 'needs-update') return TIPS.needsUpdate;
@@ -128,15 +138,21 @@ function saveTip(result: WriteResult, text: string, malformed: readonly Malforme
   return null;
 }
 
-const KINDS = ['needs-update', 'done', 'missing', 'issues', 'malformed'] as const;
+/** 這一篇的提示（不算寫錯，卡照常複習）：屬性寫法有問題、看不懂的出處。 */
+interface DeckHints { properties: readonly { line: number; message: string }[]; sources: readonly UnreadableSource[] }
+const NO_HINTS: DeckHints = { properties: [], sources: [] };
+
+const KINDS = ['needs-update', 'done', 'missing', 'issues', 'malformed', 'properties', 'sources'] as const;
 /**
  * 一篇卡組按鈕的樣子：需要新版、有待處理的問題、有目標寫法有問題（技術債 D1：按下去補 ID 並在通知列出問題，所以排在沒有 ID 前面）、
- * 有目標還沒有 ID、沒有要做的。
+ * 屬性寫法有問題、看不懂的出處（§9-5：排在 malformed 後面、沒有 ID 前面）、有目標還沒有 ID、沒有要做的。
  */
-function buttonLook(status: { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true }): { kind: (typeof KINDS)[number]; icon: string; tip: string } {
+function buttonLook(status: { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true }, hints: DeckHints): { kind: (typeof KINDS)[number]; icon: string; tip: string } {
   if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
   if (status.malformed.length) return { kind: 'malformed', icon: 'alert-triangle', tip: TIPS.malformed(status.malformed.length) };
+  if (hints.properties.length) return { kind: 'properties', icon: 'alert-triangle', tip: TIPS.properties(hints.properties.length) };
+  if (hints.sources.length) return { kind: 'sources', icon: 'alert-triangle', tip: TIPS.sources(hints.sources.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
 }
@@ -266,6 +282,12 @@ export function wireSave(host: SaveHost): Saver {
     return reason ? BLOCKED[reason] ?? null : null;
   }
 
+  /** 這一篇的提示，依 state 目前讀到的內容。 */
+  function hintsOf(state: State, path: string): DeckHints {
+    const deck = state.decks().find(entry => entry.path === path)?.deck;
+    return deck ? { properties: deck.props.issues, sources: unreadableSources(app, path, deck) } : NO_HINTS;
+  }
+
   /** 存檔還沒結束的卡組：再按不另外排一份。 */
   const saving = new Map<string, Promise<void>>();
   function save(view: MarkdownView): Promise<void> {
@@ -277,7 +299,7 @@ export function wireSave(host: SaveHost): Saver {
     const job = state.save(editorOf(view, path)).then(result => {
       // 卸載之後才回來：不提示、不加回按鈕、不開小視窗（技術債 W2）。
       if (!alive) return;
-      const tip = saveTip(result, text, state.deckStatus(path).malformed);
+      const tip = saveTip(result, text, state.deckStatus(path).malformed, hintsOf(state, path));
       if (tip) host.notify(tip);
       refresh();
       if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view, life).open();
@@ -301,7 +323,7 @@ export function wireSave(host: SaveHost): Saver {
       const path = view.file?.path;
       if (!state || !path || !isDeckPath(path)) continue;
       seen.add(view);
-      const look = buttonLook(state.deckStatus(path));
+      const look = buttonLook(state.deckStatus(path), hintsOf(state, path));
       // 受阻期間外觀照舊，說明一律用同一句（不說「學習目標都已加入複習」）；需要新版的照它的說明。按下時 state 的門檻先看讀不到，
       // 所以這種卡組按下去先說受阻、讀完再按才說需要新版（B7，照實記下、這次不統一）。
       const blocked = blockTip(state);

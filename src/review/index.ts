@@ -11,7 +11,7 @@ export type { Axis, Gesture } from './gesture.ts';
 export { englishParts, lineSpeech, otherAnswers, englishBreak, glueArticles, tailStart, closingRun, openingRun, fillBlank, blankCount, BLANK } from './english.ts';
 export { crumb } from './crumb.ts';
 export { extraLabel } from './extras.ts';
-export { sourceLinks } from './sources.ts';
+export { sourceLabel, sourceLinks } from './sources.ts';
 export type { SourceLink } from './sources.ts';
 export { startRows } from './start.ts';
 export type { StartRow } from './start.ts';

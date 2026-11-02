@@ -98,3 +98,12 @@ export function splitUnit(value: string): { code: string; name: string } {
   const at = text.search(/[ \t　]/);
   return at < 0 ? { code: text, name: '' } : { code: text.slice(0, at), name: text.slice(at + 1).trim() };
 }
+
+/** 按鈕上的文字（D-164 第 8 點）：連結不露出括號，有別名顯示別名，有標題顯示標題，否則顯示筆記名稱；其他照原文。 */
+export function sourceLabel({ text, link }: SourceItem): string {
+  if (link.kind !== 'note') return text;
+  if (link.alias) return link.alias;
+  const parts = link.link.split('#');
+  const heading = parts.at(-1) ?? '';
+  return parts.length > 1 && heading && !heading.startsWith('^') ? heading : parts[0];
+}

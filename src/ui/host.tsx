@@ -108,6 +108,7 @@ export function openReview(options: OpenOptions): ReviewHandle {
     close={() => { handle.close(); }}
     openLink={(linktext, sourcePath) => { handle.close(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}
+    units={(path, term, code) => state.unitMaterials(path, term, code)}
     autoRead={{ get: () => loadAutoRead(app), set: on => { saveAutoRead(app, on); } }}
   />);
   element.focus({ preventScroll: true });

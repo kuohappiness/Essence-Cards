@@ -16,7 +16,9 @@
 .essence-cards-save.is-missing { color: var(--interactive-accent); }
 .essence-cards-save.is-issues { color: var(--text-error); }
 .essence-cards-save.is-needs-update,
-.essence-cards-save.is-malformed { color: var(--text-warning); }
+.essence-cards-save.is-malformed,
+.essence-cards-save.is-properties,
+.essence-cards-save.is-sources { color: var(--text-warning); }
 
 .essence-cards-issue + .essence-cards-issue,
 .essence-cards-issue + .essence-cards-issue-intro {
