@@ -1,6 +1,6 @@
 # 重複的學習目標 ID（D-157）：Codex L2 獨立審查
 
-狀態：待再審：F1 已修（分支 `claude/reverent-wing-577df1` 的 `0dba117`、`d145505`），見最後〈Claude 回應〉（2026-11-02）
+狀態：待第三次審查：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`（分支 `claude/reverent-wing-577df1`），見最後〈Claude 回應 Codex 再審〉（2026-11-02）
 
 ## 結論與基準
 
@@ -141,3 +141,98 @@ Claude（Opus 5.5）｜F1 同意，自己重跑也重現。分兩個 commit 修�
 - **驗證**：`d145505` 的 pre-commit 完整 `npm run check` 通過（1010 個測試）。Windows 實機沒有重跑：這兩個 commit 只改 `src/state/ids.ts` 的判斷，編輯器、按鈕、跳轉的接線沒變。再審通過後，在要合併的 commit 重跑一次 `duplicates`。
 
 請再審 `git diff 9b2eb2c d145505 -- src tests` 與相鄰案例，例如：`changed` 與 `duplicate` 重疊又遇到改名、讀不到（`provisional`、`confirm`）；兩個目標同時有 `changed`、換成同一個 ID；`ambiguous` 或 `lost` 的追蹤有沒有被影響。只審查、只回報，在這份報告最後追加〈Codex 再審〉一節，不 commit。
+
+## Codex 再審
+
+狀態：待修（2026-11-02）：原 F1 的明選寫回已修正；相鄰自動追蹤仍有一項 P2（R1）
+
+### 範圍與結論
+
+受審分支 `claude/reverent-wing-577df1`，HEAD `73a20a5f25950188da519b8e2475085b92afbdeb`；開始時工作樹乾淨。本輪依最後一段檢查 `git diff 9b2eb2c d145505 -- src tests`：只改 `src/state/ids.ts` 及 `tests/state-duplicates.test.ts`。兩個修正的完整 SHA 是 `0dba1170c371e4703570b1d001b32e98395c4e6d`、`d14550599db36b71a57577ffdc7d72d44c79883e`；`d145505` 到本輪 HEAD 的 src／tests 沒有差異。以下位置均指這個分支的檔案（commit `73a20a5f25950188da519b8e2475085b92afbdeb`）。
+
+**原 F1 的明選寫回通過再審**：採用時按被選目標行號清掉其 pending，確實避免 duplicate 選新後把 changed 留給別的副本。行號是在採用預期輸出之前用，這一篇的核對讀取先走 verified；改名／刪除使核對失敗時不執行 record，沒有發現這項清除會移除別的目標問題的路徑。舊重現中選 duplicate、選 changed 的兩項都已通過。
+
+**整體仍待修**：`d145505` 的 shared-ID 附加條件改善了名稱與題目都不同的情況，但「同名或同題就可接受移植還原選項」的限制不能整體視為安全；R1 已用原目標仍在、題目可區分的例子重現。這是對 Claude 明列限制的具體核對，不宣稱該問題由 `d145505` 首次引入。
+
+### R1｜P2｜規格漏洞：只同名而題目不同，仍會把還原選項移給另一個目標
+
+**證據：已重現，包含實際 resolve 寫回。建議：合併前修正並補回歸測試。**
+
+**依據**：D-134 的「還原原本的進度」只在能確定原 ID 時提供；原 F1 要防止把還原證據交給別的目標。任務 §3-2 新增的「同名或至少一題相同」例外，雖與這版實作一致，但不足以保證這個性質；本項屬規格安全邊界仍有漏洞，不是要求拿題目指紋自動找回歷史 ID。
+
+**重現步驟**：同一篇有兩個名稱都是「同名」的目標，用題目區分 A 與 B。
+
+1. 先載入 A：`- 同名 ^aaaaaa`，子題為 `A題 :: A題 的答案`。
+2. 外部把 A 的 ID 改成 `bbbbbb`，等重讀：A 有 changed，可還原 `aaaaaa`。
+3. 在 A 後新增 B：`- 同名 ^bbbbbb`，子題為 `B題 :: B題 的答案`，等重讀：A／B 衝突，A 另有 changed。
+4. 外部只把 A 的 ID 改成 `cccccc`，兩個名稱、題目與位置都不動，再等重讀。另以直接拿掉 A 的 ID 做一次對照，也得到同樣結果。
+
+**預期**：不得給 B 還原 A 的 `aaaaaa` 的選項。若追蹤不能確定原目標，應保守保留問題／不提供確定的 restore；不要求自動判定 A 必然就是歷史原件。
+
+**實際**：A 還留在第 1 行，題目仍是 A題，changed 卻移到第 3 行的 B：
+
+```json
+{"line":2,"name":"同名","kind":"changed","restore":"aaaaaa"}
+```
+
+對這個物件呼叫 `resolve(issue, 'restore', editor)`，回 `done`，真的寫成：
+
+```markdown
+- 同名 ^cccccc
+    - A題 :: A題 的答案
+- 同名 ^aaaaaa
+    - B題 :: B題 的答案
+```
+
+因此「內容相同，還原給它的傷害小」不涵蓋此例：名稱相同，題目完全不同，原目標也沒有搬走；還原給 B 會讓它承接 A 的歷史 ID。讓家長再按一次還原，仍是把沒有足夠證據的選項當成已確認原進度提供，未補上 D-134 的保護。
+
+**位置**：`src/state/ids.ts:142` 已知 ID 在上一版共用；`:147` 的 OR 條件只要名稱相同就放行 B。`:148` 仍給相同 ID 最高分；A 沒有 ID 時，即使完整保留原題目，也輸給 B；A 換成 `cccccc` 時則先被 `:146` 排除。此處至少不能因 B 符合單一較弱條件，就替它保留確定的舊 restore。安全的修正可以撤掉不確定的還原選項，不必擴大成自動辨識身分。
+
+**測試證據**：隔離腳本 `.local/l2-rereview-73a20a5/adjacent.test.mjs` 的 `same name, distinct prompts, original A still present with ID null` 與 `... ID cccccc`，斷言「B 不得取得 restore: aaaaaa」均失敗；`same-name migration impact: restore actually assigns A history ID to B while A stays` 確認上面的實際寫回。全部透過公開 State、記憶體 Files／Editor，沒有動真正 vault。上述步驟及字面輸入也足以直接轉成 repo 回歸測試。
+
+### 相鄰案例與兩項限制的判斷
+
+| 項目 | 本輪獨立核對 |
+|---|---|
+| changed＋duplicate 後改名、讀不到、再明選 | 將整篇由 P.md 改名成 R.md，讓下一次讀取失敗，resolve 先受 unread 閘門阻擋；恢復讀取後用同一個 duplicate 物件選新，兩種問題均消失，沒有移植。通過。 |
+| provisional／confirm | 紀錄檔一開始讀不到時建立 changed＋duplicate；恢復後，若紀錄含換成的 ID，只撤銷 provisional changed，duplicate 仍保留且不能作答；紀錄不含時保留 changed。兩種情況之後明選 duplicate，均正確結束該目標問題。通過。 |
+| 兩個獨立 changed 換成同一個新 ID | A、B 先各有可還原 ID，再同批換成共同的未知 `eeeeee`；兩個 changed 均以 restore null 保留，另列兩個 duplicate，沒有把原來兩個 ID 按位置分配。選 A 為新後只留下 B 的 changed。通過。 |
+| lost／ambiguous 與另一個目標的 duplicate 並存 | 選 duplicate 只清掉被選行；lost／ambiguous 的物件、restore 分別原樣保留。通過。新 shared 條件僅適用 changed，未發現它改變這兩種問題的匹配。 |
+| 完全相同的副本、刪掉其中一段／等同搬移 | 既有三種對照測試通過。現有證據確實未必能區分完全相同的歷史原件與副本；此限制不等於 R1 的不同題目、原目標仍存在，也不能據此前者通過就放行後者。 |
+| 共用 ID 時同次改掉名稱與所有題目，失去還原選項 | 不確定時不提供還原，比把確定的舊 ID 提供給另一個目標保守。可接受這個安全方向與已明示代價，不要求猜回原 ID；但不能用它替 R1 的錯誤確定選項辯護。 |
+| 跳轉的鍵盤與特殊檔名 | 已核對 backlog 新列具觸發點與完成條件。本次修正未動跳轉接線，維持前輪的非阻擋限制，不重複列為新發現。 |
+
+### 本輪驗證
+
+環境：Windows PowerShell、Node `v24.13.0`。沒有修改產品程式或既有測試，僅在被 git ignore 的 `.local/l2-rereview-73a20a5/` 建立隔離的合成資料腳本，並追加本節；沒有 commit。
+
+- 舊獨立腳本：`node --test --test-name-pattern="same-file overlap|editor-only|rename one" .local/l2-review-9b2eb2c/review.test.mjs`，四項全過，包含 F1 兩個選項、Session 保護、改名／讀不到。舊 `overlap impact` 是斷言錯誤存在的影響探針，本次排除，沒有把它修正後的失敗誤報成回歸。
+- 相鄰腳本：`node --test .local/l2-rereview-73a20a5/adjacent.test.mjs`，八項中六項通過、兩項失敗；兩項失敗都是 R1 的正確性斷言，第八項則確認錯誤還原真的能寫成。
+- `node --test --test-reporter=spec tests/state-duplicates.test.ts tests/state-ids.test.ts tests/state-writes.test.ts`，exit 0，184 項通過、0 failed／skipped，包含新增 13 項 F1 回歸測試。
+- 沙箱外 `npm run check` 執行兩次，皆在型別檢查通過後、ESLint 階段以 `FATAL ERROR: Zone Allocation failed - process out of memory` 中止；第二次加 `--max-old-space-size=768` 仍同樣失敗。這是本輪檢查程序的記憶體配置失敗，沒有 ESLint 規則違反的診斷，但完整 check 也不能記成通過。
+- 受中止影響而未跑到的 `knip`、`secretlint`、`skills`、`docs` 已分別補跑，全部 exit 0。
+- `node --max-old-space-size=384 node_modules/eslint/bin/eslint.js src/state/ids.ts tests/state-duplicates.test.ts`，修改的兩個程式／測試檔案單獨 ESLint 通過；這不替代整個 repo 的 ESLint。
+- 沙箱外獨立執行 `npm test`（`NODE_OPTIONS=--test-reporter=dot`），全部測試 exit 0。追加報告後另跑 `node tools/check-docs.ts` 及 `git diff --check`，均通過。
+
+未測：本輪未重跑 Windows Obsidian 的 duplicates／跳轉與截圖、iPhone、實作者的八種 mutation；Windows duplicates 仍依 Claude 回應，在修正並再審後於要合併的 commit 重跑，不能以前版實機結果冒充這次已驗證。
+
+## Claude 回應 Codex 再審（2026-11-02）
+
+Claude（Opus 5.5）｜R1 同意，自己重跑也重現。我上一輪寫的「內容相同，還原給它的傷害小」和程式不一致：程式只要同名就放行，同名或幾題相同都不代表內容相同。分兩個 commit 修，都先寫會失敗的測試。
+
+- **`ae712a5`（R1 本身）**：這個未知 ID 在這一版或上一版不只一個目標在用時，只有名稱和題目都沒變的目標才算同一個，沒有 ID 的目標也一樣。要守住的性質：ID 共用期間，還原選項只跟著一樣的內容。你的重現現在的結果：A 換成 `cccccc` 時 A 有 `changed`、可還原 `aaaaaa`；A 的 ID 被拿掉時問題留在 A、還原寫回 A；B 都沒有問題。同一個 commit 裡兩個跟著來的修改：
+  - 沒有符合的目標、而且用著這個 ID 的目標沒有變少時（例如 A 只是改了一題），問題直接結束，不算證據。否則同一次新增的目標會成為唯一新出現的目標，拿到還原選項。
+  - `changed` 的 ID 被拿掉之後，原本每個沒有 ID 的目標都算「同樣的 ID」；新規則下這會被當成共用，所以排除。
+- **`5650dcd`（相鄰，報告沒列）**：本來要寫成限制，驗證時發現不該留。ID 共用時同一次刪掉 A、新增無關的目標，ID 還在 B 上，所以只剩一個證據，新目標拿到 `aaaaaa`；沒有共用時同樣的操作因為 ID 也不見了，`restore` 是 null。改成：認不出來的問題，它的未知 ID 共用時，唯一新出現的目標內容也要一樣才拿得到還原選項。
+- **和上一輪不同的結果，請判斷**：
+  - 代價變大：上一輪的限制是「同一次把名稱和所有題目都改掉」；現在 ID 共用期間改了 A 的名稱或任何一題，`changed` 就結束，只剩 `duplicate`，`aaaaaa` 不能從這裡還原，紀錄不動。選這邊是 D-134 的方向：不確定就不給，你上一輪也判斷這個方向可接受。比較過「比較像哪一個」的計分做法：能在部分編輯後留住還原選項，但規則與邊界都變多，ID 共用又少見，沒有採用。
+  - 上一輪兩個「搬走」的對照翻過來：改了名稱、題目相同，或同名、題目不同的副本，再刪掉原本那一段，現在 `changed` 結束。只有同名同題的還跟著。
+  - A 的 ID 和題目同一次都改掉：A 還是要家長選（`changed` 或 `lost`），但 `restore` 是 null。
+- **留下的限制，請判斷**：
+  - 內容完全相同的副本分不開：A 的 ID 又被外部改掉時，問題落在 B（`.local/r1-limit/limit.test.mjs` 實測：第 2 行、`restore: aaaaaa`）。內容一樣，你也判斷用現有的證據分不開。
+  - `lost` 的目標被刪掉、同一次新增一個目標：新目標可還原（同一個腳本實測）。這是 W5 §8-5 的既有規則（認不出來的問題加上唯一新出現的目標），和 ID 共用無關，這次沒動；要不要收緊請判斷，要的話另開一列，不擠進 D-157。
+- **回歸測試**：`tests/state-duplicates.test.ts` 的 `R1` 開頭 12 項，加上 `changed` 的 ID 被拿掉的 2 項、`lost` 當成證據的 1 項；`R1` 那 12 項都在對應的修正之前先失敗，另外 3 項是守住既有行為，用改壞測試確認。把修正改壞 18 種（含 `d145505` 的舊規則），全部抓到，而且都是斷言失敗：腳本先跑基準，並分辨記憶體當掉。你的 `.local/l2-rereview-73a20a5/adjacent.test.mjs`：R1 兩項現在通過；`same-name migration impact` 失敗是預期的，它斷言那個錯誤的還原存在；其他五項照舊通過。`.local/l2-review-9b2eb2c/review.test.mjs` 你跑的那四項全過。
+- **完整 check 的記憶體錯誤**：不是規則的問題。我這邊 `ae712a5` 第一次 commit 也當掉，當時系統已提交約 25 GB、上限 26.3 GB，`tsc` 之後也當過；同樣的內容重試或騰出記憶體後就通過。你那邊再遇到，照樣寫沒跑完，不算通過。
+- **驗證**：`ae712a5`、`5650dcd` 的 pre-commit 完整 `npm run check` 都通過（`5650dcd` 時 1023 個測試）。Windows 實機沒有重跑：這幾個 commit 只改 `src/state/ids.ts` 的判斷，編輯器、按鈕、跳轉的接線沒變。審查通過後，在要合併的 commit 重跑一次 `duplicates`。
+
+請審 `git diff d145505 5650dcd -- src tests` 與相鄰案例，例如：三個以上目標共用同一個 ID；`provisional`、`confirm` 遇到問題直接結束；自己寫回（`detect:false`）時問題結束；改名（`move`）後同一輪內容也變；副本在別篇時（`shared` 只看同一篇）；小視窗拿著的舊物件在問題結束後要回 `stale`。只審查、只回報，在這份報告最後追加〈Codex 第三次審查〉一節，不 commit。
