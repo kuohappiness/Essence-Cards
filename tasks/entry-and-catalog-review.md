@@ -1,6 +1,6 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：待審；只審查，不改產品程式。報告寫在 `Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md`（標題下第一行寫狀態），或貼回對話由 Claude 存。
+狀態：第一輪審完，[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)；F1、F2、F3、F5、F6 已修，F4 等使用者決定，之後再審修正的部分。只審查，不改產品程式。
 
 ## 審查對象
 
