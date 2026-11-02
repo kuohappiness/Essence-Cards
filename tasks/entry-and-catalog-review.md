@@ -13,6 +13,7 @@
 | 提示 | `src/ui/sources.ts` 的 `unreadableSources` 多看目錄與那個單元的材料；標題去雜訊之後比；`state.unitMaterials` 多回 `name` | `4a0bce2` |
 | 接線 | `Review.tsx`、`host.tsx` 的 `owner`；`save.ts` | `4a0bce2` |
 | 別的欄位 | `parse.ts` 半形 `\|` 後面接欄位名稱也是分隔 | `4961699` |
+| 開發命令的測試資料 | `src/obsidian/dev-entry.ts`：看不懂的那行換成新規則的例子；長文字拿掉逗號（逗號現在是分隔） | `4a0bce2`、`1c643d7` |
 | 合併 main | `tests/compare-versions.test.ts` 的匯出行照這個分支改；`tools/compare/adapter.ts` 不讀出處，§9-4 要核對的部分沒有東西要改 | `b493743` |
 
 **規格**：[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)、[任務說明 §9-3、§9-5、§9-6](entry-and-catalog.md#9-3-出處一欄怎麼讀syntax-2-5d-167)、[syntax §2-5](../docs/syntax.md#2-5-出處)。過程與你前三輪的意見在[討論稿](<../Claude Codex Discussion/2026-11-02-source-reading.md>)。
@@ -36,7 +37,7 @@
 7. **整段只有字**：同一欄有讀懂別的就是說明（`remark`），找不到標題不提示；像編號的字與否定字不算說明。
 8. **本篇自己的編號單獨寫**（`2-2`）、網址、`第5題`：只顯示，不算看不懂。
 
-**驗證方式**：`npm run check`（包含上面的測試）。正式程式跑兩份考卷（都不是盲測了，只當回歸）：`node experiments/source-reading/product-check.mjs "$(pwd)"`。
+**驗證方式**：`npm run check`（包含上面的測試）。正式程式跑兩份考卷（都不是盲測了，只當回歸）：`node experiments/source-reading/product-check.mjs "$(pwd)"`。Windows 版 Obsidian 1.14.5 上 `entry` 44 項 true、0 項 false，`entry-unread` 通過，見[任務說明〈結果〉](entry-and-catalog.md#結果)。
 
 **已知的問題與沒做的**：
 

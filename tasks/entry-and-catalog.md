@@ -1,6 +1,6 @@
 # 入口與目錄，第一批：看得到、練得到（D-163，給 Claude，本機執行）
 
-狀態：使用者 2026-11-02 同意；§9 格式查核做完（[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-format-review.md>)），改寫法定在 [D-164](../docs/decisions.md#d-164-出處的寫法與讀法)，L2 之後再收緊（[D-166](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)）；程式與 Windows 實機做完（分支 `claude/entry-and-catalog`，到 `e032aa6`），Codex L2 第一輪的發現都修了，等再審（[審查請求](entry-and-catalog-review.md)）
+狀態：使用者 2026-11-02 同意；§9 格式查核做完（[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-format-review.md>)），改寫法定在 [D-164](../docs/decisions.md#d-164-出處的寫法與讀法)，L2 之後再收緊（[D-166](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)）；出處的讀法改成 [D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)；程式與 Windows 實機做完（分支 `claude/entry-and-catalog`，到 `1c643d7`），Codex L2 第一輪的發現都修了，第二輪的 R2-F1 併進 D-167，等第三輪再審（[審查請求](entry-and-catalog-review.md)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（設計已在 [D-163](../docs/decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區) 與這份說明做完）。跨模組、動到選卡與出處解析，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -337,10 +337,11 @@ D-142 原則 1、2、5、6、8；[D-164](../docs/decisions.md#d-164-出處的寫
 
 ## 結果
 
-Windows 版 Obsidian 1.14.5，開發版 `0.2.0+a1b73b5.dirty`（內容同 `4f9d07c`，只差之後改的測試），2026-11-02；L2 第一輪修完後在 `0.2.0+e032aa6` 重跑 `entry`，一樣 44 項 true、0 項 false，看不懂的通知列出三個並教怎麼寫（`entry-unread` 沒有重跑：這一段沒有改）。
+Windows 版 Obsidian 1.14.5，開發版 `0.2.0+a1b73b5.dirty`（內容同 `4f9d07c`，只差之後改的測試），2026-11-02；L2 第一輪修完後在 `0.2.0+e032aa6` 重跑 `entry`，一樣 44 項 true、0 項 false，看不懂的通知列出三個並教怎麼寫（`entry-unread` 沒有重跑：這一段沒有改）。D-167 的新讀法寫好後兩個都重跑，2026-11-03，見下面最後一項開發命令。
 
 - **開發命令 `entry`**（`src/obsidian/dev-entry.ts`）：44 項 true、0 項 false。§1 的返回路線全部走過（入口按科目、目錄的全部卡、草稿、設定圖示、出處；卡組筆記的全部卡與預覽回筆記），每條路焦點都沒有掉到 body；出處實際點一次，複習和入口都關掉，開在新分頁、跳到第二個單元的材料；按鈕沒有括號，手機寬度下長文字換行；`compareLists` 對分行的出處沒有不一致；看不懂的出處，存檔按鈕是 `有 1 個出處看不懂`，通知是 `第 16 行〈看不懂的出處〉：p.44, 45`；預覽一輪後複習紀錄不變。截圖 26 張（淺色與深色、電腦與手機寬度），第一輪看到目錄的列被 Obsidian 的按鈕樣式置中，已修。
 - **開發命令 `entry-unread`**（PowerShell 用獨占鎖擋住一篇，再送 modify）：狀態列 `Essence Cards：1 項提醒`，提醒一區列出路徑；放開後自己重試，兩邊都消失，不用重開。用的是獨占鎖，不是任務說明寫的 `dev-cloud`：要驗的是 `unread()` 到畫面這一段，雲端佔位檔的讀法在 D-154 的實測驗過。
+- **D-167 之後重跑**（開發版 `0.2.0+1c643d7.dirty`，程式同 `1c643d7`，`.dirty` 是別的 session 在 `docs/backlog.md` 加的一行）：`entry` 44 項 true、0 項 false，截圖 26 張。第一次是 43／1：測試資料的長文字有逗號，新讀法分成兩項，最後一個按鈕變短，「長文字換行」量不到；改成沒有逗號的長文字後通過，畫面本身沒有問題。存檔按鈕是 `有 4 個出處看不懂`，通知列出前三個、另有 1 個，並教怎麼寫；`compareLists` 沒有不一致。`entry-unread`（一樣用獨占鎖）：狀態列與提醒一區出現，放開後都消失。第二次重跑撞到第一次留下的兩個空資料夾（Obsidian 當它們刪了，iCloud 上還在，`createFolder` 報 Folder already exists），手動移除後再跑沒有再留下；這是開發命令的清理，不影響外掛。
 - **`npm run build`**：`styles.css` 的字標 2.8 KB（上限 20 KB）。
 - **`tools/compare/adapter.ts` 的核對**（§9-4，2026-11-03 合併 main 後）：它用每個版本自己的 `state` 讀，沒有讀出處，`src/dev/compare.ts` 的 `fieldNames` 也不用改。
 - **沒做**：iPhone 併入下一次實機測試（[backlog](../docs/backlog.md#v1-需要做的任務)）。

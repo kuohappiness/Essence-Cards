@@ -1,6 +1,6 @@
 # 出處怎麼讀：從底層重想
 
-狀態：第二份考卷（盲測）跑完，結果在最後；使用者決定用合併版當基礎，接著談模組化填入與沒寫學期，都定了才寫 D-ID；[Codex](<2026-11-02-source-reading-codex.md>)、[Fable](<2026-11-02-source-reading-fable.md>) 的原文各在自己的檔案；入口與目錄第一批的合併等這一題定案
+狀態：已定案（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)），程式在分支 `claude/entry-and-catalog`（`4a0bce2`）；第二份考卷（盲測）的結果在最後；使用者決定用合併版當基礎，模組化填入照 Claude 的建議，沒寫學期維持不算；[Codex](<2026-11-02-source-reading-codex.md>)、[Fable](<2026-11-02-source-reading-fable.md>) 的原文各在自己的檔案；入口與目錄第一批的合併等 Codex 第三輪再審
 
 基準：分支 `claude/entry-and-catalog`（worktree `.claude/worktrees/busy-meitner-e52ff7`）的 `1089fa3`。相關：[D-164](../docs/decisions.md#d-164-出處的寫法與讀法)、[D-166](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)、[任務說明 §9](../tasks/entry-and-catalog.md#9-單元索引與文法d-164)、[L2 兩輪報告](<2026-11-02-entry-and-catalog-review.md>)（R2-F1 併進這一題）、[syntax §2-5](../docs/syntax.md#2-5-出處)。
 
