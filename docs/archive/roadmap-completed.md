@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-30 | 預覽卡片定案（[D-161](../decisions.md#d-161-預覽卡片不記錄不動排程設定頁打開才有)）：家長快速看版型，不寫紀錄、不動排程；設定頁打開才顯示，手機電腦都有；v1 和範圍與目錄一起做 |
 | 2026-10-30 | 外掛內的備份第一部分合併進 `main`（`7a12688`，[任務說明](../../tasks/plugin-backup.md)〈結果：第一部分〉、[L2 報告](<../../Claude Codex Discussion/2026-10-30-plugin-backup-1-review.md>)）：電腦上新版改寫前、每月一次、隨時手動備份，沒成功前停寫卡組、複習照常；Node／Electron 只在 `src/desktop/`（D-148）；設定頁的「備份」一區（D-156）；Codex L2 三次再審後通過，合併後 815 個測試通過 |
 | 2026-10-30 | 外掛架構檢查環節 9 的四列與環節 5 的 W3 (a)(b) 合併進 `main`（分支 `claude/zealous-williams-bb5446`，[討論稿](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 9 的結論〉）：擋 git 指令的 hook 也接 PowerShell、加擋跳過 hook 的寫法（`2596f53`；合併時用 PowerShell 工具實測：含 `git stash` 的一行被擋、`--force-if-includes` 不擋）；pre-commit 改用 dot reporter（`976a7f4`）；`tests/`、`tools/` 加進型別檢查、修好 9 個錯（`cea60a3`）；建置測試建到暫存資料夾（`e2e8fa5`）；結果檔都記 `BUILD`、正式版檢查涵蓋 `dev-*.ts`（`c13f516`） |
 | 2026-10-30 | 維修與查修的準備討論完成（[規畫](../plans/maintenance.md)）：模組化已有，缺的是正式版的錯誤證據（D-155）與學生回報（D-160）；查單一目標排程的工具現在不做，觸發點記在 [backlog 技術債](../backlog.md#技術債) |
