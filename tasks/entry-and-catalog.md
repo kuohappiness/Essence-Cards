@@ -342,7 +342,8 @@ Windows 版 Obsidian 1.14.5，開發版 `0.2.0+a1b73b5.dirty`（內容同 `4f9d0
 - **開發命令 `entry`**（`src/obsidian/dev-entry.ts`）：44 項 true、0 項 false。§1 的返回路線全部走過（入口按科目、目錄的全部卡、草稿、設定圖示、出處；卡組筆記的全部卡與預覽回筆記），每條路焦點都沒有掉到 body；出處實際點一次，複習和入口都關掉，開在新分頁、跳到第二個單元的材料；按鈕沒有括號，手機寬度下長文字換行；`compareLists` 對分行的出處沒有不一致；看不懂的出處，存檔按鈕是 `有 1 個出處看不懂`，通知是 `第 16 行〈看不懂的出處〉：p.44, 45`；預覽一輪後複習紀錄不變。截圖 26 張（淺色與深色、電腦與手機寬度），第一輪看到目錄的列被 Obsidian 的按鈕樣式置中，已修。
 - **開發命令 `entry-unread`**（PowerShell 用獨占鎖擋住一篇，再送 modify）：狀態列 `Essence Cards：1 項提醒`，提醒一區列出路徑；放開後自己重試，兩邊都消失，不用重開。用的是獨占鎖，不是任務說明寫的 `dev-cloud`：要驗的是 `unread()` 到畫面這一段，雲端佔位檔的讀法在 D-154 的實測驗過。
 - **`npm run build`**：`styles.css` 的字標 2.8 KB（上限 20 KB）。
-- **沒做**：`tools/compare/adapter.ts` 的核對（§9-4）等另一個分支合併；iPhone 併入下一次實機測試（[backlog](../docs/backlog.md#v1-需要做的任務)）。
+- **`tools/compare/adapter.ts` 的核對**（§9-4，2026-11-03 合併 main 後）：它用每個版本自己的 `state` 讀，沒有讀出處，`src/dev/compare.ts` 的 `fieldNames` 也不用改。
+- **沒做**：iPhone 併入下一次實機測試（[backlog](../docs/backlog.md#v1-需要做的任務)）。
 
 ## 13. 這一批不做
 
