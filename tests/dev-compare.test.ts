@@ -18,6 +18,11 @@ void test('對照：結構一致時沒有不一致；欄位、行內程式碼與
   assert.deepEqual(rules('前言\n\n- 一般清單\n- 第二項', [item(2, -2), item(3, -2)]), []);
 });
 
+void test('對照：分行的出處（§9-4）和 Obsidian 的清單一致，底下的子項目不算題目', () => {
+  const text = '- 目標 ^abc234\n    - 出處：\n        - p.44\n        - [[a]]\n    - Q :: A';
+  assert.deepEqual(compareLists(text, [item(0, -1, 'abc234'), item(1, 0), item(2, 1), item(3, 1), item(4, 0)]), []);
+});
+
 void test('對照 (a)：目標不是最上層項目，或最上層項目有題目卻不是目標', () => {
   assert.deepEqual(rules(deck, [item(0, 7, 'abc234'), ...deckItems.slice(1)]), ['a0']);
   assert.deepEqual(rules(deck, deckItems.slice(1)), ['a0', 'd0']);

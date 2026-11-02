@@ -16,7 +16,11 @@ export interface DeckProps {
    * 值不是字串，或屬性區讀不出來而原文含「需要版本」時是 false（有標記但壞掉，等於讀不懂）。
    */
   need: string | false | null;
+  /** 屬性寫法有問題（`單元: 3`、沒加引號的 `材料: [[…]]`，§9-2）：目錄與存檔的提示共用，不默默變成沒有。 */
+  issues: PropertyIssue[];
 }
+/** line 從 0 算（檔案的第幾行）。 */
+export interface PropertyIssue { line: number; message: string }
 export interface Target {
   id: string | null;
   name: string;
@@ -58,7 +62,9 @@ export type ProblemCode =
   | 'duplicate-field' | 'unknown-field-value' | 'unknown-field'
   | 'unknown-property-value' | 'duplicate-id' | 'cloze-not-typed'
   // misplaced-id：hint，目標的 ID 不在行尾，照樣認得、存檔時移回行尾；ambiguous-id：error，目標那一行有兩個以上的 ID（D-134）。
-  | 'misplaced-id' | 'ambiguous-id';
+  | 'misplaced-id' | 'ambiguous-id'
+  // field-children：hint，分行的資料裡忽略的子項目（§9-4）。
+  | 'field-children';
 export interface AssignOptions {
   taken: ReadonlySet<string>;
   random?: () => number;

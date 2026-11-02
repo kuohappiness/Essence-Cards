@@ -222,8 +222,8 @@ void test('R12 出處：頁碼、圖表例題（含子圖）、段落標題、�
     { kind: 'unit', term: null, unit: '2-2', rest: { kind: 'block', id: 'fig2-14' } },
   ]);
   assert.deepEqual(sourceLinks(['p.45 知識快遞'])[0], { text: 'p.45 知識快遞', link: { kind: 'block', id: 'p45' } });
-  // 認不得的（例如先備知識）先當成標題候選；材料裡沒有這個標題時，Obsidian 層照文字顯示、不做連結。
-  assert.deepEqual(sourceLinks(['先備：國一數學 比例式'])[0].link, { kind: 'heading', heading: '先備：國一數學 比例式' });
+  // 先備知識是文字，不做連結（D-087）；其他讀法的例子在 tests/sources.test.ts。
+  assert.deepEqual(sourceLinks(['先備：國一數學 比例式'])[0].link, { kind: 'text' });
 });
 
 void test('§2-4 能按的自評：一般卡四個；拼對記住了／太簡單；拼錯差一點／沒印象；按「沒印象」只剩沒印象', () => {
