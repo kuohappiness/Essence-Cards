@@ -96,6 +96,11 @@ void test('D-167 有否定字的不算；國二上 2-1, p.44 與乾淨的列表�
   assert.deepEqual(index.unresolved, []);
 });
 
+void test('§9-5 一筆出處不能讓整份目錄建不起來：連結路徑有原樣的百分號，其他目標照列', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：[教材](100%.md)'], b: ['出處：p.3'] });
+  assert.deepEqual(ids(buildIndex([owner]).find('國二上', '自然', '1-1')), ['a', 'b']);
+});
+
 void test('D-166 沒寫年級學期的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、L2, 2-2'] });
   const others = ['2-1', '2-2', 'L1', 'L2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));

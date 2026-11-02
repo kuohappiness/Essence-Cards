@@ -56,6 +56,11 @@ const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|https?:
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
 
+/** `100%.md` 這種原樣的百分號不是編碼：解不開就用原字，不用記進錯誤紀錄，一筆出處不能讓整份目錄建不起來（§9-5）。 */
+function decodedPath(path: string): string {
+  try { return decodeURIComponent(path); } catch { return path; }
+}
+
 /** 連結的目標；網址不是位置（null）。 */
 function linkTarget(raw: string): SourceLink | null {
   const wiki = /^!?(\[\[|［［)\s*([^\]］]*?)\s*(?:\]\]|］］)$/.exec(raw);
@@ -67,7 +72,7 @@ function linkTarget(raw: string): SourceLink | null {
     return split < 0 ? { kind: 'note', link: target } : { kind: 'note', link: target, alias: inner.slice(split + 1).trim() };
   }
   const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(raw);
-  return markdown ? { kind: 'note', link: decodeURIComponent(markdown[1]).replace(/\.md$/, '') } : null;
+  return markdown ? { kind: 'note', link: decodedPath(markdown[1]).replace(/\.md$/, '') } : null;
 }
 
 // ── 年級學期 ──
