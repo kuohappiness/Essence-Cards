@@ -13,5 +13,5 @@ export { crumb } from './crumb.ts';
 export { extraLabel } from './extras.ts';
 export { sourceLabel, sourceLinks } from './sources.ts';
 export type { SourceLink } from './sources.ts';
-export { startRows } from './start.ts';
-export type { StartRow } from './start.ts';
+export { catalogView, entryView, reminderView } from './entry.ts';
+export { createPreview } from './preview.ts';

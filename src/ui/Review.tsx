@@ -223,7 +223,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
     focusApp();
   }
   const back = (): void => { if (!reportingRef.current && latest.current.top.canBack) void slide(1, () => { session.back(); }); };
-  const forward = (): void => { if (!reportingRef.current && latest.current.top.viewing) void slide(-1, () => { session.forward(); }); };
+  const forward = (): void => { if (!reportingRef.current && (latest.current.top.viewing || latest.current.top.canForward)) void slide(-1, () => { session.forward(); }); };
   const toCurrent = (): void => { if (!reportingRef.current && latest.current.top.viewing) void slide(-1, () => { session.toCurrent(); }); };
   /** 打開回報的選單（動畫期間不開）。 */
   const openMenu = (): void => { if (!busy.current) setReporting(true); };
@@ -255,8 +255,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
       touch.axis = touch.interactive ? 'vertical' : lockAxis(touch.axis, touch.dx, touch.dy);
       if (touch.axis === 'horizontal') {
         if (event.cancelable) event.preventDefault();
-        const { canBack, viewing } = latest.current.top;
-        const resist = (touch.dx > 0 && !canBack) || (touch.dx < 0 && !viewing);
+        const { canBack, viewing, canForward } = latest.current.top;
+        const resist = (touch.dx > 0 && !canBack) || (touch.dx < 0 && !viewing && !canForward);
         if (body.current && !reducedMotion()) body.current.style.transform = 'translateX(' + String(resist ? touch.dx * 0.18 : touch.dx) + 'px)';
       }
     };
@@ -266,8 +266,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
       const p = Array.from(event.changedTouches).find(point => point.identifier === t.id);
       if (p) { t.dx = p.clientX - t.x; t.dy = p.clientY - t.y; }
       const ms = performance.now() - t.time;
-      const { canBack, viewing } = latest.current.top;
-      const outcome: Gesture = event.type === 'touchcancel' ? (t.axis === 'vertical' ? 'scroll' : 'bounce') : gesture(t.axis, t.dx, t.dy, ms, canBack, viewing);
+      const { canBack, viewing, canForward } = latest.current.top;
+      const outcome: Gesture = event.type === 'touchcancel' ? (t.axis === 'vertical' ? 'scroll' : 'bounce') : gesture(t.axis, t.dx, t.dy, ms, canBack, viewing || !!canForward);
       if (outcome !== 'tap') suppressClick.current = performance.now() + 450;
       if (outcome === 'back') back();
       else if (outcome === 'forward') forward();
@@ -327,7 +327,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>
       {top.viewing
         ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
-        : <span className="ec-count" aria-live="polite">{view.kind === 'done' ? '' : top.center}</span>}
+        : <span className="ec-count" aria-live="polite">{view.kind === 'done' && !top.pinned ? '' : top.center}</span>}
       {/* 沒有開關時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
       {english ? <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label> : <span aria-hidden="true" />}
       {/* 回報（D-160）：畫面上有卡才有，在 ✕ 左邊；沒有時也留一格空的 */}
@@ -353,9 +353,10 @@ export function Review(props: ReviewProps): React.JSX.Element {
     </div>
     {/* 打字中沒有底部那一排：「沒印象」「確認」在題目正下方（TypedActions） */}
     {!typing && <div className="ec-actions" inert={reporting}>
-      {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>結束複習</button>}
+      {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>{view.done.buttons.find(button => button.kind === 'close')?.label ?? '結束複習'}</button>}
       {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} />}
     </div>}
+    {view.kind === 'card' && view.card.nextLabel && <div className="ec-next-row"><button type="button" className="ec-next" disabled={animating} onClick={forward}>{view.card.nextLabel}</button></div>}
     {reporting && view.kind === 'card' && <ReportMenu menuRef={menuEl} choose={choose} cancel={closeMenu} />}
   </div>;
 }
@@ -379,7 +380,7 @@ function ReportMenu({ menuRef, choose, cancel }: { menuRef: React.RefObject<HTML
  */
 function TypedActions({ typed, animating, submit, skip }: { typed: TypedView; animating: boolean; submit: () => void; skip: () => void }): React.JSX.Element {
   return <div className="ec-typed-actions">
-    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{typed.step === 3 ? '跳過' : RATING_LABELS.miss}</button>}
+    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{typed.skipLabel ?? (typed.step === 3 ? '跳過' : RATING_LABELS.miss)}</button>}
     <button type="button" className="ec-show ec-confirm" disabled={animating || !typed.input.trim()} onClick={submit}>確認</button>
   </div>;
 }

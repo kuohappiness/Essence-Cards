@@ -36,6 +36,7 @@ interface Host extends Plugin {
   backup: BackupWiring | null;
   lockAlso: string[];
   startReview(pick: Pick): ReviewHandle | null;
+  entry: { close(): void } | null;
   on<K extends PluginEvent>(kind: K, listener: (value: PluginEvents[K]) => void): () => void;
 }
 /** 載入時記下的數字，每個結果檔都附上（T12）。 */

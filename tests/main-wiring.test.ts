@@ -25,7 +25,7 @@ const devNoScreen = await bundle(true, [{
   setup(builder) {
     builder.onResolve({ filter: /\/host\.tsx$/ }, () => ({ path: 'host', namespace: 'stub' }));
     builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-      contents: "export function openReview(options) { return { close() { options.onEvent?.({ kind: 'closed' }); options.onClose?.(); } }; }", loader: 'js',
+      contents: "export function openReview(options) { return { close() { options.onEvent?.({ kind: 'closed' }); options.onClose?.(); } }; } export function openPreview() {}", loader: 'js',
     }));
   },
 }]);
@@ -204,10 +204,109 @@ void test('2-1 接線：載入後這台的紀錄有版本行，版本命令列�
   assert.ok(lines.some(line => line.startsWith(`・${device}：0.0.1+test（`)), lines.join('\n'));
 });
 
-// 任務說明 2-2：入口的「給家長」一區還沒做，先在載入時用 Obsidian 的通知提示一次。
-void test('2-2 接線：有內容需要新版時，載入後提示一次；版本命令列出是哪幾篇', async t => {
+// 任務說明 2-2、entry-and-catalog §8：手機用 Obsidian 的通知提示一次；電腦由入口的提醒一區與狀態列提示，不再跳通知。
+void test('§8 電腦上有內容需要新版：不跳通知，狀態列寫一項提醒，點了打開入口；沒有提醒時不顯示', async t => {
   const newer = 'Essence Cards/新寫法.md';
   const h = host({ ...deck, [newer]: '---\n需要版本: 9.0.0\n---\n- 目標 ^bbbbbb\n    - Q :: A\n' }, { desktop: true });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(20);
+  assert.ok(!h.notices.includes('Essence Cards：有內容需要新版才讀得懂，請更新外掛'));
+  assert.equal(h.statusBar.length, 1);
+  assert.equal(h.statusBar[0].textContent, 'Essence Cards：1 項提醒');
+  assert.equal(h.statusBar[0].style.display, '');
+  const plain = host(deck, { desktop: true });
+  t.after(() => { plain.plugin.onunload(); });
+  plain.plugin.onload();
+  plain.layoutReady();
+  await plain.plugin.state?.ready();
+  await wait(20);
+  assert.equal(plain.statusBar[0].style.display, 'none');
+  assert.equal(plain.statusBar[0].textContent, '');
+});
+
+void test('§8 手機模式：狀態列沒有，需要新版的通知還在；讀不到的通知也在', async t => {
+  const newer = 'Essence Cards/新寫法.md';
+  const h = host({ ...deck, [newer]: '---\n需要版本: 9.0.0\n---\n- 目標 ^bbbbbb\n    - Q :: A\n' });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(20);
+  assert.deepEqual(h.statusBar, []);
+  assert.ok(h.notices.includes('Essence Cards：有內容需要新版才讀得懂，請更新外掛'));
+  const failing = host(deck, { failRead: path => path === 'Essence Cards/a.md' });
+  t.after(() => { failing.plugin.onunload(); });
+  failing.plugin.onload();
+  failing.layoutReady();
+  await failing.plugin.state?.ready();
+  await wait(20);
+  assert.ok(failing.notices.includes('Essence Cards：有些卡組或複習紀錄暫時讀不到，會自動再試'));
+});
+
+void test('§8 狀態列跟著 unread：從有變沒有時一行消失，不用重開', async t => {
+  let failing = true;
+  const h = host(deck, { desktop: true, failRead: path => failing && path === 'Essence Cards/a.md' });
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await wait(20);
+  assert.equal(h.statusBar[0].textContent, 'Essence Cards：1 項提醒');
+  failing = false;
+  await wait(1200);
+  assert.equal(h.statusBar[0].style.display, 'none');
+});
+
+void test('§1 圖示與命令打開入口，「目錄」直接開目錄；開始複習的選單與命令拿掉了；Obsidian 啟動時不自動打開', async t => {
+  const opened: { screen?: string }[] = [];
+  const h = host(deck, {}, reviewBundled);
+  t.after(() => { h.plugin.onunload(); });
+  const closes: string[] = [];
+  h.obsidian.__openEntry = (options: { screen?: string; onClose?: () => void }) => {
+    opened.push(options);
+    return { refresh() {}, show(screen: string) { closes.push('show ' + screen); }, close() { closes.push('close'); options.onClose?.(); } };
+  };
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  assert.equal(opened.length, 0, '啟動時不打開');
+  assert.equal(h.commands.has('start-review'), false);
+  assert.deepEqual(h.ribbons.map(ribbon => ribbon.title), ['Essence Cards：打開入口']);
+  h.ribbons[0].callback({});
+  assert.equal(opened[0].screen, 'entry');
+  h.commands.get('open-catalog')?.callback?.();
+  assert.deepEqual(closes, ['show catalog'], '已經開著就換畫面，不開第二層');
+  h.plugin.onunload();
+  assert.ok(closes.includes('close'), '停用外掛時入口關掉');
+  h.commands.get('open-catalog')?.callback?.();
+  assert.equal(opened.at(-1)?.screen, 'catalog');
+});
+
+void test('§1 複習中點出處：複習與入口都關掉，筆記開在最上層；複習關掉時入口的數字重新取', async t => {
+  const h = host(deck, {}, reviewBundled);
+  t.after(() => { h.plugin.onunload(); });
+  const calls: string[] = [];
+  let options: { onLink?: () => void; onClose?: () => void } = {};
+  h.obsidian.__openEntry = (each: { onClose?: () => void }) => ({ refresh() { calls.push('refresh'); }, show() {}, close() { calls.push('close entry'); each.onClose?.(); } });
+  h.obsidian.__openReview = (each: { onLink?: () => void; onClose?: () => void }) => { options = each; return { close() { each.onClose?.(); }, session: {} }; };
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  h.commands.get('open-entry')?.callback?.();
+  h.plugin.startReview({ subject: '自然' });
+  options.onClose?.();
+  assert.deepEqual(calls.at(-1), 'refresh');
+  options.onLink?.();
+  assert.equal(calls.at(-1), 'close entry');
+});
+
+// 任務說明 2-2：手機沒有提醒一區，載入時用 Obsidian 的通知提示一次。
+void test('2-2 接線：有內容需要新版時，手機載入後提示一次；版本命令列出是哪幾篇', async t => {
+  const newer = 'Essence Cards/新寫法.md';
+  const h = host({ ...deck, [newer]: '---\n需要版本: 9.0.0\n---\n- 目標 ^bbbbbb\n    - Q :: A\n' });
   t.after(() => { h.plugin.onunload(); });
   h.plugin.onload();
   h.layoutReady();
@@ -218,7 +317,7 @@ void test('2-2 接線：有內容需要新版時，載入後提示一次；版�
   await wait(50);
   assert.deepEqual((h.notices.at(-1) ?? '').split('\n').slice(-2), ['有內容需要新版才讀得懂，請更新外掛：1 篇卡組不出題', '・' + newer]);
   // 沒有需要新版的內容時不提示。
-  const plain = host(deck, { desktop: true });
+  const plain = host(deck);
   t.after(() => { plain.plugin.onunload(); });
   plain.plugin.onload();
   plain.layoutReady();
@@ -257,7 +356,7 @@ const reviewBundled = await bundle(false, [{
   name: 'ui-stub',
   setup(builder) {
     builder.onResolve({ filter: /\/ui\/index\.ts$/ }, () => ({ path: 'ui', namespace: 'ui-stub' }));
-    builder.onLoad({ filter: /.*/, namespace: 'ui-stub' }, () => ({ contents: "export function registerStart() {} export function openReview(options) { return require('obsidian').__openReview(options); }", loader: 'js' }));
+    builder.onLoad({ filter: /.*/, namespace: 'ui-stub' }, () => ({ contents: "export function openReview(options) { return require('obsidian').__openReview(options); } export function openPreview(options, session) { return require('obsidian').__openPreview(options, session); } export function openEntry(options) { return require('obsidian').__openEntry(options); }", loader: 'js' }));
   },
 }]);
 

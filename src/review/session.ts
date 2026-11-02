@@ -48,6 +48,8 @@ export interface TypedView {
   finished: boolean;
   /** 有跳過的按鈕：第 1、2 步是「沒印象」；第 3 步一開始沒有，照打送出一次還是不對之後是「跳過」（D-158）。 */
   canSkip: boolean;
+  /** 跳過的按鈕換一個字（預覽是「顯示答案」，D-161）；沒有就照上面。 */
+  skipLabel?: string;
 }
 
 /** 這一次做過的一張（D-084：回看是「這一次」做過的）。 */
@@ -89,6 +91,8 @@ export interface CardView {
   viewing: { index: number; total: number } | null;
   /** 這一張第幾次從頭出現：切走超過 60 秒回來重新開始時加一（畫面用它換卡）；回看的卡是 0。 */
   shown: number;
+  /** 不作答也能往後的按鈕的字（預覽，D-161）；複習沒有。 */
+  nextLabel?: string;
 }
 interface TopView {
   /** 中間的文字：「還剩 N 張」或「再複習一些」。 */
@@ -100,6 +104,8 @@ interface TopView {
   viewing: boolean;
   /** 不是回看也能往後一張（預覽，D-161）。 */
   canForward?: boolean;
+  /** 完成畫面也留著中間的文字（預覽一直標「預覽，不記錄」）。 */
+  pinned?: boolean;
 }
 export type View =
   | { kind: 'loading'; top: TopView }

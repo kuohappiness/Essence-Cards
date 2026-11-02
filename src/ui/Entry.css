@@ -1,0 +1,89 @@
+/* 入口與目錄（D-095、D-097）：版面、字級、間距照樣式稿 entry-and-reveal.html 第 16 版；顏色與節奏用 tokens.css 的變數。 */
+.ec-entry { --ec-gutter: 26px; }
+.ec-en-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 50px; padding: 6px 10px 0 var(--ec-gutter); }
+.ec-en-top.is-nav { display: grid; grid-template-columns: var(--ec-touch) 1fr var(--ec-touch); padding-left: 10px; }
+.ec-en-title { margin: 0; font-size: 17px; font-weight: 600; text-align: center; }
+.ec-en-tools { display: inline-flex; flex: none; }
+.ec-en-today { display: flex; align-items: baseline; gap: 10px; margin: 0; }
+.ec-en-today .ec-en-name { font-size: var(--ec-size-title); }
+.ec-en-today.is-done .ec-en-n { color: var(--ec-done); font-weight: 600; }
+.ec-en-name { font-size: 18px; font-weight: 600; }
+.ec-en-n { font-size: var(--ec-size-base); color: var(--ec-muted); font-variant-numeric: tabular-nums; }
+.ec-en-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--ec-gutter) 24px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.ec-en-none { margin: 28px 0 0; color: var(--ec-muted); font-size: 14px; }
+.ec-en-mark { flex: none; margin: 0; padding: 6px 22px 14px 0; text-align: right; font: italic 500 15px/1 "Essence Cards Mark", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; letter-spacing: .06em; color: var(--ec-muted); }
+
+/* 一科一列：底下的細線就是進度（樣式稿的 A）；做完時線與數字變灰綠，字不變淡 */
+.ec-sb-list { margin-top: 14px; border-top: 1px solid var(--ec-line); }
+.ec-sb { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 72px; padding: 12px 0; }
+.ec-en-l1 { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ec-sb-bar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--ec-line); }
+.ec-sb-bar i { display: block; height: 100%; background: var(--ec-ink); }
+.ec-sb.is-done .ec-sb-bar i { background: var(--ec-done); }
+.ec-sb.is-done .ec-en-n { color: var(--ec-done); font-weight: 600; }
+.ec-app .ec-sb-btn { flex: none; width: 108px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0; border: 1px solid var(--ec-line); border-radius: 20px; background: none; color: var(--ec-ink); font-size: var(--ec-size-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ec-app .ec-sb-btn:hover, .ec-app .ec-sb-btn:focus { background: none; }
+.ec-app .ec-sb-btn:not(:disabled):active { background: color-mix(in srgb, var(--ec-press) 45%, transparent); }
+.ec-app .ec-sb-btn:disabled { border-color: transparent; color: var(--ec-muted); font-weight: 500; opacity: 1; }
+.ec-app .ec-en-more { display: block; width: 100%; height: 50px; margin-top: 18px; border: 1px solid var(--ec-line); border-radius: 16px; background: none; font-size: var(--ec-size-button); font-weight: 600; }
+.ec-app .ec-en-row { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; margin-top: 28px; padding: 0; border: 0; border-top: 1px solid var(--ec-line); border-bottom: 1px solid var(--ec-line); border-radius: 0; background: none; font-size: 16px; text-align: left; }
+.ec-app .ec-en-row svg { color: var(--ec-muted); }
+.ec-app .ec-en-row:hover, .ec-app .ec-en-row:focus { background: none; }
+.ec-app .ec-en-row:active { background: var(--ec-press); }
+
+/* 提醒一區（D-163 第 5 點）：只在電腦、有事才出現 */
+.ec-rem { margin-top: 30px; }
+.ec-rem h2 { margin: 0 0 4px; font-size: var(--ec-size-small); font-weight: 600; color: var(--ec-muted); letter-spacing: .06em; }
+.ec-rem-row { margin: 0; padding: 12px 0; border-top: 1px solid var(--ec-line); font-size: 14px; line-height: 1.55; }
+.ec-rem-row:last-child { border-bottom: 1px solid var(--ec-line); }
+.ec-app .ec-rem-go { display: flex; align-items: center; justify-content: space-between; width: 100%; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 14px; text-align: left; }
+.ec-app .ec-rem-go:hover, .ec-app .ec-rem-go:focus { background: none; }
+.ec-app .ec-rem-go svg { flex: none; color: var(--ec-muted); transition: transform .2s ease; }
+.ec-app .ec-rem-go[aria-expanded="true"] svg { transform: rotate(90deg); }
+.ec-rem-paths { margin: 8px 0 0; padding: 0; list-style: none; color: var(--ec-muted); font-size: var(--ec-size-small); overflow-wrap: anywhere; }
+.ec-rem-paths li + li { margin-top: 4px; }
+
+/* 目錄（D-097）：學期 → 科目 → 單元 */
+.ec-seg { display: inline-flex; margin-top: 14px; padding: 2px; border: 1px solid var(--ec-line); border-radius: 999px; }
+.ec-app .ec-seg button { min-height: 30px; height: auto; padding: 0 14px; border: 0; border-radius: 999px; background: none; color: var(--ec-muted); font-size: var(--ec-size-small); }
+.ec-app .ec-seg button:hover, .ec-app .ec-seg button:focus { background: none; }
+.ec-app .ec-seg button[aria-pressed="true"] { background: var(--ec-press); color: var(--ec-ink); font-weight: 600; }
+.ec-tr-group { margin-top: 18px; }
+.ec-app .ec-tr-sem { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 17px; font-weight: 600; text-align: left; }
+.ec-app .ec-tr-sem:hover, .ec-app .ec-tr-sem:focus { background: none; }
+.ec-app .ec-tr-sem svg { color: var(--ec-muted); transition: transform .2s ease; }
+.ec-app .ec-tr-sem.is-open svg { transform: rotate(90deg); }
+.ec-tr-subject { margin: 10px 0 0; min-height: 28px; font-size: var(--ec-size-small); font-weight: 600; color: var(--ec-muted); letter-spacing: .06em; }
+.ec-tr-u { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 52px; border-top: 1px solid var(--ec-line); }
+.ec-app .ec-tr-exp { flex: none; width: 32px; height: 44px; display: grid; place-items: center; margin-left: -8px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ec-muted); }
+.ec-app .ec-tr-exp:hover, .ec-app .ec-tr-exp:focus { background: none; }
+.ec-app .ec-tr-exp svg { transition: transform .2s ease; }
+.ec-app .ec-tr-exp.is-open svg { transform: rotate(90deg); }
+.ec-app .ec-tr-exp:disabled { visibility: hidden; }
+.ec-app .ec-tr-name { flex: 1; min-width: 0; height: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 12px 0; border: 0; border-radius: 0; background: none; font-size: 16px; text-align: left; white-space: normal; }
+.ec-app .ec-tr-name:hover, .ec-app .ec-tr-name:focus { background: none; }
+.ec-tr-tag { padding: 0 6px; border: 1px solid var(--ec-line); border-radius: 6px; color: var(--ec-muted); font-size: 11px; line-height: 18px; white-space: nowrap; }
+.ec-tr-due { flex: none; min-width: 2em; text-align: right; color: var(--k, var(--ec-muted)); font-size: var(--ec-size-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ec-tr-ub { display: flex; gap: 8px; flex-basis: 100%; padding: 0 0 12px 24px; }
+.ec-app .ec-u-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--ec-line); border-radius: 16px; background: none; font-size: var(--ec-size-small); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ec-app .ec-u-btn:hover, .ec-app .ec-u-btn:focus { background: none; }
+.ec-app .ec-u-btn:not(:disabled):active { background: color-mix(in srgb, var(--ec-press) 45%, transparent); }
+.ec-app .ec-u-btn:disabled { color: var(--ec-muted); font-weight: 500; opacity: .6; }
+.ec-tr-open { padding: 0 0 10px 24px; }
+.ec-tr-ts { margin: 0; padding: 0; list-style: none; }
+.ec-tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
+.ec-tr-from { display: block; color: var(--ec-muted); font-size: var(--ec-size-meta); }
+.ec-tr-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--k); }
+[data-m="new"] { --k: var(--ec-new); }
+[data-m="near"] { --k: var(--ec-near); }
+[data-m="good"] { --k: var(--ec-good); }
+[data-m="easy"] { --k: var(--ec-easy); }
+.ec-app .ec-tr-problem, .ec-app .ec-tr-deck { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 14px; text-align: left; white-space: normal; }
+.ec-app .ec-tr-problem:hover, .ec-app .ec-tr-problem:focus, .ec-app .ec-tr-deck:hover, .ec-app .ec-tr-deck:focus { background: none; }
+.ec-app .ec-tr-problem { color: var(--ec-near); }
+.ec-app .ec-tr-deck { color: var(--ec-muted); }
+
+/* 預覽的「下一張」（D-161）：不強制作答 */
+.ec-next-row { flex: none; display: flex; justify-content: center; border-top: 1px solid var(--ec-line); }
+.ec-app .ec-next { min-height: var(--ec-touch); height: auto; padding: 0 20px; border: 0; border-radius: 0; background: none; color: var(--ec-muted); font-size: var(--ec-size-base); }
+.ec-app .ec-next:hover, .ec-app .ec-next:focus { background: none; }

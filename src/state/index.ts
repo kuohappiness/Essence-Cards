@@ -103,6 +103,8 @@ export interface State {
   scope(pick: StudyPick): ScopeCount | null;
   /** 目錄的資料（D-097、D-142）：索引加上每個目標現在的記憶顏色與今天的份。 */
   catalog(): Catalog;
+  /** 卡組筆記的全部卡的目標（D-146）：這一篇啟用中、可以出的目標 ID；草稿、暫停、轉錄稿、還沒讀完是空的。 */
+  deckTargets(path: string): readonly string[];
   /** 跨單元的出處要在哪裡找（§10）：那個單元的每一篇，照路徑，各自的材料照原順序；對不到單元是空的。term 是 null 時算這一篇的年級學期。 */
   unitMaterials(path: string, term: string | null, code: string): readonly { path: string; materials: readonly string[] }[];
   /**
@@ -495,6 +497,7 @@ export function createState(options: StateOptions): State {
       const { today, input: value } = fresh();
       return paintCatalog(catalogIndex(), memoryColors(value), todayLeft(today, value));
     },
+    deckTargets: path => life.loaded ? catalogIndex().deckTargets(path) : [],
     unitMaterials(path, term, code) {
       const props = deckMap.get(path)?.props;
       const wanted = term ?? props?.term ?? null, subject = props?.subject ?? null;

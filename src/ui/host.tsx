@@ -21,15 +21,25 @@ export interface OpenOptions {
   /** 學生在旗子的選單選了一項（D-160）；沒傳就沒有旗子。 */
   onReport?: ReviewProps['onReport'];
   onClose?: () => void;
+  /** 打開出處：複習已經關掉、筆記還沒開的時候呼叫，入口也關掉，最上層才是筆記（任務說明 §1）。 */
+  onLink?: () => void;
 }
 export interface ReviewHandle { session: Session; close(): void }
 
 export function openReview(options: OpenOptions): ReviewHandle {
+  return mount(options, createSession({ state: options.state, pick: options.pick }));
+}
+
+/** 預覽（D-161）：同一個畫面，換一個不寫紀錄的 Session。 */
+export function openPreview(options: Omit<OpenOptions, 'pick' | 'onReport'>, session: Session): ReviewHandle {
+  return mount(options, session);
+}
+
+function mount(options: Omit<OpenOptions, 'pick'>, session: Session): ReviewHandle {
   const { app, state } = options;
   const pickedAt = options.pickedAt ?? performance.now();
   const shell = openFullscreen();
   const { element } = shell;
-  const session = createSession({ state, pick: options.pick });
   const speech = options.speech ?? createSpeech(() => { new Notice(NO_ENGLISH_VOICE); });
   // 複習畫面沒有 error boundary，也不加 fallback 畫面：React 沒接住的錯交給主機（D-155 第 2 點）。有傳 onError 才接，
   // 不然照 React 的預設印在 console。
@@ -106,7 +116,7 @@ export function openReview(options: OpenOptions): ReviewHandle {
     onRenderError={onError && ((error, path) => { onError(error, 'render', path); })}
     onReport={options.onReport} onMenu={open => { menuOpen = open; }}
     close={() => { handle.close(); }}
-    openLink={(linktext, sourcePath) => { handle.close(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
+    openLink={(linktext, sourcePath) => { handle.close(); options.onLink?.(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}
     units={(path, term, code) => state.unitMaterials(path, term, code)}
     autoRead={{ get: () => loadAutoRead(app), set: on => { saveAutoRead(app, on); } }}
