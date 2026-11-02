@@ -59,6 +59,8 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-10-30 | 外掛架構檢查環節 9 的四列與環節 5 的 W3 (a)(b) 合併進 `main`（分支 `claude/zealous-williams-bb5446`，[討論稿](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 9 的結論〉）：擋 git 指令的 hook 也接 PowerShell、加擋跳過 hook 的寫法（`2596f53`；合併時用 PowerShell 工具實測：含 `git stash` 的一行被擋、`--force-if-includes` 不擋）；pre-commit 改用 dot reporter（`976a7f4`）；`tests/`、`tools/` 加進型別檢查、修好 9 個錯（`cea60a3`）；建置測試建到暫存資料夾（`e2e8fa5`）；結果檔都記 `BUILD`、正式版檢查涵蓋 `dev-*.ts`（`c13f516`） |
+| 2026-10-30 | 維修與查修的準備討論完成（[規畫](../plans/maintenance.md)）：模組化已有，缺的是正式版的錯誤證據（D-155）與學生回報（D-160）；查單一目標排程的工具現在不做，觸發點記在 [backlog 技術債](../backlog.md#技術債) |
 | 2026-10-30 | 學生在複習畫面回報問題定案（[D-160](../decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)，使用者指出學生打字不可信）：上方一個旗子，點一個選項，卡與時間由外掛帶入，記進錯誤紀錄；併進[錯誤紀錄的任務](../../tasks/error-log.md)第 8 節 |
 | 2026-10-30 | 外掛架構逐環節檢視整串完成：環節 3（學習狀態模組）談定（[討論稿](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 3 的結論〉）：打字卡的彎引號、特殊空白與連續空白不算錯，照打可以跳過（[D-158](../decisions.md#d-158-打字卡看起來一樣的字元與多按的空白不算錯照打可以跳過)）；當天採用的錯題補強另有練習的選項（[D-159](../decisions.md#d-159-當天採用的錯題補強今天的份不變另有一個練習的選項)）；紀錄寫入與讀取的修補記進 [backlog 技術債](../backlog.md#技術債) |
 | 2026-10-30 | 外掛架構逐環節檢視的環節 2（卡組模組）談定（[討論稿](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)〈環節 2 的結論〉）：重複的學習目標 ID 先停、家長選（[D-157](../decisions.md#d-157-重複的學習目標-id先停家長選)）；寫錯的目標要看得到、連結裡的 `^id` 被搬走等記進 [backlog 技術債](../backlog.md#技術債)，D-047 列回 v1 任務 |

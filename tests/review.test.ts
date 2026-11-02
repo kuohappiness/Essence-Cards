@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -148,6 +148,30 @@ void test('D-145 喇叭和最後一個字一起換行：最後一個英文字連
   assert.equal(tail('.'), '.');
   assert.equal(tail(''), '');
   assert.equal(tail('the 𠮷'), '𠮷', '補充平面的中文字照 UTF-16 長度算');
+});
+
+void test('空格後面緊接的標點和空格一起換行：開頭連續幾個不能放在行首的標點；空白、開括號、字不算', () => {
+  assert.equal(closingRun('，糖溶解得越快。'), 1);
+  assert.equal(closingRun('」。後面'), 2);
+  assert.equal(closingRun('……'), 2);
+  assert.equal(closingRun('.'), 1);
+  assert.equal(closingRun('? Yes.'), 1);
+  assert.equal(closingRun('”，'), 2, '結束的引號也算');
+  assert.equal(closingRun(' ，'), 0, '中間有空白：不算緊接');
+  assert.equal(closingRun('（借）'), 0, '開括號可以放在行首');
+  assert.equal(closingRun('一下'), 0);
+  assert.equal(closingRun('——'), 0, '破折號不算');
+  assert.equal(closingRun(''), 0);
+});
+
+void test('空格前面緊接的開括號和空格一起換行：結尾連續幾個不能放在行尾的標點；空白、其他標點、字不算', () => {
+  assert.equal(openingRun('把糖放進水裡，再「'), 1);
+  assert.equal(openingRun('（「'), 2);
+  assert.equal(openingRun('He said “'), 1, '開始的引號也算');
+  assert.equal(openingRun('「 '), 0, '中間有空白：不算緊接');
+  assert.equal(openingRun('再，'), 0, '逗號可以放在行尾');
+  assert.equal(openingRun('一下'), 0);
+  assert.equal(openingRun(''), 0);
 });
 
 void test('D-145 中文句子後面的英文換到下一行：斷在最後一個中文字或全形標點後面；英文在前的不斷', () => {
