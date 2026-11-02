@@ -58,12 +58,14 @@ function map<V>(value: unknown, name: string): Map<string, V> {
 function frozen(texts: Record<string, string>) {
   const paths = Object.keys(texts).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
   const refused: string[] = [];
+  const refusal = Error('比較只能讀，不能寫');
   const refuse = (what: string): Promise<never> => {
     refused.push(what);
-    return Promise.reject(Error('比較只能讀，不能寫'));
+    return Promise.reject(refusal);
   };
   return {
     refused,
+    refusal,
     files: {
       list: (folder: string): Promise<string[]> => Promise.resolve(paths.filter(path => path.startsWith(folder + '/'))),
       read: (path: string): Promise<string | null> => Promise.resolve(Object.hasOwn(texts, path) ? texts[path] : null),
@@ -162,11 +164,13 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
   const study = await import(pathToFileURL(join(root, 'src/core/study/index.ts')).href) as unknown;
   // eslint-disable-next-line essence/module-boundaries
   const stateModule = await import(pathToFileURL(join(root, 'src/state/index.ts')).href) as unknown;
-  const { files, refused } = frozen(input.files);
+  const { files, refused, refusal } = frozen(input.files);
   const failures: unknown[] = [];
+  // 預期的錯只有這裡的 Files 拒絕寫入（寫了什麼下面查）；其他的都是這一版讀或收尾時出錯，不能當成沒事（Codex 第三次審查 F4）。
+  const failed = (error: unknown): void => { if (error !== refusal) failures.push(error); };
   const state = need(stateModule, 'createState')({
     files, device: 'compare', build: version, fillIds: false, now: () => input.now, offset: () => input.offset,
-    onError: (error: unknown, source: string) => { if (source !== 'write') failures.push(error); },
+    onError: failed,
   }) as StateLike;
   let result: Snapshot;
   try {
@@ -176,8 +180,8 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
     if (unread.length) throw Error('讀不到：' + unread.join('、'));
     result = read(state, study, input);
   } finally {
-    // 版本行被拒絕之後，close 重試時也會拒絕：寫了什麼下面查，其他的錯在 failures。
-    await state.close().catch(() => {});
+    // 版本行被拒絕之後，close 重試時也會拒絕，拒絕的是同一個物件。
+    await state.close().catch(failed);
   }
   if (failures.length) throw Error('這個版本讀的時候出錯：' + String(failures[0]));
   const write = refused.find(line => !isVersionLine(line));

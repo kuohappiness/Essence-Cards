@@ -8,8 +8,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { backupVault } from '../tools/backup.ts';
 import { snapshot } from '../tools/compare/adapter.ts';
+import type { AdapterInput } from '../tools/compare/adapter.ts';
 import { diffSnapshots } from '../tools/compare/snapshot.ts';
-import type { Snapshot } from '../tools/compare/snapshot.ts';
+import type { AdapterResult, Snapshot } from '../tools/compare/snapshot.ts';
 import { compareVersions } from '../tools/compare-versions.ts';
 import { goal, makeVault, review, tempFolder } from './helpers/vault.ts';
 
@@ -268,6 +269,29 @@ void test('回傳的型別不同也是接不上，不能靠真假值往下算：
     ['blocked: () => ({ decks: gated.map(() => 5), targets: history.held, all: history.incomplete })', /blocked\(\)\.decks.*型別不同/],
     ['blocked: () => ({ decks: gated, targets: history.held.map(() => 5), all: history.incomplete })', /blocked\(\)\.targets.*型別不同/],
   ] as const) await assert.rejects(snapshot(await patched(t, state, gates, to), input), expected, to);
+});
+
+/** 直接跑轉接器的命令列（compareVersions 用的那條路），回傳它寫出的結果。 */
+async function adapterCli(t: TestContext, dir: string, input: AdapterInput): Promise<AdapterResult> {
+  const folder = await tempFolder(t, 'essence-cli-');
+  const [inputPath, outputPath] = [join(folder, 'input.json'), join(folder, 'output.json')];
+  await writeFile(inputPath, JSON.stringify(input));
+  execFileSync(process.execPath, [join(root, 'tools/compare/adapter.ts'), dir, inputPath, outputPath], { stdio: 'pipe' });
+  return JSON.parse(await readFile(outputPath, 'utf8')) as AdapterResult;
+}
+
+void test('收尾：只有 Files 拒絕寫版本行是預期的；close 自己的錯、寫入時別的錯都不能當成成功（Codex 第三次審查 F4）', async t => {
+  const { version } = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: string };
+  // 紀錄裡已經有這一版的版本行就不會寫任何東西，這時 close 的拒絕不可能來自 Files；沒有就會排一行、被拒絕。
+  const nothingToWrite = { now: NOW, offset: 480, files: { [A]: goal('aaa111'), 'Essence Cards/紀錄/2026-10 compare.jsonl': JSON.stringify({ t: '2026-10-29T19:00:00.000+08:00', set: 'app', val: version }) + '\n' } };
+  const versionLine = { now: NOW, offset: 480, files: { [A]: goal('aaa111') } };
+  for (const input of [nothingToWrite, versionLine]) assert.deepEqual((await snapshot(root, input)).due, { aaa111: null });
+  const closing = await patched(t, 'src/state/index.ts', 'reads.stop();', "reads.stop(); throw new TypeError('unsupported close contract');");
+  for (const input of [nothingToWrite, versionLine]) await assert.rejects(snapshot(closing, input), /unsupported close contract/);
+  const result = await adapterCli(t, closing, nothingToWrite);
+  assert.ok(!result.ok && result.reason.includes('unsupported close contract'), JSON.stringify(result));
+  const writing = await patched(t, 'src/state/index.ts', "onError: error => { report(error, 'write'); }", "onError: () => { report(new TypeError('write contract'), 'write'); }");
+  await assert.rejects(snapshot(writing, versionLine), /write contract/);
 });
 
 void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘門與重複的 ID，今天的份不同不是零差異', async t => {
