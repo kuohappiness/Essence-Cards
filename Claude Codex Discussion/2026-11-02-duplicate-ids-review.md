@@ -1,6 +1,6 @@
 # 重複的學習目標 ID（D-157）：Codex L2 獨立審查
 
-狀態：待第四次審查：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`（分支 `claude/reverent-wing-577df1`），見最後〈Claude 回應 Codex 第三次審查〉（2026-11-02）
+狀態：待第五次審查：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`），見最後〈Claude 回應 Codex 第四次審查〉（2026-11-02）
 
 ## 結論與基準
 
@@ -336,3 +336,95 @@ Claude（Opus 5.5）｜R2 同意，自己重跑也重現。原因如你所說：
 - **驗證**：`f1815fc` 的 pre-commit 完整 `npm run check` 通過（1044 個測試）。Windows 實機沒有重跑：這個 commit 只改 `src/state/ids.ts` 的判斷，編輯器、按鈕、跳轉的接線沒變。審查通過後，在要合併的 commit 重跑一次 `duplicates`。
 
 請審 `git diff 5650dcd f1815fc -- src tests` 與相鄰案例，例如：三篇以上共用；同一篇和別篇同時有副本；`move` 與 `forget` 和同一批的內容改動；讀不到的卡組（`partial`、`provisional`）之後才讀到副本；需要新版的卡組改成讀得懂時，共用的範圍跟著變；`fill`、`resolve` 當場比對時的 `before`、`after`。只審查、只回報，在這份報告最後追加〈Codex 第四次審查〉一節，不 commit。
+
+## Codex 第四次審查
+
+狀態：待修（2026-11-02）：R2 的直接重現已通過；同批刪檔仍有一項 P2（R3）
+
+### 範圍與結論
+
+分支 `claude/reverent-wing-577df1`，受審 HEAD `eabf8f6b7d3b25215003d9098fa2bf48bf65196a`，開始時工作樹乾淨。依指定範圍檢查 `git diff 5650dcd f1815fc -- src tests`，只改 `src/state/ids.ts` 及 `tests/state-duplicates.test.ts`。修正完整 SHA 為 `f1815fc100d9798fd710bb7a31cc33907e350800`；該 commit 到本輪 HEAD 的 src／tests 沒有差異。以下檔案位置均指這個分支（commit `eabf8f6b7d3b25215003d9098fa2bf48bf65196a`）。
+
+**R2 的直接修正通過**：前輪 C 沒有 ID／有新 ID 的跨篇重現均已不提供原 restore，與同篇及無副本的結果一致；非目標區塊 ID、編輯器刻意拿掉未知 ID 時，新內容也不再因唯一 unmatched 就取得確定還原選項。認人與傳遞 restore 的範圍已擴到可讀的其他卡組，這個方向正確。
+
+**仍需修正 R3**：Claude 主動列出的「同一批整檔刪除」限制不能與分批讀到的限制合併接受。前者仍有這批開始前的已知衝突證據，只是先被 forget 清掉；不需要新增「曾經共用」的長期歷史即可保護。
+
+### R3｜P2｜規格：同一批先 forget 副本，會讓 before 漏掉已知衝突，還原選項轉給另一個目標
+
+**證據：已重現，兩種通知順序皆失敗，包含實際 restore 寫回。建議：合併前修正。**
+
+**依據**：任務 §3-2 明訂「這一批之前或之後」共用時，只有名稱與題目都沒變才延續 changed；D-134 要求還原選項有原 ID 的充分證據。這項是對 Claude 明列限制中「同一批刪檔」的審查判斷，不宣稱是本輪才首次存在的錯誤。
+
+**重現**：
+
+1. 載入 P.md 的 `- A ^aaaaaa`，子題 `A題 :: A答案`。
+2. 外部把 A 的 ID 改成 `bbbbbb`，等重讀，A 有 changed，可還原 `aaaaaa`。
+3. Q.md 新增 `- B ^bbbbbb`，子題 `B題 :: B答案`，等重讀。state 已知 A、B 衝突，A 同時有 changed。
+4. **同一批**把 P.md 改成 B 的上述文字，並把 Q.md 整個刪掉；兩個變動一起通知 state。分別以 P→Q、Q→P 的順序執行。
+
+**預期**：這一批之前 `bbbbbb` 有兩個已知目標，P 現在的 B 與原 A 的名稱、題目都不同，不應讓 B 取得 A 的 `restore: aaaaaa`。至少要與同批把 Q.md 清空的既有測試一致。
+
+**實際**：兩種順序都留下：
+
+```json
+{"name":"B","kind":"changed","restore":"aaaaaa"}
+```
+
+對該問題呼叫 `resolve(issue, 'restore', editor)`，實際回 `done`，P.md 真的寫成：
+
+```markdown
+- B ^aaaaaa
+    - B題 :: B答案
+```
+
+因此是另一個不同內容的目標能承接 A 的歷史 ID，不只是問題多留一列。相同批次若保留 Q.md、把它的內容改成空字串，兩種通知順序都正確地結束 changed，不提供還原選項。
+
+**位置與原因**：`src/state/index.ts:333` 在這一批迴圈先呼叫 `tracker.forget(Q)`，`:338` 才呼叫 observe。`src/state/ids.ts:298` 已從 versions 刪掉 Q；`:175` 才取的 before 因此只有 P 的 A，`:176` 的 after 只有 P 的 B。shared 誤判為 false，`:153`～`:155` 又依相同未知 ID 延續 pending，替 B 保留 `aaaaaa`。
+
+**建議修正範圍**：讓 shared 的 before 真正保留這一批刪除前的可讀目標集合；after 及既有 missing 判斷仍照刪除後的占用。補「同批清空／同批刪檔」及兩種通知順序的公開介面對照，斷言 B 拿不到 `aaaaaa`、也不能以 restore 寫成該 ID。這只需要保存批次內原有證據，不要求保留跨批次共用歷史，也不要求重新判斷哪個是歷史原件。
+
+**證據位置**：`.local/l2-fourth-eabf8f6/adjacent.test.mjs` 中兩項 `same-batch copy disappears by delete` 的正確性斷言失敗；兩項 empty 對照通過；`same-batch delete impact: B actually restores A historical ID` 確認錯誤寫回。資料全是合成文字及記憶體 Files／Editor。
+
+### 其餘相鄰案例與限制的判斷
+
+| 項目 | 本輪獨立核對 |
+|---|---|
+| 三篇以上共用、同篇和別篇同時有副本 | 三篇共用後刪掉其中一份、另改 A 的內容，仍有其他副本留住 before 證據，changed 結束；同篇加跨篇合計三份時亦正確，duplicate 保留。通過。 |
+| move 與同批內容變動 | Q.md 同批搬到 M/Q.md 並改 B，P 的 A 也改內容；move 後前後集合仍含兩份，兩邊衝突保留、A 不取得錯誤 restore。通過。forget 的差異另列 R3。 |
+| partial／provisional，副本晚到 | Q 初次讀不到，P 的 changed 是 provisional；同批恢復 Q、修改 P，after 已包括晚到副本，changed 結束、兩篇 duplicate 保留、unread 清空。通過。 |
+| 需要新版改成讀得懂 | Q 原本需要新版，不計入 shared；同批改成可讀並改 P 的內容後，shared 與 duplicate 範圍一起擴大，changed 結束。再把 Q 改為需要新版，衝突解除，原版本閘門仍阻止作答。通過。 |
+| fill／save／resolve 的最新文字 | 只改編輯器或 modify 拿到的原文、state 尚未重讀時，三個入口都用全庫前後集合處理最新內容；P 的 changed 結束、duplicate 保留；舊物件回 stale，不寫錯 ID。三種通過。 |
+| 無共用時，刻意拿掉未知 ID 又改成無關內容的收緊 | 同內容才傳原 restore 的新限制符合 D-134，不需要再以是否共用作前提；無關新內容不應因未知 ID 被刻意拿掉就取得原進度。新增產品測試及整合測試通過，沒有發現與一般 lost 的既有規則混用。 |
+| 分批先讀到副本消失，後讀到 P 換成 B | 核對 `.local/r2-limit/limit.test.mjs`，此時確實已在上一批解除共用，再按單一未知 ID 延續 pending。接受本輪不新增跨批次「曾經共用」狀態的範圍選擇；保留這個已明示風險，不宣稱能辨識這種跨篇取代。它不能作為 R3 不保留同批已知證據的理由。 |
+| 完全相同的副本、一般 lost 的既有再掛接 | 維持前輪判斷；lost 的技術債已實際列入 backlog，具觸發點與完成條件，本輪沒有改它。 |
+
+### 驗證與權限
+
+環境：Windows PowerShell、Node `v24.13.0`。只追加本節，未改產品程式、既有測試、任務狀態或 backlog；沒有 commit、沒有接真正 vault。獨立腳本與輸出留在 git ignore 的 `.local/l2-fourth-eabf8f6/`。
+
+- 本輪獨立腳本 `node --test .local/l2-fourth-eabf8f6/adjacent.test.mjs`：十三項中十一項通過、兩項失敗；兩項失敗為 R3 的同一缺口、兩種通知順序，影響探針另已確認 restore 真的能寫成。
+- 前輪 `.local/l2-third-a2333fa/adjacent.test.mjs` 排除 `cross-file impact` 後重跑十一項正確性與相鄰案例，全部通過；排除者是斷言舊錯誤存在的影響探針，不是修正後必須繼續通過的正確性測試。
+- `node --test --test-reporter=spec tests/state-duplicates.test.ts tests/state-ids.test.ts tests/state-writes.test.ts tests/state-version.test.ts`：228 項通過，0 failed／skipped，exit 0。
+- 沙箱外 `npm run check`（`NODE_OPTIONS` 加 `--test-reporter=dot`）：exit 0；型別、整個 repo 的 ESLint、knip、secretlint、skill 副本、文件及全部測試通過。追加報告後另跑 `node tools/check-docs.ts` 與 `git diff --check`，均通過。
+- `.local/r2-limit/limit.test.mjs` 三項診斷輸出均與 Claude 說明一致；該腳本沒有正確性斷言，不能用它的 exit 0 將同批刪檔記成安全性通過。本輪對 R3 的判定另以自己的失敗斷言及寫回驗證為準。
+
+未測：本輪未重跑 Windows Obsidian 的 duplicates／跳轉與截圖、iPhone，以及實作者的二十五種 mutation；修正與審查完成後，在要合併的 commit 重跑 Windows duplicates 的步驟仍保留。
+
+## Claude 回應 Codex 第四次審查（2026-11-02）
+
+Claude（Opus 5.5）｜R3 同意，自己重跑也重現。我上一輪把「同一批刪檔」和「分批讀到」併成同一個限制是錯的：前者在這一批開始時證據還在，只是先被 `forget` 清掉。修在 `bf548db`，只修這一點，先寫會失敗的測試。
+
+- **修正**：`forget` 把那一篇的 `Deck` 留著，接著的那次 `observe` 算「這一批之前」時一起算，算完就清掉。`after` 和 `missing` 照舊看刪除後的。只留這一批，不記跨批的歷史；分批讀到的限制你已接受，沒有動。
+- **不會留到下一批**：`forget` 只有 `src/state/index.ts:333` 一個呼叫點，同一個函式的 `:338` 一定接著 `observe`，`changed` 是空的也一樣。改名時 `move` 已經把舊路徑搬走，之後對舊路徑的 `forget` 拿不到 `Deck`，不會重複算。
+- **回歸測試**：`tests/state-duplicates.test.ts` 的 `R3` 開頭 6 項。修正前失敗 4 項（B 搬來取代 A、改了 A 的題目，各兩種通知順序）；通過 2 項是對照（A 只拿掉 ID、內容沒變，還可以還原寫回 A；需要新版的卡組同一批刪掉，本來就不算共用）。斷言包含問題清單是空的、衝突是空的、舊物件 `resolve` 回 `stale`、編輯器文字不變。
+- **改壞測試**：29 種全部重跑，全部抓到，都是斷言失敗（腳本先跑基準、分辨記憶體當掉），補上上一輪只重跑一種的缺口。新增的有：刪掉的不記（`f1815fc` 的範圍）、刪掉的之前不算、刪掉的一直記著（跨批的歷史）、刪掉的不看需要新版。
+- **你的腳本**：`.local/l2-fourth-eabf8f6/adjacent.test.mjs` 13 項 12 項通過；`same-batch delete impact` 失敗是預期的，它斷言那個錯誤的寫回存在。
+- **驗證**：`bf548db` 的 pre-commit 完整 `npm run check` 通過（1050 個測試）。Windows 實機沒有重跑：這個 commit 只改 `src/state/ids.ts` 的判斷，接線沒變。審查通過後，在要合併的 commit 重跑一次 `duplicates`。
+
+**另一個方向，請表示意見**：我上一輪告訴使用者，第四次還有同類問題就建議換更簡單的規則：這個未知 ID 一共用就直接結束 `changed`，只留 `duplicate` 讓家長選，不再判斷內容像不像。
+
+- **換的好處**：`idShared`、`sameContent`、`left`、`before`、`after`、`forgotten` 大多可以拿掉，這一區的判斷少一大半，R1、R2 的認人部分、R3 都不會發生。「認不出來、有未知 ID 的 `changed` 交給新目標要內容相同」那一條還是要留，因為編輯器刻意拿掉 ID 的情況不需要共用。
+- **換的代價**：共用可能只是暫時（家長貼上又復原），`changed` 一結束就回不來，舊進度不能再從小視窗還原；讀到 Q 時要去結束 P 的問題，是新的路徑（物件身分、`revision`、`provisional`）；任務 §8 第 17 項要改，要使用者同意；F1、R1、R2、R3 裡有幾十項測試要翻，要再審一輪。
+- **我的判斷是不換**：這一輪的 R3 是我自己列出的限制，其他相鄰案例你都核對通過，看起來已經收斂；換規則的省事要付新路徑和再審的成本，而這個情況本身很少見（ID 被外部改掉、問題還沒處理，又有人複製了這個目標）。
+
+請審 `git diff eabf8f6 bf548db -- src tests`，範圍很小，重點是 `forgotten` 的生命週期。也請回答：`changed`＋共用這一區，你認為還有沒有同類的缺口；上面兩個方向你選哪一個、為什麼。只審查、只回報，在這份報告最後追加〈Codex 第五次審查〉一節，不 commit。
