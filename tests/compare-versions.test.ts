@@ -3,8 +3,8 @@ import type { TestContext } from 'node:test';
 import { gitEnv } from '../tools/git.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cp, readFile, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { cp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { backupVault } from '../tools/backup.ts';
 import { snapshot } from '../tools/compare/adapter.ts';
@@ -315,10 +315,15 @@ void test('送給比較端的每個值都要符合比較資料的形狀：換了
   const slotTarget = (change: (slot: Slot) => object): Change => ((today: Today) => ({ ...today, slots: new Map([...today.slots].map(([id, slot]) => [id, { ...slot, target: { ...slot.target, ...change(slot) } }])) }));
   const conflict = (value: unknown): Change => (() => value);
   const wrong = new Uint8Array();
+  const hole = new Array(1);
   const anyInput: [keyof typeof hooks.broken, Change, RegExp][] = [
     ['decks', conflict(wrong), /decks\(\).*型別不同/],
     ['conflicts', conflict(wrong), /conflicts\(\).*型別不同/],
     ['conflicts', conflict(null), /conflicts\(\).*型別不同/],
+    // 空洞會被 `some` 和 `map` 跳過：完全沒有內容時也要拒絕（Codex 第四次審查 F5）。
+    ['decks', conflict(hole), /decks\(\).*型別不同/],
+    ['conflicts', conflict(hole), /conflicts\(\).*型別不同/],
+    ['conflicts', conflict([{ id: 'x', targets: hole }]), /conflicts\(\).*targets.*型別不同/],
   ];
   const withContent: [keyof typeof hooks.broken, Change, RegExp][] = [
     ['decks', ((list: Entry[]) => list.map(entry => ({ ...entry, path: 5 }))), /path.*型別不同/],
@@ -331,8 +336,12 @@ void test('送給比較端的每個值都要符合比較資料的形狀：換了
     ['decks', prop({ unit: { code: NaN, name: 'Back to School' } }), /unit.*型別不同/],
     ['decks', prop({ unit: 0 }), /unit.*型別不同/],
     ['decks', prop({ categories: '' }), /categories.*型別不同/],
+    ['decks', prop({ categories: hole }), /categories.*型別不同/],
     ['decks', deckField({ targets: wrong }), /targets.*型別不同/],
+    ['decks', deckField({ targets: hole }), /targets.*型別不同/],
     ['decks', deckField({ problems: wrong }), /problems.*型別不同/],
+    ['decks', deckField({ problems: hole }), /problems.*型別不同/],
+    ['decks', target({ prompts: hole }), /target\.prompts.*型別不同/],
     ['decks', deckField({ problems: [{ line: NaN, level: 'hint', code: 'x' }] }), /problems.*line.*型別不同/],
     ['decks', deckField({ problems: [{ line: 0, level: 5, code: 'x' }] }), /problems.*level.*型別不同/],
     ['decks', deckField({ problems: [{ line: 0, level: 'hint' }] }), /problems.*code.*型別不同/],
@@ -378,6 +387,10 @@ void test('送給比較端的每個值都要符合比較資料的形狀：換了
   assert.ok(!term.ok && /term.*型別不同/.test(term.reason), JSON.stringify(term));
   const typed = await adapterCli(t, await patched(t, 'src/state/index.ts', 'decks: () => deckList,', 'decks: () => new Uint8Array(),'), empty);
   assert.ok(!typed.ok && /decks\(\).*型別不同/.test(typed.reason), JSON.stringify(typed));
+  const holes = await adapterCli(t, await patched(t, 'src/state/index.ts', 'decks: () => deckList,', 'decks: () => deckList.map(entry => ({ ...entry, deck: { ...entry.deck, props: { ...entry.deck.props, categories: new Array(1) } } })),'), full);
+  assert.ok(!holes.ok && /categories.*型別不同/.test(holes.reason), JSON.stringify(holes));
+  const noContent = await adapterCli(t, await patched(t, 'src/state/index.ts', 'conflicts: () => life.loaded ? tracker.duplicates() : [],', 'conflicts: () => new Array(1),'), empty);
+  assert.ok(!noContent.ok && /conflicts\(\).*型別不同/.test(noContent.reason), JSON.stringify(noContent));
 });
 
 /** 直接跑轉接器的命令列（compareVersions 用的那條路），回傳它寫出的結果。 */
@@ -401,6 +414,109 @@ void test('收尾：只有 Files 拒絕寫版本行是預期的；close 自己�
   assert.ok(!result.ok && result.reason.includes('unsupported close contract'), JSON.stringify(result));
   const writing = await patched(t, 'src/state/index.ts', "onError: error => { report(error, 'write'); }", "onError: () => { report(new TypeError('write contract'), 'write'); }");
   await assert.rejects(snapshot(writing, versionLine), /write contract/);
+});
+
+// 假的版本回傳的每一個值，每個都會換成下面每一種不對的值。
+const fakeGood = () => ({
+  state: {
+    unread: [] as string[],
+    decks: [{ path: A, deck: {
+      props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back' }, categories: ['單字'] },
+      targets: [{ id: 'aaa111', name: 'A', line: 0, ok: true, prompts: [{ fingerprint: '11111111' }], fields: { importance: 'medium', paused: false }, direction: 'en-zh' }],
+      problems: [{ line: 1, level: 'error', code: 'x' }],
+    } }],
+    history: { reviews: [{}] },
+    blocked: { decks: [C], targets: ['hld111'], all: false },
+    canAnswer: true,
+    input: { settings: { retention: 0.9 } },
+    today: { share: [{ lt: 'aaa111', deck: A, lane: 'due' }], more: [{ lt: 'aaa111', deck: A, lane: 'new' }], slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
+    conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }],
+  },
+  study: { releaseOf: '9.9.9', replay: new Map([['aaa111', {}]]), dueAt: NOW + 1000, dayOf: 20000, nextCard: { kind: 'card', card: { prompt: { fingerprint: '11111111' } } } },
+});
+const fakeSnapshot: Snapshot = {
+  gates: { decks: [C], held: ['hld111'], incomplete: false, conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }] },
+  decks: [{ path: A, props: { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: 'L1 Back', categories: ['單字'] },
+    targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh' }],
+    problems: ['1 error x'] }],
+  due: { aaa111: NOW + 1000 },
+  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'aaa111', deck: A, lane: 'new', retention: 0.8, prompt: '11111111', direction: 'en-zh' }],
+  days: days(1),
+};
+const WRONG: [string, () => unknown][] = [
+  ['undefined', () => undefined], ['null', () => null], ['NaN', () => NaN], ['Infinity', () => Infinity], ['1.5', () => 1.5], ['5', () => 5], ['true', () => true],
+  ['空字串', () => ''], ['"x"', () => 'x'], ['"constructor"', () => 'constructor'],
+  ['[]', () => []], ['空洞', () => new Array<unknown>(1)], ['[null]', () => [null]], ['[undefined]', () => [undefined]], ['["x", 空洞]', () => { const list = ['x']; list.length = 2; return list; }],
+  ['有 toJSON 的陣列', () => Object.assign(['x'], { toJSON: () => [] })], ['多了屬性的陣列', () => Object.assign(['x'], { extra: 1 })], ['Array 的子類別', () => new (class extends Array { toJSON() { return []; } })()],
+  ['{}', () => ({})], ['有 toJSON 的物件', () => ({ toJSON: () => 'x' })], ['1n', () => 1n], ['Symbol', () => Symbol('x')], ['函式', () => () => 0], ['Promise', () => Promise.resolve()],
+  ['字串物件', () => Object('x') as unknown], ['數字物件', () => Object(1) as unknown], ['布林物件', () => Object(false) as unknown], ['Date', () => new Date(0)], ['Map', () => new Map()], ['Set', () => new Set()],
+  ['Uint8Array', () => new Uint8Array(1)], ['空的 Uint8Array', () => new Uint8Array()],
+];
+type Position = (string | number)[];
+/** 值裡每一個位置（陣列的元素、物件的欄位、Map 的值）。 */
+function positions(value: unknown, at: Position = []): Position[] {
+  const children: [string | number, unknown][] = value instanceof Map ? [...(value as Map<string, unknown>)]
+    : Array.isArray(value) ? (value as unknown[]).map((each, i) => [i, each])
+    : typeof value === 'object' && value !== null ? Object.entries(value) : [];
+  return [at, ...children.flatMap(([key, child]) => positions(child, [...at, key]))];
+}
+function replaced(value: unknown, [key, ...rest]: Position, wrong: unknown): unknown {
+  if (key === undefined) return wrong;
+  if (value instanceof Map) return new Map([...(value as Map<string, unknown>)].map(([k, each]) => [k, k === key ? replaced(each, rest, wrong) : each]));
+  if (Array.isArray(value)) return (value as unknown[]).map((each, i) => i === key ? replaced(each, rest, wrong) : each);
+  const fields = value as Record<string, unknown>;
+  return { ...fields, [key]: replaced(fields[key], rest, wrong) };
+}
+const NULLABLE = new Set(['id', 'term', 'subject', 'unit', 'direction', 'prompt', 'conflicts']);
+/** 比較資料的形狀：和正常的那一份同型別；能是 null 的欄位才能是 null。 */
+function sameShape(out: unknown, good: unknown, key: string): void {
+  if (out === null) { assert.ok(NULLABLE.has(key), key); return; }
+  if (Array.isArray(good)) {
+    assert.ok(Array.isArray(out), key);
+    for (const each of out as unknown[]) sameShape(each, good[0], key);
+  } else if (typeof good === 'object' && good !== null) {
+    assert.equal(Object.getPrototypeOf(out), Object.prototype, key);
+    for (const [name, each] of Object.entries(good)) sameShape((out as Record<string, unknown>)[name], each, name);
+  } else assert.equal(typeof out, typeof good, key);
+}
+
+void test('被比較的版本回傳的每個位置換成每一種不對的值：不是拒絕，就是形狀對、經過 JSON 不變（Codex 第四次審查 F5 之後，不再逐項補）', async t => {
+  // 假的版本：每個函式回傳測試給的值，一個程序跑完所有組合。正常的值要出一份有具體內容的比較資料，否則全部拒絕也算過。
+  const dir = await tempFolder(t, 'essence-fake-');
+  const method = (group: string, name: string): string => `${name}: () => globalThis.fake.${group}.${name},`;
+  const { state: stateValues, study: studyValues } = fakeGood();
+  for (const [path, text] of Object.entries({
+    'package.json': '{"type":"module"}',
+    'manifest.json': '{"version":"9.9.9"}',
+    'src/core/version/index.ts': 'export const releaseOf = () => globalThis.fake.study.releaseOf;\n',
+    'src/core/study/index.ts': Object.keys(studyValues).map(name => `export const ${name} = () => globalThis.fake.study.${name};\n`).join(''),
+    'src/state/index.ts': `export const createState = () => ({ ready: async () => {}, close: async () => {}, ${Object.keys(stateValues).map(name => method('state', name)).join(' ')} });\n`,
+  })) {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await writeFile(join(dir, path), text);
+  }
+  const hooks = globalThis as unknown as { fake?: unknown };
+  t.after(() => { delete hooks.fake; });
+  const input = { now: NOW, offset: 480, files: {} };
+  hooks.fake = fakeGood();
+  assert.deepEqual(await snapshot(dir, input), fakeSnapshot);
+  const escaped: string[] = [];
+  let refused = 0;
+  for (const position of positions(fakeGood()).filter(each => each.length > 1)) for (const [name, make] of WRONG) {
+    hooks.fake = replaced(fakeGood(), position, make());
+    let out: Snapshot;
+    try { out = await snapshot(dir, input); } catch { refused++; continue; }
+    try {
+      assert.deepEqual(JSON.parse(JSON.stringify(out)), out);
+      const { due, ...rest } = out, { due: _due, ...goodRest } = fakeSnapshot;
+      sameShape(rest, goodRest, 'snapshot');
+      for (const [id, at] of Object.entries(due)) assert.ok(at === null || at === 'stopped' || Number.isFinite(at), id);
+    } catch {
+      escaped.push(`${position.join('.')} = ${name}`);
+    }
+  }
+  assert.deepEqual(escaped, []);
+  assert.ok(refused > 500, String(refused));
 });
 
 void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘門與重複的 ID，今天的份不同不是零差異', async t => {

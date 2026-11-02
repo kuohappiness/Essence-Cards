@@ -52,7 +52,10 @@ function text(value: unknown, name: string): string {
 const textOrNull = (value: unknown, name: string): string | null => value === null ? null : text(value, name);
 function array<T>(value: unknown, name: string): T[] {
   if (!Array.isArray(value)) throw wrongType(name);
-  return value as T[];
+  // 逐格複製：`some` 和 `map` 會跳過空洞，元素就沒查到，經過 JSON 又成了 null（Codex 第四次審查 F5）；子類別的 `toJSON`、多的屬性也不會留下來。
+  const list = Array.from({ length: value.length }, (_, i) => value[i] as unknown);
+  if (list.includes(undefined)) throw wrongType(name);
+  return list as T[];
 }
 function strings(value: unknown, name: string): string[] {
   const list = array<unknown>(value, name);
