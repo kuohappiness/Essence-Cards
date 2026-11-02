@@ -1,6 +1,6 @@
 # 重複的學習目標 ID（D-157）：Codex L2 獨立審查
 
-狀態：待第三次審查：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`（分支 `claude/reverent-wing-577df1`），見最後〈Claude 回應 Codex 再審〉（2026-11-02）
+狀態：待第四次審查：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`（分支 `claude/reverent-wing-577df1`），見最後〈Claude 回應 Codex 第三次審查〉（2026-11-02）
 
 ## 結論與基準
 
@@ -236,3 +236,103 @@ Claude（Opus 5.5）｜R1 同意，自己重跑也重現。我上一輪寫的「
 - **驗證**：`ae712a5`、`5650dcd` 的 pre-commit 完整 `npm run check` 都通過（`5650dcd` 時 1023 個測試）。Windows 實機沒有重跑：這幾個 commit 只改 `src/state/ids.ts` 的判斷，編輯器、按鈕、跳轉的接線沒變。審查通過後，在要合併的 commit 重跑一次 `duplicates`。
 
 請審 `git diff d145505 5650dcd -- src tests` 與相鄰案例，例如：三個以上目標共用同一個 ID；`provisional`、`confirm` 遇到問題直接結束；自己寫回（`detect:false`）時問題結束；改名（`move`）後同一輪內容也變；副本在別篇時（`shared` 只看同一篇）；小視窗拿著的舊物件在問題結束後要回 `stale`。只審查、只回報，在這份報告最後追加〈Codex 第三次審查〉一節，不 commit。
+
+## Codex 第三次審查
+
+狀態：待修（2026-11-02）：前輪 R1 的直接重現已通過；跨篇副本仍有一項 P2（R2）
+
+### 範圍與結論
+
+分支 `claude/reverent-wing-577df1`，受審 HEAD `a2333fa58cbc6e4958f84172ed229b17812e6942`，開始時工作樹乾淨。依指定範圍檢查 `git diff d145505 5650dcd -- src tests`，只改 `src/state/ids.ts` 與 `tests/state-duplicates.test.ts`。修正的完整 SHA 是 `ae712a5cfd10c039b1ff634dcad4bc8dd67937a7`、`5650dcd3bbbe2a680a57ccb6efec9bb3a13cc2f5`；從 `5650dcd` 到本輪 HEAD 的 src／tests 沒有差異。以下檔案位置均指這個分支（commit `a2333fa58cbc6e4958f84172ed229b17812e6942`）。
+
+前輪 R1 的「只同名、題目不同，A 換 ID 或拿掉 ID」兩個獨立重現均已通過，問題留在 A，沒有交給 B。原 F1 的兩種明選、Session 與改名／讀不到對照也仍通過。新的名稱與全部題目比對，及認不出來時不直接拿來當證據的方向，符合不確定就不提供錯誤還原選項的要求。
+
+仍有一項需合併前修正的範圍缺口：`5650dcd` 對「刪 A、同次新增無關目標」的保護只認同篇共用 ID；副本換到別篇，無關目標仍拿到 A 的歷史 ID。完整自動檢查通過，沒有涵蓋這個跨篇組合。
+
+### R2｜P2｜規格：同內容才可繼承還原選項的保護，漏掉副本在別篇的情況
+
+**證據：已重現，包含實際 restore 寫回。建議：合併前修正，補同篇／跨篇／無副本的對照測試。**
+
+**依據**：D-157 的 ID 衝突包含同篇及跨篇；任務 §3-2 與本次修正明列「還原選項只跟著一樣的內容，不交給另一個目標」，D-134 要求還原原 ID 必須有足夠證據。`5650dcd` 也已針對無關新目標不能繼承原 restore 加保護，不應因副本搬到別篇就失效。
+
+**最小重現**，每一步均等 State 重讀：
+
+1. P.md 載入 A：`- A ^aaaaaa`，子題為 `A :: A 的答案`。
+2. 外部把 A 的 ID 改成 `bbbbbb`。A 有 `changed`，可還原 `aaaaaa`。
+3. 在 **Q.md** 新增 B：`- B ^bbbbbb`，子題為 `B :: B 的答案`。`conflicts()` 已列出 P、Q 的兩個目標；A 同時有 changed 與 duplicate。
+4. 同一次把 P.md 的 A 刪掉，改放無關 C：`- C`，子題為 `C :: C 的答案`。Q.md 的 B 不動。
+
+**預期**：C 可以被保守地列為待處理，但不能取得 `restore: aaaaaa`；至少應與副本在同一篇時相同，回 `restore: null`。
+
+**實際**：P.md 的問題變成：
+
+```json
+{"line":0,"name":"C","kind":"lost","restore":"aaaaaa"}
+```
+
+對這個物件呼叫 `resolve(issue, 'restore', editor)`，實際回 `done`，P.md 寫成：
+
+```markdown
+- C ^aaaaaa
+    - C :: C 的答案
+```
+
+即無關 C 真的能取得 A 的歷史 ID，並承接該 ID 的紀錄。把 C 改成帶未知 `^cccccc` 的目標也一樣，得到的是 `kind: changed, restore: aaaaaa`。因此這不是只對原本 `lost` 的目標做一般追蹤：本例在步驟 3 的來源明確是 **changed＋跨篇 duplicate**。
+
+**對照**：完全相同操作，B 放在 P.md 並保留 B，再刪 A、加 C，C 的 restore 是 null；不建立 B 的無副本版本也是 null。新目標帶 `^cccccc` 的同篇對照亦為 null。副本的所在篇改變了是否提供確定還原選項，但沒有增加 C 與 A 的關係證據。
+
+**位置與原因**：`src/state/ids.ts:140` 的 `idShared` 只數傳進來的 targets／before；`:249` 傳的是 `deck.targets`、`prev.targets`，都是 P.md。P 的前後分別只有一個、零個 `bbbbbb`，所以錯判為未共用，沒有套用 sameContent 限制。另一方面，`:232` 的 missing 判斷卻使用跨篇的 `elsewhere(path)`，因 Q 仍有 `bbbbbb` 而不把它算成 missing；最後只剩一個 unmatched 證據，C 成為唯一 appeared，於是 `:249` 把 A 的 restore 傳給 C。這兩道判斷的占用範圍不一致。
+
+**建議修正範圍**：使 shared-ID 的還原保護涵蓋 state 已知的跨篇共用，包括這次更新前的共用證據；不要只依本篇目標數。保留不確定就不給 restore 的方向，不需要為此擴大到重寫一般 lost 的追蹤。回歸測試同時斷言 C 不得取得 `aaaaaa`，且不能以 restore 寫成這個 ID。
+
+**重現證據位置**：隔離腳本 `.local/l2-third-a2333fa/adjacent.test.mjs` 的 `delete A and add unrelated C, copy=other`、`delete changed A and add unrelated ID-bearing C, copy=other` 正確性斷言均失敗；`cross-file impact: unrelated C can actually receive A historical ID` 確認了上述實際寫回。資料全為自編字串及記憶體 Files／Editor。
+
+### 指定相鄰案例與限制的判斷
+
+| 項目 | 本輪結果 |
+|---|---|
+| 三份同篇共用 ID | A 的題目改變後 changed 結束，三個 duplicate 留著；同次新增 C 不取得原 restore。刪掉 A、留下兩個副本並加 C，也不洩漏 restore。通過。 |
+| provisional／confirm 遇到問題結束 | 紀錄讀不到時建立 changed＋duplicate，再改 A 的題目使 changed 結束。恢復紀錄時，分別驗含／不含 `bbbbbb`，confirm 都不復活已結束問題；duplicate 保留，舊 changed 物件回 stale。兩種通過。 |
+| 自己寫回、detect:false | duplicate 選新時結束被選目標的問題，另一個 lost 的物件及 restore 保留；核對採用及再通知重讀後不移植、不復活，文字不再改。通過。 |
+| move 後同批內容也變 | P.md 同批搬到 R/P.md 並改 A 的題目，按既有檔名配對成功 move；changed 結束、兩個 duplicate 留著，舊物件即使 path 已更新仍回 stale。通過。 |
+| 小視窗拿著的舊物件 | 三份共用後改題，以及 provisional 結束後的舊 changed，resolve 都回 stale，編輯器文字不變。通過。 |
+| 副本在別篇 | 一般衝突停出仍有效，但刪 A／新增 C 會洩漏原 restore，見 R2。不能把 shared 只看同篇當成安全的局部實作選擇。 |
+| 改名稱或任一題後失去還原選項 | 既定代價與新測試一致；寧可不提供確定的原 ID，而不按相似程度選另一個目標。這個方向可接受，不要求導入相似度或身分推測機制。 |
+| 名稱與全部題目相同的副本分不開 | 核對現有診斷腳本，行為與 Claude 說明一致。現有證據不足以分辨兩份相同內容的歷史原件，不另列本輪阻擋；此限制不涵蓋 R2 的完全不同 C。 |
+| 一般 lost 被刪掉、同批新增另一個目標仍可還原 | 核對現有診斷腳本及 W5 §8-5，屬既有 unmatched＋唯一新目標的再掛接規則；本輪沒有改它，不將整個 lost 規則擴進 D-157。但這仍是可能提供錯誤確定選項的邊界，建議由 Claude 另列技術債：下次修改 lost 的追蹤／還原時，對照「原目標被改字」及「刪除後新增無關目標」，以不把確定 restore 交給無關目標為完成條件。本輪依只追加報告的權限，沒有改 backlog。 |
+
+### 驗證與權限
+
+環境：Windows PowerShell、Node `v24.13.0`。只追加本節；產品程式、既有測試、任務狀態及 backlog 均未修改。獨立重現腳本與輸出留在被 git ignore 的 `.local/l2-third-a2333fa/`；沒有接真正 vault、沒有 commit。
+
+- 沙箱外 `npm run check`（`NODE_OPTIONS` 加 `--test-reporter=dot`）：**exit 0**。型別、整個 repo 的 ESLint、knip、secretlint、skill 副本、文件及全部測試均通過；本輪沒有重現前輪的記憶體中止。
+- `node --test --test-reporter=spec tests/state-duplicates.test.ts tests/state-ids.test.ts tests/state-writes.test.ts`：**197 項通過，0 failed／skipped，exit 0**。
+- 前輪獨立腳本以 `--test-name-pattern` 重跑 R1 與相鄰正確性案例：七項全過；最初獨立腳本的明選 F1、Session、改名／讀不到：四項全過。兩支舊腳本中斷言「錯誤存在」的影響探針排除，沒有把修正後它們不再成立誤報為產品回歸。
+- 本輪 `node --test .local/l2-third-a2333fa/adjacent.test.mjs`：十二項中十項通過、兩項失敗；兩項失敗均為 R2 的同一個跨篇保護缺口，實際 restore 的影響探針則成功確認錯誤寫回。
+- 補核對 `.local/r1-limit/limit.test.mjs` 時，整檔第一次執行在 Node 測試程序間訊息解析出現 `Unable to deserialize cloned data due to invalid or unsupported version`，沒有取得兩項限制的結果，未算通過；之後只選 `lost|內容完全` 重跑，兩項完成、輸出與說明一致。這支是診斷腳本，不能將其通過等同安全性斷言通過。
+
+未測：本輪未重跑 Windows Obsidian 的 duplicates／跳轉與截圖、iPhone、實作者的十八種 mutation；依 Claude 回應，修正與審查完成後仍須在要合併的 commit 重跑 Windows duplicates，本輪 Node 證據不替代該步驟。
+
+## Claude 回應 Codex 第三次審查（2026-11-02）
+
+Claude（Opus 5.5）｜R2 同意，自己重跑也重現。原因如你所說：`missing` 看跨篇，`idShared` 只看同一篇。修在 `f1815fc`，先寫會失敗的測試。順著同一個原因往下找，範圍比報告列的大，一起修了：
+
+- **共用不分同篇別篇**：`idShared` 改看這一批之前、之後各篇讀得懂的目標，認人（`match`）和交還原選項用同一個範圍。報告只列了交給新目標；`match` 有同樣的洞，修正前實測：副本在別篇時，改了 A 的題目 `changed` 還留著；同一次把 A 的 ID 拿掉、題目改掉還能還原；同一次改 ID 和題目也能還原；別篇的 B 貼過來取代 A（同一個 ID）時 `changed` 跟著 ID 交給 B。現在都和同篇一樣。
+- **之前、之後在這一批開始時算好**：同一批的兩篇不因通知的先後得到不同結果，兩種順序都有測試。
+- **認不出來、有未知 ID 的 `changed`，交給新出現的目標時一律要內容相同，不再看有沒有共用**：沒有共用時 ID 也不見了，不見的 ID 加上認不出來的問題已經是兩個證據，本來就不給；只剩一個證據，表示那個 ID 還在別的地方或是刻意拿掉的，這些都說不出新目標和原本的目標有關。這也修掉兩個報告沒列、同一條路徑的洞，修正前實測新目標都拿到 `aaaaaa`：
+  - 未知 ID 留在別篇不是目標的一行。
+  - 編輯器裡刪掉 `changed` 的目標、寫了無關的目標（`removedInEditor` 把 ID 記成刻意拿掉，所以不算不見）。這條完全不需要共用，比 R2 更容易遇到。
+- **需要新版的卡組不算共用**：和重複 ID 看的範圍一樣（任務 §8 第 15 項）。算的話 `changed` 結束、又不列 `duplicate`，家長什麼問題都看不到。未知 ID 留在需要新版的卡組時，上一點照樣擋住無關的新目標（修正前新目標一樣拿到 `aaaaaa`）。
+- **和上一輪不同的結果，請判斷**：
+  - 跨篇共用時也付 R1 的代價：改了 A 的名稱或任何一題，`changed` 結束，`aaaaaa` 不能從這裡還原，紀錄不動；兩篇的 `duplicate` 留著要家長選。
+  - 沒有共用時的一個收緊：編輯器裡把 `changed` 的 ID 拿掉，又同一次改得認不出來，新內容不再拿到還原選項。把 ID 換掉、內容沒變的還可以還原（有對照測試）。
+- **留下的限制，請判斷**：
+  - 共用已經結束才讀到貼過來的內容：別篇先讀到 B 被剪下，或同一批把別篇整個檔案刪掉（`forget` 在 `observe` 之前），之後讀到 P 裡 A 的位置換成 B（同一個 ID）。這時這個 ID 只有一個目標在用，照 ID 認人，問題落在 B、`restore: aaaaaa`（`.local/r2-limit/limit.test.mjs` 實測）；同一批把別篇清空、檔案還在時則是問題結束。分開讀到的那種要記住「曾經共用」才分得開，會和「共用結束就恢復只靠 ID 認人」衝突（`R2 對照：別篇的副本不在了`）。前提是 A 已有 `changed`、又跨篇剪下貼在 A 上，我判斷不值得加歷史。同一批刪檔的那種加三行就能和清空一致，但分開讀到的還是一樣，所以也沒加；你認為該收就告訴我。
+  - 上一輪兩項限制照舊，內容完全相同的副本分不開，你已判斷不阻擋。
+  - `lost` 被刪掉＋新增目標：照你的建議列進 [backlog 技術債](../docs/backlog.md#技術債)，含觸發點與完成條件，這次不動。
+- **回歸測試**：`tests/state-duplicates.test.ts` 的 `R2` 開頭 21 項，全部在修正前的 `5650dcd` 跑過：13 項失敗，8 項通過。通過的是對照與守住既有行為（A 的 ID 又被改、A 的 ID 被拿掉、選 A 或 B 當成新的、三個對照）。斷言同時包含 C 拿不到 `aaaaaa`、`resolve` 選還原回 `stale`、編輯器文字不變。
+- **改壞測試**：把修正改壞 25 種（含 `5650dcd` 只看這一篇的範圍，和只修報告列的那一條）。第一輪 24 種抓到，都是斷言失敗（腳本先跑基準、分辨記憶體當掉）；「認人時之後只看這一篇」沒抓到，補了同一批在別篇新增 B 的 2 項之後抓到。補測試後只重跑了這一種，沒有重跑全部 25 種（只加測試，不會讓前 24 種變成抓不到）。
+- **你的腳本**：`.local/l2-third-a2333fa/adjacent.test.mjs` 12 項 11 項通過；`cross-file impact` 失敗是預期的，它斷言那個錯誤的寫回存在。
+- **驗證**：`f1815fc` 的 pre-commit 完整 `npm run check` 通過（1044 個測試）。Windows 實機沒有重跑：這個 commit 只改 `src/state/ids.ts` 的判斷，編輯器、按鈕、跳轉的接線沒變。審查通過後，在要合併的 commit 重跑一次 `duplicates`。
+
+請審 `git diff 5650dcd f1815fc -- src tests` 與相鄰案例，例如：三篇以上共用；同一篇和別篇同時有副本；`move` 與 `forget` 和同一批的內容改動；讀不到的卡組（`partial`、`provisional`）之後才讀到副本；需要新版的卡組改成讀得懂時，共用的範圍跟著變；`fill`、`resolve` 當場比對時的 `before`、`after`。只審查、只回報，在這份報告最後追加〈Codex 第四次審查〉一節，不 commit。
