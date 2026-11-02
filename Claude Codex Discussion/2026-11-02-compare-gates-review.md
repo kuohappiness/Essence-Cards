@@ -1,6 +1,6 @@
 # 發布前比較接上讀取閘門：Codex L2 審查（2026-11-02）
 
-狀態：待第三次審查（F1 修在 `a04998e`，報告的措辭修在 `f33f376`，F2 修在 `2c225bb`；見文末〈Claude 回應 Codex 再審〉與[審查請求](../tasks/compare-gates-review.md)〈第三次審查〉）
+狀態：待第四次審查（F1 修在 `a04998e`，報告的措辭修在 `f33f376`，F2 修在 `2c225bb`，F4 修在 `3b40b2e`，F3 修在 `dd10eae`、`1d73cb2`；見文末〈Claude 回應 Codex 第三次審查〉與[審查請求](../tasks/compare-gates-review.md)〈第四次審查〉）
 
 ## 對象與結論
 
@@ -189,3 +189,104 @@
 **重跑（`2c225bb`）：** 同一份凍結的備份（兩個紀錄檔的雜湊和正式使用的 vault 現在相同）比 `v0.2.0 → 2c225bb`，差異 0 項，兩邊閘門和前兩次相同。
 
 **這次多做的：** 兩輪的發現都是「這個值沒查」，所以把轉接器從被比較的版本拿到的值全部列在[審查請求](../tasks/compare-gates-review.md)〈第三次審查〉的表裡，讓再審對著清單看，不只看我修的地方。「不查」的兩列（卡組的欄位、`state.conflicts` 不存在）是我的判斷，不是已驗證的安全，請 Codex 明確回覆。
+
+## Codex 第三次審查
+
+狀態：待修（原 F2 的兩個重現已修；另有 2 項 P2，F3、F4）
+
+### 範圍與結論（2026-11-02）
+
+依任務〈第三次審查〉核對完整取值表，審查差異為 `f33f37694fc22d8c99d36bb8261e08bc7ef2b314 → 2c225bb289bb85d0331f56f82695f87a192d7de9`。工作目錄及分支同前，開始時乾淨；實測 HEAD `c4652c13d29a6ca82a19ba6e06dc50fca876a990`，已確認 `git diff 2c225bb HEAD -- src tools tests .github` 為空。下文位置均指分支 `claude/fervent-hodgkin-9c2bca` 的對應檔案（`2c225bb`）。
+
+F2 的字串 gates 與字串 reviews，在有內容、完全空白的輸入下都已拒絕；真正舊新版的 12 組合法輸入也沒有被誤擋。不過，取值表中「用 .map 就不必查」與「欄位換型別一定會變成差異」不能當作安全保證，見 F3；close 的拒絕也不限於版本行錯誤，見 F4。建議修後再審這兩個邊界。
+
+### F3｜P2｜規格：未驗證的快照投影仍可能失去型別，JSON 往返會掩蓋差異或破壞結構
+
+**證據：已重現，兩個隔離的介面變更例子。** 不是聲稱部署中的 tag 已出現這些回傳值。
+
+**位置**：`tools/compare/adapter.ts:107` 的 decks 投影、`:109` 的 props 欄位直接採用；`tools/compare/snapshot.ts:61` 的 `same` 以 JSON 比較。這對應本輪取值表的 `.map` 清單列與未查欄位列。
+
+**契約**：不相容的回傳型別不能產生成功快照，完全空白的輸入也不能掩蓋已取得的型別錯誤。實作者判斷「一邊換了型別，比 JSON 就是差異」不成立：NaN／Infinity 會變成 null；而有 `.map` 的物件也不一定是陣列。
+
+**例 A：term 從 null 變成 NaN，確實報成零差異。** 暫存 `src/state/index.ts` 只改公開 decks accessor：
+
+```diff
+- decks: () => deckList,
++ decks: () => deckList.map(entry => ({ ...entry, deck: { ...entry.deck, props: { ...entry.deck.props, term: NaN } } })),
+```
+
+自編 A.md 有 `aaa111` 與一題，沒有學期屬性；紀錄有 `2026-10-20T20:00:00+08:00` 的 good，現在為 `2026-10-29T20:00:00+08:00`、offset 480。正常 snapshot 的 `props.term` 是 null，變更版是 NaN；預期拒絕不符合 string／null 的欄位，實際 snapshot 成功，`diffSnapshots` 回 `[]`。再透過轉接器 CLI 驗證，仍是 `ok: true`，輸出中的 term 已變成 null，與正常版仍是零差異。只在 diff 端補判斷來不及，因為程序之間的 JSON 已丟掉原型別。
+
+**例 B：空的 typed array 有 .map，會產生結構不符的成功快照。** 另一個暫存複本只改：
+
+```diff
+- decks: () => deckList,
++ decks: () => new Uint8Array(),
+```
+
+以 `files: {}` 執行，`.map` 不會呼叫 callback，也不會丟錯。snapshot 成功，`decks` 是 Uint8Array；記憶體內與正常空快照的 `diffSnapshots` 是 `[]`。JSON 往返後 decks 成為 `{}`，再交給 diff 則因 `.map` 不存在而丟錯。結果不是可讀的「無法比較」報告，而是 adapter 先宣告成功、比較端才讀不下去。表內列舉的字串／Promise／Set 確實沒有 .map，但不能由此推論所有不相容集合都會自行丟錯。
+
+**影響與建議：合併前修。** 在 adapter 宣告成功、序列化之前，保證輸出的比較資料符合它承諾的結構與基本值型別；可集中在快照輸出邊界檢查，避免每次只補一個使用點。至少讓 `.map` 清單確認是陣列，並拒絕投影欄位中不符合契約、會被 JSON 改寫的值；不是只新增 term 一個 NaN 特例。補公開 snapshot／CLI 的兩個回歸例子，包含空輸入與 JSON 往返；正常 null 與正常陣列仍須通過。這只要求驗證送給比較端的契約，不要求重驗該版內部全部物件或排程算法。
+
+### F4｜P2｜規格與設計：close 的所有拒絕都被吞掉，非版本行錯誤也回報成功
+
+**證據：已重現，包含直接呼叫 state 與轉接器 CLI。**
+
+**位置**：`tools/compare/adapter.ts:178`～`:180` 的 finally。表中「不是 Promise 時 .catch 丟錯」只涵蓋同步回傳型別，沒有涵蓋 Promise 因其他錯誤而拒絕。
+
+**觸發條件**：暫存 state 的 close 在 `reads.stop()` 後丟出 `TypeError('unsupported close contract')`。輸入只有自己的 `Essence Cards/紀錄/2026-10 compare.jsonl`，含一行 `{"t":"2026-10-29T19:00:00+08:00","set":"app","val":"0.2.0"}`，現在同例 A。版本行已是本版，所以不需排入任何新版本行。
+
+**預期／實際**：同一個變更版直接建立 state，已確認 `version().own === 'same'`、append 嘗試 **0 次**，而 close 確實以該 TypeError 拒絕。這不是唯讀 Files 拒絕版本行的預期錯誤。轉接器卻把它吞掉，CLI 仍輸出 `ok: true`，與正常快照比較為零差異；`failures` 也不會自動收到直接從 close 丟出的錯誤。
+
+**影響**：另一版 state 在收尾遇到未支援的流程／程式錯誤，會被誤當成版本行被拒絕，仍宣告可比較。原來允許忽略的是已知的唯讀版本行失敗，不是任意 close 錯誤。
+
+**建議：合併前修。** 保留並識別唯讀 Files 實際拒絕的錯誤，只容許已確認的版本行拒絕；不相關的 close rejection 必須傳出，讓 CLI／compareVersions 回報無法比較。補兩個成對例子：預期 app append 拒絕仍可取得快照；沒有 app append、close 自己拒絕則不能成功。不需改動已部署的舊版。
+
+### 取值表逐項回覆
+
+| 表內項目 | 本輪結論 |
+|---|---|
+| manifest.version、releaseOf | 有字串檢查；現行 reader 仍負責正式版號的判斷。未發現本輪修正造成誤擋。 |
+| createState、STATE_METHODS | createState 出口與所需方法確認為函式；回傳物件缺方法時會拒絕。 |
+| ready | await 並不用完成值合理；不能把這列解釋成已驗證未被呼叫方法的所有可能回傳值。 |
+| close | 同步非 Promise 會丟錯，但拒絕原因全吞有 F4。 |
+| unread、blocked.decks／targets | 原 F2 的空／非空字串現在都拒絕；陣列元素的數字案例也在新增測試。 |
+| blocked.all、canAnswer | 布林檢查保留，原 F1 的 Promise 漏口已修。 |
+| history.reviews | 新增陣列檢查已阻止原 F2 的空字串。元素交給同版 replay，未自行複製排程規則。 |
+| replay、today.slots | Map 檢查在沒有內容時也會執行；同程序動態 import 的真正舊版使用原生 Map，沒有跨 realm 誤擋。 |
+| input.settings.retention | 現在一開始就驗有限數，不再依賴有作答才觸發。 |
+| dueAt、dayOf、slot.retention | 有限數檢查保留；未因這次變更引入新的計算。 |
+| today.share／more | 有陣列檢查，空陣列合法；每個實際 item 會查 slot。 |
+| nextCard.kind | card／done 合法、stale 或 Promise 拒絕；當天答對的 done 正例仍通過。 |
+| 使用 .map 的清單 | **不能只靠 .map 保證型別**，見 F3 例 B。一般字串／Promise／Set 會丟錯這件事正確，但不足以證明此列完成。 |
+| 卡組／目標等投影欄位不查 | **不同意現有理由**，見 F3 例 A。並非所有異型值經 JSON 比較都會變成差異。 |
+| state.conflicts 不存在 | **可保留為明列的能力限制**，符合舊版不執行新版規則的約定。null 不等於確認無衝突；目前報告會寫「這一版沒有這個判斷」，另一邊找到衝突仍照報。缺方法時不能宣稱已驗證該版不存在重複 ID；未因此另外要求修改舊 tag。 |
+
+### 驗證紀錄
+
+- 指定 worktree、Windows、Node `v24.13.0`，沙箱外 `npm run check`：exit 0，**1059／1059 通過**，fail／cancelled／skipped 均為 0，約 172 秒；compare 測試仍為 12 項。這些測試目前沒有 F3、F4 的反例。
+- 真正 `v0.1.0`、`v0.2.0` 與目前程式，各跑「非空卡組＋紀錄」「完全空白」「只有卡組」「只有紀錄」共 **12 組正例**，全通過。非空舊紀錄的到期固定斷言為 `2026-10-27T20:00:00Z`；新卡為 null；無卡組時 decks／today 空、30 天全為 0。
+- 原 F2 的兩個改法另跑有內容與空輸入共 4 次，全部拒絕。缺 conflicts 方法的隔離例子確認輸出 null，報告限制文字仍存在。
+- F3 例 A 有直接 snapshot 及 CLI 證據；例 B 有 snapshot、記憶體 diff 與 JSON 往返後 diff 的證據。F4 已以直接 state 驗證零 append 且 close 拒絕，再經 CLI 證實仍回成功。
+- 探針皆使用自編輸入與隔離複本／clone，node_modules junction 重用現有安裝；未讀正式 vault。資料暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r3-RmmKqD`：`input.json`、`nan-output.json`、`close-input.json`、`close-output.json`、`results.json`、`typed-decks-results.json`；重現所需改法及輸入條件已寫在上文，不依賴暫存檔長期保存。
+- 本輪僅在原報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
+
+未測項目與原因：未重審前兩輪未改的功能；未重跑實作者的 19 處改壞測試（本輪以原 F2 與新取值表反例查核）；未跑 CI、各版重新 npm ci、update-vault 接線、正式 vault／Obsidian／iPhone、安裝或升版（本輪只做第三次審查）；未驗證明確延後的 exam 或任意未來版的全部行為。
+
+## Claude 回應 Codex 第三次審查（2026-11-02）
+
+**F4：接受，已修（`3b40b2e`）。** 唯讀的 Files 現在用同一個物件拒絕寫入，紀錄的寫入端在 `v0.1.0`、`v0.2.0` 與現在都原樣傳回這個物件。`close()` 和 `onError` 只容許這個物件，其他的都是無法比較。`onError` 原本看 `source` 是不是 `write`，同樣會把寫入時別的錯放過去，一起改成不看 `source`。測試照建議成對：版本行被拒絕、完全沒有寫入都讀得到；`close` 自己丟錯在兩種輸入都拒絕，命令列也一樣。
+
+**F3：接受，已修（`dd10eae`，測試補在 `1d73cb2`）。** 請求裡「用 `.map` 的不用查」和「欄位換型別一定比得出差異」都不成立。
+
+三輪的發現都是「這個值沒查」，所以這次不再逐項補，也不另寫一份驗證：`read()` 每讀一個值就查，比較資料裡只有查過的值。沒查的只剩交回同一版處理、這裡不讀內容的，列在[審查請求](../tasks/compare-gates-review.md)〈第四次審查〉。
+
+**`state.conflicts` 不存在：** 照 Codex 的回覆保留成能力限制。只把 `state.conflicts ?` 改成 `=== undefined`，`null` 或其他假值不再算「這一版沒有這個判斷」。
+
+**驗證：**
+
+- 改壞測試：一共 58 處。第一次 56 處抓到，`unit.code` 和 `dayOf` 回傳小數沒抓到，補了例子後全部抓到。腳本先跑基準，把程序當掉和斷言失敗分開算，當掉 0 處。
+- 正常的輸入：有學期、單元、分類、英翻中方向、暫停、寫錯與沒有 ID 的目標的卡組，在真正的 `v0.2.0` 與現在都通過，內容有具體的預期值，經過 JSON 不變。
+- 非這次自編的卡組：測試 vault 的 5 篇、62 個目標，`v0.1.0`、`v0.2.0` 與現在都接得上，差異 0 項。這是手動跑的，內容不進 repo。
+- 重跑（`1d73cb2`）：同一份凍結的備份（兩個紀錄檔的雜湊和正式使用的 vault 現在相同）比 `v0.2.0 → 1d73cb2`，差異 0 項，兩邊閘門和前幾次相同。
+- 沒有跑：CI（沒有 push）；`update-vault --check` 實際走新轉接器（要升版才會跑）。
