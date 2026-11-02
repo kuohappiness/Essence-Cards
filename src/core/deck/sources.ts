@@ -256,7 +256,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const segment = raw.replace(WRAP, '$1');
     const asHeading = (extra: Partial<Pending> = {}): Pending => ({ text: display, link: { kind: 'heading', heading: display }, ...extra });
     if (NEGATIVE.test(segment)) { forget(); return [asHeading({ negative: true })]; }
-    if (NOTE_ONLY.test(segment)) return [{ text: display, link: { kind: 'text' } }];
+    if (NOTE_ONLY.test(segment)) { forget(); return [{ text: display, link: { kind: 'text' } }]; }
     let rest = segment, unit: UnitName | null = null, selfRef = false, needsUnit = false;
     const body = dropSubject(segment);
     const term = readTerm(body);
@@ -282,7 +282,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       const self = ownCode ? new RegExp(`^${escapeRegExp(ownCode)}(?![0-9A-Za-z-]) ?(.*)$`, 'is').exec(segment) : null;
       if (self) {
         scope = 'this'; selfRef = true; rest = self[1]; carry = null;
-        if (!rest) return [{ text: display, link: { kind: 'text' } }];
+        if (!rest) { forget(); return [{ text: display, link: { kind: 'text' } }]; }
       } else {
         const followed = continuation(segment, display, next);
         if (followed) return [followed];
@@ -305,10 +305,11 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
         lastPlace = null;
         return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}) }];
       }
+      // 後面的編號、數字不接過這些字（D-167 第 6 點）。
+      forget();
       if (selfRef && !left) return [{ text: display, link: { kind: 'text' } }];
       // 網址：只有字，不是位置，也不算看不懂。
       if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' } }];
-      forget();
       if (bad) return [asHeading({ problem: 'position' })];
       return [asHeading(problem ? { codeLike: true } : {})];
     }
@@ -347,7 +348,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   const entries = masked.split(/[、﹑]/).map(each => each.trim()).filter(Boolean);
   for (const [index, entry] of entries.entries()) {
     const display = restore(entry.replace(RAW_END, ''), tokens);
-    if (/^先備 ?[：:]/.test(entry)) { items.push({ text: display, link: { kind: 'text' } }); continue; }
+    if (/^先備 ?[：:]/.test(entry)) { forget(); items.push({ text: display, link: { kind: 'text' } }); continue; }
     const parts = segmentsOf(entry), start = items.length;
     parts.forEach((part, at) => {
       const clean = tidy(part).replace(END, '').trim();

@@ -108,6 +108,12 @@ void test('D-167 網址不會吃掉後面明寫的單元', () => {
   assert.deepEqual(index.unresolved.map(ref => ref.code), ['1-3']);
 });
 
+void test('D-167 中間隔了只顯示的字，後面的編號不沿用學期', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 1-3, 第5題, 1-8'] });
+  const index = buildIndex([owner, card('Essence Cards/1-8.md', unit('國二上', '1-8'), {})]);
+  assert.deepEqual(ids(index.find('國二上', '自然', '1-8')), []);
+});
+
 void test('D-166 沒寫年級學期的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、L2, 2-2'] });
   const others = ['2-1', '2-2', 'L1', 'L2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
