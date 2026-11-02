@@ -213,9 +213,11 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   const tokens: string[] = [];
   // 一項一項藏：不同項的字不會接成一個連結。
   const masked = sources.map(source => mask(source, tokens)).join('、');
-  const ownCode = own.unit?.code ?? '';
+  // 這一篇的屬性也去雜訊再比：`八上` 就是 `國二上`，`Ｌ３` 就是 `L3`。
+  const ownCode = tidy(own.unit?.code ?? '').trim();
+  const ownTerm = own.term === null ? null : termKey(own.term);
   const ownLetters = /^([A-Za-z]+)\d+$/.exec(ownCode)?.[1] ?? null;
-  const subject = own.subject ? new RegExp(`^${escapeRegExp(own.subject)} ?`) : null;
+  const subject = own.subject ? new RegExp(`^${escapeRegExp(tidy(own.subject).trim())} ?`) : null;
   const dropSubject = (text: string): string => subject ? text.replace(subject, '') : text;
   // 同一欄不分頓號、逗號、分行（D-167 第 6 點）：位置跟著前面的單元；scope 是 null 時，前面寫了別的學期卻沒有單元，不知道屬於哪裡。
   let scope: UnitName | 'this' | null = 'this', lastPlace: string | null = null, carry: UnitName | null = null;
@@ -279,7 +281,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
         // 只有年級學期、編號沒寫完（`小五上 p.15`、`國二上 1 3`）：不猜單元。自己的學期還是這本書；別的學期的位置不知道在哪裡。
         forget();
         const found = code ? [] : scan(after.trim(), tokens).found;
-        scope = term.term === own.term ? 'this' : null;
+        scope = term.term === ownTerm ? 'this' : null;
         if (scope === 'this' && found.length) return found.map((each, at) => ({ text: at ? restore(after.trim().slice(each.at, each.end), tokens) : display, link: each.link, problem: 'term-only' as const }));
         return [asHeading({ problem: 'term-only' })];
       }

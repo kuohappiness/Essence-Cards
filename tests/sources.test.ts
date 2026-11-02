@@ -59,6 +59,8 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   ['國二上 1 3 p.20', [heading('國二上 1 3 p.20')], true], ['國二上 1-', [heading('國二上 1-')], true], ['國二上 第3節 p.20', [page(20)], true], ['國二上 第三課 p.5', [page(5)], true], ['國二上 水溶液 p.30', [page(30)], true], ['國一上 L1~L3', [heading('國一上 L1~L3')], true, ENGLISH],
   // 自己的學期沒寫單元：還是這本書
   ['國二上 p.15', [page(15)], true], ['國二上 圖2-14', [fig('2-14')], true], ['國二上 第44頁', [page(44)], true],
+  // 本篇的屬性也比鍵：學期寫 八上、編號寫全形
+  ['國二上 p.15', [page(15)], true, { term: '八上', subject: '自然', unit: { code: '2-2' } }], ['八上 p.15', [page(15)], true], ['L3 p.30', [page(30)], false, { term: '國一上', subject: '英文', unit: { code: 'Ｌ３' } }], ['2-2 p.30', [page(30)], false, { term: '國二上', subject: '自然', unit: { code: '２－２' } }], ['Ｅｎｇｌｉｓｈ 國一上 L1', [unit('國一上', 'L1')], false, { term: '國一上', subject: 'English', unit: { code: 'L3' } }], ['English 國一上 L1', [unit('國一上', 'L1')], false, { term: '國一上', subject: 'Ｅｎｇｌｉｓｈ', unit: { code: 'L3' } }],
   // 位置照連，但要提示
   ['1-3 p.20', [page(20)], true], ['L2 p.12', [page(12)], true, ENGLISH], ['老師說過 p.44', [page(44)], true], ['上一節 p.40', [page(40)], true], ['pH7 p.20', [page(20)], true],
   // 字裡有像編號的

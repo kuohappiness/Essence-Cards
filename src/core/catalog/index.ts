@@ -74,13 +74,16 @@ function compareDigits(a: string, b: string): number {
 const codeKind = (code: string): number => /^[0-9]+(?:-[0-9]+)*$/.test(code) ? 0 : /^[A-Za-z]+[0-9]+$/.test(code) ? 1 : 2;
 /** 認得的學期照順序，其他文字排在認得的後面，彼此比原字串。 */
 function compareTerm(a: string, b: string): number {
-  const x = termRank(a), y = termRank(b);
+  const x = termRank(termKey(a)), y = termRank(termKey(b));
   if (x !== null && y !== null) return x - y;
   if (x !== null) return -1;
   if (y !== null) return 1;
   return compareText(a, b);
 }
-const compareCode = (a: string, b: string): number => codeKind(a) - codeKind(b) || natural(a, b);
+const compareCode = (a: string, b: string): number => {
+  const x = codeKey(a), y = codeKey(b);
+  return codeKind(x) - codeKind(y) || natural(x, y) || compareText(a, b);
+};
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const usableTarget = (target: Target): target is Target & { id: string } => target.id !== null && target.ok && !target.fields.paused && target.prompts.length > 0;
@@ -223,7 +226,7 @@ export interface Catalog {
  * 學期預設展開哪一個：設定頁的「目前學期」還沒做（D-111），先用年級學期最新的那一組；讀法集中在這個函式，設定頁做好時改這裡。
  */
 function latestTerm(terms: readonly string[]): string | null {
-  const known = terms.filter(term => termRank(term) !== null);
+  const known = terms.filter(term => termRank(termKey(term)) !== null);
   return known.at(-1) ?? terms[0] ?? null;
 }
 
@@ -241,7 +244,8 @@ export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, Me
   const terms: TermView[] = [];
   for (const unit of index.units) {
     const term = unit.term ?? '', subject = unit.subject ?? '';
-    let group = terms.find(each => each.term === term);
+    // 同一個學期的別名（`八上`、`國二上`）是一組，顯示最前面那篇的原字。
+    let group = terms.find(each => termKey(each.term) === termKey(term));
     if (!group) terms.push(group = { term, subjects: [] });
     let row = group.subjects.find(each => each.subject === subject);
     if (!row) group.subjects.push(row = { subject, units: [] });

@@ -161,6 +161,20 @@ void test('排序：自然排序、平手比原字串；順序打亂、反向輸
   assert.equal(paintCatalog(buildIndex([]), new Map(), new Set()).latest, null);
 });
 
+void test('D-167 年級學期的別名、全形編號：分組與排序都比鍵，顯示第一篇的原字', () => {
+  const index = buildIndex([
+    card('Essence Cards/a.md', unit('八上', '1-2'), { a: [] }), card('Essence Cards/b.md', unit('國二上', '1-1'), { b: [] }),
+    card('Essence Cards/c.md', unit('高一上', '1-1'), { c: [] }), card('Essence Cards/d.md', unit('小六下', '1-1'), { d: [] }),
+    card('Essence Cards/e.md', unit('國二上', 'Ｌ２'), { e: [] }), card('Essence Cards/f.md', unit('國二上', '１－５'), { f: [] }), card('Essence Cards/g.md', unit('國二上', '1-10'), { g: [] }),
+  ]);
+  const { terms, latest } = paintCatalog(index, new Map(), new Set());
+  assert.deepEqual(terms.map(each => each.term), ['小六下', '國二上', '高一上'], '八上和國二上是同一組，排在小六下和高一上中間');
+  assert.deepEqual(terms[1].subjects[0].units.map(each => each.code), ['1-1', '1-2', '１－５', '1-10', 'Ｌ２'], '全形的編號照鍵排');
+  assert.equal(latest, '高一上');
+  const only = paintCatalog(buildIndex([card('Essence Cards/a.md', unit('八上', '1-2'), { a: [] }), card('Essence Cards/c.md', unit('小六下', '1-1'), { c: [] })]), new Map(), new Set());
+  assert.equal(only.latest, '八上', '別名也認得是最新的學期');
+});
+
 void test('其他組：學業以外、有年級學期與科目但沒單元的都不消失；一般筆記不列；轉錄稿不算', () => {
   const photo = deck('Essence Cards/攝影.md', '- 構圖 ^a\n    - 問 :: 答\n');
   const noUnit = deck('Essence Cards/零散.md', '---\n年級學期: 國二上\n科目: 自然\n---\n- 目標 ^b\n    - 問 :: 答\n');
