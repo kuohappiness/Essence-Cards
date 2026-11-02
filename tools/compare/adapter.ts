@@ -28,8 +28,9 @@ function need(module: unknown, name: string): Fn {
   return value as Fn;
 }
 
-// 被比較的版本回傳的值拿來判斷或算數之前先查型別，不能靠真假值往下算：Promise 永遠是真的，`!` 之後停掉的目標就成了新卡；
-// NaN 寫進 JSON 變成 null，看起來也像新卡（Codex L2 F1）。卡組的欄位不用查：一邊改了名，比的時候就是差異。
+// 被比較的版本回傳的值，拿來判斷、算數或走訪之前先查型別，不能靠真假值往下算：Promise 永遠是真的，`!` 之後停掉的目標就成了新卡；
+// NaN 寫進 JSON 變成 null，看起來也像新卡（Codex L2 F1）；字串也能展開、走訪，空字串就成了空清單，接不上的版本可能報成零差異（Codex 再審 F2）。
+// 用 `.map` 的清單不用另外查：字串、Promise、Set 都沒有 `.map`，會丟錯。卡組的欄位不用查：一邊改了名，比的時候就是差異。
 const wrongType = (name: string): Error => Error(`這個版本的 ${name} 型別不同`);
 function yesNo(value: unknown, name: string): boolean {
   if (typeof value !== 'boolean') throw wrongType(name);
@@ -38,6 +39,19 @@ function yesNo(value: unknown, name: string): boolean {
 function finite(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw wrongType(name);
   return value;
+}
+function array<T>(value: unknown, name: string): T[] {
+  if (!Array.isArray(value)) throw wrongType(name);
+  return value as T[];
+}
+function strings(value: unknown, name: string): string[] {
+  const list = array<unknown>(value, name);
+  if (list.some(each => typeof each !== 'string')) throw wrongType(name);
+  return list as string[];
+}
+function map<V>(value: unknown, name: string): Map<string, V> {
+  if (!(value instanceof Map)) throw wrongType(name);
+  return value as Map<string, V>;
 }
 
 /** 凍結的輸入：監看不做事（內容不會變），寫入一律拒絕並記下來。 */
@@ -68,7 +82,8 @@ interface TargetLike { id: string | null; name: string; line: number; ok: boolea
 interface DeckLike { props: { status: string; isTranscript: boolean; term: string | null; subject: string | null; unit: { code: string; name: string } | null; categories: string[] };
   targets: TargetLike[]; problems: { line: number; level: string; code: string }[] }
 interface ItemLike { lt: string; deck: string; lane: string }
-interface TodayLike { share: ItemLike[]; more: ItemLike[]; slots: Map<string, { retention: number; target: { direction: string | null } }> }
+interface SlotLike { retention: number; target: { direction: string | null } }
+interface TodayLike { share: ItemLike[]; more: ItemLike[]; slots: Map<string, SlotLike> }
 interface StateLike {
   ready(): Promise<unknown>;
   close(): Promise<void>;
@@ -99,13 +114,14 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   }));
 
   const todayInput = state.input();
-  const memories = replay(state.history().reviews) as Map<string, unknown>;
+  const retention = finite(todayInput.settings.retention, 'input().settings.retention');
+  const memories = map(replay(array(state.history().reviews, 'history().reviews')), 'replay()');
   const due: Snapshot['due'] = {};
   for (const entry of deckSnaps) for (const target of entry.targets) {
     if (target.id === null || Object.hasOwn(due, target.id)) continue;
     const memory = memories.get(target.id);
     due[target.id] = !yesNo(state.canAnswer(target.id), 'canAnswer()') ? 'stopped'
-      : memory === undefined ? null : finite(dueAt(memory, todayInput.settings.retention), 'dueAt()');
+      : memory === undefined ? null : finite(dueAt(memory, retention), 'dueAt()');
   }
   const todayDay = dayNumber(input.now);
   const days = Array.from({ length: 30 }, () => 0);
@@ -116,10 +132,11 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   }
 
   const today = state.today();
+  const slots = map<SlotLike>(today.slots, 'today().slots');
   const items: TodaySnap[] = [];
   for (const list of ['share', 'more'] as const) {
-    for (const item of today[list]) {
-      const slot = today.slots.get(item.lt);
+    for (const item of array<ItemLike>(today[list], 'today().' + list)) {
+      const slot = slots.get(item.lt);
       if (!slot) throw wrongType('today().slots');
       // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。今天已經答對就是 done；時間是固定的，不會是 stale。
       const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck: item.deck }) as { kind: string; card?: { prompt: { fingerprint: string } } };
@@ -129,7 +146,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
     }
   }
   return {
-    gates: { decks: [...blocked.decks], held: [...blocked.targets], incomplete: yesNo(blocked.all, 'blocked().all'),
+    gates: { decks: strings(blocked.decks, 'blocked().decks'), held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),
       conflicts: state.conflicts ? state.conflicts().map(each => ({ id: each.id, targets: each.targets.map(({ path, line, name }) => ({ path, line, name })) })) : null },
     decks: deckSnaps, due, today: items, days,
   };
@@ -155,8 +172,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
   try {
     for (const name of STATE_METHODS) need(state, name);
     await state.ready();
-    const unread = state.unread() as unknown;
-    if (!Array.isArray(unread)) throw wrongType('unread()');
+    const unread = strings(state.unread(), 'unread()');
     if (unread.length) throw Error('讀不到：' + unread.join('、'));
     result = read(state, study, input);
   } finally {

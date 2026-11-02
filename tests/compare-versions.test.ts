@@ -217,9 +217,11 @@ void test('回傳的型別不同也是接不上，不能靠真假值往下算：
   // aaa111 被紀錄行停掉；bbb222 作答過，算到期、也在今天的份裡；new111 是新卡。
   const reviewed = review('2026-10-20T20:00:00.000+08:00', 'bbb222');
   const held = JSON.stringify({ t: '2026-10-29T19:00:00.000+08:00', lt: 'aaa111', need: '99.0.0' });
-  const input = { now: NOW, offset: 480, files: { [A]: goal('aaa111') + goal('bbb222') + goal('new111'), [LOG]: reviewed + '\n' + held + '\n' } };
+  const gatedDeck = '---\n需要版本: 99.0.0\n---\n' + goal('gat111');
+  const input = { now: NOW, offset: 480, files: { [A]: goal('aaa111') + goal('bbb222') + goal('new111'), [C]: gatedDeck, [LOG]: reviewed + '\n' + held + '\n' } };
   // 現在的版本：false 是停掉，true 照紀錄算。
   const snap = await snapshot(root, input);
+  assert.deepEqual(snap.gates, { decks: [C], held: ['aaa111'], incomplete: false, conflicts: [] });
   assert.deepEqual(snap.due, { aaa111: 'stopped', bbb222: Date.parse('2026-10-27T20:00:00.000Z'), new111: null });
   assert.deepEqual(snap.today.map(item => item.lt), ['bbb222', 'new111']);
   // 今天已經答對：還在今天的份裡，只是沒有要出的題（nextCard 是 done），不是接不上。
@@ -240,6 +242,32 @@ void test('回傳的型別不同也是接不上，不能靠真假值往下算：
     ['src/core/version/index.ts', "export { canRead, releaseOf } from './release.ts';", "export { canRead } from './release.ts';\nexport const releaseOf = () => Promise.resolve('1.0.0');", /讀取能力不明/],
   ];
   for (const [path, from, to, expected] of table) await assert.rejects(snapshot(await patched(t, path, from, to), input), expected, to);
+
+  // 集合：字串也能展開、走訪，空字串就成了空清單。比較的是一個完全沒有內容的輸入時也要拒絕，否則接不上的版本會報成零差異（Codex 再審 F2）。
+  const empty = { ...input, files: {} };
+  assert.deepEqual((await snapshot(root, empty)).gates, { decks: [], held: [], incomplete: false, conflicts: [] });
+  const gates = 'blocked: () => ({ decks: gated, targets: history.held, all: history.incomplete })', todayOf = 'today: () => fresh().today,';
+  const collections: [string, string, string, RegExp][] = [
+    [state, gates, "blocked: () => ({ decks: gated.join(''), targets: history.held, all: history.incomplete })", /blocked\(\)\.decks.*型別不同/],
+    [state, gates, "blocked: () => ({ decks: gated, targets: history.held.join(''), all: history.incomplete })", /blocked\(\)\.targets.*型別不同/],
+    [state, 'unread: () => [...unread].sort()', "unread: () => ''", /unread.*型別不同/],
+    [state, 'history: () => history,', "history: () => ({ ...history, reviews: '' }),", /reviews.*型別不同/],
+    [state, todayOf, "today: () => ({ ...fresh().today, share: '' }),", /share.*型別不同/],
+    [state, todayOf, "today: () => ({ ...fresh().today, more: '' }),", /more.*型別不同/],
+    [state, todayOf, 'today: () => ({ ...fresh().today, slots: {} }),', /slots.*型別不同/],
+    [state, todayOf, 'input: () => Promise.resolve(input()), today: () => fresh().today,', /retention/],
+    [state, todayOf, 'input: () => ({ ...input(), settings: {} }), today: () => fresh().today,', /retention.*型別不同/],
+    [study, "export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';", "export { review, intervalDays, dueAt, recall } from './fsrs.ts';\nexport const replay = () => Promise.resolve(new Map());", /replay.*型別不同/],
+  ];
+  for (const [path, from, to, expected] of collections) {
+    const dir = await patched(t, path, from, to);
+    for (const each of [input, empty]) await assert.rejects(snapshot(dir, each), expected, to);
+  }
+  // 清單裡的路徑與 ID 也要是字串。
+  for (const [to, expected] of [
+    ['blocked: () => ({ decks: gated.map(() => 5), targets: history.held, all: history.incomplete })', /blocked\(\)\.decks.*型別不同/],
+    ['blocked: () => ({ decks: gated, targets: history.held.map(() => 5), all: history.incomplete })', /blocked\(\)\.targets.*型別不同/],
+  ] as const) await assert.rejects(snapshot(await patched(t, state, gates, to), input), expected, to);
 });
 
 void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘門與重複的 ID，今天的份不同不是零差異', async t => {
