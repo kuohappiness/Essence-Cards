@@ -136,19 +136,22 @@ export function createIdTracker(options: IdTrackerOptions) {
   }
   /** 這個問題的未知 ID 是不是這個目標用著的；只有 changed 才有未知 ID，ID 被拿掉之後就沒有了。 */
   const holds = (item: Pending, t: Target): boolean => item.issue.kind === 'changed' && item.id !== null && t.id === item.id;
+  /** 這個未知 ID 不只一個目標在用（這一版或上一版，D-157）：ID 認不出是哪一個。 */
+  const idShared = (item: Pending, targets: readonly Target[], before: readonly Target[]): boolean =>
+    targets.filter(t => holds(item, t)).length > 1 || before.filter(t => holds(item, t)).length > 1;
+  const sameContent = (item: Pending, t: Target): boolean => t.name === item.issue.name && samePrompts(t, item.fingerprints);
   /**
    * 這一版裡哪個目標是同一個待處理的目標：同樣的未知 ID、同樣的候選、同樣的名稱，或至少一題相同；平手取行號最近的。
-   * 這個未知 ID 不只一個目標在用（這一版或上一版，D-157）時，ID 認不出是哪一個，同名或幾題相同也認不出：只有名稱和題目都沒變的才算，
-   * 還原的選項只跟著一樣的內容，不能交給另一個目標（D-134、Codex L2 的 F1、再審的 R1）。
+   * 這個未知 ID 共用時，同名或幾題相同也認不出：只有名稱和題目都沒變的才算，還原的選項只跟著一樣的內容，不能交給另一個目標（D-134、Codex L2 的 F1、再審的 R1）。
    */
   function match(item: Pending, targets: readonly Target[], before: readonly Target[], used: ReadonlySet<Target>): Target | null {
     const sameId = (t: Target): boolean => holds(item, t);
-    const shared = targets.filter(sameId).length > 1 || before.filter(sameId).length > 1;
+    const shared = idShared(item, targets, before);
     let best: Target | null = null, bestScore = 0;
     for (const target of targets) {
       if (used.has(target)) continue;
       if (target.id !== null && !sameId(target)) continue;
-      if (shared && !(target.name === item.issue.name && samePrompts(target, item.fingerprints))) continue;
+      if (shared && !sameContent(item, target)) continue;
       const score = sameId(target) ? 4
         : target.idCandidates && item.candidates.length && sameSet(target.idCandidates, item.candidates) ? 3
         : target.name === item.issue.name ? 2
@@ -241,7 +244,9 @@ export function createIdTracker(options: IdTrackerOptions) {
       // 兩者都有才是問題；證據也包括這次認不出來的待處理問題（那個目標可能被改得認不出來）。
       const evidence = missing.length + unmatched.length;
       if (evidence && appeared.length) {
-        const single = evidence === 1 && appeared.length === 1 ? missing[0] ?? unmatched[0].issue.restore : null;
+        // 認不出來的問題的未知 ID 共用時，新出現的目標內容也要一樣，才拿得到還原的選項（Codex 再審的 R1）。
+        const single = evidence !== 1 || appeared.length !== 1 ? null
+          : missing[0] ?? (idShared(unmatched[0], deck.targets, prev.targets) && !sameContent(unmatched[0], appeared[0][0]) ? null : unmatched[0].issue.restore);
         for (const [target, kind] of appeared) fresh.push(make(path, target, kind, single));
       }
     }

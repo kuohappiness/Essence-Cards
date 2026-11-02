@@ -641,10 +641,27 @@ void test('R1 同名、題目不同，A 的 ID 被拿掉：changed 留在 A；�
   assert.equal(h.texts.get(P), twin('A', 'aaaaaa') + twin('B', 'bbbbbb'));
 });
 
-void test('R1 同名、題目不同，同一次把 A 的 ID 和題目都改掉：還原選項不給 B', async t => {
+void test('R1 同名、題目不同，同一次把 A 的 ID 和題目都改掉：內容不一樣，還要家長選，但誰都不給還原選項', async t => {
   const h = await changedThenCopied(t, twin);
   await h.edit(P, twin('A 改過', 'cccccc') + twin('B', 'bbbbbb'));
-  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: null }]);
+});
+
+void test('R1 同名、題目不同，同一次把 A 的 ID 拿掉、題目改掉：內容不一樣，誰都不給還原選項', async t => {
+  const h = await changedThenCopied(t, twin);
+  await h.edit(P, twin('A 改過', null) + twin('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'lost', restore: null }]);
+});
+
+void test('R1 ID 共用時同一次刪掉 A、新增一個目標：和沒有共用時一樣，新的目標不會拿到還原選項', async t => {
+  const added = '- 新的\n    - 新題 :: 新答案\n';
+  const h = await changedThenCopied(t, twin);
+  await h.edit(P, twin('B', 'bbbbbb') + added);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 2, name: '新的', kind: 'lost', restore: null }]);
+  const alone = await setup(t, { [Q]: twin('A', 'aaaaaa') });
+  await alone.edit(Q, twin('A', 'bbbbbb'));
+  await alone.edit(Q, added);
+  assert.deepEqual(brief(alone.state.deckStatus(Q).issues), [{ line: 0, name: '新的', kind: 'lost', restore: null }]);
 });
 
 void test('R1 同名、只有一題相同，A 的 ID 又被外部改掉：還原選項不給 B', async t => {
