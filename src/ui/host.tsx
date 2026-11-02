@@ -118,6 +118,7 @@ function mount(options: Omit<OpenOptions, 'pick'>, session: Session): ReviewHand
     close={() => { handle.close(); }}
     openLink={(linktext, sourcePath) => { handle.close(); options.onLink?.(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}
+    owner={path => state.decks().find(entry => entry.path === path)?.deck.props ?? { term: null, subject: null, unit: null }}
     units={(path, term, code) => state.unitMaterials(path, term, code)}
     autoRead={{ get: () => loadAutoRead(app), set: on => { saveAutoRead(app, on); } }}
   />);

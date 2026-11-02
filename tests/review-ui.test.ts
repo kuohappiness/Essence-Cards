@@ -8,6 +8,8 @@ import type { Session } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { App } from 'obsidian';
 import { createMemoryFiles } from './helpers/memory-files.ts';
+
+const NO_OWNER = { term: null, subject: null, unit: null };
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
 import type { ReviewProps } from '../src/ui/Review.tsx';
 import { resolveSource } from '../src/ui/sources.ts';
@@ -47,7 +49,7 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   const idle: (() => void)[] = [];
   let autoOn = options.autoRead ?? false;
   const ui = await renderReview({
-    app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], units: () => [],
+    app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], owner: () => NO_OWNER, units: () => [],
     speech: options.speech ?? { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); idle.length = 0; }, whenIdle: callback => { if (!options.holdSpeech) { callback(); return () => {}; } idle.push(callback); return () => { const at = idle.indexOf(callback); if (at >= 0) idle.splice(at, 1); }; } },
     autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
     pickedAt: performance.now(),
@@ -201,7 +203,7 @@ void test('F5 出處的圖省略子圖字母：精確的錨點優先，沒有時
     },
   } as unknown as App;
   const materials = ['[[甲]]', '[[乙]]', '[[丙]]'];
-  const resolve = (text: string) => { const [item] = sourceLinks([text]); return resolveSource(app, NATURAL, materials, item.link); };
+  const resolve = (text: string) => { const [item] = sourceLinks([text], NO_OWNER); return resolveSource(app, NATURAL, materials, item.link); };
   assert.equal(resolve('圖 2-13'), 'Essence Cards/材料/甲.md#^fig2-13a', '省略字母：第一張子圖（照字母，不照材料裡的先後）');
   assert.equal(resolve('圖 2-13 A'), 'Essence Cards/材料/甲.md#^fig2-13a');
   assert.equal(resolve('圖 2-13 B'), 'Essence Cards/材料/甲.md#^fig2-13b');
@@ -557,7 +559,7 @@ void test('§8 旗子：沒傳 onReport 時沒有；有卡時在「結束複習�
   t.after(() => state.close());
   const session = createSession({ state, pick: { subject: '自然' } });
   t.after(() => { session.close(); });
-  const loading = await renderReview({ app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], units: () => [], speech: { say() {}, stop() {}, whenIdle: () => () => {} }, autoRead: { get: () => false, set() {} }, pickedAt: 0, onReport: () => {} });
+  const loading = await renderReview({ app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], owner: () => NO_OWNER, units: () => [], speech: { say() {}, stop() {}, whenIdle: () => () => {} }, autoRead: { get: () => false, set() {} }, pickedAt: 0, onReport: () => {} });
   t.after(() => { loading.unmount(); });
   assert.equal(session.view().kind, 'loading');
   assert.deepEqual(flag(loading), []);

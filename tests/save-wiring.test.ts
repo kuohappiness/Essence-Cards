@@ -810,22 +810,22 @@ void test('D1 中翻英的答案寫了中文：按鈕提醒；按存檔補上 ID
 // 看不懂的出處與屬性的提示（tasks/entry-and-catalog.md §9-2、§9-5）：不跳視窗，也不擋補 ID。
 const TEACH = '可以這樣寫：p.44、圖 2-14、國二上 1-3 p.20、[[筆記#標題]]；只想記一句話，請寫在「備註」';
 void test('§9-5 看不懂的出處：按鈕排在 malformed 後面、沒有 ID 前面；存檔補上 ID，通知列前三個，其餘寫「另有 N 個」，最後一句教怎麼寫', async t => {
-  const deck = '- 溫度影響溶解度\n    - 出處：p.44, 45、2 擴散現象、CO2 的性質、溶解, 擴散\n    - 問 :: 答\n';
+  const deck = '- 溫度影響溶解度\n    - 出處：p.46-44、2 擴散現象、CO2 的性質、溶解, 擴散\n    - 問 :: 答\n';
   const h = await blockedSetup(t, deck, 'none');
   assert.equal(h.tip(), '有 4 個出處看不懂', '還沒有 ID 時也先說出處');
   await h.saver.save(h.view);
   const name = '第 1 行〈溫度影響溶解度〉：';
-  assert.deepEqual(h.notices, ['1 個學習目標已加入複習\n有 4 個出處看不懂\n' + name + 'p.44, 45\n' + name + '2 擴散現象\n' + name + 'CO2 的性質\n另有 1 個\n' + TEACH]);
+  assert.deepEqual(h.notices, ['1 個學習目標已加入複習\n有 4 個出處看不懂\n' + name + 'p.46-44\n' + name + '2 擴散現象\n' + name + 'CO2 的性質\n另有 1 個\n' + TEACH]);
   assert.equal(ids(h.view.value).length, 1, '不擋補 ID');
   assert.equal(h.modals.length, 0, '不跳視窗');
   assert.equal(h.tip(), '有 4 個出處看不懂');
 });
 
-void test('§9-5 認得的寫法不提示；D-166：沒寫年級學期的要提示；寫法有問題的目標排在前面', async t => {
+void test('§9-5 認得的寫法不提示；D-166：沒寫年級學期的要提示，國二上 1-3, p.44 讀得懂（D-167）；寫法有問題的目標排在前面', async t => {
   const clean = await blockedSetup(t, '- 目標 ^a23456\n    - 出處：p.44、國二上 1-9 p.3、[[x]]、先備：比例、第 3 頁\n    - 問 :: 答\n', 'none');
   assert.equal(clean.tip(), DONE);
   const bare = await blockedSetup(t, '- 目標 ^a23456\n    - 出處：1-3 p.20、L1、國二上 1-3, p.44\n    - 問 :: 答\n', 'none');
-  assert.equal(bare.tip(), '有 3 個出處看不懂');
+  assert.equal(bare.tip(), '有 2 個出處看不懂');
   const both = await blockedSetup(t, '- 目標 ^a23456\n    - 出處：看不懂\n    - 問 :: 答\n' + TYPED_DECK, 'none');
   assert.equal(both.tip(), MALFORMED_ONE);
 });

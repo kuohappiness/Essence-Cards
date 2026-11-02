@@ -1,4 +1,4 @@
-import { sourceLinks, termRank } from '../deck/index.ts';
+import { codeKey, sourceLinks, termKey, termRank } from '../deck/index.ts';
 import type { Deck, Target } from '../deck/index.ts';
 import type { MemoryColor } from '../study/index.ts';
 
@@ -14,7 +14,7 @@ interface UnitTarget { id: string; name: string; path: string; line: number; fro
 export interface UnitProblem { kind: 'target' | 'property'; count: number; path: string; line: number }
 
 export interface UnitNode {
-  /** 單元的身分：（年級學期、科目、單元編號），編號用原字串；「其他」組是那一篇的路徑。 */
+  /** 單元的身分：（年級學期、科目、單元編號），編號不分全形半形與大小寫（D-167）；「其他」組是那一篇的路徑。code 是路徑第一篇的原字。 */
   key: string;
   term: string | null;
   subject: string | null;
@@ -51,7 +51,7 @@ export interface CatalogIndex {
 
 const practiced = (unit: UnitNode): readonly UnitTarget[] => unit.status === 'active' ? unit.targets : [];
 
-const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([term, subject, code]);
+const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 
 /** 自然排序：連續的數字照數值比（`L2` 在 `L10` 前），平手時比原字串（`L01` 與 `L1`），不用輸入順序。 */
@@ -165,12 +165,14 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
   }
   for (const { entry, target, own, label } of owned) {
     const { subject } = entry.deck.props;
-    for (const { link } of sourceLinks(target.fields.sources)) {
+    const written = new Set<string>();
+    for (const { link } of sourceLinks(target.fields.sources, entry.deck.props)) {
       if (link.kind !== 'unit') continue;
       const key = subject !== null ? unitKey(link.term, subject, link.unit) : null;
       if (key === own) continue;
       if (key !== null && nodes.has(key)) add(key, { id: target.id, name: target.name, path: entry.path, line: target.line, from: label });
-      else unresolved.push({ id: target.id, path: entry.path, term: link.term, subject, code: link.unit });
+      else if (!written.has(key ?? link.term + link.unit)) unresolved.push({ id: target.id, path: entry.path, term: link.term, subject, code: link.unit });
+      written.add(key ?? link.term + link.unit);
     }
   }
   const compareUnit = (a: UnitNode, b: UnitNode): number =>

@@ -287,7 +287,7 @@ export function wireSave(host: SaveHost): Saver {
   /** 這一篇的提示，依 state 目前讀到的內容。 */
   function hintsOf(state: State, path: string): DeckHints {
     const deck = state.decks().find(entry => entry.path === path)?.deck;
-    return deck ? { properties: deck.props.issues, sources: unreadableSources(app, path, deck) } : NO_HINTS;
+    return deck ? { properties: deck.props.issues, sources: unreadableSources(app, path, deck, (term, code) => state.unitMaterials(path, term, code)) } : NO_HINTS;
   }
 
   /** 存檔還沒結束的卡組：再按不另外排一份。 */

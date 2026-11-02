@@ -1,90 +1,191 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceLinks, splitUnit, termRank } from '../src/core/deck/index.ts';
-import type { SourceLink } from '../src/core/deck/index.ts';
+import { codeKey, headingKey, parseDeck, sourceLinks, splitUnit, termKey, termRank } from '../src/core/deck/index.ts';
+import type { SourceItem, SourceLink, SourceOwner } from '../src/core/deck/index.ts';
 
-// 出處的字面讀法（tasks/entry-and-catalog.md §9-3、§9-6）：預期值都來自那份說明的表，不用同一個正則再算一次。
+// 出處的讀法（tasks/entry-and-catalog.md §9-3、§9-6，D-167）：預期值都來自那份說明的表，不用同一個正則再算一次。
 
-const one = (text: string): SourceLink => {
-  const items = sourceLinks([text]);
-  assert.equal(items.length, 1, text + ' 應該只有一項，實際 ' + JSON.stringify(items));
-  assert.equal(items[0].text, text, '保留原文');
-  return items[0].link;
-};
-const page = (id: string): SourceLink => ({ kind: 'block', id });
-const unit = (term: string, code: string, rest: SourceLink | null = null): SourceLink => ({ kind: 'unit', term, unit: code, rest });
+const NATURE: SourceOwner = { term: '國二上', subject: '自然', unit: { code: '2-2' } };
+const ENGLISH: SourceOwner = { term: '國一上', subject: '英文', unit: { code: 'L3' } };
+const MATH: SourceOwner = { term: '小三下', subject: '數學', unit: { code: '5' } };
+const NO_OWNER: SourceOwner = { term: null, subject: null, unit: null };
+
+const read = (text: string, own: SourceOwner = NATURE): SourceItem[] => sourceLinks([text], own);
+const links = (text: string, own: SourceOwner = NATURE): SourceLink[] => read(text, own).map(item => item.link);
+const page = (n: number | string): SourceLink => ({ kind: 'block', id: 'p' + n });
+const fig = (id: string): SourceLink => ({ kind: 'block', id: 'fig' + id });
+const tab = (id: string): SourceLink => ({ kind: 'block', id: 'tab' + id });
+const ex = (id: string): SourceLink => ({ kind: 'block', id: 'ex' + id });
+const note = (link: string): SourceLink => ({ kind: 'note', link });
 const heading = (text: string): SourceLink => ({ kind: 'heading', heading: text });
+const unit = (term: string, code: string, rest: SourceLink | null = null): SourceLink => ({ kind: 'unit', term, unit: code, rest });
+const u13 = (rest: SourceLink | null = null): SourceLink => unit('國二上', '1-3', rest);
 
-void test('第 1 種：連結是那份筆記，別名只顯示', () => {
-  assert.deepEqual(one('[[筆記#標題]]'), { kind: 'note', link: '筆記#標題' });
-  assert.deepEqual(one('[[筆記]]'), { kind: 'note', link: '筆記' });
-  assert.deepEqual(one('[[筆記|別名]]'), { kind: 'note', link: '筆記', alias: '別名' });
-  assert.deepEqual(one('[[筆記#標題|別名]]'), { kind: 'note', link: '筆記#標題', alias: '別名' });
-  assert.deepEqual(one('[[a,b]]'), { kind: 'note', link: 'a,b' }, '連結裡的逗號不切');
-  // 反例：連結後面還有字不算整個是連結。
-  assert.deepEqual(one('[[a]] 的重點'), heading('[[a]] 的重點'));
+/** 每個例子：原文、讀成什麼、要不要提示（字面上就知道的）、情境。登錄在這裡的例子自動受下面的性質保護。 */
+const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
+  // 頁碼
+  ['p.44', [page(44)]], ['p44', [page(44)]], ['P.44', [page(44)]], ['p 44', [page(44)]], ['p. 44', [page(44)]], ['pp.44-46', [page(44)]], ['page 44', [page(44)]], ['pg.44', [page(44)]],
+  ['p.44-46', [page(44)]], ['p.44~46', [page(44)]], ['p.44～46', [page(44)]], ['p.44-p.46', [page(44)]], ['第 44 頁', [page(44)]], ['第44頁', [page(44)]], ['44頁', [page(44)]], ['44 頁', [page(44)]], ['p44頁', [page(44)]],
+  ['第四十四頁', [page(44)]], ['第44-46頁', [page(44)]], ['第 44 至 46 頁', [page(44)]], ['（p.44）', [page(44)]], ['課本第44頁', [page(44)]], ['講義p.12', [page(12)]], ['Workbook p.12', [page(12)]], ['p.44 知識快遞', [page(44)]],
+  // 圖表例題
+  ['圖 2-14', [fig('2-14')]], ['圖2-14', [fig('2-14')]], ['圖 2-13 A', [fig('2-13a')]], ['圖2-13(a)', [fig('2-13a')]], ['圖2-14圖說', [fig('2-14')]], ['表 2-1', [tab('2-1')]], ['例題 2-3', [ex('2-3')]], ['範例2-3', [ex('2-3')]], ['Fig. 2-14', [fig('2-14')]], ['2-14圖', [fig('2-14')]], ['第2-14圖', [fig('2-14')]], ['圖2.14', [fig('2-14')]],
+  // 好幾個
+  ['p.44, p.45', [page(44), page(45)]], ['p.44/p.45', [page(44), page(45)]], ['p.44;p.45', [page(44), page(45)]], ['p.44 p.45', [page(44), page(45)]], ['p.44, 45', [page(44), page(45)]], ['p.44 45', [page(44), page(45)]], ['p.44、46、48', [page(44), page(46), page(48)]], ['44、46頁', [page(44), page(46)]], ['第44頁和第46頁', [page(44), page(46)]],
+  ['圖2-14、2-15', [fig('2-14'), fig('2-15')]], ['圖2-13a、b', [fig('2-13a'), fig('2-13b')]], ['圖2-14表2-1', [fig('2-14'), tab('2-1')]], ['p.20 圖 2-14', [page(20), fig('2-14')]],
+  // 單元
+  ['國二上 1-3', [u13()]], ['國二上 1-3 p.20', [u13(page(20))]], ['國二上1-3 p.20', [u13(page(20))]], ['國二 上 1-3', [u13()]], ['國 二 上 1-3', [u13()]], ['國二上1-3p.20', [u13(page(20))]], ['國二上 1-3 第20頁', [u13(page(20))]], ['國二上 1-3 20頁', [u13(page(20))]],
+  ['八上 1-3', [u13()]], ['8上1-3', [u13()]], ['八年級上學期 1-3', [u13()]], ['國二上學期 1-3 第20頁', [u13(page(20))]], ['國二（上）1-3', [u13()]], ['國中二年級上 1-3', [u13()]], ['自然 國二上 1-3', [u13()]], ['國二上 自然 1-3', [u13()]], ['（國二上 1-3）', [u13()]],
+  ['國二上 第1章第3節 p.20', [u13(page(20))]], ['國二上 第一章第三節', [u13()]], ['國二上 單元 1-3', [u13()]], ['國二上 1-2-3 p.20', [unit('國二上', '1-2-3', page(20))]], ['國二上 20-1', [unit('國二上', '20-1')]], ['高三下 L10 圖 2-13 A', [unit('高三下', 'L10', fig('2-13a'))]],
+  ['小五上 3 p.15', [unit('小五上', '3', page(15))]], ['小五上 A1', [unit('小五上', 'A1')]], ['國二上 L 1 p.20', [unit('國二上', 'L1', page(20))]], ['國一上 l1', [unit('國一上', 'l1')], false, ENGLISH],
+  ['國二上 2-1 水溶液 p.15', [unit('國二上', '2-1', page(15))]], ['國二上 2-1 水溶液', [unit('國二上', '2-1', heading('水溶液'))]], ['國二上 1-3 [[別的筆記]]', [u13(note('別的筆記'))]],
+  ['p.44 國二上 1-3 p.20', [page(44), u13(page(20))]], ['p.44、國二上 1-3 p.20', [page(44), u13(page(20))]],
+  // 位置跟著前面的單元（D-167 第 6 點）
+  ['國二上 1-3 p.44, p.45', [u13(page(44)), u13(page(45))]], ['國二上 1-3 p.44、p.45', [u13(page(44)), u13(page(45))]], ['國二上 1-3 p.44；p.45', [u13(page(44)), u13(page(45))]], ['國二上 1-3 p.44, 45', [u13(page(44)), u13(page(45))]], ['國二上 1-3, p.44', [u13(), u13(page(44))]],
+  ['國二上 1-3 p.20，本單元 p.44', [u13(page(20)), page(44)]], ['國二上 1-3 p.20，本篇 p.44', [u13(page(20)), page(44)]],
+  // 乾淨的列表
+  ['國二上 1-3、1-8', [u13(), unit('國二上', '1-8')]], ['國二上 1-3, 1-8 p.5', [u13(), unit('國二上', '1-8', page(5))]], ['國一上 L1、L2', [unit('國一上', 'L1'), unit('國一上', 'L2')], false, ENGLISH], ['國一上 L1, L2 p.20', [unit('國一上', 'L1'), unit('國一上', 'L2', page(20))], false, ENGLISH],
+  // 本篇自己的編號
+  ['L3 p.30', [page(30)], false, ENGLISH], ['2-2 p.30', [page(30)]], ['5', [{ kind: 'text' }], false, MATH], ['本單元 p.44', [page(44)]],
+  // 連結
+  ['[[筆記#標題]]', [note('筆記#標題')]], ['[[筆記]]', [note('筆記')]], ['[[a,b]]', [note('a,b')]], ['[[國二上 L1]]', [note('國二上 L1')]], ['[[Ａ卷#２-１]]', [note('Ａ卷#２-１')]], ['[[ノート]]', [note('ノート')]], ['[[a]], [[b/c]]', [note('a'), note('b/c')]], ['[補充筆記](補充筆記.md)', [note('補充筆記')]], ['[[#睡眠的階段]]', [heading('睡眠的階段')]], ['#睡眠的階段', [heading('睡眠的階段')]], ['「睡眠的階段」', [heading('睡眠的階段')]],
+  // 先備、網址、題號
+  ['先備：國一數學 比例式', [{ kind: 'text' }]], ['先備:比例', [{ kind: 'text' }]], ['先備：A, B', [{ kind: 'text' }]], ['https://example.com/p.44', [{ kind: 'text' }]], ['第5題', [{ kind: 'text' }]],
+  // 舊標題：連結由 Obsidian 層找
+  ['睡眠的階段', [heading('睡眠的階段')]], ['溶解, 擴散', [heading('溶解, 擴散')]], ['CO2 的性質', [heading('CO2 的性質')]], ['2 擴散現象', [heading('2 擴散現象')]], ['1-2 溶液', [heading('1-2 溶液')]], ['課本第三章', [heading('課本第三章')]], ['老師上課說的', [heading('老師上課說的')]], ['先備知識', [heading('先備知識')]],
+  // 不算單元（D-166 第 2 點）
+  ['2-1', [heading('2-1')]], ['L1', [heading('L1')]], ['U1', [heading('U1')]], ['1-2-3', [heading('1-2-3')]], ['44', [heading('44')]], ['1-3, 1-8', [heading('1-3, 1-8')]], ['國二上的回顧', [heading('國二上的回顧')]], ['高六上 L1', [heading('高六上 L1')]], ['國四上 1-3', [heading('國四上 1-3')]], ['六上 2-1', [heading('六上 2-1')]], ['二上 1-3', [heading('二上 1-3')]], ['第三冊 1-3', [heading('第三冊 1-3')]], ['B2 1-3', [heading('B2 1-3')]], ['看國二上 1-3', [heading('看國二上 1-3')]], ['數學 國二上 1-3', [heading('數學 國二上 1-3')]], ['國二上 數學 1-3', [heading('國二上 數學 1-3')], true],
+  ['小五上', [heading('小五上')], true], ['小五上 p.15', [heading('小五上 p.15')], true], ['小五上 P20', [heading('小五上 P20')], true], ['小五上 圖 2-14', [heading('小五上 圖 2-14')], true], ['小五上 [[x]]', [heading('小五上 [[x]]')], true], ['小五上 第 44 頁', [heading('小五上 第 44 頁')], true], ['小五上 20頁', [heading('小五上 20頁')], true],
+  ['國二上 1 3 p.20', [heading('國二上 1 3 p.20')], true], ['國二上 1-', [heading('國二上 1-')], true], ['國二上 第3節 p.20', [page(20)], true], ['國二上 第三課 p.5', [page(5)], true], ['國二上 水溶液 p.30', [page(30)], true], ['國一上 L1~L3', [heading('國一上 L1~L3')], true, ENGLISH],
+  // 自己的學期沒寫單元：還是這本書
+  ['國二上 p.15', [page(15)], true], ['國二上 圖2-14', [fig('2-14')], true], ['國二上 第44頁', [page(44)], true],
+  // 位置照連，但要提示
+  ['1-3 p.20', [page(20)], true], ['L2 p.12', [page(12)], true, ENGLISH], ['老師說過 p.44', [page(44)], true], ['上一節 p.40', [page(40)], true], ['pH7 p.20', [page(20)], true],
+  // 字裡有像編號的
+  ['國二上 1-3 和 1-8', [u13(heading('和 1-8'))], true], ['p.12 of L1', [page(12)], true, ENGLISH], ['p.30, 也算 L1', [page(30), heading('也算 L1')], false, ENGLISH],
+  ['國二上1-3,8', [u13(), heading('8')]], ['國一上 L1, A1 p.20', [unit('國一上', 'L1'), unit('國一上', 'L1', page(20))], true, ENGLISH], ['國二上 1-3, 2-5 題', [u13(), heading('2-5 題')]], ['國二上 1-3, 10-15 上課筆記', [u13(), heading('10-15 上課筆記')]], ['國二上 1-3, 2026-10', [u13(), heading('2026-10')]], ['國二上 1-3 p.44, 溶解說明, 45', [u13(page(44)), heading('溶解說明'), heading('45')]],
+  // 否定字：不算單元、不算位置
+  ['不要算國二上 1-3', [heading('不要算國二上 1-3')]], ['國二上 1-3 不要算這個目標', [heading('國二上 1-3 不要算這個目標')]], ['國二上 1-3 不考這個', [heading('國二上 1-3 不考這個')]], ['不是國二上 1-3，是國三上 2-1', [heading('不是國二上 1-3'), heading('是國三上 2-1')]], ['老師說不用看 p.44', [heading('老師說不用看 p.44')]], ['圖 2-14 不用看', [heading('圖 2-14 不用看')]],
+  // 範圍寫反、不確定：不連
+  ['p.46-44', [heading('p.46-44')], true], ['p.44-5', [heading('p.44-5')], true], ['p.44-44', [heading('p.44-44')], true], ['第46-44頁', [heading('第46-44頁')], true], ['p53 基因', [heading('p53 基因')], true], ['第十百頁', [heading('第十百頁')]], ['pp.44', [page(44)]],
+];
+
+void test('D-167 每個例子：讀成預期的位置與單元，字面上就有問題的才標出來', () => {
+  const wrong = EXAMPLES.flatMap(([text, expected, problem = false, own = NATURE]) => {
+    const items = read(text, own);
+    const same = JSON.stringify(items.map(item => item.link)) === JSON.stringify(expected) && items.some(item => item.problem !== undefined) === problem;
+    return same ? [] : [{ text, expected, problem, got: items }];
+  });
+  assert.deepEqual(wrong, []);
 });
 
-void test('第 2 種：頁碼的各種寫法都連到同一個錨點，顯示原文', () => {
-  for (const text of ['p.44', 'p44', 'P.44', 'p 44', 'P44', 'p.44-46', 'p.44～46', 'p.44~46', '第 44 頁', '第44頁', '44頁', '44 頁', 'p.44 知識快遞', '第 44 頁 知識快遞']) assert.deepEqual(one(text), page('p44'), text);
-  assert.deepEqual(one('圖 2-14'), page('fig2-14'));
-  assert.deepEqual(one('圖 2-13 A'), page('fig2-13a'));
-  assert.deepEqual(one('表 2-1'), page('tab2-1'));
-  assert.deepEqual(one('例題 2-3'), page('ex2-3'));
-  // 反例：表裡的第 6 種。
-  for (const text of ['p.46-44', 'p.44-44', 'p.44-5', 'p.44, 45', 'pp.44', '１-３ p.20', '44', '第 頁', 'p.']) assert.deepEqual(one(text), heading(text), text);
-});
+// ── 性質：同一個意思套上打字雜訊，歸屬與位置都不變（D-167 第 3 點）──
 
-void test('第 3 種：開頭是年級學期，第一段就是單元編號，後面是位置', () => {
-  assert.deepEqual(one('國二上 3 p.15'), unit('國二上', '3', page('p15')));
-  assert.deepEqual(one('國一上 Starter'), unit('國一上', 'Starter'));
-  assert.deepEqual(one('小五上 2-1'), unit('小五上', '2-1'));
-  assert.deepEqual(one('小五上 A1'), unit('小五上', 'A1'));
-  assert.deepEqual(one('國二上 ２-１'), unit('國二上', '２-１'), '全形不轉半形');
-  assert.deepEqual(one('國二上1-3 p.20'), unit('國二上', '1-3', page('p20')));
-  assert.deepEqual(one('國二 上 1-3'), unit('國二上', '1-3'));
-  assert.deepEqual(one('國二上　1-3　p.20'), unit('國二上', '1-3', page('p20')), '全形空白也算');
-  assert.deepEqual(one('國二上\t1-3'), unit('國二上', '1-3'), 'Tab 也算');
-  assert.deepEqual(one('高三下 L10 圖 2-13 A'), unit('高三下', 'L10', page('fig2-13a')));
-  assert.deepEqual(one('國二上 1-2-3 p.20'), unit('國二上', '1-2-3', page('p20')));
-  assert.deepEqual(one('國二上 20-1'), unit('國二上', '20-1'), '不屬於單元 2');
-  assert.deepEqual(one('國二上 1-3 水溶液'), unit('國二上', '1-3', heading('水溶液')));
-  // 反例：不算單元，當第 6 種。
-  for (const text of ['小五上', '小五上 p.15', '小五上 P20', '小五上 圖 2-14', '小五上 [[x]]', '小五上 第 44 頁', '高六上 L1', '國四上 1-3', '國二上的回顧', '國二中 1-3']) assert.deepEqual(one(text), heading(text), text);
-  // 編號裡有列表的分隔符號，又切不開（D-166、Codex L2 的 F4）：不是單元，看不懂會提示。
-  for (const text of ['國二上 1-3, p.44', '國二上 1-3， p.44', '國二上 1-3/ p.44', '國二上 1-3／p.44', '國二上 L1, L2', '國二上 L1,L2', '國二上 1/2']) assert.deepEqual(one(text), heading(text), text);
+const wide = (text: string): string => text.replace(/[0-9A-Za-z.,\-]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xfee0));
+const NOISE: Record<string, (text: string) => string> = {
+  尾端空白: t => t + ' ', 開頭空白: t => ' ' + t, 連續空白: t => t.replace(/ /g, '  '), 全形空白: t => t.replace(/ /g, '　'), Tab: t => t.replace(/ /g, '\t'),
+  尾端逗號: t => t + ',', 尾端全形逗號: t => t + '，', 尾端句號: t => t + '。', 尾端頓號: t => t + '、', 全形字: wide,
+  短破折號: t => t.replace(/-/g, '–'), 長破折號: t => t.replace(/-/g, '—'), 減號: t => t.replace(/-/g, '−'), 全形連字號: t => t.replace(/-/g, '－'), 全形波浪號: t => t.replace(/~/g, '～'),
+  逗號前空白: t => t.replace(/,/g, ' ,'), 逗號換全形: t => t.replace(/,/g, '，'), 逗號後沒空白: t => t.replace(/, /g, ','), 零寬字元: t => t + '​',
+  兩種: t => wide(t).replace(/ /g, '　') + '，', 三種: t => (t + ' ,').replace(/-/g, '–').replace(/ (?=\S)/g, '  '),
+};
+/** 意思：單元比鍵；舊標題由 Obsidian 層去雜訊之後才比材料，所以也比鍵。 */
+const meaning = (items: readonly SourceItem[]): string => JSON.stringify(items.map(item => item.link), (key, value: unknown) => {
+  if (key === 'unit') return codeKey(value as string);
+  if (key === 'heading') return headingKey(value as string);
+  return value;
 });
+const hasLink = (text: string): boolean => /\[|\(|https?:|「|#/.test(text);
 
-void test('沒寫年級學期的都不算單元（D-166）：2-1、1-2-3、L1、U1 和其他的字一樣是第 6 種', () => {
-  for (const text of ['1-2-3 p.20', '1-3 p.20', '2-1', '20-1', 'L1', 'U1', 'U1 p.20', '2-2 圖 2-14', '2-2　p.3', '1-2 溶液', 'CO2 的性質', '2 擴散現象', 'A1 p.20', 'l1 p.20', 'Starter p.20', '3 p.15', 'L1-2', '2-', 'l1']) assert.deepEqual(one(text), heading(text), text);
-  // 頁碼照舊認得。
-  assert.deepEqual(one('p20'), page('p20'));
-  assert.deepEqual(one('P20'), page('p20'));
-});
-
-void test('第 5 種：先備是文字，不做連結；第 6 種是舊的段落標題', () => {
-  assert.deepEqual(one('先備：國一數學 比例式'), { kind: 'text' });
-  assert.deepEqual(one('先備:比例'), { kind: 'text' });
-  assert.deepEqual(one('先備：A, B'), { kind: 'text' }, '不切');
-  assert.deepEqual(one('先備知識'), heading('先備知識'));
-  assert.deepEqual(one('睡眠的階段'), heading('睡眠的階段'));
-});
-
-void test('切開：每一段都讀得懂才切，每一段各自獨立', () => {
-  const texts = (text: string): string[] => sourceLinks([text]).map(item => item.text);
-  for (const text of ['p.44, p.45', 'p.44，p.45', 'p.44/p.45', 'p.44／p.45']) {
-    assert.deepEqual(sourceLinks([text]).map(item => item.link), [page('p44'), page('p45')], text);
+void test('D-167 性質：登錄的例子套上任何打字雜訊，意思都不變', () => {
+  for (const [text, , , own = NATURE] of EXAMPLES) {
+    if (hasLink(text)) continue;
+    const base = meaning(read(text, own));
+    for (const [name, apply] of Object.entries(NOISE)) {
+      const changed = apply(text);
+      assert.equal(meaning(read(changed, own)), base, `${name}：${JSON.stringify(changed)}`);
+    }
   }
-  assert.deepEqual(texts('p.44, p.45'), ['p.44', 'p.45'], '顯示切開後的原文');
-  assert.deepEqual(sourceLinks(['國二上 1-3 p.20, p.44']).map(item => item.link), [unit('國二上', '1-3', page('p20')), page('p44')]);
-  assert.deepEqual(sourceLinks(['小五上 2-1 p.15, 國一上 L3 圖 2-1']).map(item => item.link), [unit('小五上', '2-1', page('p15')), unit('國一上', 'L3', page('fig2-1'))]);
-  assert.deepEqual(sourceLinks(['[[a]], [[b/c]]']).map(item => item.link), [{ kind: 'note', link: 'a' }, { kind: 'note', link: 'b/c' }], '連結裡的斜線不切');
-  // 反例：有一段讀不懂、單元後面沒有位置，都不切。
-  for (const text of ['溶解, 擴散', '[[a,b]]', '先備：A, B', 'p.44, 45', 'p.44, 溶解', '1/2 的意思', 'L1, L2', '2-1, p.44', '小五上 2-1, p.44', '1-3 p.20, p.44']) assert.deepEqual(texts(text), [text], text);
 });
 
-void test('頓號切開的每一項各自獨立：第一項屬於小五上 2-1，第二項回到目標所在單元', () => {
-  assert.deepEqual(sourceLinks(['小五上 2-1 p.15', 'p.44']).map(item => item.link), [unit('小五上', '2-1', page('p15')), page('p44')]);
+void test('D-167 不是雜訊的字不合併：連結裡不動，CO₂、①、L01 都保留', () => {
+  assert.deepEqual(links('[[Ａ卷#２-１]]'), [note('Ａ卷#２-１')], '連結裡的全形字是檔名');
+  assert.deepEqual(links('CO₂ 的性質'), [heading('CO₂ 的性質')]);
+  assert.deepEqual(links('國二上 ① p.20'), [page(20)], '① 不是單元 1；自己的學期還是這本書');
+  assert.deepEqual(links('國二上 2⁻¹ p.20'), [page(20)], '2⁻¹ 不是單元 2-1');
+  assert.deepEqual(links('小五上 ① p.20'), [heading('小五上 ① p.20')], '別的學期不知道在哪裡');
+  assert.notEqual(codeKey('L01'), codeKey('L1'));
+  assert.notEqual(codeKey('2-01'), codeKey('2-1'));
+  assert.equal(codeKey('Ｌ１'), codeKey('L1'));
+  assert.equal(codeKey('l1'), codeKey('L1'));
+  assert.equal(codeKey('２－１'), codeKey('2-1'));
+  assert.equal(termKey('八上'), '國二上');
+  assert.equal(termKey('國二上學期'), '國二上');
+  assert.equal(termKey('暑假'), '暑假', '認不得的照原字');
+});
+
+void test('D-167 注音打出來的連字號：ㄦ、ㄧ、一、ー、之，數字之間才算', () => {
+  for (const text of ['國二上 1ㄦ3', '國二上 1ㄧ3', '國二上 1一3', '國二上 1ー3', '國二上 1之3', '國二上 1─3']) assert.deepEqual(links(text), [u13()], text);
+  assert.deepEqual(links('圖2一14'), [fig('2-14')]);
+  assert.deepEqual(links('一下 p.5'), [page(5)].map(() => page(5)), '不是數字之間的「一」不動');
+  assert.deepEqual(links('p。44'), [page(44)]);
+  assert.deepEqual(links('p，44'), [page(44)]);
+  assert.deepEqual(links('p：44'), [page(44)]);
+  assert.deepEqual(links('p . 44'), [page(44)]);
+});
+
+void test('D-167 顯示原文：一個位置就是整段；一段好幾個位置時一個位置一個按鈕，接著前一個的寫完整', () => {
+  const texts = (text: string, own: SourceOwner = NATURE): string[] => read(text, own).map(item => item.text);
+  assert.deepEqual(texts('ｐ．４４'), ['ｐ．４４']);
+  assert.deepEqual(texts('p.44, p.45'), ['p.44', 'p.45']);
+  assert.deepEqual(texts('p.44 知識快遞'), ['p.44 知識快遞']);
+  assert.deepEqual(texts('國二上 1-3 p.20'), ['國二上 1-3 p.20']);
+  assert.deepEqual(texts('p.44 p.45'), ['p.44', 'p.45']);
+  assert.deepEqual(texts('國二上 1-3 p.20 圖 2-14 重點'), ['國二上 1-3 p.20', '圖 2-14 重點']);
+  assert.deepEqual(texts('p.44, 45'), ['p.44', 'p.45'], '只有數字的按鈕看不懂');
+  assert.deepEqual(texts('圖2-14、2-15'), ['圖2-14', '圖 2-15']);
+  assert.deepEqual(texts('圖2-13a、b'), ['圖2-13a', '圖 2-13b']);
+  assert.deepEqual(texts('[[a]], [[b/c]]'), ['[[a]]', '[[b/c]]']);
+  assert.deepEqual(texts('溶解, 擴散'), ['溶解, 擴散']);
+});
+
+void test('D-167 同一欄不分頓號、逗號、分行：parse 拆好的每一項照順序讀，範圍接著走', () => {
+  const inline = parseDeck('- 目標 ^abc123\n    - 問 :: 答\n    - 出處：小五上 2-1 p.15、p.44\n').targets[0].fields.sources;
+  const nested = parseDeck('- 目標 ^abc123\n    - 問 :: 答\n    - 出處：\n        - 小五上 2-1 p.15\n        - p.44\n').targets[0].fields.sources;
+  const expected = [unit('小五上', '2-1', page(15)), unit('小五上', '2-1', page(44))];
+  assert.deepEqual(sourceLinks(inline, NATURE).map(item => item.link), expected);
+  assert.deepEqual(sourceLinks(nested, NATURE).map(item => item.link), expected);
+  assert.deepEqual(sourceLinks(['p.44', '國二上 1-3 p.20'], NATURE).map(item => item.link), [page(44), u13(page(20))]);
+});
+
+void test('D-167 別的學期沒寫單元：範圍停掉，後面的位置不知道屬於哪裡', () => {
+  assert.deepEqual(links('國二上 1-3 p.44，國一下 p.15'), [u13(page(44)), heading('國一下 p.15')]);
+  assert.deepEqual(links('國二上 1-3 p.44，國一下 p.15，p.16'), [u13(page(44)), heading('國一下 p.15'), heading('p.16')]);
+  assert.deepEqual(links('國一上 L1, 國一下, L2 p.20', ENGLISH), [unit('國一上', 'L1'), heading('國一下'), heading('L2 p.20')]);
+  assert.deepEqual(links('國二上 1-3 p.44，國一下 p.15，本篇 p.16'), [u13(page(44)), heading('國一下 p.15'), page(16)]);
+});
+
+void test('D-167 整段只有字：同一欄有讀懂別的就是說明（remark），沒有就是舊標題；否定字一定提示', () => {
+  const remark = (text: string): boolean[] => read(text).map(item => item.remark === true);
+  assert.deepEqual(remark('p.44, 老師說的'), [false, true]);
+  assert.deepEqual(remark('老師說的'), [false]);
+  assert.deepEqual(remark('p.44、睡眠的階段'), [false, true]);
+  assert.deepEqual(remark('p.44, 不是重點'), [false, false], '否定字不當說明');
+  assert.deepEqual(read('p.44, 45').map(item => item.remark), [undefined, undefined]);
+});
+
+void test('D-167 對不到目錄才算有問題的（needsUnit）：其他編號、沿用學期的', () => {
+  const needs = (text: string, own: SourceOwner = ENGLISH): boolean[] => read(text, own).map(item => item.needsUnit === true);
+  assert.deepEqual(needs('國一上 Starter'), [true]);
+  assert.deepEqual(needs('國一上 L1-2'), [true]);
+  assert.deepEqual(needs('國一上 L1'), [false], '標準的編號沒有卡組不提示（D-033 邊用邊長）');
+  assert.deepEqual(needs('國一上 L1、L2'), [false, true]);
+  assert.deepEqual(needs('國二上 1-3, 10-15', NATURE), [false, true]);
+});
+
+void test('不看別篇：沒有 own 的卡組（學業以外）一樣讀；本篇的科目與編號只在有寫時用', () => {
+  assert.deepEqual(sourceLinks(['國二上 1-3 p.20'], NO_OWNER).map(item => item.link), [u13(page(20))]);
+  assert.deepEqual(sourceLinks(['p.44'], NO_OWNER).map(item => item.link), [page(44)]);
+  assert.deepEqual(sourceLinks(['自然 國二上 1-3'], NO_OWNER).map(item => item.link), [heading('自然 國二上 1-3')]);
 });
 
 void test('編號與名稱的切法：半形空白、全形空白、Tab 都算', () => {

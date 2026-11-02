@@ -70,8 +70,34 @@ void test('出處寫到 A、B：兩個單元各列一次；同一科', () => {
   assert.deepEqual(ids(index.find('國二上', '數學', '2-1')), [], '不跨科目');
 });
 
-void test('D-166 沒寫年級學期、編號帶逗號的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
-  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、國二上 L1, L2、國二上 2-2/ p.3'] });
+void test('D-167 只差全形或大小寫、年級學期的別名是同一個單元；每一篇都留著，顯示路徑第一篇的；L01 和 L1 不同', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：八上 ２－１ p.3'], b: ['出處：國二上學期 l1'], c: ['出處：國二上 L01'] });
+  const index = buildIndex([owner, card('Essence Cards/2-1.md', unit('國二上', '2-1'), {}), card('Essence Cards/２-１.md', unit('國二上', '２-１'), {}), card('Essence Cards/l1.md', unit('國二上', 'L1'), {})]);
+  assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a']);
+  assert.deepEqual(index.find('國二上', '自然', '２－１')?.decks.map(entry => entry.path), ['Essence Cards/2-1.md', 'Essence Cards/２-１.md'], '合成一個單元，兩篇都在');
+  assert.equal(index.find('國二上', '自然', '2-1')?.code, '2-1');
+  assert.deepEqual(ids(index.find('八上', '自然', 'L1')), ['b']);
+  assert.deepEqual(index.unresolved.map(ref => ref.code), ['L01'], 'L01 不是 L1');
+});
+
+void test('D-167 同一個目標寫到同一個單元好幾次：單元只列一次，對不到的也只留一筆', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1 p.3, p.4、國二上 1-9 p.3, p.4'] });
+  const index = buildIndex([owner, card('Essence Cards/2-1.md', unit('國二上', '2-1'), {})]);
+  assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a']);
+  assert.deepEqual(index.unresolved.map(ref => ref.code), ['1-9']);
+});
+
+void test('D-167 有否定字的不算；國二上 2-1, p.44 與乾淨的列表算；連結裡的字不算', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1, p.44'], b: ['出處：國二上 2-1、2-2'], c: ['出處：不要算國二上 2-1、國二上 2-2 不考這個'], d: ['出處：[[國二上 2-1]]'] });
+  const others = ['2-1', '2-2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
+  const index = buildIndex([owner, ...others]);
+  assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a', 'b']);
+  assert.deepEqual(ids(index.find('國二上', '自然', '2-2')), ['b']);
+  assert.deepEqual(index.unresolved, []);
+});
+
+void test('D-166 沒寫年級學期的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、L2, 2-2'] });
   const others = ['2-1', '2-2', 'L1', 'L2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
   const index = buildIndex([owner, ...others]);
   for (const code of ['2-1', '2-2', 'L1', 'L2']) assert.deepEqual(ids(index.find('國二上', '自然', code)), [], code);
@@ -94,12 +120,12 @@ void test('對不到的參照留在索引，目錄沒有節點；段落標題不
   assert.deepEqual(ids(filled.find('國二上', '自然', '1-9')), ['a']);
 });
 
-void test('全形編號對不到 2-1，退回文字；單元屬性的全形空白和別篇的出處是同一個單元', () => {
+void test('全形編號也是 2-1（D-167）；單元屬性的全形空白和別篇的出處是同一個單元', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 ２-１'], b: ['出處：國二上 2-1 p.20'] });
   const target = deck('Essence Cards/t.md', '---\n年級學期: 國二上\n科目: 自然\n單元: 2-1　水溶液\n---\n');
   const index = buildIndex([owner, target]);
-  assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['b']);
-  assert.deepEqual(index.unresolved.map(ref => ref.code), ['２-１']);
+  assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a', 'b']);
+  assert.deepEqual(index.unresolved, []);
 });
 
 void test('排序：自然排序、平手比原字串；順序打亂、反向輸入結果相同；未知學期排在後面', () => {

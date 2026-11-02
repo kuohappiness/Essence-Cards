@@ -106,7 +106,7 @@ export interface State {
   /** 卡組筆記的全部卡的目標（D-146）：這一篇啟用中、可以出的目標 ID；草稿、暫停、轉錄稿、還沒讀完是空的。 */
   deckTargets(path: string): readonly string[];
   /** 跨單元的出處要在哪裡找（§10）：那個單元的每一篇，照路徑，各自的材料照原順序；對不到單元是空的。科目算 path 這一篇的。 */
-  unitMaterials(path: string, term: string, code: string): readonly { path: string; materials: readonly string[] }[];
+  unitMaterials(path: string, term: string, code: string): readonly { path: string; materials: readonly string[]; name: string }[];
   /**
    * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。取消的那一筆早於今天的份的開始（例如複習到 03:59、過了 04:00 回看改評分）時，
    * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
@@ -502,7 +502,10 @@ export function createState(options: StateOptions): State {
       const subject = deckMap.get(path)?.props.subject ?? null;
       if (subject === null) return [];
       const unit = catalogIndex().find(term, subject, code);
-      return (unit?.decks ?? []).map(deck => ({ path: deck.path, materials: deckMap.get(deck.path)?.props.materials ?? [] }));
+      return (unit?.decks ?? []).map(deck => {
+        const { materials = [], unit: own = null } = deckMap.get(deck.path)?.props ?? {};
+        return { path: deck.path, materials, name: own?.name ?? '' };
+      });
     },
     progress() {
       const { today, input: value } = fresh();

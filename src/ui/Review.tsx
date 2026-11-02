@@ -5,7 +5,7 @@ import { animate } from 'motion';
 import type { ReportKind } from '../core/errors/index.ts';
 import type { Rating } from '../core/study/index.ts';
 import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLabel, sourceLinks } from '../review/index.ts';
-import type { Axis, CardView, DoneView, Gesture, Session, Spelling, TypedView } from '../review/index.ts';
+import type { Axis, CardView, DoneView, Gesture, Session, SourceOwner, Spelling, TypedView } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
 import { firstMaterial, resolveSource, type MaterialDeck } from './sources.ts';
 import type { Speech } from './speech.ts';
@@ -30,6 +30,8 @@ export interface ReviewProps {
   openLink: (linktext: string, sourcePath: string) => void;
   /** 這篇卡組的「材料」（出處要在哪幾份裡找）。 */
   materials: (deckPath: string) => readonly string[];
+  /** 這一篇自己的屬性：出處的讀法要用（D-167）。 */
+  owner: (deckPath: string) => SourceOwner;
   /** 跨單元的出處的候選（§10）：那個單元的每一篇與它的材料。 */
   units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
   speech: Speech;
@@ -346,7 +348,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
+        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} owner={props.owner} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
           qRef={questionEl} sticky={stickyQuestion} actions={typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />}
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
@@ -408,6 +410,7 @@ function Done({ done, session, close }: { done: DoneView; session: Session; clos
 interface CardProps {
   view: CardView; app: App; speech: Speech;
   materials: (deckPath: string) => readonly string[];
+  owner: (deckPath: string) => SourceOwner;
   units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
@@ -425,7 +428,7 @@ interface CardProps {
   onPainted: () => void;
   onFail: (side: 'front' | 'back', error: unknown, path: string) => void;
 }
-function Card({ view, app, speech, materials, units, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
+function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
   const prompt = card.prompt;
   const question = prompt.kind === 'qa' ? prompt.question : prompt.text;
@@ -438,7 +441,7 @@ function Card({ view, app, speech, materials, units, openLink, tipOpen, setTipOp
   // 三步還沒走完（不是回看）：題目有 ＿＿ 時在空格裡打（D-145），渲染後找不到空格才放在題目下面。
   const typing = typed !== null && !typed.finished && !view.viewing ? typed : null;
   const inline = typing !== null && lines > 0 && slot !== null;
-  const sources = sourceLinks(card.target.fields.sources);
+  const sources = sourceLinks(card.target.fields.sources, owner(card.deck));
   const deckMaterials = materials(card.deck);
   const links = sources.map(item => ({ ...item, label: sourceLabel(item), target: resolveSource(app, card.deck, deckMaterials, item.link, (term, code) => units(card.deck, term, code)) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);

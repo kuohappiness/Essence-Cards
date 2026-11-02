@@ -1,8 +1,9 @@
-// 出處與單元編號的字面讀法（syntax.md §2-1、§2-5、D-080、D-164、D-166）：只看字面、不看有沒有別篇卡組，所以新增一篇卡組不會讓舊的出處變意思。
-// 家長亂填是常態，所以不猜：只有開頭寫了年級學期才算別的單元（D-166）。在哪一份材料裡找由 Obsidian 層判斷，單元對到哪一篇由 core/catalog 判斷。
+// 出處與單元編號的讀法（syntax.md §2-1、§2-5、D-080、D-164、D-166、D-167）：只靠字面與這一篇自己的屬性。這裡拿不到別篇與材料，
+// 所以新增一篇卡組、材料多一個標題都不會讓舊的出處變意思。不用猜的直接讀懂；要猜的不生效，只標出問題。
+// 在哪一份材料裡找由 Obsidian 層判斷，單元對到哪一篇由 core/catalog 判斷。
 
 /**
- * 連結的目標：block 是 `#^id`、heading 是舊的段落標題（§9-3 第 6 種）、note 是筆記連結本身（alias 只顯示，不送去開）；
+ * 連結的目標：block 是 `#^id`、heading 是舊的段落標題、note 是筆記連結本身（alias 只顯示，不送去開）；
  * unit 是別的單元；text 不做連結（先備，D-087）。
  */
 export type SourceLink =
@@ -11,36 +12,70 @@ export type SourceLink =
   | { kind: 'note'; link: string; alias?: string }
   | { kind: 'unit'; term: string; unit: string; rest: SourceLink | null }
   | { kind: 'text' };
-/** text 是原文，手寫的容錯只影響讀法（D-164 第 6 點）。 */
-export interface SourceItem { text: string; link: SourceLink }
-
-/** 頁碼：`p.44`、`p44`、`P.44`、`p 44`，範圍 `p.44-46`、`p.44～46`（後面比前面大才算，連到前面那一頁）；`第 44 頁`、`44頁`。後面可以接說明文字。 */
-function page(text: string): string | null {
-  const latin = /^p\.?\s*(\d+)(?:[-～~](\d+))?(?:\s+.*)?$/is.exec(text);
-  if (latin) return latin[2] === undefined || BigInt(latin[2]) > BigInt(latin[1]) ? latin[1] : null;
-  return /^(?:第\s*)?(\d+)\s*頁(?:\s+.*)?$/s.exec(text)?.[1] ?? null;
+/** 字面上就知道有問題（不用看目錄與材料，§9-5）：term-only 年級學期沒有完整的編號；position 範圍寫反或可能不是頁碼；before 位置前面有一句話；leftover 字裡有像編號的。 */
+export type SourceProblem = 'term-only' | 'position' | 'before' | 'leftover';
+/** 一個按鈕。text 是原文，手寫的容錯只影響讀法（D-164 第 6 點）。 */
+export interface SourceItem {
+  text: string;
+  link: SourceLink;
+  problem?: SourceProblem;
+  /** 對不到目錄才算有問題：其他編號（`Starter`）、列表沿用學期的（`1-8`）。標準的編號沒有卡組不提示（D-033 邊用邊長）。 */
+  needsUnit?: true;
+  /** 同一欄有讀懂別的，這一段只是字：材料裡找得到標題就連，找不到不提示。 */
+  remark?: true;
 }
+/** 這一篇自己的屬性：本科的名稱、本篇的編號（`L3 p.30` 就是這一篇）、自己的學期。 */
+export interface SourceOwner { term: string | null; subject: string | null; unit: { code: string } | null }
 
-/** 位置：頁碼、圖表例題（含子圖）、其他筆記的連結；都不是時 null。 */
-function location(text: string): SourceLink | null {
-  const number = page(text);
-  if (number !== null) return { kind: 'block', id: 'p' + number };
-  const figure = /^(圖|表|例題)\s*(\d+-\d+)(?:\s*([A-Za-z]))?(?:\s+.*)?$/s.exec(text);
-  if (figure) return { kind: 'block', id: ({ 圖: 'fig', 表: 'tab', 例題: 'ex' } as const)[figure[1] as '圖' | '表' | '例題'] + figure[2] + (figure[3]?.toLowerCase() ?? '') };
-  const note = /^\[\[([^\]]+)\]\]$/.exec(text);
-  if (note) {
-    const split = note[1].indexOf('|');
-    return split < 0 ? { kind: 'note', link: note[1] } : { kind: 'note', link: note[1].slice(0, split).trim(), alias: note[1].slice(split + 1).trim() };
+// ── 去雜訊：只換確定的語法字元，連結裡不動；不用 NFKC，CO₂、① 不是打字雜訊（D-167 第 3 點）──
+
+function tidy(text: string): string {
+  return text
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+    .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[‐‑‒–—―−﹘﹣─━]/g, '-').replace(/〜/g, '~').replace(/﹐/g, ',').replace(/﹔/g, ';').replace(/﹑/g, '、')
+    .replace(/\s+/g, ' ')
+    // 數字之間的 ㄦ（注音的連字號鍵）、ㄧ、一、ー、之 是連字號打錯。
+    .replace(/(?<=\d) ?[ㄦㄧ一ー之] ?(?=\d)/g, '-')
+    .replace(/(?<=[0-9A-Za-z]) ?- ?(?=[0-9])/g, '-')
+    .replace(/(?<![A-Za-z])([pP]) ?[.,:。] ?(?=\d)/g, '$1.')
+    .replace(/ +([,;/、])/g, '$1');
+}
+const END = /[,/;、。.\s]+$/;
+const RAW_END = /[,，﹐/／;；﹔、﹑。．.\s]+$/;
+const SEPARATOR = /[,，﹐/／;；﹔]/;
+
+/** 單元編號的比對鍵：全半形、大小寫不分；`L01` 與 `L1` 不同（§9-2、D-167 第 4 點）。屬性、出處、目錄、考試範圍共用。 */
+export const codeKey = (code: string): string => tidy(code).trim().toLowerCase();
+/** 材料標題的比對鍵（只影響連結）：全半形、大小寫、空白、上下標不分。 */
+export const headingKey = (text: string): string => tidy(text).toLowerCase().replace(/\s/g, '').replace(/[₀-₉]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2080 + 48)).replace(/[¹²³]/g, c => ({ '¹': '1', '²': '2', '³': '3' })[c] ?? c);
+
+// ── 連結先藏起來，裡面的字不動 ──
+
+const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|https?:\/\/\S+/g;
+const TOKEN = /\uE000(\d+)\uE001/g;
+const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
+
+/** 連結的目標；網址不是位置（null）。 */
+function linkTarget(raw: string): SourceLink | null {
+  const wiki = /^!?(\[\[|［［)\s*([^\]］]*?)\s*(?:\]\]|］］)$/.exec(raw);
+  if (wiki) {
+    const inner = wiki[1] === '［［' ? tidy(wiki[2]) : wiki[2];
+    const split = inner.search(/[|｜]/);
+    const target = (split < 0 ? inner : inner.slice(0, split)).trim();
+    if (target.startsWith('#')) return { kind: 'heading', heading: target.slice(1) };
+    return split < 0 ? { kind: 'note', link: target } : { kind: 'note', link: target, alias: inner.slice(split + 1).trim() };
   }
-  return null;
+  const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(raw);
+  return markdown ? { kind: 'note', link: decodeURIComponent(markdown[1]).replace(/\.md$/, '') } : null;
 }
 
-/** 單元編號後面的那一段：位置；其他文字照舊當段落標題。 */
-const rest = (text: string): SourceLink | null => text ? location(text) ?? { kind: 'heading', heading: text } : null;
+// ── 年級學期 ──
 
-/** 認得的年級學期：小一～小六、國一～國三、高一～高三，各有上下；`國二 上` 也算。 */
-const TERM = /^(小[一二三四五六]|國[一二三]|高[一二三])\s*([上下])(.*)$/s;
 const GRADE = '小一小二小三小四小五小六國一國二國三高一高二高三';
+const ZH_GRADE = '一二三四五六';
+const STAGE: Record<string, string> = { 小: '小', 國: '國', 高: '高', 國小: '小', 小學: '小', 國中: '國', 高中: '高' };
+const JUNIOR: Record<string, string> = { 七: '一', 八: '二', 九: '三', 7: '一', 8: '二', 9: '三' };
 
 /** 認得的年級學期的順序（小 → 國 → 高、年級、上 → 下）；認不得是 null。 */
 export function termRank(term: string): number | null {
@@ -50,45 +85,270 @@ export function termRank(term: string): number | null {
   return match && grade >= 0 && grade % 2 === 0 ? grade + (match[2] === '下' ? 1 : 0) : null;
 }
 
-/**
- * 開頭是年級學期的單元（§9-3 第 3 種）；後面沒東西、接的是位置、黏著不是半形英數字開頭的字（`國二上的回顧`）都不算。
- * 編號裡有列表的分隔符號（`國二上 1-3, p.44`、`國二上 L1, L2`，切不開才會讀到這裡）也不算：不猜是哪幾項，當看不懂提示（D-166）。
- */
-function termUnit(text: string): SourceLink | null {
-  const match = TERM.exec(text);
-  if (!match) return null;
-  const after = match[3], body = after.trim();
-  if (!body || location(body) || !/^(?:\s|[A-Za-z0-9])/.test(after)) return null;
-  const { code, name } = splitUnit(body);
-  if (/[,，/／]/.test(code)) return null;
-  return { kind: 'unit', term: match[1] + match[2], unit: code, rest: rest(name) };
+/** 開頭的年級學期；`二上`、`第三冊`、`B2` 要靠學制或教材才知道，不認（D-167 第 4 點）。 */
+function readTerm(text: string): { term: string; length: number } | null {
+  const named = /^(國小|小學|國中|高中|小|國|高) ?([一二三四五六1-6]) ?(?:年級)? ?\(? ?([上下])(?: ?\))?(?: ?(?:學期|冊))?/.exec(text);
+  if (named) {
+    const grade = /\d/.test(named[2]) ? ZH_GRADE[Number(named[2]) - 1] : named[2];
+    const term = STAGE[named[1]] + grade + named[3];
+    return termRank(term) === null ? null : { term, length: named[0].length };
+  }
+  const junior = /^([七八九789]) ?(?:年級)? ?\(? ?([上下])(?: ?\))?(?: ?(?:學期|冊))?/.exec(text);
+  return junior ? { term: '國' + JUNIOR[junior[1]] + junior[2], length: junior[0].length } : null;
+}
+/** 年級學期的比對鍵：`八上`、`國二上學期` 都是 `國二上`；認不得的照原字。 */
+export function termKey(term: string): string {
+  const text = tidy(term).trim(), read = readTerm(text);
+  return read?.length === text.length ? read.term : term;
 }
 
-function read(text: string): SourceLink {
-  const place = location(text);
-  if (place) return place;
-  const unit = termUnit(text);
-  if (unit) return unit;
-  if (/^先備\s*[：:]/.test(text) || !text) return { kind: 'text' };
-  return { kind: 'heading', heading: text };
+// ── 編號 ──
+
+const ZH_NUMBER: Record<string, number> = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+/** 中文數字 1～999；寫法不對回 null（`十百` 不算）。 */
+function zhNumber(text: string): number | null {
+  const match = /^(?:([一二兩三四五六七八九])百)?(?:([一二三四五六七八九])?(十)|零)?([一二三四五六七八九])?$/.exec(text);
+  if (!match || !text) return null;
+  return (match[1] ? ZH_NUMBER[match[1]] * 100 : 0) + (match[3] ? (match[2] ? ZH_NUMBER[match[2]] : 1) * 10 : 0) + (match[4] ? ZH_NUMBER[match[4]] : 0);
+}
+const NUMBER = '(?:\\d+|[一二兩三四五六七八九十百零]+)';
+function toNumber(text: string): string | null {
+  if (/^\d+$/.test(text)) return text;
+  const value = zhNumber(text);
+  return value === null ? null : String(value);
 }
 
-/** 切開之後這一段讀得懂：位置，或單元後面接位置（§9-3「切開」）。 */
-function plainPart(text: string): boolean {
-  const link = read(text);
-  if (link.kind === 'block' || link.kind === 'note') return true;
-  return link.kind === 'unit' && (link.rest?.kind === 'block' || link.rest?.kind === 'note');
+const AFTER_CODE = '(?=$| |[(,]|[pP]\\.? ?\\d|第 ?\\d|圖|表|例題|\\uE000)';
+const PLACE_START = /^(?:(?:pp?|pg|page)\.? ?\d|第 ?\S*? ?頁|\d+(?: ?[-~至到] ?\d+)? ?頁|(?:圖|表|例題|範例|fig(?:ure)?\.?|table|example) ?\d|\uE000)/i;
+
+interface Code { code: string; rest: string; other?: true }
+/** 年級學期後面的編號；開頭是位置、中文字或沒寫完時 null。other：不是標準形狀，對不到目錄才提示。 */
+function readCode(text: string): Code | null {
+  const t = text.trimStart();
+  if (PLACE_START.test(t)) return null;
+  const chapter = new RegExp(`^第 ?(${NUMBER}) ?章 ?第 ?(${NUMBER}) ?節 ?(.*)$`, 's').exec(t);
+  if (chapter) {
+    const [a, b] = [toNumber(chapter[1]), toNumber(chapter[2])];
+    return a && b ? { code: `${a}-${b}`, rest: chapter[3] } : null;
+  }
+  const named = /^單元 ?(.*)$/s.exec(t);
+  if (named) return readCode(named[1]);
+  const shape = new RegExp(`^(\\d+(?:-\\d+)*|[A-Za-z]+\\d+)${AFTER_CODE} ?(.*)$`, 's').exec(t);
+  if (shape) return { code: shape[1], rest: shape[2] };
+  const spaced = new RegExp(`^([A-Za-z]{1,2}) (\\d+)${AFTER_CODE} ?(.*)$`, 's').exec(t);
+  if (spaced) return { code: spaced[1] + spaced[2], rest: spaced[3] };
+  // 其他編號（`Starter`、`L1-2`）：半形字母開頭的一個字。範圍符號、問號不是編號的一部分。
+  const other = /^([A-Za-z][A-Za-z0-9-]*)(?: (.*))?$/s.exec(t);
+  return other ? { code: other[1], rest: other[2] ?? '', other: true } : null;
 }
 
-/** `,`、`，`、`/`、`／` 只有在切開後每一段都讀得懂時才切；連結裡的不算（`[[a,b]]`）。 */
-function split(text: string): string[] {
-  const parts = text.split(/(?![^[]*\]\])[,，/／]/).map(part => part.trim());
-  return parts.length > 1 && parts.every(plainPart) ? parts : [text];
+// ── 位置 ──
+
+const BLOCK: Record<string, string> = { 圖: 'fig', fig: 'fig', figure: 'fig', 表: 'tab', table: 'tab', 例題: 'ex', 範例: 'ex', example: 'ex' };
+const FULL_NAME: Record<string, string> = { fig: '圖', tab: '表', ex: '例題' };
+interface Found { at: number; end: number; link: SourceLink }
+
+/** 一段裡所有的位置，照原文順序；left 是沒用到的字，before 是第一個位置前面的字。bad：範圍寫反、可能不是頁碼。 */
+function scan(text: string, tokens: readonly string[]): { found: Found[]; left: string; before: string; bad: boolean } {
+  const found: Found[] = [];
+  let masked = text, bad = false;
+  const take = (match: RegExpMatchArray, link: SourceLink | null): void => {
+    const at = match.index ?? 0;
+    if (link) found.push({ at, end: at + match[0].length, link });
+    masked = masked.slice(0, at) + ' '.repeat(match[0].length) + masked.slice(at + match[0].length);
+  };
+  for (const match of [...masked.matchAll(TOKEN)]) take(match, linkTarget(tokens[Number(match[1])]));
+  for (const match of [...masked.matchAll(/「([^」]+)」/g)]) take(match, { kind: 'heading', heading: match[1] });
+  for (const match of [...masked.matchAll(/(?<![^ ])#([^ #,、;/]+)/g)]) take(match, { kind: 'heading', heading: match[1] });
+  for (const match of [...masked.matchAll(/(圖|表|例題|範例|figure|fig|table|example)\.? ?(\d+)[-.](\d+) ?(?:\(? ?([A-Za-z]) ?\)?(?![A-Za-z0-9]))?/gi)]) take(match, { kind: 'block', id: `${BLOCK[match[1].toLowerCase()]}${match[2]}-${match[3]}${match[4]?.toLowerCase() ?? ''}` });
+  for (const match of [...masked.matchAll(/(?<![A-Za-z0-9-])第? ?(\d+)-(\d+) ?(圖|表|例題)/g)]) take(match, { kind: 'block', id: `${BLOCK[match[3]]}${match[1]}-${match[2]}` });
+  const page = (match: RegExpMatchArray, first: string, last: string | undefined, sure: boolean): void => {
+    const start = toNumber(first);
+    if (start === null) return;
+    const end = last === undefined ? null : toNumber(last);
+    // 反向、位數較少都不確定（`p.46-44`、`p.44-6`），不偷偷截成第一頁（D-167 第 5 點）。
+    if (last !== undefined && (end === null || BigInt(end) <= BigInt(start) || end.length !== start.length)) { bad = true; take(match, null); return; }
+    // 沒有句點的 `p53` 後面又接字，可能是名稱。
+    if (!sure && /^ *[^ \uE000圖表例第pP頁,]/.test(masked.slice((match.index ?? 0) + match[0].length))) { bad = true; take(match, null); return; }
+    take(match, { kind: 'block', id: 'p' + start });
+  };
+  for (const match of [...masked.matchAll(/(?<![A-Za-z0-9])(pp?|pg|page)(\.?) ?(\d+)(?: ?[-~至到] ?(?:(?:pp?|pg|page)\.? ?)?(\d+))?( ?頁)?(?![A-Za-z0-9-])/gi)]) page(match, match[3], match[4], Boolean(match[2]) || Boolean(match[5]) || match[1].length > 1);
+  for (const match of [...masked.matchAll(new RegExp(`(?<![0-9A-Za-z-])(?:第 ?)?(${NUMBER})(?: ?[-~至到] ?(${NUMBER}))? ?頁`, 'g'))]) page(match, match[1], match[2], true);
+  found.sort((a, b) => a.at - b.at);
+  const before = found.length ? masked.slice(0, found[0].at).replace(/ +/g, ' ').trim() : '';
+  return { found, left: masked.replace(/ +/g, ' ').trim(), before, bad };
 }
 
-/** 把資料欄位「出處」的每一項（已經照頓號切好）變成顯示文字加連結的目標。 */
-export function sourceLinks(sources: readonly string[]): SourceItem[] {
-  return sources.flatMap(split).map(text => ({ text, link: read(text) }));
+// ── 讀一欄 ──
+
+// 有這些字的那一段不算歸屬、不算位置，只提示。表只會讓結果變成「先不算」，缺字只是少一次保護，不會多算（D-167 第 7 點）。
+const NEGATIVE = /不是|不要|不用|不必|不算|不考|不看|不含|不包括|除外|以外|排除|並非|而非|而是|別算|勿|略過|改成|改為|更正|應為|不對/;
+const SELF = /^(?:本單元|本篇|本課|本節|這一篇|這一課|這一節|這一單元|這個單元) ?/;
+// 沒用到的字裡有編號或年級學期：可能是沒寫完的參照。
+const SUSPECT = /(?<![A-Za-z0-9.-])\d+(?:-\d+)+(?![A-Za-z0-9-])|(?:小[一二三四五六]|國[一二三]|高[一二三]|[七八九]) ?[上下]/;
+const WRAP = /^[([《【] ?(.*?) ?[)\]》】]$/s;
+const NOTE_ONLY = /^(?:第 ?\d+ ?[題段行])$/;
+/** 位置前面的字可以當教材名稱：兩個中文字以內或一個英文字（`課本第44頁`、`Workbook p.12`）。 */
+const MATERIAL = /^(?:[\u3400-\u9FFF]{1,2}的?|[A-Za-z]+)$/;
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+interface UnitName { term: string; code: string }
+/** negative：有否定字，不當說明。codeLike：只有字但像編號，也不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。 */
+interface Pending extends SourceItem { negative?: true; codeLike?: true }
+
+export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
+  const tokens: string[] = [];
+  const masked = sources.join('、').replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
+  const ownCode = own.unit?.code ?? '';
+  const ownLetters = /^([A-Za-z]+)\d+$/.exec(ownCode)?.[1] ?? null;
+  const subject = own.subject ? new RegExp(`^${escapeRegExp(own.subject)} ?`) : null;
+  const dropSubject = (text: string): string => subject ? text.replace(subject, '') : text;
+  // 同一欄不分頓號、逗號、分行（D-167 第 6 點）：位置跟著前面的單元；scope 是 null 時，前面寫了別的學期卻沒有單元，不知道屬於哪裡。
+  let scope: UnitName | 'this' | null = 'this', lastPlace: string | null = null, carry: UnitName | null = null;
+
+  const inScope = (link: SourceLink): SourceLink => scope && scope !== 'this' ? { kind: 'unit', term: scope.term, unit: scope.code, rest: link } : link;
+  /** 接著前一個位置的一項；按鈕寫完整，只有數字看不懂。 */
+  const follow = (id: string, text: string): Pending => { lastPlace = id; return { text, link: inScope({ kind: 'block', id }) }; };
+  /** 字裡有本篇那種字母的編號（英文卡組的 `也算 L1`）；`p.20 維生素 B12` 不算。 */
+  const hasOwnKindCode = (text: string): boolean => ownLetters !== null && new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(ownLetters)}\\d+(?![A-Za-z0-9])`, 'i').test(text);
+  const looksLikeCode = (text: string): boolean => SUSPECT.test(text) || hasOwnKindCode(text);
+  const forget = (): void => { lastPlace = null; carry = null; };
+
+  /** 接著前一個位置：p.44, 45；圖 2-14、2-15；圖 2-13a、b；44、46頁。 */
+  function continuation(segment: string, display: string, next: string | undefined): Pending | null {
+    if (lastPlace?.startsWith('p') && /^\d+$/.test(segment)) return follow('p' + segment, 'p.' + segment);
+    const kind = /^(fig|tab|ex)/.exec(lastPlace ?? '')?.[1];
+    if (kind && /^\d+-\d+$/.test(segment)) return follow(kind + segment, `${FULL_NAME[kind]} ${segment}`);
+    if (kind === 'fig' && /^[A-Za-z]$/.test(segment)) {
+      const id = (lastPlace ?? '').replace(/[a-z]$/, '') + segment.toLowerCase();
+      return follow(id, '圖 ' + id.slice(3));
+    }
+    return /^\d+$/.test(segment) && /^\d+ ?頁/.test(next ?? '') ? follow('p' + segment, display) : null;
+  }
+
+  /** 乾淨的列表：寫過年級學期的下一段只有編號（可以加位置），和前一個同一類，沿用學期（`國二上 1-3、1-8`）。 */
+  function listed(segment: string): Code | null {
+    const bare = /^(\d{1,2}(?:-\d{1,2})*|[A-Za-z]+\d+)(?![0-9A-Za-z-]) ?(.*)$/s.exec(segment);
+    if (!bare || !carry) return null;
+    const same = /^\d/.test(carry.code)
+      ? /^\d/.test(bare[1]) && bare[1].split('-').length === carry.code.split('-').length
+      : /^[A-Za-z]+/.exec(carry.code)?.[0].toLowerCase() === /^[A-Za-z]+/.exec(bare[1])?.[0].toLowerCase();
+    if (!same) return null;
+    const after = scan(bare[2], tokens);
+    return !bare[2] || (after.found.length && !after.left) ? { code: bare[1], rest: bare[2], other: true } : null;
+  }
+
+  function readSegment(raw: string, display: string, next: string | undefined): Pending[] {
+    const segment = raw.replace(WRAP, '$1');
+    const asHeading = (extra: Partial<Pending> = {}): Pending => ({ text: display, link: { kind: 'heading', heading: display }, ...extra });
+    if (NEGATIVE.test(segment)) { forget(); return [asHeading({ negative: true })]; }
+    if (NOTE_ONLY.test(segment)) return [{ text: display, link: { kind: 'text' } }];
+    let rest = segment, unit: UnitName | null = null, selfRef = false, needsUnit = false;
+    const body = dropSubject(segment);
+    const term = readTerm(body);
+    const tail = term ? body.slice(term.length) : '';
+    const after = dropSubject(tail.trimStart());
+    // 學期後面緊接著中文字不算（`國二上的回顧`），本科的名稱可以（`國二上自然 1-3`）。
+    if (term && (after !== tail.trimStart() || /^(?:$| |[0-9A-Za-z第]|單元|\uE000)/.test(tail))) {
+      const code = readCode(after);
+      if (!code || ((code.other || /^\d+$/.test(code.code)) && /^\d+(?![0-9-]* ?頁)/.test(code.rest))) {
+        // 只有年級學期、編號沒寫完（`小五上 p.15`、`國二上 1 3`）：不猜單元。自己的學期還是這本書；別的學期的位置不知道在哪裡。
+        forget();
+        const found = code ? [] : scan(after.trim(), tokens).found;
+        scope = term.term === own.term ? 'this' : null;
+        if (scope === 'this' && found.length) return found.map((each, at) => ({ text: at ? restore(after.trim().slice(each.at, each.end), tokens) : display, link: each.link, problem: 'term-only' as const }));
+        return [asHeading({ problem: 'term-only' })];
+      }
+      unit = { term: term.term, code: code.code };
+      needsUnit = code.other === true;
+      rest = code.rest;
+    } else if (SELF.test(segment)) {
+      scope = 'this'; selfRef = true; rest = segment.replace(SELF, ''); carry = null;
+    } else {
+      const self = ownCode ? new RegExp(`^${escapeRegExp(ownCode)}(?![0-9A-Za-z-]) ?(.*)$`, 'is').exec(segment) : null;
+      if (self) {
+        scope = 'this'; selfRef = true; rest = self[1]; carry = null;
+        if (!rest) return [{ text: display, link: { kind: 'text' } }];
+      } else {
+        const followed = continuation(segment, display, next);
+        if (followed) return [followed];
+        const code = listed(segment);
+        if (code && carry) {
+          unit = { term: carry.term, code: code.code };
+          needsUnit = true;
+          rest = code.rest;
+        }
+      }
+    }
+    if (unit) { scope = unit; carry = unit; }
+
+    const { found, left, before, bad } = scan(rest, tokens);
+    if (scope === null && found.length) return [asHeading({ problem: 'term-only' })];
+    if (!found.length) {
+      const problem: SourceProblem | undefined = bad ? 'position' : looksLikeCode(left) || /^(?:\d+|[A-Za-z]+\d+)$/.test(left) ? 'leftover' : undefined;
+      if (unit) {
+        // 單元後面的字留在 rest：Obsidian 層比那個單元的名稱與材料的標題。
+        lastPlace = null;
+        return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}) }];
+      }
+      if (selfRef && !left) return [{ text: display, link: { kind: 'text' } }];
+      // 網址：只有字，不是位置，也不算看不懂。
+      if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' } }];
+      forget();
+      if (bad) return [asHeading({ problem: 'position' })];
+      return [asHeading(problem ? { codeLike: true } : {})];
+    }
+    // 一個位置就是整段的原文；好幾個時照位置切開，一個位置一個按鈕。
+    const placed: Pending[] = found.map((each, at) => {
+      const start = at ? each.at : 0, end = at + 1 < found.length ? found[at + 1].at : rest.length;
+      const head = at === 0 ? segment.slice(0, segment.length - rest.length) : '';
+      const block = each.link.kind === 'block' ? each.link.id : null;
+      lastPlace = block;
+      return { text: found.length === 1 ? display : restore((head + rest.slice(start, end)).trim(), tokens), link: inScope(each.link) };
+    });
+    if (needsUnit) placed[0].needsUnit = true;
+    const final = placed[placed.length - 1];
+    if (bad) final.problem = 'position';
+    if (left && /^\d+$/.test(left) && lastPlace?.startsWith('p')) return [...placed, follow('p' + left, 'p.' + left)];
+    if (!unit && !selfRef && before && !MATERIAL.test(before)) placed[0].problem ??= 'before';
+    if (left && looksLikeCode(left)) final.problem ??= 'leftover';
+    return placed;
+  }
+
+  /** 切段：分隔符號；位置後面直接接年級學期加編號也切（`p.44 國二上 1-3 p.20`）。`p，44` 的逗號不是分隔。 */
+  function segmentsOf(entry: string): string[] {
+    const fixed = entry.replace(/(?<![A-Za-zＡ-Ｚａ-ｚ])([pPｐＰ]) ?[，,] ?(?=[0-9０-９])/g, '$1.');
+    return fixed.split(SEPARATOR).map(each => each.trim()).filter(Boolean).flatMap(part => {
+      const clean = tidy(part);
+      for (let at = 1; at < clean.length; at++) {
+        if (clean[at - 1] !== ' ' || !readTerm(clean.slice(at))) continue;
+        const head = scan(clean.slice(0, at).trim(), tokens);
+        if (head.found.length && !head.left) return [clean.slice(0, at).trim(), clean.slice(at).trim()];
+      }
+      return [part];
+    });
+  }
+
+  const items: Pending[] = [];
+  const entries = masked.split(/[、﹑]/).map(each => each.trim()).filter(Boolean);
+  for (const [index, entry] of entries.entries()) {
+    const display = restore(entry.replace(RAW_END, ''), tokens);
+    if (/^先備 ?[：:]/.test(entry)) { items.push({ text: display, link: { kind: 'text' } }); continue; }
+    const parts = segmentsOf(entry), start = items.length;
+    parts.forEach((part, at) => {
+      const clean = tidy(part).replace(END, '').trim();
+      const next = parts[at + 1] ?? entries[index + 1];
+      if (clean) items.push(...readSegment(clean, restore(part.replace(RAW_END, '').trim(), tokens), next && tidy(next)));
+    });
+    // 這一項切成好幾段、全部都沒讀懂：是一句話或舊標題（`溶解, 擴散`），併回一個。
+    const added = items.slice(start);
+    if (added.length > 1 && added.every(each => each.link.kind === 'heading' && !each.negative)) {
+      const problem = added.find(each => each.problem)?.problem;
+      items.splice(start, added.length, { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}) });
+    }
+  }
+  const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
+  return items.map(({ negative, codeLike, ...item }) => anyRead && !negative && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true as const } : item);
 }
 
 /** 「編號 名稱」的切法（§9-2）：第一個空白前是編號，半形空白、全形空白、Tab 都算；屬性和出處共用。 */
@@ -100,9 +360,10 @@ export function splitUnit(value: string): { code: string; name: string } {
 
 /** 按鈕上的文字（D-164 第 8 點）：連結不露出括號，有別名顯示別名，有標題顯示標題，否則顯示筆記名稱；其他照原文。 */
 export function sourceLabel({ text, link }: SourceItem): string {
-  if (link.kind !== 'note') return text;
-  if (link.alias) return link.alias;
-  const parts = link.link.split('#');
+  const note = link.kind === 'unit' ? link.rest : link;
+  if (note?.kind !== 'note') return text;
+  if (note.alias) return note.alias;
+  const parts = note.link.split('#');
   const heading = parts.at(-1) ?? '';
   return parts.length > 1 && heading && !heading.startsWith('^') ? heading : parts[0];
 }
