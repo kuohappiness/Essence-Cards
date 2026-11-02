@@ -52,7 +52,7 @@ export const headingKey = (text: string): string => tidy(text).toLowerCase().rep
 
 // ── 連結先藏起來，裡面的字不動 ──
 
-const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|https?:\/\/\S+/g;
+const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s、﹑，；,;｜|]+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
 
