@@ -1,4 +1,4 @@
-import { parseDocument } from 'yaml';
+import { isMap, isScalar, parseDocument } from 'yaml';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { splitUnit } from './sources.ts';
@@ -55,12 +55,18 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
     const data: unknown = doc.toJS();
     if (data !== null && (typeof data !== 'object' || Array.isArray(data))) throw Error('屬性不是對照表');
     const values = (data ?? {}) as Record<string, unknown>;
+    /** 這個屬性在檔案的第幾行（從 0 算）：看 YAML 解析出來的鍵，加引號、跳脫、冒號前有空白都找得到；找不到是屬性區開頭那一行。 */
+    const lineOf = (key: string): number => {
+      if (!isMap(doc.contents)) return 0;
+      const found = doc.contents.items.find(pair => isScalar(pair.key) && pair.key.value === key)?.key;
+      const at = isScalar(found) ? found.range?.[0] : undefined;
+      return at === undefined ? 0 : raw.slice(0, at).split('\n').length;
+    };
     props.term = string(values['年級學期']);
     props.subject = string(values['科目']);
     const unit = string(values['單元']);
     if (unit !== null) props.unit = splitUnit(unit);
     // 不一律轉成字串：`單元: 03` 的原寫法已經不見（§9-2），所以給提示、請家長加引號。
-    const lineOf = (key: string): number => lines.slice(1, end).findIndex(value => value.raw.split(':')[0].trim() === key) + 1;
     if (unit === null && values['單元'] !== null && values['單元'] !== undefined) props.issues.push({ line: lineOf('單元'), message: '屬性「單元」要加引號，例如 單元: "3"' });
     props.materials = strings(values['材料']);
     const materials = values['材料'];
@@ -73,10 +79,7 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
       const status = values['狀態'];
       if (status === '草稿') props.status = 'draft';
       else if (status === '暫停') props.status = 'paused';
-      else if (status !== '啟用') {
-        const line = lines.slice(1, end).findIndex(value => /^狀態\s*:/.test(value.raw)) + 1;
-        hint(line, '屬性「狀態」的值認不得，先當作啟用');
-      }
+      else if (status !== '啟用') hint(lineOf('狀態'), '屬性「狀態」的值認不得，先當作啟用');
     }
   } catch {
     hint(0, '屬性區塊寫法有問題，先使用預設值');
@@ -138,8 +141,8 @@ export function parseDeck(text: string): Deck {
     if (idProblem === 'ambiguous-id') addProblem(root, idProblem, '學習目標那一行有兩個以上的 ID，先不出題，等家長選要用哪一個', 'error');
     const seenFields = new Set<string>();
     function collectFields(node: Item): void {
-      const isField = fieldStart.test(node.text);
-      if (isField) {
+      let values: string[] | null = null;
+      if (fieldStart.test(node.text)) {
         const segments = node.text.split('｜');
         for (const segment of segments) {
           const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
@@ -149,8 +152,7 @@ export function parseDeck(text: string): Deck {
             continue;
           }
           if (key === '出處' || key === '備註' || key === '錯題補強') {
-            const destination = key === '出處' ? fields.sources : key === '備註' ? fields.remarks : fields.mistakes;
-            for (const entry of value.split('、').map(v => v.trim()).filter(Boolean)) if (!destination.includes(entry)) destination.push(entry);
+            addValues(key === '出處' ? fields.sources : key === '備註' ? fields.remarks : fields.mistakes, value);
           } else {
             if (seenFields.has(key)) { addProblem(node, 'duplicate-field', '「' + key + '」寫了兩次，使用第一個'); continue; }
             seenFields.add(key);
@@ -166,26 +168,34 @@ export function parseDeck(text: string): Deck {
             }
           }
         }
-        fieldChildren(node, segments.length > 1);
+        values = fieldChildren(node, segments.length > 1);
       }
-      for (const child of node.children) collectFields(child);
+      // 一項一項走，普通的子項目和帶欄位名稱的子項目混著寫時，順序照筆記（D-164 第 5 點）。
+      for (const child of node.children) {
+        if (values && !fieldStart.test(child.text)) addValues(values, child.text);
+        collectFields(child);
+      }
+    }
+    /** 頓號分隔的值，照順序加進去，重複的只留第一個。 */
+    function addValues(destination: string[], text: string): void {
+      for (const entry of text.split('、').map(v => v.trim()).filter(Boolean)) if (!destination.includes(entry)) destination.push(entry);
     }
     /**
-     * 資料欄位分行（§9-4、D-164 第 4 點）：出處、備註、錯題補強底下的子項目和寫在同一行相同；開頭是欄位名稱的子項目是別的欄位（collectFields 的遞迴）。
+     * 資料欄位分行（§9-4、D-164 第 4 點）：出處、備註、錯題補強底下的子項目和寫在同一行相同，回傳要加到哪裡；開頭是欄位名稱的子項目是別的欄位（collectFields 的遞迴）。
      * 其他欄位帶子項目、同一行有｜又帶子項目、子項目底下還有子項目：忽略並提示，不默默不見。一個欄位提示一次。
      */
-    function fieldChildren(node: Item, joined: boolean): void {
+    function fieldChildren(node: Item, joined: boolean): string[] | null {
       const values = node.children.filter(child => !fieldStart.test(child.text));
-      if (!values.length) return;
-      const key = /^s*([^：:]+?)s*[：:]/.exec(node.text)?.[1] ?? '';
+      if (!values.length) return null;
+      const key = /^\s*([^：:]+?)\s*[：:]/.exec(node.text)?.[1] ?? '';
       const destination = key === '出處' ? fields.sources : key === '備註' ? fields.remarks : key === '錯題補強' ? fields.mistakes : null;
       if (joined || !destination) {
         addProblem(values[0], 'field-children', joined ? '同一行有「｜」的資料，底下的子項目已忽略' : '「' + key + '」底下的子項目已忽略；這個欄位寫在同一行');
-        return;
+        return null;
       }
-      for (const child of values) for (const entry of child.text.split('、').map(v => v.trim()).filter(Boolean)) if (!destination.includes(entry)) destination.push(entry);
       const deeper = values.find(child => child.children.some(each => !fieldStart.test(each.text)));
       if (deeper) addProblem(deeper, 'field-children', '「' + key + '」的子項目底下再分層的部分已忽略');
+      return destination;
     }
     // 補充或多行答案裡的資料也屬於整個目標。
     for (const child of root.children) collectFields(child);

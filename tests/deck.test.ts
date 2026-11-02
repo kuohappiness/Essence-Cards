@@ -875,6 +875,30 @@ void test('§9-4 補 ID 與改縮排不改到分行的意思：四格、七格�
   }
 });
 
+// Codex L2 的 F3：欄位解析本來就接受冒號前的空白，分行也要讀得到。
+void test('§9-4 欄位名稱和冒號之間有空白：分行的值照樣讀到，提示裡的名稱也不帶空白', () => {
+  for (const head of ['出處 ：', '出處　：', '出處\t：', '出處 :']) {
+    const target = first('    - ' + head + '\n        - p.44\n        - p.45\n    - Q :: A');
+    assert.deepEqual(target.fields.sources, ['p.44', 'p.45'], head);
+    assert.deepEqual(codes('    - ' + head + '\n        - p.44\n    - Q :: A'), [], head);
+  }
+  assert.deepEqual(first('    - 備註 ：\n        - 老師強調\n    - Q :: A').fields.remarks, ['老師強調']);
+  assert.deepEqual(first('    - 錯題補強\t：\n        - [[a]]\n    - Q :: A').fields.mistakes, ['[[a]]']);
+  assert.match(deck('    - 類型 ：\n        - 定義\n    - Q :: A').problems[0].message, /「類型」底下/);
+});
+
+// Codex L2 的 F5：普通的子項目和帶欄位名稱的子項目混著寫，順序照筆記（D-164 第 5 點）。
+void test('§9-4 混用兩種子項目：順序照筆記，重複的只留第一個', () => {
+  const mixed = first('    - 問 :: 答\n    - 出處：p.1\n        - p.2\n        - 出處：p.3\n        - p.4\n        - p.1\n        - p.3');
+  assert.deepEqual(mixed.fields.sources, ['p.1', 'p.2', 'p.3', 'p.4']);
+  const nested = first('    - 問 :: 答\n    - 出處：\n        - p.2\n            - 出處：p.3\n        - p.4');
+  assert.deepEqual(nested.fields.sources, ['p.2', 'p.3', 'p.4']);
+  assert.deepEqual(codes('    - 問 :: 答\n    - 出處：\n        - p.2\n            - 出處：p.3\n        - p.4'), [], '子項目底下是欄位時不算再分層');
+  const fields = first('    - 問 :: 答\n    - 備註：a\n        - 出處：p.1\n        - b\n    - 出處：p.2');
+  assert.deepEqual(fields.fields.remarks, ['a', 'b']);
+  assert.deepEqual(fields.fields.sources, ['p.1', 'p.2']);
+});
+
 // ── 屬性（§9-2）──
 
 void test('§9-2 單元的切法：全形空白、Tab 和半形空白相同；編號用原字串，不改大小寫與前導零', () => {
@@ -884,6 +908,17 @@ void test('§9-2 單元的切法：全形空白、Tab 和半形空白相同；�
   assert.deepEqual(unit('2-1 水溶液'), { code: '2-1', name: '水溶液' });
   assert.deepEqual(unit('L01 Back to School'), { code: 'L01', name: 'Back to School' });
   assert.deepEqual(unit('"03"'), { code: '03', name: '' });
+});
+
+// Codex L2 的 F6：行號看 YAML 解析出來的鍵，不是用文字切冒號。
+void test('§9-2 屬性的鍵加引號、跳脫或冒號前有空白：提示的行號照樣對', () => {
+  const lines = (text: string) => parseDeck(text).props.issues.map(issue => issue.line);
+  assert.deepEqual(lines('---\n科目: 自然\n"單元": 3\n"材料": [[教材]]\n---\n'), [2, 3]);
+  assert.deepEqual(lines("---\n科目: 自然\n'單元': 3\n---\n"), [2]);
+  assert.deepEqual(lines('---\n科目: 自然\n單元 : 3\n---\n'), [2]);
+  assert.deepEqual(lines('---\n科目: 自然\n"\\u55AE\\u5143": 3\n---\n'), [2]);
+  assert.deepEqual(lines('---\r\n科目: 自然\r\n"單元": 3\r\n---\r\n'), [2], 'CRLF');
+  assert.deepEqual(parseDeck('---\n科目: 自然\n"狀態": 奇怪\n---\n').problems.map(problem => [problem.line, problem.code]), [[2, 'unknown-property-value']]);
 });
 
 void test('§9-2 單元讀成數字、材料沒加引號：給提示，不默默變成沒有，也不一律轉成字串', () => {
