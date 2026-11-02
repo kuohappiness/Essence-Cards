@@ -875,6 +875,16 @@ void test('§9-4 補 ID 與改縮排不改到分行的意思：四格、七格�
   }
 });
 
+void test('D-167 半形的 | 後面接欄位名稱加冒號也是分隔：類型不會被吞進出處；連結裡的、後面不是欄位名稱的都不算', () => {
+  const fields = (line: string) => parseDeck(`- 目標 ^abc123\n    - 問 :: 答\n    - ${line}\n`).targets[0].fields;
+  assert.deepEqual(fields('出處：p.44 | 類型：定義').sources, ['p.44']);
+  assert.equal(fields('出處：p.44 | 類型：定義').type, '定義');
+  assert.equal(fields('出處：p.44|重要性：高').importance, 'high');
+  assert.deepEqual(fields('出處：p.44｜類型：定義').sources, ['p.44'], '全形照舊');
+  assert.deepEqual(fields('出處：[[筆記|類型：x]]').sources, ['[[筆記|類型：x]]'], '連結裡的不算');
+  assert.deepEqual(fields('出處：p.44 | 重點').sources, ['p.44 | 重點'], '後面不是欄位名稱');
+});
+
 // Codex L2 的 F3：欄位解析本來就接受冒號前的空白，分行也要讀得到。
 void test('§9-4 欄位名稱和冒號之間有空白：分行的值照樣讀到，提示裡的名稱也不帶空白', () => {
   for (const head of ['出處 ：', '出處　：', '出處\t：', '出處 :']) {

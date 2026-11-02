@@ -143,7 +143,8 @@ export function parseDeck(text: string): Deck {
     function collectFields(node: Item): void {
       let values: string[] | null = null;
       if (fieldStart.test(node.text)) {
-        const segments = node.text.split('｜');
+        // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-167 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
+        const segments = node.text.split(/｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])(?![^[]*\]\])/);
         for (const segment of segments) {
           const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
           const key = match?.[1] ?? '', value = match?.[2] ?? '';
