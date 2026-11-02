@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { AdapterResult, Conflict, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts';
+import type { AdapterResult, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts';
 
 /**
  * 發布前比較的轉接器（任務說明 1-3）：在一個版本的 worktree 裡，用那個版本自己的 `src/state` 讀凍結的備份，輸出 snapshot.ts 的比較資料。
@@ -28,9 +28,10 @@ function need(module: unknown, name: string): Fn {
   return value as Fn;
 }
 
-// 被比較的版本回傳的值，拿來判斷、算數或走訪之前先查型別，不能靠真假值往下算：Promise 永遠是真的，`!` 之後停掉的目標就成了新卡；
-// NaN 寫進 JSON 變成 null，看起來也像新卡（Codex L2 F1）；字串也能展開、走訪，空字串就成了空清單，接不上的版本可能報成零差異（Codex 再審 F2）。
-// 用 `.map` 的清單不用另外查：字串、Promise、Set 都沒有 `.map`，會丟錯。卡組的欄位不用查：一邊改了名，比的時候就是差異。
+// 被比較的版本回傳的值，每一個都在讀的時候查型別，比較資料裡只有查過的值。不能靠真假值、靠它自己丟錯，也不能靠之後比出差異：
+// Promise 永遠是真的，`!` 之後停掉的目標就成了新卡（Codex L2 F1）；字串也能展開，空字串就成了空清單；空的 typed array 也有 `.map`，
+// 不會丟錯（Codex 再審 F2、第三次審查 F3）；NaN 經過程序之間的 JSON 變成 null，和原本的 null 比不出差異（F3）。
+// 只有交回同一版處理、這裡不讀內容的不查：作答紀錄的元素、replay 算出的記憶、今天的份交給 nextCard。
 const wrongType = (name: string): Error => Error(`這個版本的 ${name} 型別不同`);
 function yesNo(value: unknown, name: string): boolean {
   if (typeof value !== 'boolean') throw wrongType(name);
@@ -40,6 +41,15 @@ function finite(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw wrongType(name);
   return value;
 }
+function integer(value: unknown, name: string): number {
+  if (!Number.isInteger(value)) throw wrongType(name);
+  return value as number;
+}
+function text(value: unknown, name: string): string {
+  if (typeof value !== 'string') throw wrongType(name);
+  return value;
+}
+const textOrNull = (value: unknown, name: string): string | null => value === null ? null : text(value, name);
 function array<T>(value: unknown, name: string): T[] {
   if (!Array.isArray(value)) throw wrongType(name);
   return value as T[];
@@ -79,40 +89,50 @@ const isVersionLine = (line: string): boolean => {
   try { return (JSON.parse(line) as { set?: unknown }).set === 'app'; } catch { return false; }
 };
 
-interface TargetLike { id: string | null; name: string; line: number; ok: boolean; prompts: { fingerprint: string }[];
+interface TargetLike { id: string | null; name: string; line: number; ok: boolean; prompts: unknown;
   fields: { importance: string; paused: boolean }; direction: string | null }
 interface DeckLike { props: { status: string; isTranscript: boolean; term: string | null; subject: string | null; unit: { code: string; name: string } | null; categories: string[] };
-  targets: TargetLike[]; problems: { line: number; level: string; code: string }[] }
+  targets: unknown; problems: unknown }
+interface ProblemLike { line: number; level: string; code: string }
 interface ItemLike { lt: string; deck: string; lane: string }
 interface SlotLike { retention: number; target: { direction: string | null } }
-interface TodayLike { share: ItemLike[]; more: ItemLike[]; slots: Map<string, SlotLike> }
+interface TodayLike { share: unknown; more: unknown; slots: unknown }
+interface ConflictLike { id: string; targets: unknown }
 interface StateLike {
   ready(): Promise<unknown>;
   close(): Promise<void>;
-  unread(): readonly string[];
-  decks(): readonly { path: string; deck: DeckLike }[];
-  history(): { reviews: unknown[] };
-  blocked(): { decks: readonly string[]; targets: readonly string[]; all: boolean };
-  canAnswer(lt: string): boolean;
-  input(): { settings: { retention: number } };
+  unread(): unknown;
+  decks(): unknown;
+  history(): { reviews: unknown };
+  blocked(): { decks: unknown; targets: unknown; all: unknown };
+  canAnswer(lt: string): unknown;
+  input(): { settings: { retention: unknown } };
   today(): TodayLike;
   /** D-157 之後才有。 */
-  conflicts?(): readonly Conflict[];
+  conflicts?(): unknown;
 }
 const STATE_METHODS = ['ready', 'close', 'unread', 'decks', 'history', 'blocked', 'canAnswer', 'input', 'today'];
 
 /** 讀完的 state 換成比較資料。到期照整份紀錄算（下次到期），但照那一版的 state 停掉的目標不算。 */
 function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   const [nextCard, replay, dueAt, dayOf] = ['nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name));
-  const dayNumber = (at: number): number => finite(dayOf(at, input.offset), 'dayOf()');
+  const dayNumber = (at: number): number => integer(dayOf(at, input.offset), 'dayOf()');
   const blocked = state.blocked();
-  const deckSnaps: DeckSnap[] = state.decks().map(({ path, deck: { props, targets, problems } }) => ({
-    path,
-    props: { status: props.status, isTranscript: props.isTranscript, term: props.term, subject: props.subject,
-      unit: props.unit ? (props.unit.code + ' ' + props.unit.name).trim() : null, categories: props.categories },
-    targets: targets.map(target => ({ key: target.id ?? `@${target.line}:${target.name}`, id: target.id, name: target.name, line: target.line, ok: target.ok,
-      fingerprints: target.prompts.map(prompt => prompt.fingerprint), importance: target.fields.importance, paused: target.fields.paused, direction: target.direction })),
-    problems: problems.map(problem => `${problem.line} ${problem.level} ${problem.code}`),
+  const deckSnaps: DeckSnap[] = array<{ path: unknown; deck: DeckLike }>(state.decks(), 'decks()').map(({ path, deck: { props, targets, problems } }) => ({
+    path: text(path, 'decks() 的 path'),
+    props: { status: text(props.status, 'props.status'), isTranscript: yesNo(props.isTranscript, 'props.isTranscript'),
+      term: textOrNull(props.term, 'props.term'), subject: textOrNull(props.subject, 'props.subject'),
+      unit: props.unit === null ? null : (text(props.unit.code, 'props.unit') + ' ' + text(props.unit.name, 'props.unit')).trim(),
+      categories: strings(props.categories, 'props.categories') },
+    targets: array<TargetLike>(targets, 'targets').map(target => {
+      const id = textOrNull(target.id, 'target.id'), name = text(target.name, 'target.name'), line = integer(target.line, 'target.line');
+      return { key: id ?? `@${line}:${name}`, id, name, line, ok: yesNo(target.ok, 'target.ok'),
+        fingerprints: array<{ fingerprint: unknown }>(target.prompts, 'target.prompts').map(prompt => text(prompt.fingerprint, 'prompt.fingerprint')),
+        importance: text(target.fields.importance, 'target.fields.importance'), paused: yesNo(target.fields.paused, 'target.fields.paused'),
+        direction: textOrNull(target.direction, 'target.direction') };
+    }),
+    problems: array<ProblemLike>(problems, 'problems').map(problem =>
+      `${integer(problem.line, 'problems 的 line')} ${text(problem.level, 'problems 的 level')} ${text(problem.code, 'problems 的 code')}`),
   }));
 
   const todayInput = state.input();
@@ -138,18 +158,25 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   const items: TodaySnap[] = [];
   for (const list of ['share', 'more'] as const) {
     for (const item of array<ItemLike>(today[list], 'today().' + list)) {
-      const slot = slots.get(item.lt);
+      const lt = text(item.lt, 'today() 的 lt'), deck = text(item.deck, 'today() 的 deck');
+      const slot = slots.get(lt);
       if (!slot) throw wrongType('today().slots');
       // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。今天已經答對就是 done；時間是固定的，不會是 stale。
-      const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck: item.deck }) as { kind: string; card?: { prompt: { fingerprint: string } } };
+      const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck }) as { kind: string; card?: { prompt: { fingerprint: unknown } } };
       if (next.kind !== 'card' && next.kind !== 'done') throw wrongType('nextCard()');
-      items.push({ list, lt: item.lt, deck: item.deck, lane: item.lane, retention: finite(slot.retention, 'today().slots 的 retention'),
-        prompt: next.kind === 'card' ? next.card!.prompt.fingerprint : null, direction: slot.target.direction ?? null });
+      items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'),
+        prompt: next.kind === 'card' ? text(next.card!.prompt.fingerprint, 'nextCard() 的 fingerprint') : null,
+        direction: textOrNull(slot.target.direction, 'today().slots 的 direction') });
     }
   }
   return {
     gates: { decks: strings(blocked.decks, 'blocked().decks'), held: strings(blocked.targets, 'blocked().targets'), incomplete: yesNo(blocked.all, 'blocked().all'),
-      conflicts: state.conflicts ? state.conflicts().map(each => ({ id: each.id, targets: each.targets.map(({ path, line, name }) => ({ path, line, name })) })) : null },
+      // 這個方法不存在是舊版本來就沒有這個判斷，報告會寫出來；存在就要回傳對的清單。
+      conflicts: state.conflicts === undefined ? null : array<ConflictLike>(state.conflicts(), 'conflicts()').map(each => ({
+        id: text(each.id, 'conflicts() 的 id'),
+        targets: array<{ path: unknown; line: unknown; name: unknown }>(each.targets, 'conflicts() 的 targets').map(({ path, line, name }) => ({
+          path: text(path, 'conflicts() 的 path'), line: integer(line, 'conflicts() 的 line'), name: text(name, 'conflicts() 的 name') })),
+      })) },
     decks: deckSnaps, due, today: items, days,
   };
 }

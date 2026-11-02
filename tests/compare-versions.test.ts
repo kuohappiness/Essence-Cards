@@ -128,14 +128,17 @@ async function deployed(t: TestContext): Promise<string> {
   return dir;
 }
 /** 現在的程式改幾個字之後的複本：讀取能力不同、接不上的版本。 */
-async function patched(t: TestContext, path: string, from: string, to: string): Promise<string> {
+async function patched(t: TestContext, path: string, ...pairs: string[]): Promise<string> {
   const dir = await tempFolder(t, 'essence-patched-');
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   for (const name of ['manifest.json', 'package.json']) await cp(join(root, name), join(dir, name));
   await linkModules(dir);
-  const before = await readFile(join(dir, path), 'utf8');
-  assert.ok(before.includes(from), from);
-  await writeFile(join(dir, path), before.replace(from, to));
+  let text = await readFile(join(dir, path), 'utf8');
+  for (let i = 0; i < pairs.length; i += 2) {
+    assert.ok(text.includes(pairs[i]), pairs[i]);
+    text = text.replace(pairs[i], pairs[i + 1]);
+  }
+  await writeFile(join(dir, path), text);
   return dir;
 }
 
@@ -166,6 +169,7 @@ void test('跨版本的固定輸入：v0.2.0 與現在各照自己的 state；�
   assert.deepEqual(before.today.map(item => item.lt), ['aaa111', 'dup111', 'new111']);
   assert.deepEqual(after.today.map(item => item.lt), ['aaa111', 'new111']);
   assert.deepEqual([before.days, after.days], [days(2), days(1)]);
+  for (const snap of [before, after]) assert.deepEqual(JSON.parse(JSON.stringify(snap)), snap);
   // 今天的份因此不同是預期的差異，不能報成零差異。
   assert.deepEqual(diffSnapshots(before, after, time), [
     '重複的學習目標 ID（舊版沒有這個判斷）：dup111（Essence Cards/A.md 第 3 行「第一份」、Essence Cards/B.md 第 1 行「第二份」）',
@@ -269,6 +273,109 @@ void test('回傳的型別不同也是接不上，不能靠真假值往下算：
     ['blocked: () => ({ decks: gated.map(() => 5), targets: history.held, all: history.incomplete })', /blocked\(\)\.decks.*型別不同/],
     ['blocked: () => ({ decks: gated, targets: history.held.map(() => 5), all: history.incomplete })', /blocked\(\)\.targets.*型別不同/],
   ] as const) await assert.rejects(snapshot(await patched(t, state, gates, to), input), expected, to);
+});
+
+void test('送給比較端的每個值都要符合比較資料的形狀：換了型別就是接不上，比 JSON 抓不到（Codex 第三次審查 F3）', async t => {
+  // 屬性都有值、有題目與問題、有英翻中方向、有暫停與沒有 ID 的目標：真正的舊版與現在都要接得上，經過 JSON 不變。
+  const full = { now: NOW, offset: 480, files: {
+    [A]: '---\n年級學期: 國二上\n科目: 英文\n單元: L1 Back to School\n分類:\n  - 單字\n狀態: 啟用\n---\n\n- borrow 英翻中 ^b4rw7k\n    - borrow :: v. 借入\n        - 例句：Can I borrow your pen?\n    - 重要性：高\n- uniform 英翻中 ^u6vf2m\n    - uniform :: n. 制服\n    - 狀態：暫停\n- 寫錯的目標 ^k3m9x2\n    - 題目 ::\n- 還沒有 ID 的目標\n    - 題目 :: 答案\n',
+    [LOG]: review('2026-10-20T20:00:00.000+08:00', 'b4rw7k') + '\n',
+  } };
+  const props = { status: 'active', isTranscript: false, term: '國二上', subject: '英文', unit: 'L1 Back to School', categories: ['單字'] };
+  for (const dir of [await deployed(t), root]) {
+    const snap = await snapshot(dir, full);
+    assert.deepEqual(snap.decks[0].props, props);
+    assert.deepEqual(snap.decks[0].targets.map(target => [target.key, target.ok, target.direction, target.paused, target.importance]), [
+      ['b4rw7k', true, 'en-zh', false, 'high'], ['u6vf2m', true, 'en-zh', true, 'medium'], ['k3m9x2', false, null, false, 'medium'], ['@18:還沒有 ID 的目標', true, null, false, 'medium']]);
+    assert.deepEqual(snap.decks[0].problems, ['17 error missing-answer']);
+    assert.deepEqual(JSON.parse(JSON.stringify(snap)), snap);
+  }
+
+  // 現在的程式，decks、today、conflicts 回傳前先過測試給的函式，不用每一種改法都複製一次。
+  type Change = (value: never) => unknown;
+  const hooks = globalThis as unknown as { broken: Record<'decks' | 'today' | 'conflicts', Change> };
+  const same: Change = (value: never) => value;
+  const reset = (): void => { hooks.broken = { decks: same, today: same, conflicts: same }; };
+  t.after(() => { delete (globalThis as { broken?: unknown }).broken; });
+  const dir = await patched(t, 'src/state/index.ts',
+    'decks: () => deckList,', 'decks: () => globalThis.broken.decks(deckList),',
+    'today: () => fresh().today,', 'today: () => globalThis.broken.today(fresh().today),',
+    'conflicts: () => life.loaded ? tracker.duplicates() : [],', 'conflicts: () => globalThis.broken.conflicts(life.loaded ? tracker.duplicates() : []),');
+  reset();
+  assert.deepEqual(await snapshot(dir, full), await snapshot(root, full));
+
+  interface Entry { deck: { props: object; targets: { prompts: object[] }[]; problems: object[] } }
+  interface Slot { target: { prompts: object[] } }
+  interface Today { share: object[]; slots: Map<string, Slot> }
+  const deckField = (change: object): Change => ((list: Entry[]) => list.map(entry => ({ ...entry, deck: { ...entry.deck, ...change } })));
+  const prop = (change: object): Change => ((list: Entry[]) => list.map(entry => ({ ...entry, deck: { ...entry.deck, props: { ...entry.deck.props, ...change } } })));
+  const target = (change: object): Change => ((list: Entry[]) => list.map(entry => ({ ...entry, deck: { ...entry.deck, targets: entry.deck.targets.map(each => ({ ...each, ...change })) } })));
+  const item = (change: object): Change => ((today: Today) => ({ ...today, share: today.share.map(each => ({ ...each, ...change })) }));
+  const slotTarget = (change: (slot: Slot) => object): Change => ((today: Today) => ({ ...today, slots: new Map([...today.slots].map(([id, slot]) => [id, { ...slot, target: { ...slot.target, ...change(slot) } }])) }));
+  const conflict = (value: unknown): Change => (() => value);
+  const wrong = new Uint8Array();
+  const anyInput: [keyof typeof hooks.broken, Change, RegExp][] = [
+    ['decks', conflict(wrong), /decks\(\).*型別不同/],
+    ['conflicts', conflict(wrong), /conflicts\(\).*型別不同/],
+    ['conflicts', conflict(null), /conflicts\(\).*型別不同/],
+  ];
+  const withContent: [keyof typeof hooks.broken, Change, RegExp][] = [
+    ['decks', ((list: Entry[]) => list.map(entry => ({ ...entry, path: 5 }))), /path.*型別不同/],
+    ['decks', prop({ status: undefined }), /status.*型別不同/],
+    ['decks', prop({ isTranscript: 'no' }), /isTranscript.*型別不同/],
+    ['decks', prop({ term: NaN }), /term.*型別不同/],
+    ['decks', prop({ subject: NaN }), /subject.*型別不同/],
+    ['decks', prop({ unit: 'L1' }), /unit.*型別不同/],
+    ['decks', prop({ unit: { code: 'L1', name: NaN } }), /unit.*型別不同/],
+    ['decks', prop({ unit: 0 }), /unit.*型別不同/],
+    ['decks', prop({ categories: '' }), /categories.*型別不同/],
+    ['decks', deckField({ targets: wrong }), /targets.*型別不同/],
+    ['decks', deckField({ problems: wrong }), /problems.*型別不同/],
+    ['decks', deckField({ problems: [{ line: NaN, level: 'hint', code: 'x' }] }), /problems.*line.*型別不同/],
+    ['decks', deckField({ problems: [{ line: 0, level: 5, code: 'x' }] }), /problems.*level.*型別不同/],
+    ['decks', deckField({ problems: [{ line: 0, level: 'hint' }] }), /problems.*code.*型別不同/],
+    ['decks', target({ id: undefined }), /target\.id.*型別不同/],
+    ['decks', target({ name: 5 }), /target\.name.*型別不同/],
+    ['decks', target({ line: NaN }), /target\.line.*型別不同/],
+    ['decks', target({ line: 1.5 }), /target\.line.*型別不同/],
+    ['decks', target({ ok: 'yes' }), /target\.ok.*型別不同/],
+    ['decks', target({ prompts: wrong }), /target\.prompts.*型別不同/],
+    ['decks', target({ prompts: [{ fingerprint: NaN }] }), /fingerprint.*型別不同/],
+    ['decks', target({ fields: { importance: undefined, paused: false } }), /importance.*型別不同/],
+    ['decks', target({ fields: { importance: 'medium', paused: 'no' } }), /paused.*型別不同/],
+    ['decks', target({ direction: NaN }), /target\.direction.*型別不同/],
+    ['today', item({ lt: 5 }), /today\(\).*lt.*型別不同/],
+    ['today', item({ deck: NaN }), /today\(\).*deck.*型別不同/],
+    ['today', item({ lane: undefined }), /today\(\).*lane.*型別不同/],
+    ['today', slotTarget(() => ({ direction: NaN })), /slots.*direction.*型別不同/],
+    ['today', slotTarget(slot => ({ prompts: slot.target.prompts.map(each => ({ ...each, fingerprint: NaN })) })), /nextCard\(\).*fingerprint.*型別不同/],
+    ['conflicts', conflict([{ id: NaN, targets: [] }]), /conflicts\(\).*id.*型別不同/],
+    ['conflicts', conflict([{ id: 'x', targets: wrong }]), /conflicts\(\).*targets.*型別不同/],
+    ['conflicts', conflict([{ id: 'x', targets: [{ path: 5, line: 0, name: 'n' }] }]), /conflicts\(\).*path.*型別不同/],
+    ['conflicts', conflict([{ id: 'x', targets: [{ path: 'p', line: 1.5, name: 'n' }] }]), /conflicts\(\).*line.*型別不同/],
+    ['conflicts', conflict([{ id: 'x', targets: [{ path: 'p', line: 0 }] }]), /conflicts\(\).*name.*型別不同/],
+  ];
+  const empty = { ...full, files: {} };
+  // 空的 typed array 也有 `.map`：沒有內容時不會丟錯，所以完全沒有內容也要拒絕。
+  for (const [hook, change, expected] of anyInput) for (const each of [full, empty]) {
+    reset();
+    hooks.broken[hook] = change;
+    await assert.rejects(snapshot(dir, each), expected, String(expected));
+  }
+  // 卡組的問題要有內容才走得到元素：`full` 裡有今天的份、卡組、問題。
+  for (const [hook, change, expected] of withContent) {
+    reset();
+    hooks.broken[hook] = change;
+    await assert.rejects(snapshot(dir, full), expected, String(expected));
+  }
+  reset();
+
+  // 命令列這條路：程序之間的 JSON 會丟掉原型別，要在送出之前擋下來。正常的輸出和直接呼叫相同。
+  assert.deepEqual(await adapterCli(t, root, full), { ok: true, snapshot: await snapshot(root, full) });
+  const term = await adapterCli(t, await patched(t, 'src/state/index.ts', 'decks: () => deckList,', 'decks: () => deckList.map(entry => ({ ...entry, deck: { ...entry.deck, props: { ...entry.deck.props, term: NaN } } })),'), full);
+  assert.ok(!term.ok && /term.*型別不同/.test(term.reason), JSON.stringify(term));
+  const typed = await adapterCli(t, await patched(t, 'src/state/index.ts', 'decks: () => deckList,', 'decks: () => new Uint8Array(),'), empty);
+  assert.ok(!typed.ok && /decks\(\).*型別不同/.test(typed.reason), JSON.stringify(typed));
 });
 
 /** 直接跑轉接器的命令列（compareVersions 用的那條路），回傳它寫出的結果。 */

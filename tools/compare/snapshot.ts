@@ -33,7 +33,7 @@ export interface TodaySnap {
   direction: string | null;
 }
 /** 用了同一個學習目標 ID 的目標（D-157）；line 從 0 算。 */
-export interface Conflict { id: string; targets: { path: string; line: number; name: string }[] }
+interface Conflict { id: string; targets: { path: string; line: number; name: string }[] }
 /** 那一版的 state 擋下來的內容（syntax.md §0-1、§2-1、§5-2，D-157）。 */
 export interface Gates {
   /** 需要新版才讀得懂的卡組：不出題；那一版讀不懂，內容不進 decks。 */
