@@ -1,8 +1,7 @@
 import { Notice, type App } from 'obsidian';
 import { createRoot } from 'react-dom/client';
-import type { Pick } from '../core/study/index.ts';
 import { createSession, keyboardFit, type Session } from '../review/index.ts';
-import type { State } from '../state/index.ts';
+import type { State, StudyPick } from '../state/index.ts';
 import { Review, type ReviewEvent, type ReviewProps } from './Review.tsx';
 import { openFullscreen } from './fullscreen.ts';
 import { createSpeech, loadAutoRead, NO_ENGLISH_VOICE, saveAutoRead, type Speech } from './speech.ts';
@@ -12,7 +11,7 @@ import { createSpeech, loadAutoRead, NO_ENGLISH_VOICE, saveAutoRead, type Speech
 export interface OpenOptions {
   app: App;
   state: State;
-  pick: Pick;
+  pick: StudyPick;
   /** 選了科目的時間（performance.now）：量「從選了科目到第一張卡畫好」（L2 自選第 22 點）。 */
   pickedAt?: number;
   speech?: Speech;

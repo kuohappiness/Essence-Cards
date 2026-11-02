@@ -1,6 +1,9 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
+import { buildIndex, paintCatalog } from '../core/catalog/index.ts';
+import type { Catalog, CatalogIndex } from '../core/catalog/index.ts';
+export type { Catalog, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
@@ -10,8 +13,8 @@ import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, mergeHistory, nextCard, parseLine, parseTime, planToday, progress } from '../core/study/index.ts';
-import type { DeckEntry, DuplicateId, History, NewEntry, Next, Pick, Progress, Settings, Today, TodayInput } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, memoryColors, mergeHistory, nextCard, parseLine, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
+import type { DeckEntry, DuplicateId, History, NewEntry, Next, Pick, Progress, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
 import type { VersionReport } from '../core/backup/index.ts';
@@ -31,6 +34,8 @@ export interface StateOptions {
   settings?: Settings;
   /** 收到檔案變動後等多久才處理（毫秒），預設 500。 */
   delay?: number;
+  /** 讀取一直沒回來多久算讀不到（毫秒），預設 30 秒（任務說明〈小選擇〉第 5 項）。 */
+  stuckAfter?: number;
   /**
    * write：紀錄寫不進去（下一次作答或 flush 時重試）；read：卡組或紀錄讀不到（自己隔一段時間重試）；
    * listener：onChange 的監聽者丟出錯誤（程式的錯，不重試）；init：第一次載入時讀取那一列以外的錯（例如監看、首次排程），
@@ -50,6 +55,11 @@ export interface StateOptions {
   writeTimeout?: number;
 }
 export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
+/**
+ * 一次複習的範圍：study 的 Pick，加上要經過單元索引才知道目標集合的（D-142 原則 5）。unit 是單元的鍵（Catalog 的 key）；
+ * 沒有 since 是單元的當日卡，有 since 是單元的全部卡；deck 加 since 是卡組筆記的全部卡（D-146）。目標集合每次都照 state 現在讀到的內容算。
+ */
+export type StudyPick = Pick | { unit: string } | { unit: string; since: number } | { deck: string; since: number };
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
 
@@ -68,7 +78,7 @@ export interface State {
    */
   ready(): Promise<LoadTimings>;
   /**
-   * 列出來或通知過、但最近一次讀不到的路徑（卡組與紀錄），照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
+   * 列出來或通知過、但最近一次讀不到的路徑（卡組與紀錄），以及讀取一直沒回來（stuckAfter）的路徑，照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
    * 不是空的時候占用資訊不完整，補 ID、還原、當成新的都暫停（save、resolve 回 blocked unread，fillIds 回傳 false；
    * D-134 不能把「不知道」當成「沒用過」）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
    * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
@@ -87,8 +97,14 @@ export interface State {
   /** 今天的份；過了清晨 4 點或 offset 變了，先重排。 */
   today(): Today;
   /** nextCard；不會回傳 'stale'。 */
-  next(pick: Pick): Next;
+  next(pick: StudyPick): Next;
   progress(): Progress;
+  /** 這個範圍現在的總數與完成數；再複習一些是 null。選卡、上方的「還剩 N 張」、完成畫面都照這一份。 */
+  scope(pick: StudyPick): ScopeCount | null;
+  /** 目錄的資料（D-097、D-142）：索引加上每個目標現在的記憶顏色與今天的份。 */
+  catalog(): Catalog;
+  /** 跨單元的出處要在哪裡找（§10）：那個單元的每一篇，照路徑，各自的材料照原順序；對不到單元是空的。term 是 null 時算這一篇的年級學期。 */
+  unitMaterials(path: string, term: string | null, code: string): readonly { path: string; materials: readonly string[] }[];
   /**
    * 寫一行紀錄（背景）、併進 history，回傳 t；不重排。取消的那一筆早於今天的份的開始（例如複習到 03:59、過了 04:00 回看改評分）時，
    * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
@@ -112,6 +128,8 @@ export interface State {
   version(): { build: string | null; own: 'waiting' | 'same' | 'queued' | 'written' | null; devices: VersionReport[] };
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫。 */
   onChange(listener: () => void): () => void;
+  /** unread() 的內容變了（多了或少了）；另外一條，不經 onChange，所以存檔按鈕不多更新一次（任務說明 §8、§11）。 */
+  onUnread(listener: () => void): () => void;
   /** 等目前排隊的紀錄寫完。 */
   flush(): Promise<void>;
   /** 停止監看、等紀錄寫完。 */
@@ -179,6 +197,7 @@ export function createState(options: StateOptions): State {
   /** 讀取層與寫入共用；只有這裡改值。 */
   const life: Life = { loaded: false, closed: false };
   const listeners = new Set<() => void>();
+  const unreadListeners = new Set<() => void>();
   const reads = createReads({
     files,
     life,
@@ -187,6 +206,13 @@ export function createState(options: StateOptions): State {
     onError: error => { report(error, 'read'); },
     batch,
     unreadable: path => { writes.unreadable(path); },
+    stuckAfter: options.stuckAfter ?? 30_000,
+    unreadChanged() {
+      if (life.closed) return;
+      for (const listener of [...unreadListeners]) {
+        try { listener(); } catch (error) { report(error, 'listener'); }
+      }
+    },
   });
   const unread = reads.unread;
 
@@ -274,6 +300,23 @@ export function createState(options: StateOptions): State {
     deckMap.set(path, parseDeck(text));
     rebuild();
     replan();
+  }
+
+  /** 單元索引：卡組或停掉的目標變了才重建；讀不懂的紀錄行停掉的目標看 history（syntax §5-2）。 */
+  let indexed: { decks: DeckEntry[]; held: string; index: CatalogIndex } | null = null;
+  function catalogIndex(): CatalogIndex {
+    const held = history.incomplete ? '*' : history.held.join('\n');
+    if (indexed?.decks !== planList || indexed.held !== held) indexed = { decks: planList, held, index: buildIndex(planList, id => history.incomplete || history.held.includes(id)) };
+    return indexed.index;
+  }
+  /** 範圍換成 study 的 Pick：目標集合照現在的索引算，所以中途改暫停時總數跟著變。 */
+  function studyPick(pick: StudyPick): Pick {
+    if ('unit' in pick) {
+      const targets = (catalogIndex().unit(pick.unit)?.targets ?? []).map(target => target.id);
+      return 'since' in pick ? { targets, since: pick.since } : { targets };
+    }
+    if ('deck' in pick && 'since' in pick) return { targets: catalogIndex().deckTargets(pick.deck), since: pick.since };
+    return pick;
   }
 
   function input(): TodayInput {
@@ -438,10 +481,26 @@ export function createState(options: StateOptions): State {
     today: () => fresh().today,
     next(pick) {
       const { today, input: value } = fresh();
-      const next = nextCard(today, value, pick);
+      const chosen = studyPick(pick);
+      const next = nextCard(today, value, chosen);
       if (next.kind !== 'stale') return next;
       current = planToday(value);
-      return nextCard(current, value, pick);
+      return nextCard(current, value, chosen);
+    },
+    scope(pick) {
+      const { today, input: value } = fresh();
+      return scopeCount(today, value, studyPick(pick));
+    },
+    catalog() {
+      const { today, input: value } = fresh();
+      return paintCatalog(catalogIndex(), memoryColors(value), todayLeft(today, value));
+    },
+    unitMaterials(path, term, code) {
+      const props = deckMap.get(path)?.props;
+      const wanted = term ?? props?.term ?? null, subject = props?.subject ?? null;
+      if (wanted === null || subject === null) return [];
+      const unit = catalogIndex().find(wanted, subject, code);
+      return (unit?.decks ?? []).map(deck => ({ path: deck.path, materials: deckMap.get(deck.path)?.props.materials ?? [] }));
     },
     progress() {
       const { today, input: value } = fresh();
@@ -457,6 +516,10 @@ export function createState(options: StateOptions): State {
     onChange(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
+    },
+    onUnread(listener) {
+      unreadListeners.add(listener);
+      return () => { unreadListeners.delete(listener); };
     },
     async flush() {
       // 版本行在這次 flush 開始前就排好了，flush 成功就是寫成了（寫入成功以 flush 為準）。

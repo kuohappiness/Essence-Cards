@@ -13,9 +13,8 @@ import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { versionText } from './obsidian/version.ts';
-import { createState, type ErrorSource, type State } from './state/index.ts';
+import { createState, type ErrorSource, type State, type StudyPick } from './state/index.ts';
 import { openReview, registerStart, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
-import type { Pick } from './core/study/index.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
@@ -139,7 +138,7 @@ export default class EssenceCardsPlugin extends Plugin {
   }
 
   /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
-  startReview(pick: Pick): ReviewHandle | null {
+  startReview(pick: StudyPick): ReviewHandle | null {
     if (!this.state) return null;
     const pickedAt = performance.now();
     this.review?.close();

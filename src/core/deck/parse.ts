@@ -60,7 +60,7 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
     const unit = string(values['單元']);
     if (unit !== null) props.unit = splitUnit(unit);
     // 不一律轉成字串：`單元: 03` 的原寫法已經不見（§9-2），所以給提示、請家長加引號。
-    const lineOf = (key: string): number => lines.slice(1, end).findIndex(value => new RegExp('^' + key + '\s*:').test(value.raw)) + 1;
+    const lineOf = (key: string): number => lines.slice(1, end).findIndex(value => value.raw.split(':')[0].trim() === key) + 1;
     if (unit === null && values['單元'] !== null && values['單元'] !== undefined) props.issues.push({ line: lineOf('單元'), message: '屬性「單元」要加引號，例如 單元: "3"' });
     props.materials = strings(values['材料']);
     const materials = values['材料'];

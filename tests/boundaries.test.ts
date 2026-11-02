@@ -60,5 +60,27 @@ void test('src 裡只有 study/fsrs.ts 能 import、export、動態 import 或 r
 // readHistory、readDecks 給 tools/bench-study.ts 與測試用，產品程式走 state（技術債 A5、D-105）；parseTime 給備份清單的時間檢查（syntax §8）。
 void test('study 只匯出任務指定的公開介面，不洩漏 ts-fsrs 的型別或類別', async () => {
   const module = await import('../src/core/study/index.ts');
-  assert.deepEqual(Object.keys(module).sort(), ['LOG_FOLDER', 'appendLine', 'checkTyped', 'createLogWriter', 'dayOf', 'dayStart', 'dueAt', 'encodeEntry', 'findDuplicateIds', 'formatTime', 'intervalDays', 'isLogPath', 'logPath', 'mergeHistory', 'nextCard', 'parseLine', 'parseTime', 'planToday', 'progress', 'readHistory', 'recall', 'replay', 'review', 'typedKey', 'typedUnits'].sort());
+  assert.deepEqual(Object.keys(module).sort(), ['LOG_FOLDER', 'appendLine', 'checkTyped', 'createLogWriter', 'dayOf', 'dayStart', 'dueAt', 'encodeEntry', 'findDuplicateIds', 'formatTime', 'intervalDays', 'isLogPath', 'logPath', 'memoryColors', 'mergeHistory', 'nextCard', 'parseLine', 'parseTime', 'planToday', 'progress', 'readHistory', 'recall', 'replay', 'review', 'scopeCount', 'todayLeft', 'typedKey', 'typedUnits'].sort());
+});
+
+// 範圍與目錄（tasks/entry-and-catalog.md §9-1）：deck、study 不 import catalog；catalog 從 study 只拿型別。
+void test('deck、study 不 import catalog；catalog 從 study 只 import 型別', async () => {
+  const root = new URL('../src/core/', import.meta.url);
+  const specifiers = async (folder: string): Promise<{ path: string; name: string; typeOnly: boolean }[]> => {
+    const found: { path: string; name: string; typeOnly: boolean }[] = [];
+    for (const path of (await readdir(new URL(folder + '/', root))).filter(each => each.endsWith('.ts'))) {
+      const source = ts.createSourceFile(path, await readFile(new URL(folder + '/' + path, root), 'utf8'), ts.ScriptTarget.Latest, true);
+      source.forEachChild(node => {
+        if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+          const typeOnly = ts.isImportDeclaration(node) ? !!node.importClause?.isTypeOnly : node.isTypeOnly;
+          found.push({ path, name: node.moduleSpecifier.text, typeOnly });
+        }
+      });
+    }
+    return found;
+  };
+  for (const folder of ['deck', 'study']) for (const { path, name } of await specifiers(folder)) assert.ok(!name.includes('catalog'), folder + '/' + path + ' 不能 import ' + name);
+  const fromCatalog = await specifiers('catalog');
+  assert.ok(fromCatalog.length > 0);
+  for (const { path, name, typeOnly } of fromCatalog) if (name.includes('/study/')) assert.ok(typeOnly, 'catalog/' + path + ' 只能 import type');
 });

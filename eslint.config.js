@@ -26,7 +26,7 @@ const stateEntry = { regex: '(^|/)state/(?!index\\.ts$)', message: 'state 只能
 const viewFiles = { regex: '(^|/)core/files\\.ts$', message: '畫面只透過 state 拿資料，不直接存取檔案。' };
 const viewNames = {
   group: ['**/core/deck/index.ts', '**/core/study/index.ts'],
-  importNames: ['readDecks', 'parseDeck', 'readHistory', 'mergeHistory', 'appendLine', 'createLogWriter', 'planToday', 'nextCard', 'progress', 'replay', 'review'],
+  importNames: ['readDecks', 'parseDeck', 'readHistory', 'mergeHistory', 'appendLine', 'createLogWriter', 'planToday', 'nextCard', 'progress', 'scopeCount', 'todayLeft', 'memoryColors', 'replay', 'review'],
   message: '畫面只透過 state 拿資料：讀檔、排程、寫紀錄的函式不能在 ui 與 review 用。',
 };
 // 測試不改全域的 Node 內建模組（第一個里程碑回顧的 R1）：Node 自己的實作也呼叫它們，換掉的結果隨 Node 版本改變。
@@ -63,6 +63,9 @@ function crossModule(path, name, typeOnly) {
   const to = coreModule.exec(target)?.[1];
   if (!to || to === from) return undefined;
   if (from === 'deck' && to === 'study') return 'deck 不能 import study。';
+  // 範圍與目錄（D-142）：deck、study 不知道它；它從 study 只拿型別。
+  if ((from === 'deck' || from === 'study') && to === 'catalog') return from + ' 不能 import catalog。';
+  if (from === 'catalog' && to === 'study' && !typeOnly) return 'catalog 從 study 只能 import 型別（import type）。';
   if (!target.endsWith('/src/core/' + to + '/index.ts')) return '核心的模組之間只能 import 對方的 index.ts。';
   if (from === 'study' && to === 'deck' && !typeOnly) return 'study 從 deck 只能 import 型別（import type）。';
   return undefined;
