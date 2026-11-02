@@ -1,15 +1,15 @@
-// 出處與單元編號的字面讀法（syntax.md §2-1、§2-5、D-080、D-164）：只看字面、不看有沒有別篇卡組，所以新增一篇卡組不會讓舊的出處變意思。
-// 在哪一份材料裡找由 Obsidian 層判斷，單元對到哪一篇由 core/catalog 判斷。
+// 出處與單元編號的字面讀法（syntax.md §2-1、§2-5、D-080、D-164、D-165）：只看字面、不看有沒有別篇卡組，所以新增一篇卡組不會讓舊的出處變意思。
+// 家長亂填是常態，所以不猜：只有開頭寫了年級學期才算別的單元（D-165）。在哪一份材料裡找由 Obsidian 層判斷，單元對到哪一篇由 core/catalog 判斷。
 
 /**
  * 連結的目標：block 是 `#^id`、heading 是舊的段落標題（§9-3 第 6 種）、note 是筆記連結本身（alias 只顯示，不送去開）；
- * unit 是別的單元（term 是 null 時是同一個年級學期）；text 不做連結（先備，D-087）。
+ * unit 是別的單元；text 不做連結（先備，D-087）。
  */
 export type SourceLink =
   | { kind: 'block'; id: string }
   | { kind: 'heading'; heading: string }
   | { kind: 'note'; link: string; alias?: string }
-  | { kind: 'unit'; term: string | null; unit: string; rest: SourceLink | null }
+  | { kind: 'unit'; term: string; unit: string; rest: SourceLink | null }
   | { kind: 'text' };
 /** text 是原文，手寫的容錯只影響讀法（D-164 第 6 點）。 */
 export interface SourceItem { text: string; link: SourceLink }
@@ -50,26 +50,25 @@ export function termRank(term: string): number | null {
   return match && grade >= 0 && grade % 2 === 0 ? grade + (match[2] === '下' ? 1 : 0) : null;
 }
 
-/** 開頭是年級學期的單元（§9-3 第 3 種）；後面沒東西、接的是位置、黏著不是半形英數字開頭的字（`國二上的回顧`）都不算。 */
+/**
+ * 開頭是年級學期的單元（§9-3 第 3 種）；後面沒東西、接的是位置、黏著不是半形英數字開頭的字（`國二上的回顧`）都不算。
+ * 編號裡有列表的分隔符號（`國二上 1-3, p.44`、`國二上 L1, L2`，切不開才會讀到這裡）也不算：不猜是哪幾項，當看不懂提示（D-165）。
+ */
 function termUnit(text: string): SourceLink | null {
   const match = TERM.exec(text);
   if (!match) return null;
   const after = match[3], body = after.trim();
   if (!body || location(body) || !/^(?:\s|[A-Za-z0-9])/.test(after)) return null;
   const { code, name } = splitUnit(body);
+  if (/[,，/／]/.test(code)) return null;
   return { kind: 'unit', term: match[1] + match[2], unit: code, rest: rest(name) };
 }
-
-/** 沒寫年級學期時，只有 `2-1`、`1-2-3`、`L1`、`U1` 算單元（§9-3 第 4 種）；`2`、`A1`、`l1`、`L1-2` 都不算。 */
-const BARE_UNIT = /^(\d+(?:-\d+)+|[LU]\d+)(?:\s+(.*))?$/s;
 
 function read(text: string): SourceLink {
   const place = location(text);
   if (place) return place;
   const unit = termUnit(text);
   if (unit) return unit;
-  const bare = BARE_UNIT.exec(text);
-  if (bare) return { kind: 'unit', term: null, unit: bare[1], rest: rest(bare[2]?.trim() ?? '') };
   if (/^先備\s*[：:]/.test(text) || !text) return { kind: 'text' };
   return { kind: 'heading', heading: text };
 }

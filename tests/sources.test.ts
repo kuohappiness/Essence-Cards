@@ -12,7 +12,7 @@ const one = (text: string): SourceLink => {
   return items[0].link;
 };
 const page = (id: string): SourceLink => ({ kind: 'block', id });
-const unit = (term: string | null, code: string, rest: SourceLink | null = null): SourceLink => ({ kind: 'unit', term, unit: code, rest });
+const unit = (term: string, code: string, rest: SourceLink | null = null): SourceLink => ({ kind: 'unit', term, unit: code, rest });
 const heading = (text: string): SourceLink => ({ kind: 'heading', heading: text });
 
 void test('第 1 種：連結是那份筆記，別名只顯示', () => {
@@ -46,22 +46,18 @@ void test('第 3 種：開頭是年級學期，第一段就是單元編號，後
   assert.deepEqual(one('國二上　1-3　p.20'), unit('國二上', '1-3', page('p20')), '全形空白也算');
   assert.deepEqual(one('國二上\t1-3'), unit('國二上', '1-3'), 'Tab 也算');
   assert.deepEqual(one('高三下 L10 圖 2-13 A'), unit('高三下', 'L10', page('fig2-13a')));
+  assert.deepEqual(one('國二上 1-2-3 p.20'), unit('國二上', '1-2-3', page('p20')));
+  assert.deepEqual(one('國二上 20-1'), unit('國二上', '20-1'), '不屬於單元 2');
   assert.deepEqual(one('國二上 1-3 水溶液'), unit('國二上', '1-3', heading('水溶液')));
   // 反例：不算單元，當第 6 種。
   for (const text of ['小五上', '小五上 p.15', '小五上 P20', '小五上 圖 2-14', '小五上 [[x]]', '小五上 第 44 頁', '高六上 L1', '國四上 1-3', '國二上的回顧', '國二中 1-3']) assert.deepEqual(one(text), heading(text), text);
+  // 編號裡有列表的分隔符號，又切不開（D-165、Codex L2 的 F4）：不是單元，看不懂會提示。
+  for (const text of ['國二上 1-3, p.44', '國二上 1-3， p.44', '國二上 1-3/ p.44', '國二上 1-3／p.44', '國二上 L1, L2', '國二上 L1,L2', '國二上 1/2']) assert.deepEqual(one(text), heading(text), text);
 });
 
-void test('第 4 種：沒寫年級學期時只有 2-1、1-2-3、L1、U1 算單元，後面是位置', () => {
-  assert.deepEqual(one('1-2-3 p.20'), unit(null, '1-2-3', page('p20')));
-  assert.deepEqual(one('2-1'), unit(null, '2-1'));
-  assert.deepEqual(one('20-1'), unit(null, '20-1'), '不屬於單元 2');
-  assert.deepEqual(one('L1'), unit(null, 'L1'));
-  assert.deepEqual(one('U1 p.20'), unit(null, 'U1', page('p20')));
-  assert.deepEqual(one('2-2 圖 2-14'), unit(null, '2-2', page('fig2-14')));
-  assert.deepEqual(one('2-2　p.3'), unit(null, '2-2', page('p3')), '全形空白也算');
-  // 反例：段落標題；新增、刪除同名單元的卡組前後，讀法都不變（讀法不看別篇，這裡沒有卡組可看）。
-  for (const text of ['CO2 的性質', '2 擴散現象', 'A1 p.20', 'l1 p.20', 'Starter p.20', '3 p.15', 'L1-2', '2-', 'l1']) assert.deepEqual(one(text), heading(text), text);
-  // 頁碼優先於編號。
+void test('沒寫年級學期的都不算單元（D-165）：2-1、1-2-3、L1、U1 和其他的字一樣是第 6 種', () => {
+  for (const text of ['1-2-3 p.20', '1-3 p.20', '2-1', '20-1', 'L1', 'U1', 'U1 p.20', '2-2 圖 2-14', '2-2　p.3', '1-2 溶液', 'CO2 的性質', '2 擴散現象', 'A1 p.20', 'l1 p.20', 'Starter p.20', '3 p.15', 'L1-2', '2-', 'l1']) assert.deepEqual(one(text), heading(text), text);
+  // 頁碼照舊認得。
   assert.deepEqual(one('p20'), page('p20'));
   assert.deepEqual(one('P20'), page('p20'));
 });
@@ -80,11 +76,11 @@ void test('切開：每一段都讀得懂才切，每一段各自獨立', () => 
     assert.deepEqual(sourceLinks([text]).map(item => item.link), [page('p44'), page('p45')], text);
   }
   assert.deepEqual(texts('p.44, p.45'), ['p.44', 'p.45'], '顯示切開後的原文');
-  assert.deepEqual(sourceLinks(['1-3 p.20, p.44']).map(item => item.link), [unit(null, '1-3', page('p20')), page('p44')]);
+  assert.deepEqual(sourceLinks(['國二上 1-3 p.20, p.44']).map(item => item.link), [unit('國二上', '1-3', page('p20')), page('p44')]);
   assert.deepEqual(sourceLinks(['小五上 2-1 p.15, 國一上 L3 圖 2-1']).map(item => item.link), [unit('小五上', '2-1', page('p15')), unit('國一上', 'L3', page('fig2-1'))]);
   assert.deepEqual(sourceLinks(['[[a]], [[b/c]]']).map(item => item.link), [{ kind: 'note', link: 'a' }, { kind: 'note', link: 'b/c' }], '連結裡的斜線不切');
   // 反例：有一段讀不懂、單元後面沒有位置，都不切。
-  for (const text of ['溶解, 擴散', '[[a,b]]', '先備：A, B', 'p.44, 45', 'p.44, 溶解', '1/2 的意思', 'L1, L2', '2-1, p.44', '小五上 2-1, p.44']) assert.deepEqual(texts(text), [text], text);
+  for (const text of ['溶解, 擴散', '[[a,b]]', '先備：A, B', 'p.44, 45', 'p.44, 溶解', '1/2 的意思', 'L1, L2', '2-1, p.44', '小五上 2-1, p.44', '1-3 p.20, p.44']) assert.deepEqual(texts(text), [text], text);
 });
 
 void test('頓號切開的每一項各自獨立：第一項屬於小五上 2-1，第二項回到目標所在單元', () => {

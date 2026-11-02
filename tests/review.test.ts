@@ -215,11 +215,10 @@ void test('R12 出處：頁碼、圖表例題（含子圖）、段落標題、�
   ]);
   assert.deepEqual(sourceLinks(['睡眠的階段']), [{ text: '睡眠的階段', link: { kind: 'heading', heading: '睡眠的階段' } }]);
   assert.deepEqual(sourceLinks(['[[水溶液實驗影片筆記#溶解的速度]]'])[0].link, { kind: 'note', link: '水溶液實驗影片筆記#溶解的速度' });
-  assert.deepEqual(sourceLinks(['1-3 p.20', 'L3', '國一下 L5', '2-2 圖 2-14']).map(item => item.link), [
-    { kind: 'unit', term: null, unit: '1-3', rest: { kind: 'block', id: 'p20' } },
-    { kind: 'unit', term: null, unit: 'L3', rest: null },
+  assert.deepEqual(sourceLinks(['國二上 1-3 p.20', '國一下 L5', '國二上 2-2 圖 2-14']).map(item => item.link), [
+    { kind: 'unit', term: '國二上', unit: '1-3', rest: { kind: 'block', id: 'p20' } },
     { kind: 'unit', term: '國一下', unit: 'L5', rest: null },
-    { kind: 'unit', term: null, unit: '2-2', rest: { kind: 'block', id: 'fig2-14' } },
+    { kind: 'unit', term: '國二上', unit: '2-2', rest: { kind: 'block', id: 'fig2-14' } },
   ]);
   assert.deepEqual(sourceLinks(['p.45 知識快遞'])[0], { text: 'p.45 知識快遞', link: { kind: 'block', id: 'p45' } });
   // 先備知識是文字，不做連結（D-087）；其他讀法的例子在 tests/sources.test.ts。

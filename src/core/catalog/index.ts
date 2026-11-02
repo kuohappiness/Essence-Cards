@@ -30,7 +30,7 @@ export interface UnitNode {
   problems: UnitProblem[];
 }
 /** 對到單元的參照，或對不到的（這一批不建目錄節點，D-033；第二批的考試範圍要用，不能當成「沒有關係」）。 */
-interface UnitRef { id: string; path: string; term: string | null; subject: string | null; code: string }
+interface UnitRef { id: string; path: string; term: string; subject: string | null; code: string }
 
 export interface CatalogIndex {
   /** 學業的單元，照學期、科目、編號排好。 */
@@ -164,14 +164,13 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
     deckIds.set(entry.path, ids);
   }
   for (const { entry, target, own, label } of owned) {
-    const { term, subject } = entry.deck.props;
+    const { subject } = entry.deck.props;
     for (const { link } of sourceLinks(target.fields.sources)) {
       if (link.kind !== 'unit') continue;
-      const refTerm = link.term ?? term;
-      const key = refTerm !== null && subject !== null ? unitKey(refTerm, subject, link.unit) : null;
+      const key = subject !== null ? unitKey(link.term, subject, link.unit) : null;
       if (key === own) continue;
       if (key !== null && nodes.has(key)) add(key, { id: target.id, name: target.name, path: entry.path, line: target.line, from: label });
-      else unresolved.push({ id: target.id, path: entry.path, term: refTerm, subject, code: link.unit });
+      else unresolved.push({ id: target.id, path: entry.path, term: link.term, subject, code: link.unit });
     }
   }
   const compareUnit = (a: UnitNode, b: UnitNode): number =>

@@ -8,7 +8,7 @@ import type { SourceLink } from '../review/index.ts';
 /** 一篇卡組與它的材料；相對連結以那篇的路徑解析。 */
 export interface MaterialDeck { path: string; materials: readonly string[] }
 /** 跨單元的出處的候選：那個單元的每一篇，照路徑；對不到單元是空的（照文字顯示）。 */
-export type UnitDecks = (term: string | null, code: string) => readonly MaterialDeck[];
+export type UnitDecks = (term: string, code: string) => readonly MaterialDeck[];
 
 /** `[[筆記]]`、`[[筆記|別名]]` 或純文字的材料 → 連結路徑。 */
 const linkpath = (material: string): string => material.replace(/^\[\[|\]\]$/g, '').split('|')[0].split('#')[0].trim();

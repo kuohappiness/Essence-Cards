@@ -61,13 +61,22 @@ void test('跨單元的目標：兩個單元都列它、都算一個，別的單
   assert.deepEqual(ids(pausedTarget.find('小四上', '自然', '2-1')), []);
 });
 
-void test('出處寫到 A、B：兩個單元各列一次；只寫單元的算同一個年級學期與科目', () => {
-  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、國二上 2-2、L1'] });
+void test('出處寫到 A、B：兩個單元各列一次；同一科', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1 p.3、國二上 2-2、國二上 L1'] });
   const others = ['2-1', '2-2', 'L1'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
   const otherSubject = card('Essence Cards/x.md', unit('國二上', '2-1', '數學'), {});
   const index = buildIndex([owner, ...others, otherSubject]);
   for (const code of ['2-1', '2-2', 'L1']) assert.deepEqual(ids(index.find('國二上', '自然', code)), ['a'], code);
   assert.deepEqual(ids(index.find('國二上', '數學', '2-1')), [], '不跨科目');
+});
+
+void test('D-165 沒寫年級學期、編號帶逗號的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
+  const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、國二上 L1, L2、國二上 2-2/ p.3'] });
+  const others = ['2-1', '2-2', 'L1', 'L2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
+  const index = buildIndex([owner, ...others]);
+  for (const code of ['2-1', '2-2', 'L1', 'L2']) assert.deepEqual(ids(index.find('國二上', '自然', code)), [], code);
+  assert.deepEqual(index.unresolved, []);
+  assert.deepEqual(ids(index.find('國二上', '自然', '1-1')), ['a'], '自己的單元照算');
 });
 
 void test('對不到的參照留在索引，目錄沒有節點；段落標題不算參照，新增同名單元的卡組前後都不變', () => {

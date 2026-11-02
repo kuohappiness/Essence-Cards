@@ -31,7 +31,7 @@ export interface ReviewProps {
   /** 這篇卡組的「材料」（出處要在哪幾份裡找）。 */
   materials: (deckPath: string) => readonly string[];
   /** 跨單元的出處的候選（§10）：那個單元的每一篇與它的材料。 */
-  units: (deckPath: string, term: string | null, code: string) => readonly MaterialDeck[];
+  units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
   speech: Speech;
   autoRead: { get(): boolean; set(on: boolean): void };
   onEvent?: (event: ReviewEvent) => void;
@@ -408,7 +408,7 @@ function Done({ done, session, close }: { done: DoneView; session: Session; clos
 interface CardProps {
   view: CardView; app: App; speech: Speech;
   materials: (deckPath: string) => readonly string[];
-  units: (deckPath: string, term: string | null, code: string) => readonly MaterialDeck[];
+  units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;

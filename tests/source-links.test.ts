@@ -30,12 +30,12 @@ const link = (text: string) => sourceLinks([text])[0].link;
 
 void test('§10 跨單元：第一篇沒有 ^p20、第二篇有，跳到第二篇；都沒有開第一份材料；只寫單元開第一份材料；對不到單元照文字顯示', () => {
   const { app, resolved } = appWith({ '材料/甲.md': { blocks: ['p1'] }, '材料/乙.md': { blocks: ['p20'], headings: ['溶液'] } });
-  const units: UnitDecks = (term, code) => code === '1-3' && (term === null || term === '國二上') ? [{ path: '卡組/課本.md', materials: ['[[沒有這份]]', '[[甲]]'] }, { path: '卡組/習作.md', materials: ['[[乙]]'] }] : [];
+  const units: UnitDecks = (term, code) => code === '1-3' && term === '國二上' ? [{ path: '卡組/課本.md', materials: ['[[沒有這份]]', '[[甲]]'] }, { path: '卡組/習作.md', materials: ['[[乙]]'] }] : [];
   const resolve = (text: string) => resolveSource(app, '卡組/本篇.md', ['[[本篇材料]]'], link(text), units);
-  assert.equal(resolve('1-3 p.20'), '材料/乙.md#^p20');
+  assert.equal(resolve('1-3 p.20'), null, '沒寫年級學期不算單元（D-165）');
   assert.equal(resolve('國二上 1-3 p.20'), '材料/乙.md#^p20');
   assert.equal(resolve('國二上 1-3 p.99'), '材料/甲.md', '全部找完才退回第一份可用的材料');
-  assert.equal(resolve('1-3'), '材料/甲.md');
+  assert.equal(resolve('國二上 1-3'), '材料/甲.md');
   assert.equal(resolve('國二上 1-3 溶液'), '材料/乙.md#溶液');
   assert.equal(resolve('國二上 1-3 沒有的標題'), '材料/甲.md');
   assert.equal(resolve('國二上 1-3 [[別的筆記|別名]]'), '別的筆記');
@@ -45,7 +45,7 @@ void test('§10 跨單元：第一篇沒有 ^p20、第二篇有，跳到第二�
   assert.ok(resolved.some(([name, from]) => name === '乙' && from === '卡組/習作.md'));
 });
 
-void test('§10 候選來自索引：單元每一篇照路徑、每篇的材料照原順序；只寫單元的算這一篇的年級學期；對不到是空的', async t => {
+void test('§10 候選來自索引：單元每一篇照路徑、每篇的材料照原順序，算這一篇的科目；對不到是空的', async t => {
   const memory = createMemoryFiles({
     'Essence Cards/本篇.md': '---\n年級學期: 國二上\n科目: 自然\n單元: "1-1"\n---\n',
     'Essence Cards/習作.md': '---\n年級學期: 國二上\n科目: 自然\n單元: "1-3"\n材料:\n  - "[[丙]]"\n  - "[[甲]]"\n狀態: 草稿\n---\n',
@@ -57,11 +57,10 @@ void test('§10 候選來自索引：單元每一篇照路徑、每篇的材料�
   t.after(() => state.close());
   await state.ready();
   const from = 'Essence Cards/本篇.md';
-  assert.deepEqual(state.unitMaterials(from, null, '1-3'), [{ path: 'Essence Cards/習作.md', materials: ['[[丙]]', '[[甲]]'] }, { path: 'Essence Cards/課本.md', materials: ['[[乙]]'] }]);
-  assert.deepEqual(state.unitMaterials(from, '國二上', '1-3'), state.unitMaterials(from, null, '1-3'));
+  assert.deepEqual(state.unitMaterials(from, '國二上', '1-3'), [{ path: 'Essence Cards/習作.md', materials: ['[[丙]]', '[[甲]]'] }, { path: 'Essence Cards/課本.md', materials: ['[[乙]]'] }]);
   assert.deepEqual(state.unitMaterials(from, '國一上', 'L3'), [{ path: 'Essence Cards/別學期.md', materials: ['[[丁]]'] }]);
-  assert.deepEqual(state.unitMaterials(from, null, '9-9'), []);
-  assert.deepEqual(state.unitMaterials('Essence Cards/沒有這篇.md', null, '1-3'), []);
+  assert.deepEqual(state.unitMaterials(from, '國二上', '9-9'), []);
+  assert.deepEqual(state.unitMaterials('Essence Cards/沒有這篇.md', '國二上', '1-3'), []);
 });
 
 void test('舊讀法逐項保留：頁碼、圖表例題、子圖、標題、筆記連結，別名不送去開', () => {
@@ -99,9 +98,15 @@ void test('§9-5 看不懂：第 6 種而且材料裡找不到同名標題；材
   assert.deepEqual(unreadableSources(app, '卡組/本篇.md', parseDeck(text)), [
     { line: 3, name: '溫度影響溶解度', text: 'p.44, 45' },
     { line: 3, name: '溫度影響溶解度', text: '2 擴散現象' },
+    { line: 6, name: '第二個', text: 'L1' },
   ]);
   // 材料的快取還沒建好：不知道，不提示。
   assert.deepEqual(unreadableSources(appWith({ '材料/甲.md': null }).app, '卡組/本篇.md', parseDeck(text)), []);
   // 連不到的材料本來就找不到：照提示。
-  assert.equal(unreadableSources(appWith({}).app, '卡組/本篇.md', parseDeck(text)).length, 3);
+  assert.equal(unreadableSources(appWith({}).app, '卡組/本篇.md', parseDeck(text)).length, 4);
+  // D-165：沒寫年級學期的，材料裡有同名標題就是那個標題；沒有就提示。逗號切不開的也提示（F4）。
+  const bare = '---\n材料: "[[甲]]"\n---\n- 目標 ^a\n    - 出處：1-2 溶液、1-3 p.20、國二上 1-3, p.44\n    - 問 :: 答\n';
+  const named = appWith({ '材料/甲.md': { headings: ['1-2 溶液'] } }).app;
+  assert.deepEqual(unreadableSources(named, '卡組/本篇.md', parseDeck(bare)).map(item => item.text), ['1-3 p.20', '國二上 1-3, p.44']);
+  assert.equal(resolveSource(named, '卡組/本篇.md', ['[[甲]]'], link('1-2 溶液')), '材料/甲.md#1-2 溶液');
 });

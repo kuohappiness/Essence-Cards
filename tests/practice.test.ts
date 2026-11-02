@@ -217,7 +217,7 @@ void test('§5 中途把目標改暫停，總數減一；卡組筆記的全部�
 // Codex L2 的 F2：別的單元寫過來的目標，收的那個單元全部暫停或改草稿時，目錄、選卡、還剩幾張都是 0。
 for (const status of ['暫停', '草稿']) {
   void test(`§3 §5 單元改成全部${status}：當日卡、全部卡和目錄用同一份目標集合`, async t => {
-    const owner = HEAD('2-2') + '- 目標 x ^x\n    - 出處：2-1 p.3\n    - x 的題目 :: 答\n';
+    const owner = HEAD('2-2') + '- 目標 x ^x\n    - 出處：國二上 2-1 p.3\n    - x 的題目 :: 答\n';
     const off = `---\n年級學期: 國二上\n科目: 自然\n單元: "2-1"\n狀態: ${status}\n---\n` + targets('b');
     const h = await setup(t, { [DECK]: HEAD('2-1') + targets('b'), [OTHER]: owner });
     const round = h.round();

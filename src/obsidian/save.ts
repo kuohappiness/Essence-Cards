@@ -24,6 +24,8 @@ export const TIPS = {
   /** 屬性寫法有問題（§9-2）與看不懂的出處（§9-5）：按鈕說明與存檔後的通知都用。 */
   properties: (n: number) => `有 ${n} 個屬性寫法有問題`,
   sources: (n: number) => `有 ${n} 個出處看不懂`,
+  /** 家長不用讀說明書，看到提示就知道怎麼改（D-165 第 4 點）。 */
+  sourcesHow: '可以這樣寫：p.44、圖 2-14、國二上 1-3 p.20、[[筆記#標題]]；只想記一句話，請寫在「備註」',
   /** 通知裡一個屬性的問題；line 從 1 算。 */
   property: (line: number, message: string) => `第 ${line} 行：${message}`,
   /** 通知只列前幾個，其餘的數。 */
@@ -119,7 +121,7 @@ function doneTip(added: number, malformed: readonly Malformed[], hints: DeckHint
   } else if (added) parts.push(TIPS.added(added));
   if (hints.properties.length) parts.push(TIPS.properties(hints.properties.length), ...shown(hints.properties.map(issue => TIPS.property(issue.line + 1, issue.message))));
   // 不跳視窗，也不擋補 ID（D-164 第 7 點）。
-  if (hints.sources.length) parts.push(TIPS.sources(hints.sources.length), ...shown(hints.sources.map(source => TIPS.problem(source.line + 1, source.name, source.text))));
+  if (hints.sources.length) parts.push(TIPS.sources(hints.sources.length), ...shown(hints.sources.map(source => TIPS.problem(source.line + 1, source.name, source.text))), TIPS.sourcesHow);
   return parts.length ? parts.join('\n') : null;
 }
 
