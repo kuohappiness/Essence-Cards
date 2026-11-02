@@ -1,7 +1,7 @@
 import { isMap, isScalar, parseDocument } from 'yaml';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { splitUnit } from './sources.ts';
+import { splitOutsideLinks, splitUnit } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
 import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
@@ -144,7 +144,7 @@ export function parseDeck(text: string): Deck {
       let values: string[] | null = null;
       if (fieldStart.test(node.text)) {
         // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-167 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
-        const segments = node.text.split(/｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])(?![^[]*\]\])/);
+        const segments = splitOutsideLinks(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
         for (const segment of segments) {
           const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
           const key = match?.[1] ?? '', value = match?.[2] ?? '';
@@ -177,9 +177,9 @@ export function parseDeck(text: string): Deck {
         collectFields(child);
       }
     }
-    /** 頓號分隔的值，照順序加進去，重複的只留第一個。 */
+    /** 頓號分隔的值，照順序加進去，重複的只留第一個。出處例外：`本篇` 這種字會影響後面的意思，讀完才去重（D-167 第 6 點）。 */
     function addValues(destination: string[], text: string): void {
-      for (const entry of text.split('、').map(v => v.trim()).filter(Boolean)) if (!destination.includes(entry)) destination.push(entry);
+      for (const entry of splitOutsideLinks(text, /、/).map(v => v.trim()).filter(Boolean)) if (destination === fields.sources || !destination.includes(entry)) destination.push(entry);
     }
     /**
      * 資料欄位分行（§9-4、D-164 第 4 點）：出處、備註、錯題補強底下的子項目和寫在同一行相同，回傳要加到哪裡；開頭是欄位名稱的子項目是別的欄位（collectFields 的遞迴）。

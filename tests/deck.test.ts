@@ -321,9 +321,9 @@ void test('中翻英填空只提示、不要求 typed', () => {
 void test('只有結尾完整方向字樣才配對', () => {
   assert.equal(parseDeck('- 字 中翻英 補充\n  - Q :: A').targets[0].direction, null);
 });
-void test('欄位合併去重、單值只取首次、未知欄位忽略', () => {
+void test('欄位合併、備註與錯題補強去重（出處讀完才去重，D-167）、單值只取首次、未知欄位忽略', () => {
   const parsed = deck('  - 出處：1-3 p.20、p.44｜備註：A、B｜錯題補強：[[考試]]\n  - 類型：定義｜重要性：低｜狀態：暫停｜陌生：X\n  - Q :: A\n    - 出處:p.44、p.45｜備註:B、C｜錯題補強:[[考試]]、[[考試2]]\n    - 類型：因果｜重要性：高｜狀態：啟用');
-  assert.deepEqual(parsed.targets[0].fields, { sources: ['1-3 p.20', 'p.44', 'p.45'], type: '定義', importance: 'low', paused: true, remarks: ['A', 'B', 'C'], mistakes: ['[[考試]]', '[[考試2]]'] });
+  assert.deepEqual(parsed.targets[0].fields, { sources: ['1-3 p.20', 'p.44', 'p.44', 'p.45'], type: '定義', importance: 'low', paused: true, remarks: ['A', 'B', 'C'], mistakes: ['[[考試]]', '[[考試2]]'] });
   assert.deepEqual(parsed.problems.map(p => p.code), ['unknown-field', 'duplicate-field', 'duplicate-field', 'duplicate-field']);
 });
 void test('例句、記憶錨點不是未知資料；補充保留巢狀 Markdown', () => {
@@ -821,9 +821,9 @@ void test('§9-4 分行的出處和寫在同一行相同；指紋相同，不進
   assert.deepEqual(parseDeck(MULTI).problems, []);
 });
 
-void test('§9-4 同一行又有子項目時合併，順序照筆記，重複的只留第一個；子項目裡的頓號照切；備註、錯題補強同一條規則', () => {
+void test('§9-4 同一行又有子項目時合併，順序照筆記；子項目裡的頓號照切；備註、錯題補強同一條規則', () => {
   const target = first('    - 出處：p.44\n        - p.45、p.46\n        - p.44\n    - 備註：\n        - 老師強調、必考\n    - 錯題補強：[[a]]\n        - [[b]]\n    - Q :: A');
-  assert.deepEqual(target.fields.sources, ['p.44', 'p.45', 'p.46']);
+  assert.deepEqual(target.fields.sources, ['p.44', 'p.45', 'p.46', 'p.44'], '出處讀完才去重（D-167）');
   assert.deepEqual(target.fields.remarks, ['老師強調', '必考']);
   assert.deepEqual(target.fields.mistakes, ['[[a]]', '[[b]]']);
   assert.deepEqual(first('    - 出處：\n    - Q :: A').fields.sources, [], '沒有子項目的空欄位');
@@ -883,6 +883,14 @@ void test('D-167 半形的 | 後面接欄位名稱加冒號也是分隔：類型
   assert.deepEqual(fields('出處：p.44｜類型：定義').sources, ['p.44'], '全形照舊');
   assert.deepEqual(fields('出處：[[筆記|類型：x]]').sources, ['[[筆記|類型：x]]'], '連結裡的不算');
   assert.deepEqual(fields('出處：p.44 | 重點').sources, ['p.44 | 重點'], '後面不是欄位名稱');
+  for (const inside of ['[[筆記｜類型：x]]', '[[筆記|類型：x]]', '[a](foo|類型：bar)', '[a](foo｜類型：bar)', '「附錄｜類型：x」', '「附錄|類型：x」', '［［筆記｜類型：x］］']) {
+    assert.deepEqual(fields('出處：' + inside).sources, [inside], inside);
+    assert.equal(fields('出處：' + inside).type, null, inside);
+  }
+  assert.deepEqual(fields('出處：[[a、b]]、「c、d」、p.1').sources, ['[[a、b]]', '「c、d」', 'p.1'], '頓號也一樣');
+  assert.deepEqual(fields('出處：https://x.test｜類型：定義').sources, ['https://x.test']);
+  assert.equal(fields('出處：https://x.test｜類型：定義').type, '定義');
+  assert.equal(fields('出處：[[筆記]]｜類型：定義').type, '定義');
 });
 
 // Codex L2 的 F3：欄位解析本來就接受冒號前的空白，分行也要讀得到。
@@ -898,9 +906,9 @@ void test('§9-4 欄位名稱和冒號之間有空白：分行的值照樣讀到
 });
 
 // Codex L2 的 F5：普通的子項目和帶欄位名稱的子項目混著寫，順序照筆記（D-164 第 5 點）。
-void test('§9-4 混用兩種子項目：順序照筆記，重複的只留第一個', () => {
+void test('§9-4 混用兩種子項目：順序照筆記', () => {
   const mixed = first('    - 問 :: 答\n    - 出處：p.1\n        - p.2\n        - 出處：p.3\n        - p.4\n        - p.1\n        - p.3');
-  assert.deepEqual(mixed.fields.sources, ['p.1', 'p.2', 'p.3', 'p.4']);
+  assert.deepEqual(mixed.fields.sources, ['p.1', 'p.2', 'p.3', 'p.4', 'p.1', 'p.3']);
   const nested = first('    - 問 :: 答\n    - 出處：\n        - p.2\n            - 出處：p.3\n        - p.4');
   assert.deepEqual(nested.fields.sources, ['p.2', 'p.3', 'p.4']);
   assert.deepEqual(codes('    - 問 :: 答\n    - 出處：\n        - p.2\n            - 出處：p.3\n        - p.4'), [], '子項目底下是欄位時不算再分層');

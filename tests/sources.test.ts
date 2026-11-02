@@ -158,6 +158,20 @@ void test('D-167 同一欄不分頓號、逗號、分行：parse 拆好的每一
   assert.deepEqual(sourceLinks(['p.44', '國二上 1-3 p.20'], NATURE).map(item => item.link), [page(44), u13(page(20))]);
 });
 
+void test('D-167 讀完才去重：本篇這種字會影響後面的意思；一樣的位置只留第一個按鈕', () => {
+  const fieldOf = (text: string): readonly string[] => parseDeck(`- 目標 ^abc123\n    - 問 :: 答\n    - 出處：${text}\n`).targets[0].fields.sources;
+  assert.deepEqual(sourceLinks(fieldOf('本篇、國二上 1-3、本篇、p.44'), NATURE).map(item => item.link), [{ kind: 'text' }, u13(), page(44)]);
+  assert.deepEqual(sourceLinks(fieldOf('國二上 1-3 p.20、本篇 p.5、國二上 1-3 p.20、p.44'), NATURE).map(item => item.link), [u13(page(20)), page(5), u13(page(44))]);
+  assert.deepEqual(links('p.44、p.44'), [page(44)]);
+  assert.deepEqual(read('p.44 知識快遞、ｐ．４４').map(item => item.text), ['p.44 知識快遞']);
+  assert.deepEqual(read('第5題、第6題').map(item => item.text), ['第5題', '第6題'], '只顯示的項目照文字比');
+});
+
+void test('D-167 項目的邊界：不同行的字不會接成一個連結', () => {
+  assert.deepEqual(sourceLinks(['[[a', 'p.44', 'b]]'], NATURE).map(item => item.link), [heading('[[a'), page(44), heading('b]]')]);
+  assert.deepEqual(sourceLinks(['「a', '國二上 1-3', 'b」'], NATURE).map(item => item.link), [heading('「a'), u13(), heading('b」')]);
+});
+
 void test('D-167 別的學期沒寫單元：範圍停掉，後面的位置不知道屬於哪裡', () => {
   assert.deepEqual(links('國二上 1-3 p.44，國一下 p.15'), [u13(page(44)), heading('國一下 p.15')]);
   assert.deepEqual(links('國二上 1-3 p.44，國一下 p.15，p.16'), [u13(page(44)), heading('國一下 p.15'), heading('p.16')]);

@@ -55,6 +55,13 @@ export const headingKey = (text: string): string => tidy(text).toLowerCase().rep
 const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、﹑，；,;｜|]+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
+const mask = (text: string, tokens: string[]): string => text.replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
+
+/** 連結與「標題」裡的字不算分隔：欄位的 `｜`、值的 `、` 都先藏起來再切（§9-4）。 */
+export function splitOutsideLinks(text: string, separator: RegExp): string[] {
+  const tokens: string[] = [];
+  return mask(text, tokens).split(separator).map(each => restore(each, tokens));
+}
 
 /** `100%.md` 這種原樣的百分號不是編碼：解不開就用原字，不用記進錯誤紀錄，一筆出處不能讓整份目錄建不起來（§9-5）。 */
 function decodedPath(path: string): string {
@@ -204,7 +211,8 @@ interface Pending extends SourceItem { negative?: true; codeLike?: true }
 
 export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
   const tokens: string[] = [];
-  const masked = sources.join('、').replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
+  // 一項一項藏：不同項的字不會接成一個連結。
+  const masked = sources.map(source => mask(source, tokens)).join('、');
   const ownCode = own.unit?.code ?? '';
   const ownLetters = /^([A-Za-z]+)\d+$/.exec(ownCode)?.[1] ?? null;
   const subject = own.subject ? new RegExp(`^${escapeRegExp(own.subject)} ?`) : null;
@@ -354,7 +362,14 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     }
   }
   const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
-  return items.map(({ negative, codeLike, ...item }) => anyRead && !negative && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true as const } : item);
+  // 讀完才去重：`本篇` 這種字會影響後面的意思（D-167 第 6 點）。只顯示的項目照文字比。
+  const seen = new Set<string>();
+  return items.map(({ negative, codeLike, ...item }) => anyRead && !negative && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true as const } : item).filter(item => {
+    const key = item.link.kind === 'text' ? item.text : JSON.stringify(item.link);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** 「編號 名稱」的切法（§9-2）：第一個空白前是編號，半形空白、全形空白、Tab 都算；屬性和出處共用。 */
