@@ -48,8 +48,9 @@ export function practiceProgress(input: TodayInput, ids: readonly string[], sinc
 }
 
 /**
- * 這一輪的順序：今天到期的（relearn、再照今天的份的排法）→ 還沒到期的（現在最容易忘的先）→ 新卡（筆記順序；跨篇照路徑）；
- * 雙向配對的兩個方向都出，英翻中排在中翻英前面。記憶看 since 之前的紀錄，所以這一輪答過之後順序不會變；中途關掉再開時，剛答過的排在後面。
+ * 這一輪的順序：今天到期的（relearn、再照今天的份的排法）→ 還沒到期的（現在最容易忘的先）→ 新卡（筆記順序；跨篇照路徑）→
+ * 今天答過、還沒到期的（現在最容易忘的先；D-097 的補充，中途關掉再開時不會先把剛答過的再答一遍）；
+ * 雙向配對的兩個方向都出，英翻中排在中翻英前面。記憶看 since 之前的紀錄，所以這一輪答過之後順序不會變。
  */
 function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory>, input: TodayInput, since: number): Item[] {
   const retention = input.settings.retention;
@@ -58,7 +59,7 @@ function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory
   const bucket = (item: Item): number => {
     const memory = memories.get(item.id);
     if (!memory) return 3;
-    if (dueAt(memory, retention) >= end) return 2;
+    if (dueAt(memory, retention) >= end) return memory.last.at >= start ? 4 : 2;
     return wrong(memory.last) && memory.last.src !== 'mistake' ? 0 : 1;
   };
   const compare = (a: Item, b: Item): number => {
@@ -68,7 +69,7 @@ function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory
     const x = memories.get(a.id), y = memories.get(b.id);
     if (group === 0 && x && y) return dueAt(x, retention) - dueAt(y, retention) || compareText(a.id, b.id);
     if (group === 1 && x && y) return IMPORTANCE[a.target.fields.importance] - IMPORTANCE[b.target.fields.importance] || recall(x, start) - recall(y, start) || compareText(a.id, b.id);
-    if (group === 2 && x && y) return recall(x, since) - recall(y, since) || compareText(a.id, b.id);
+    if ((group === 2 || group === 4) && x && y) return recall(x, since) - recall(y, since) || compareText(a.id, b.id);
     return compareText(a.path, b.path) || a.target.line - b.target.line;
   };
   const ordered = [...items].sort(compare);

@@ -78,8 +78,21 @@ void test('§4 順序：今天到期的 → 還沒到期的（最容易忘的先
   assert.equal(remaining(s.view()), '還剩 12 張');
   const order: string[] = [];
   while (s.view().kind === 'card') { order.push(card(s.view())); h.rate(s, 'good'); }
-  assert.deepEqual(order, ['r1', 'd1', 'd2', 'd3', 'n5', 'n1', 'n2', 'n3', 'a2', 'n4', 'a1', 'x1']);
+  assert.deepEqual(order, ['r1', 'd1', 'd2', 'd3', 'n5', 'n1', 'n2', 'n3', 'n4', 'x1', 'a2', 'a1']);
   assert.equal(s.view().kind, 'done');
+});
+
+void test('§4 練全新的單元中途關掉再開：剛答對的排到新卡後面，答錯的還是最先出', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b', 'c', 'd') });
+  const first = await h.open(h.round());
+  h.rate(first, 'good');
+  h.rate(first, 'miss');
+  first.close();
+  const second = await h.open(h.round());
+  assert.equal(remaining(second.view()), '還剩 4 張');
+  const order: string[] = [];
+  while (second.view().kind === 'card') { order.push(card(second.view())); h.rate(second, 'good'); }
+  assert.deepEqual(order, ['b', 'c', 'd', 'a']);
 });
 
 void test('§4 早上做完當日卡，晚上按全部卡：今天答過的照樣出；連按兩輪都能做完，第二輪不會一開始就完成', async t => {
