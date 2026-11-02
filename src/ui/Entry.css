@@ -49,7 +49,7 @@
 .ec-app .ec-seg button:hover, .ec-app .ec-seg button:focus { background: none; }
 .ec-app .ec-seg button[aria-pressed="true"] { background: var(--ec-press); color: var(--ec-ink); font-weight: 600; }
 .ec-tr-group { margin-top: 18px; }
-.ec-app .ec-tr-sem { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 17px; font-weight: 600; text-align: left; }
+.ec-app .ec-tr-sem { display: flex; align-items: center; justify-content: flex-start; gap: 6px; width: 100%; min-height: 44px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 17px; font-weight: 600; text-align: left; }
 .ec-app .ec-tr-sem:hover, .ec-app .ec-tr-sem:focus { background: none; }
 .ec-app .ec-tr-sem svg { color: var(--ec-muted); transition: transform .2s ease; }
 .ec-app .ec-tr-sem.is-open svg { transform: rotate(90deg); }
@@ -60,7 +60,7 @@
 .ec-app .ec-tr-exp svg { transition: transform .2s ease; }
 .ec-app .ec-tr-exp.is-open svg { transform: rotate(90deg); }
 .ec-app .ec-tr-exp:disabled { visibility: hidden; }
-.ec-app .ec-tr-name { flex: 1; min-width: 0; height: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 12px 0; border: 0; border-radius: 0; background: none; font-size: 16px; text-align: left; white-space: normal; }
+.ec-app .ec-tr-name { flex: 1; min-width: 0; height: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 8px; padding: 12px 0; border: 0; border-radius: 0; background: none; font-size: 16px; text-align: left; white-space: normal; }
 .ec-app .ec-tr-name:hover, .ec-app .ec-tr-name:focus { background: none; }
 .ec-tr-tag { padding: 0 6px; border: 1px solid var(--ec-line); border-radius: 6px; color: var(--ec-muted); font-size: 11px; line-height: 18px; white-space: nowrap; }
 .ec-tr-due { flex: none; min-width: 2em; text-align: right; color: var(--k, var(--ec-muted)); font-size: var(--ec-size-base); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -78,7 +78,7 @@
 [data-m="near"] { --k: var(--ec-near); }
 [data-m="good"] { --k: var(--ec-good); }
 [data-m="easy"] { --k: var(--ec-easy); }
-.ec-app .ec-tr-problem, .ec-app .ec-tr-deck { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 14px; text-align: left; white-space: normal; }
+.ec-app .ec-tr-problem, .ec-app .ec-tr-deck { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; min-height: 38px; height: auto; padding: 0; border: 0; border-radius: 0; background: none; font-size: 14px; text-align: left; white-space: normal; }
 .ec-app .ec-tr-problem:hover, .ec-app .ec-tr-problem:focus, .ec-app .ec-tr-deck:hover, .ec-app .ec-tr-deck:focus { background: none; }
 .ec-app .ec-tr-problem { color: var(--ec-near); }
 .ec-app .ec-tr-deck { color: var(--ec-muted); }

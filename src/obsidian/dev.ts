@@ -1,3 +1,4 @@
+import { entryCheck, entryUnread, type EntryDevHost } from './dev-entry.ts';
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
 import { encodeEntry, logPath, parseLine } from '../core/study/index.ts';
@@ -36,7 +37,9 @@ interface Host extends Plugin {
   backup: BackupWiring | null;
   lockAlso: string[];
   startReview(pick: Pick): ReviewHandle | null;
-  entry: { close(): void } | null;
+  review: ReviewHandle | null;
+  entry: { close(): void; refresh(): void } | null;
+  openEntry(screen?: 'entry' | 'catalog'): unknown;
   on<K extends PluginEvent>(kind: K, listener: (value: PluginEvents[K]) => void): () => void;
 }
 /** 載入時記下的數字，每個結果檔都附上（T12）。 */
@@ -49,6 +52,7 @@ interface LoadInfo { loadedAt: number; onloadMs: number; beforeLayoutReady: () =
 interface DevCommand { name: string; run: (host: Host, ids: IdsHost, params: Params) => Promise<unknown>; desktop?: true; root?: string }
 /** 事件記錄用的：存檔備援的接線、外掛的 state 與它發出的紀錄（dev-events.ts）。 */
 const events = (host: Host): EventsHost => ({ app: host.app, saver: host.ids?.saver ?? null, state: () => host.state, log: listener => host.on('event', listener) });
+const hostFor = (host: Host): EntryDevHost => host;
 const commands: Record<string, DevCommand> = {
   compare: { name: 'Essence 開發：metadataCache 對照', run: host => compare(host.app) },
   files: { name: 'Essence 開發：檔案存取', run: host => filesContract(host.app) },
@@ -76,6 +80,9 @@ const commands: Record<string, DevCommand> = {
   'w6-save': { name: 'Essence 開發：W6 範例存檔', run: saveExamples, desktop: true, root: W6_ROOT },
   decks: { name: 'Essence 開發：卡組內容', run: deckHashes, root: W6_ROOT },
   'open-times': { name: 'Essence 開發：打開三次', run: openTimes, root: W6_ROOT },
+  // tasks/entry-and-catalog.md §12：入口與目錄的返回路線、出處、預覽與存檔的提示，截圖寫在 Essence W6/結果/入口 …/。
+  entry: { name: 'Essence 開發：入口與目錄（截圖）', run: (host, ids) => entryCheck(hostFor(host), `${W6_ROOT}/結果/入口 ${stampOf(new Date())}`, ids.devLog), desktop: true, root: W6_ROOT },
+  'entry-unread': { name: 'Essence 開發：讀不到的提醒（URI 帶 file、do）', run: (host, _ids, params) => entryUnread(hostFor(host), params.file, params.do, `${W6_ROOT}/結果`), desktop: true, root: W6_ROOT },
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
   'ui-phone': { name: 'Essence 開發：畫面與鍵盤（手機寬度）', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 手機寬度 ${stampOf(new Date())}`, true), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
