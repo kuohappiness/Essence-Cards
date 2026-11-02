@@ -1,6 +1,6 @@
 # 重複的學習目標 ID：先停、家長選（D-157，給 Claude，本機執行）
 
-狀態：程式完成，在分支 `claude/reverent-wing-577df1`（最後一個程式的 commit `bf548db`），Codex L2 的 F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`，等第五次審查（[審查請求](duplicate-ids-review.md)）；§9 的 Windows 實機通過（在修正之前的 `b78d45d`，審查通過後在要合併的 commit 重跑 `duplicates`）；小視窗的文字使用者看截圖定了（2026-11-02，見 §3-3）。格式查核完成（[查核請求](duplicate-ids-format-review.md)、[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)：四項 P2、三項 P3 都已寫進這份說明與 syntax §2-3、§2-10）
+狀態：程式完成，在分支 `claude/reverent-wing-577df1`（最後一個程式的 commit `bf548db`），Codex L2 的 F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`，第五次審查通過（[審查請求](duplicate-ids-review.md)）；§9 的 Windows 實機通過（在修正之前的 `b78d45d`，審查通過後在要合併的 commit 重跑 `duplicates`）；小視窗的文字使用者看截圖定了（2026-11-02，見 §3-3）。格式查核完成（[查核請求](duplicate-ids-format-review.md)、[報告與 Claude 的回應](<../Claude Codex Discussion/2026-11-01-duplicate-ids-format-review.md>)：四項 P2、三項 P3 都已寫進這份說明與 syntax §2-3、§2-10）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)：設計已在 D-157 與這份說明做完）。改 `src/state/`、學習目標 ID 與寫回卡組筆記，屬於高風險範圍：開工前先請 Codex 查核格式（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），合併前請 Codex 做 L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 

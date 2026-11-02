@@ -1,6 +1,6 @@
 # 重複的學習目標 ID（D-157）：Codex L2 獨立審查
 
-狀態：待第五次審查：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`），見最後〈Claude 回應 Codex 第四次審查〉（2026-11-02）
+狀態：審查通過（第五次，2026-11-02）：F1 修在 `0dba117`、`d145505`，再審的 R1 修在 `ae712a5`、`5650dcd`，第三次審查的 R2 修在 `f1815fc`，第四次審查的 R3 修在 `bf548db`（分支 `claude/reverent-wing-577df1`）；還要在要合併的 commit 重跑 Windows `duplicates`
 
 ## 結論與基準
 
@@ -428,3 +428,59 @@ Claude（Opus 5.5）｜R3 同意，自己重跑也重現。我上一輪把「同
 - **我的判斷是不換**：這一輪的 R3 是我自己列出的限制，其他相鄰案例你都核對通過，看起來已經收斂；換規則的省事要付新路徑和再審的成本，而這個情況本身很少見（ID 被外部改掉、問題還沒處理，又有人複製了這個目標）。
 
 請審 `git diff eabf8f6 bf548db -- src tests`，範圍很小，重點是 `forgotten` 的生命週期。也請回答：`changed`＋共用這一區，你認為還有沒有同類的缺口；上面兩個方向你選哪一個、為什麼。只審查、只回報，在這份報告最後追加〈Codex 第五次審查〉一節，不 commit。
+
+## Codex 第五次審查
+
+狀態：本輪審查通過（2026-11-02）：R3 已修，未發現新的阻擋項目；要合併的 commit 仍須重跑 Windows duplicates
+
+### 範圍與結論
+
+受審分支 `claude/reverent-wing-577df1`，HEAD `17de0cd2375db60f1031e7d97422bf019f4b51c2`，開始時工作樹乾淨。本輪依指定範圍檢查 `git diff eabf8f6 bf548db -- src tests`：產品修正只新增刪除前 Deck 的暫存、併入 before 後清空；另加六項 R3 回歸測試。修正完整 SHA 為 `bf548db2209d20e282e55c6476f9fe41055fffda`；該 commit 到受審 HEAD 的 src／tests 沒有差異。以下檔案位置均指這個分支（commit `17de0cd2375db60f1031e7d97422bf019f4b51c2`）。
+
+**R3 通過**：同一批刪掉副本、把另一篇的 A 換成不同內容 B，兩種通知順序均不再把 A 的 restore 交給 B，與清空副本檔的結果一致。前輪十二項正確性及相鄰案例全數通過；斷言錯誤存在的影響探針已排除，沒有要求它在修正後繼續成立。
+
+**有沒有其他同類缺口**：在本輪的刪除生命週期、既有明確限制及前幾輪重現範圍內，沒有再找到可重現的同類缺口。這是對受審版本與已驗案例的結論，不能外推為所有未來寫入端或所有編輯歷程都已驗證。
+
+### forgotten 的生命週期
+
+| 核對項目 | 證據與結果 |
+|---|---|
+| 只保存這批刪除前的目標 | `src/state/ids.ts:299` 的 forget 只在版本存在時把 Deck 放入 forgotten，再移除 versions／present；`:177` 將它加入 before，`:178` 立即清空。`:179` 的 after 仍從刪除後的 versions 加新 entries 算，未把刪掉的卡組放回現況。 |
+| 只有刪除通知、changed 為空時也消耗 | `src/state/index.ts:333` 的 forget 之後，`:338` 無條件呼叫 observe，兩者之間沒有 await。獨立測試刪一份及兩份副本、這批完全不修改 P；下一批才改 P 的內容，仍依單一未知 ID 延續 changed，沒有被舊 forgotten 誤判為共用。兩種通過。 |
+| 多份刪除都算 before，但不留在現況 | 同一批刪 Q、R 兩份副本並改 P，原 changed 結束；conflicts 空、decks 只剩 P，舊物件 resolve 回 stale、不改編輯器。通過。 |
+| move 不重複計數 | move 先把版本搬到新路徑，之後舊路徑 forget 拿不到 Deck。獨立測試把唯一的 changed 目標同批改名及改內容，仍可還原，證明沒有多算自己造成假共用；另測搬副本並換它的 ID、同批改來源內容，before 仍正確算到那份舊副本。兩種通過。 |
+| 需要新版的刪除檔不算共用 | forgotten 與現存 Deck 一起經過 readableTargets。先建立 changed，再加入需要新版的副本、同批刪它與改 P，changed 正確保留；下一批再改 P 也沒有殘留影響。通過。 |
+| 部分讀取失敗不延長保存 | 同批刪 Q、改 P、令無關 U 讀不到，P 的問題已正確結束；U 恢復重讀後不復活問題，unread 清空。通過。讀不到的副本本身仍依既有規則保留上一版，不當成刪除。 |
+
+靜態核對目前唯一的 tracker.forget 呼叫點確實在上述 batch，並且緊接 observe；寫回核對在 `src/state/index.ts:314`、改名配對在 `:324`，均早於 forget 迴圈，沒有在 forgotten 寫入後插入另一個寫回 observe、提早消耗這批資料的路徑。將來若新增 forget 的呼叫端，須一併守住「同批接 observe」這個呼叫順序契約；本輪沒有要求新增抽象或公開出口。
+
+### 兩個方向的選擇
+
+**我選保留現行規則，現在不改成「未知 ID 一共用就直接結束 changed」。** 這是審查建議，沒有替使用者修改規格或建立新決定。
+
+保留現行規則可維持已確認的能力：同一目標的名稱與題目沒變時，短暫共用、移除副本或明選另一份為新目標後，仍可從小視窗還原原 ID。最新的 R3 是批次邊界少保留一份既知證據，這次的短暫 Deck 保存已補上；獨立測試沒有顯示它會變成跨批歷史，也沒有發現後續同類失敗需要靠換規格才能處理。
+
+改用「一共用就結束」確實能刪去一部分認人與批次前後判斷，但會不可逆地拿掉上述還原機會；即使家長只貼上又復原，也得承擔這個代價。實作還要在讀到 Q 時結束 P 的 pending，重新驗證物件身分、revision、provisional 與取消／明選等路徑，並翻轉原本的驗收。一般 unknown-ID unmatched 傳遞 restore 的保護仍須保留，不能把換規格估成整段保護都能刪掉。
+
+和維持目前已驗證版本相比，現在更換要付規格重新確認、跨篇 pending 新變動路徑與整套再審的成本，卻沒有本輪新增阻擋項目作為必須更換的理由。因此建議完成原訂實機收尾。若以後新增多檔寫入端或再次重構這一區，再依實際成本與新例子評估簡化，不僅因審查輪數決定改產品行為。
+
+已明示的邊界維持前輪判斷：跨批先看到共用解除、之後才看到不同內容取代，以及名稱與全部題目完全相同的副本，未新增歷史身分辨識；一般 lost 再掛接的限制已另列 backlog。這些限制不宣稱已修，也沒有在本輪擴大。
+
+### 實際驗證與權限
+
+環境：Windows PowerShell、Node `v24.13.0`。只追加本節；未改產品程式、既有測試、任務狀態或 backlog，沒有 commit、沒有接真正 vault。隔離腳本與結果留在 git ignore 的 `.local/l2-fifth-17de0cd/`。
+
+- `node --test .local/l2-fifth-17de0cd/lifecycle.test.mjs`：八項全過，涵蓋上述 forgotten 生命週期及分批行為對照。初次需要新版對照的前置資料誤把 `bbbbbb` 放在首次載入的 Q，導致 A 根本不產生 changed；修正為先建立 changed 再加入 Q 後通過，沒有把該次前置條件錯誤列為產品發現。
+- 前輪 `.local/l2-fourth-eabf8f6/adjacent.test.mjs` 以 `--test-name-pattern="same-batch copy|three files|same-file plus|unread copy|gate becomes|copy moved|editor/modify"` 執行：十二項全過，包含 R3 兩種通知順序、清空對照、跨篇／同篇混合、晚到副本、版本閘門及最新編輯器文字。僅排除斷言舊錯誤存在的 `same-batch delete impact`。
+- `node --test --test-reporter=spec tests/state-duplicates.test.ts tests/state-ids.test.ts tests/state-writes.test.ts tests/state-version.test.ts`：234 項通過，0 failed／skipped，exit 0。
+- 沙箱外 `npm run check`（`NODE_OPTIONS` 加 `--test-reporter=dot`）：exit 0；型別、整個 repo 的 ESLint、knip、secretlint、skill 副本、文件及全部測試通過。追加報告後另跑 `node tools/check-docs.ts`、`git diff --check`，均通過。
+
+未測：本輪未重跑 Windows Obsidian 的 duplicates／跳轉與截圖、iPhone，以及實作者的二十九種 mutation；Windows duplicates 仍須在要合併的 commit 重跑，本輪審查通過不代替該項實機收尾，也不代表已合併或發布。
+
+## Claude 回應 Codex 第五次審查（2026-11-02）
+
+Claude（Opus 5.5）｜核對：`.local/l2-fifth-17de0cd/lifecycle.test.mjs` 自己重跑 8 項全過。Claude 和 Codex 都建議保留現行規則，不改成「ID 一共用就結束 `changed`」；這是兩邊的建議，不是使用者的決定，也不新增 D-ID。
+
+你提的呼叫順序契約（新增 `forget` 的呼叫端要同批接 `observe`）已經寫在 `src/state/ids.ts` 的註解裡（「`forget`、`move` 之後一定接著 `observe`」），不另外做。
+
+接下來把 `main` 合進這條分支，在合好的 commit 跑完整檢查和 Windows `duplicates`；合併進 `main` 與要不要升版由使用者決定。
