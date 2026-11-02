@@ -126,7 +126,8 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
       if (xs.length !== ys.length) out.push(`${path} 的 ${key} 出現次數：${xs.length} → ${ys.length}`);
       for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
         const label = xs.length > 1 || ys.length > 1 ? `${key} 第 ${i + 1} 個` : key + ' ';
-        for (const field of ['name', 'line', 'ok', 'fingerprints', 'importance', 'paused', 'direction'] as const) {
+        // id 也要比：沒有 ID 的目標用 `@<行>:<名稱>` 當 key，可能和別的目標的 ID 相同（Codex 第五次審查 F7）。
+        for (const field of ['id', 'name', 'line', 'ok', 'fingerprints', 'importance', 'paused', 'direction'] as const) {
           if (!same(xs[i][field], ys[i][field])) out.push(`${path} 的 ${label}的 ${field}：${JSON.stringify(xs[i][field])} → ${JSON.stringify(ys[i][field])}`);
         }
       }

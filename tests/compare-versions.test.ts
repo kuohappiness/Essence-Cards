@@ -558,6 +558,36 @@ void test('被比較的版本回傳的每個位置換成每一種不對的值：
   assert.ok(refused > 500, String(refused));
 });
 
+void test('比較：比較資料裡任何一個值不同都報得出來，少了一筆也是，兩個方向都要（Codex 第五次審查 F7）', () => {
+  // 每個能是 null、'stopped' 的欄位都有例子。
+  const rich = structuredClone(fakeSnapshot);
+  rich.decks.push({ path: B, props: { status: 'draft', isTranscript: true, term: null, subject: null, unit: null, categories: [] },
+    targets: [{ key: '@2:B', id: null, name: 'B', line: 2, ok: false, fingerprints: [], importance: 'low', paused: true, direction: null }], problems: [] });
+  rich.due = { ...rich.due, new111: null, hld111: 'stopped' };
+  rich.today[1] = { ...rich.today[1], prompt: null, direction: null };
+  assert.deepEqual(diffSnapshots(rich, structuredClone(rich), time), []);
+  const changed = (value: unknown, position: Position): unknown => {
+    if (Array.isArray(value)) return value.length ? (value as unknown[]).slice(1) : undefined;
+    if (typeof value === 'object' && value !== null) return undefined;
+    if (position[0] === 'due') return value === 1 ? 2 : 1;
+    return typeof value === 'string' ? value + 'x' : typeof value === 'number' ? value + 1 : typeof value === 'boolean' ? !value : 'x';
+  };
+  const unseen: string[] = [];
+  for (const position of positions(rich).filter(each => each.length > 0)) {
+    const other = changed(at(rich, position), position);
+    if (other === undefined) continue;
+    const after = replaced(rich, position, other) as Snapshot;
+    if (!diffSnapshots(rich, after, time).length || !diffSnapshots(after, rich, time).length) unseen.push(position.join('.'));
+  }
+  assert.deepEqual(unseen, []);
+
+  // 沒有 ID 的目標，替代的 key 和別的目標的 ID 相同：只有 id 不同，也要報。
+  const target = (id: string | null, line: number, name: string): Snapshot['decks'][number]['targets'][number] =>
+    ({ key: id ?? `@${line}:${name}`, id, name, line, ok: true, fingerprints: [], importance: 'medium', paused: false, direction: null });
+  const aliased = (first: string | null): Snapshot => ({ ...structuredClone(rich), decks: [{ ...structuredClone(rich.decks[1]), path: A, targets: [target(first, 0, 'A'), target('@0:A', 2, 'B')] }], due: { '@0:A': 'stopped' }, today: [] });
+  assert.deepEqual(diffSnapshots(aliased(null), aliased('@0:A'), time).filter(line => line.startsWith(A)), [`${A} 的 @0:A 第 1 個的 id：null → "@0:A"`]);
+});
+
 void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘門與重複的 ID，今天的份不同不是零差異', async t => {
   const clone = await deployed(t);
   const vault = await makeVault(t, gatedFiles);
