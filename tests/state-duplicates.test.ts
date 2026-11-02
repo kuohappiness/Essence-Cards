@@ -596,24 +596,131 @@ void test('F1 相鄰：B 貼在 A 上面（上一版只有 A），changed 跟著
   assert.deepEqual(brief(h.state.deckStatus(P).issues.filter(each => each.kind === 'changed')), [{ line: 2, name: 'A', kind: 'changed', restore: 'aaaaaa' }]);
 });
 
-for (const [label, make] of [
-  ['同名同題', copied],
-  ['改了名稱、題目相同', (name: string, id: string) => '- ' + name + ' ^' + id + '\n    - 同一題 :: 同一個答案\n'],
-  ['同名、題目改了', (name: string, id: string) => '- 同名 ^' + id + '\n    - ' + name + ' :: ' + name + ' 的答案\n'],
+void test('F1 對照：整段複製再刪掉原本那一段（同名同題），等於搬走，changed 跟著留下的那一段', async t => {
+  const h = await changedThenCopied(t, copied);
+  await h.edit(P, copied('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.deepEqual(h.state.conflicts(), []);
+});
+
+// Codex 再審的 R1：這個 ID 不只一個目標在用時，還原選項只跟著名稱和題目都沒變的目標；同名或有幾題相同都不算（D-134）。
+const twin = (name: string, id: string | null) => '- 同名' + (id ? ' ^' + id : '') + '\n    - ' + name + ' :: ' + name + ' 的答案\n';
+const sameQuestion = (name: string, id: string) => '- ' + name + ' ^' + id + '\n    - 同一題 :: 同一個答案\n';
+const partly = (name: string, id: string) => '- 同名 ^' + id + '\n    - 共同 :: 共同的答案\n    - ' + name + ' :: ' + name + ' 的答案\n';
+
+for (const [label, make, deleted] of [
+  ['改了名稱、題目相同', sameQuestion, sameQuestion('B', 'bbbbbb')],
+  ['同名、題目不同', twin, twin('B', 'bbbbbb')],
 ] as const) {
-  void test('F1 對照：整段複製再刪掉原本那一段（' + label + '），等於搬走，changed 跟著留下的那一段', async t => {
+  void test('R1 整段複製又改過再刪掉原本那一段（' + label + '）：認不出是不是同一個，changed 結束，不給 B 還原選項', async t => {
     const h = await changedThenCopied(t, make);
-    await h.edit(P, make('B', 'bbbbbb'));
-    assert.deepEqual(h.state.deckStatus(P).issues.map(({ line, kind, restore }) => ({ line, kind, restore })), [{ line: 0, kind: 'changed', restore: 'aaaaaa' }]);
+    await h.edit(P, deleted);
+    assert.deepEqual(h.state.deckStatus(P).issues, []);
     assert.deepEqual(h.state.conflicts(), []);
+    assert.deepEqual(h.share(), ['bbbbbb']);
   });
 }
+
+void test('R1 同名、題目不同，A 的 ID 又被外部改掉：changed 還是 A 的，不移給 B；還原寫回 A', async t => {
+  const h = await changedThenCopied(t, twin);
+  const after = twin('A', 'cccccc') + twin('B', 'bbbbbb');
+  await h.edit(P, after);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.deepEqual(h.state.conflicts(), []);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, after))).kind, 'done');
+  assert.equal(h.texts.get(P), twin('A', 'aaaaaa') + twin('B', 'bbbbbb'));
+  assert.deepEqual(h.state.deckStatus(P).issues, []);
+});
+
+void test('R1 同名、題目不同，A 的 ID 被拿掉：changed 留在 A；還原寫回 A', async t => {
+  const h = await changedThenCopied(t, twin);
+  const after = twin('A', null) + twin('B', 'bbbbbb');
+  await h.edit(P, after);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+  assert.equal((await h.state.resolve(h.state.deckStatus(P).issues[0], 'restore', createMemoryEditor(h, P, after))).kind, 'done');
+  assert.equal(h.texts.get(P), twin('A', 'aaaaaa') + twin('B', 'bbbbbb'));
+});
+
+void test('R1 同名、題目不同，同一次把 A 的 ID 和題目都改掉：還原選項不給 B', async t => {
+  const h = await changedThenCopied(t, twin);
+  await h.edit(P, twin('A 改過', 'cccccc') + twin('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('R1 同名、只有一題相同，A 的 ID 又被外部改掉：還原選項不給 B', async t => {
+  const h = await setup(t, { [P]: partly('A', 'aaaaaa') });
+  await h.edit(P, partly('A', 'bbbbbb'));
+  await h.edit(P, partly('A', 'bbbbbb') + partly('B', 'bbbbbb'));
+  await h.edit(P, partly('A', 'cccccc') + partly('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('R1 同名、題目不同的 B 貼在 A 上面（上一版只有 A）：changed 跟著 A，不是跟著最近的行號', async t => {
+  const h = await setup(t, { [P]: twin('A', 'aaaaaa') });
+  await h.edit(P, twin('A', 'bbbbbb'));
+  await h.edit(P, twin('B', 'bbbbbb') + twin('A', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues.filter(each => each.kind === 'changed')), [{ line: 2, name: '同名', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('R1 B 的 ID 被拿掉、A 的 ID 同時改掉：認不出來，兩個都不給還原選項', async t => {
+  const h = await changedThenCopied(t, twin);
+  await h.edit(P, twin('A', 'cccccc') + twin('B', null));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [
+    { line: 0, name: '同名', kind: 'changed', restore: null },
+    { line: 2, name: '同名', kind: 'lost', restore: null },
+  ]);
+});
+
+void test('R1 ID 共用時改了 A 的題目：認不出是哪一個，changed 結束，兩個目標的 duplicate 留著要家長選', async t => {
+  const h = await changedThenCopied(t, twin);
+  await h.edit(P, twin('A 改過', 'bbbbbb') + twin('B', 'bbbbbb'));
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [
+    { line: 0, name: '同名', kind: 'duplicate', restore: null },
+    { line: 2, name: '同名', kind: 'duplicate', restore: null },
+  ]);
+});
+
+void test('R1 ID 共用時改了 A 的題目，同一次又新增一個目標：新的目標不會拿到還原選項', async t => {
+  const h = await changedThenCopied(t, twin);
+  const added = twin('A 改過', 'bbbbbb') + twin('B', 'bbbbbb');
+  await h.edit(P, added + '- 新的\n    - 新題 :: 新答案\n');
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [
+    { line: 0, name: '同名', kind: 'duplicate', restore: null },
+    { line: 2, name: '同名', kind: 'duplicate', restore: null },
+  ]);
+});
 
 void test('F1 對照：changed 的 ID 只有一個目標在用時，只靠 ID 認人照舊（名稱與題目都改了也認得）', async t => {
   const h = await setup(t, { [P]: named('A', 'aaaaaa') });
   await h.edit(P, named('A', 'bbbbbb'));
   await h.edit(P, named('全改了', 'bbbbbb'));
   assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '全改了', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('changed 的 ID 被拿掉之後，新的無 ID 目標貼在上面：changed 還是原本的目標，不交給新的', async t => {
+  const bare = '- A\n    - A :: A 的答案\n';
+  const h = await setup(t, { [P]: named('A', 'aaaaaa') });
+  await h.edit(P, named('A', 'bbbbbb'));
+  await h.edit(P, bare);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: 'A', kind: 'changed', restore: 'aaaaaa' }]);
+  await h.edit(P, '- 新的\n    - 新題 :: 新答案\n' + bare);
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 2, name: 'A', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('changed 的 ID 被拿掉之後，同一次改了題目又新增無 ID 的目標：沒有 ID 不算共用，同名的還是認得出來', async t => {
+  const h = await setup(t, { [P]: named('A', 'aaaaaa') });
+  await h.edit(P, named('A', 'bbbbbb'));
+  await h.edit(P, '- A\n    - A :: A 的答案\n');
+  await h.edit(P, '- A\n    - A 改過 :: A 的答案\n- 新的\n    - 新題 :: 新答案\n');
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: 'A', kind: 'changed', restore: 'aaaaaa' }]);
+});
+
+void test('lost 的目標被改得認不出來：沒有未知 ID 可比，還是當成證據，新出現的目標可以還原', async t => {
+  const h = await setup(t, { [P]: named('A', 'aaaaaa') });
+  await h.edit(P, '- A\n    - A :: A 的答案\n');
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: 'A', kind: 'lost', restore: 'aaaaaa' }]);
+  await h.edit(P, '- 全改了\n    - 新題 :: 新答案\n');
+  assert.deepEqual(brief(h.state.deckStatus(P).issues), [{ line: 0, name: '全改了', kind: 'lost', restore: 'aaaaaa' }]);
 });
 
 void test('第 18 項解除後寫回的檔，新開的 state 沒有衝突', async t => {

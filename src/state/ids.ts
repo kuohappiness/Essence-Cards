@@ -128,23 +128,27 @@ export function createIdTracker(options: IdTrackerOptions) {
   }
   const idless = (t: Target): boolean => t.id === null && !t.idCandidates;
   const sharesPrompt = (t: Target, fingerprints: readonly string[]): boolean => t.prompts.some(p => fingerprints.includes(p.fingerprint));
+  const samePrompts = (t: Target, fingerprints: readonly string[]): boolean => t.prompts.map(p => p.fingerprint).sort().join() === [...fingerprints].sort().join();
   const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every(id => b.includes(id));
   function make(path: string, target: Target, kind: IdIssueKind, restore: string | null): Pending {
     return { issue: { path, line: target.line, name: target.name, kind, restore: target.implicit ? null : restore },
       id: target.id, candidates: target.idCandidates ?? [], fingerprints: target.prompts.map(p => p.fingerprint), provisional: options.partial() };
   }
+  /** 這個問題的未知 ID 是不是這個目標用著的；只有 changed 才有未知 ID，ID 被拿掉之後就沒有了。 */
+  const holds = (item: Pending, t: Target): boolean => item.issue.kind === 'changed' && item.id !== null && t.id === item.id;
   /**
    * 這一版裡哪個目標是同一個待處理的目標：同樣的未知 ID、同樣的候選、同樣的名稱，或至少一題相同；平手取行號最近的。
-   * 這個未知 ID 不只一個目標在用（這一版或上一版，D-157）時，ID 認不出是哪一個，還要同名或至少一題相同：還原的選項不能交給另一個目標（D-134、Codex L2 的 F1）。
+   * 這個未知 ID 不只一個目標在用（這一版或上一版，D-157）時，ID 認不出是哪一個，同名或幾題相同也認不出：只有名稱和題目都沒變的才算，
+   * 還原的選項只跟著一樣的內容，不能交給另一個目標（D-134、Codex L2 的 F1、再審的 R1）。
    */
   function match(item: Pending, targets: readonly Target[], before: readonly Target[], used: ReadonlySet<Target>): Target | null {
-    const sameId = (t: Target): boolean => item.issue.kind === 'changed' && t.id === item.id;
+    const sameId = (t: Target): boolean => holds(item, t);
     const shared = targets.filter(sameId).length > 1 || before.filter(sameId).length > 1;
     let best: Target | null = null, bestScore = 0;
     for (const target of targets) {
       if (used.has(target)) continue;
       if (target.id !== null && !sameId(target)) continue;
-      if (shared && sameId(target) && target.name !== item.issue.name && !sharesPrompt(target, item.fingerprints)) continue;
+      if (shared && !(target.name === item.issue.name && samePrompts(target, item.fingerprints))) continue;
       const score = sameId(target) ? 4
         : target.idCandidates && item.candidates.length && sameSet(target.idCandidates, item.candidates) ? 3
         : target.name === item.issue.name ? 2
@@ -196,13 +200,17 @@ export function createIdTracker(options: IdTrackerOptions) {
     const kept: Pending[] = [], unmatched: Pending[] = [];
     for (const item of old) {
       const target = match(item, deck.targets, prev?.targets ?? [], used);
-      if (!target) { unmatched.push(item); continue; }
+      if (!target) {
+        // 用著這個 ID 的目標沒有變少：那個目標多半還在，只是認不出是哪一個，不算「改得認不出來」，不能當證據把還原的選項交給新出現的目標（Codex 再審的 R1）。
+        const left = deck.targets.filter(t => holds(item, t)).length;
+        if (left === 0 || left < (prev?.targets ?? []).filter(t => holds(item, t)).length) unmatched.push(item);
+        continue;
+      }
       used.add(target);
       const fingerprints = target.prompts.map(p => p.fingerprint);
       const candidates = target.idCandidates ?? [];
       // 名稱、題目或候選改了：換一個新的問題物件，舊的（小視窗拿到的）就不能再用來寫回（D-134：寫回前重新確認內容沒變）。
-      const same = target.name === item.issue.name && target.id === item.id && sameSet(candidates, item.candidates)
-        && fingerprints.length === item.fingerprints.length && [...fingerprints].sort().join() === [...item.fingerprints].sort().join();
+      const same = target.name === item.issue.name && target.id === item.id && sameSet(candidates, item.candidates) && samePrompts(target, item.fingerprints);
       const issue = same ? Object.assign(item.issue, { line: target.line }) : { ...item.issue, line: target.line, name: target.name };
       if (!same) revision++;
       kept.push({ issue, id: target.id, candidates, fingerprints, provisional: item.provisional });
