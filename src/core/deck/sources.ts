@@ -12,8 +12,8 @@ export type SourceLink =
   | { kind: 'note'; link: string; alias?: string }
   | { kind: 'unit'; term: string; unit: string; rest: SourceLink | null }
   | { kind: 'text' };
-/** 字面上就知道有問題（不用看目錄與材料，§9-5）：term-only 年級學期沒有完整的編號；position 範圍寫反或可能不是頁碼；before 位置前面有一句話；leftover 字裡有像編號的。 */
-export type SourceProblem = 'term-only' | 'position' | 'before' | 'leftover';
+/** 字面上就知道有問題（不用看目錄與材料，§9-5）：term-only 年級學期沒有完整的編號；position 範圍寫反或可能不是頁碼；before 位置前面有一句話；leftover 字裡有像編號的；negative 有否定字。 */
+export type SourceProblem = 'term-only' | 'position' | 'before' | 'leftover' | 'negative';
 /** 一個按鈕。text 是原文，手寫的容錯只影響讀法（D-164 第 6 點）。 */
 export interface SourceItem {
   text: string;
@@ -206,8 +206,8 @@ const MATERIAL = /^(?:[\u3400-\u9FFF]{1,2}的?|[A-Za-z]+)$/;
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 interface UnitName { term: string; code: string }
-/** negative：有否定字，不當說明。codeLike：只有字但像編號，也不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。 */
-interface Pending extends SourceItem { negative?: true; codeLike?: true }
+/** codeLike：只有字但像編號，不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。 */
+interface Pending extends SourceItem { codeLike?: true }
 
 export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
   const tokens: string[] = [];
@@ -227,6 +227,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   const hasOwnKindCode = (text: string): boolean => ownLetters !== null && new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(ownLetters)}\\d+(?![A-Za-z0-9])`, 'i').test(text);
   const looksLikeCode = (text: string): boolean => SUSPECT.test(text) || hasOwnKindCode(text);
   const forget = (): void => { lastPlace = null; carry = null; };
+  const items: Pending[] = [];
 
   /** 接著前一個位置：p.44, 45；圖 2-14、2-15；圖 2-13a、b；44、46頁。 */
   function continuation(segment: string, display: string, next: string | undefined): Pending | null {
@@ -255,7 +256,16 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   function readSegment(raw: string, display: string, next: string | undefined): Pending[] {
     const segment = raw.replace(WRAP, '$1');
     const asHeading = (extra: Partial<Pending> = {}): Pending => ({ text: display, link: { kind: 'heading', heading: display }, ...extra });
-    if (NEGATIVE.test(segment)) { forget(); return [asHeading({ negative: true })]; }
+    if (NEGATIVE.test(segment)) {
+      forget();
+      // 緊接在沒有位置的單元後面（`國二上 1-3，不算這個`）：說的就是那個單元，一起先不算。有位置的是實際的出處，照連。
+      const last = items.at(-1);
+      if (last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading')) {
+        items[items.length - 1] = { text: last.text, link: { kind: 'text' }, problem: 'negative' };
+        scope = 'this';
+      }
+      return [{ text: display, link: { kind: 'text' }, problem: 'negative' }];
+    }
     if (NOTE_ONLY.test(segment)) { forget(); return [{ text: display, link: { kind: 'text' } }]; }
     let rest = segment, unit: UnitName | null = null, selfRef = false, needsUnit = false;
     const body = dropSubject(segment);
@@ -344,7 +354,6 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     });
   }
 
-  const items: Pending[] = [];
   const entries = masked.split(/[、﹑]/).map(each => each.trim()).filter(Boolean);
   for (const [index, entry] of entries.entries()) {
     const display = restore(entry.replace(RAW_END, ''), tokens);
@@ -357,15 +366,15 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     });
     // 這一項切成好幾段、全部都沒讀懂：是一句話或舊標題（`溶解, 擴散`），併回一個。
     const added = items.slice(start);
-    if (added.length > 1 && added.every(each => each.link.kind === 'heading' && !each.negative)) {
+    if (added.length > 1 && added.every(each => each.link.kind === 'heading')) {
       const problem = added.find(each => each.problem)?.problem;
-      items.splice(start, added.length, { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}) });
+      items.splice(start, added.length, { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}), ...(added.some(each => each.codeLike) ? { codeLike: true as const } : {}) });
     }
   }
   const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
   // 讀完才去重：`本篇` 這種字會影響後面的意思（D-167 第 6 點）。只顯示的項目照文字比。
   const seen = new Set<string>();
-  return items.map(({ negative, codeLike, ...item }) => anyRead && !negative && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true as const } : item).filter(item => {
+  return items.map(({ codeLike, ...item }) => anyRead && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true as const } : item).filter(item => {
     const key = item.link.kind === 'text' ? item.text : JSON.stringify(item.link);
     if (seen.has(key)) return false;
     seen.add(key);

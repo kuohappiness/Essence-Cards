@@ -67,7 +67,9 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 只顯示的字也中斷沿用與接續（D-167 第 6 點）
   ['國二上 1-3, 第5題, 1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['國二上 1-3 p.44, 第5題, 45', [u13(page(44)), { kind: 'text' }, heading('45')]], ['國二上 1-3, https://x.test, 1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['國二上 1-3、先備：比例、1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['p.44, 本篇, 45', [page(44), { kind: 'text' }, heading('45')]], ['p.44, 2-2, 45', [page(44), { kind: 'text' }, heading('45')]],
   // 否定字：不算單元、不算位置
-  ['不要算國二上 1-3', [heading('不要算國二上 1-3')]], ['國二上 1-3 不要算這個目標', [heading('國二上 1-3 不要算這個目標')]], ['國二上 1-3 不考這個', [heading('國二上 1-3 不考這個')]], ['不是國二上 1-3，是國三上 2-1', [heading('不是國二上 1-3'), heading('是國三上 2-1')]], ['老師說不用看 p.44', [heading('老師說不用看 p.44')]], ['圖 2-14 不用看', [heading('圖 2-14 不用看')]],
+  ['不要算國二上 1-3', [{ kind: 'text' }], true], ['國二上 1-3 不要算這個目標', [{ kind: 'text' }], true], ['國二上 1-3 不考這個', [{ kind: 'text' }], true], ['不是國二上 1-3，是國三上 2-1', [{ kind: 'text' }, heading('是國三上 2-1')], true], ['老師說不用看 p.44', [{ kind: 'text' }], true], ['圖 2-14 不用看', [{ kind: 'text' }], true], ['不是 p.44', [{ kind: 'text' }], true],
+  // 否定字緊接在沒有位置的單元後面：說的就是那個單元；有位置的是實際的出處，照連
+  ['國二上 1-3，不算這個', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3 水溶液，不算這個', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算這個，p.44', [{ kind: 'text' }, { kind: 'text' }, page(44)], true], ['國二上 1-3 p.20，老師說不用背', [u13(page(20)), { kind: 'text' }], true],
   // 範圍寫反、不確定：不連
   ['p.46-44', [heading('p.46-44')], true], ['p.44-5', [heading('p.44-5')], true], ['p.44-44', [heading('p.44-44')], true], ['第46-44頁', [heading('第46-44頁')], true], ['p53 基因', [heading('p53 基因')], true], ['第十百頁', [heading('第十百頁')]], ['pp.44', [page(44)]],
 ];
@@ -187,6 +189,7 @@ void test('D-167 整段只有字：同一欄有讀懂別的就是說明（remark
   assert.deepEqual(remark('老師說的'), [false]);
   assert.deepEqual(remark('p.44、睡眠的階段'), [false, true]);
   assert.deepEqual(remark('p.44, 不是重點'), [false, false], '否定字不當說明');
+  assert.deepEqual(read('國二上 1-3、溶解, 1-8').map(item => [item.text, item.remark === true]), [['國二上 1-3', false], ['溶解, 1-8', false]], '併回一個舊標題時，像編號的字還是不當說明');
   assert.deepEqual(read('p.44, 45').map(item => item.remark), [undefined, undefined]);
 });
 

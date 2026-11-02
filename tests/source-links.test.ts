@@ -142,6 +142,15 @@ void test('D-167 只有字：同一欄有讀懂別的就是說明，不提示；
   assert.deepEqual(unreadable('小五上 p.15', material), ['小五上 p.15']);
 });
 
+void test('D-167 否定字只提示：材料裡有同名標題也不連；像編號的字併回舊標題時還是要提示', () => {
+  const { app } = appWith({ '材料/甲.md': { headings: ['不是 p.44', '不算這個'] } });
+  const hints = (text: string): string[] => unreadableSources(app, '卡組/本篇.md', parseDeck(`---\n年級學期: 國二上\n科目: 自然\n單元: "2-2"\n材料: "[[甲]]"\n---\n- 目標 ^abc123\n    - 問 :: 答\n    - 出處：${text}\n`), NO_UNITS).map(each => each.text);
+  assert.deepEqual(hints('不是 p.44'), ['不是 p.44']);
+  assert.equal(resolveSource(app, '卡組/本篇.md', ['[[甲]]'], link('不是 p.44')), null);
+  assert.deepEqual(hints('國二上 1-3，不算這個'), ['國二上 1-3', '不算這個']);
+  assert.deepEqual(hints('國二上 1-3、溶解, 1-8'), ['溶解, 1-8']);
+});
+
 void test('D-167 單元：標準的編號沒有卡組不提示；其他編號、列表沿用學期的對不到才提示；單元後面的字比名稱與那個單元的材料', () => {
   const material = { '材料/甲.md': { headings: [] }, '材料/乙.md': { headings: ['水溶液的濃度'] } };
   const units: UnitDecks = (term, code) => term === '國二上' && code === '2-1' ? [{ path: '卡組/2-1.md', materials: ['[[乙]]'], name: '水溶液' }] : term === '國一上' && code === 'Starter' ? [{ path: '卡組/s.md', materials: [], name: '' }] : [];
