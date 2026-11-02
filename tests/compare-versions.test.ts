@@ -213,6 +213,35 @@ void test('接不上就丟錯（比較的一方寫無法比較）：版號不是
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'cap', val: 5 }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"cap"/);
 });
 
+void test('回傳的型別不同也是接不上，不能靠真假值往下算：canAnswer 回傳 Promise 時，停掉的目標不能變成新卡（Codex L2 F1）', async t => {
+  // aaa111 被紀錄行停掉；bbb222 作答過，算到期、也在今天的份裡；new111 是新卡。
+  const reviewed = review('2026-10-20T20:00:00.000+08:00', 'bbb222');
+  const held = JSON.stringify({ t: '2026-10-29T19:00:00.000+08:00', lt: 'aaa111', need: '99.0.0' });
+  const input = { now: NOW, offset: 480, files: { [A]: goal('aaa111') + goal('bbb222') + goal('new111'), [LOG]: reviewed + '\n' + held + '\n' } };
+  // 現在的版本：false 是停掉，true 照紀錄算。
+  const snap = await snapshot(root, input);
+  assert.deepEqual(snap.due, { aaa111: 'stopped', bbb222: Date.parse('2026-10-27T20:00:00.000Z'), new111: null });
+  assert.deepEqual(snap.today.map(item => item.lt), ['bbb222', 'new111']);
+  // 今天已經答對：還在今天的份裡，只是沒有要出的題（nextCard 是 done），不是接不上。
+  const answered = await snapshot(root, { ...input, files: { ...input.files, [LOG]: [reviewed, review('2026-10-29T19:30:00.000+08:00', 'bbb222'), held].join('\n') + '\n' } });
+  assert.deepEqual(answered.today.map(item => [item.lt, item.prompt === null]), [['bbb222', true], ['new111', false]]);
+  const study = 'src/core/study/index.ts', state = 'src/state/index.ts';
+  const table: [string, string, string, RegExp][] = [
+    [state, 'canAnswer: answerable', 'canAnswer: (lt: string) => Promise.resolve(answerable(lt))', /canAnswer.*型別不同/],
+    [state, 'canAnswer: answerable', 'canAnswer: () => undefined', /canAnswer.*型別不同/],
+    [state, 'unread: () => [...unread].sort()', 'unread: () => Promise.resolve([...unread].sort())', /unread.*型別不同/],
+    [state, 'all: history.incomplete', 'whole: history.incomplete', /blocked.*all.*型別不同/],
+    [study, "export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';", "export { review, replay, intervalDays, recall } from './fsrs.ts';\nexport const dueAt = () => NaN;", /dueAt.*型別不同/],
+    [study, "export { formatTime, dayOf, dayStart, parseTime } from './time.ts';", "export { formatTime, dayStart, parseTime } from './time.ts';\nexport const dayOf = () => Promise.resolve(0);", /dayOf.*型別不同/],
+    [study, "export { nextCard, progress, checkTyped, typedKey, typedUnits } from './session.ts';", "export { progress, checkTyped, typedKey, typedUnits } from './session.ts';\nexport const nextCard = () => Promise.resolve({ kind: 'card' });", /nextCard.*型別不同/],
+    [study, "export { nextCard, progress, checkTyped, typedKey, typedUnits } from './session.ts';", "export { progress, checkTyped, typedKey, typedUnits } from './session.ts';\nexport const nextCard = () => ({ kind: 'stale' });", /nextCard.*型別不同/],
+    ['src/core/study/plan.ts', 'retention: c.retention', 'retention: undefined', /retention.*型別不同/],
+    ['src/core/study/plan.ts', 'return { day, offset, share, more, slots };', 'return { day, offset, share, more, slots: new Map() };', /slots.*型別不同/],
+    ['src/core/version/index.ts', "export { canRead, releaseOf } from './release.ts';", "export { canRead } from './release.ts';\nexport const releaseOf = () => Promise.resolve('1.0.0');", /讀取能力不明/],
+  ];
+  for (const [path, from, to, expected] of table) await assert.rejects(snapshot(await patched(t, path, from, to), input), expected, to);
+});
+
 void test('發布前比較：v0.2.0 到現在；報告列出兩邊的讀取閘門與重複的 ID，今天的份不同不是零差異', async t => {
   const clone = await deployed(t);
   const vault = await makeVault(t, gatedFiles);

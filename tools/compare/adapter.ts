@@ -28,6 +28,18 @@ function need(module: unknown, name: string): Fn {
   return value as Fn;
 }
 
+// 被比較的版本回傳的值拿來判斷或算數之前先查型別，不能靠真假值往下算：Promise 永遠是真的，`!` 之後停掉的目標就成了新卡；
+// NaN 寫進 JSON 變成 null，看起來也像新卡（Codex L2 F1）。卡組的欄位不用查：一邊改了名，比的時候就是差異。
+const wrongType = (name: string): Error => Error(`這個版本的 ${name} 型別不同`);
+function yesNo(value: unknown, name: string): boolean {
+  if (typeof value !== 'boolean') throw wrongType(name);
+  return value;
+}
+function finite(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw wrongType(name);
+  return value;
+}
+
 /** 凍結的輸入：監看不做事（內容不會變），寫入一律拒絕並記下來。 */
 function frozen(texts: Record<string, string>) {
   const paths = Object.keys(texts).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
@@ -75,6 +87,7 @@ const STATE_METHODS = ['ready', 'close', 'unread', 'decks', 'history', 'blocked'
 /** 讀完的 state 換成比較資料。到期照整份紀錄算（下次到期），但照那一版的 state 停掉的目標不算。 */
 function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   const [nextCard, replay, dueAt, dayOf] = ['nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name));
+  const dayNumber = (at: number): number => finite(dayOf(at, input.offset), 'dayOf()');
   const blocked = state.blocked();
   const deckSnaps: DeckSnap[] = state.decks().map(({ path, deck: { props, targets, problems } }) => ({
     path,
@@ -91,13 +104,14 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   for (const entry of deckSnaps) for (const target of entry.targets) {
     if (target.id === null || Object.hasOwn(due, target.id)) continue;
     const memory = memories.get(target.id);
-    due[target.id] = !state.canAnswer(target.id) ? 'stopped' : memory === undefined ? null : dueAt(memory, todayInput.settings.retention) as number;
+    due[target.id] = !yesNo(state.canAnswer(target.id), 'canAnswer()') ? 'stopped'
+      : memory === undefined ? null : finite(dueAt(memory, todayInput.settings.retention), 'dueAt()');
   }
-  const todayDay = dayOf(input.now, input.offset) as number;
+  const todayDay = dayNumber(input.now);
   const days = Array.from({ length: 30 }, () => 0);
   for (const at of Object.values(due)) {
     if (typeof at !== 'number') continue;
-    const day = Math.max(0, (dayOf(at, input.offset) as number) - todayDay);
+    const day = Math.max(0, dayNumber(at) - todayDay);
     if (day < 30) days[day]++;
   }
 
@@ -105,15 +119,17 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   const items: TodaySnap[] = [];
   for (const list of ['share', 'more'] as const) {
     for (const item of today[list]) {
-      // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。
-      const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck: item.deck }) as { kind: string; card?: { prompt: { fingerprint: string } } };
       const slot = today.slots.get(item.lt);
-      items.push({ list, lt: item.lt, deck: item.deck, lane: item.lane, retention: slot?.retention ?? NaN,
-        prompt: next.kind === 'card' ? next.card!.prompt.fingerprint : null, direction: slot?.target.direction ?? null });
+      if (!slot) throw wrongType('today().slots');
+      // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。今天已經答對就是 done；時間是固定的，不會是 stale。
+      const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck: item.deck }) as { kind: string; card?: { prompt: { fingerprint: string } } };
+      if (next.kind !== 'card' && next.kind !== 'done') throw wrongType('nextCard()');
+      items.push({ list, lt: item.lt, deck: item.deck, lane: item.lane, retention: finite(slot.retention, 'today().slots 的 retention'),
+        prompt: next.kind === 'card' ? next.card!.prompt.fingerprint : null, direction: slot.target.direction ?? null });
     }
   }
   return {
-    gates: { decks: [...blocked.decks], held: [...blocked.targets], incomplete: blocked.all,
+    gates: { decks: [...blocked.decks], held: [...blocked.targets], incomplete: yesNo(blocked.all, 'blocked().all'),
       conflicts: state.conflicts ? state.conflicts().map(each => ({ id: each.id, targets: each.targets.map(({ path, line, name }) => ({ path, line, name })) })) : null },
     decks: deckSnaps, due, today: items, days,
   };
@@ -124,7 +140,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
   // 載入要比較的那個版本的程式：路徑由命令列給，只能是計算出來的（這個檔不進外掛，D-148 的邊界檢查管的是 src/）。
   // eslint-disable-next-line essence/module-boundaries
   const release = await import(pathToFileURL(join(root, 'src/core/version/index.ts')).href) as unknown;
-  if (typeof version !== 'string' || need(release, 'releaseOf')(version) === null) throw Error('這個版本的版號不是正式版號，讀取能力不明：' + String(version));
+  if (typeof version !== 'string' || typeof need(release, 'releaseOf')(version) !== 'string') throw Error('這個版本的版號不是正式版號，讀取能力不明：' + String(version));
   // eslint-disable-next-line essence/module-boundaries
   const study = await import(pathToFileURL(join(root, 'src/core/study/index.ts')).href) as unknown;
   // eslint-disable-next-line essence/module-boundaries
@@ -139,7 +155,9 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
   try {
     for (const name of STATE_METHODS) need(state, name);
     await state.ready();
-    if (state.unread().length) throw Error('讀不到：' + state.unread().join('、'));
+    const unread = state.unread() as unknown;
+    if (!Array.isArray(unread)) throw wrongType('unread()');
+    if (unread.length) throw Error('讀不到：' + unread.join('、'));
     result = read(state, study, input);
   } finally {
     // 版本行被拒絕之後，close 重試時也會拒絕：寫了什麼下面查，其他的錯在 failures。
