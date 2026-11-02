@@ -77,7 +77,7 @@ export function planToday(input: TodayInput): Today {
     else categories.add(label);
   }
 
-  // 前提是 state 交進來的 ID 不重複（D-157：用了重複 ID 的目標已經拿掉）。直接收到重複的 ID 時（測試、發布前比較的轉接器）是防呆：
+  // 前提是 state 交進來的 ID 不重複（D-157：用了重複 ID 的目標已經拿掉）。直接收到重複的 ID 時（測試）是防呆：
   // 不照位置或路徑決定誰保留，輸入裡這個 ID 的目標都不出、不占配對、作答不算進估秒。只看輸入裡的，不冒充檢查過 state 已經拿掉的。
   const duplicated = new Set(findDuplicateIds(decks).map(each => each.id));
   const subjectOf = new Map<string, string | null>();

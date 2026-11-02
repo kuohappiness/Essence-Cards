@@ -5,6 +5,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 發布前比較的跨版本測試要讀真正部署過的版本（tag）。
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24

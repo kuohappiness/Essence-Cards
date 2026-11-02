@@ -1,42 +1,55 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { AdapterResult, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts';
+import type { AdapterResult, Conflict, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts';
 
 /**
- * 發布前比較的轉接器（任務說明 1-3）：在一個版本的 worktree 裡，用那個版本自己的 `src/core/deck` 與 `src/core/study`
- * 讀凍結的備份，輸出 snapshot.ts 的比較資料。每個版本在自己的 Node 程序裡跑：
+ * 發布前比較的轉接器（任務說明 1-3）：在一個版本的 worktree 裡，用那個版本自己的 `src/state` 讀凍結的備份，輸出 snapshot.ts 的比較資料。
+ * 每個版本在自己的 Node 程序裡跑：
  *
  *   node tools/compare/adapter.ts <那個版本的 repo> <輸入 JSON> <輸出 JSON>
  *
- * 依版本選轉接器的方式是看那個版本有沒有這裡要用的函式：有就用這一個；之後介面改到接不上時，另寫一個並在這裡依版本選。
- * 接不上（函式不存在、型別不同、丟錯）就輸出 `ok: false`，比較的一方寫「無法比較」，不能當成零差異。
- * 只給唯讀的 Files，也不跑會補 ID 或寫紀錄的流程（state、補 ID 都不碰）。
+ * 讀取閘門、今天的份與到期都照那一版的 state，不在這裡另寫一份規則：讀得懂哪些「需要版本」與 need 看那一版 manifest 的版號，
+ * 重複 ID 的判斷（D-157）是那一版有才有，沒有就是 null，不要求舊版跑新版的規則。
+ * 接不上（函式不存在、型別不同、丟錯）、版號不是正式版號（讀取能力不明）就輸出 `ok: false`，比較的一方寫「無法比較」，不能當成零差異。
+ *
+ * state 載入時會想寫版本行（讀取能力和版本行都綁在 build，src/state/index.ts）。這裡的 Files 拒絕所有寫入，什麼都寫不出去，
+ * 也不假裝寫成；看到版本行以外的寫入，就是這一版載入時不只讀，當成無法比較。紀錄照順序寫，第一行被拒絕之後排在後面的不會送到這裡，
+ * 所以看得到的是排在最前面的那一行與 modify，不保證抓到版本行之後才排的。
  */
 
 /** 輸入：備份的時間與時區當「現在」，`Essence Cards/` 底下的文字檔。 */
 export interface AdapterInput { now: number; offset: number; files: Record<string, string> }
 
-/** 外掛現在用的設定：設定頁還沒做，state 用預設（D-104、D-078）。考試範圍是 null（限制寫在報告開頭）。 */
-const SETTINGS = { capMinutes: 30, retention: 0.8, filter: [] as string[] };
-
 type Fn = (...args: unknown[]) => unknown;
-function need(module: Record<string, unknown>, name: string): Fn {
-  const value = module[name];
+function need(module: unknown, name: string): Fn {
+  const value = (module as Record<string, unknown>)[name];
   if (typeof value !== 'function') throw Error('這個版本沒有 ' + name);
   return value as Fn;
 }
 
-/** 只能讀的 Files：寫入與監看都丟錯。 */
-function readOnly(texts: Record<string, string>) {
+/** 凍結的輸入：監看不做事（內容不會變），寫入一律拒絕並記下來。 */
+function frozen(texts: Record<string, string>) {
   const paths = Object.keys(texts).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-  const refuse = (): never => { throw Error('比較只能讀，不能寫'); };
+  const refused: string[] = [];
+  const refuse = (what: string): Promise<never> => {
+    refused.push(what);
+    return Promise.reject(Error('比較只能讀，不能寫'));
+  };
   return {
-    list: (folder: string): Promise<string[]> => Promise.resolve(paths.filter(path => path.startsWith(folder + '/'))),
-    read: (path: string): Promise<string | null> => Promise.resolve(Object.hasOwn(texts, path) ? texts[path] : null),
-    modify: refuse, append: refuse, watch: refuse,
+    refused,
+    files: {
+      list: (folder: string): Promise<string[]> => Promise.resolve(paths.filter(path => path.startsWith(folder + '/'))),
+      read: (path: string): Promise<string | null> => Promise.resolve(Object.hasOwn(texts, path) ? texts[path] : null),
+      modify: (path: string) => refuse('改 ' + path),
+      append: (_path: string, line: string) => refuse(line),
+      watch: () => () => {},
+    },
   };
 }
+const isVersionLine = (line: string): boolean => {
+  try { return (JSON.parse(line) as { set?: unknown }).set === 'app'; } catch { return false; }
+};
 
 interface TargetLike { id: string | null; name: string; line: number; ok: boolean; prompts: { fingerprint: string }[];
   fields: { importance: string; paused: boolean }; direction: string | null }
@@ -44,22 +57,26 @@ interface DeckLike { props: { status: string; isTranscript: boolean; term: strin
   targets: TargetLike[]; problems: { line: number; level: string; code: string }[] }
 interface ItemLike { lt: string; deck: string; lane: string }
 interface TodayLike { share: ItemLike[]; more: ItemLike[]; slots: Map<string, { retention: number; target: { direction: string | null } }> }
+interface StateLike {
+  ready(): Promise<unknown>;
+  close(): Promise<void>;
+  unread(): readonly string[];
+  decks(): readonly { path: string; deck: DeckLike }[];
+  history(): { reviews: unknown[] };
+  blocked(): { decks: readonly string[]; targets: readonly string[]; all: boolean };
+  canAnswer(lt: string): boolean;
+  input(): { settings: { retention: number } };
+  today(): TodayLike;
+  /** D-157 之後才有。 */
+  conflicts?(): readonly Conflict[];
+}
+const STATE_METHODS = ['ready', 'close', 'unread', 'decks', 'history', 'blocked', 'canAnswer', 'input', 'today'];
 
-export async function snapshot(root: string, input: AdapterInput): Promise<Snapshot> {
-  // 載入要比較的那個版本的程式：路徑由命令列給，只能是計算出來的（這個檔不進外掛，D-148 的邊界檢查管的是 src/）。
-  // eslint-disable-next-line essence/module-boundaries
-  const deck = await import(pathToFileURL(join(root, 'src/core/deck/index.ts')).href) as Record<string, unknown>;
-  // eslint-disable-next-line essence/module-boundaries
-  const study = await import(pathToFileURL(join(root, 'src/core/study/index.ts')).href) as Record<string, unknown>;
-  const [readDecks, readHistory, planToday, nextCard, replay, dueAt, dayOf] =
-    [need(deck, 'readDecks'), ...['readHistory', 'planToday', 'nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name))];
-  const files = readOnly(input.files);
-  const decks = await readDecks(files) as { path: string; deck: DeckLike }[];
-  const history = await readHistory(files) as { reviews: unknown[] };
-  const todayInput = { decks, history, settings: SETTINGS, exam: null, now: input.now, offset: input.offset };
-  const today = planToday(todayInput) as TodayLike;
-
-  const deckSnaps: DeckSnap[] = decks.map(({ path, deck: { props, targets, problems } }) => ({
+/** 讀完的 state 換成比較資料。到期照整份紀錄算（下次到期），但照那一版的 state 停掉的目標不算。 */
+function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
+  const [nextCard, replay, dueAt, dayOf] = ['nextCard', 'replay', 'dueAt', 'dayOf'].map(name => need(study, name));
+  const blocked = state.blocked();
+  const deckSnaps: DeckSnap[] = state.decks().map(({ path, deck: { props, targets, problems } }) => ({
     path,
     props: { status: props.status, isTranscript: props.isTranscript, term: props.term, subject: props.subject,
       unit: props.unit ? (props.unit.code + ' ' + props.unit.name).trim() : null, categories: props.categories },
@@ -68,21 +85,23 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
     problems: problems.map(problem => `${problem.line} ${problem.level} ${problem.code}`),
   }));
 
-  const memories = replay(history.reviews) as Map<string, unknown>;
-  const due: Record<string, number | null> = {};
+  const todayInput = state.input();
+  const memories = replay(state.history().reviews) as Map<string, unknown>;
+  const due: Snapshot['due'] = {};
   for (const entry of deckSnaps) for (const target of entry.targets) {
     if (target.id === null || Object.hasOwn(due, target.id)) continue;
     const memory = memories.get(target.id);
-    due[target.id] = memory === undefined ? null : dueAt(memory, SETTINGS.retention) as number;
+    due[target.id] = !state.canAnswer(target.id) ? 'stopped' : memory === undefined ? null : dueAt(memory, todayInput.settings.retention) as number;
   }
   const todayDay = dayOf(input.now, input.offset) as number;
   const days = Array.from({ length: 30 }, () => 0);
   for (const at of Object.values(due)) {
-    if (at === null) continue;
+    if (typeof at !== 'number') continue;
     const day = Math.max(0, (dayOf(at, input.offset) as number) - todayDay);
     if (day < 30) days[day]++;
   }
 
+  const today = state.today();
   const items: TodaySnap[] = [];
   for (const list of ['share', 'more'] as const) {
     for (const item of today[list]) {
@@ -93,7 +112,43 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
         prompt: next.kind === 'card' ? next.card!.prompt.fingerprint : null, direction: slot?.target.direction ?? null });
     }
   }
-  return { decks: deckSnaps, due, today: items, days };
+  return {
+    gates: { decks: [...blocked.decks], held: [...blocked.targets], incomplete: blocked.all,
+      conflicts: state.conflicts ? state.conflicts().map(each => ({ id: each.id, targets: each.targets.map(({ path, line, name }) => ({ path, line, name })) })) : null },
+    decks: deckSnaps, due, today: items, days,
+  };
+}
+
+export async function snapshot(root: string, input: AdapterInput): Promise<Snapshot> {
+  const { version } = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: unknown };
+  // 載入要比較的那個版本的程式：路徑由命令列給，只能是計算出來的（這個檔不進外掛，D-148 的邊界檢查管的是 src/）。
+  // eslint-disable-next-line essence/module-boundaries
+  const release = await import(pathToFileURL(join(root, 'src/core/version/index.ts')).href) as unknown;
+  if (typeof version !== 'string' || need(release, 'releaseOf')(version) === null) throw Error('這個版本的版號不是正式版號，讀取能力不明：' + String(version));
+  // eslint-disable-next-line essence/module-boundaries
+  const study = await import(pathToFileURL(join(root, 'src/core/study/index.ts')).href) as unknown;
+  // eslint-disable-next-line essence/module-boundaries
+  const stateModule = await import(pathToFileURL(join(root, 'src/state/index.ts')).href) as unknown;
+  const { files, refused } = frozen(input.files);
+  const failures: unknown[] = [];
+  const state = need(stateModule, 'createState')({
+    files, device: 'compare', build: version, fillIds: false, now: () => input.now, offset: () => input.offset,
+    onError: (error: unknown, source: string) => { if (source !== 'write') failures.push(error); },
+  }) as StateLike;
+  let result: Snapshot;
+  try {
+    for (const name of STATE_METHODS) need(state, name);
+    await state.ready();
+    if (state.unread().length) throw Error('讀不到：' + state.unread().join('、'));
+    result = read(state, study, input);
+  } finally {
+    // 版本行被拒絕之後，close 重試時也會拒絕：寫了什麼下面查，其他的錯在 failures。
+    await state.close().catch(() => {});
+  }
+  if (failures.length) throw Error('這個版本讀的時候出錯：' + String(failures[0]));
+  const write = refused.find(line => !isVersionLine(line));
+  if (write !== undefined) throw Error('這個版本比較的時候想寫入：' + write);
+  return result;
 }
 
 if (import.meta.main) {
