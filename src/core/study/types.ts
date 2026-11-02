@@ -160,7 +160,7 @@ export interface Today {
   share: QueueItem[];
   /** 「再複習一些」，接在 share 後面的順序。 */
   more: QueueItem[];
-  /** 內部資料，不屬於介面；畫面與測試不讀。 */
+  /** 內部資料，不屬於介面；畫面與測試不讀（發布前比較的轉接器讀 retention 與 target，tools/compare/adapter.ts）。 */
   slots: ReadonlyMap<string, Slot>;
 }
 
