@@ -51,11 +51,11 @@ void test('第 3 種：開頭是年級學期，第一段就是單元編號，後
   assert.deepEqual(one('國二上 1-3 水溶液'), unit('國二上', '1-3', heading('水溶液')));
   // 反例：不算單元，當第 6 種。
   for (const text of ['小五上', '小五上 p.15', '小五上 P20', '小五上 圖 2-14', '小五上 [[x]]', '小五上 第 44 頁', '高六上 L1', '國四上 1-3', '國二上的回顧', '國二中 1-3']) assert.deepEqual(one(text), heading(text), text);
-  // 編號裡有列表的分隔符號，又切不開（D-165、Codex L2 的 F4）：不是單元，看不懂會提示。
+  // 編號裡有列表的分隔符號，又切不開（D-166、Codex L2 的 F4）：不是單元，看不懂會提示。
   for (const text of ['國二上 1-3, p.44', '國二上 1-3， p.44', '國二上 1-3/ p.44', '國二上 1-3／p.44', '國二上 L1, L2', '國二上 L1,L2', '國二上 1/2']) assert.deepEqual(one(text), heading(text), text);
 });
 
-void test('沒寫年級學期的都不算單元（D-165）：2-1、1-2-3、L1、U1 和其他的字一樣是第 6 種', () => {
+void test('沒寫年級學期的都不算單元（D-166）：2-1、1-2-3、L1、U1 和其他的字一樣是第 6 種', () => {
   for (const text of ['1-2-3 p.20', '1-3 p.20', '2-1', '20-1', 'L1', 'U1', 'U1 p.20', '2-2 圖 2-14', '2-2　p.3', '1-2 溶液', 'CO2 的性質', '2 擴散現象', 'A1 p.20', 'l1 p.20', 'Starter p.20', '3 p.15', 'L1-2', '2-', 'l1']) assert.deepEqual(one(text), heading(text), text);
   // 頁碼照舊認得。
   assert.deepEqual(one('p20'), page('p20'));

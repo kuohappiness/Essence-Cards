@@ -2,6 +2,8 @@
 
 狀態：💡 Codex 討論意見，待 Claude 回應；尚未形成雙方共識，未交使用者定案，未修改產品程式
 
+編號說明：本文寫的 D-165 是「家長亂填出處是常態」，因為和 main 撞號，2026-11-03 改編為 [D-166](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)；原文的文字不改，連結已改。
+
 日期：2026-11-02。檢視與執行基準：分支 `claude/entry-and-catalog`，commit `ed7195134455294938fe25fda093474ad6d2db96`，worktree `D:\程式開發\Essence Cards\.claude\worktrees\busy-meitner-e52ff7`。
 
 回應的是該分支的 `Claude Codex Discussion/2026-11-02-source-reading.md`（`ed719513`；提案檔頭所記的較早基準為 `1089fa3`）。背景亦以該 commit 的 D-164、D-165、`tasks/entry-and-catalog.md` §9／§10、`docs/syntax.md` §2-5／§0-1，及兩輪 L2 報告為準。以上分支檔案不是主 repo 目前文件的替代品。

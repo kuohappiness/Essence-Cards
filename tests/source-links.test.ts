@@ -32,7 +32,7 @@ void test('§10 跨單元：第一篇沒有 ^p20、第二篇有，跳到第二�
   const { app, resolved } = appWith({ '材料/甲.md': { blocks: ['p1'] }, '材料/乙.md': { blocks: ['p20'], headings: ['溶液'] } });
   const units: UnitDecks = (term, code) => code === '1-3' && term === '國二上' ? [{ path: '卡組/課本.md', materials: ['[[沒有這份]]', '[[甲]]'] }, { path: '卡組/習作.md', materials: ['[[乙]]'] }] : [];
   const resolve = (text: string) => resolveSource(app, '卡組/本篇.md', ['[[本篇材料]]'], link(text), units);
-  assert.equal(resolve('1-3 p.20'), null, '沒寫年級學期不算單元（D-165）');
+  assert.equal(resolve('1-3 p.20'), null, '沒寫年級學期不算單元（D-166）');
   assert.equal(resolve('國二上 1-3 p.20'), '材料/乙.md#^p20');
   assert.equal(resolve('國二上 1-3 p.99'), '材料/甲.md', '全部找完才退回第一份可用的材料');
   assert.equal(resolve('國二上 1-3'), '材料/甲.md');
@@ -104,7 +104,7 @@ void test('§9-5 看不懂：第 6 種而且材料裡找不到同名標題；材
   assert.deepEqual(unreadableSources(appWith({ '材料/甲.md': null }).app, '卡組/本篇.md', parseDeck(text)), []);
   // 連不到的材料本來就找不到：照提示。
   assert.equal(unreadableSources(appWith({}).app, '卡組/本篇.md', parseDeck(text)).length, 4);
-  // D-165：沒寫年級學期的，材料裡有同名標題就是那個標題；沒有就提示。逗號切不開的也提示（F4）。
+  // D-166：沒寫年級學期的，材料裡有同名標題就是那個標題；沒有就提示。逗號切不開的也提示（F4）。
   const bare = '---\n材料: "[[甲]]"\n---\n- 目標 ^a\n    - 出處：1-2 溶液、1-3 p.20、國二上 1-3, p.44\n    - 問 :: 答\n';
   const named = appWith({ '材料/甲.md': { headings: ['1-2 溶液'] } }).app;
   assert.deepEqual(unreadableSources(named, '卡組/本篇.md', parseDeck(bare)).map(item => item.text), ['1-3 p.20', '國二上 1-3, p.44']);

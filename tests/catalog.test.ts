@@ -70,7 +70,7 @@ void test('出處寫到 A、B：兩個單元各列一次；同一科', () => {
   assert.deepEqual(ids(index.find('國二上', '數學', '2-1')), [], '不跨科目');
 });
 
-void test('D-165 沒寫年級學期、編號帶逗號的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
+void test('D-166 沒寫年級學期、編號帶逗號的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、國二上 L1, L2、國二上 2-2/ p.3'] });
   const others = ['2-1', '2-2', 'L1', 'L2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
   const index = buildIndex([owner, ...others]);
