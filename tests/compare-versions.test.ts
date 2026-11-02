@@ -114,6 +114,18 @@ void test('比較：讀取閘門的改變都抓得到；一邊沒有重複 ID �
   assert.deepEqual(diffSnapshots(gated(), gated(), time), []);
 });
 
+void test('比較：ID 剛好是每個物件都有的名稱時還是一個 ID，只在一邊也報得出來', async () => {
+  // 語法接受英數字與連字號，寫得出 constructor；底線寫不出來，__proto__ 是下面的假版本才會回傳。
+  const named = await snapshot(root, { now: NOW, offset: 480, files: { [A]: '- 目標 ^constructor\n    - 題目 :: 答案\n' } });
+  assert.deepEqual(named.due, JSON.parse('{"constructor":null}'));
+  for (const id of ['constructor', 'toString', '__proto__']) {
+    const after = base();
+    after.due = { ...after.due, ...JSON.parse(`{"${id}":null}`) as Snapshot['due'] };
+    assert.deepEqual(diffSnapshots(base(), after, time), [`${id} 的下次到期：（沒有這個目標） → （新卡）`]);
+    assert.deepEqual(diffSnapshots(after, base(), time), [`${id} 的下次到期：（新卡） → （沒有這個目標）`]);
+  }
+});
+
 const env = gitEnv();
 const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();
@@ -445,7 +457,7 @@ const fakeSnapshot: Snapshot = {
 };
 const WRONG: [string, () => unknown][] = [
   ['undefined', () => undefined], ['null', () => null], ['NaN', () => NaN], ['Infinity', () => Infinity], ['1.5', () => 1.5], ['5', () => 5], ['true', () => true],
-  ['空字串', () => ''], ['"x"', () => 'x'], ['"constructor"', () => 'constructor'],
+  ['空字串', () => ''], ['"x"', () => 'x'], ['"__proto__"', () => '__proto__'], ['"constructor"', () => 'constructor'],
   ['[]', () => []], ['空洞', () => new Array<unknown>(1)], ['[null]', () => [null]], ['[undefined]', () => [undefined]], ['["x", 空洞]', () => { const list = ['x']; list.length = 2; return list; }],
   ['有 toJSON 的陣列', () => Object.assign(['x'], { toJSON: () => [] })], ['多了屬性的陣列', () => Object.assign(['x'], { extra: 1 })], ['Array 的子類別', () => new (class extends Array { toJSON() { return []; } })()],
   ['{}', () => ({})], ['有 toJSON 的物件', () => ({ toJSON: () => 'x' })], ['1n', () => 1n], ['Symbol', () => Symbol('x')], ['函式', () => () => 0], ['Promise', () => Promise.resolve()],

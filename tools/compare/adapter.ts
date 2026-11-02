@@ -141,16 +141,17 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   const todayInput = state.input();
   const retention = finite(todayInput.settings.retention, 'input().settings.retention');
   const memories = map(replay(array(state.history().reviews, 'history().reviews')), 'replay()');
-  const due: Snapshot['due'] = {};
+  // 先放 Map：ID 只查是字串，叫 `__proto__` 時，指定給一般物件不會留下這個 key。
+  const due = new Map<string, Snapshot['due'][string]>();
   for (const entry of deckSnaps) for (const target of entry.targets) {
-    if (target.id === null || Object.hasOwn(due, target.id)) continue;
+    if (target.id === null || due.has(target.id)) continue;
     const memory = memories.get(target.id);
-    due[target.id] = !yesNo(state.canAnswer(target.id), 'canAnswer()') ? 'stopped'
-      : memory === undefined ? null : finite(dueAt(memory, retention), 'dueAt()');
+    due.set(target.id, !yesNo(state.canAnswer(target.id), 'canAnswer()') ? 'stopped'
+      : memory === undefined ? null : finite(dueAt(memory, retention), 'dueAt()'));
   }
   const todayDay = dayNumber(input.now);
   const days = Array.from({ length: 30 }, () => 0);
-  for (const at of Object.values(due)) {
+  for (const at of due.values()) {
     if (typeof at !== 'number') continue;
     const day = Math.max(0, dayNumber(at) - todayDay);
     if (day < 30) days[day]++;
@@ -180,7 +181,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
         targets: array<{ path: unknown; line: unknown; name: unknown }>(each.targets, 'conflicts() 的 targets').map(({ path, line, name }) => ({
           path: text(path, 'conflicts() 的 path'), line: integer(line, 'conflicts() 的 line'), name: text(name, 'conflicts() 的 name') })),
       })) },
-    decks: deckSnaps, due, today: items, days,
+    decks: deckSnaps, due: Object.fromEntries(due), today: items, days,
   };
 }
 

@@ -136,7 +136,8 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
     for (const [problem, list] of problemsB) for (let i = problemsA.get(problem)?.length ?? 0; i < list.length; i++) out.push(`${path} 多了問題：${problem}`);
   }
   for (const id of [...new Set([...Object.keys(before.due), ...Object.keys(after.due)])].sort()) {
-    const a = before.due[id], b = after.due[id];
+    // 只在一邊的 ID 可能叫 constructor：另一邊取到的是每個物件都有的函式，不是沒有這個目標。
+    const a = Object.hasOwn(before.due, id) ? before.due[id] : undefined, b = Object.hasOwn(after.due, id) ? after.due[id] : undefined;
     if (a === b) continue;
     const show = (value: number | null | 'stopped' | undefined): string => value === undefined ? '（沒有這個目標）' : value === null ? '（新卡）' : value === 'stopped' ? '（停掉了）' : time(value);
     out.push(`${id} 的下次到期：${show(a)} → ${show(b)}`);
