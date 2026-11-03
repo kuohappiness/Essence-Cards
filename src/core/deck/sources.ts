@@ -281,6 +281,16 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     return !bare[2] || (after.found.length && !after.left) ? { code: bare[1], rest: bare[2], other: true } : null;
   }
 
+  /** 否定段拿掉前面那個單元的字之後，還有沒有點名別的東西。 */
+  function namesOther(segment: string, term: string, code: string): boolean {
+    let text = segment.replace(new RegExp(`(?<![0-9A-Za-z-])${escapeRegExp(code)}(?![0-9A-Za-z-])`, 'gi'), '');
+    for (let at = 0; at < text.length; at++) {
+      const read = readTerm(text.slice(at));
+      if (read?.term === term) { text = text.slice(0, at) + text.slice(at + read.length); break; }
+    }
+    return /[\dA-Za-z]/.test(text) || hasCode(text) || scan(text, tokens).found.length > 0;
+  }
+
   function readSegment(raw: string, source: string, next: string | undefined): Pending[] {
     const segment = raw.replace(WRAP, '$1');
     const display = restore(source, tokens);
@@ -300,8 +310,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       // 緊接在沒有位置的單元後面（`國二上 1-3，不算這個`）：說的就是那個單元，一起先不算。有位置的是實際的出處，照連；
       // 否定段自己點名了別的（`不是 p.46`、`不是國二上 1-8`、`不是 [[筆記]]`）：說的不是前面的單元。
       const last = items.at(-1);
-      const namesOther = /[\dA-Za-z]/.test(segment) || hasCode(segment) || scan(segment, tokens).found.length > 0;
-      if (!namesOther && last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading')) {
+      if (last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading') && !namesOther(segment, last.link.term, last.link.unit)) {
         items[items.length - 1] = { text: last.text, link: { kind: 'text' }, problem: 'negative' };
         scope = 'this';
       }
