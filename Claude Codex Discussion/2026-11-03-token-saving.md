@@ -89,6 +89,10 @@
 
 - **使用者的問題**：能不能讓這類雜事自動用 `/model sonnet` 做；或有其他省 token 的流程建議。
 - **要先查的**：Claude Code 能不能依工作自動換模型（subagent 或 skill 指定模型、`opusplan`）；Max 方案裡 Sonnet 和 Opus 的額度怎麼算；Sonnet 做這幾類雜事的品質風險（例如寫 D-ID 要判斷同步哪些文件）。改的是 [D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核)、[D-144](../docs/decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候) 的分工。
+- **查到的（Claude Code 官方說明，2026-11-03）**：
+  - 電腦上的 session 有三種自動換的方法：skill 的 `model` 欄位（叫用那個 skill 後，這一輪剩下的部分用指定的模型，下一則訊息換回來）；`.claude/agents/` 的 subagent 寫 `model: sonnet`（主對話交出去，它只看得到交給它的說明）；`/model opusplan`（plan mode 用 Opus，執行時自動換 Sonnet）。
+  - 專案的雲端討論串**不載入** repo 的 `.claude/skills/`、`.claude/agents/`、hooks 與 `settings.json`，只載入 `CLAUDE.md`。所以雲端討論串裡，skill 的 `model` 不會生效；要用 Sonnet，只能在開討論串時指定，或在專案設定改討論串的預設模型。
+  - 官方說明寫，新專案預設每個討論串都用 Opus high，「最快用完方案額度」。Opus 和 Sonnet 各佔多少額度，官方沒有寫數字。
 
 ## 3. 不建議做的
 
