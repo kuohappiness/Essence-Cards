@@ -138,7 +138,26 @@ void test('D-172 英文句子後面緊接中文翻譯：分成兩行；其他照
   assert.deepEqual(splitTranslation('She left. `她走了。`'), two('She left.', '`她走了。`'), '中文包在反引號裡');
   assert.deepEqual(splitTranslation('`She left.` `她走了。`'), two('`She left.`', '`她走了。`'), '兩邊各自包在反引號裡');
   assert.deepEqual(splitTranslation('He (Tom) left. 他（Tom）走了。'), two('He (Tom) left.', '他（Tom）走了。'), '括號收尾了');
+  // Codex L2 第三輪的 F1：只分純文字加完整的簡單格式；粗體標出目標字是常見的寫法，一定要分行。
+  assert.deepEqual(splitTranslation('She **bought** a book. 她買了一本書。'), two('She **bought** a book.', '她買了一本書。'), '粗體標出目標字');
+  assert.deepEqual(splitTranslation('She ==bought== a *new* ~~old~~ book. 她買了一本書。'), two('She ==bought== a *new* ~~old~~ book.', '她買了一本書。'), '好幾種簡單格式');
+  assert.deepEqual(splitTranslation('She `used *` here. 她用了星號。'), two('She `used *` here.', '她用了星號。'), '程式碼裡的星號不是格式');
+  assert.deepEqual(splitTranslation('Is 1 + 1 = 2? 是的。'), two('Is 1 + 1 = 2?', '是的。'), '單獨的等號不是格式');
   const one = (text: string): void => { assert.deepEqual(splitTranslation(text), { line: text, translation: null }, text); };
+  // Codex L2 第三輪的 F1：數記號會被騙過的組合。判斷不了就一行，一行不會壞。
+  one('She typed ``foo. 中文``.');
+  one('She wrote \\* and *left. 她走了。* and \\*.');
+  one('She `*` *left. 她走了。* `*` now');
+  one('x_y _left. 她走了。_ z_w');
+  one('She *a* b* *c. 中* *d *e* now');
+  one('She $left. 她$走了。');
+  one('She %%left. 她%%走了。');
+  one('She left. ``她走了。``');
+  one('She ***left***. 她走了。');
+  one('snake_case is fun. 蛇形命名。');
+  one('She __left__. _她_走了。');
+  one('She ~left. 她~走了。');
+  one('See www.example.com/?中文');
   // Codex L2 第二輪的 F1：有連結、HTML、網址的一律一行，切分點可能落在裡面；括號沒收尾也一行。
   one('See [source](https://example.com/a.中文).');
   one('See https://example.com/a.中文');
