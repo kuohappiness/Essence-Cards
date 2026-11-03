@@ -65,7 +65,7 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 本篇的屬性也比鍵：學期寫 八上、編號寫全形
   ['國二上 p.15', [page(15)], true, { term: '八上', subject: '自然', unit: { code: '2-2' } }], ['八上 p.15', [page(15)], true], ['L3 p.30', [page(30)], false, { term: '國一上', subject: '英文', unit: { code: 'Ｌ３' } }], ['2-2 p.30', [page(30)], false, { term: '國二上', subject: '自然', unit: { code: '２－２' } }], ['Ｅｎｇｌｉｓｈ 國一上 L1', [unit('國一上', 'L1')], false, { term: '國一上', subject: 'English', unit: { code: 'L3' } }], ['English 國一上 L1', [unit('國一上', 'L1')], false, { term: '國一上', subject: 'Ｅｎｇｌｉｓｈ', unit: { code: 'L3' } }],
   // 位置照連，但要提示
-  ['1-3 p.20', [page(20)], true], ['3 p.44', [page(44)], true], ['L2 p.12', [page(12)], true, ENGLISH], ['老師說過 p.44', [page(44)], true], ['上一節 p.40', [page(40)], true], ['pH7 p.20', [page(20)], true],
+  ['1-3 p.20', [page(20)], true], ['3 p.44', [page(44)], true], ['國二上 1-3 44 p.45', [u13(page(45))], true], ['L2 p.12', [page(12)], true, ENGLISH], ['老師說過 p.44', [page(44)], true], ['上一節 p.40', [page(40)], true], ['pH7 p.20', [page(20)], true],
   // 字裡有像編號的
   ['國二上 1-3 和 1-8', [u13(heading('和 1-8'))], true], ['p.12 of L1', [page(12)], true, ENGLISH], ['p.30, 也算 L1', [page(30), heading('也算 L1')], false, ENGLISH],
   ['國二上1-3,8', [u13(), heading('8')]], ['國一上 L1, A1 p.20', [unit('國一上', 'L1'), unit('國一上', 'L1', page(20))], true, ENGLISH], ['國二上 1-3, 2-5 題', [u13(), heading('2-5 題')]], ['國二上 1-3, 10-15 上課筆記', [u13(), heading('10-15 上課筆記')]], ['國二上 1-3, 2026-10', [u13(), heading('2026-10')]], ['國二上 1-3 p.44, 溶解說明, 45', [u13(page(44)), heading('溶解說明'), heading('45')]],
@@ -165,7 +165,7 @@ void test('D-167 網址的分界：半形逗號、分號後面緊接著字是網
     assert.ok(read(text).some(item => item.problem === 'leftover'), text);
   }
   assert.equal(read('https://example.test/a,國二上1-3 p.5').at(-1)?.problem, 'leftover', '後面還有位置也要提示');
-  for (const text of ['https://x.test,8上L1', 'https://x.test,八上L1', 'https://x.test,國中二年級上L1', 'https://x.test,國二上學期L1', '本篇 https://x.test,國二上1-3', '2-2 https://x.test,8上L1']) assert.ok(read(text).some(item => item.problem === 'leftover'), text);
+  for (const text of ['https://x.test,8上L1', 'https://x.test,八上L1', 'https://x.test,國中二年級上L1', 'https://x.test,國二上學期L1', '本篇 https://x.test,國二上1-3', '2-2 https://x.test,8上L1', 'https://x.test,8上L1 參考']) assert.ok(read(text).some(item => item.problem === 'leftover'), text);
   assert.equal(read('p.44 和 8上L1')[0].problem, 'leftover', '說明裡有認得的學期寫法也要提示');
   for (const separator of ['、', '﹑', '，', '﹐', '；', '﹔', ', ', '; ']) assert.deepEqual(links('https://example.test/a' + separator + '國二上 1-3'), [{ kind: 'text' }, u13()], separator);
   assert.deepEqual(read('https://example.test/a,').map(item => item.text), ['https://example.test/a'], '尾端的逗號不是網址的一部分');

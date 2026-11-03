@@ -375,6 +375,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       }
       // 後面的編號、數字不接過這些字（D-167 第 6 點）。
       forget();
+      if (hidden && left) return [asHeading({ problem: 'leftover' })];
       if (selfRef && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
       // 網址：只有字，不是位置，也不算看不懂。
       if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
@@ -390,6 +391,8 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const final = placed[placed.length - 1];
     if (bad) final.problem = 'position';
     if (left && !before && /^\d+$/.test(left) && lastPlace?.startsWith('p')) return [...placed, follow('p' + left, 'p.' + left)];
+    // 單元與位置之間的字是說明，孤立的數字不是：用途要家長說明（`國二上 1-3 44 p.45`）。
+    if (/^\d+$/.test(before)) placed[0].problem ??= 'before';
     if (!unit && !selfRef && before && !MATERIAL.test(before)) placed[0].problem ??= 'before';
     if (hidden || (left && looksLikeCode(left))) final.problem ??= 'leftover';
     return placed;
