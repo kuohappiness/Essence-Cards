@@ -32,6 +32,8 @@ export interface ErrorLogOptions {
   offset?: (ms: number) => number;
   /** 第一次讀寫之前先等它：Obsidian 在 layout ready 之前 vault 的索引還不完整，數不到當月的行數。 */
   after?: Promise<unknown>;
+  /** 這台的 stack 可能只有名稱、沒有位置（iPhone，D-173）：只有名稱的也留。預設不留，其他主機只認自己的位置。 */
+  nameStacks?: boolean;
 }
 
 /** 一行最多幾 bytes（UTF-8，含 JSON 的跳脫）。 */
@@ -105,24 +107,23 @@ function ownFrames(error: unknown): string[] {
 
 /**
  * WebKit 的 stack 沒有位置時（D-173，iPhone 的 Obsidian 1.15.0、iOS 27.0.1）：至少一層只有名稱就整段留下，沒有的話是空的。不拋錯。
- * 分不出是哪個外掛的，Obsidian 自己的程式在 iPhone 上有沒有位置也沒驗過。V8 的 stack 開頭是訊息，訊息裡可能有 `名稱@` 這樣的一行，不看。
+ * 分不出是哪個外掛的，Obsidian 自己的程式在 iPhone 上有沒有位置也沒驗過。只在 iPhone 上問（nameStacks）：V8 的 stack 開頭是訊息，
+ * 訊息裡可能有 `名稱@` 這樣的一行，從 stack 的樣子分不乾淨（Codex L2 的 F2）。
  */
 function nameFrames(error: unknown): string[] {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return [];
   const raw = attempt(() => (error as { stack?: unknown }).stack);
-  if (typeof raw !== 'string' || V8_FRAME.test(raw)) return [];
-  const header = attempt(() => Error.prototype.toString.call(error));
-  if (header && raw.startsWith(header)) return [];
+  if (typeof raw !== 'string') return [];
   const frames = raw.split('\n').map(line => line.trim()).filter(line => line !== '');
   return frames.some(line => NAME_ONLY.test(line)) ? frames : [];
 }
 
 /**
  * window 的 error 與 unhandledrejection 只收這個（D-155 第 2 點的補網）：stack 裡有這個外掛自己的程式位置，
- * 或沒有位置、分不出是誰的（D-173，寧可混進別的外掛的錯，iPhone 上也要看得到）。
+ * 或在 iPhone 上（nameStacks）沒有位置、分不出是誰的（D-173，寧可混進別的外掛的錯，iPhone 上也要看得到）。
  */
-export function maybeOwn(error: unknown): boolean {
-  return ownFrames(error).length > 0 || nameFrames(error).length > 0;
+export function maybeOwn(error: unknown, nameStacks = false): boolean {
+  return ownFrames(error).length > 0 || (nameStacks && nameFrames(error).length > 0);
 }
 
 interface Line {
@@ -172,7 +173,7 @@ function counted(text: string | null): number {
 }
 
 export function createErrorLog(options: ErrorLogOptions): ErrorLog {
-  const { files, device, build, obsidian } = options;
+  const { files, device, build, obsidian, nameStacks = false } = options;
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
   const after = options.after ?? Promise.resolve();
@@ -225,7 +226,7 @@ export function createErrorLog(options: ErrorLogOptions): ErrorLog {
       try {
         const msg = describe(error);
         const own = ownFrames(error);
-        const frames = own.length ? own : nameFrames(error);
+        const frames = own.length || !nameStacks ? own : nameFrames(error);
         const path = context?.path;
         // 去重：有自己的位置就用第一層的位置；只有名稱時好幾個錯誤的第一層都可能是匿名的 `@`，連訊息一起比（D-173）。
         const key = own[0] ?? [msg, frames[0]];

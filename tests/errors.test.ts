@@ -422,36 +422,67 @@ void test('§1 G1 訊息是 frame 位址的一部分：WebKit 照樣留下自己
 // D-173：iPhone 的 stack 每一層只有名稱（Obsidian 1.15.0、iOS 27.0.1 實測，tasks/iphone-test-2026-11.md），分不出是哪個外掛的，一律收。
 const withStack = (stack: string, message = 'x'): Error => { const error = Error(message); error.stack = stack; return error; };
 
-void test('D-173 只有名稱的 stack：window 的錯誤也收，整段留下', async () => {
+/** iPhone 上的記錄器（main.ts 用 Platform.isIosApp 開這個選項）。 */
+function setupIos(files: Files): ReturnType<typeof createErrorLog> {
+  return createErrorLog({ files, device: DEVICE, build: BUILD, obsidian: OBSIDIAN, now: () => at('2026-11-02T20:15:03.250+08:00'), offset: () => 480, nameStacks: true });
+}
+
+void test('D-173 iPhone 只有名稱的 stack：window 的錯誤也收，整段留下', async () => {
   const stack = 'kq@\nTq@\nforEach@[native code]\n@\nglobal code@';
-  assert.equal(maybeOwn(withStack(stack)), true);
-  assert.equal(maybeOwn(withStack('@')), true, '只有一層匿名的');
-  assert.equal(maybeOwn(withStack('forEach@[native code]\nkq@')), true, '最上面是系統的');
+  assert.equal(maybeOwn(withStack(stack), true), true);
+  assert.equal(maybeOwn(withStack('@'), true), true, '只有一層匿名的');
+  assert.equal(maybeOwn(withStack('forEach@[native code]\nkq@'), true), true, '最上面是系統的');
   const memory = createMemoryFiles();
-  const { log } = setup(memory.files);
+  const log = setupIos(memory.files);
   log.record('uncaught', withStack(stack));
   await wait(10);
   assert.equal((JSON.parse(lines(memory.texts.get(FILE))[0]) as { stack: string }).stack, stack);
 });
 
-void test('D-173 分得出不是自己的，照舊不收', () => {
-  assert.equal(maybeOwn(withStack('other@plugin:other-plugin:1:1\n@capacitor://localhost/app.js:2:3')), false, '每一層都有別人的位置');
-  assert.equal(maybeOwn(withStack('forEach@[native code]')), false, '只有系統的');
-  assert.equal(maybeOwn(withStack('')), false, '空的 stack');
-  assert.equal(maybeOwn('kq@'), false, '字串沒有 stack');
-  const noFrames = withStack('Error: mail me@', 'mail me@');
-  assert.equal(maybeOwn(noFrames), false, 'V8 沒有 frame、訊息剛好以 @ 結尾：開頭是標頭');
-  const lineInMessage = withStack('Error: first\nkq@\n    at real (plugin:other-plugin:1:1)', 'first\nkq@');
-  assert.equal(maybeOwn(lineInMessage), false, 'V8 多行訊息裡像名稱的那一行');
-  const renamed = withStack('Error: first\nkq@\n    at real (plugin:other-plugin:1:1)', 'changed later');
-  assert.equal(maybeOwn(renamed), false, 'V8 標頭對不上時也不算');
+void test('D-173 iPhone 分得出不是自己的，照舊不收', () => {
+  assert.equal(maybeOwn(withStack('other@plugin:other-plugin:1:1\n@capacitor://localhost/app.js:2:3'), true), false, '每一層都有別人的位置');
+  assert.equal(maybeOwn(withStack('forEach@[native code]'), true), false, '只有系統的');
+  assert.equal(maybeOwn(withStack(''), true), false, '空的 stack');
+  assert.equal(maybeOwn('kq@', true), false, '字串沒有 stack');
+});
+
+// Codex L2 的 F2：名稱這條只在 iPhone 開，其他主機（V8）收與不收和 D-173 之前完全一樣，不靠猜 stack 的樣子。
+void test('D-173 F2 不是 iPhone：只有名稱的 stack 不收也不留，真的 V8 沒有 frame、訊息後來改過也一樣', async () => {
+  // 用真的 V8 產生：沒有 frame 的 stack 只剩標頭，訊息改過之後標頭對不上（Codex 的重現）。
+  const noFrames = (message: string): Error => {
+    const limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 0;
+    try {
+      const error = Error(message);
+      assert.equal(error.stack, 'Error: ' + message);
+      error.message = 'changed later';
+      return error;
+    } finally { Error.stackTraceLimit = limit; }
+  };
+  const errors: [Error, string][] = [
+    [noFrames('first\nkq@'), '多行訊息裡像名稱的那一行'],
+    [noFrames('mail me@'), '訊息以 @ 結尾'],
+    [withStack('kq@\nTq@'), '別人改寫成只有名稱的 stack'],
+    [withStack('Error: first\nkq@\n    at real (plugin:other-plugin:1:1)', 'changed later'), '標頭對不上、frame 是別人的'],
+    [withStack('Error: mail me@', 'mail me@'), '標頭對得上'],
+  ];
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  for (const [error, label] of errors) {
+    assert.equal(maybeOwn(error), false, label);
+    log.record('ui', error);
+  }
+  await wait(10);
+  // 訊息改過的那幾個相同，去重後合成一行。
+  const written = lines(memory.texts.get(FILE)).map(line => JSON.parse(line) as { msg: string; stack?: string });
+  assert.deepEqual(written, [{ msg: 'changed later' }, { msg: 'x' }, { msg: 'mail me@' }].map(row => ({ t: '2026-11-02T20:15:03.250+08:00', build: BUILD, obsidian: OBSIDIAN, where: 'ui', ...row })), '接住的錯誤也不留名稱');
 });
 
 void test('D-173 有自己的位置時照舊只留自己的那幾層', async () => {
   const memory = createMemoryFiles();
-  const { log } = setup(memory.files);
+  const log = setupIos(memory.files);
   const mixed = withStack('kq@\nload@plugin:essence-cards:1:2\nother@plugin:other-plugin:3:4');
-  assert.equal(maybeOwn(mixed), true);
+  assert.equal(maybeOwn(mixed, true), true);
   log.record('ui', mixed);
   await wait(10);
   assert.equal((JSON.parse(lines(memory.texts.get(FILE))[0]) as { stack: string }).stack, 'load@plugin:essence-cards:1:2');
@@ -459,7 +490,7 @@ void test('D-173 有自己的位置時照舊只留自己的那幾層', async () 
 
 void test('D-173 只有名稱時，同一個錯誤靠訊息與第一層名稱去重：第一層都是匿名的，訊息不同就是不同的錯', async () => {
   const memory = createMemoryFiles();
-  const { log } = setup(memory.files);
+  const log = setupIos(memory.files);
   log.record('uncaught', withStack('@\nRd@', 'first'));
   log.record('uncaught', withStack('@\nRd@', 'second'));
   log.record('uncaught', withStack('kq@', 'first'));

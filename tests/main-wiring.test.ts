@@ -371,7 +371,7 @@ const reviewBundled = await bundle(false, [{
 interface Line { where: string; msg?: string; path?: string; stack?: string; kind?: string; lt?: string; v?: string }
 /** 這台的錯誤紀錄（當月的檔）裡的每一行。 */
 function errorLines(h: ReturnType<typeof host>): Line[] {
-  const path = [...h.texts.keys()].find(key => /^Essence Cards\/紀錄\/錯誤\/\d{4}-\d{2} Windows-[0-9a-f]{4} 錯誤\.jsonl$/.test(key));
+  const path = [...h.texts.keys()].find(key => /^Essence Cards\/紀錄\/錯誤\/\d{4}-\d{2} (?:Windows|iPhone)-[0-9a-f]{4} 錯誤\.jsonl$/.test(key));
   return path ? (h.text(path) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Line) : [];
 }
 /** 帶這個外掛自己程式位置的錯誤（Obsidian 載入外掛時的 stack 寫法）。 */
@@ -484,6 +484,26 @@ void test('§2-4 補網：window 的 error 與 unhandledrejection 只收自己�
   h.window.dispatchEvent(new Event('error'));
   await wait(20);
   assert.deepEqual(errorLines(h).map(line => [line.where, line.msg]), [['uncaught', '同步拋錯'], ['uncaught', '非同步拒絕']]);
+});
+
+// D-173：只有名稱的 stack 只在 iPhone 收（Codex L2 的 F2：其他主機完全不變）。
+void test('D-173 補網：只有名稱的 stack，iPhone 收、留整段；不是 iPhone 不收', async t => {
+  const named = (message: string): Error => { const error = Error(message); error.stack = 'kq@\n@'; return error; };
+  const fire = async (options: Omit<StubOptions, 'texts'>): Promise<Line[]> => {
+    const h = host(deck, options);
+    const plugin = h.plugin as PluginLike & { unload(): void };
+    plugin.onload();
+    t.after(() => { plugin.unload(); });
+    h.layoutReady();
+    await plugin.state?.ready();
+    h.window.dispatchEvent(errorEvent(named('同步拋錯')));
+    h.window.dispatchEvent(rejection(named('非同步拒絕')));
+    await wait(20);
+    return errorLines(h);
+  };
+  assert.deepEqual((await fire({ ios: true })).map(line => [line.where, line.msg, line.stack]), [['uncaught', '同步拋錯', 'kq@\n@'], ['uncaught', '非同步拒絕', 'kq@\n@']]);
+  assert.deepEqual(await fire({}), [], '手機但不是 iPhone');
+  assert.deepEqual(await fire({ desktop: true }), [], '電腦');
 });
 
 // tasks/error-log.md §8（D-160）：畫面的回報交給記錄器的 report，出一次提示；不寫複習紀錄。
