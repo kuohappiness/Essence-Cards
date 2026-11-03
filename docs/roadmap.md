@@ -14,7 +14,7 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 國小社會預設 | v0.7；試用先停在這裡（使用者 2026-11-03），還沒判定通過；跨單元加題的寫法能用，但 Sol 不寫待核對（[試用紀錄](card-rules/trials.md)） | 寫 AI 製卡模組時，決定開放前要不要再試歷史、公民類的單元（[backlog](backlog.md#v1-需要做的任務)） | AI 製卡模組開工 | [預設](card-rules/elementary-social.md)、[試用紀錄](card-rules/trials.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成；外掛內備份的第一部分（備份）隨 `0.2.0` 裝到正式使用的 vault，電腦上的外掛已自己做出第一份備份（2026-10-31，見已完成） | 外掛的備份位置已換成更新命令用的資料夾（[D-162](decisions.md#d-162-更新命令的安裝前備份保留和外掛的備份放同一個資料夾)，2026-10-31 核對：手動備份寫進那裡）；iPhone 重開後的版本行在下一次看「版本」命令時確認；還原畫面（第二部分）放到 v1 結案前（使用者 2026-10-29） | iPhone 實機測試 | [外掛內備份任務說明](../tasks/plugin-backup.md)、[規畫](plans/updates.md) |
 | 入口與目錄（第一批，[D-163](decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區)） | 已合併進 `main`，Codex L2 七輪後通過、Windows 實機通過（見已完成）；出處定在 [D-164](decisions.md#d-164-出處的寫法與讀法)、[D-169](decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選) | 還沒升版；iPhone 在下一次實機測試；第二批開工前先定出處結果的欄位（[任務 §9-1](../tasks/entry-and-catalog.md#9-1-模組)） | 使用者決定升版；iPhone 實機測試 | [任務說明](../tasks/entry-and-catalog.md)、[L2 審查請求](../tasks/entry-and-catalog-review.md) |
-| 節省 token 的流程優化 | 量過 Codex 與 Claude：兩邊都是長對話每次呼叫重讀整段最花額度；T1（每輪新開 Codex 對話）、T3（每輪寫明只讀哪幾節）已寫進 quality.md，T4（電腦上的 Claude 40 萬就壓縮）已寫進 `.claude/settings.json`，T2 的方向在「整理現有的開發 skill」討論串；Codex 第一輪回應了 T1～T3 | 談 T5、T6，再請 Codex 看 T4～T6 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>) |
+| 節省 token 的流程優化 | 已定案（[D-171](decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)）：Codex 每輪新開、只讀需要的、L2 第四輪後停；電腦上的 Claude 40 萬就壓縮（試行） | 下一件 L2 或長實作做完，量一次對照（D-171 第 6 點） | Claude | [討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>) |
 | 外掛架構逐環節檢視 | 整串檢視完成（2026-10-30）：九個環節都談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)、[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)、[D-158](decisions.md#d-158-打字卡看起來一樣的字元與多按的空白不算錯照打可以跳過)、[D-159](decisions.md#d-159-當天採用的錯題補強今天的份不變另有一個練習的選項)）；施工都在 [backlog](backlog.md#技術債)，環節 5 的存檔受阻提示已隨雲端佔位檔任務合併；環節 9 的四列與環節 5 的 W3 (a)(b) 已合併（見已完成）；觸發點已到的：環節 2 兩列（D1 已合併，見已完成；D-157 見上一列）；環節 3 的打字卡比對已合併（見已完成） | 照 backlog 各列的觸發點施工，不再另開檢視 | — | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
@@ -49,6 +49,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-03 | 節省 token 的流程定案（[D-171](decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)，[討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>)）：量過 Codex 與電腦上的 Claude，大頭是長對話每次重讀整段；Codex 每輪新開、只讀需要的、L2 第四輪後停，Claude 40 萬就壓縮 |
 | 2026-11-03 | code-quality 補兩句（review.md）：修審查發現時整類一次修、回歸測試涵蓋同類；請審查者特別看的邊界先自己測。依據：三份 L2（[錯誤紀錄](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)、[發布前比較](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)、[更新防線第二部分](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）22 項發現中，10 項屬這兩類 |
 | 2026-11-03 | 國小社會預設 v0.6 測跨單元加題（[試用紀錄](card-rules/trials.md)）：混入 10 項自製的小四目標再跑 2-2，Sol 加了 8 項、10 題，ID 全對；但不寫待核對，只給名稱會過度合併；預設改成 v0.7 |
 | 2026-11-03 | 入口與目錄第一批合併進 `main`（分支 `claude/entry-and-catalog`，[任務說明](../tasks/entry-and-catalog.md)）：入口、目錄瀏覽與練習、全部卡、預覽；出處的讀法定案（[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)）：不用猜的直接讀懂，要猜的只提示，模組化填入在第二批用到歸屬前完成；Codex L2 七輪（[報告](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）；Windows `entry` 44／44；還沒升版 |
@@ -58,4 +59,3 @@ flowchart LR
 | 2026-11-03 | 國小社會預設 v0.4 用 Sol 跑康軒五上 2-1 兩次（[試用紀錄](card-rules/trials.md)）：語法錯誤 0、各約 45 個目標，D-165、D-166 照設計發生；習作的景觀判斷被做成背地點、出處認不得，待改 |
 | 2026-11-03 | 學習目標的連結與整理定案（[D-167](decisions.md#d-167-學習目標的連結與整理)，第二階段）：關係寫成 Obsidian 的區塊 ID 連結、Cards 索引讀，先只做先備；整理靠結構檢查與按需的語意整理；判準相同的重複目標合併時保留原 ID（修改 D-126） |
 | 2026-11-03 | 國小社會預設 v0.4（[D-166](decisions.md#d-166-國小社會預設試用後的修改換一個地方還成立嗎反方向照第-9-條)）：加「換一個地方還成立嗎」，從特色問地名照第 9 條；另外三點和 Codex 談過後不改，Sol 對照時檢查 |
-| 2026-11-03 | 發布前比較的轉接器合併進 `main`（分支 `claude/fervent-hodgkin-9c2bca`，程式到 `3c6cd96`）：每個版本用自己的 `state` 讀備份，閘門與重複的 ID 進比較資料，回傳型別不對或內容矛盾就是無法比較；Codex L2 六輪（[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)）；比過正式使用的 vault 的備份：差異 0 項、沒有重複的 ID（裡面還沒有卡組）；還沒升版，條件見[技術債](backlog.md#技術債) |
