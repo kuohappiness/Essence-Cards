@@ -7,7 +7,7 @@ import { hash } from './screen-analysis.mjs';
 import { material, mechanical, stepUser } from './arch.mjs';
 import { createSecondSession } from './arch-r2-session.mjs';
 
-export const secondSettings = (root = ROOT) => readJson(path.join(root, 'arch/第二輪/設定.json'));
+export const secondSettings = (root = ROOT, file = 'arch/第二輪/設定.json') => readJson(path.join(root, file));
 export async function secondPrompt(root, spec, step) {
   const lines = [...spec.任務資料];
   for (const [key, value] of Object.entries(step.任務資料覆寫 ?? {})) {
@@ -19,19 +19,27 @@ export async function secondPrompt(root, spec, step) {
   for (const file of prompt.files) file.sha256 = hash(await fs.readFile(path.resolve(root, file.path)));
   return prompt;
 }
+// 清單由真實卡組整理，只放 --out；有寫才換掉任務資料的那一行。
+async function withExisting(out, spec) {
+  if (!spec.已有目標檔) return spec;
+  const file = path.join(out, spec.已有目標檔);
+  if (!(await exists(file))) throw new Error('缺少已有目標檔：' + spec.已有目標檔);
+  const list = (await fs.readFile(file, 'utf8')).trim();
+  return { ...spec, 任務資料: spec.任務資料.map(line => line.startsWith('學生已有的學習目標') ? `學生已有的學習目標：\n${list}` : line) };
+}
 function selection(values, allowed, label) {
   if (!Array.isArray(values) || !values.length || new Set(values).size !== values.length || values.some(v => !allowed.includes(v))) throw new Error(label + ' 必須非空、不重複且存在於設定');
   return allowed.filter(v => values.includes(v));
 }
-export async function prepareSecond({ out, run = 1, materials, configs, plan = '正式生成' }, dependencies = {}) {
+export async function prepareSecond({ out, run = 1, materials, configs, plan = '正式生成', settings }, dependencies = {}) {
   if (!Number.isSafeInteger(run) || run < 1) throw new Error('--run 必須是正整數');
-  if (!(await exists(path.join(out, '考題/凍結.md'))) || !(await exists(path.join(out, '材料/凍結.md')))) throw new Error('缺少教材或考題凍結；不送任何生成請求');
-  const root = dependencies.root ?? ROOT, config = dependencies.config ?? await secondSettings(root);
+  const root = dependencies.root ?? ROOT, config = dependencies.config ?? await secondSettings(root, settings);
+  if ((!config.不需考題凍結 && !(await exists(path.join(out, '考題/凍結.md')))) || !(await exists(path.join(out, '材料/凍結.md')))) throw new Error('缺少教材或考題凍結；不送任何生成請求');
   if (!['正式生成', '接法驗證'].includes(plan)) throw new Error('未知的第二輪 plan');
   if (plan === '接法驗證' && (materials || configs)) throw new Error('接法驗證固定照設定，不接受 materials／configs 覆寫');
-  const selectedMaterials = selection(materials ?? config[plan].materials, Object.keys(config.materials), 'materials');
-  const selectedConfigs = selection(configs ?? config[plan].configs, Object.keys(config.configs), 'configs');
-  const routes = ['R0', 'R1', 'R2', 'R3'].map(id => JSON.stringify(config.configs[id].map(s => config.models[s.model])));
+  const selectedMaterials = selection(materials ?? config[plan]?.materials, Object.keys(config.materials), 'materials');
+  const selectedConfigs = selection(configs ?? config[plan]?.configs, Object.keys(config.configs), 'configs');
+  const routes = ['R0', 'R1', 'R2', 'R3'].filter(id => config.configs[id]).map(id => JSON.stringify(config.configs[id].map(s => config.models[s.model])));
   if (new Set(routes).size !== 1) throw new Error('R0～R3 必須使用同一模型、參數與接法');
   const jobs = [];
   for (const name of selectedMaterials) {
@@ -40,7 +48,7 @@ export async function prepareSecond({ out, run = 1, materials, configs, plan = '
     for (const id of selectedConfigs) {
       if (!/^(R[0-3]|S0)$/.test(id)) throw new Error('未知第二輪組別');
       const steps = config.configs[id], prompts = [];
-      for (const step of steps) prompts.push(await secondPrompt(root, config.materials[name], step));
+      for (const step of steps) prompts.push(await secondPrompt(root, await withExisting(out, config.materials[name]), step));
       const dir = path.join(out, plan === '接法驗證' ? '接法驗證' : '生成', name, id, ...(run === 1 ? [] : [`第${run}次`]));
       jobs.push({ name, id, source, user, dir, steps, prompts });
     }

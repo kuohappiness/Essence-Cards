@@ -1,6 +1,6 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：第七輪通過（`a331804`，[報告](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md#codex-第七輪的報告最後一輪>)），等使用者同意合併：第五輪發現的修正（[D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+狀態：第七輪通過，已合併進 `main`（`a331804`，[報告](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md#codex-第七輪的報告最後一輪>)）：第五輪發現的修正（[D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
 
 ## 再審（第六輪）：第五輪發現的修正
 

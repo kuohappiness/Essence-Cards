@@ -8,7 +8,7 @@ import { ROOT, readJson, writeJson } from './core.mjs';
 import { secondSettings, secondPrompt, prepareSecond, runSecond } from './arch-r2.mjs';
 import { createSecondSession } from './arch-r2-session.mjs';
 import { renderCards, blindSecond } from './arch-r2-blind.mjs';
-import { splitSections } from './arch-request.mjs';
+import { splitSections, estimateInput } from './arch-request.mjs';
 import { requestPlan, verifyIdentity, planBody } from './arch-plan.mjs';
 
 const image = '自編原始圖.png';
@@ -203,7 +203,43 @@ export async function selftest() {
     for (const patch of [{ aud: 'wrong' }, { iss: 'wrong' }, { nonce: 'wrong' }, { exp: 1 }, { sub: '' }]) assert.throws(() => verifyIdentity(jwt({ ...claims, ...patch }), validation), /invalid-id-token/);
     assert.throws(() => verifyIdentity(jwt(claims).slice(0, -8) + 'AAAAAAAA', validation), /invalid-id-token/);
     assert.equal((await readJson(path.join(out, '紀錄/預算.json'))).limitUsd, 5);
-    console.log('arch 第二輪 selftest：8 類驗收通過（離線假請求；5 卡組／4 架構；未讀真實金鑰或登入檔）');
+    // 9. 另一份設定：只拿掉考題凍結，接法與 R3 提示不變；次數分開存；方案接法的 dry-run 估得出 token。
+    const socialFile = 'arch/第二輪/國小社會設定.json', social = await secondSettings(ROOT, socialFile);
+    assert.deepEqual(social.models['sol-plan'], config.models['sol-plan']);
+    assert.deepEqual(social.configs.R3[0].system, ['格式.md', '../短規則.md', '判斷邊界.md', '五步.md', '../../../../docs/card-rules/elementary-social.md']);
+    assert.deepEqual(social.configs.R3[0].output, ['全貌', '架構', '卡組']);
+    assert.deepEqual(social.materials['2-1'].任務資料, ['學生：國小五年級（小五上）', '科目：社會', '單元：2-1 地形如何影響我們的生活', '學習目的：準備段考', '允許 AI 補充：是', '學生已有的學習目標：無', '家長調整：無', '教材：課本轉錄稿（教師用書，含給老師的註記）與習作轉錄稿']);
+    const preset = path.resolve(root, 'arch/第二輪', social.configs.R3[0].system[4]);
+    await fs.mkdir(path.dirname(preset), { recursive: true });
+    await fs.copyFile(path.resolve(ROOT, 'arch/第二輪', social.configs.R3[0].system[4]), preset);
+    await writeJson(path.join(root, socialFile), social);
+    const socialOut = path.join(temp, 'social-output');
+    await fs.mkdir(path.join(socialOut, '材料/2-1/圖'), { recursive: true });
+    await fs.writeFile(path.join(socialOut, '材料/2-1/教材.md'), `p.1 ^p1\n\n自編文字\n![[${image}]]`);
+    await fs.writeFile(path.join(socialOut, '材料/2-1/圖', image), 'fixture-png-bytes');
+    await assert.rejects(prepareSecond({ out: socialOut, settings: socialFile }, { root }), /凍結/);
+    await fs.writeFile(path.join(socialOut, '材料/凍結.md'), '自編凍結');
+    await assert.rejects(prepareSecond({ out: socialOut, materials: ['2-1'], configs: ['R3'] }, { root }), /凍結/);
+    await assert.rejects(prepareSecond({ out: socialOut, settings: socialFile, plan: '接法驗證' }, { root }), /materials/);
+    const socialPlan = await prepareSecond({ out: socialOut, settings: socialFile, materials: ['2-1'] }, { root });
+    assert.deepEqual(socialPlan.jobs.map(j => [j.name, j.id]), [['2-1', 'R3']]);
+    assert.ok(socialPlan.jobs[0].prompts[0].system.includes('學生已有的學習目標：無'));
+    // 已有目標在 --out 裡，不進設定檔；只有用到的節才要有那個檔。
+    assert.equal(social.materials['2-2'].已有目標檔, '已有目標-2-1.md');
+    await fs.mkdir(path.join(socialOut, '材料/2-2/圖'), { recursive: true });
+    await fs.writeFile(path.join(socialOut, '材料/2-2/教材.md'), 'p.1 ^p1\n\n自編文字');
+    await assert.rejects(prepareSecond({ out: socialOut, settings: socialFile, materials: ['2-2'] }, { root }), /已有目標/);
+    await fs.writeFile(path.join(socialOut, '已有目標-2-1.md'), '- 自編目標｜k3m9x2｜小五上 2-1 p.1\n');
+    const existingPlan = await prepareSecond({ out: socialOut, settings: socialFile, materials: ['2-2'] }, { root });
+    assert.ok(existingPlan.jobs[0].prompts[0].system.includes('學生已有的學習目標：\n- 自編目標｜k3m9x2｜小五上 2-1 p.1\n家長調整：無'));
+    assert.ok(!existingPlan.jobs[0].prompts[0].system.includes('學生已有的學習目標：無'));
+    assert.ok(socialPlan.jobs[0].prompts[0].system.endsWith((await fs.readFile(preset, 'utf8')).replaceAll('\r\n', '\n').trimEnd()));
+    const before = planCalls;
+    for (const run of [1, 2]) assert.ok((await runSecond({ out: socialOut, settings: socialFile, materials: ['2-1'], run }, dependencies)).every(r => r.complete));
+    assert.equal(planCalls, before + 2);
+    for (const dir of ['生成/2-1/R3', '生成/2-1/R3/第2次']) for (const file of ['全貌.md', '架構.md', '卡組.md', '卡組.檢查.md']) await fs.access(path.join(socialOut, dir, file));
+    assert.deepEqual(estimateInput('ab', [{ type: 'text', text: '字' }, { type: 'image', file: 'x.png' }]), { chars: 3, images: 1, upperTokens: 18437 });
+    console.log('arch 第二輪 selftest：9 類驗收通過（離線假請求；5 卡組／4 架構；未讀真實金鑰或登入檔）');
   } finally {
     const target = await fs.realpath(temp), parent = await fs.realpath(os.tmpdir());
     if (!target.startsWith(parent + path.sep)) throw Error('暫存路徑不安全');

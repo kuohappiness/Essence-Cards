@@ -7,7 +7,7 @@
 | 角色 | 由誰擔任 |
 |---|---|
 | 規劃者 | Claude 的 Opus，推理等級 xhigh：任務說明、大的設計、L1 設計回顧（[D-144](../decisions.md#d-144-決策交給-opus-xhighfable-只在解不了的時候)）。重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high。任務說明與決定先和「不做」比較（[D-153](../decisions.md#d-153-每個新決定與新任務先和不做比較)），討論稿請 Codex 專門站在「不做」那一方反駁 |
-| 實作者 | Claude 的 Opus，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex |
+| 實作者 | Claude 的 Opus，推理等級 high（[D-131](../decisions.md#d-131-claude-實作codex-在關鍵點查核)、D-140）；例外轉出時是 Codex，任務說明照 `tasks/w3.md` 寫，交回照 code-quality 的「實作交回」檢查（[D-168](../decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)） |
 | 獨立審查者（L2） | 新開的 Codex session，不能是寫程式的那一個。Codex 不能用時，由 Claude 開子代理（L3），做不到的部分明列 |
 | 整合者 | Claude 的 Opus：L1 對照、核對 L2 的發現、合併 |
 
@@ -72,10 +72,10 @@
 
 [D-138](../decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)：Obsidian 出新的次版本（例如 1.14 → 1.15）時做一次，由 AI 做。
 
-- **目前驗證過的版本**：Windows 1.14.5（2026-10-26，W5 第二部分的開發命令）；iPhone 1.14.5（2026-10-27，[W6 的 iPhone 測試](../../tasks/w6-iphone.md)）。
+- **目前驗證過的版本**：Windows 1.15.0（2026-11-03，[相容性檢查](../../tasks/obsidian-1.15-compat.md)；npm 還沒有 1.15 的型別檔，比對列在[技術債](../backlog.md#技術債)）；iPhone 1.14.5（2026-10-27，[W6 的 iPhone 測試](../../tasks/w6-iphone.md)）。
 - **怎麼發現新版**：開發命令的結果檔會記 Obsidian 的版本（`obsidian` 欄位），AI 在 Windows 版 Obsidian 跑開發命令時看到比上面新的次版本就做；每個里程碑結束時也查一次 Obsidian 的改版說明。
 - **三層**：
-  1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `package.json` 的開發相依改成一樣，跑 `npm run check`。
+  1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `package.json` 的開發相依改成一樣，跑 `npm run check`。npm 常比 app 晚：還沒有新版時，先讀 `%APPDATA%\obsidian\obsidian-<版本>.asar` 裡的 `app.js`（只讀不執行），查用到的匯出還在、用 CodeMirror 新舊版的差異推定版本，型別檔的比對記進技術債；安裝資料夾的 `resources\obsidian.asar` 是安裝當時的舊版，不能當上一版比。
   2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（`npm run install-vault -- <測試 vault> --dev`；`lock`、`save` 在 W5 第二部分合併後才有），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 會假通過的情境已修（`b9309ca`，外掛架構討論稿環節 9 結論第 5 條）：`save` 的 `checks.clicked` 也要是 true。
   3. 讀改版說明裡和這幾點有關的條目：編輯器與 CodeMirror、Markdown 解析與閱讀模式（清單、區塊 ID）、檔案與 vault 的事件、iOS 與同步；每一點寫一句結論。
 - **結果**：寫進 roadmap 的已完成，通過就更新上面的版本；有不相容先寫失敗測試再修（高風險範圍做 L2）。iPhone 的部分記進下一次 iPhone 實機測試的清單。

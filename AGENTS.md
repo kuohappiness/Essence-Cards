@@ -25,7 +25,7 @@
 - 只在試作場（`experiments/`）做測試時，只讀 `experiments/README.md` 和該任務連到的說明（[D-065](docs/decisions.md#d-065-試作場)）。
 - `docs/archive/v0-planning/` 已被取代，不當依據；`docs/archive/discussions/` 是過程紀錄，不當規格。
 - 以 repo 中的最新文件為準，不以舊聊天紀錄為準。
-- 先載入對應的 skill：設計討論用 `essence-discuss`、寫 D-ID 用 `essence-decision`、寫或審程式用 `code-quality`、交給 Codex 用 `codex-brief`。
+- 先載入對應的 skill：設計討論用 `essence-discuss`、寫 D-ID 用 `essence-decision`、寫或審程式、請 Codex 查核用 `code-quality`。
 
 ## 文件分工
 

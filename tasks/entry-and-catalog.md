@@ -1,6 +1,6 @@
 # 入口與目錄，第一批：看得到、練得到（D-163，給 Claude，本機執行）
 
-狀態：使用者 2026-11-02 同意；§9 格式查核做完（[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-format-review.md>)），改寫法定在 [D-164](../docs/decisions.md#d-164-出處的寫法與讀法)，L2 之後再收緊（[D-169](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)）；出處的讀法改成 [D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)；程式與 Windows 實機做完（分支 `claude/entry-and-catalog`，到 `a331804`），Codex L2 第一輪的發現都修了，Codex L2 七輪後通過，等使用者同意合併（[審查請求](entry-and-catalog-review.md)）
+狀態：使用者 2026-11-02 同意；§9 格式查核做完（[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-format-review.md>)），改寫法定在 [D-164](../docs/decisions.md#d-164-出處的寫法與讀法)，L2 之後再收緊（[D-169](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)）；出處的讀法改成 [D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)；程式與 Windows 實機做完（分支 `claude/entry-and-catalog`，到 `a331804`），Codex L2 第一輪的發現都修了，使用者 2026-11-03 同意，已合併進 `main`；Codex L2 七輪後通過（[審查請求](entry-and-catalog-review.md)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（設計已在 [D-163](../docs/decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區) 與這份說明做完）。跨模組、動到選卡與出處解析，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 

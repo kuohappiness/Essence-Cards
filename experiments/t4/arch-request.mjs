@@ -14,15 +14,18 @@ export const PRICES = {
   'anthropic/claude-opus-5.5': { input: 4, output: 20 },
 };
 export const MAX_USD = 20;
+export function estimateInput(system, saved) {
+  // 文字以 UTF-8 bytes 上界估 token；圖以每張 16k token 預留，非帳單。
+  const text = saved.filter(p => p.type === 'text').map(p => p.text).join('\n'), images = saved.filter(p => p.type === 'image').length;
+  return { chars: (system + text).length, images, upperTokens: Buffer.byteLength(system + text, 'utf8') + images * 16384 + 2048 };
+}
 export function estimateRequest(model, system, saved) {
   const price = PRICES[model.model];
   if (!price) throw new Error('未知的模型定價，停止送出');
   const parameters = model.parameters ?? {};
   const output = parameters.max_completion_tokens ?? parameters.max_tokens;
   if (!Number.isSafeInteger(output) || output <= 0) throw new Error('付費請求必須明確指定輸出 token 上限');
-  // 文字以 UTF-8 bytes 上界估 token；圖以每張 16k token 預留，非帳單。
-  const text = saved.filter(p => p.type === 'text').map(p => p.text).join('\n');
-  const input = Buffer.byteLength(system + text, 'utf8') + saved.filter(p => p.type === 'image').length * 16384 + 2048;
+  const input = estimateInput(system, saved).upperTokens;
   // 長 context 的 OpenAI 溢價也納入上界。
   const multiplier = model.provider === 'openai' && input > 272000 ? { input: 2, output: 1.5 } : { input: 1, output: 1 };
   // 公開端點表也有 2 倍定價的路由；尚未釘選供應商時，以最高列價預留。

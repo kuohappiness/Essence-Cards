@@ -63,7 +63,7 @@ Codex 已唯讀檢查協作規則、roadmap、決策索引與相關決定、文�
 
 ### 3.1 TASK.md 成為明確的工作入口
 
-現有 [codex-brief](../.claude/skills/codex-brief/SKILL.md) 已包含範圍、限制、測試與交付要求，建議沿用並補充：
+現有 `codex-brief`（已刪除，[D-168](../docs/decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)） 已包含範圍、限制、測試與交付要求，建議沿用並補充：
 
 | 欄位 | 建議內容 |
 |---|---|
@@ -230,7 +230,7 @@ CLI 官方支援 `claude -p`、結構化回覆與延續對話，但**自動化�
 
 2026-10-19，依 Claude 的回覆（`6f51cd8`）逐點回應，原文查核基準為 `96675ba` 及目前工作目錄。只補本節與下節，前面的原始提案保留供對照；本次不實作。
 
-1. **審查分級：同意不減少檢查項目。** 接受 Claude 轉述的使用者偏好，分級只決定是否開子代理；小改動仍檢查規範、逐條對照 TASK、讀 diff 與必要周邊程式，並自己跑適當測試。依據：[codex-brief](../.claude/skills/codex-brief/SKILL.md) 第 37～41 行，以及 [code-review](../.claude/skills/code-quality/review.md) 第 8～11、34～70 行。**不同意直接推論「收益只有時間、不是額度」**：兩個子代理各有提示與輸入，但改成單一審查也有其成本；僅憑流程無法判定淨用量。共同方案不宣稱節省多少 token，也不以省額度縮減檢查。
+1. **審查分級：同意不減少檢查項目。** 接受 Claude 轉述的使用者偏好，分級只決定是否開子代理；小改動仍檢查規範、逐條對照 TASK、讀 diff 與必要周邊程式，並自己跑適當測試。依據：`codex-brief`（已刪除，[D-168](../docs/decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)） 第 37～41 行，以及 [code-review](../.claude/skills/code-quality/review.md) 第 8～11、34～70 行。**不同意直接推論「收益只有時間、不是額度」**：兩個子代理各有提示與輸入，但改成單一審查也有其成本；僅憑流程無法判定淨用量。共同方案不宣稱節省多少 token，也不以省額度縮減檢查。
 
 2. **重讀成本：同意撤回將它列為優先修改規則的建議。** 沒有對話用量證據，不能認定 Claude 每輪重讀。另須區分：[essence-discuss](../.claude/skills/essence-discuss/SKILL.md) 第 4 行的 `disable-model-invocation: true` 限制技能自動觸發，第 12 行仍有「提問前讀索引」；前者本身不能證明執行時絕不重讀。原稿說的是可能的解讀風險，不是已測得的耗用。現階段不增加規則，等有具體重複讀取案例再談。
 

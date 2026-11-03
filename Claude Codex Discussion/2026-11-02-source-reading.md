@@ -1,6 +1,6 @@
 # 出處怎麼讀：從底層重想
 
-狀態：已定案（[D-167](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)），程式在分支 `claude/entry-and-catalog`（`4a0bce2`）；第二份考卷（盲測）的結果在最後；使用者決定用合併版當基礎，模組化填入照 Claude 的建議，沒寫學期維持不算；[Codex](<2026-11-02-source-reading-codex.md>)、[Fable](<2026-11-02-source-reading-fable.md>) 的原文各在自己的檔案；入口與目錄第一批的 Codex L2 通過，合併等使用者同意
+狀態：已定案（[D-167](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)），程式在分支 `claude/entry-and-catalog`（`4a0bce2`）；第二份考卷（盲測）的結果在最後；使用者決定用合併版當基礎，模組化填入照 Claude 的建議，沒寫學期維持不算；[Codex](<2026-11-02-source-reading-codex.md>)、[Fable](<2026-11-02-source-reading-fable.md>) 的原文各在自己的檔案；入口與目錄第一批的 Codex L2 通過，已合併進 `main`
 
 編號說明：本文的 D-166、D-167 是「家長亂填出處是常態」與「出處的讀法」，因為和 main 撞號，2026-11-03 改編為 [D-169](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)；原文的文字不改，連結已改。
 
