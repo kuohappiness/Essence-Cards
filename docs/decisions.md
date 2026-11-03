@@ -190,7 +190,7 @@
 | [D-110 v1 外掛的程式結構](#d-110-v1-外掛的程式結構) | 程式放 repo 最上層；核心分卡組、學習狀態、範圍與目錄、AI 四個模組，不碰 Obsidian；和 vault 只透過檔案存取一個接點；寫回筆記都是文字到文字的函式；排程用 ts-fsrs，快取量過再決定。 | 2026-10-20 | ✅ 後續見 [D-135](#d-135-清單解析和-obsidian-對照後的處理) |
 | [D-111 v1 的開發順序，Capture 延後](#d-111-v1-的開發順序capture-延後) | 先打通手寫卡組到 iPhone 複習與排程（W1～W6），AI 製卡在後；Capture 延到 Cards 的複習閉環完成後，repo 骨架已建好。 | 2026-10-20 | ✅ |
 | [D-117 技術債預防：機械檢查全自動，AI 審查只在關鍵點](#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點) | `npm run check`（型別、測試、ESLint 模組邊界、knip、secretlint）在 pre-commit 與 CI 自動跑；AI 審查只在大改動合併前；retro 與 security-review 每個里程碑一次。 | 2026-10-20 | ✅ 後續見 [D-119](#d-119-程式品質的-skill-整併成通用的-code-quality)、[D-141](#d-141-文件架構入口只放狀態同一類資訊只維護一份) |
-| [D-119 程式品質的 skill 整併成通用的 code-quality](#d-119-程式品質的-skill-整併成通用的-code-quality) | 品質相關的 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債記在 backlog，寫觸發點與完成條件。 | 2026-10-20 | ✅ 後續見 [D-131](#d-131-claude-實作codex-在關鍵點查核)、[D-140](#d-140-fable-規劃opus-執行codex-查核) |
+| [D-119 程式品質的 skill 整併成通用的 code-quality](#d-119-程式品質的-skill-整併成通用的-code-quality) | 品質相關的 skill 合成通用的 `code-quality`，專案設定在 `docs/agents/quality.md`；高風險改動由新開的 Codex session 審查、Claude 核對；技術債記在 backlog，寫觸發點與完成條件。 | 2026-10-20 | ✅ 後續見 [D-131](#d-131-claude-實作codex-在關鍵點查核)、[D-140](#d-140-fable-規劃opus-執行codex-查核)、[D-168](#d-168-拿掉-codex-brief請-codex-查核走-code-quality) |
 | [D-138 Obsidian 出新的次版本時做一次相容性檢查](#d-138-obsidian-出新的次版本時做一次相容性檢查) | Obsidian 出新的次版本時，維護的 AI 比對型別檔與 CodeMirror 版本、重跑開發命令、讀相關的改版說明；使用者不用做事 | 2026-10-26 | ✅ |
 | [D-148 電腦專用的主機接點](#d-148-電腦專用的主機接點) | 外掛只有一個電腦專用的資料夾能用 Node／Electron（背景製卡、vault 外備份），判斷是電腦才動態載入；ESLint 與建置檢查擋住其他地方，手機替身載入正式版驗收。 | 2026-10-28 | ✅ |
 | [D-149 更新與相容：版本紀錄、讀取閘門與正式安裝](#d-149-更新與相容版本紀錄讀取閘門與正式安裝) | 每台裝置在紀錄裡記版本；「需要哪一版」的讀取端現在做，讀不懂就停、不猜；正式 vault 只裝正式版，安裝前比較新舊版、考前只提醒；更新防線做完才裝下一版。 | 2026-10-28 | ✅ 後續見 [D-155](#d-155-正式版的錯誤紀錄) |
@@ -214,8 +214,9 @@
 | [D-141 文件架構：入口只放狀態，同一類資訊只維護一份](#d-141-文件架構入口只放狀態同一類資訊只維護一份) | roadmap「現在在哪裡」改成狀態板、同一類資訊只維護一份、加每次 commit 的文件檢查與檔頭狀態行；決策索引分主題放第二批。 | 2026-10-27 | ✅ 後續見 [D-143](#d-143-歸檔原則每類文件都有終點不設字數上限) |
 | [D-143 歸檔原則：每類文件都有終點，不設字數上限](#d-143-歸檔原則每類文件都有終點不設字數上限) | 不設字數上限，改靠每類文件都有終點：backlog 定案或做完就移除、plans 加狀態行、有討論稿的不另寫摘要、做完的任務不刪不搬、AGENTS.md 只放每個 session 都要的規則。 | 2026-10-27 | ✅ 後續見 [D-147](#d-147-agentsmd-的寫法底線在上新增規則先過五關) |
 | [D-144 決策交給 Opus xhigh，Fable 只在解不了的時候](#d-144-決策交給-opus-xhighfable-只在解不了的時候) | 規劃型對話開 Opus xhigh、執行型開 high；重大決策點先寫討論稿和 Codex 討論；解不了才切 Fable 5.1 high，和卡關的升級同一條路線。 | 2026-10-27 | ✅ |
-| [D-147 AGENTS.md 的寫法：底線在上，新增規則先過五關](#d-147-agentsmd-的寫法底線在上新增規則先過五關) | CLAUDE.md 維持一行指向；AGENTS.md 一條一句、底線放最上、刪掉與 skill 重複的並加一行 skill 分流；新增規則先過五關（重大或重複犯錯、每個 session 都要、具體、只放一處、使用者同意），每加一條同時除草。 | 2026-10-28 | ✅ |
+| [D-147 AGENTS.md 的寫法：底線在上，新增規則先過五關](#d-147-agentsmd-的寫法底線在上新增規則先過五關) | CLAUDE.md 維持一行指向；AGENTS.md 一條一句、底線放最上、刪掉與 skill 重複的並加一行 skill 分流；新增規則先過五關（重大或重複犯錯、每個 session 都要、具體、只放一處、使用者同意），每加一條同時除草。 | 2026-10-28 | ✅ 後續見 [D-168](#d-168-拿掉-codex-brief請-codex-查核走-code-quality) |
 | [D-153 每個新決定與新任務先和「不做」比較](#d-153-每個新決定與新任務先和不做比較) | 新決定與新任務先寫不做會怎樣、做的代價、更小的做法；不做夠好就不做，D-ID 的曾考慮必寫「不做」；主要在 Opus 規劃階段，Codex 在討論稿專門反駁。 | 2026-10-29 | ✅ |
+| [D-168 拿掉 codex-brief，請 Codex 查核走 code-quality](#d-168-拿掉-codex-brief請-codex-查核走-code-quality) | 刪掉沒在用的 codex-brief；AGENTS 分流改成請 Codex 查核用 code-quality，例外轉出實作照 `tasks/w3.md` 寫。 | 2026-11-03 | ✅ |
 
 ---
 
@@ -2791,7 +2792,7 @@
 
 ## D-119 程式品質的 skill 整併成通用的 code-quality
 
-✅ 2026-10-20｜Claude 與 Codex 討論後由使用者確認（[討論稿](<../Claude Codex Discussion/2026-10-20-code-quality-skill.md>)）｜修改 [D-106](#d-106-claude-與-codex-的協作流程) 的審查分級、[D-117](#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點) 的 retro 與檢查範圍｜實作者改為 Claude，見 [D-131](#d-131-claude-實作codex-在關鍵點查核)｜改存檔格式的任務開工前多一次 Codex 查核，見 [D-140](#d-140-fable-規劃opus-執行codex-查核)
+✅ 2026-10-20｜Claude 與 Codex 討論後由使用者確認（[討論稿](<../Claude Codex Discussion/2026-10-20-code-quality-skill.md>)）｜修改 [D-106](#d-106-claude-與-codex-的協作流程) 的審查分級、[D-117](#d-117-技術債預防機械檢查全自動ai-審查只在關鍵點) 的 retro 與檢查範圍｜實作者改為 Claude，見 [D-131](#d-131-claude-實作codex-在關鍵點查核)｜改存檔格式的任務開工前多一次 Codex 查核，見 [D-140](#d-140-fable-規劃opus-執行codex-查核)｜codex-brief 拿掉，Codex 交回改由 code-quality 指定，見 [D-168](#d-168-拿掉-codex-brief請-codex-查核走-code-quality)
 
 **決定**：
 
@@ -3697,7 +3698,7 @@
 
 ## D-147 AGENTS.md 的寫法：底線在上，新增規則先過五關
 
-✅ 2026-10-28｜使用者提出（專案討論串「討論 CLAUDE.md 內容」：使用者給五條寫法原則，Claude 逐條檢查兩個 repo 的 AGENTS.md，使用者同意全部，並補上「skill 裡全域適用的也拉進 AGENTS」）｜修改 [D-143](#d-143-歸檔原則每類文件都有終點不設字數上限) 的「AGENTS.md 只放每個 session 都需要的規則」
+✅ 2026-10-28｜使用者提出（專案討論串「討論 CLAUDE.md 內容」：使用者給五條寫法原則，Claude 逐條檢查兩個 repo 的 AGENTS.md，使用者同意全部，並補上「skill 裡全域適用的也拉進 AGENTS」）｜修改 [D-143](#d-143-歸檔原則每類文件都有終點不設字數上限) 的「AGENTS.md 只放每個 session 都需要的規則」｜skill 分流拿掉 codex-brief，見 [D-168](#d-168-拿掉-codex-brief請-codex-查核走-code-quality)
 
 **決定**：
 
@@ -4392,3 +4393,24 @@
 - 第二階段要多欄位、索引、整理的提醒與審核畫面；語意整理的 AI 用量隨網變大。
 - 家長要判斷兩個目標的判準是否等價；判錯時，退役目標的能力會被當成已經會了。
 - iPhone 上的負擔沒量過，做之前先試作。
+
+## D-168 拿掉 codex-brief，請 Codex 查核走 code-quality
+
+✅ 2026-11-03｜使用者同意 Claude 的提案（專案討論串「整理現有的開發 skill」）｜修改 [D-119](#d-119-程式品質的-skill-整併成通用的-code-quality) 的「Codex 交回由 codex-brief 指定」、[D-147](#d-147-agentsmd-的寫法底線在上新增規則先過五關) 的 skill 分流
+
+**決定**：
+
+- 刪掉 `.claude/skills/codex-brief/`（只有 `.claude` 一份）；git 歷史留得到。
+- `AGENTS.md` 的 skill 分流改成「寫或審程式、請 Codex 查核用 `code-quality`」，不再寫「交給 Codex 用 codex-brief」。
+- 例外把實作轉給 Codex 時（D-131），任務說明照 `tasks/w3.md` 寫，交回後照 code-quality 的「實作交回」檢查；這一點寫在 `docs/agents/quality.md` 的角色表。
+
+**理由**：
+
+- D-131（2026-10-23）以後沒有一件實作交給 Codex，`tasks/` 最近的任務都由 Claude 執行；常做的是請 Codex 查核（10-27～11-02 約 16 份格式查核、L2 與再審的請求），範本已經在 code-quality 的 `review.md` 與 `quality.md`。
+- 分流那行把最常見的情況（請 Codex 查核）指到明寫「不用在查核」的 skill，用不到的說明每個 session 還要多載入一段。
+
+**曾考慮的做法**：
+
+- 不做：查核請求目前都寫得出來，壞處小；但分流會繼續誤導，用不到的 skill 留著也要跟著其他規則改（D-141、D-143 都改過它）。
+- 另寫一個「Codex 查核請求」skill：範本已在 `review.md`，最近的查核都照它寫成，多一個 skill 只是多一處要同步。
+- 把 codex-brief 改寫成查核用：和 code-quality 的審查一節重複（D-119 當初就是為了把審查集中到 code-quality）。
