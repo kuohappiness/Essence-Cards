@@ -1,6 +1,6 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：第六輪待審：第五輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+狀態：第六輪審完，沒有 P1，發現都修了，等使用者決定要不要再審：第五輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
 
 ## 再審（第六輪）：第五輪發現的修正
 
