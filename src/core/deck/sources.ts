@@ -282,9 +282,11 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const asHeading = (extra: Partial<Pending> = {}): Pending => ({ text: display, link: { kind: 'heading', heading: display }, ...extra });
     if (NEGATIVE.test(segment)) {
       forget();
-      // 緊接在沒有位置的單元後面（`國二上 1-3，不算這個`）：說的就是那個單元，一起先不算。有位置的是實際的出處，照連。
+      // 緊接在沒有位置的單元後面（`國二上 1-3，不算這個`）：說的就是那個單元，一起先不算。有位置的是實際的出處，照連；
+      // 否定段自己點名了別的（`不是 p.46`、`不是國二上 1-8`、`不是 [[筆記]]`）：說的不是前面的單元。
       const last = items.at(-1);
-      if (last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading')) {
+      const namesOther = /[\dA-Za-z]/.test(segment) || SUSPECT.test(segment) || scan(segment, tokens).found.length > 0;
+      if (!namesOther && last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading')) {
         items[items.length - 1] = { text: last.text, link: { kind: 'text' }, problem: 'negative' };
         scope = 'this';
       }

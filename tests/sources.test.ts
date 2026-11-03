@@ -75,6 +75,8 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   ['不要算國二上 1-3', [{ kind: 'text' }], true], ['國二上 1-3 不要算這個目標', [{ kind: 'text' }], true], ['國二上 1-3 不考這個', [{ kind: 'text' }], true], ['不是國二上 1-3，是國三上 2-1', [{ kind: 'text' }, heading('是國三上 2-1')], true], ['老師說不用看 p.44', [{ kind: 'text' }], true], ['圖 2-14 不用看', [{ kind: 'text' }], true], ['不是 p.44', [{ kind: 'text' }], true],
   // 否定字緊接在沒有位置的單元後面：說的就是那個單元；有位置的是實際的出處，照連
   ['國二上 1-3，不算這個', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3 水溶液，不算這個', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算這個，p.44', [{ kind: 'text' }, { kind: 'text' }, page(44)], true], ['國二上 1-3 p.20，老師說不用背', [u13(page(20)), { kind: 'text' }], true],
+  // 否定段自己點名了別的東西：說的不是前面的單元
+  ['國二上 1-3、不是國二上 1-8', [u13(), { kind: 'text' }], true], ['國二上 1-3、不是 p.46、p.45', [u13(), { kind: 'text' }, u13(page(45))], true], ['國二上 1-3，不算 L2', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是第四十四頁', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是國二下', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是 [[筆記]]', [u13(), { kind: 'text' }], true],
   // 範圍寫反、不確定：不連
   ['p.46-44', [heading('p.46-44')], true], ['p.44-5', [heading('p.44-5')], true], ['p.44-44', [heading('p.44-44')], true], ['第46-44頁', [heading('第46-44頁')], true], ['p53 基因', [heading('p53 基因')], true], ['第十百頁', [heading('第十百頁')]], ['pp.44', [page(44)]],
 ];
