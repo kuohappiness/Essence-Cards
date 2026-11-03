@@ -883,6 +883,8 @@ void test('D-167 半形的 | 後面接欄位名稱加冒號也是分隔：類型
   assert.deepEqual(fields('出處：p.44｜類型：定義').sources, ['p.44'], '全形照舊');
   assert.deepEqual(fields('出處：[[筆記|類型：x]]').sources, ['[[筆記|類型：x]]'], '連結裡的不算');
   assert.deepEqual(fields('出處：p.44 | 重點').sources, ['p.44 | 重點'], '後面不是欄位名稱');
+  assert.deepEqual(fields('備註：[解法](a(b)|類型：補充)').remarks, ['[解法](a(b)|類型：補充)'], '連結路徑裡的成對括號');
+  assert.equal(fields('備註：[解法](a(b)|類型：補充)').type, null);
   for (const inside of ['[[筆記｜類型：x]]', '[[筆記|類型：x]]', '[a](foo|類型：bar)', '[a](foo｜類型：bar)', '「附錄｜類型：x」', '「附錄|類型：x」', '［［筆記｜類型：x］］']) {
     assert.deepEqual(fields('出處：' + inside).sources, [inside], inside);
     assert.equal(fields('出處：' + inside).type, null, inside);

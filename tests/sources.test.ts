@@ -50,7 +50,7 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 本篇自己的編號
   ['L3 p.30', [page(30)], false, ENGLISH], ['2-2 p.30', [page(30)]], ['5', [{ kind: 'text' }], false, MATH], ['本單元 p.44', [page(44)]],
   // 連結
-  ['[[筆記#標題]]', [note('筆記#標題')]], ['[[筆記]]', [note('筆記')]], ['[[a,b]]', [note('a,b')]], ['[[國二上 L1]]', [note('國二上 L1')]], ['[[Ａ卷#２-１]]', [note('Ａ卷#２-１')]], ['[[ノート]]', [note('ノート')]], ['［［Ａ卷＃２－１］］', [note('Ａ卷#２－１')]], ['[[Ａ｜卷]]', [note('Ａ｜卷')]], ['［［筆記｜別名］］', [{ kind: 'note', link: '筆記', alias: '別名' }]], ['[[a]], [[b/c]]', [note('a'), note('b/c')]], ['[補充筆記](補充筆記.md)', [note('補充筆記')]], ['[教材](%E6%95%99.md)', [note('教')]], ['[教材](100%.md)', [note('100%')]], ['[教材](%E4%.md)', [note('%E4%')]], ['[[#睡眠的階段]]', [heading('睡眠的階段')]], ['#睡眠的階段', [heading('睡眠的階段')]], ['「睡眠的階段」', [heading('睡眠的階段')]], ['「附錄,國二上 1-3 p.20」', [heading('附錄,國二上 1-3 p.20')]], ['「不是這個」', [heading('不是這個')]], ['國二上 1-3 「標題」', [u13(heading('標題'))]], ['p.44, 「溶解, 擴散」', [page(44), heading('溶解, 擴散')]],
+  ['[[筆記#標題]]', [note('筆記#標題')]], ['[[筆記]]', [note('筆記')]], ['[[a,b]]', [note('a,b')]], ['[[國二上 L1]]', [note('國二上 L1')]], ['[[Ａ卷#２-１]]', [note('Ａ卷#２-１')]], ['[[ノート]]', [note('ノート')]], ['［［Ａ卷＃２－１］］', [note('Ａ卷#２－１')]], ['[[Ａ｜卷]]', [note('Ａ｜卷')]], ['［［筆記｜別名］］', [{ kind: 'note', link: '筆記', alias: '別名' }]], ['[[a]], [[b/c]]', [note('a'), note('b/c')]], ['[補充筆記](補充筆記.md)', [note('補充筆記')]], ['[教材](%E6%95%99.md)', [note('教')]], ['[教材](100%.md)', [note('100%')]], ['[教材](版本(甲),國二上1-3p.44)', [note('版本(甲),國二上1-3p.44')]], ['[教材](%E4%.md)', [note('%E4%')]], ['[[#睡眠的階段]]', [heading('睡眠的階段')]], ['#睡眠的階段', [heading('睡眠的階段')]], ['「睡眠的階段」', [heading('睡眠的階段')]], ['「附錄,國二上 1-3 p.20」', [heading('附錄,國二上 1-3 p.20')]], ['「不是這個」', [heading('不是這個')]], ['國二上 1-3 「標題」', [u13(heading('標題'))]], ['p.44, 「溶解, 擴散」', [page(44), heading('溶解, 擴散')]],
   // 先備、網址、題號
   ['先備：國一數學 比例式', [{ kind: 'text' }]], ['先備:比例', [{ kind: 'text' }]], ['先備：A, B', [{ kind: 'text' }]], ['https://example.com/p.44', [{ kind: 'text' }]], ['第5題', [{ kind: 'text' }]], ['https://zh.wikipedia.org/wiki/水溶液', [{ kind: 'text' }]],
   ['國二上 1-3、https://x.test、國二上1-8', [u13(), { kind: 'text' }, unit('國二上', '1-8')]], ['https://x.test，國二上1-8', [{ kind: 'text' }, unit('國二上', '1-8')]],
@@ -102,7 +102,7 @@ const INSIDE: Record<string, Change> = {
 const AROUND: Record<string, [string, string]> = {
   尾端空白: ['', ' '], 開頭空白: [' ', ''], 尾端逗號: ['', ','], 尾端全形逗號: ['', '，'], 尾端句號: ['', '。'], 尾端頓號: ['', '、'], 零寬字元: ['', String.fromCharCode(0x200b)], 逗號加空白: ['', ' ,'],
 };
-const PROTECTED = /［［[^］]*］］|\[\[[^\]]*\]\]|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、，,]+/g;
+const PROTECTED = /［［[^］]*］］|\[\[[^\]]*\]\]|\[[^\]]+\]\((?:[^()]|\([^()]*\))+\)|「[^」]+」|https?:\/\/[^\s、，,]+/g;
 function outside(text: string, change: Change): string {
   let out = '', last = 0;
   for (const match of text.matchAll(PROTECTED)) {
@@ -161,6 +161,12 @@ void test('D-167 網址的分界：半形逗號、分號後面緊接著字是網
   assert.equal(read('https://example.test/a,國二上1-3 p.5').at(-1)?.problem, 'leftover', '後面還有位置也要提示');
   for (const separator of ['、', '﹑', '，', '﹐', '；', '﹔', ', ', '; ']) assert.deepEqual(links('https://example.test/a' + separator + '國二上 1-3'), [{ kind: 'text' }, u13()], separator);
   assert.deepEqual(read('https://example.test/a,').map(item => item.text), ['https://example.test/a'], '尾端的逗號不是網址的一部分');
+});
+
+void test('D-167 Markdown 連結的路徑可以有成對的括號，裡面的字不算單元', () => {
+  assert.deepEqual(links('[教材](a(b(c)),國二上1-3p.44)'), [note('a(b(c)),國二上1-3p.44')]);
+  assert.deepEqual(links('[教材](a\\)國二上1-3.md)'), [note('a\\)國二上1-3')]);
+  assert.deepEqual(links('[教材](a(b)、國二上 1-3'), [heading('[教材](a(b)'), u13()], '括號沒有配對就不是連結');
 });
 
 void test('D-167 零寬字元夾在任何地方都不改意思；連結裡的不動', () => {
