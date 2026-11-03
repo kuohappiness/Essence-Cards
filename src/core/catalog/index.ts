@@ -14,7 +14,7 @@ interface UnitTarget { id: string; name: string; path: string; line: number; fro
 export interface UnitProblem { kind: 'target' | 'property'; count: number; path: string; line: number }
 
 export interface UnitNode {
-  /** 單元的身分：（年級學期、科目、單元編號），編號不分全形半形與大小寫（D-167）；「其他」組是那一篇的路徑。code 是路徑第一篇的原字。 */
+  /** 單元的身分：（年級學期、科目、單元編號），編號不分全形半形、大小寫與連字號的打法（D-167）；「其他」組是那一篇的路徑。code 是路徑第一篇的原字。 */
   key: string;
   term: string | null;
   subject: string | null;

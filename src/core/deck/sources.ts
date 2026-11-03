@@ -50,7 +50,7 @@ const END = /[,/;、。.\s]+$/;
 const RAW_END = /[,，﹐/／;；﹔、﹑。．.\s]+$/;
 const SEPARATOR = /[,，﹐/／;；﹔]/;
 
-/** 單元編號的比對鍵：全半形、大小寫不分；`L01` 與 `L1` 不同（§9-2、D-167 第 4 點）。屬性、出處、目錄、考試範圍共用。 */
+/** 單元編號的比對鍵：全半形、大小寫、連字號的打法不分；`L01` 與 `L1` 不同（§9-2、D-167 第 4 點）。屬性、出處、目錄、考試範圍共用。 */
 export const codeKey = (code: string): string => tidy(code).trim().toLowerCase();
 /** 材料標題的比對鍵（只影響連結）：全半形、大小寫、空白、上下標不分。 */
 export const headingKey = (text: string): string => tidy(text).toLowerCase().replace(/\s/g, '').replace(/[₀-₉]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2080 + 48)).replace(/[¹²³]/g, c => ({ '¹': '1', '²': '2', '³': '3' })[c] ?? c);

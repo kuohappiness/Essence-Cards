@@ -1,6 +1,21 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：第三輪待審：出處的新讀法（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+狀態：第四輪待審：第三輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+
+## 再審（第四輪）：第三輪發現的修正
+
+只審第三輪報告的修正與相鄰案例，不必整包重審。基準 `2016e4c`（第三輪待審的版本），待審分支 `claude/entry-and-catalog` 的最新 commit。逐項的處理與 commit 在[討論稿的〈Claude 回應 Codex 第三輪〉](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md#claude-回應-codex-第三輪2026-11-03>)。
+
+**請特別查**：
+
+- **這輪新加的規則**：否定字緊接在沒有位置的單元後面、讀完才去重（`fields.sources` 現在留著重複）、`splitOutsideLinks` 在 `parse.ts` 的用法（備註、錯題補強也走這裡）、`rawIndex` 切原文。有沒有帶進新的誤歸屬。
+- **使用者已決定、不用再提**：`10-15` 維持沿用、`2之1` 算同一個單元、全形括號裡的字不動。除非你找到比已寫明的代價更嚴重的後果，再具體說。
+- **性質測試**：`tests/sources.test.ts` 雜訊只加在保護區外、比 `problem`、`needsUnit`、`remark`，一種雜訊時從 `parseDeck` 跑到目錄與提示，兩種疊加時只跑讀法。有沒有漏掉的組合。
+- **第二批的分法**：任務 §9-1 的三種結果夠不夠用。
+
+**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 的結果寫在[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
+
+回報照下面〈回報〉的格式，貼回對話或接在討論稿最後都可以；所有檔案都在這個 worktree，不要寫到主資料夾。
 
 ## 再審（第三輪）：出處的新讀法
 

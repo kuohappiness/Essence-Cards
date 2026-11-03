@@ -80,6 +80,13 @@ void test('D-167 只差全形或大小寫、年級學期的別名是同一個單
   assert.deepEqual(index.unresolved.map(ref => ref.code), ['L01'], 'L01 不是 L1');
 });
 
+void test('D-167 只差連字號的打法也是同一個單元（使用者 2026-11-03）：2之1、2–1 和 2-1 一列，每一篇都留著', () => {
+  const index = buildIndex(['2之1', '2–1', '2-1'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), { ['t' + code.charCodeAt(1)]: [] })));
+  assert.equal(index.units.length, 1);
+  assert.equal(index.units[0].decks.length, 3);
+  assert.equal(index.find('國二上', '自然', '2之1'), index.find('國二上', '自然', '2-1'));
+});
+
 void test('D-167 同一個目標寫到同一個單元好幾次：單元只列一次，對不到的也只留一筆', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1 p.3, p.4、國二上 1-9 p.3, p.4'] });
   const index = buildIndex([owner, card('Essence Cards/2-1.md', unit('國二上', '2-1'), {})]);
