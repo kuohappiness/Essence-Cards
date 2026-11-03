@@ -1,6 +1,29 @@
 # iPhone 測試後的修改：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第一輪）
+狀態：待再審（第二輪，下面第一節）；第一輪的[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)
+
+## 再審（第二輪）：第一輪發現的修正
+
+**這一輪只讀**：本節、〈審查對象〉、討論稿的〈[Claude 回應：第一輪](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md#claude-回應第一輪2026-11-03>)〉。第一輪的內容需要時，照 F1、F2、F3 的標題只查相關段落。
+
+**範圍**：基準 `eea49fe804c3a35c13d56736536a6dfa6d0ead60`，待審 `9e3dc41b78c620e0e7ffac6207432fb2d0074792`，`git diff eea49fe..9e3dc41`（5 個修正 commit）；本節的文件 commit 在它之後，不用審。
+
+**還沒結的發現**：F1、F2、F3，看修正有沒有做到，以及同類的其他輸入。
+
+**可能碰到的已結項目**：第一輪〈其餘核對與驗證〉確認過的性質（一筆作答只在按評分時寫、自動朗讀的停止、背面補充分行只影響顯示）。這次的修改碰到 `Session.skip`、`record`、`maybeOwn`、`splitTranslation` 與 `Review.tsx` 的翻譯行，只查受影響的路徑。
+
+**請特別找**：
+
+- 電腦與 Android：`nameStacks` 沒開時，收與不收、`stack` 和去重的鍵是否和 D-173 之前完全一樣（`git diff 4f686ed..9e3dc41 -- src/core/errors/log.ts`）。
+- iPhone：`nameStacks` 開著時，有自己的位置、全是別人的位置、混合、非字串 stack 的結果。
+- `splitTranslation`：`closed` 判錯的組合，尤其是切開後畫面會看到記號的；原本該分行的例句有沒有變成不分行（卡組的例句來自 `docs/card-rules/english.md`）。
+- 打叉：回看、切走超過 60 秒重來時的 `notice`。
+
+**使用者已決定、不用再提**：第 1 步拼錯、第 2 步按「沒印象」留著打叉；翻譯裡有英文時只有英文那一行有喇叭（2026-11-03，D-172 第 2、3 點）。
+
+**真實路徑**：照 [D-171](../docs/decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 3 點，每項發現標真實路徑會不會發生；沒有擋合併的發現就直接寫「通過」。
+
+**驗證方式**：`npm run check`，要在沙箱外跑（[quality.md](../docs/agents/quality.md#檢查指令)）。實作者跑過的與沒跑的見〈Claude 回應〉的〈驗證〉。報告接在討論稿最後；所有檔案都在這個 worktree，不要寫到主資料夾。
 
 ## 審查對象
 
