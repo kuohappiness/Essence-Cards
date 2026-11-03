@@ -1,6 +1,6 @@
 # iPhone 測試後的修改：L2 審查請求（給新開的 Codex session）
 
-狀態：L2 結案，待合併（四輪；第四輪留下的一項使用者 2026-11-04 決定不修）；[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)；文中的 D-172 現在是 D-174（2026-11-04 改號，和 main 的 D-172 撞號）
+狀態：L2 結案，已合併進 `main`（`25deec7`）；四輪，第四輪留下的一項使用者 2026-11-04 決定不修；[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)；文中的 D-172 現在是 D-174（2026-11-04 改號，和 main 的 D-172 撞號）
 
 ## 再審（第四輪）：第三輪發現的修正
 
