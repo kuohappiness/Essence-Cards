@@ -68,7 +68,8 @@ export const headingKey = (text: string): string => tidy(text).toLowerCase().rep
 const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\((?:\\.|[^()\\]|\((?:\\.|[^()\\]|\([^()]*\))*\))+\)|「[^」]+」|https?:\/\/(?:[^\s、﹑，﹐；﹔｜|,;]|[,;](?=[^\s、﹑，﹐；﹔｜|,;]))+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
-const mask = (text: string, tokens: string[]): string => text.replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
+// 原文裡的私用區字元先拿掉，不會拼出不存在的遮罩。
+const mask = (text: string, tokens: string[]): string => text.replace(/[\uE000\uE001]/g, '').replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
 
 /** 連結與「標題」裡的字不算分隔：欄位的 `｜`、值的 `、` 都先藏起來再切（§9-4）。 */
 export function splitOutsideLinks(text: string, separator: RegExp): string[] {
@@ -238,7 +239,7 @@ interface Pending extends SourceItem { codeLike?: true; written?: true }
 export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
   const tokens: string[] = [];
   // 一項一項藏：不同項的字不會接成一個連結。
-  const masked = sources.map(source => mask(source, tokens).replace(ZERO_WIDTH, '')).join('、');
+  const masked = sources.map(source => mask(source, tokens).replace(/[\u200B\u200C\uFEFF]/g, '')).join('、');
   // 這一篇的屬性也去雜訊再比：`八上` 就是 `國二上`，`Ｌ３` 就是 `L3`。
   const ownCode = tidy(own.unit?.code ?? '').trim();
   const ownTerm = own.term === null ? null : termKey(own.term);
@@ -385,7 +386,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     if (needsUnit) placed[0].needsUnit = true;
     const final = placed[placed.length - 1];
     if (bad) final.problem = 'position';
-    if (left && /^\d+$/.test(left) && lastPlace?.startsWith('p')) return [...placed, follow('p' + left, 'p.' + left)];
+    if (left && !before && /^\d+$/.test(left) && lastPlace?.startsWith('p')) return [...placed, follow('p' + left, 'p.' + left)];
     if (!unit && !selfRef && before && !MATERIAL.test(before)) placed[0].problem ??= 'before';
     if (hidden || (left && looksLikeCode(left))) final.problem ??= 'leftover';
     return placed;

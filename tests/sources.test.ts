@@ -65,7 +65,7 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 本篇的屬性也比鍵：學期寫 八上、編號寫全形
   ['國二上 p.15', [page(15)], true, { term: '八上', subject: '自然', unit: { code: '2-2' } }], ['八上 p.15', [page(15)], true], ['L3 p.30', [page(30)], false, { term: '國一上', subject: '英文', unit: { code: 'Ｌ３' } }], ['2-2 p.30', [page(30)], false, { term: '國二上', subject: '自然', unit: { code: '２－２' } }], ['Ｅｎｇｌｉｓｈ 國一上 L1', [unit('國一上', 'L1')], false, { term: '國一上', subject: 'English', unit: { code: 'L3' } }], ['English 國一上 L1', [unit('國一上', 'L1')], false, { term: '國一上', subject: 'Ｅｎｇｌｉｓｈ', unit: { code: 'L3' } }],
   // 位置照連，但要提示
-  ['1-3 p.20', [page(20)], true], ['L2 p.12', [page(12)], true, ENGLISH], ['老師說過 p.44', [page(44)], true], ['上一節 p.40', [page(40)], true], ['pH7 p.20', [page(20)], true],
+  ['1-3 p.20', [page(20)], true], ['3 p.44', [page(44)], true], ['L2 p.12', [page(12)], true, ENGLISH], ['老師說過 p.44', [page(44)], true], ['上一節 p.40', [page(40)], true], ['pH7 p.20', [page(20)], true],
   // 字裡有像編號的
   ['國二上 1-3 和 1-8', [u13(heading('和 1-8'))], true], ['p.12 of L1', [page(12)], true, ENGLISH], ['p.30, 也算 L1', [page(30), heading('也算 L1')], false, ENGLISH],
   ['國二上1-3,8', [u13(), heading('8')]], ['國一上 L1, A1 p.20', [unit('國一上', 'L1'), unit('國一上', 'L1', page(20))], true, ENGLISH], ['國二上 1-3, 2-5 題', [u13(), heading('2-5 題')]], ['國二上 1-3, 10-15 上課筆記', [u13(), heading('10-15 上課筆記')]], ['國二上 1-3, 2026-10', [u13(), heading('2026-10')]], ['國二上 1-3 p.44, 溶解說明, 45', [u13(page(44)), heading('溶解說明'), heading('45')]],
@@ -179,6 +179,14 @@ void test('D-167 零寬字元夾在任何地方都不改意思；連結裡的不
   assert.deepEqual(links('國二上 1-3 ｐ' + zero + '，４４'), [u13(page(44))]);
   assert.deepEqual(links('國' + zero + '二上 1' + zero + '-3'), [u13()]);
   assert.deepEqual(links('[[a' + zero + 'b]]'), [note('a' + zero + 'b')]);
+});
+
+void test('出處裡的私用區字元不會變成遮罩；組合的表情符號不被拆開', () => {
+  const [open, close, zero] = [0xe000, 0xe001, 0x200b].map(code => String.fromCharCode(code));
+  assert.doesNotThrow(() => sourceLinks([open + '0' + zero + close], NATURE));
+  assert.deepEqual(links(open + '0' + close + ' p.44'), [page(44)]);
+  const teacher = '👩' + String.fromCharCode(0x200d) + '🏫';
+  assert.deepEqual(read('p.44 ' + teacher + ' 圖 2-14').map(item => item.text), ['p.44 ' + teacher, '圖 2-14']);
 });
 
 void test('D-167 不是雜訊的字不合併：連結裡不動，CO₂、①、L01 都保留', () => {
