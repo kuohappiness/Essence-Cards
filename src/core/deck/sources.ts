@@ -43,11 +43,17 @@ function tidy(text: string): string {
     .replace(/(?<![A-Za-z])([pP]) ?[.,:。] ?(?=\d)/g, '$1.')
     .replace(/ +([,;/、])/g, '$1');
 }
-/** 原文裡對應去雜訊之後第 at 個字的位置。從後面找：`1 - 3` 打到一半時比打完還長。 */
-function rawIndex(source: string, at: number): number {
-  for (let end = source.length; end > 0; end--) if (tidy(source.slice(0, end)).length <= at) return end;
-  return 0;
+/** 原文裡對應去雜訊之後第 at 個字的位置。每個前綴只算一次；從後面找：`1 - 3` 打到一半時比打完還長。 */
+function rawCutter(source: string): (at: number) => number {
+  if (tidy(source) === source) return at => at;
+  const lengths = Array.from({ length: source.length + 1 }, (_, end) => tidy(source.slice(0, end)).length);
+  return at => {
+    for (let end = source.length; end > 0; end--) if (lengths[end] <= at) return end;
+    return 0;
+  };
 }
+/** 超過這個長度就不切原文，按鈕用去雜訊之後的字：成本和長度的平方成正比，顯示不值得卡住目錄。 */
+const RAW_CUT_LIMIT = 2000;
 const END = /[,/;、。.\s]+$/;
 const RAW_END = /[,，﹐/／;；﹔、﹑。．.\s]+$/;
 const SEPARATOR = /[,，﹐/／;；﹔]/;
@@ -273,12 +279,15 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const segment = raw.replace(WRAP, '$1');
     const display = restore(source, tokens);
     /** 一個位置就是整段的原文；好幾個時照位置切開，一個位置一個按鈕。外面有括號時照讀法的字切，括號不會只剩一半。 */
-    const pieces = (list: readonly Found[], base: number): string[] => list.map((each, at) => {
-      if (list.length === 1) return display;
-      const from = at ? base + each.at : 0, to = at + 1 < list.length ? base + list[at + 1].at : null;
-      const piece = segment === raw ? source.slice(rawIndex(source, from), to === null ? source.length : rawIndex(source, to)) : segment.slice(from, to ?? segment.length);
-      return restore(piece.trim(), tokens);
-    });
+    const pieces = (list: readonly Found[], base: number): string[] => {
+      if (list.length === 1) return [display];
+      const cut = segment === raw && source.length <= RAW_CUT_LIMIT ? rawCutter(source) : null;
+      return list.map((each, at) => {
+        const from = at ? base + each.at : 0, to = at + 1 < list.length ? base + list[at + 1].at : null;
+        const piece = cut ? source.slice(cut(from), to === null ? source.length : cut(to)) : segment.slice(from, to ?? segment.length);
+        return restore(piece.trim(), tokens);
+      });
+    };
     const asHeading = (extra: Partial<Pending> = {}): Pending => ({ text: display, link: { kind: 'heading', heading: display }, ...extra });
     if (NEGATIVE.test(segment)) {
       forget();
@@ -374,8 +383,10 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       for (let at = 1; at < clean.length; at++) {
         if (clean[at - 1] !== ' ' || !readTerm(clean.slice(at))) continue;
         const head = scan(clean.slice(0, at).trim(), tokens);
-        const cut = rawIndex(part, at);
-        if (head.found.length && !head.left) return [part.slice(0, cut).trim(), part.slice(cut).trim()];
+        if (!head.found.length || head.left) continue;
+        if (part.length > RAW_CUT_LIMIT) return [clean.slice(0, at).trim(), clean.slice(at).trim()];
+        const cut = rawCutter(part)(at);
+        return [part.slice(0, cut).trim(), part.slice(cut).trim()];
       }
       return [part];
     });

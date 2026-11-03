@@ -221,6 +221,10 @@ void test('D-167 顯示原文：一個位置就是整段；一段好幾個位置
   assert.deepEqual(texts('ｐ．４４　國二上　１－３　ｐ．２０'), ['ｐ．４４', '國二上　１－３　ｐ．２０'], '位置後面接年級學期也照原文切');
   assert.deepEqual(texts('（ｐ．４４　ｐ．４５）'), ['p.44', 'p.45'], '外面有括號時不切原文，括號不會只剩一半');
   assert.deepEqual(texts('國二上 p.15 p.16'), ['國二上 p.15', 'p.16'], '自己的學期沒寫單元：一樣一個位置一個按鈕');
+  const many = Array.from({ length: 100 }, (_, at) => 'ｐ．' + String(at + 1));
+  assert.deepEqual(texts(many.join('　')), many, '一行很多個位置也照原文切');
+  const long = Array.from({ length: 1000 }, (_, at) => 'ｐ．' + String(at + 1)).join('　');
+  assert.equal(read(long).length, 1000, '長到不切原文時，位置一樣都讀到');
 });
 
 void test('D-167 同一欄不分頓號、逗號、分行：parse 拆好的每一項照順序讀，範圍接著走', () => {
