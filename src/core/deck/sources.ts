@@ -41,6 +41,11 @@ function tidy(text: string): string {
     .replace(/(?<![A-Za-z])([pP]) ?[.,:。] ?(?=\d)/g, '$1.')
     .replace(/ +([,;/、])/g, '$1');
 }
+/** 原文裡對應去雜訊之後第 at 個字的位置。從後面找：`1 - 3` 打到一半時比打完還長。 */
+function rawIndex(source: string, at: number): number {
+  for (let end = source.length; end > 0; end--) if (tidy(source.slice(0, end)).length <= at) return end;
+  return 0;
+}
 const END = /[,/;、。.\s]+$/;
 const RAW_END = /[,，﹐/／;；﹔、﹑。．.\s]+$/;
 const SEPARATOR = /[,，﹐/／;；﹔]/;
@@ -74,8 +79,9 @@ function linkTarget(raw: string): SourceLink | null {
   if (quoted) return { kind: 'heading', heading: quoted[1] };
   const wiki = /^!?(\[\[|［［)\s*([^\]］]*?)\s*(?:\]\]|］］)$/.exec(raw);
   if (wiki) {
-    const inner = wiki[1] === '［［' ? tidy(wiki[2]) : wiki[2];
-    const split = inner.search(/[|｜]/);
+    // 連結裡的字不動（D-167 第 3 點）。全形括號是整個打錯，只換結構的字；半形括號裡的 `｜` 是檔名的一部分。
+    const inner = wiki[1] === '［［' ? wiki[2].replace(/＃/g, '#').replace(/｜/g, '|') : wiki[2];
+    const split = inner.indexOf('|');
     const target = (split < 0 ? inner : inner.slice(0, split)).trim();
     if (target.startsWith('#')) return { kind: 'heading', heading: target.slice(1) };
     return split < 0 ? { kind: 'note', link: target } : { kind: 'note', link: target, alias: inner.slice(split + 1).trim() };
@@ -255,8 +261,16 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     return !bare[2] || (after.found.length && !after.left) ? { code: bare[1], rest: bare[2], other: true } : null;
   }
 
-  function readSegment(raw: string, display: string, next: string | undefined): Pending[] {
+  function readSegment(raw: string, source: string, next: string | undefined): Pending[] {
     const segment = raw.replace(WRAP, '$1');
+    const display = restore(source, tokens);
+    /** 一個位置就是整段的原文；好幾個時照位置切開，一個位置一個按鈕。外面有括號時照讀法的字切，括號不會只剩一半。 */
+    const pieces = (list: readonly Found[], base: number): string[] => list.map((each, at) => {
+      if (list.length === 1) return display;
+      const from = at ? base + each.at : 0, to = at + 1 < list.length ? base + list[at + 1].at : null;
+      const piece = segment === raw ? source.slice(rawIndex(source, from), to === null ? source.length : rawIndex(source, to)) : segment.slice(from, to ?? segment.length);
+      return restore(piece.trim(), tokens);
+    });
     const asHeading = (extra: Partial<Pending> = {}): Pending => ({ text: display, link: { kind: 'heading', heading: display }, ...extra });
     if (NEGATIVE.test(segment)) {
       forget();
@@ -282,7 +296,10 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
         forget();
         const found = code ? [] : scan(after.trim(), tokens).found;
         scope = term.term === ownTerm ? 'this' : null;
-        if (scope === 'this' && found.length) return found.map((each, at) => ({ text: at ? restore(after.trim().slice(each.at, each.end), tokens) : display, link: each.link, problem: 'term-only' as const }));
+        if (scope === 'this' && found.length) {
+          const texts = pieces(found, segment.length - after.trim().length);
+          return found.map((each, at) => ({ text: texts[at], link: each.link, problem: 'term-only' as const }));
+        }
         return [asHeading({ problem: 'term-only' })];
       }
       unit = { term: term.term, code: code.code };
@@ -325,13 +342,10 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       if (bad) return [asHeading({ problem: 'position' })];
       return [asHeading(problem ? { codeLike: true } : {})];
     }
-    // 一個位置就是整段的原文；好幾個時照位置切開，一個位置一個按鈕。
+    const texts = pieces(found, segment.length - rest.length);
     const placed: Pending[] = found.map((each, at) => {
-      const start = at ? each.at : 0, end = at + 1 < found.length ? found[at + 1].at : rest.length;
-      const head = at === 0 ? segment.slice(0, segment.length - rest.length) : '';
-      const block = each.link.kind === 'block' ? each.link.id : null;
-      lastPlace = block;
-      return { text: found.length === 1 ? display : restore((head + rest.slice(start, end)).trim(), tokens), link: inScope(each.link) };
+      lastPlace = each.link.kind === 'block' ? each.link.id : null;
+      return { text: texts[at], link: inScope(each.link) };
     });
     if (needsUnit) placed[0].needsUnit = true;
     const final = placed[placed.length - 1];
@@ -344,13 +358,14 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
 
   /** 切段：分隔符號；位置後面直接接年級學期加編號也切（`p.44 國二上 1-3 p.20`）。`p，44` 的逗號不是分隔。 */
   function segmentsOf(entry: string): string[] {
-    const fixed = entry.replace(/(?<![A-Za-zＡ-Ｚａ-ｚ])([pPｐＰ]) ?[，,] ?(?=[0-9０-９])/g, '$1.');
+    const fixed = entry.replace(/(?<![A-Za-zＡ-Ｚａ-ｚ])([pPｐＰ])\s*[，,]\s*(?=[0-9０-９])/g, '$1.');
     return fixed.split(SEPARATOR).map(each => each.trim()).filter(Boolean).flatMap(part => {
       const clean = tidy(part);
       for (let at = 1; at < clean.length; at++) {
         if (clean[at - 1] !== ' ' || !readTerm(clean.slice(at))) continue;
         const head = scan(clean.slice(0, at).trim(), tokens);
-        if (head.found.length && !head.left) return [clean.slice(0, at).trim(), clean.slice(at).trim()];
+        const cut = rawIndex(part, at);
+        if (head.found.length && !head.left) return [part.slice(0, cut).trim(), part.slice(cut).trim()];
       }
       return [part];
     });
@@ -364,7 +379,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     parts.forEach((part, at) => {
       const clean = tidy(part).replace(END, '').trim();
       const next = parts[at + 1] ?? entries[index + 1];
-      if (clean) items.push(...readSegment(clean, restore(part.replace(RAW_END, '').trim(), tokens), next && tidy(next)));
+      if (clean) items.push(...readSegment(clean, part.replace(RAW_END, '').trim(), next && tidy(next)));
     });
     // 這一項切成好幾段、全部都沒讀懂：是一句話或舊標題（`溶解, 擴散`），併回一個。
     const added = items.slice(start);

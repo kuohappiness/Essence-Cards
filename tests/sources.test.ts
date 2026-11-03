@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type { App } from 'obsidian';
+import { buildIndex } from '../src/core/catalog/index.ts';
 import { codeKey, headingKey, parseDeck, sourceLinks, splitUnit, termKey, termRank } from '../src/core/deck/index.ts';
 import type { SourceItem, SourceLink, SourceOwner } from '../src/core/deck/index.ts';
+import { unreadableSources } from '../src/ui/sources.ts';
 
 // 出處的讀法（tasks/entry-and-catalog.md §9-3、§9-6，D-167）：預期值都來自那份說明的表，不用同一個正則再算一次。
 
@@ -25,7 +28,7 @@ const u13 = (rest: SourceLink | null = null): SourceLink => unit('國二上', '1
 const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 頁碼
   ['p.44', [page(44)]], ['p44', [page(44)]], ['P.44', [page(44)]], ['p 44', [page(44)]], ['p. 44', [page(44)]], ['pp.44-46', [page(44)]], ['page 44', [page(44)]], ['pg.44', [page(44)]],
-  ['p.44-46', [page(44)]], ['p.44~46', [page(44)]], ['p.44～46', [page(44)]], ['p.44-p.46', [page(44)]], ['第 44 頁', [page(44)]], ['第44頁', [page(44)]], ['44頁', [page(44)]], ['44 頁', [page(44)]], ['p44頁', [page(44)]],
+  ['p.44-46', [page(44)]], ['p，44', [page(44)]], ['p , 44', [page(44)]], ['ｐ　，　４４', [page(44)]], ['p.44~46', [page(44)]], ['p.44～46', [page(44)]], ['p.44-p.46', [page(44)]], ['第 44 頁', [page(44)]], ['第44頁', [page(44)]], ['44頁', [page(44)]], ['44 頁', [page(44)]], ['p44頁', [page(44)]],
   ['第四十四頁', [page(44)]], ['第44-46頁', [page(44)]], ['第 44 至 46 頁', [page(44)]], ['（p.44）', [page(44)]], ['課本第44頁', [page(44)]], ['講義p.12', [page(12)]], ['Workbook p.12', [page(12)]], ['p.44 知識快遞', [page(44)]],
   // 圖表例題
   ['圖 2-14', [fig('2-14')]], ['圖2-14', [fig('2-14')]], ['圖 2-13 A', [fig('2-13a')]], ['圖2-13(a)', [fig('2-13a')]], ['圖2-14圖說', [fig('2-14')]], ['表 2-1', [tab('2-1')]], ['例題 2-3', [ex('2-3')]], ['範例2-3', [ex('2-3')]], ['Fig. 2-14', [fig('2-14')]], ['2-14圖', [fig('2-14')]], ['第2-14圖', [fig('2-14')]], ['圖2.14', [fig('2-14')]],
@@ -47,7 +50,7 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 本篇自己的編號
   ['L3 p.30', [page(30)], false, ENGLISH], ['2-2 p.30', [page(30)]], ['5', [{ kind: 'text' }], false, MATH], ['本單元 p.44', [page(44)]],
   // 連結
-  ['[[筆記#標題]]', [note('筆記#標題')]], ['[[筆記]]', [note('筆記')]], ['[[a,b]]', [note('a,b')]], ['[[國二上 L1]]', [note('國二上 L1')]], ['[[Ａ卷#２-１]]', [note('Ａ卷#２-１')]], ['[[ノート]]', [note('ノート')]], ['[[a]], [[b/c]]', [note('a'), note('b/c')]], ['[補充筆記](補充筆記.md)', [note('補充筆記')]], ['[教材](%E6%95%99.md)', [note('教')]], ['[教材](100%.md)', [note('100%')]], ['[教材](%E4%.md)', [note('%E4%')]], ['[[#睡眠的階段]]', [heading('睡眠的階段')]], ['#睡眠的階段', [heading('睡眠的階段')]], ['「睡眠的階段」', [heading('睡眠的階段')]], ['「附錄,國二上 1-3 p.20」', [heading('附錄,國二上 1-3 p.20')]], ['「不是這個」', [heading('不是這個')]], ['國二上 1-3 「標題」', [u13(heading('標題'))]], ['p.44, 「溶解, 擴散」', [page(44), heading('溶解, 擴散')]],
+  ['[[筆記#標題]]', [note('筆記#標題')]], ['[[筆記]]', [note('筆記')]], ['[[a,b]]', [note('a,b')]], ['[[國二上 L1]]', [note('國二上 L1')]], ['[[Ａ卷#２-１]]', [note('Ａ卷#２-１')]], ['[[ノート]]', [note('ノート')]], ['［［Ａ卷＃２－１］］', [note('Ａ卷#２－１')]], ['[[Ａ｜卷]]', [note('Ａ｜卷')]], ['［［筆記｜別名］］', [{ kind: 'note', link: '筆記', alias: '別名' }]], ['[[a]], [[b/c]]', [note('a'), note('b/c')]], ['[補充筆記](補充筆記.md)', [note('補充筆記')]], ['[教材](%E6%95%99.md)', [note('教')]], ['[教材](100%.md)', [note('100%')]], ['[教材](%E4%.md)', [note('%E4%')]], ['[[#睡眠的階段]]', [heading('睡眠的階段')]], ['#睡眠的階段', [heading('睡眠的階段')]], ['「睡眠的階段」', [heading('睡眠的階段')]], ['「附錄,國二上 1-3 p.20」', [heading('附錄,國二上 1-3 p.20')]], ['「不是這個」', [heading('不是這個')]], ['國二上 1-3 「標題」', [u13(heading('標題'))]], ['p.44, 「溶解, 擴散」', [page(44), heading('溶解, 擴散')]],
   // 先備、網址、題號
   ['先備：國一數學 比例式', [{ kind: 'text' }]], ['先備:比例', [{ kind: 'text' }]], ['先備：A, B', [{ kind: 'text' }]], ['https://example.com/p.44', [{ kind: 'text' }]], ['第5題', [{ kind: 'text' }]], ['https://zh.wikipedia.org/wiki/水溶液', [{ kind: 'text' }]],
   ['國二上 1-3、https://x.test、國二上1-8', [u13(), { kind: 'text' }, unit('國二上', '1-8')]], ['https://x.test,國二上1-8', [{ kind: 'text' }, unit('國二上', '1-8')]], ['https://x.test，國二上1-8', [{ kind: 'text' }, unit('國二上', '1-8')]],
@@ -85,31 +88,63 @@ void test('D-167 每個例子：讀成預期的位置與單元，字面上就有
   assert.deepEqual(wrong, []);
 });
 
-// ── 性質：同一個意思套上打字雜訊，歸屬與位置都不變（D-167 第 3 點）──
+// ── 性質：同一個意思套上打字雜訊，歸屬、位置與提示都不變（D-167 第 3 點）；連結與「標題」裡的字不動，雜訊只加在外面 ──
 
 const wide = (text: string): string => text.replace(/[0-9A-Za-z.,\-]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xfee0));
-const NOISE: Record<string, (text: string) => string> = {
-  尾端空白: t => t + ' ', 開頭空白: t => ' ' + t, 連續空白: t => t.replace(/ /g, '  '), 全形空白: t => t.replace(/ /g, '　'), Tab: t => t.replace(/ /g, '\t'),
-  尾端逗號: t => t + ',', 尾端全形逗號: t => t + '，', 尾端句號: t => t + '。', 尾端頓號: t => t + '、', 全形字: wide,
+type Change = (text: string) => string;
+const INSIDE: Record<string, Change> = {
+  連續空白: t => t.replace(/ /g, '  '), 全形空白: t => t.replace(/ /g, '　'), Tab: t => t.replace(/ /g, '\t'), 全形字: wide,
   短破折號: t => t.replace(/-/g, '–'), 長破折號: t => t.replace(/-/g, '—'), 減號: t => t.replace(/-/g, '−'), 全形連字號: t => t.replace(/-/g, '－'), 全形波浪號: t => t.replace(/~/g, '～'),
-  逗號前空白: t => t.replace(/,/g, ' ,'), 逗號換全形: t => t.replace(/,/g, '，'), 逗號後沒空白: t => t.replace(/, /g, ','), 零寬字元: t => t + '​',
-  兩種: t => wide(t).replace(/ /g, '　') + '，', 三種: t => (t + ' ,').replace(/-/g, '–').replace(/ (?=\S)/g, '  '),
+  逗號前空白: t => t.replace(/,/g, ' ,'), 逗號換全形: t => t.replace(/,/g, '，'), 逗號後沒空白: t => t.replace(/, /g, ','),
 };
-/** 意思：單元比鍵；舊標題由 Obsidian 層去雜訊之後才比材料，所以也比鍵。 */
-const meaning = (items: readonly SourceItem[]): string => JSON.stringify(items.map(item => item.link), (key, value: unknown) => {
+const AROUND: Record<string, [string, string]> = {
+  尾端空白: ['', ' '], 開頭空白: [' ', ''], 尾端逗號: ['', ','], 尾端全形逗號: ['', '，'], 尾端句號: ['', '。'], 尾端頓號: ['', '、'], 零寬字元: ['', String.fromCharCode(0x200b)], 逗號加空白: ['', ' ,'],
+};
+const PROTECTED = /\[\[[^\]]*\]\]|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、，,]+/g;
+function outside(text: string, change: Change): string {
+  let out = '', last = 0;
+  for (const match of text.matchAll(PROTECTED)) {
+    out += change(text.slice(last, match.index)) + match[0];
+    last = match.index + match[0].length;
+  }
+  return out + change(text.slice(last));
+}
+/** 意思：單元比鍵；舊標題由 Obsidian 層去雜訊之後才比材料，所以也比鍵。要不要提示、算不算說明也是意思的一部分。 */
+const meaning = (items: readonly SourceItem[]): string => JSON.stringify(items.map(({ link, problem, needsUnit, remark }) => ({ link, problem, needsUnit, remark })), (key, value: unknown) => {
   if (key === 'unit') return codeKey(value as string);
   if (key === 'heading') return headingKey(value as string);
   return value;
 });
-const hasLink = (text: string): boolean => /\[|\(|https?:|「|#/.test(text);
+const NO_MATERIALS = { metadataCache: { getFirstLinkpathDest: () => null, getFileCache: () => null } } as unknown as App;
+/** 整條路：筆記 → parseDeck → 讀法、目錄對不到的參照、存檔的提示。 */
+function throughDeck(text: string, own: SourceOwner): string {
+  const deck = parseDeck(`---\n年級學期: ${own.term ?? ''}\n科目: ${own.subject ?? ''}\n單元: "${own.unit?.code ?? ''}"\n---\n- 目標 ^abc123\n    - 問 :: 答\n    - 出處：${text}\n`);
+  const refs = buildIndex([{ path: 'o.md', deck }]).unresolved.map(ref => [termKey(ref.term), codeKey(ref.code)]);
+  return JSON.stringify([meaning(sourceLinks(deck.targets[0].fields.sources, deck.props)), refs, unreadableSources(NO_MATERIALS, 'o.md', deck, () => []).length]);
+}
 
-void test('D-167 性質：登錄的例子套上任何打字雜訊，意思都不變', () => {
+void test('D-167 性質：登錄的例子套上任何一種打字雜訊，從筆記到提示與目錄，意思都不變', () => {
   for (const [text, , , own = NATURE] of EXAMPLES) {
-    if (hasLink(text)) continue;
+    const base = throughDeck(text, own);
+    for (const [name, change] of Object.entries(INSIDE)) {
+      const changed = outside(text, change);
+      assert.equal(throughDeck(changed, own), base, `${name}：${JSON.stringify(changed)}`);
+    }
+    for (const [name, [start, end]] of Object.entries(AROUND)) {
+      const changed = start + text + end;
+      assert.equal(throughDeck(changed, own), base, `${name}：${JSON.stringify(changed)}`);
+    }
+  }
+});
+
+void test('D-167 性質：兩種雜訊疊在一起，讀法與提示也不變', () => {
+  for (const [text, , , own = NATURE] of EXAMPLES) {
     const base = meaning(read(text, own));
-    for (const [name, apply] of Object.entries(NOISE)) {
-      const changed = apply(text);
-      assert.equal(meaning(read(changed, own)), base, `${name}：${JSON.stringify(changed)}`);
+    for (const [first, one] of Object.entries(INSIDE)) {
+      for (const [second, other] of Object.entries(INSIDE)) {
+        const changed = outside(text, t => other(one(t)));
+        assert.equal(meaning(read(changed, own)), base, `${first}＋${second}：${JSON.stringify(changed)}`);
+      }
     }
   }
 });
@@ -153,6 +188,12 @@ void test('D-167 顯示原文：一個位置就是整段；一段好幾個位置
   assert.deepEqual(texts('圖2-13a、b'), ['圖2-13a', '圖 2-13b']);
   assert.deepEqual(texts('[[a]], [[b/c]]'), ['[[a]]', '[[b/c]]']);
   assert.deepEqual(texts('溶解, 擴散'), ['溶解, 擴散']);
+  assert.deepEqual(texts('ｐ．４４　圖２－１４'), ['ｐ．４４', '圖２－１４'], '好幾個位置也顯示原文');
+  assert.deepEqual(texts('國二上　１－３　ｐ．２０　圖２－１４　重點'), ['國二上　１－３　ｐ．２０', '圖２－１４　重點']);
+  assert.deepEqual(texts('1 - 3 p.20 圖 2-14'), ['1 - 3 p.20', '圖 2-14']);
+  assert.deepEqual(texts('ｐ．４４　國二上　１－３　ｐ．２０'), ['ｐ．４４', '國二上　１－３　ｐ．２０'], '位置後面接年級學期也照原文切');
+  assert.deepEqual(texts('（ｐ．４４　ｐ．４５）'), ['p.44', 'p.45'], '外面有括號時不切原文，括號不會只剩一半');
+  assert.deepEqual(texts('國二上 p.15 p.16'), ['國二上 p.15', 'p.16'], '自己的學期沒寫單元：一樣一個位置一個按鈕');
 });
 
 void test('D-167 同一欄不分頓號、逗號、分行：parse 拆好的每一項照順序讀，範圍接著走', () => {
