@@ -53,7 +53,7 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   ['[[筆記#標題]]', [note('筆記#標題')]], ['[[筆記]]', [note('筆記')]], ['[[a,b]]', [note('a,b')]], ['[[國二上 L1]]', [note('國二上 L1')]], ['[[Ａ卷#２-１]]', [note('Ａ卷#２-１')]], ['[[ノート]]', [note('ノート')]], ['［［Ａ卷＃２－１］］', [note('Ａ卷#２－１')]], ['[[Ａ｜卷]]', [note('Ａ｜卷')]], ['［［筆記｜別名］］', [{ kind: 'note', link: '筆記', alias: '別名' }]], ['[[a]], [[b/c]]', [note('a'), note('b/c')]], ['[補充筆記](補充筆記.md)', [note('補充筆記')]], ['[教材](%E6%95%99.md)', [note('教')]], ['[教材](100%.md)', [note('100%')]], ['[教材](%E4%.md)', [note('%E4%')]], ['[[#睡眠的階段]]', [heading('睡眠的階段')]], ['#睡眠的階段', [heading('睡眠的階段')]], ['「睡眠的階段」', [heading('睡眠的階段')]], ['「附錄,國二上 1-3 p.20」', [heading('附錄,國二上 1-3 p.20')]], ['「不是這個」', [heading('不是這個')]], ['國二上 1-3 「標題」', [u13(heading('標題'))]], ['p.44, 「溶解, 擴散」', [page(44), heading('溶解, 擴散')]],
   // 先備、網址、題號
   ['先備：國一數學 比例式', [{ kind: 'text' }]], ['先備:比例', [{ kind: 'text' }]], ['先備：A, B', [{ kind: 'text' }]], ['https://example.com/p.44', [{ kind: 'text' }]], ['第5題', [{ kind: 'text' }]], ['https://zh.wikipedia.org/wiki/水溶液', [{ kind: 'text' }]],
-  ['國二上 1-3、https://x.test、國二上1-8', [u13(), { kind: 'text' }, unit('國二上', '1-8')]], ['https://x.test,國二上1-8', [{ kind: 'text' }, unit('國二上', '1-8')]], ['https://x.test，國二上1-8', [{ kind: 'text' }, unit('國二上', '1-8')]],
+  ['國二上 1-3、https://x.test、國二上1-8', [u13(), { kind: 'text' }, unit('國二上', '1-8')]], ['https://x.test，國二上1-8', [{ kind: 'text' }, unit('國二上', '1-8')]],
   // 舊標題：連結由 Obsidian 層找
   ['睡眠的階段', [heading('睡眠的階段')]], ['溶解, 擴散', [heading('溶解, 擴散')]], ['CO2 的性質', [heading('CO2 的性質')]], ['2 擴散現象', [heading('2 擴散現象')]], ['1-2 溶液', [heading('1-2 溶液')]], ['課本第三章', [heading('課本第三章')]], ['老師上課說的', [heading('老師上課說的')]], ['先備知識', [heading('先備知識')]],
   // 不算單元（D-166 第 2 點）
@@ -70,7 +70,7 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   ['國二上 1-3 和 1-8', [u13(heading('和 1-8'))], true], ['p.12 of L1', [page(12)], true, ENGLISH], ['p.30, 也算 L1', [page(30), heading('也算 L1')], false, ENGLISH],
   ['國二上1-3,8', [u13(), heading('8')]], ['國一上 L1, A1 p.20', [unit('國一上', 'L1'), unit('國一上', 'L1', page(20))], true, ENGLISH], ['國二上 1-3, 2-5 題', [u13(), heading('2-5 題')]], ['國二上 1-3, 10-15 上課筆記', [u13(), heading('10-15 上課筆記')]], ['國二上 1-3, 2026-10', [u13(), heading('2026-10')]], ['國二上 1-3 p.44, 溶解說明, 45', [u13(page(44)), heading('溶解說明'), heading('45')]],
   // 只顯示的字也中斷沿用與接續（D-167 第 6 點）
-  ['國二上 1-3, 第5題, 1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['國二上 1-3 p.44, 第5題, 45', [u13(page(44)), { kind: 'text' }, heading('45')]], ['國二上 1-3, https://x.test, 1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['國二上 1-3、先備：比例、1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['p.44, 本篇, 45', [page(44), { kind: 'text' }, heading('45')]], ['p.44, 2-2, 45', [page(44), { kind: 'text' }, heading('45')]],
+  ['國二上 1-3, 第5題, 1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['國二上 1-3 p.44, 第5題, 45', [u13(page(44)), { kind: 'text' }, heading('45')]], ['國二上 1-3、https://x.test、1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['國二上 1-3、先備：比例、1-8', [u13(), { kind: 'text' }, heading('1-8')]], ['p.44, 本篇, 45', [page(44), { kind: 'text' }, heading('45')]], ['p.44, 2-2, 45', [page(44), { kind: 'text' }, heading('45')]],
   // 否定字：不算單元、不算位置
   ['不要算國二上 1-3', [{ kind: 'text' }], true], ['國二上 1-3 不要算這個目標', [{ kind: 'text' }], true], ['國二上 1-3 不考這個', [{ kind: 'text' }], true], ['不是國二上 1-3，是國三上 2-1', [{ kind: 'text' }, heading('是國三上 2-1')], true], ['老師說不用看 p.44', [{ kind: 'text' }], true], ['圖 2-14 不用看', [{ kind: 'text' }], true], ['不是 p.44', [{ kind: 'text' }], true],
   // 否定字緊接在沒有位置的單元後面：說的就是那個單元；有位置的是實際的出處，照連
@@ -95,12 +95,12 @@ type Change = (text: string) => string;
 const INSIDE: Record<string, Change> = {
   連續空白: t => t.replace(/ /g, '  '), 全形空白: t => t.replace(/ /g, '　'), Tab: t => t.replace(/ /g, '\t'), 全形字: wide,
   短破折號: t => t.replace(/-/g, '–'), 長破折號: t => t.replace(/-/g, '—'), 減號: t => t.replace(/-/g, '−'), 全形連字號: t => t.replace(/-/g, '－'), 全形波浪號: t => t.replace(/~/g, '～'),
-  逗號前空白: t => t.replace(/,/g, ' ,'), 逗號換全形: t => t.replace(/,/g, '，'), 逗號後沒空白: t => t.replace(/, /g, ','),
+  逗號前空白: t => t.replace(/,/g, ' ,'), 逗號換全形: t => t.replace(/,/g, '，'), 逗號後沒空白: t => t.replace(/, /g, ','), 零寬夾在中間: t => t.split('').join(String.fromCharCode(0x200b)),
 };
 const AROUND: Record<string, [string, string]> = {
   尾端空白: ['', ' '], 開頭空白: [' ', ''], 尾端逗號: ['', ','], 尾端全形逗號: ['', '，'], 尾端句號: ['', '。'], 尾端頓號: ['', '、'], 零寬字元: ['', String.fromCharCode(0x200b)], 逗號加空白: ['', ' ,'],
 };
-const PROTECTED = /\[\[[^\]]*\]\]|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、，,]+/g;
+const PROTECTED = /［［[^］]*］］|\[\[[^\]]*\]\]|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、，,]+/g;
 function outside(text: string, change: Change): string {
   let out = '', last = 0;
   for (const match of text.matchAll(PROTECTED)) {
@@ -147,6 +147,25 @@ void test('D-167 性質：兩種雜訊疊在一起，讀法與提示也不變', 
       }
     }
   }
+});
+
+void test('D-167 網址的分界：半形逗號、分號後面緊接著字是網址的一部分，不算別的單元；像編號就提示。全形標點與逗號後的空白一定是分界', () => {
+  assert.deepEqual(links('https://example.test/a,b'), [{ kind: 'text' }]);
+  assert.equal(read('https://example.test/a,b')[0].problem, undefined, '網址裡的逗號本來就有');
+  for (const text of ['https://example.test/a,國二上1-3', 'https://example.test/a;國二上1-3', 'https://example.test/a,1-8', '國二上 2-1 https://example.test/a,國二上1-3']) {
+    assert.ok(read(text).every(item => item.link.kind !== 'unit' || item.link.unit !== '1-3'), text);
+    assert.ok(read(text).some(item => item.problem === 'leftover'), text);
+  }
+  assert.equal(read('https://example.test/a,國二上1-3 p.5').at(-1)?.problem, 'leftover', '後面還有位置也要提示');
+  for (const separator of ['、', '﹑', '，', '﹐', '；', '﹔', ', ', '; ']) assert.deepEqual(links('https://example.test/a' + separator + '國二上 1-3'), [{ kind: 'text' }, u13()], separator);
+  assert.deepEqual(read('https://example.test/a,').map(item => item.text), ['https://example.test/a'], '尾端的逗號不是網址的一部分');
+});
+
+void test('D-167 零寬字元夾在任何地方都不改意思；連結裡的不動', () => {
+  const zero = String.fromCharCode(0x200b);
+  assert.deepEqual(links('國二上 1-3 ｐ' + zero + '，４４'), [u13(page(44))]);
+  assert.deepEqual(links('國' + zero + '二上 1' + zero + '-3'), [u13()]);
+  assert.deepEqual(links('[[a' + zero + 'b]]'), [note('a' + zero + 'b')]);
 });
 
 void test('D-167 不是雜訊的字不合併：連結裡不動，CO₂、①、L01 都保留', () => {

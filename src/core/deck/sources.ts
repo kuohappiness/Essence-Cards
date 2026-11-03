@@ -29,9 +29,11 @@ export interface SourceOwner { term: string | null; subject: string | null; unit
 
 // ── 去雜訊：只換確定的語法字元，連結裡不動；不用 NFKC，CO₂、① 不是打字雜訊（D-167 第 3 點）──
 
+const ZERO_WIDTH = /[\u200B\u200C\u200D\uFEFF]/g;
+
 function tidy(text: string): string {
   return text
-    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+    .replace(ZERO_WIDTH, '')
     .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
     .replace(/[‐‑‒–—―−﹘﹣─━]/g, '-').replace(/〜/g, '~').replace(/﹐/g, ',').replace(/﹔/g, ';').replace(/﹑/g, '、')
     .replace(/\s+/g, ' ')
@@ -57,7 +59,7 @@ export const headingKey = (text: string): string => tidy(text).toLowerCase().rep
 
 // ── 連結與「標題」先藏起來，裡面的字不動 ──
 
-const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/[^\s、﹑，；,;｜|]+/g;
+const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/(?:[^\s、﹑，﹐；﹔｜|,;]|[,;](?=[^\s、﹑，﹐；﹔｜|,;]))+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
 const mask = (text: string, tokens: string[]): string => text.replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
@@ -169,15 +171,21 @@ const FULL_NAME: Record<string, string> = { fig: '圖', tab: '表', ex: '例題'
 interface Found { at: number; end: number; link: SourceLink }
 
 /** 一段裡所有的位置，照原文順序；left 是沒用到的字，before 是第一個位置前面的字。bad：範圍寫反、可能不是頁碼。 */
-function scan(text: string, tokens: readonly string[]): { found: Found[]; left: string; before: string; bad: boolean } {
+function scan(text: string, tokens: readonly string[]): { found: Found[]; left: string; before: string; bad: boolean; hidden: boolean } {
   const found: Found[] = [];
-  let masked = text, bad = false;
+  let masked = text, bad = false, hidden = false;
   const take = (match: RegExpMatchArray, link: SourceLink | null): void => {
     const at = match.index ?? 0;
     if (link) found.push({ at, end: at + match[0].length, link });
     masked = masked.slice(0, at) + ' '.repeat(match[0].length) + masked.slice(at + match[0].length);
   };
-  for (const match of [...masked.matchAll(TOKEN)]) take(match, linkTarget(tokens[Number(match[1])]));
+  for (const match of [...masked.matchAll(TOKEN)]) {
+    const raw = tokens[Number(match[1])], link = linkTarget(raw);
+    // 半形逗號後面緊接著字是網址的一部分，分不出是不是另一項：不算別的單元，像編號就提示（D-167 第 1 點）。
+    const comma = raw.search(/[,;]/);
+    if (!link && comma >= 0 && SUSPECT.test(tidy(raw.slice(comma)))) hidden = true;
+    take(match, link);
+  }
   for (const match of [...masked.matchAll(/(?<![^ ])#([^ #,、;/]+)/g)]) take(match, { kind: 'heading', heading: match[1] });
   for (const match of [...masked.matchAll(/(圖|表|例題|範例|figure|fig|table|example)\.? ?(\d+)[-.](\d+) ?(?:\(? ?([A-Za-z]) ?\)?(?![A-Za-z0-9]))?/gi)]) take(match, { kind: 'block', id: `${BLOCK[match[1].toLowerCase()]}${match[2]}-${match[3]}${match[4]?.toLowerCase() ?? ''}` });
   for (const match of [...masked.matchAll(/(?<![A-Za-z0-9-])第? ?(\d+)-(\d+) ?(圖|表|例題)/g)]) take(match, { kind: 'block', id: `${BLOCK[match[3]]}${match[1]}-${match[2]}` });
@@ -195,7 +203,7 @@ function scan(text: string, tokens: readonly string[]): { found: Found[]; left: 
   for (const match of [...masked.matchAll(new RegExp(`(?<![0-9A-Za-z-])(?:第 ?)?(${NUMBER})(?: ?[-~至到] ?(${NUMBER}))? ?頁`, 'g'))]) page(match, match[1], match[2], true);
   found.sort((a, b) => a.at - b.at);
   const before = found.length ? masked.slice(0, found[0].at).replace(/ +/g, ' ').trim() : '';
-  return { found, left: masked.replace(/ +/g, ' ').trim(), before, bad };
+  return { found, left: masked.replace(/ +/g, ' ').trim(), before, bad, hidden };
 }
 
 // ── 讀一欄 ──
@@ -218,7 +226,7 @@ interface Pending extends SourceItem { codeLike?: true }
 export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
   const tokens: string[] = [];
   // 一項一項藏：不同項的字不會接成一個連結。
-  const masked = sources.map(source => mask(source, tokens)).join('、');
+  const masked = sources.map(source => mask(source, tokens).replace(ZERO_WIDTH, '')).join('、');
   // 這一篇的屬性也去雜訊再比：`八上` 就是 `國二上`，`Ｌ３` 就是 `L3`。
   const ownCode = tidy(own.unit?.code ?? '').trim();
   const ownTerm = own.term === null ? null : termKey(own.term);
@@ -325,10 +333,10 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     }
     if (unit) { scope = unit; carry = unit; }
 
-    const { found, left, before, bad } = scan(rest, tokens);
+    const { found, left, before, bad, hidden } = scan(rest, tokens);
     if (scope === null && found.length) return [asHeading({ problem: 'term-only' })];
     if (!found.length) {
-      const problem: SourceProblem | undefined = bad ? 'position' : looksLikeCode(left) || /^(?:\d+|[A-Za-z]+\d+)$/.test(left) ? 'leftover' : undefined;
+      const problem: SourceProblem | undefined = bad ? 'position' : hidden || looksLikeCode(left) || /^(?:\d+|[A-Za-z]+\d+)$/.test(left) ? 'leftover' : undefined;
       if (unit) {
         // 單元後面的字留在 rest：Obsidian 層比那個單元的名稱與材料的標題。
         lastPlace = null;
@@ -338,7 +346,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       forget();
       if (selfRef && !left) return [{ text: display, link: { kind: 'text' } }];
       // 網址：只有字，不是位置，也不算看不懂。
-      if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' } }];
+      if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
       if (bad) return [asHeading({ problem: 'position' })];
       return [asHeading(problem ? { codeLike: true } : {})];
     }
@@ -352,7 +360,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     if (bad) final.problem = 'position';
     if (left && /^\d+$/.test(left) && lastPlace?.startsWith('p')) return [...placed, follow('p' + left, 'p.' + left)];
     if (!unit && !selfRef && before && !MATERIAL.test(before)) placed[0].problem ??= 'before';
-    if (left && looksLikeCode(left)) final.problem ??= 'leftover';
+    if (hidden || (left && looksLikeCode(left))) final.problem ??= 'leftover';
     return placed;
   }
 
