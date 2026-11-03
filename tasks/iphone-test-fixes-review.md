@@ -1,6 +1,6 @@
 # iPhone 測試後的修改：L2 審查請求（給新開的 Codex session）
 
-狀態：L2 結案，待合併（四輪；第四輪留下的一項使用者 2026-11-04 決定不修）；[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)
+狀態：L2 結案，待合併（四輪；第四輪留下的一項使用者 2026-11-04 決定不修）；[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)；文中的 D-172 現在是 D-174（2026-11-04 改號，和 main 的 D-172 撞號）
 
 ## 再審（第四輪）：第三輪發現的修正
 
@@ -76,7 +76,7 @@
 
 ## 規格
 
-- [D-172](../docs/decisions.md#d-172-iphone-實機測試後的複習畫面調整不自動換卡直接照打也打叉例句分行)：不自動換卡、拼錯進照打也打叉、例句分行。修改 D-145 第 7 點。
+- [D-174](../docs/decisions.md#d-174-iphone-實機測試後的複習畫面調整不自動換卡直接照打也打叉例句分行)：不自動換卡、拼錯進照打也打叉、例句分行。修改 D-145 第 7 點。
 - [D-173](../docs/decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)：iPhone 的 stack 沒有位置時也收。修改 D-155 第 2、3 點；格式見 [syntax.md §9](../docs/syntax.md#9-錯誤紀錄) 的 `stack`。
 - 實測證據：[iPhone 測試](iphone-test-2026-11.md)〈結果〉〈測試中找到的〉。
 

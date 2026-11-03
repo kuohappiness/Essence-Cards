@@ -200,7 +200,7 @@ void test('R5 第 1 步拼錯 → 第 2 步拼錯 → 第 3 步顯示比對（ma
   assert.ok(h.log()[0].includes('"typed":"wrong","retry":"wrong"'));
 });
 
-void test('D-172 進第 3 步：拼錯進來標「錯誤」（直接照打的卡也標），按「沒印象」進來不標；走完就不標', async t => {
+void test('D-174 進第 3 步：拼錯進來標「錯誤」（直接照打的卡也標），按「沒印象」進來不標；走完就不標', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });
   // z1 有原形提示：第 1 步按「沒印象」、第 2 步再按「沒印象」，一路沒拼過。
@@ -226,7 +226,7 @@ void test('D-172 進第 3 步：拼錯進來標「錯誤」（直接照打的卡
 });
 
 // Codex L2 的待釐清，使用者選「留著打叉」：這張拼錯過就一路標到走完，最後一步是不是按「沒印象」都一樣。
-void test('D-172 第 1 步拼錯、第 2 步按「沒印象」：第 3 步留著打叉，紀錄不變', async t => {
+void test('D-174 第 1 步拼錯、第 2 步按「沒印象」：第 3 步留著打叉，紀錄不變', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });
   assert.equal(lt(s.view()), 'z1');
@@ -240,7 +240,7 @@ void test('D-172 第 1 步拼錯、第 2 步按「沒印象」：第 3 步留著
   assert.ok(h.log()[0].includes('"typed":"wrong","retry":"skip"'), '紀錄不變：' + h.log()[0]);
 });
 
-void test('D-172 第 1 步按「沒印象」、第 2 步拼錯進第 3 步：標打叉', async t => {
+void test('D-174 第 1 步按「沒印象」、第 2 步拼錯進第 3 步：標打叉', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });
   s.skip();
