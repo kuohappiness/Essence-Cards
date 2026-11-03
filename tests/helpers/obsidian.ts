@@ -44,6 +44,8 @@ export interface StubOptions {
   failWatch?: boolean | (() => unknown);
   /** Platform.isDesktopApp；預設 false（手機）。 */
   desktop?: boolean;
+  /** Platform.isIosApp；預設 false。 */
+  ios?: boolean;
   /**
    * 電腦上 vault 在磁碟上的位置（FileSystemAdapter.getBasePath）：給了才是 FileSystemAdapter，外掛內的備份才載入得起來
    * （load 的程式碼這時可以 require node: 的模組）。vault 的內容仍在記憶體裡。
@@ -275,7 +277,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     MarkdownView: FakeMarkdownView,
     MarkdownRenderer: { render: (_app: unknown, markdown: string, el: { textContent: string }) => { el.textContent = markdown; return Promise.resolve(); } },
     setIcon: () => {}, editorInfoField: {}, apiVersion: 'test',
-    Platform: { isWin: true, isDesktop: !!options.desktop, isDesktopApp: !!options.desktop, isMobileApp: !options.desktop, isIosApp: false, isAndroidApp: false },
+    Platform: { isWin: true, isDesktop: !!options.desktop, isDesktopApp: !!options.desktop, isMobileApp: !options.desktop, isIosApp: !!options.ios, isAndroidApp: false },
   };
   function load<T>(code: string): T {
     const module = { exports: {} as T };

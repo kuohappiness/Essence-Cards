@@ -10,7 +10,7 @@ import { localFolder } from './install.ts';
  * 位置寫 stack 裡的 `行:欄`（1 起算，例如 `plugin:essence-cards:1:20345` 的 `1:20345`），也可以貼整個 frame；
  * SourceMap.findEntry 是 0 起算，這裡各減 1。
  * Obsidian 載入外掛時沒有多出行或欄的偏移（Windows 版 Obsidian 1.14.5，2026-10-30 開發命令 error-probe：六個位置都對回拋錯的
- * 那一行，欄指在 `Error(`；tasks/error-log.md〈結果〉）。iPhone 的 stack 格式待下一次實機測試確認。
+ * 那一行，欄指在 `Error(`；tasks/error-log.md〈結果〉）。iPhone（Obsidian 1.15.0、iOS 27.0.1）的 stack 每一層只有名稱、沒有位置，這個工具用不上（tasks/iphone-test-2026-11.md）。
  */
 
 /** Obsidian 的 stack 和 main.js 的行、欄差多少：實測是 0。之後哪個平台不是 0，改這裡並寫明出處。 */

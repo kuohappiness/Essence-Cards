@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, splitTranslation, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -117,6 +117,78 @@ void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只
   assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
   assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
   assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
+});
+
+void test('D-174 英文句子後面緊接中文翻譯：分成兩行；其他照原文一行', () => {
+  const two = (line: string, translation: string): { line: string; translation: string } => ({ line, translation });
+  assert.deepEqual(splitTranslation('Can you lend me your pen? 你可以借我你的筆嗎？'), two('Can you lend me your pen?', '你可以借我你的筆嗎？'));
+  assert.deepEqual(splitTranslation('She bought a book. Tom sold it! 她買了書，Tom 把它賣了。'), two('She bought a book. Tom sold it!', '她買了書，Tom 把它賣了。'), '英文有好幾句；中文裡有英文');
+  assert.deepEqual(splitTranslation('He left.他走了。'), two('He left.', '他走了。'), '句點和中文之間沒有空格');
+  assert.deepEqual(splitTranslation('He left.   他走了。'), two('He left.', '他走了。'), '多按的空格');
+  assert.deepEqual(splitTranslation('Is it OK？ 可以嗎？'), two('Is it OK？', '可以嗎？'), '全形問號');
+  assert.deepEqual(splitTranslation('**She** said "hi." 她說「嗨」。'), two('**She** said "hi."', '她說「嗨」。'), '粗體開頭、句點在引號裡');
+  assert.deepEqual(splitTranslation('She **left.** 她離開了。'), two('She **left.**', '她離開了。'), '句點在粗體裡');
+  assert.deepEqual(splitTranslation('He said hi. 「嗨」他說。'), two('He said hi.', '「嗨」他說。'), '翻譯以引號開頭');
+  // Codex L2 的 F1：格式各自在英文或中文裡收尾的照樣分行，中文也可以有自己的格式。
+  assert.deepEqual(splitTranslation('She bought a book. **她買了一本書。**'), two('She bought a book.', '**她買了一本書。**'), '中文自己加粗');
+  assert.deepEqual(splitTranslation('She bought a book. ==她買了一本書。=='), two('She bought a book.', '==她買了一本書。=='), '中文自己標記');
+  assert.deepEqual(splitTranslation('**She bought a book.** **她買了一本書。**'), two('**She bought a book.**', '**她買了一本書。**'), '兩邊各自加粗');
+  assert.deepEqual(splitTranslation('She **bought** a `book`. *她*買了書。'), two('She **bought** a `book`.', '*她*買了書。'), '英文裡的格式都收尾了');
+  assert.deepEqual(splitTranslation('It costs $5. 它要五元。'), two('It costs $5.', '它要五元。'), '錢的符號不是格式');
+  assert.deepEqual(splitTranslation('She left. `她走了。`'), two('She left.', '`她走了。`'), '中文包在反引號裡');
+  assert.deepEqual(splitTranslation('`She left.` `她走了。`'), two('`She left.`', '`她走了。`'), '兩邊各自包在反引號裡');
+  assert.deepEqual(splitTranslation('He (Tom) left. 他（Tom）走了。'), two('He (Tom) left.', '他（Tom）走了。'), '括號收尾了');
+  // Codex L2 第三輪的 F1：只分純文字加完整的簡單格式；粗體標出目標字是常見的寫法，一定要分行。
+  assert.deepEqual(splitTranslation('She **bought** a book. 她買了一本書。'), two('She **bought** a book.', '她買了一本書。'), '粗體標出目標字');
+  assert.deepEqual(splitTranslation('She ==bought== a *new* ~~old~~ book. 她買了一本書。'), two('She ==bought== a *new* ~~old~~ book.', '她買了一本書。'), '好幾種簡單格式');
+  assert.deepEqual(splitTranslation('She `used *` here. 她用了星號。'), two('She `used *` here.', '她用了星號。'), '程式碼裡的星號不是格式');
+  assert.deepEqual(splitTranslation('Is 1 + 1 = 2? 是的。'), two('Is 1 + 1 = 2?', '是的。'), '單獨的等號不是格式');
+  const one = (text: string): void => { assert.deepEqual(splitTranslation(text), { line: text, translation: null }, text); };
+  // Codex L2 第三輪的 F1：數記號會被騙過的組合。判斷不了就一行，一行不會壞。
+  one('She typed ``foo. 中文``.');
+  one('She wrote \\* and *left. 她走了。* and \\*.');
+  one('She `*` *left. 她走了。* `*` now');
+  one('x_y _left. 她走了。_ z_w');
+  one('She *a* b* *c. 中* *d *e* now');
+  one('She $left. 她$走了。');
+  one('She %%left. 她%%走了。');
+  one('She left. ``她走了。``');
+  one('She ***left***. 她走了。');
+  one('snake_case is fun. 蛇形命名。');
+  one('She __left__. _她_走了。');
+  one('She ~left. 她~走了。');
+  one('See www.example.com/?中文');
+  // Codex L2 第二輪的 F1：有連結、HTML、網址的一律一行，切分點可能落在裡面；括號沒收尾也一行。
+  one('See [source](https://example.com/a.中文).');
+  one('See https://example.com/a.中文');
+  one('Go to <https://example.com/a.中文>');
+  one('She <u>left. 她走了。</u>');
+  one('She [left](https://example.com). 她走了。');
+  one('She <b>left</b>. 她走了。');
+  one('She (left. 她) 走了。');
+  one('`She left. 她走了。`');
+  // Codex L2 的 F1：切開會把格式拆成兩半、畫面看到星號的，照舊一行，格式完整。
+  one('**She bought a book. 她買了一本書。**');
+  one('*She bought a book. 她買了一本書。*');
+  one('_She bought a book. 她買了一本書。_');
+  one('==She bought a book. 她買了一本書。==');
+  one('~~She bought a book. 她買了一本書。~~');
+  one('She **left. 她**離開了。');
+  one('She `left. 她`離開了。');
+  one('She bought a book.**她買了一本書。**');
+  one('5 * 3 = 15. 五乘三等於十五。');
+  one('She [left. 她](https://example.com)離開了。');
+  one('She [[left. 她]]離開了。');
+  one('go 的過去式不規則：go → went → gone');
+  one('look after 照顧');
+  one('She bought a book 她買了一本書');
+  one('我昨天買了一本書。I bought a book yesterday.');
+  one('made up his mind 和 made his mind up 都對');
+  one('She bought a book.');
+  one('She bought a book. 3 本');
+  one('易混淆 lend（借出）');
+  one('![[W6 擴散示意圖.svg]]');
+  one('');
 });
 
 void test('D-145 背面補充的名稱自己一行：一到六個字、不含空白，緊接全形冒號；其他照原文', () => {

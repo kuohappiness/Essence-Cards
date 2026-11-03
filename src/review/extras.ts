@@ -8,3 +8,26 @@ export function extraLabel(text: string): { label: string | null; body: string }
   const match = LABEL.exec(text);
   return match ? { label: match[1], body: match[2] } : { label: null, body: text };
 }
+
+/**
+ * 背面補充開頭是英文句子、後面緊接中文翻譯時（D-174），分成兩行顯示：「She bought a book. 她買了一本書。」。
+ * 只認整段從英文開始、中文之前以句尾標點結束的：「go 的過去式」「look after 照顧」這類不是句子加翻譯，照舊一行；
+ * 句尾標點和中文之間的空格可有可無，中文開頭可以有自己的格式。不是這個樣子時 translation 是 null、line 是原文。
+ * 兩邊都只能是純文字加完整的簡單格式（Codex L2 三輪的 F1）：切開後格式被拆成兩半的（`**She left. 她走了。**`）、
+ * 切分點可能落在裡面的（`[a](b.中文)`）、看不出範圍的（`x_y`、`\*`）都照舊一行。不解析 Markdown，判斷不了就一行，一行不會壞。
+ */
+const TRANSLATED = /^([*_=~`"'“(]*[A-Za-z][^\p{Script=Han}]*[.?!。？！]["'’”)*_=~`]*)\s*([*_=~`]*[\p{Script=Han}「『（][\s\S]*)$/u;
+/** 切分點可能落在裡面、或看不出範圍的結構：連結、HTML、網址、跳脫、數學式、註解。 */
+const STRUCTURE = /[[\]<>\\]|:\/\/|www\.|\$[\s\S]*\$|%%/;
+/** 完整的簡單格式：裡面沒有別的記號，頭尾不是空白（頭尾是空白的星號不是格式）。 */
+const SIMPLE = /(\*\*|\*|==|~~)(?=\S)[^*_=~`]+(?<=\S)\1|`[^`]+`/g;
+/** 拿掉簡單格式之後還剩下的記號。 */
+const LEFTOVER = /[*_`~]|==/;
+/** 這一段只有純文字加完整的簡單格式，括號也對得上。 */
+function closed(text: string): boolean {
+  return !LEFTOVER.test(text.replace(SIMPLE, '')) && text.split('(').length === text.split(')').length;
+}
+export function splitTranslation(text: string): { line: string; translation: string | null } {
+  const match = STRUCTURE.test(text) ? null : TRANSLATED.exec(text);
+  return match && closed(match[1]) && closed(match[2]) ? { line: match[1], translation: match[2] } : { line: text, translation: null };
+}

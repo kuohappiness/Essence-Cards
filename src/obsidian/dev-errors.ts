@@ -1,11 +1,11 @@
-import { MarkdownRenderer, type App } from 'obsidian';
+import { MarkdownRenderer, Platform, type App } from 'obsidian';
 import type { Pick } from '../core/study/index.ts';
 import type { State } from '../state/index.ts';
 import type { ReviewHandle } from '../ui/index.ts';
 import { createObsidianFiles } from './files.ts';
 import { capturePng, keepRendering } from './dev-review.ts';
 
-// tasks/error-log.md §7：正式版的錯誤紀錄在 Windows 版 Obsidian 的實測。依序製造幾種錯誤，再讀這台當月的錯誤紀錄。
+// tasks/error-log.md §7：正式版的錯誤紀錄在 Windows 版與 iPhone 的實測。依序製造幾種錯誤，再讀這台當月的錯誤紀錄；iPhone 沒有截圖與送按鍵，那幾步回傳 null 或說明。
 // 每一種從自己的一行原始碼拋出，對照表定位（npm run locate）要對回那一行；行號寫在結果檔的 expected。
 
 interface ProbeHost { app: App; device: string; state: State | null; startReview(pick: Pick): ReviewHandle | null }
@@ -38,6 +38,7 @@ function speechThrow(): void { throw Error('error-probe：複習畫面的 effect
 
 interface Contents { sendInputEvent?(event: { type: 'keyDown' | 'keyUp' | 'char'; keyCode: string; modifiers?: string[] }): void }
 function webContents(): Contents | null {
+  if (!Platform.isDesktopApp) return null;
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
   const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
   return electron?.remote?.getCurrentWebContents() ?? null;
@@ -161,9 +162,9 @@ export async function errorProbe(host: ProbeHost): Promise<unknown> {
     steps,
     added,
     check: {
-      uncaught: probe.filter(line => line.where === 'uncaught').map(line => [line.msg, line.n ?? null, typeof line.stack === 'string' && line.stack.includes('plugin:essence-cards:')]),
+      uncaught: probe.filter(line => line.where === 'uncaught').map(line => [line.msg, line.n ?? null, typeof line.stack === 'string']),
       render: probe.filter(line => line.where === 'render').map(line => [line.msg, line.path ?? null, line.n ?? null]),
-      ui: probe.filter(line => line.where === 'ui').map(line => [line.msg, typeof line.stack === 'string' && line.stack.includes('plugin:essence-cards:')]),
+      ui: probe.filter(line => line.where === 'ui').map(line => [line.msg, typeof line.stack === 'string']),
       report: parsed.filter(line => line.where === 'report').map(line => [line.kind, line.lt, line.v, line.path]),
       others: parsed.filter(line => !probe.includes(line) && line.where !== 'report'),
     },

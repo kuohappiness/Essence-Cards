@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { animate } from 'motion';
 import type { ReportKind } from '../core/errors/index.ts';
 import type { Rating } from '../core/study/index.ts';
-import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLabel, sourceLinks } from '../review/index.ts';
+import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLabel, sourceLinks, splitTranslation } from '../review/index.ts';
 import type { Axis, CardView, DoneView, Gesture, Session, SourceOwner, Spelling, TypedView } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
 import { firstMaterial, resolveSource, type MaterialDeck } from './sources.ts';
@@ -162,17 +162,6 @@ export function Review(props: ReviewProps): React.JSX.Element {
     if (autoOn) speech.say(texts);
   }, [view, autoOn, speech]);
   useEffect(() => { if (!autoOn) speech.stop(); }, [autoOn, speech]);
-  // 只剩一個自評時（打字卡第 1 步按了「沒印象」），三步走完就自動記下、換下一張（D-145，iPhone 回饋）。
-  // 正在念答案與例句時等念完（答錯後的回饋，D-116）；語音沒回報念完時，底下那一顆「沒印象」照樣能按。
-  // 每次畫面更新都重新等（同一題重出、回看後回來、切走再回來都會再自動，Codex 審查 F2），條件不成立或卸載時取消；
-  // 關掉畫面、切到背景時 Speech.stop 取消等待、不算念完，所以中斷不會被記成作答（Codex 審查 F1）。切到背景時不等。
-  // 換卡動畫期間不等，動畫結束才等：回到目前那張時沒在念，whenIdle 馬上回報，那時動畫還沒結束（Codex 再查 R1）。
-  // 回報的選單開著時也不等（D-160 第 3 點），關上才等。
-  useEffect(() => {
-    if (reporting || animating || view.kind !== 'card' || view.card.viewing || !view.card.typed?.finished || view.card.allowed.length !== 1) return;
-    if (document.visibilityState === 'hidden') return;
-    return speech.whenIdle(() => { if (alive.current && !busy.current) commit(() => session.rateOnly()); });
-  }, [view, autoOn, animating, reporting, speech, session]);
   // 打字卡：輸入框自動取得焦點（在空格裡打字時，題目渲染好、輸入框放進空格之後；回報的選單關上之後）。
   useEffect(() => {
     if (!reporting && view.kind === 'card' && view.card.typed && !view.card.typed.finished && !view.card.viewing) inputEl.current?.focus({ preventScroll: true });
@@ -446,12 +435,14 @@ function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, s
   const links = sources.map(item => ({ ...item, label: sourceLabel(item), target: resolveSource(app, card.deck, deckMaterials, item.link, (term, code) => units(card.deck, term, code)) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
-  // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
+  // 拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
+  // 不經提示直接照打的卡也一樣（D-174）。
   // 照打：「照著打一次」後面接即時比對，打了字就顯示現在打的字（打對的照常顯示、打錯的字母畫刪除線，D-145，使用者 2026-10-28）；
   // 放在同一行，打字時不多冒出一行把下面往鍵盤後推。
   const live = typing?.step === 3 && typing.live?.typed.length ? typing.live : null;
-  const stepText = typing?.step === 2 ? <div className="ec-hint">{typing.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>}<span>提示：<span lang="en">{typing.hint}</span></span></div>
-    : typing?.step === 3 ? <div className="ec-hint"><span>照著打一次</span>{live && <span className="ec-live"><Letters letters={live.typed} mode="typed" /></span>}</div> : null;
+  const wrong = typing?.notice && <span className="ec-ok is-no" role="img" aria-label="錯誤"><Icon type="close" /></span>;
+  const stepText = typing?.step === 2 ? <div className="ec-hint">{wrong}<span>提示：<span lang="en">{typing.hint}</span></span></div>
+    : typing?.step === 3 ? <div className="ec-hint">{wrong}<span>照著打一次</span>{live && <span className="ec-live"><Letters letters={live.typed} mode="typed" /></span>}</div> : null;
   const input = typing && <input ref={inputRef} className={'ec-input' + (inline ? ' ec-blank-input' : '')} type="text" lang="en" value={typing.input} onChange={event => { onInput(event.currentTarget.value); }}
     placeholder={inline ? ' ' : typing.step === 3 ? '照著打一次' : '輸入英文'} aria-label={typing.step === 3 ? '照著打一次' : '輸入英文'} size={inline ? 1 : undefined}
     autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" />;
@@ -493,9 +484,12 @@ function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, s
       {/* 背面補充開頭的「記憶錨點：」「例句：」這類名稱自己一行，內容從下一行開始（D-145，iPhone 回饋） */}
       {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => {
         const { label, body } = extraLabel(extra);
+        // 英文句子和中文翻譯各一行（D-174），喇叭留在英文那一行。
+        const { line, translation } = splitTranslation(body);
         return <div key={index} className="ec-ex-item">
           {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
-          <div className="ec-ex-row"><Markdown app={app} text={body} sourcePath={card.deck} revealed tail={<Speaker texts={speak(body)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>
+          <div className="ec-ex-row"><Markdown app={app} text={line} sourcePath={card.deck} revealed tail={<Speaker texts={speak(line)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>
+          {translation && <div className="ec-ex-row" lang="zh-Hant"><Markdown app={app} text={translation} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} /></div>}
         </div>;
       })}</div>}
       {hasSource && <div className="ec-tools">

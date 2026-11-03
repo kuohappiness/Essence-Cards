@@ -3,7 +3,7 @@ import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import { isDeckPath } from './core/deck/index.ts';
-import { createErrorLog, hasOwnFrame, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
+import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
@@ -104,10 +104,11 @@ export default class EssenceCardsPlugin extends Plugin {
     let files: Files = createObsidianFiles(this.app);
     // 錯誤紀錄等 layout ready 才讀寫：之前 vault 的索引還不完整，數不到當月的行數（D-155 第 3 點）。
     const layoutReady = new Promise<void>(resolve => { this.app.workspace.onLayoutReady(resolve); });
-    this.errors = createErrorLog({ files, device: this.device, build: BUILD, obsidian: apiVersion, after: layoutReady });
-    // 補網（D-155 第 2 點）：只收 stack 有這個外掛自己程式位置的；registerDomEvent 在停用時自動移除。瀏覽器已經印在 console。
-    this.registerDomEvent(window, 'error', event => { if (hasOwnFrame(event.error)) this.errors.record('uncaught', event.error); });
-    this.registerDomEvent(window, 'unhandledrejection', event => { if (hasOwnFrame(event.reason)) this.errors.record('uncaught', event.reason); });
+    const nameStacks = Platform.isIosApp;
+    this.errors = createErrorLog({ files, device: this.device, build: BUILD, obsidian: apiVersion, after: layoutReady, nameStacks });
+    // 補網（D-155 第 2 點）：只收 stack 有這個外掛自己程式位置的，iPhone 的 stack 沒有位置，只有名稱的也收（D-173）；registerDomEvent 在停用時自動移除。瀏覽器已經印在 console。
+    this.registerDomEvent(window, 'error', event => { if (maybeOwn(event.error, nameStacks)) this.errors.record('uncaught', event.error); });
+    this.registerDomEvent(window, 'unhandledrejection', event => { if (maybeOwn(event.reason, nameStacks)) this.errors.record('uncaught', event.reason); });
     this.addCommand({
       id: 'version',
       name: '版本',

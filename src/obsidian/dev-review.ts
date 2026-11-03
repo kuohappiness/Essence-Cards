@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, type App, type Plugin } from 'obsidian';
+import { MarkdownView, Notice, Platform, type App, type Plugin } from 'obsidian';
 import { isDeckPath } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
 import { encodeEntry, isLogPath, type NewEntry, type Pick } from '../core/study/index.ts';
@@ -388,6 +388,7 @@ interface Contents {
   sendInputEvent?(event: { type: 'keyDown' | 'keyUp'; keyCode: string; modifiers?: string[] }): void;
 }
 function webContents(): Contents | null {
+  if (!Platform.isDesktopApp) return null;
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
   const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
   return electron?.remote?.getCurrentWebContents() ?? null;
@@ -634,8 +635,10 @@ async function shootUi(host: ReviewHost, folder: string, base: State, visibility
     await record('鍵盤 2（差一點）', press('2'));
     await record('light：沒印象', click('沒印象'), '英文 打字 原形等於答案');
     typeText('light');
-    // 按了「沒印象」只剩一個自評：照打完就自動記下、換下一張（D-145），不用再按 1。
-    await record('照打（自動換下一張）', { key: press('Enter'), next: name() });
+    // 按了「沒印象」只剩一個自評：照打完停在這張（D-174），自己按 1。
+    await record('照打（停在這張）', press('Enter'));
+    await sleep(RATE_DELAY);
+    await record('鍵盤 1（沒印象）', press('1'));
     typeText('went');
     await record('go 第 1 步拼對', press('Enter'), '英文 打字 拼對');
     await sleep(RATE_DELAY);
