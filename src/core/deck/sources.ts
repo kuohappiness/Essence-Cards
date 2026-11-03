@@ -284,12 +284,15 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
 
   /** 否定段拿掉前面那個單元的字之後，還有沒有點名別的東西。 */
   function namesOther(segment: string, term: string, code: string): boolean {
-    let text = segment.replace(new RegExp(`(?<![0-9A-Za-z-])${escapeRegExp(code)}(?![0-9A-Za-z-])`, 'gi'), '');
+    // 先看有沒有頁、圖：`不是第3頁` 說的是頁，只是號碼和單元 3 一樣。
+    if (scan(segment, tokens).found.length) return true;
+    const written = escapeRegExp(code).replace(/^([A-Za-z]+)(?=\d)/, '$1 ?');
+    let text = segment.replace(new RegExp(`(?<![0-9A-Za-z-])${written}(?![0-9A-Za-z-])`, 'gi'), '');
     for (let at = 0; at < text.length; at++) {
       const read = readTerm(text.slice(at));
       if (read?.term === term) { text = text.slice(0, at) + text.slice(at + read.length); break; }
     }
-    return /[\dA-Za-z]/.test(text) || hasCode(text) || scan(text, tokens).found.length > 0;
+    return /[\dA-Za-z]/.test(text) || hasCode(text);
   }
 
   function readSegment(raw: string, source: string, next: string | undefined): Pending[] {

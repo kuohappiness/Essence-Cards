@@ -75,6 +75,9 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   ['不要算國二上 1-3', [{ kind: 'text' }], true], ['國二上 1-3 不要算這個目標', [{ kind: 'text' }], true], ['國二上 1-3 不考這個', [{ kind: 'text' }], true], ['不是國二上 1-3，是國三上 2-1', [{ kind: 'text' }, heading('是國三上 2-1')], true], ['老師說不用看 p.44', [{ kind: 'text' }], true], ['圖 2-14 不用看', [{ kind: 'text' }], true], ['不是 p.44', [{ kind: 'text' }], true],
   // 否定字緊接在沒有位置的單元後面：說的就是那個單元；有位置的是實際的出處，照連
   ['國二上 1-3，不算這個', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3 水溶液，不算這個', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算這個，p.44', [{ kind: 'text' }, { kind: 'text' }, page(44)], true], ['國二上 1-3 p.20，老師說不用背', [u13(page(20)), { kind: 'text' }], true],
+  // 否定段說的是頁或圖，只是號碼和單元一樣：前面的單元照算
+  ['國二上 3、不是第3頁、p.44', [unit('國二上', '3'), { kind: 'text' }, unit('國二上', '3', page(44))], true], ['國二上 2-1、不是圖2-1', [unit('國二上', '2-1'), { kind: 'text' }], true], ['國二上 3，不是 p.3', [unit('國二上', '3'), { kind: 'text' }], true],
+  ['國二上 L1，不用考 L 1', [{ kind: 'text' }, { kind: 'text' }], true],
   // 否定段點名的就是前面那個單元：一樣先不算
   ['國二上 L1，不用考 L1', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算1-3', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算國二上 1-3', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算八上 1-3', [{ kind: 'text' }, { kind: 'text' }], true],
   // 否定段自己點名了別的東西：說的不是前面的單元
