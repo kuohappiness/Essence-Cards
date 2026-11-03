@@ -59,7 +59,7 @@ export const headingKey = (text: string): string => tidy(text).toLowerCase().rep
 
 // ── 連結與「標題」先藏起來，裡面的字不動 ──
 
-const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\([^)]+\)|「[^」]+」|https?:\/\/(?:[^\s、﹑，﹐；﹔｜|,;]|[,;](?=[^\s、﹑，﹐；﹔｜|,;]))+/g;
+const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\((?:\\.|[^()\\]|\((?:\\.|[^()\\]|\([^()]*\))*\))+\)|「[^」]+」|https?:\/\/(?:[^\s、﹑，﹐；﹔｜|,;]|[,;](?=[^\s、﹑，﹐；﹔｜|,;]))+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
 const mask = (text: string, tokens: string[]): string => text.replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
@@ -88,7 +88,7 @@ function linkTarget(raw: string): SourceLink | null {
     if (target.startsWith('#')) return { kind: 'heading', heading: target.slice(1) };
     return split < 0 ? { kind: 'note', link: target } : { kind: 'note', link: target, alias: inner.slice(split + 1).trim() };
   }
-  const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(raw);
+  const markdown = /^\[[^\]]+\]\((.+)\)$/s.exec(raw);
   return markdown ? { kind: 'note', link: decodedPath(markdown[1]).replace(/\.md$/, '') } : null;
 }
 
