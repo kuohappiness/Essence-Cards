@@ -19,6 +19,14 @@ export async function secondPrompt(root, spec, step) {
   for (const file of prompt.files) file.sha256 = hash(await fs.readFile(path.resolve(root, file.path)));
   return prompt;
 }
+// 清單由真實卡組整理，只放 --out；有寫才換掉任務資料的那一行。
+async function withExisting(out, spec) {
+  if (!spec.已有目標檔) return spec;
+  const file = path.join(out, spec.已有目標檔);
+  if (!(await exists(file))) throw new Error('缺少已有目標檔：' + spec.已有目標檔);
+  const list = (await fs.readFile(file, 'utf8')).trim();
+  return { ...spec, 任務資料: spec.任務資料.map(line => line.startsWith('學生已有的學習目標') ? `學生已有的學習目標：\n${list}` : line) };
+}
 function selection(values, allowed, label) {
   if (!Array.isArray(values) || !values.length || new Set(values).size !== values.length || values.some(v => !allowed.includes(v))) throw new Error(label + ' 必須非空、不重複且存在於設定');
   return allowed.filter(v => values.includes(v));
@@ -40,7 +48,7 @@ export async function prepareSecond({ out, run = 1, materials, configs, plan = '
     for (const id of selectedConfigs) {
       if (!/^(R[0-3]|S0)$/.test(id)) throw new Error('未知第二輪組別');
       const steps = config.configs[id], prompts = [];
-      for (const step of steps) prompts.push(await secondPrompt(root, config.materials[name], step));
+      for (const step of steps) prompts.push(await secondPrompt(root, await withExisting(out, config.materials[name]), step));
       const dir = path.join(out, plan === '接法驗證' ? '接法驗證' : '生成', name, id, ...(run === 1 ? [] : [`第${run}次`]));
       jobs.push({ name, id, source, user, dir, steps, prompts });
     }

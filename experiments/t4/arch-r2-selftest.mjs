@@ -221,11 +221,21 @@ export async function selftest() {
     await fs.writeFile(path.join(socialOut, '材料/凍結.md'), '自編凍結');
     await assert.rejects(prepareSecond({ out: socialOut, materials: ['2-1'], configs: ['R3'] }, { root }), /凍結/);
     await assert.rejects(prepareSecond({ out: socialOut, settings: socialFile, plan: '接法驗證' }, { root }), /materials/);
-    const socialPlan = await prepareSecond({ out: socialOut, settings: socialFile }, { root });
+    const socialPlan = await prepareSecond({ out: socialOut, settings: socialFile, materials: ['2-1'] }, { root });
     assert.deepEqual(socialPlan.jobs.map(j => [j.name, j.id]), [['2-1', 'R3']]);
+    assert.ok(socialPlan.jobs[0].prompts[0].system.includes('學生已有的學習目標：無'));
+    // 已有目標在 --out 裡，不進設定檔；只有用到的節才要有那個檔。
+    assert.equal(social.materials['2-2'].已有目標檔, '已有目標-2-1.md');
+    await fs.mkdir(path.join(socialOut, '材料/2-2/圖'), { recursive: true });
+    await fs.writeFile(path.join(socialOut, '材料/2-2/教材.md'), 'p.1 ^p1\n\n自編文字');
+    await assert.rejects(prepareSecond({ out: socialOut, settings: socialFile, materials: ['2-2'] }, { root }), /已有目標/);
+    await fs.writeFile(path.join(socialOut, '已有目標-2-1.md'), '- 自編目標｜k3m9x2｜小五上 2-1 p.1\n');
+    const existingPlan = await prepareSecond({ out: socialOut, settings: socialFile, materials: ['2-2'] }, { root });
+    assert.ok(existingPlan.jobs[0].prompts[0].system.includes('學生已有的學習目標：\n- 自編目標｜k3m9x2｜小五上 2-1 p.1\n家長調整：無'));
+    assert.ok(!existingPlan.jobs[0].prompts[0].system.includes('學生已有的學習目標：無'));
     assert.ok(socialPlan.jobs[0].prompts[0].system.endsWith((await fs.readFile(preset, 'utf8')).replaceAll('\r\n', '\n').trimEnd()));
     const before = planCalls;
-    for (const run of [1, 2]) assert.ok((await runSecond({ out: socialOut, settings: socialFile, run }, dependencies)).every(r => r.complete));
+    for (const run of [1, 2]) assert.ok((await runSecond({ out: socialOut, settings: socialFile, materials: ['2-1'], run }, dependencies)).every(r => r.complete));
     assert.equal(planCalls, before + 2);
     for (const dir of ['生成/2-1/R3', '生成/2-1/R3/第2次']) for (const file of ['全貌.md', '架構.md', '卡組.md', '卡組.檢查.md']) await fs.access(path.join(socialOut, dir, file));
     assert.deepEqual(estimateInput('ab', [{ type: 'text', text: '字' }, { type: 'image', file: 'x.png' }]), { chars: 3, images: 1, upperTokens: 18437 });
