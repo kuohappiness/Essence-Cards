@@ -1,5 +1,5 @@
 {
-  "說明": "國小社會預設用 Sol 跑康軒五上的對照（tasks/elementary-social-sol-trial.md、tasks/elementary-social-sol-trial-2.md）；程式只讀，預設讀 repo 的最新版。提示與接法和第二輪的 R3、sol-plan 相同，最後接上預設。這次沒有考題要凍結，所以不需要 考題/凍結.md；教材仍要 材料/凍結.md。configs 的檔案路徑相對於 experiments/t4/arch/第二輪。已有目標檔相對於 --out（清單由真實卡組整理，不進 repo），內容取代任務資料的「學生已有的學習目標」。",
+  "說明": "國小社會預設用 Sol 跑康軒五上的對照（tasks/elementary-social-sol-trial.md、tasks/elementary-social-sol-trial-2.md、tasks/elementary-social-sol-trial-3.md）；程式只讀，預設讀 repo 的最新版。提示與接法和第二輪的 R3、sol-plan 相同，最後接上預設。這次沒有考題要凍結，所以不需要 考題/凍結.md；教材仍要 材料/凍結.md。configs 的檔案路徑相對於 experiments/t4/arch/第二輪。已有目標檔相對於 --out（清單由真實卡組整理，不進 repo），內容取代任務資料的「學生已有的學習目標」。",
   "不需考題凍結": true,
   "models": {
     "sol-plan": {"provider":"chatgpt-plan","model":"gpt-6.1-sol","baseUrl":"https://api.openai.com/v1","authentication":"Sign in with ChatGPT：dynamic_agent_client + PKCE；獨立本機憑證","outputLimit":null,"modelMaxOutputTokens":128000,"outputLimitNote":"方案預覽明文不接受 max_output_tokens；模型公開上限不代表方案路線的實際上限，留待 G3 預試。","documentation":["https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference","https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations","https://developers.openai.com/api/docs/models/gpt-6.1-sol"],"parameters":{"reasoning":{"effort":"high"},"store":false,"stream":true}}
@@ -16,7 +16,7 @@
       "任務資料": ["學生：國小五年級（小五上）", "科目：社會", "單元：2-1 地形如何影響我們的生活", "學習目的：準備段考", "允許 AI 補充：是", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師用書，含給老師的註記）與習作轉錄稿"]
     },
     "2-2": {
-      "已有目標檔": "已有目標-2-1.md",
+      "已有目標檔": "已有目標-混入.md",
       "unit": "國小五上社會 2-2",
       "title": "國小五上社會 2-2 氣候如何影響我們的生活",
       "任務資料": ["學生：國小五年級（小五上）", "科目：社會", "單元：2-2 氣候如何影響我們的生活", "學習目的：準備段考", "允許 AI 補充：是", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師用書，含給老師的註記）與習作轉錄稿"]
