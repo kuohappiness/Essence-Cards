@@ -4,19 +4,19 @@ import { validateOut } from './core.mjs';
 import { prepareSecond, runSecond } from './arch-r2.mjs';
 import { blindSecond } from './arch-r2-blind.mjs';
 import { loginPlan } from './arch-plan.mjs';
-import { estimateRequest } from './arch-request.mjs';
+import { estimateRequest, estimateInput } from './arch-request.mjs';
 
 export async function secondMain(command, values, positionals) {
   if (positionals.length !== 1 || !['run', 'blind', 'plan-login'].includes(command)) throw new Error('第二輪只接受 run、blind 或 plan-login');
-  if (values.pdf || values.photos || (command !== 'run' && (values.configs || values.plan || values['dry-run']))) throw new Error('這些選項只適用第二輪 run');
+  if (values.pdf || values.photos || (command !== 'run' && (values.configs || values.plan || values.settings || values['dry-run']))) throw new Error('這些選項只適用第二輪 run');
   const out = await validateOut(values.out), run = Number(values.run ?? 1);
   const list = value => value === undefined ? undefined : value.split(',').map(v => v.trim());
-  const options = { out, run, materials: list(values.materials), configs: list(values.configs), plan: values.plan };
+  const options = { out, run, materials: list(values.materials), configs: list(values.configs), plan: values.plan, settings: values.settings };
   if (values['dry-run']) {
     const { jobs, config } = await prepareSecond(options);
     const summary = jobs.map(j => ({ material: j.name, setting: j.id, images: j.source.images.length, steps: j.prompts.map((p, i) => ({
       files: p.files, model: config.models[j.steps[i].model],
-      estimate: config.models[j.steps[i].model].provider === 'openai' ? estimateRequest(config.models[j.steps[i].model], p.system, j.user.saved) : null,
+      estimate: config.models[j.steps[i].model].provider === 'openai' ? estimateRequest(config.models[j.steps[i].model], p.system, j.user.saved) : estimateInput(p.system, j.user.saved),
     })) }));
     console.log(JSON.stringify({ dryRun: true, requestsSent: 0, jobs: summary }, null, 2)); return;
   }
