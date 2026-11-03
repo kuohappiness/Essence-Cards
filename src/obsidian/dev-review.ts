@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, type App, type Plugin } from 'obsidian';
+import { MarkdownView, Notice, Platform, type App, type Plugin } from 'obsidian';
 import { isDeckPath } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
 import { encodeEntry, isLogPath, type NewEntry, type Pick } from '../core/study/index.ts';
@@ -388,6 +388,7 @@ interface Contents {
   sendInputEvent?(event: { type: 'keyDown' | 'keyUp'; keyCode: string; modifiers?: string[] }): void;
 }
 function webContents(): Contents | null {
+  if (!Platform.isDesktopApp) return null;
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
   const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;
   return electron?.remote?.getCurrentWebContents() ?? null;

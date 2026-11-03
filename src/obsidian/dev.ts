@@ -112,7 +112,7 @@ const commands: Record<string, DevCommand> = {
   'save-blocked': { name: 'Essence 開發：受阻時按存檔', run: (host, _ids, params) => saveBlocked({ app: host.app, state: host.state, saver: host.ids?.saver ?? null, notices: listener => host.on('notice', listener) }, params), desktop: true, root: CLOUD_ROOT },
   // 更新防線第二部分（任務說明 2-1、2-2）：版本行、「版本」命令的通知、需要新版的卡組；截圖寫在 Essence W5/結果/。
   // tasks/error-log.md §7：正式版的錯誤紀錄與複習畫面的回報（D-155、D-160）。
-  'error-probe': { name: 'Essence 開發：錯誤紀錄實測', run: errorProbe, desktop: true },
+  'error-probe': { name: 'Essence 開發：錯誤紀錄實測', run: errorProbe },
   // 外掛內的備份（tasks/plugin-backup.md §1-2、§1-10）：URI 的 do 參數選要做的事，截圖寫在 Essence W5/結果/備份 …/。
   backup: { name: 'Essence 開發：備份', run: (host, ids, params) => backupDev({ app: host.app, backup: host.backup, state: host.state, notices: ids.devLog.notices, refresh: () => { host.ids?.saver.refresh(); } }, params, `${root}/結果/備份 ${host.device} ${stampOf(new Date())}`), desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
