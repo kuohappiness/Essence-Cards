@@ -1,8 +1,10 @@
 # 出處怎麼讀：從底層重想
 
-狀態：已定案（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)），程式在分支 `claude/entry-and-catalog`（`4a0bce2`）；第二份考卷（盲測）的結果在最後；使用者決定用合併版當基礎，模組化填入照 Claude 的建議，沒寫學期維持不算；[Codex](<2026-11-02-source-reading-codex.md>)、[Fable](<2026-11-02-source-reading-fable.md>) 的原文各在自己的檔案；入口與目錄第一批的 Codex L2 通過，合併等使用者同意
+狀態：已定案（[D-167](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)），程式在分支 `claude/entry-and-catalog`（`4a0bce2`）；第二份考卷（盲測）的結果在最後；使用者決定用合併版當基礎，模組化填入照 Claude 的建議，沒寫學期維持不算；[Codex](<2026-11-02-source-reading-codex.md>)、[Fable](<2026-11-02-source-reading-fable.md>) 的原文各在自己的檔案；入口與目錄第一批的 Codex L2 通過，合併等使用者同意
 
-基準：分支 `claude/entry-and-catalog`（worktree `.claude/worktrees/busy-meitner-e52ff7`）的 `1089fa3`。相關：[D-164](../docs/decisions.md#d-164-出處的寫法與讀法)、[D-166](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)、[任務說明 §9](../tasks/entry-and-catalog.md#9-單元索引與文法d-164)、[L2 兩輪報告](<2026-11-02-entry-and-catalog-review.md>)（R2-F1 併進這一題）、[syntax §2-5](../docs/syntax.md#2-5-出處)。
+編號說明：本文的 D-166、D-167 是「家長亂填出處是常態」與「出處的讀法」，因為和 main 撞號，2026-11-03 改編為 [D-169](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)；原文的文字不改，連結已改。
+
+基準：分支 `claude/entry-and-catalog`（worktree `.claude/worktrees/busy-meitner-e52ff7`）的 `1089fa3`。相關：[D-164](../docs/decisions.md#d-164-出處的寫法與讀法)、[D-166](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[任務說明 §9](../tasks/entry-and-catalog.md#9-單元索引與文法d-164)、[L2 兩輪報告](<2026-11-02-entry-and-catalog-review.md>)（R2-F1 併進這一題）、[syntax §2-5](../docs/syntax.md#2-5-出處)。
 
 ## 使用者提出的問題
 

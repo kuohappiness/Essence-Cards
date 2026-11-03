@@ -321,7 +321,7 @@ void test('中翻英填空只提示、不要求 typed', () => {
 void test('只有結尾完整方向字樣才配對', () => {
   assert.equal(parseDeck('- 字 中翻英 補充\n  - Q :: A').targets[0].direction, null);
 });
-void test('欄位合併、備註與錯題補強去重（出處讀完才去重，D-167）、單值只取首次、未知欄位忽略', () => {
+void test('欄位合併、備註與錯題補強去重（出處讀完才去重，D-170）、單值只取首次、未知欄位忽略', () => {
   const parsed = deck('  - 出處：1-3 p.20、p.44｜備註：A、B｜錯題補強：[[考試]]\n  - 類型：定義｜重要性：低｜狀態：暫停｜陌生：X\n  - Q :: A\n    - 出處:p.44、p.45｜備註:B、C｜錯題補強:[[考試]]、[[考試2]]\n    - 類型：因果｜重要性：高｜狀態：啟用');
   assert.deepEqual(parsed.targets[0].fields, { sources: ['1-3 p.20', 'p.44', 'p.44', 'p.45'], type: '定義', importance: 'low', paused: true, remarks: ['A', 'B', 'C'], mistakes: ['[[考試]]', '[[考試2]]'] });
   assert.deepEqual(parsed.problems.map(p => p.code), ['unknown-field', 'duplicate-field', 'duplicate-field', 'duplicate-field']);
@@ -823,7 +823,7 @@ void test('§9-4 分行的出處和寫在同一行相同；指紋相同，不進
 
 void test('§9-4 同一行又有子項目時合併，順序照筆記；子項目裡的頓號照切；備註、錯題補強同一條規則', () => {
   const target = first('    - 出處：p.44\n        - p.45、p.46\n        - p.44\n    - 備註：\n        - 老師強調、必考\n    - 錯題補強：[[a]]\n        - [[b]]\n    - Q :: A');
-  assert.deepEqual(target.fields.sources, ['p.44', 'p.45', 'p.46', 'p.44'], '出處讀完才去重（D-167）');
+  assert.deepEqual(target.fields.sources, ['p.44', 'p.45', 'p.46', 'p.44'], '出處讀完才去重（D-170）');
   assert.deepEqual(target.fields.remarks, ['老師強調', '必考']);
   assert.deepEqual(target.fields.mistakes, ['[[a]]', '[[b]]']);
   assert.deepEqual(first('    - 出處：\n    - Q :: A').fields.sources, [], '沒有子項目的空欄位');
@@ -875,7 +875,7 @@ void test('§9-4 補 ID 與改縮排不改到分行的意思：四格、七格�
   }
 });
 
-void test('D-167 半形的 | 後面接欄位名稱加冒號也是分隔：類型不會被吞進出處；連結裡的、後面不是欄位名稱的都不算', () => {
+void test('D-170 半形的 | 後面接欄位名稱加冒號也是分隔：類型不會被吞進出處；連結裡的、後面不是欄位名稱的都不算', () => {
   const fields = (line: string) => parseDeck(`- 目標 ^abc123\n    - 問 :: 答\n    - ${line}\n`).targets[0].fields;
   assert.deepEqual(fields('出處：p.44 | 類型：定義').sources, ['p.44']);
   assert.equal(fields('出處：p.44 | 類型：定義').type, '定義');

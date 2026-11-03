@@ -143,7 +143,7 @@ export function parseDeck(text: string): Deck {
     function collectFields(node: Item): void {
       let values: string[] | null = null;
       if (fieldStart.test(node.text)) {
-        // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-167 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
+        // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-170 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
         const segments = splitOutsideLinks(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
         for (const segment of segments) {
           const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
@@ -177,7 +177,7 @@ export function parseDeck(text: string): Deck {
         collectFields(child);
       }
     }
-    /** 頓號分隔的值，照順序加進去，重複的只留第一個。出處例外：`本篇` 這種字會影響後面的意思，讀完才去重（D-167 第 6 點）。 */
+    /** 頓號分隔的值，照順序加進去，重複的只留第一個。出處例外：`本篇` 這種字會影響後面的意思，讀完才去重（D-170 第 6 點）。 */
     function addValues(destination: string[], text: string): void {
       for (const entry of splitOutsideLinks(text, /、/).map(v => v.trim()).filter(Boolean)) if (destination === fields.sources || !destination.includes(entry)) destination.push(entry);
     }

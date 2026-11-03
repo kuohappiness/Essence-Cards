@@ -30,7 +30,7 @@ export interface ReviewProps {
   openLink: (linktext: string, sourcePath: string) => void;
   /** 這篇卡組的「材料」（出處要在哪幾份裡找）。 */
   materials: (deckPath: string) => readonly string[];
-  /** 這一篇自己的屬性：出處的讀法要用（D-167）。 */
+  /** 這一篇自己的屬性：出處的讀法要用（D-170）。 */
   owner: (deckPath: string) => SourceOwner;
   /** 跨單元的出處的候選（§10）：那個單元的每一篇與它的材料。 */
   units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];

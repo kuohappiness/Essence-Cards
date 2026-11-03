@@ -70,7 +70,7 @@ void test('出處寫到 A、B：兩個單元各列一次；同一科', () => {
   assert.deepEqual(ids(index.find('國二上', '數學', '2-1')), [], '不跨科目');
 });
 
-void test('D-167 只差全形或大小寫、年級學期的別名是同一個單元；每一篇都留著，顯示路徑第一篇的；L01 和 L1 不同', () => {
+void test('D-170 只差全形或大小寫、年級學期的別名是同一個單元；每一篇都留著，顯示路徑第一篇的；L01 和 L1 不同', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：八上 ２－１ p.3'], b: ['出處：國二上學期 l1'], c: ['出處：國二上 L01'] });
   const index = buildIndex([owner, card('Essence Cards/2-1.md', unit('國二上', '2-1'), {}), card('Essence Cards/２-１.md', unit('國二上', '２-１'), {}), card('Essence Cards/l1.md', unit('國二上', 'L1'), {})]);
   assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a']);
@@ -80,21 +80,21 @@ void test('D-167 只差全形或大小寫、年級學期的別名是同一個單
   assert.deepEqual(index.unresolved.map(ref => ref.code), ['L01'], 'L01 不是 L1');
 });
 
-void test('D-167 只差連字號的打法也是同一個單元（使用者 2026-11-03）：2之1、2–1 和 2-1 一列，每一篇都留著', () => {
+void test('D-170 只差連字號的打法也是同一個單元（使用者 2026-11-03）：2之1、2–1 和 2-1 一列，每一篇都留著', () => {
   const index = buildIndex(['2之1', '2–1', '2-1'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), { ['t' + code.charCodeAt(1)]: [] })));
   assert.equal(index.units.length, 1);
   assert.equal(index.units[0].decks.length, 3);
   assert.equal(index.find('國二上', '自然', '2之1'), index.find('國二上', '自然', '2-1'));
 });
 
-void test('D-167 同一個目標寫到同一個單元好幾次：單元只列一次，對不到的也只留一筆', () => {
+void test('D-170 同一個目標寫到同一個單元好幾次：單元只列一次，對不到的也只留一筆', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1 p.3, p.4、國二上 1-9 p.3, p.4'] });
   const index = buildIndex([owner, card('Essence Cards/2-1.md', unit('國二上', '2-1'), {})]);
   assert.deepEqual(ids(index.find('國二上', '自然', '2-1')), ['a']);
   assert.deepEqual(index.unresolved.map(ref => ref.code), ['1-9']);
 });
 
-void test('D-167 有否定字的不算；國二上 2-1, p.44 與乾淨的列表算；連結裡的字不算', () => {
+void test('D-170 有否定字的不算；國二上 2-1, p.44 與乾淨的列表算；連結裡的字不算', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 2-1, p.44'], b: ['出處：國二上 2-1、2-2'], c: ['出處：不要算國二上 2-1、國二上 2-2 不考這個'], d: ['出處：[[國二上 2-1]]'], e: ['出處：「附錄,國二上 2-1 p.20」'], f: ['出處：國二上 2-1，不算這個'] });
   const others = ['2-1', '2-2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
   const index = buildIndex([owner, ...others]);
@@ -108,20 +108,20 @@ void test('§9-5 一筆出處不能讓整份目錄建不起來：連結路徑有
   assert.deepEqual(ids(buildIndex([owner]).find('國二上', '自然', '1-1')), ['a', 'b']);
 });
 
-void test('D-167 網址不會吃掉後面明寫的單元', () => {
+void test('D-170 網址不會吃掉後面明寫的單元', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 1-3、https://x.test、國二上1-8'] });
   const index = buildIndex([owner, card('Essence Cards/1-8.md', unit('國二上', '1-8'), {})]);
   assert.deepEqual(ids(index.find('國二上', '自然', '1-8')), ['a']);
   assert.deepEqual(index.unresolved.map(ref => ref.code), ['1-3']);
 });
 
-void test('D-167 中間隔了只顯示的字，後面的編號不沿用學期', () => {
+void test('D-170 中間隔了只顯示的字，後面的編號不沿用學期', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 1-3, 第5題, 1-8'] });
   const index = buildIndex([owner, card('Essence Cards/1-8.md', unit('國二上', '1-8'), {})]);
   assert.deepEqual(ids(index.find('國二上', '自然', '1-8')), []);
 });
 
-void test('D-166 沒寫年級學期的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
+void test('D-169 沒寫年級學期的都不算參照：單元有卡組也不歸過去，也不留在對不到的清單', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：2-1 p.3、L1、2-2、L2, 2-2'] });
   const others = ['2-1', '2-2', 'L1', 'L2'].map(code => card('Essence Cards/' + code + '.md', unit('國二上', code), {}));
   const index = buildIndex([owner, ...others]);
@@ -145,7 +145,7 @@ void test('對不到的參照留在索引，目錄沒有節點；段落標題不
   assert.deepEqual(ids(filled.find('國二上', '自然', '1-9')), ['a']);
 });
 
-void test('全形編號也是 2-1（D-167）；單元屬性的全形空白和別篇的出處是同一個單元', () => {
+void test('全形編號也是 2-1（D-170）；單元屬性的全形空白和別篇的出處是同一個單元', () => {
   const owner = card('Essence Cards/o.md', unit('國二上', '1-1'), { a: ['出處：國二上 ２-１'], b: ['出處：國二上 2-1 p.20'] });
   const target = deck('Essence Cards/t.md', '---\n年級學期: 國二上\n科目: 自然\n單元: 2-1　水溶液\n---\n');
   const index = buildIndex([owner, target]);
@@ -168,7 +168,7 @@ void test('排序：自然排序、平手比原字串；順序打亂、反向輸
   assert.equal(paintCatalog(buildIndex([]), new Map(), new Set()).latest, null);
 });
 
-void test('D-167 年級學期的別名、全形編號：分組與排序都比鍵，顯示第一篇的原字', () => {
+void test('D-170 年級學期的別名、全形編號：分組與排序都比鍵，顯示第一篇的原字', () => {
   const index = buildIndex([
     card('Essence Cards/a.md', unit('八上', '1-2'), { a: [] }), card('Essence Cards/b.md', unit('國二上', '1-1'), { b: [] }),
     card('Essence Cards/c.md', unit('高一上', '1-1'), { c: [] }), card('Essence Cards/d.md', unit('小六下', '1-1'), { d: [] }),

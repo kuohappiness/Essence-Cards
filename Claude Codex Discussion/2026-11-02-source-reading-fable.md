@@ -2,9 +2,11 @@
 
 狀態：Fable（Claude Fable 5.1）第三輪寫完（2026-11-03，最後一節）：反駁「讀法分兩段」，主張界線照證據種類畫；候選 `experiments/source-reading/readers-fable.mjs` 定稿（SHA-256 `6f04753a…6360a`）；沒有 commit、沒有改產品程式
 
-編號說明：本文寫的 D-165 是「家長亂填出處是常態」，因為和 main 撞號，2026-11-03 改編為 [D-166](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)；原文的文字不改，連結已改。
+編號說明：本文的 D-166、D-167 是「家長亂填出處是常態」與「出處的讀法」，因為和 main 撞號，2026-11-03 改編為 [D-169](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)；原文的文字不改，連結已改。
 
-基準：worktree `.claude/worktrees/busy-meitner-e52ff7` 的 `ed71951`。相關：[出處怎麼讀的討論稿](<2026-11-02-source-reading.md>)、[L2 兩輪報告](<2026-11-02-entry-and-catalog-review.md>)、[D-164](../docs/decisions.md#d-164-出處的寫法與讀法)、[D-165](../docs/decisions.md#d-166-家長亂填出處是常態程式不猜看不懂就當場教)、[任務說明 §9](../tasks/entry-and-catalog.md#9-單元索引與文法d-164)、[syntax §2-5](../docs/syntax.md#2-5-出處)。
+編號說明：本文寫的 D-165 是「家長亂填出處是常態」，因為和 main 撞號，2026-11-03 改編為 [D-166](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)；原文的文字不改，連結已改。
+
+基準：worktree `.claude/worktrees/busy-meitner-e52ff7` 的 `ed71951`。相關：[出處怎麼讀的討論稿](<2026-11-02-source-reading.md>)、[L2 兩輪報告](<2026-11-02-entry-and-catalog-review.md>)、[D-164](../docs/decisions.md#d-164-出處的寫法與讀法)、[D-165](../docs/decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[任務說明 §9](../tasks/entry-and-catalog.md#9-單元索引與文法d-164)、[syntax §2-5](../docs/syntax.md#2-5-出處)。
 
 做法：照使用者指定的順序，先讀 AGENTS、product、D-080／D-142／D-153／D-164／D-165／D-114、syntax §2-1／§2-3～§2-6／§2-10／§3／§4、tasks §3／§9／§10、`src/core/deck/sources.ts`、`src/core/catalog/index.ts`、`src/ui/sources.ts`、`src/core/deck/parse.ts` 的欄位部分與 `experiments/source-reading/noise-check.mjs`；跑 noise-check（含 `--list`）與自己的兩組探測；先寫初步結論，再讀兩份討論稿核對。
 

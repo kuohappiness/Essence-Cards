@@ -821,7 +821,7 @@ void test('§9-5 看不懂的出處：按鈕排在 malformed 後面、沒有 ID 
   assert.equal(h.tip(), '有 4 個出處看不懂');
 });
 
-void test('§9-5 認得的寫法不提示；D-166：沒寫年級學期的要提示，國二上 1-3, p.44 讀得懂（D-167）；寫法有問題的目標排在前面', async t => {
+void test('§9-5 認得的寫法不提示；D-169：沒寫年級學期的要提示，國二上 1-3, p.44 讀得懂（D-170）；寫法有問題的目標排在前面', async t => {
   const clean = await blockedSetup(t, '- 目標 ^a23456\n    - 出處：p.44、國二上 1-9 p.3、[[x]]、先備：比例、第 3 頁\n    - 問 :: 答\n', 'none');
   assert.equal(clean.tip(), DONE);
   const bare = await blockedSetup(t, '- 目標 ^a23456\n    - 出處：1-3 p.20、L1、國二上 1-3, p.44\n    - 問 :: 答\n', 'none');

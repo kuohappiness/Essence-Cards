@@ -1,4 +1,4 @@
-// 出處與單元編號的讀法（syntax.md §2-1、§2-5、D-080、D-164、D-166、D-167）：只靠字面與這一篇自己的屬性。這裡拿不到別篇與材料，
+// 出處與單元編號的讀法（syntax.md §2-1、§2-5、D-080、D-164、D-169、D-170）：只靠字面與這一篇自己的屬性。這裡拿不到別篇與材料，
 // 所以新增一篇卡組、材料多一個標題都不會讓舊的出處變意思。不用猜的直接讀懂；要猜的不生效，只標出問題。
 // 在哪一份材料裡找由 Obsidian 層判斷，單元對到哪一篇由 core/catalog 判斷。
 
@@ -27,7 +27,7 @@ export interface SourceItem {
 /** 這一篇自己的屬性：本科的名稱、本篇的編號（`L3 p.30` 就是這一篇）、自己的學期。 */
 export interface SourceOwner { term: string | null; subject: string | null; unit: { code: string } | null }
 
-// ── 去雜訊：只換確定的語法字元，連結裡不動；不用 NFKC，CO₂、① 不是打字雜訊（D-167 第 3 點）──
+// ── 去雜訊：只換確定的語法字元，連結裡不動；不用 NFKC，CO₂、① 不是打字雜訊（D-170 第 3 點）──
 
 const ZERO_WIDTH = /[\u200B\u200C\u200D\uFEFF]/g;
 
@@ -58,7 +58,7 @@ const END = /[,/;、。.\s]+$/;
 const RAW_END = /[,，﹐/／;；﹔、﹑。．.\s]+$/;
 const SEPARATOR = /[,，﹐/／;；﹔]/;
 
-/** 單元編號的比對鍵：全半形、大小寫、連字號的打法不分；`L01` 與 `L1` 不同（§9-2、D-167 第 4 點）。屬性、出處、目錄、考試範圍共用。 */
+/** 單元編號的比對鍵：全半形、大小寫、連字號的打法不分；`L01` 與 `L1` 不同（§9-2、D-170 第 4 點）。屬性、出處、目錄、考試範圍共用。 */
 export const codeKey = (code: string): string => tidy(code).trim().toLowerCase();
 /** 材料標題的比對鍵（只影響連結）：全半形、大小寫、空白、上下標不分。 */
 export const headingKey = (text: string): string => tidy(text).toLowerCase().replace(/\s/g, '').replace(/[₀-₉]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2080 + 48)).replace(/[¹²³]/g, c => ({ '¹': '1', '²': '2', '³': '3' })[c] ?? c);
@@ -89,7 +89,7 @@ function linkTarget(raw: string): SourceLink | null {
   if (quoted) return { kind: 'heading', heading: quoted[1] };
   const wiki = /^!?(\[\[|［［)\s*([^\]］]*?)\s*(?:\]\]|］］)$/.exec(raw);
   if (wiki) {
-    // 連結裡的字不動（D-167 第 3 點）。全形括號是整個打錯，只換結構的字；半形括號裡的 `｜` 是檔名的一部分。
+    // 連結裡的字不動（D-170 第 3 點）。全形括號是整個打錯，只換結構的字；半形括號裡的 `｜` 是檔名的一部分。
     const inner = wiki[1] === '［［' ? wiki[2].replace(/＃/g, '#').replace(/｜/g, '|') : wiki[2];
     const split = inner.indexOf('|');
     const target = (split < 0 ? inner : inner.slice(0, split)).trim();
@@ -115,7 +115,7 @@ export function termRank(term: string): number | null {
   return match && grade >= 0 && grade % 2 === 0 ? grade + (match[2] === '下' ? 1 : 0) : null;
 }
 
-/** 開頭的年級學期；`二上`、`第三冊`、`B2` 要靠學制或教材才知道，不認（D-167 第 4 點）。 */
+/** 開頭的年級學期；`二上`、`第三冊`、`B2` 要靠學制或教材才知道，不認（D-170 第 4 點）。 */
 function readTerm(text: string): { term: string; length: number } | null {
   const named = /^(國小|小學|國中|高中|小|國|高) ?([一二三四五六1-6]) ?(?:年級)? ?\(? ?([上下])(?: ?\))?(?: ?(?:學期|冊))?/.exec(text);
   if (named) {
@@ -189,7 +189,7 @@ function scan(text: string, tokens: readonly string[]): { found: Found[]; left: 
   };
   for (const match of [...masked.matchAll(TOKEN)]) {
     const raw = tokens[Number(match[1])], link = linkTarget(raw);
-    // 半形逗號後面緊接著字是網址的一部分，分不出是不是另一項：不算別的單元，像編號就提示（D-167 第 1 點）。
+    // 半形逗號後面緊接著字是網址的一部分，分不出是不是另一項：不算別的單元，像編號就提示（D-170 第 1 點）。
     const comma = raw.search(/[,;]/);
     if (!link && comma >= 0 && hasCode(tidy(raw.slice(comma)))) hidden = true;
     take(match, link);
@@ -201,7 +201,7 @@ function scan(text: string, tokens: readonly string[]): { found: Found[]; left: 
     const start = toNumber(first);
     if (start === null) return;
     const end = last === undefined ? null : toNumber(last);
-    // 反向、位數較少都不確定（`p.46-44`、`p.44-6`），不偷偷截成第一頁（D-167 第 5 點）。
+    // 反向、位數較少都不確定（`p.46-44`、`p.44-6`），不偷偷截成第一頁（D-170 第 5 點）。
     if (last !== undefined && (end === null || BigInt(end) <= BigInt(start) || end.length !== start.length)) { bad = true; take(match, null); return; }
     // 沒有句點的 `p53` 後面又接字，可能是名稱。
     if (!sure && /^ *[^ \uE000圖表例第pP頁,]/.test(masked.slice((match.index ?? 0) + match[0].length))) { bad = true; take(match, null); return; }
@@ -216,7 +216,7 @@ function scan(text: string, tokens: readonly string[]): { found: Found[]; left: 
 
 // ── 讀一欄 ──
 
-// 有這些字的那一段不算歸屬、不算位置，只提示。表只會讓結果變成「先不算」，缺字只是少一次保護，不會多算（D-167 第 7 點）。
+// 有這些字的那一段不算歸屬、不算位置，只提示。表只會讓結果變成「先不算」，缺字只是少一次保護，不會多算（D-170 第 7 點）。
 const NEGATIVE = /不是|不要|不用|不必|不算|不考|不看|不含|不包括|除外|以外|排除|並非|而非|而是|別算|勿|略過|改成|改為|更正|應為|不對/;
 const SELF = /^(?:本單元|本篇|本課|本節|這一篇|這一課|這一節|這一單元|這個單元) ?/;
 // 沒用到的字裡有編號或年級學期：可能是沒寫完的參照。
@@ -247,7 +247,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   const ownLetters = /^([A-Za-z]+)\d+$/.exec(ownCode)?.[1] ?? null;
   const subject = own.subject ? new RegExp(`^${escapeRegExp(tidy(own.subject).trim())} ?`) : null;
   const dropSubject = (text: string): string => subject ? text.replace(subject, '') : text;
-  // 同一欄不分頓號、逗號、分行（D-167 第 6 點）：位置跟著前面的單元；scope 是 null 時，前面寫了別的學期卻沒有單元，不知道屬於哪裡。
+  // 同一欄不分頓號、逗號、分行（D-170 第 6 點）：位置跟著前面的單元；scope 是 null 時，前面寫了別的學期卻沒有單元，不知道屬於哪裡。
   let scope: UnitName | 'this' | null = 'this', lastPlace: string | null = null, carry: UnitName | null = null;
 
   const inScope = (link: SourceLink): SourceLink => scope && scope !== 'this' ? { kind: 'unit', term: scope.term, unit: scope.code, rest: link } : link;
@@ -374,7 +374,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
         lastPlace = null;
         return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}), ...written }];
       }
-      // 後面的編號、數字不接過這些字（D-167 第 6 點）。
+      // 後面的編號、數字不接過這些字（D-170 第 6 點）。
       forget();
       if (hidden && left) return [asHeading({ problem: 'leftover' })];
       if (selfRef && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
@@ -434,7 +434,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     }
   }
   const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
-  // 讀完才去重：`本篇` 這種字會影響後面的意思（D-167 第 6 點）。只顯示的項目照文字比。
+  // 讀完才去重：`本篇` 這種字會影響後面的意思（D-170 第 6 點）。只顯示的項目照文字比。
   // 同一個目標寫兩次時按鈕留一個，診斷與確認依據不丟：後面的有問題就照它提示；有一項明寫了學期就不算沿用。
   const kept = new Map<string, SourceItem>();
   for (const { codeLike, written, ...item } of items) {

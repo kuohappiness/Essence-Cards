@@ -35,7 +35,7 @@ void test('§10 跨單元：第一篇沒有 ^p20、第二篇有，跳到第二�
   const { app, resolved } = appWith({ '材料/甲.md': { blocks: ['p1'] }, '材料/乙.md': { blocks: ['p20'], headings: ['溶液'] } });
   const units: UnitDecks = (term, code) => code === '1-3' && term === '國二上' ? [{ path: '卡組/課本.md', materials: ['[[沒有這份]]', '[[甲]]'] }, { path: '卡組/習作.md', materials: ['[[乙]]'] }] : [];
   const resolve = (text: string) => resolveSource(app, '卡組/本篇.md', ['[[本篇材料]]'], link(text), units);
-  assert.equal(resolve('1-3 p.20'), null, '沒寫年級學期不算單元（D-166）：位置照連這一篇，這一篇的材料連不到');
+  assert.equal(resolve('1-3 p.20'), null, '沒寫年級學期不算單元（D-169）：位置照連這一篇，這一篇的材料連不到');
   assert.equal(resolve('國二上 1-3 p.20'), '材料/乙.md#^p20');
   assert.equal(resolve('國二上 1-3 p.99'), '材料/甲.md', '全部找完才退回第一份可用的材料');
   assert.equal(resolve('國二上 1-3'), '材料/甲.md');
@@ -62,7 +62,7 @@ void test('§10 候選來自索引：單元每一篇照路徑、每篇的材料�
   await state.ready();
   const from = 'Essence Cards/本篇.md';
   assert.deepEqual(state.unitMaterials(from, '國二上', '1-3'), [{ path: 'Essence Cards/習作.md', materials: ['[[丙]]', '[[甲]]'], name: '' }, { path: 'Essence Cards/課本.md', materials: ['[[乙]]'], name: '' }]);
-  assert.deepEqual(state.unitMaterials(from, '八上', '１－３').map(deck => deck.path), ['Essence Cards/習作.md', 'Essence Cards/課本.md'], '年級學期與編號都比鍵（D-167）');
+  assert.deepEqual(state.unitMaterials(from, '八上', '１－３').map(deck => deck.path), ['Essence Cards/習作.md', 'Essence Cards/課本.md'], '年級學期與編號都比鍵（D-170）');
   assert.deepEqual(state.unitMaterials(from, '國一上', 'L3'), [{ path: 'Essence Cards/別學期.md', materials: ['[[丁]]'], name: '' }]);
   assert.deepEqual(state.unitMaterials(from, '國二上', '9-9'), []);
   assert.deepEqual(state.unitMaterials('Essence Cards/沒有這篇.md', '國二上', '1-3'), []);
@@ -113,7 +113,7 @@ void test('§9-5 看不懂：回傳行號、目標與原文；讀懂的都不提
   assert.deepEqual(unreadableSources(appWith({}).app, '卡組/本篇.md', parseDeck(text), NO_UNITS).map(item => item.text), ['看不懂的字', 'p.46-44'], '連不到的材料本來就找不到');
 });
 
-void test('D-166、D-167 沒寫年級學期的：材料裡有同名標題就是那個標題，沒有就提示；有位置的照連，也提示', () => {
+void test('D-169、D-170 沒寫年級學期的：材料裡有同名標題就是那個標題，沒有就提示；有位置的照連，也提示', () => {
   const named = { '材料/甲.md': { headings: ['1-2 溶液', '溶解, 擴散', 'CO₂ 的性質'] } };
   assert.deepEqual(unreadable('1-2 溶液', named), []);
   assert.deepEqual(unreadable('p.44、1-2 溶液', named), [], '同一欄有別的位置，像編號的字一樣先比標題');
@@ -128,7 +128,7 @@ void test('D-166、D-167 沒寫年級學期的：材料裡有同名標題就是�
   assert.equal(resolveSource(app, '卡組/本篇.md', ['[[甲]]'], link('CO2 的性質')), '材料/甲.md#CO₂ 的性質');
 });
 
-void test('D-167 只有字：同一欄有讀懂別的就是說明，不提示；有否定字、像編號的字要提示', () => {
+void test('D-170 只有字：同一欄有讀懂別的就是說明，不提示；有否定字、像編號的字要提示', () => {
   const material = { '材料/甲.md': { headings: [] } };
   assert.deepEqual(unreadable('p.44、老師說的', material), []);
   assert.deepEqual(unreadable('老師說的', material), ['老師說的']);
@@ -144,7 +144,7 @@ void test('D-167 只有字：同一欄有讀懂別的就是說明，不提示；
 });
 
 // Codex L2 第三、四輪的字串：單元都有卡組、材料都在，直接看目標算進哪些單元、提示了什麼。
-void test('D-167 從筆記到目錄與提示：目標算進哪些單元、提示哪些字', () => {
+void test('D-170 從筆記到目錄與提示：目標算進哪些單元、提示哪些字', () => {
   const head = (code: string, material: string): string => `---\n年級學期: 國二上\n科目: 自然\n單元: "${code}"\n材料: "[[${material}]]"\n---\n`;
   const others = ['1-3', '1-8'].map(code => ({ path: `卡組/${code}.md`, deck: parseDeck(head(code, '乙') + '- 別的 ^b' + code.replace('-', '') + 'xyz\n    - 問 :: 答\n') }));
   const { app } = appWith({ '材料/甲.md': { headings: ['睡眠的階段'] }, '材料/乙.md': { headings: [] } });
@@ -183,7 +183,7 @@ void test('D-167 從筆記到目錄與提示：目標算進哪些單元、提示
   }
 });
 
-void test('D-167 否定字只提示：材料裡有同名標題也不連；像編號的字併回舊標題時還是要提示', () => {
+void test('D-170 否定字只提示：材料裡有同名標題也不連；像編號的字併回舊標題時還是要提示', () => {
   const { app } = appWith({ '材料/甲.md': { headings: ['不是 p.44', '不算這個'] } });
   const hints = (text: string): string[] => unreadableSources(app, '卡組/本篇.md', parseDeck(`---\n年級學期: 國二上\n科目: 自然\n單元: "2-2"\n材料: "[[甲]]"\n---\n- 目標 ^abc123\n    - 問 :: 答\n    - 出處：${text}\n`), NO_UNITS).map(each => each.text);
   assert.deepEqual(hints('不是 p.44'), ['不是 p.44']);
@@ -192,7 +192,7 @@ void test('D-167 否定字只提示：材料裡有同名標題也不連；像編
   assert.deepEqual(hints('國二上 1-3、溶解, 1-8'), ['溶解, 1-8']);
 });
 
-void test('D-167 單元：標準的編號沒有卡組不提示；其他編號、列表沿用學期的對不到才提示；單元後面的字比名稱與那個單元的材料', () => {
+void test('D-170 單元：標準的編號沒有卡組不提示；其他編號、列表沿用學期的對不到才提示；單元後面的字比名稱與那個單元的材料', () => {
   const material = { '材料/甲.md': { headings: [] }, '材料/乙.md': { headings: ['水溶液的濃度'] } };
   const units: UnitDecks = (term, code) => term === '國二上' && code === '2-1' ? [{ path: '卡組/2-1.md', materials: ['[[乙]]'], name: '水溶液' }] : term === '國一上' && code === 'Starter' ? [{ path: '卡組/s.md', materials: [], name: '' }] : [];
   assert.deepEqual(unreadable('國二上 1-9 p.3', material, units), [], '寫法沒錯，家長也改不了；第二批設範圍時列出來');

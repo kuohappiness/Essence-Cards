@@ -29,7 +29,7 @@ function findAnchor(app: App, files: readonly TFile[], link: { kind: 'block'; id
     const cache = app.metadataCache.getFileCache(file);
     if (link.kind === 'block' && cache?.blocks && Object.hasOwn(cache.blocks, link.id)) return `${file.path}#^${link.id}`;
     if (link.kind === 'heading') {
-      // 去雜訊之後比（`溶解，擴散`、`CO2 的性質`），連結用材料裡的原字。只影響連結，不影響歸屬（D-167）。
+      // 去雜訊之後比（`溶解，擴散`、`CO2 的性質`），連結用材料裡的原字。只影響連結，不影響歸屬（D-170）。
       const found = cache?.headings?.find(heading => heading.heading === link.heading) ?? cache?.headings?.find(heading => headingKey(heading.heading) === headingKey(link.heading));
       if (found) return `${file.path}#${found.heading}`;
     }
@@ -66,13 +66,13 @@ export function firstMaterial(app: App, deckPath: string, materials: readonly st
   return materialFiles(app, deckPath, materials)[0]?.path ?? null;
 }
 
-/** 看不懂的出處（§9-5、D-167）：字面上就有問題，或要對目錄、材料才知道有問題。line 從 0 算，是目標那一行。 */
+/** 看不懂的出處（§9-5、D-170）：字面上就有問題，或要對目錄、材料才知道有問題。line 從 0 算，是目標那一行。 */
 export interface UnreadableSource { line: number; name: string; text: string }
 interface SourceDeck { props: SourceOwner & { materials: readonly string[] }; targets: readonly { line: number; name: string; fields: { sources: readonly string[] } }[] }
 
 /**
  * 只在電腦判斷：要看 metadataCache。材料的快取還沒建好（null）時不知道，不提示，下次再看；連不到檔案的材料本來就找不到。
- * 卡照常複習，讀懂的照用，不算寫錯（syntax §2-10）。提示可以看目錄與材料，歸屬不行（D-167 第 2 點）。
+ * 卡照常複習，讀懂的照用，不算寫錯（syntax §2-10）。提示可以看目錄與材料，歸屬不行（D-170 第 2 點）。
  */
 export function unreadableSources(app: App, deckPath: string, deck: SourceDeck, units: UnitDecks): UnreadableSource[] {
   const cachesOf = (path: string, materials: readonly string[]) => materialFiles(app, path, materials).map(file => app.metadataCache.getFileCache(file));
