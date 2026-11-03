@@ -13,7 +13,7 @@
 - **性質測試**：`tests/sources.test.ts` 雜訊只加在保護區外、比 `problem`、`needsUnit`、`remark`，一種雜訊時從 `parseDeck` 跑到目錄與提示，兩種疊加時只跑讀法。有沒有漏掉的組合。
 - **第二批的分法**：任務 §9-1 的三種結果夠不夠用。
 
-**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 的結果寫在[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
+**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 1.15.0 上 `entry` 44 項 true、0 項 false，`entry-unread` 通過，見[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone；Obsidian 1.15 的完整相容性檢查（D-138）不在這一輪。
 
 回報照下面〈回報〉的格式，貼回對話或接在討論稿最後都可以；所有檔案都在這個 worktree，不要寫到主資料夾。
 
