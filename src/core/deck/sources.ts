@@ -68,8 +68,9 @@ export const headingKey = (text: string): string => tidy(text).toLowerCase().rep
 const LINK = /!?\[\[[^\]]*\]\]|!?［［[^］]*］］|\[[^\]]+\]\((?:\\.|[^()\\]|\((?:\\.|[^()\\]|\([^()]*\))*\))+\)|「[^」]+」|https?:\/\/(?:[^\s、﹑，﹐；﹔｜|,;]|[,;](?=[^\s、﹑，﹐；﹔｜|,;]))+/g;
 const TOKEN = /\uE000(\d+)\uE001/g;
 const restore = (text: string, tokens: readonly string[]): string => text.replace(TOKEN, (_, at: string) => tokens[Number(at)]);
-// 原文裡的私用區字元先拿掉，不會拼出不存在的遮罩。
-const mask = (text: string, tokens: string[]): string => text.replace(/[\uE000\uE001]/g, '').replace(LINK, match => { tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
+// 連結外面的私用區字元拿掉，不會拼出不存在的遮罩；連結裡的字不動。
+const MASKED = new RegExp(`[\uE000\uE001]|${LINK.source}`, 'g');
+const mask = (text: string, tokens: string[]): string => text.replace(MASKED, match => { if (match.length === 1) return ''; tokens.push(match); return `\uE000${tokens.length - 1}\uE001`; });
 
 /** 連結與「標題」裡的字不算分隔：欄位的 `｜`、值的 `、` 都先藏起來再切（§9-4）。 */
 export function splitOutsideLinks(text: string, separator: RegExp): string[] {

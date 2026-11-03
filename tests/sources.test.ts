@@ -188,6 +188,7 @@ void test('出處裡的私用區字元不會變成遮罩；組合的表情符號
   const [open, close, zero] = [0xe000, 0xe001, 0x200b].map(code => String.fromCharCode(code));
   assert.doesNotThrow(() => sourceLinks([open + '0' + zero + close], NATURE));
   assert.deepEqual(links(open + '0' + close + ' p.44'), [page(44)]);
+  assert.deepEqual(links('[[甲' + open + '乙]]'), [note('甲' + open + '乙')], '連結裡的字不動');
   const teacher = '👩' + String.fromCharCode(0x200d) + '🏫';
   assert.deepEqual(read('p.44 ' + teacher + ' 圖 2-14').map(item => item.text), ['p.44 ' + teacher, '圖 2-14']);
 });
