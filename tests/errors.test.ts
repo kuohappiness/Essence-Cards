@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { setTimeout as wait } from 'node:timers/promises';
 import vm from 'node:vm';
 import type { Files } from '../src/core/files.ts';
-import { createErrorLog, errorLogPath, ERROR_FOLDER, hasOwnFrame, isErrorLogPath } from '../src/core/errors/index.ts';
+import { createErrorLog, errorLogPath, ERROR_FOLDER, maybeOwn, isErrorLogPath } from '../src/core/errors/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
 // 正式版的錯誤紀錄（D-155、tasks/error-log.md §1）：記錄器只靠 Files；預期值取自 syntax.md §9 的範例與自編的字串。
@@ -137,10 +137,10 @@ void test('§1 自己的程式位置：只留 plugin:essence-cards: 的那幾層
   await wait(10);
   const stacks = lines(memory.texts.get(FILE)).map(line => (JSON.parse(line) as { stack?: string }).stack);
   assert.deepEqual(stacks, ['at Xe (plugin:essence-cards:1:20345)', undefined, 'onload@plugin:essence-cards:1:20345']);
-  assert.equal(hasOwnFrame(ownError('x')), true);
-  assert.equal(hasOwnFrame(other), false);
-  assert.equal(hasOwnFrame('plugin:essence-cards:1:2'), false, '字串沒有 stack');
-  assert.equal(hasOwnFrame(null), false);
+  assert.equal(maybeOwn(ownError('x')), true);
+  assert.equal(maybeOwn(other), false);
+  assert.equal(maybeOwn('plugin:essence-cards:1:2'), false, '字串沒有 stack');
+  assert.equal(maybeOwn(null), false);
 });
 
 void test('§1 去重：同一個錯誤 1,000 次剛好 4 行，n 是沒有、10、100、1000；不同 path 的同一句訊息算兩個', async () => {
@@ -341,15 +341,15 @@ void test('§1 R3 訊息裡有 plugin:essence-cards:、frame 全是別人的：�
   const { log } = setup(memory.files);
   const other = Error('other-plugin cannot fetch plugin:essence-cards:1:20345');
   other.stack = ['Error: other-plugin cannot fetch plugin:essence-cards:1:20345', '    at fetcher (plugin:other-plugin:4:5)', '    at app://obsidian.md/app.js:6:7'].join('\n');
-  assert.equal(hasOwnFrame(other), false);
+  assert.equal(maybeOwn(other), false);
   // 多行的訊息：第二行看起來像 frame 也不算（V8 的 stack 開頭是整段訊息）。
   const multiline = Error('第一行\n    at fake (plugin:essence-cards:9:9)');
   multiline.stack = 'Error: 第一行\n    at fake (plugin:essence-cards:9:9)\n    at real (plugin:other-plugin:1:1)';
-  assert.equal(hasOwnFrame(multiline), false);
+  assert.equal(maybeOwn(multiline), false);
   // 訊息含位址、frame 也有自己的：只留真正的 frame。
   const mixed = Error('see plugin:essence-cards:1:1');
   mixed.stack = 'Error: see plugin:essence-cards:1:1\n    at own (plugin:essence-cards:7:8)';
-  assert.equal(hasOwnFrame(mixed), true);
+  assert.equal(maybeOwn(mixed), true);
   log.record('ui', other);
   log.record('ui', mixed);
   // WebKit：沒有訊息行；匿名函式、global code、只有位址的 frame 都認得。
@@ -368,7 +368,7 @@ void test('§1 F1 V8 真的產生的 `at async plugin:essence-cards:行:欄` 認
   const error = await (vm.runInContext('(async () => { await external(); })()', context, { filename: 'plugin:essence-cards' }) as Promise<never>).catch((reason: unknown) => reason);
   const stack = (error as Error).stack ?? '';
   assert.match(stack, /\n\s+at async plugin:essence-cards:\d+:\d+/, stack);
-  assert.equal(hasOwnFrame(error), true);
+  assert.equal(maybeOwn(error), true);
   const memory = createMemoryFiles();
   const { log } = setup(memory.files);
   log.record('uncaught', error);
@@ -385,20 +385,20 @@ void test('§1 F2 訊息的範圍確認不了時不誤收；name 拋錯但找得
     return error;
   };
   const broken = Object.defineProperty(fake(), 'name', { get() { throw Error('name-unavailable'); } });
-  assert.equal(hasOwnFrame(broken), false, 'name 拋錯');
+  assert.equal(maybeOwn(broken), false, 'name 拋錯');
   const changed = fake();
   changed.message = 'changed later';
-  assert.equal(hasOwnFrame(changed), false, '訊息後來改過');
+  assert.equal(maybeOwn(changed), false, '訊息後來改過');
   const renamed = fake();
   renamed.name = 'Renamed';
-  assert.equal(hasOwnFrame(renamed), false, '名稱後來改過');
+  assert.equal(maybeOwn(renamed), false, '名稱後來改過');
   const own = Object.defineProperty(Error('first\n    at fake (plugin:essence-cards:9:9)'), 'name', { get() { throw Error('name-unavailable'); } });
   own.stack = ['Error: first', '    at fake (plugin:essence-cards:9:9)', '    at real (plugin:essence-cards:1:2)'].join('\n');
-  assert.equal(hasOwnFrame(own), true, '找得到訊息：真正的 frame 留');
+  assert.equal(maybeOwn(own), true, '找得到訊息：真正的 frame 留');
   // WebKit 的 stack 沒有訊息那一段：名稱讀不到也照樣認得。
   const webkit = Object.defineProperty(Error('w'), 'name', { get() { throw Error('name-unavailable'); } });
   webkit.stack = 'onload@plugin:essence-cards:1:2';
-  assert.equal(hasOwnFrame(webkit), true, 'WebKit');
+  assert.equal(maybeOwn(webkit), true, 'WebKit');
 });
 
 // Codex 第三輪的 G1：WebKit 的 stack 沒有訊息那一段；訊息剛好是 frame 位址的一部分時，不能拿來切 stack。
@@ -407,14 +407,64 @@ void test('§1 G1 訊息是 frame 位址的一部分：WebKit 照樣留下自己
   for (const message of ['1:2', 'essence-cards', 'unrelated']) {
     const webkit = Error(message);
     webkit.stack = 'load@plugin:essence-cards:1:2';
-    assert.equal(hasOwnFrame(webkit), true, 'WebKit：' + message);
+    assert.equal(maybeOwn(webkit), true, 'WebKit：' + message);
   }
   // V8：標頭對不上（名稱讀了會拋錯），訊息剛好是位址的一部分；第一行找得到訊息，後面的 frame 照樣留。
   const v8 = Object.defineProperty(Error('1:2'), 'name', { get() { throw Error('name-unavailable'); } });
   v8.stack = 'Error: 1:2\n    at load (plugin:essence-cards:1:2)';
-  assert.equal(hasOwnFrame(v8), true, 'V8');
+  assert.equal(maybeOwn(v8), true, 'V8');
   // V8：訊息只出現在 frame 裡（第一行沒有）：分不出訊息範圍，一層都不算（F2 的取捨）。
   const inFrame = Object.defineProperty(Error('essence-cards:1'), 'name', { get() { throw Error('name-unavailable'); } });
   inFrame.stack = 'Error: changed\n    at load (plugin:essence-cards:1:2)';
-  assert.equal(hasOwnFrame(inFrame), false, 'V8 訊息只在 frame 裡');
+  assert.equal(maybeOwn(inFrame), false, 'V8 訊息只在 frame 裡');
+});
+
+// D-173：iPhone 的 stack 每一層只有名稱（Obsidian 1.15.0、iOS 27.0.1 實測，tasks/iphone-test-2026-11.md），分不出是哪個外掛的，一律收。
+const withStack = (stack: string, message = 'x'): Error => { const error = Error(message); error.stack = stack; return error; };
+
+void test('D-173 只有名稱的 stack：window 的錯誤也收，整段留下', async () => {
+  const stack = 'kq@\nTq@\nforEach@[native code]\n@\nglobal code@';
+  assert.equal(maybeOwn(withStack(stack)), true);
+  assert.equal(maybeOwn(withStack('@')), true, '只有一層匿名的');
+  assert.equal(maybeOwn(withStack('forEach@[native code]\nkq@')), true, '最上面是系統的');
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  log.record('uncaught', withStack(stack));
+  await wait(10);
+  assert.equal((JSON.parse(lines(memory.texts.get(FILE))[0]) as { stack: string }).stack, stack);
+});
+
+void test('D-173 分得出不是自己的，照舊不收', () => {
+  assert.equal(maybeOwn(withStack('other@plugin:other-plugin:1:1\n@capacitor://localhost/app.js:2:3')), false, '每一層都有別人的位置');
+  assert.equal(maybeOwn(withStack('forEach@[native code]')), false, '只有系統的');
+  assert.equal(maybeOwn(withStack('')), false, '空的 stack');
+  assert.equal(maybeOwn('kq@'), false, '字串沒有 stack');
+  const noFrames = withStack('Error: mail me@', 'mail me@');
+  assert.equal(maybeOwn(noFrames), false, 'V8 沒有 frame、訊息剛好以 @ 結尾：開頭是標頭');
+  const lineInMessage = withStack('Error: first\nkq@\n    at real (plugin:other-plugin:1:1)', 'first\nkq@');
+  assert.equal(maybeOwn(lineInMessage), false, 'V8 多行訊息裡像名稱的那一行');
+  const renamed = withStack('Error: first\nkq@\n    at real (plugin:other-plugin:1:1)', 'changed later');
+  assert.equal(maybeOwn(renamed), false, 'V8 標頭對不上時也不算');
+});
+
+void test('D-173 有自己的位置時照舊只留自己的那幾層', async () => {
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  const mixed = withStack('kq@\nload@plugin:essence-cards:1:2\nother@plugin:other-plugin:3:4');
+  assert.equal(maybeOwn(mixed), true);
+  log.record('ui', mixed);
+  await wait(10);
+  assert.equal((JSON.parse(lines(memory.texts.get(FILE))[0]) as { stack: string }).stack, 'load@plugin:essence-cards:1:2');
+});
+
+void test('D-173 只有名稱時，同一個錯誤靠訊息與第一層名稱去重：第一層都是匿名的，訊息不同就是不同的錯', async () => {
+  const memory = createMemoryFiles();
+  const { log } = setup(memory.files);
+  log.record('uncaught', withStack('@\nRd@', 'first'));
+  log.record('uncaught', withStack('@\nRd@', 'second'));
+  log.record('uncaught', withStack('kq@', 'first'));
+  log.record('uncaught', withStack('@\nRd@', 'first'));
+  await wait(10);
+  const written = lines(memory.texts.get(FILE)).map(line => { const row = JSON.parse(line) as { msg: string; stack: string }; return [row.msg, row.stack]; });
+  assert.deepEqual(written, [['first', '@\nRd@'], ['second', '@\nRd@'], ['first', 'kq@']], '第 4 筆和第 1 筆相同：第 2 次不寫');
 });

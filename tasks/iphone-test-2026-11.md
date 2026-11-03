@@ -1,6 +1,6 @@
 # 下一次 iPhone 實機測試（2026-11）
 
-狀態：實機測試做完（2026-11-03）；錯誤紀錄的修法等使用者決定（[技術債](../docs/backlog.md#技術債)）
+狀態：實機測試做完（2026-11-03）；iPhone 的 stack 改成全收（[D-173](../docs/decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)），實機確認併入下一次 iPhone 測試
 
 遵守 repo 根目錄的 `AGENTS.md`。把 [backlog「下一次 iPhone 實機測試」](../docs/backlog.md#v1-需要做的任務)累積的項目集中成一次（[D-065](../docs/decisions.md#d-065-試作場)）。照[里程碑報告 R9](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)：每一步指定卡片、做完當場回報，感想不留到最後。
 

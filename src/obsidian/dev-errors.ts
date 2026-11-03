@@ -162,9 +162,9 @@ export async function errorProbe(host: ProbeHost): Promise<unknown> {
     steps,
     added,
     check: {
-      uncaught: probe.filter(line => line.where === 'uncaught').map(line => [line.msg, line.n ?? null, typeof line.stack === 'string' && line.stack.includes('plugin:essence-cards:')]),
+      uncaught: probe.filter(line => line.where === 'uncaught').map(line => [line.msg, line.n ?? null, typeof line.stack === 'string']),
       render: probe.filter(line => line.where === 'render').map(line => [line.msg, line.path ?? null, line.n ?? null]),
-      ui: probe.filter(line => line.where === 'ui').map(line => [line.msg, typeof line.stack === 'string' && line.stack.includes('plugin:essence-cards:')]),
+      ui: probe.filter(line => line.where === 'ui').map(line => [line.msg, typeof line.stack === 'string']),
       report: parsed.filter(line => line.where === 'report').map(line => [line.kind, line.lt, line.v, line.path]),
       others: parsed.filter(line => !probe.includes(line) && line.where !== 'report'),
     },
