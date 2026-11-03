@@ -57,6 +57,7 @@
 | 複合舊標題只連頁碼：`溶解, 擴散 p.44` 只連 p.44，`溶解`、`擴散` 當說明，連不到那兩個標題（`deck` 拿不到材料，只有整項沒讀到東西時才併回一個舊標題） | 實際卡組需要同時連到標題與頁碼 | 兩個都連得到，不用看目錄與材料就能讀，加進 `tests/sources.test.ts` 的例子 | [Codex L2 第三輪](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)，實作者選擇第 2 項 |
 | 教材名稱的前綴沒有記下來：`課本第44頁`、`Workbook p.12` 的 `課本`、`Workbook` 只當說明，多份材料都有 p.44 時連第一份，可能連到別的教材 | 同一個單元有多份材料，而且頁碼或圖表編號重複 | 保留材料的限定或讓家長選；只影響連結，不影響歸屬（`src/ui/sources.ts` 的 `findAnchor`） | [Codex L2 第三輪](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)，實作者選擇第 6 項 |
 | Markdown 連結的路徑還留著語法字元：`[教材](章節(複習\).md)` 留著反斜線，`[教材](<版本 (甲).md>)` 留著尖括號，可能跳不到教材（只影響連結，實機沒驗） | 實際卡組用到這類 Markdown 連結 | 正式讀法取到和 Markdown 解析器一樣的目的地 | [Codex L2 第五輪](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>) |
+| 出處的診斷還有兩個小缺口，都不會默默多算：`國二上 1-3，不算第1章第3節` 的章節別名認不得是同一個單元，1-3 照算、否定段有提示；`p.44 https://x.test,8上L1 45`（刻意構造）接著讀 p.45 時，漏掉網址裡疑似單元的提示 | 第二批開工前重整診斷欄位（[任務 §9-1](../tasks/entry-and-catalog.md#9-1-模組)） | 兩個字串都有預期的結果，加進 `tests/sources.test.ts` | [Codex L2 第七輪](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>) |
 
 ### 待決問題
 
