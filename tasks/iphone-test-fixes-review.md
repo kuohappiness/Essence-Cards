@@ -1,6 +1,27 @@
 # iPhone 測試後的修改：L2 審查請求（給新開的 Codex session）
 
-狀態：待再審（第二輪，下面第一節）；第一輪的[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)
+狀態：待再審（第三輪，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)
+
+## 再審（第三輪）：第二輪發現的修正
+
+**這一輪只讀**：本節、〈審查對象〉、討論稿的〈[Claude 回應：第二輪](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md#claude-回應第二輪2026-11-03>)〉。前兩輪的內容需要時，照發現的標題只查相關段落。
+
+**範圍**：基準 `a306fea146b8f880f94ea6fcf5adff4aa295236c`，待審 `9028ad86c7d4edfb6aea28e928b51c25dfd388d0`，`git diff a306fea..9028ad8`（2 個修正 commit）；本節的文件 commit 在它之後，不用審。
+
+**還沒結的發現**：第二輪的 F1（例句切分拆壞連結）、F2（接住的錯誤去重差異），看修正有沒有做到，以及同類的其他輸入。
+
+**可能碰到的已結項目**：第一輪 F1 的整段粗體與各自加粗（驗收在〈Claude 回應：第一輪〉與 `tests/review.test.ts` 的 D-172 測試）；第一輪 F2 的主機開關（`tests/errors.test.ts`「D-173 F2」與 `tests/main-wiring.test.ts`「D-173 補網」）。這次只改 `splitTranslation`、`closed` 與 `record` 的去重鍵，只查受影響的路徑。
+
+**請特別找**：
+
+- `splitTranslation`：切開後畫面還是會看到語法的輸入；原本該分行的純文字例句有沒有被 `STRUCTURE` 或括號的判斷誤擋（例句來自 `docs/card-rules/english.md`）。
+- 去重鍵：`nameStacks` 關著時和 `4f686ed` 有沒有任何不同；開著時只有名稱的 stack 仍然靠訊息與第一層分開。
+
+**使用者已決定、不用再提**：英文句裡有完整連結的例句也不分行（2026-11-03，D-172 第 3 點）。〈Claude 回應：第二輪〉列的 `Mr.王先生來了` 這類切分，畫面沒有語法會壞，請只在你認為真實資料會常碰到時才提。
+
+**真實路徑與輪數**：照 [D-171](../docs/decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 3 點，每項發現標真實路徑會不會發生；沒有擋合併的發現就直接寫「通過」。這是第三輪，第四輪之後還有擋合併的發現就交給使用者。
+
+**驗證方式**：`npm run check`，要在沙箱外跑（[quality.md](../docs/agents/quality.md#檢查指令)）。實作者跑過的與沒跑的見〈Claude 回應：第二輪〉的〈驗證〉。報告接在討論稿最後；所有檔案都在這個 worktree，不要寫到主資料夾。
 
 ## 再審（第二輪）：第一輪發現的修正
 
