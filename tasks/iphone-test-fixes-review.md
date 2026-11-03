@@ -1,6 +1,6 @@
 # iPhone 測試後的修改：L2 審查請求（給新開的 Codex session）
 
-狀態：待再審（第四輪，下面第一節）；前三輪的[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)
+狀態：L2 結案，待合併（四輪；第四輪留下的一項使用者 2026-11-04 決定不修）；[報告與回應](<../Claude Codex Discussion/2026-11-03-iphone-test-fixes-review.md>)
 
 ## 再審（第四輪）：第三輪發現的修正
 
