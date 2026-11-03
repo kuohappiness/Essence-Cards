@@ -228,8 +228,8 @@ export function createErrorLog(options: ErrorLogOptions): ErrorLog {
         const own = ownFrames(error);
         const frames = own.length || !nameStacks ? own : nameFrames(error);
         const path = context?.path;
-        // 去重：有自己的位置就用第一層的位置；只有名稱時好幾個錯誤的第一層都可能是匿名的 `@`，連訊息一起比（D-173）。
-        const key = own[0] ?? [msg, frames[0]];
+        // 去重：有自己的位置就用第一層的位置，沒有 stack 就用訊息；只有名稱時好幾個錯誤的第一層都可能是匿名的 `@`，連訊息一起比（D-173）。
+        const key = own[0] ?? (frames.length ? [msg, frames[0]] : msg);
         write(JSON.stringify([where, path ?? null, key]), { where, msg, path, stack: frames.length ? frames.join('\n') : undefined });
       } catch {
         // 記錄器永遠不拋錯（D-155 第 4 點）：例如時區不合法時 formatTime 拋錯，這一行就不記。

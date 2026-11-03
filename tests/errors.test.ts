@@ -478,6 +478,20 @@ void test('D-173 F2 不是 iPhone：只有名稱的 stack 不收也不留，真�
   assert.deepEqual(written, [{ msg: 'changed later' }, { msg: 'x' }, { msg: 'mail me@' }].map(row => ({ t: '2026-11-02T20:15:03.250+08:00', build: BUILD, obsidian: OBSIDIAN, where: 'ui', ...row })), '接住的錯誤也不留名稱');
 });
 
+// Codex L2 第二輪的 F2：沒有留下 stack 時，去重的鍵和 D-173 之前一樣只看訊息；複合的鍵只給只有名稱的 stack。
+void test('D-173 F2 沒有留下 stack 的錯誤，去重只看訊息：訊息剛好等於另一筆的第一個位置時算同一個（iPhone 也一樣）', async () => {
+  const FRAME = 'at plugin:essence-cards:1:2';
+  const own = withStack('Error: 有位置\n    ' + FRAME, '有位置');
+  for (const [nameStacks, make] of [[false, (files: Files) => setup(files).log], [true, setupIos]] as const) {
+    const memory = createMemoryFiles();
+    const log = make(memory.files);
+    log.record('read', own, { path: 'p' });
+    log.record('read', FRAME, { path: 'p' });
+    await wait(10);
+    assert.deepEqual(lines(memory.texts.get(FILE)).map(line => (JSON.parse(line) as { msg: string }).msg), ['有位置'], 'nameStacks: ' + String(nameStacks));
+  }
+});
+
 void test('D-173 有自己的位置時照舊只留自己的那幾層', async () => {
   const memory = createMemoryFiles();
   const log = setupIos(memory.files);
