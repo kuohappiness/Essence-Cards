@@ -232,8 +232,8 @@ const MATERIAL = /^(?:[\u3400-\u9FFF]{1,2}的?|[A-Za-z]+)$/;
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 interface UnitName { term: string; code: string }
-/** codeLike：只有字但像編號，不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。 */
-interface Pending extends SourceItem { codeLike?: true }
+/** codeLike：只有字但像編號，不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。written：這一段自己明寫了年級學期與標準的編號。 */
+interface Pending extends SourceItem { codeLike?: true; written?: true }
 
 export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
   const tokens: string[] = [];
@@ -349,6 +349,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       }
     }
     if (unit) { scope = unit; carry = unit; }
+    const written = unit !== null && !needsUnit ? { written: true as const } : {};
 
     const { found, left, before, bad, hidden } = scan(rest, tokens);
     if (scope === null && found.length) return [asHeading({ problem: 'term-only' })];
@@ -357,7 +358,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       if (unit) {
         // 單元後面的字留在 rest：Obsidian 層比那個單元的名稱與材料的標題。
         lastPlace = null;
-        return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}) }];
+        return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}), ...written }];
       }
       // 後面的編號、數字不接過這些字（D-167 第 6 點）。
       forget();
@@ -370,7 +371,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const texts = pieces(found, segment.length - rest.length);
     const placed: Pending[] = found.map((each, at) => {
       lastPlace = each.link.kind === 'block' ? each.link.id : null;
-      return { text: texts[at], link: inScope(each.link) };
+      return { text: texts[at], link: inScope(each.link), ...written };
     });
     if (needsUnit) placed[0].needsUnit = true;
     const final = placed[placed.length - 1];
@@ -419,13 +420,13 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   // 讀完才去重：`本篇` 這種字會影響後面的意思（D-167 第 6 點）。只顯示的項目照文字比。
   // 同一個目標寫兩次時按鈕留一個，診斷與確認依據不丟：後面的有問題就照它提示；有一項明寫了學期就不算沿用。
   const kept = new Map<string, SourceItem>();
-  for (const { codeLike, ...item } of items) {
+  for (const { codeLike, written, ...item } of items) {
     const marked: SourceItem = anyRead && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true } : item;
     const key = item.link.kind === 'text' ? item.text : JSON.stringify(item.link);
     const first = kept.get(key);
     if (!first) { kept.set(key, marked); continue; }
     if (marked.problem && !first.problem) { first.text = marked.text; first.problem = marked.problem; }
-    if (!marked.needsUnit) delete first.needsUnit;
+    if (written) delete first.needsUnit;
   }
   return [...kept.values()];
 }

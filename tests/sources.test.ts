@@ -249,6 +249,9 @@ void test('D-167 讀完才去重：本篇這種字會影響後面的意思；一
   assert.deepEqual(read('p.44 老師說過 1-8、p.44').map(item => item.problem), ['leftover'], '前面那項的診斷也留著');
   assert.deepEqual(read('國二上 1-3、1-8 p.44、國二上 1-8 p.44').map(item => item.needsUnit), [undefined, undefined], '後面明寫了學期，就不算沿用');
   assert.deepEqual(read('國二上 1-8 p.44、1-3、1-8 p.44').map(item => item.needsUnit), [undefined, true], '前面明寫的也不會被後面的沿用蓋掉');
+  assert.deepEqual(read('國二上 L1、L2 p.44、p.44').map(item => item.needsUnit), [undefined, true], '接著寫的位置沒有明寫學期，沿用的標記留著');
+  assert.deepEqual(read('國二上 L1、L2 p.44、44').map(item => item.needsUnit), [undefined, true]);
+  assert.deepEqual(read('國一上 Starter p.12、國一上 Starter p.12').map(item => item.needsUnit), [true], '其他編號寫兩次還是要對目錄');
 });
 
 void test('D-167 項目的邊界：不同行的字不會接成一個連結', () => {
