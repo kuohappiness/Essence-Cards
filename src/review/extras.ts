@@ -13,16 +13,19 @@ export function extraLabel(text: string): { label: string | null; body: string }
  * 背面補充開頭是英文句子、後面緊接中文翻譯時（D-172），分成兩行顯示：「She bought a book. 她買了一本書。」。
  * 只認整段從英文開始、中文之前以句尾標點結束的：「go 的過去式」「look after 照顧」這類不是句子加翻譯，照舊一行；
  * 句尾標點和中文之間的空格可有可無，中文開頭可以有自己的格式。不是這個樣子時 translation 是 null、line 是原文。
- * 切開會把行內格式拆成兩半時（`**She left. 她走了。**`）也照舊一行，不然兩行都會看到星號（Codex L2 的 F1）。
+ * 切開之後畫面會壞的也照舊一行（Codex L2 兩輪的 F1）：行內格式被拆成兩半（`**She left. 她走了。**`）兩行都會看到星號；
+ * 有連結、HTML、網址時切分點可能落在裡面（`[a](b.中文)`），數記號也分不出來，一律不切。
  */
-const TRANSLATED = /^([*_=~"'“(]*[A-Za-z][^\p{Script=Han}]*[.?!。？！]["'’”)*_=~]*)\s*([*_=~]*[\p{Script=Han}「『（][\s\S]*)$/u;
-/** 這一段的行內格式都收尾了：成對的記號各是偶數個，連結的方括號對得上。數不準時（`5 * 3`）寧可一行，一行不會壞。 */
+const TRANSLATED = /^([*_=~`"'“(]*[A-Za-z][^\p{Script=Han}]*[.?!。？！]["'’”)*_=~`]*)\s*([*_=~`]*[\p{Script=Han}「『（][\s\S]*)$/u;
+/** 連結、HTML 與網址的記號。 */
+const STRUCTURE = /[[\]<>]|:\/\//;
+/** 這一段的行內格式都收尾了：成對的記號各是偶數個，括號對得上。數不準時（`5 * 3`）寧可一行，一行不會壞。 */
 function closed(text: string): boolean {
   const open = new Set<string>();
   for (const [mark] of text.matchAll(/\*\*|__|~~|==|[*_`]/g)) if (!open.delete(mark)) open.add(mark);
-  return open.size === 0 && text.split('[').length === text.split(']').length;
+  return open.size === 0 && text.split('(').length === text.split(')').length;
 }
 export function splitTranslation(text: string): { line: string; translation: string | null } {
-  const match = TRANSLATED.exec(text);
+  const match = STRUCTURE.test(text) ? null : TRANSLATED.exec(text);
   return match && closed(match[1]) && closed(match[2]) ? { line: match[1], translation: match[2] } : { line: text, translation: null };
 }

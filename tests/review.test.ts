@@ -135,7 +135,19 @@ void test('D-172 英文句子後面緊接中文翻譯：分成兩行；其他照
   assert.deepEqual(splitTranslation('**She bought a book.** **她買了一本書。**'), two('**She bought a book.**', '**她買了一本書。**'), '兩邊各自加粗');
   assert.deepEqual(splitTranslation('She **bought** a `book`. *她*買了書。'), two('She **bought** a `book`.', '*她*買了書。'), '英文裡的格式都收尾了');
   assert.deepEqual(splitTranslation('It costs $5. 它要五元。'), two('It costs $5.', '它要五元。'), '錢的符號不是格式');
+  assert.deepEqual(splitTranslation('She left. `她走了。`'), two('She left.', '`她走了。`'), '中文包在反引號裡');
+  assert.deepEqual(splitTranslation('`She left.` `她走了。`'), two('`She left.`', '`她走了。`'), '兩邊各自包在反引號裡');
+  assert.deepEqual(splitTranslation('He (Tom) left. 他（Tom）走了。'), two('He (Tom) left.', '他（Tom）走了。'), '括號收尾了');
   const one = (text: string): void => { assert.deepEqual(splitTranslation(text), { line: text, translation: null }, text); };
+  // Codex L2 第二輪的 F1：有連結、HTML、網址的一律一行，切分點可能落在裡面；括號沒收尾也一行。
+  one('See [source](https://example.com/a.中文).');
+  one('See https://example.com/a.中文');
+  one('Go to <https://example.com/a.中文>');
+  one('She <u>left. 她走了。</u>');
+  one('She [left](https://example.com). 她走了。');
+  one('She <b>left</b>. 她走了。');
+  one('She (left. 她) 走了。');
+  one('`She left. 她走了。`');
   // Codex L2 的 F1：切開會把格式拆成兩半、畫面看到星號的，照舊一行，格式完整。
   one('**She bought a book. 她買了一本書。**');
   one('*She bought a book. 她買了一本書。*');
