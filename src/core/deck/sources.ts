@@ -189,7 +189,7 @@ function scan(text: string, tokens: readonly string[]): { found: Found[]; left: 
     const raw = tokens[Number(match[1])], link = linkTarget(raw);
     // 半形逗號後面緊接著字是網址的一部分，分不出是不是另一項：不算別的單元，像編號就提示（D-167 第 1 點）。
     const comma = raw.search(/[,;]/);
-    if (!link && comma >= 0 && SUSPECT.test(tidy(raw.slice(comma)))) hidden = true;
+    if (!link && comma >= 0 && hasCode(tidy(raw.slice(comma)))) hidden = true;
     take(match, link);
   }
   for (const match of [...masked.matchAll(/(?<![^ ])#([^ #,、;/]+)/g)]) take(match, { kind: 'heading', heading: match[1] });
@@ -219,6 +219,12 @@ const NEGATIVE = /不是|不要|不用|不必|不算|不考|不看|不含|不包
 const SELF = /^(?:本單元|本篇|本課|本節|這一篇|這一課|這一節|這一單元|這個單元) ?/;
 // 沒用到的字裡有編號或年級學期：可能是沒寫完的參照。
 const SUSPECT = /(?<![A-Za-z0-9.-])\d+(?:-\d+)+(?![A-Za-z0-9-])|(?:小[一二三四五六]|國[一二三]|高[一二三]|[七八九]) ?[上下]/;
+/** 字裡有編號，或任何讀法認得的年級學期（`8上`、`國中二年級上`）。 */
+function hasCode(text: string): boolean {
+  if (SUSPECT.test(text)) return true;
+  for (let at = 0; at < text.length; at++) if (readTerm(text.slice(at))) return true;
+  return false;
+}
 const WRAP = /^[([《【] ?(.*?) ?[)\]》】]$/s;
 const NOTE_ONLY = /^(?:第 ?\d+ ?[題段行])$/;
 /** 位置前面的字可以當教材名稱：兩個中文字以內或一個英文字（`課本第44頁`、`Workbook p.12`）。 */
@@ -247,7 +253,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   const follow = (id: string, text: string): Pending => { lastPlace = id; return { text, link: inScope({ kind: 'block', id }) }; };
   /** 字裡有本篇那種字母的編號（英文卡組的 `也算 L1`）；`p.20 維生素 B12` 不算。 */
   const hasOwnKindCode = (text: string): boolean => ownLetters !== null && new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(ownLetters)}\\d+(?![A-Za-z0-9])`, 'i').test(text);
-  const looksLikeCode = (text: string): boolean => SUSPECT.test(text) || hasOwnKindCode(text);
+  const looksLikeCode = (text: string): boolean => hasCode(text) || hasOwnKindCode(text);
   const forget = (): void => { lastPlace = null; carry = null; };
   const items: Pending[] = [];
 
@@ -294,7 +300,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       // 緊接在沒有位置的單元後面（`國二上 1-3，不算這個`）：說的就是那個單元，一起先不算。有位置的是實際的出處，照連；
       // 否定段自己點名了別的（`不是 p.46`、`不是國二上 1-8`、`不是 [[筆記]]`）：說的不是前面的單元。
       const last = items.at(-1);
-      const namesOther = /[\dA-Za-z]/.test(segment) || SUSPECT.test(segment) || scan(segment, tokens).found.length > 0;
+      const namesOther = /[\dA-Za-z]/.test(segment) || hasCode(segment) || scan(segment, tokens).found.length > 0;
       if (!namesOther && last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading')) {
         items[items.length - 1] = { text: last.text, link: { kind: 'text' }, problem: 'negative' };
         scope = 'this';
@@ -355,7 +361,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       }
       // 後面的編號、數字不接過這些字（D-167 第 6 點）。
       forget();
-      if (selfRef && !left) return [{ text: display, link: { kind: 'text' } }];
+      if (selfRef && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
       // 網址：只有字，不是位置，也不算看不懂。
       if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
       if (bad) return [asHeading({ problem: 'position' })];

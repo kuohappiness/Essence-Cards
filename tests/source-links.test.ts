@@ -151,6 +151,8 @@ void test('D-167 從筆記到目錄與提示：目標算進哪些單元、提示
   const cases: [string, string[], string[]][] = [
     ['https://example.test/a,國二上1-3', [], ['https://example.test/a,國二上1-3']],
     ['https://example.test/a,b', [], []],
+    ['https://x.test,8上1-3', [], ['https://x.test,8上1-3']],
+    ['本篇 https://x.test,國二上1-3', [], ['本篇 https://x.test,國二上1-3']],
     ['https://example.test/a、國二上1-3', ['1-3'], []],
     ['https://example.test/a, 國二上1-3', ['1-3'], []],
     ['國二上1-3、https://example.test/a﹐國二上1-8', ['1-3', '1-8'], []],

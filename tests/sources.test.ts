@@ -159,6 +159,8 @@ void test('D-167 網址的分界：半形逗號、分號後面緊接著字是網
     assert.ok(read(text).some(item => item.problem === 'leftover'), text);
   }
   assert.equal(read('https://example.test/a,國二上1-3 p.5').at(-1)?.problem, 'leftover', '後面還有位置也要提示');
+  for (const text of ['https://x.test,8上L1', 'https://x.test,八上L1', 'https://x.test,國中二年級上L1', 'https://x.test,國二上學期L1', '本篇 https://x.test,國二上1-3', '2-2 https://x.test,8上L1']) assert.ok(read(text).some(item => item.problem === 'leftover'), text);
+  assert.equal(read('p.44 和 8上L1')[0].problem, 'leftover', '說明裡有認得的學期寫法也要提示');
   for (const separator of ['、', '﹑', '，', '﹐', '；', '﹔', ', ', '; ']) assert.deepEqual(links('https://example.test/a' + separator + '國二上 1-3'), [{ kind: 'text' }, u13()], separator);
   assert.deepEqual(read('https://example.test/a,').map(item => item.text), ['https://example.test/a'], '尾端的逗號不是網址的一部分');
 });
