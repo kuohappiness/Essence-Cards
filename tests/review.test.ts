@@ -129,7 +129,25 @@ void test('D-172 英文句子後面緊接中文翻譯：分成兩行；其他照
   assert.deepEqual(splitTranslation('**She** said "hi." 她說「嗨」。'), two('**She** said "hi."', '她說「嗨」。'), '粗體開頭、句點在引號裡');
   assert.deepEqual(splitTranslation('She **left.** 她離開了。'), two('She **left.**', '她離開了。'), '句點在粗體裡');
   assert.deepEqual(splitTranslation('He said hi. 「嗨」他說。'), two('He said hi.', '「嗨」他說。'), '翻譯以引號開頭');
+  // Codex L2 的 F1：格式各自在英文或中文裡收尾的照樣分行，中文也可以有自己的格式。
+  assert.deepEqual(splitTranslation('She bought a book. **她買了一本書。**'), two('She bought a book.', '**她買了一本書。**'), '中文自己加粗');
+  assert.deepEqual(splitTranslation('She bought a book. ==她買了一本書。=='), two('She bought a book.', '==她買了一本書。=='), '中文自己標記');
+  assert.deepEqual(splitTranslation('**She bought a book.** **她買了一本書。**'), two('**She bought a book.**', '**她買了一本書。**'), '兩邊各自加粗');
+  assert.deepEqual(splitTranslation('She **bought** a `book`. *她*買了書。'), two('She **bought** a `book`.', '*她*買了書。'), '英文裡的格式都收尾了');
+  assert.deepEqual(splitTranslation('It costs $5. 它要五元。'), two('It costs $5.', '它要五元。'), '錢的符號不是格式');
   const one = (text: string): void => { assert.deepEqual(splitTranslation(text), { line: text, translation: null }, text); };
+  // Codex L2 的 F1：切開會把格式拆成兩半、畫面看到星號的，照舊一行，格式完整。
+  one('**She bought a book. 她買了一本書。**');
+  one('*She bought a book. 她買了一本書。*');
+  one('_She bought a book. 她買了一本書。_');
+  one('==She bought a book. 她買了一本書。==');
+  one('~~She bought a book. 她買了一本書。~~');
+  one('She **left. 她**離開了。');
+  one('She `left. 她`離開了。');
+  one('She bought a book.**她買了一本書。**');
+  one('5 * 3 = 15. 五乘三等於十五。');
+  one('She [left. 她](https://example.com)離開了。');
+  one('She [[left. 她]]離開了。');
   one('go 的過去式不規則：go → went → gone');
   one('look after 照顧');
   one('She bought a book 她買了一本書');
