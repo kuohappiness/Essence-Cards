@@ -18,7 +18,7 @@
 
 **嚴重度**：只把真實家長可能寫出、而且會默默算錯或擋住使用的字串列成 P1；要刻意構造才會發生的，請標明「刻意構造」，放在最後，由使用者決定要不要修。
 
-**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 的結果寫在[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
+**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 1.15.0、開發版 `0.2.0+d4fc886.dirty` 上 `entry` 44 項 true、0 項 false，`entry-unread` 通過，見[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
 
 回報照下面〈回報〉的格式，貼回對話或接在討論稿最後都可以；所有檔案都在這個 worktree，不要寫到主資料夾。
 
