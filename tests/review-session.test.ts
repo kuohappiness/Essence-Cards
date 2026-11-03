@@ -225,6 +225,30 @@ void test('D-172 進第 3 步：拼錯進來標「錯誤」（直接照打的卡
   assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, false], '直接照打的卡按「沒印象」');
 });
 
+// Codex L2 的待釐清，使用者選「留著打叉」：這張拼錯過就一路標到走完，最後一步是不是按「沒印象」都一樣。
+void test('D-172 第 1 步拼錯、第 2 步按「沒印象」：第 3 步留著打叉，紀錄不變', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  assert.equal(lt(s.view()), 'z1');
+  s.input('made up his mine'); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [2, true]);
+  s.skip();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, true], '第 1 步拼錯過');
+  s.input('made up his mind'); s.submit();
+  assert.deepEqual([typed(s.view()).finished, typed(s.view()).notice], [true, false], '走完就不標');
+  await rateLater(h, s, 'miss');
+  assert.ok(h.log()[0].includes('"typed":"wrong","retry":"skip"'), '紀錄不變：' + h.log()[0]);
+});
+
+void test('D-172 第 1 步按「沒印象」、第 2 步拼錯進第 3 步：標打叉', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  s.skip();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [2, false]);
+  s.input('made up his mine'); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, true]);
+});
+
 void test('R5 原形等於答案（borrow）或去掉括號後等於答案（light）：第 1 步拼錯直接第 3 步，retry: not-needed', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '英文' });

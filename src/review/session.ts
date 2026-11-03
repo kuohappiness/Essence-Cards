@@ -401,7 +401,8 @@ export function createSession(options: SessionOptions): Session {
       else { typed.second = 'not-needed'; enterStep3(typed, card, text, false); }
     } else {
       typed.second = 'skip';
-      enterStep3(typed, card, text, false);
+      // 第 1 步拼錯過的，打叉一路標到走完（D-172）；一路按「沒印象」、沒拼過的不標。
+      enterStep3(typed, card, text, typed.first === 'wrong');
     }
     notify();
   }
