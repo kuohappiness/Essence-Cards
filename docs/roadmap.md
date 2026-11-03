@@ -49,6 +49,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-03 | code-quality 補兩句（review.md）：修審查發現時整類一次修、回歸測試涵蓋同類；請審查者特別看的邊界先自己測。依據：三份 L2（[錯誤紀錄](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)、[發布前比較](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)、[更新防線第二部分](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）22 項發現中，10 項屬這兩類 |
 | 2026-11-03 | 國小社會預設 v0.6 測跨單元加題（[試用紀錄](card-rules/trials.md)）：混入 10 項自製的小四目標再跑 2-2，Sol 加了 8 項、10 題，ID 全對；但不寫待核對，只給名稱會過度合併；預設改成 v0.7 |
 | 2026-11-03 | 入口與目錄第一批合併進 `main`（分支 `claude/entry-and-catalog`，[任務說明](../tasks/entry-and-catalog.md)）：入口、目錄瀏覽與練習、全部卡、預覽；出處的讀法定案（[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)）：不用猜的直接讀懂，要猜的只提示，模組化填入在第二批用到歸屬前完成；Codex L2 七輪（[報告](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）；Windows `entry` 44／44；還沒升版 |
 | 2026-11-03 | 國小社會預設 v0.5 用 Sol 跑康軒五上 2-1、2-2（[試用紀錄](card-rules/trials.md)）：第 6 條的習作判斷改好了；2-2 帶著 2-1 的 42 個目標跑，加題 0，兩課沒有同一個判準，R3 的提示也沒有加題的寫法 |
@@ -58,4 +59,3 @@ flowchart LR
 | 2026-11-03 | 學習目標的連結與整理定案（[D-167](decisions.md#d-167-學習目標的連結與整理)，第二階段）：關係寫成 Obsidian 的區塊 ID 連結、Cards 索引讀，先只做先備；整理靠結構檢查與按需的語意整理；判準相同的重複目標合併時保留原 ID（修改 D-126） |
 | 2026-11-03 | 國小社會預設 v0.4（[D-166](decisions.md#d-166-國小社會預設試用後的修改換一個地方還成立嗎反方向照第-9-條)）：加「換一個地方還成立嗎」，從特色問地名照第 9 條；另外三點和 Codex 談過後不改，Sol 對照時檢查 |
 | 2026-11-03 | 發布前比較的轉接器合併進 `main`（分支 `claude/fervent-hodgkin-9c2bca`，程式到 `3c6cd96`）：每個版本用自己的 `state` 讀備份，閘門與重複的 ID 進比較資料，回傳型別不對或內容矛盾就是無法比較；Codex L2 六輪（[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)）；比過正式使用的 vault 的備份：差異 0 項、沒有重複的 ID（裡面還沒有卡組）；還沒升版，條件見[技術債](backlog.md#技術債) |
-| 2026-11-02 | 國小社會：課本正文寫出地方和它的特色或變化時，另立「地方 → 特色」的目標（[D-165](decisions.md#d-165-國小社會課本正文點名的地方另立目標)），使用者看完第一次試用後選的；預設改成 v0.3，另外四點修改先和 Codex 談 |
