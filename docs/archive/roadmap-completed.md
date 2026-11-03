@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-03 | 拿掉沒在用的 codex-brief skill（[D-168](../decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)）：D-131 以後實作不再交給 Codex，常做的是請 Codex 查核；AGENTS 的分流改成查核走 code-quality |
 | 2026-11-03 | Obsidian 1.15.0 相容性檢查（[D-138](../decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)，[結果](../../tasks/obsidian-1.15-compat.md)）：Windows 通過，開發命令全過，CodeMirror 沒變；1.15 移動清單時子項目會跟著動。npm 還沒有 1.15 的型別檔，iPhone 在下一次實機測試 |
 | 2026-11-03 | 國小社會預設 v0.4 用 Sol 跑康軒五上 2-1 兩次（[試用紀錄](../card-rules/trials.md)）：語法錯誤 0、各約 45 個目標，D-165、D-166 照設計發生；習作的景觀判斷被做成背地點、出處認不得，待改 |
 | 2026-11-03 | 學習目標的連結與整理定案（[D-167](../decisions.md#d-167-學習目標的連結與整理)，第二階段）：關係寫成 Obsidian 的區塊 ID 連結、Cards 索引讀，先只做先備；整理靠結構檢查與按需的語意整理；判準相同的重複目標合併時保留原 ID（修改 D-126） |
