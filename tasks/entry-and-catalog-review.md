@@ -1,6 +1,18 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：第五輪待審：第四輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+狀態：第六輪待審：第五輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+
+## 再審（第六輪）：第五輪發現的修正
+
+只審第五輪的修正，範圍是 `51a19ed` 到分支最新 commit 的差異與緊鄰的案例：`hasCode`、否定段的 `namesOther`、去重的 `written`、私用區與零寬字元。不必再找其他區域。逐項的處理在[討論稿的〈Claude 回應 Codex 第五輪〉](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md#claude-回應-codex-第五輪2026-11-03>)。
+
+**嚴重度**：P1 只給真實家長可能寫出、而且會默默算錯或擋住使用的字串；要刻意構造的請標明並放在最後。沒有 P1、P2 就直接寫「通過」。
+
+**使用者已決定、不用再提**：`10-15` 維持沿用、`2之1` 算同一個單元、全形括號裡的字不動、網址裡的逗號算網址的一部分。
+
+**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 的結果寫在[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
+
+貼回對話或接在討論稿最後都可以；所有檔案都在這個 worktree，不要寫到主資料夾。
 
 ## 再審（第五輪）：第四輪發現的修正
 
