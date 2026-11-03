@@ -28,7 +28,7 @@ export interface TypedView {
   first: StepResult | null;
   /** 第 2 步的結果；跳過第 2 步是 not-needed，還沒到或第 1 步拼對是 null。 */
   second: RetryResult | null;
-  /** 第 2、3 步標「錯誤」（打叉的圖示，D-145、D-171）：拼錯進來才標，按「沒印象」進來不標。 */
+  /** 第 2、3 步標「錯誤」（打叉的圖示，D-145、D-172）：拼錯進來才標，按「沒印象」進來不標。 */
   notice: boolean;
   /** 第 2 步的原形提示；其他步 null。 */
   hint: string | null;

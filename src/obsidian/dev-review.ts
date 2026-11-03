@@ -635,7 +635,7 @@ async function shootUi(host: ReviewHost, folder: string, base: State, visibility
     await record('鍵盤 2（差一點）', press('2'));
     await record('light：沒印象', click('沒印象'), '英文 打字 原形等於答案');
     typeText('light');
-    // 按了「沒印象」只剩一個自評：照打完停在這張（D-171），自己按 1。
+    // 按了「沒印象」只剩一個自評：照打完停在這張（D-172），自己按 1。
     await record('照打（停在這張）', press('Enter'));
     await sleep(RATE_DELAY);
     await record('鍵盤 1（沒印象）', press('1'));

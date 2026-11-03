@@ -249,7 +249,7 @@ void test('D-145 第 3 步在空格裡照打：線上先不寫答案、提示照
   assert.equal(o.ui.find('ec-blank-input').length, 1, '第 3 步也在空格裡打');
   assert.equal(ofType(o.ui, 'markdown')[0].props.revealed, false, '照打時線上先不寫答案');
   assert.deepEqual(o.ui.find('ec-hint').map(o.ui.text), ['照著打一次']);
-  assert.equal(o.ui.find('is-no').length, 1, '直接照打的卡拼錯也打叉（D-171）');
+  assert.equal(o.ui.find('is-no').length, 1, '直接照打的卡拼錯也打叉（D-172）');
   assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['你拼的', '正確拼字']);
   assert.deepEqual(o.ui.find('ec-a'), []);
   assert.deepEqual(o.ui.find('ec-also'), [], '只有一個答案時沒有「也可以」');
@@ -277,18 +277,18 @@ void test('D-145 打字中「沒印象」「確認」在卡片裡（題目下面
   o.ui.click(o.ui.find('ec-skip')[0]);
   await o.ui.settle();
   assert.deepEqual(o.ui.find('ec-lab').map(o.ui.text), ['正確拼字'], '沒打字：只有「正確拼字」');
-  assert.deepEqual(o.ui.find('is-no'), [], '按「沒印象」進來不打叉（D-171）');
+  assert.deepEqual(o.ui.find('is-no'), [], '按「沒印象」進來不打叉（D-172）');
   assert.deepEqual(o.ui.find('ec-show').map(o.ui.text), ['確認'], '第 3 步只有確認，也在卡片裡');
   const order = o.ui.find('ec-card')[0].children.filter((child): child is Tree => typeof child !== 'string').map(child => child.props.className);
   assert.ok(order.indexOf('ec-answer') < order.indexOf('ec-typed-actions'), '照打時「確認」排在答案（正確拼字、補充）後面：' + order.join(', '));
   o.session.input('borrow'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  // 第 1 步按了「沒印象」只剩一個自評：照打完停在這張（D-171），自己按底下的「沒印象」。
+  // 第 1 步按了「沒印象」只剩一個自評：照打完停在這張（D-172），自己按底下的「沒印象」。
   assert.deepEqual(o.session.history(), []);
   assert.deepEqual(o.ui.find('ec-rate').map(o.ui.text), ['沒印象']);
 });
 
-void test('D-171 只剩一個自評時不自動換卡：走完三步、念完也停在這張，按底下的「沒印象」才記下；第 1 步拼錯的照舊自己選', async t => {
+void test('D-172 只剩一個自評時不自動換卡：走完三步、念完也停在這張，按底下的「沒印象」才記下；第 1 步拼錯的照舊自己選', async t => {
   const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off | switch off', ''].join('\n');
   const o = await open(t, { subject: '英文' }, { autoRead: true, texts: { [ENGLISH]: deck } });
   assert.equal(lt(o.session), 'g1');
@@ -341,7 +341,7 @@ void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文
   assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone']);
 });
 
-void test('D-171 例句的英文和中文翻譯各一行，喇叭在英文那一行', async t => {
+void test('D-172 例句的英文和中文翻譯各一行，喇叭在英文那一行', async t => {
   const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 例句：She went home. 她回家了。', ''].join('\n');
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
   o.session.input('went'); o.ui.key('Enter', 'input');

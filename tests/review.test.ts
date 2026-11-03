@@ -119,7 +119,7 @@ void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只
   assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
 });
 
-void test('D-171 英文句子後面緊接中文翻譯：分成兩行；其他照原文一行', () => {
+void test('D-172 英文句子後面緊接中文翻譯：分成兩行；其他照原文一行', () => {
   const two = (line: string, translation: string): { line: string; translation: string } => ({ line, translation });
   assert.deepEqual(splitTranslation('Can you lend me your pen? 你可以借我你的筆嗎？'), two('Can you lend me your pen?', '你可以借我你的筆嗎？'));
   assert.deepEqual(splitTranslation('She bought a book. Tom sold it! 她買了書，Tom 把它賣了。'), two('She bought a book. Tom sold it!', '她買了書，Tom 把它賣了。'), '英文有好幾句；中文裡有英文');

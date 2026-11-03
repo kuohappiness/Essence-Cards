@@ -436,7 +436,7 @@ function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, s
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
-  // 不經提示直接照打的卡也一樣（D-171）。
+  // 不經提示直接照打的卡也一樣（D-172）。
   // 照打：「照著打一次」後面接即時比對，打了字就顯示現在打的字（打對的照常顯示、打錯的字母畫刪除線，D-145，使用者 2026-10-28）；
   // 放在同一行，打字時不多冒出一行把下面往鍵盤後推。
   const live = typing?.step === 3 && typing.live?.typed.length ? typing.live : null;
@@ -484,7 +484,7 @@ function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, s
       {/* 背面補充開頭的「記憶錨點：」「例句：」這類名稱自己一行，內容從下一行開始（D-145，iPhone 回饋） */}
       {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => {
         const { label, body } = extraLabel(extra);
-        // 英文句子和中文翻譯各一行（D-171），喇叭留在英文那一行。
+        // 英文句子和中文翻譯各一行（D-172），喇叭留在英文那一行。
         const { line, translation } = splitTranslation(body);
         return <div key={index} className="ec-ex-item">
           {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
