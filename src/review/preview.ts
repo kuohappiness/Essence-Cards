@@ -126,7 +126,6 @@ export function createPreview(options: PreviewOptions): Session | null {
       go(index + 1);
       return true;
     },
-    rateOnly: () => false,
     back() { if (index > 0) go(index - 1); },
     forward() { if (index < cards.length) go(index + 1); },
     toCurrent() {},

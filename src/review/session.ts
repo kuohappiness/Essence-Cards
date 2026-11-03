@@ -28,7 +28,7 @@ export interface TypedView {
   first: StepResult | null;
   /** 第 2 步的結果；跳過第 2 步是 not-needed，還沒到或第 1 步拼對是 null。 */
   second: RetryResult | null;
-  /** 第 2 步標「錯誤」（打叉的圖示，D-145）：第 1 步拼錯進來才標，按「沒印象」進來不標。 */
+  /** 第 2、3 步標「錯誤」（打叉的圖示，D-145、D-171）：拼錯進來才標，按「沒印象」進來不標。 */
   notice: boolean;
   /** 第 2 步的原形提示；其他步 null。 */
   hint: string | null;
@@ -128,11 +128,6 @@ export interface Session {
   skip(): void;
   /** 自評；回看時是改評分。回傳有沒有真的算數（0.3 秒內、不能按的評分不算）。 */
   rate(rating: Rating): boolean;
-  /**
-   * 只剩一個自評可選時（打字卡第 1 步按了「沒印象」，三步走完）直接記下（D-145）：答案已經看過、打過，不受翻面後 0.3 秒的限制。
-   * 其他情況（還沒走完、有兩個以上可選、回看中）不記，回傳 false。
-   */
-  rateOnly(): boolean;
   back(): void;
   forward(): void;
   toCurrent(): void;
@@ -319,11 +314,11 @@ export function createSession(options: SessionOptions): Session {
   }
 
   /** 進入第 3 步：答案與背面出現、顯示最後一次打的字和最接近答案的比對；自動朗讀在這時念（D-121）。 */
-  function enterStep3(typed: TypedView, card: Card, lastInput: string): void {
+  function enterStep3(typed: TypedView, card: Card, lastInput: string, misspelled: boolean): void {
     const answers = answersOf(card);
     typed.step = 3;
     typed.hint = null;
-    typed.notice = false;
+    typed.notice = misspelled;
     typed.answer = answers[0] ?? '';
     typed.copy = closest(lastInput, answers);
     typed.attempt = spelling(lastInput, typed.copy);
@@ -376,11 +371,11 @@ export function createSession(options: SessionOptions): Session {
         typed.firstAttempt = spelling(text, closest(text, answers));
         const hint = hintOf(card);
         if (hint !== null) { typed.step = 2; typed.hint = hint; typed.notice = true; typed.input = ''; }
-        else { typed.second = 'not-needed'; enterStep3(typed, card, text); }
+        else { typed.second = 'not-needed'; enterStep3(typed, card, text, true); }
       }
     } else {
       if (ok) { typed.second = 'right'; finish(typed, card, matched, true); }
-      else { typed.second = 'wrong'; enterStep3(typed, card, text); }
+      else { typed.second = 'wrong'; enterStep3(typed, card, text, true); }
     }
     notify();
   }
@@ -403,10 +398,10 @@ export function createSession(options: SessionOptions): Session {
       typed.firstAttempt = spelling(text, closest(text, answersOf(card)));
       const hint = hintOf(card);
       if (hint !== null) { typed.step = 2; typed.hint = hint; typed.notice = false; typed.input = ''; }
-      else { typed.second = 'not-needed'; enterStep3(typed, card, text); }
+      else { typed.second = 'not-needed'; enterStep3(typed, card, text, false); }
     } else {
       typed.second = 'skip';
-      enterStep3(typed, card, text);
+      enterStep3(typed, card, text, false);
     }
     notify();
   }
@@ -441,14 +436,6 @@ export function createSession(options: SessionOptions): Session {
     load();
     notify();
     return true;
-  }
-
-  function rateOnly(): boolean {
-    if (!current?.typed?.finished || viewing !== null) return false;
-    const allowed = allowedFor(current.typed.first);
-    if (allowed.length !== 1) return false;
-    current.revealedAt = null;
-    return rate(allowed[0]);
   }
 
   /**
@@ -526,7 +513,7 @@ export function createSession(options: SessionOptions): Session {
   return {
     view, ready: () => readyPromise,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    reveal, input, submit, skip, rate, rateOnly, back, forward, toCurrent, continueWith, pause, resume,
+    reveal, input, submit, skip, rate, back, forward, toCurrent, continueWith, pause, resume,
     close() { closed = true; unsubscribe(); done.length = 0; current = null; listeners.clear(); },
     history: () => done,
     pick: () => pick,

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, tailStart, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, splitTranslation, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -117,6 +117,29 @@ void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只
   assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
   assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
   assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
+});
+
+void test('D-171 英文句子後面緊接中文翻譯：分成兩行；其他照原文一行', () => {
+  const two = (line: string, translation: string): { line: string; translation: string } => ({ line, translation });
+  assert.deepEqual(splitTranslation('Can you lend me your pen? 你可以借我你的筆嗎？'), two('Can you lend me your pen?', '你可以借我你的筆嗎？'));
+  assert.deepEqual(splitTranslation('She bought a book. Tom sold it! 她買了書，Tom 把它賣了。'), two('She bought a book. Tom sold it!', '她買了書，Tom 把它賣了。'), '英文有好幾句；中文裡有英文');
+  assert.deepEqual(splitTranslation('He left.他走了。'), two('He left.', '他走了。'), '句點和中文之間沒有空格');
+  assert.deepEqual(splitTranslation('He left.   他走了。'), two('He left.', '他走了。'), '多按的空格');
+  assert.deepEqual(splitTranslation('Is it OK？ 可以嗎？'), two('Is it OK？', '可以嗎？'), '全形問號');
+  assert.deepEqual(splitTranslation('**She** said "hi." 她說「嗨」。'), two('**She** said "hi."', '她說「嗨」。'), '粗體開頭、句點在引號裡');
+  assert.deepEqual(splitTranslation('She **left.** 她離開了。'), two('She **left.**', '她離開了。'), '句點在粗體裡');
+  assert.deepEqual(splitTranslation('He said hi. 「嗨」他說。'), two('He said hi.', '「嗨」他說。'), '翻譯以引號開頭');
+  const one = (text: string): void => { assert.deepEqual(splitTranslation(text), { line: text, translation: null }, text); };
+  one('go 的過去式不規則：go → went → gone');
+  one('look after 照顧');
+  one('She bought a book 她買了一本書');
+  one('我昨天買了一本書。I bought a book yesterday.');
+  one('made up his mind 和 made his mind up 都對');
+  one('She bought a book.');
+  one('She bought a book. 3 本');
+  one('易混淆 lend（借出）');
+  one('![[W6 擴散示意圖.svg]]');
+  one('');
 });
 
 void test('D-145 背面補充的名稱自己一行：一到六個字、不含空白，緊接全形冒號；其他照原文', () => {

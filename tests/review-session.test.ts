@@ -180,7 +180,7 @@ void test('R5 第 1 步拼錯 → 第 2 步拼錯 → 第 3 步顯示比對（ma
   s.input('made up my mind'); s.submit();
   s.input('made up his mand'); s.submit();
   let view = typed(s.view());
-  assert.deepEqual([view.step, view.first, view.second, view.hint, view.notice, view.input], [3, 'wrong', 'wrong', null, false, '']);
+  assert.deepEqual([view.step, view.first, view.second, view.hint, view.notice, view.input], [3, 'wrong', 'wrong', null, true, '']);
   assert.deepEqual(view.attempt?.typed.filter(l => l.bad).map(l => l.char), ['a']);
   assert.deepEqual(view.attempt?.expected.filter(l => l.bad).map(l => l.char), ['i']);
   s.input('made up his mnd');
@@ -198,6 +198,31 @@ void test('R5 第 1 步拼錯 → 第 2 步拼錯 → 第 3 步顯示比對（ma
   assert.deepEqual(card(s.view()).allowed, ['miss', 'near']);
   await rateLater(h, s, 'near');
   assert.ok(h.log()[0].includes('"typed":"wrong","retry":"wrong"'));
+});
+
+void test('D-171 進第 3 步：拼錯進來標「錯誤」（直接照打的卡也標），按「沒印象」進來不標；走完就不標', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '英文' });
+  // z1 有原形提示：第 1 步按「沒印象」、第 2 步再按「沒印象」，一路沒拼過。
+  s.skip();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [2, false]);
+  s.skip();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, false], '兩步都按「沒印象」');
+  s.input('made up his mind'); s.submit();
+  await rateLater(h, s, 'miss');
+  // z2 的原形就是答案：第 1 步拼錯直接照打。
+  assert.equal(lt(s.view()), 'z2');
+  s.input('borow'); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, true], '直接照打的卡拼錯');
+  s.input('borox'); s.submit();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, true], '照打還是不對：照舊標著');
+  s.input('borrow'); s.submit();
+  assert.deepEqual([typed(s.view()).finished, typed(s.view()).notice], [true, false], '走完就不標');
+  await rateLater(h, s, 'near');
+  // z3 直接照打的卡，第 1 步按「沒印象」。
+  assert.equal(lt(s.view()), 'z3');
+  s.skip();
+  assert.deepEqual([typed(s.view()).step, typed(s.view()).notice], [3, false], '直接照打的卡按「沒印象」');
 });
 
 void test('R5 原形等於答案（borrow）或去掉括號後等於答案（light）：第 1 步拼錯直接第 3 步，retry: not-needed', async t => {
@@ -296,8 +321,7 @@ void test('R5 D-158 照打送出一次還是不對才能跳過：按了這張結
   s.skip(); s.input('lite'); s.submit();
   s.skip();
   assert.deepEqual([typed(s.view()).finished, card(s.view()).allowed], [true, ['miss']]);
-  assert.equal(s.rateOnly(), true);
-  await h.state.flush();
+  await rateLater(h, s, 'miss');
   assert.ok(h.log()[2].endsWith(',"typed":"skip","retry":"not-needed"}'), h.log()[2]);
 });
 

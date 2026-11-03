@@ -2,58 +2,57 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSpeech } from '../src/ui/speech.ts';
 
-// D-145：只剩一個自評時，等語音念完答案與例句再換下一張（whenIdle）。用假的 speechSynthesis 測：念完、被停掉、舊的段落晚回報、取消。
+// 用假的 speechSynthesis 測：念哪幾段、先停掉正在念的、沒有英文語音時（D-082、D-116）。
 
 class Utterance {
   lang = '';
-  onend: (() => void) | null = null;
-  onerror: (() => void) | null = null;
   readonly text: string;
   constructor(text: string) { this.text = text; }
 }
-function fakeEngine(): { spoken: Utterance[]; cancel(): void; speak(u: Utterance): void; getVoices(): { lang: string }[] } {
-  return { spoken: [], cancel() {}, speak(u) { this.spoken.push(u); }, getVoices: () => [{ lang: 'en-US' }] };
+function fakeEngine(voices: { lang: string }[]): { spoken: Utterance[]; cancels: number; cancel(): void; speak(u: Utterance): void; getVoices(): { lang: string }[] } {
+  return { spoken: [], cancels: 0, cancel() { this.cancels++; }, speak(u) { this.spoken.push(u); }, getVoices: () => voices };
 }
-
-void test('whenIdle：沒在念時馬上回報；念兩段要兩段都念完才回報；上一次 say 的段落晚回報不算；stop 取消等待、不算念完（Codex 審查 F1）', () => {
-  const engine = fakeEngine();
+function withEngine(engine: ReturnType<typeof fakeEngine>, run: () => void): void {
   const scope = globalThis as unknown as { window?: unknown; SpeechSynthesisUtterance?: unknown };
   scope.window = { speechSynthesis: engine };
   scope.SpeechSynthesisUtterance = Utterance;
-  try {
-    const speech = createSpeech(() => {});
-    let idle = 0;
-    speech.whenIdle(() => { idle++; });
-    assert.equal(idle, 1, '沒在念：馬上');
-
-    speech.say(['went', 'I went to the park yesterday.']);
-    speech.whenIdle(() => { idle++; });
-    assert.equal(idle, 1, '還在念');
-    engine.spoken[0].onend?.();
-    assert.equal(idle, 1, '念完第一段還不算');
-    engine.spoken[1].onend?.();
-    assert.equal(idle, 2, '兩段都念完');
-
-    speech.say(['borrow']);
-    const old = engine.spoken[2];
-    speech.whenIdle(() => { idle++; });
-    speech.say(['lend']);
-    old.onerror?.();
-    assert.equal(idle, 2, '被新的 say 取消的段落晚回報：不算念完');
-    speech.stop();
-    assert.equal(idle, 2, 'stop：取消等待，不呼叫（關掉畫面、切到背景不能因此換卡）');
-    engine.spoken[3].onend?.();
-    assert.equal(idle, 2, '被停掉的段落晚回報也不呼叫');
-    speech.whenIdle(() => { idle++; });
-    assert.equal(idle, 3, 'stop 之後沒在念：新的等待馬上回報');
-
-    speech.say(['gone']);
-    const cancel = speech.whenIdle(() => { idle++; });
-    cancel();
-    engine.spoken[4].onend?.();
-    assert.equal(idle, 3, '取消的等待念完也不呼叫');
-  } finally {
+  try { run(); } finally {
     delete scope.window;
     delete scope.SpeechSynthesisUtterance;
   }
+}
+
+void test('say 先停掉正在念的，再用 en-US 依序念非空白的段落；stop 停掉', () => {
+  const engine = fakeEngine([{ lang: 'en-US' }]);
+  withEngine(engine, () => {
+    const speech = createSpeech(() => { assert.fail('有英文語音，不提示'); });
+    speech.say(['went', ' ', 'I went to the park yesterday.']);
+    assert.deepEqual(engine.spoken.map(u => [u.text, u.lang]), [['went', 'en-US'], ['I went to the park yesterday.', 'en-US']]);
+    assert.equal(engine.cancels, 1);
+    speech.stop();
+    assert.equal(engine.cancels, 2);
+  });
+});
+
+void test('沒有英文語音：提示一次，不念；語音清單還沒載入（空的）時當作有', () => {
+  const engine = fakeEngine([{ lang: 'zh-TW' }]);
+  withEngine(engine, () => {
+    let missing = 0;
+    const speech = createSpeech(() => { missing++; });
+    speech.say(['went']);
+    speech.say(['gone']);
+    assert.equal(missing, 1);
+    assert.deepEqual(engine.spoken, []);
+  });
+  const loading = fakeEngine([]);
+  withEngine(loading, () => {
+    createSpeech(() => { assert.fail('清單是空的，不提示'); }).say(['went']);
+    assert.equal(loading.spoken.length, 1);
+  });
+});
+
+void test('沒有 speechSynthesis：say 與 stop 都不拋錯', () => {
+  const speech = createSpeech(() => {});
+  speech.say(['went']);
+  speech.stop();
 });

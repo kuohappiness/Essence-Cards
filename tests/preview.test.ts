@@ -107,7 +107,6 @@ void test('打字卡不用打字也能看答案：按鈕寫「顯示答案」；
   wrong.submit();
   assert.equal(card(wrong.view()).typed?.first, 'wrong');
   assert.equal(card(wrong.view()).typed?.answer, 'borrow');
-  assert.equal(wrong.rateOnly(), false);
   assert.equal(wrong.rate('good'), true);
 });
 
