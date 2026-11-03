@@ -8,7 +8,7 @@
 
 **嚴重度**：P1 只給真實家長可能寫出、而且會默默算錯或擋住使用的字串；要刻意構造的請標明並放在最後。沒有 P1、P2 就直接寫「通過」。
 
-**使用者已決定、不用再提**：`10-15` 維持沿用、`2之1` 算同一個單元、全形括號裡的字不動、網址裡的逗號算網址的一部分。
+**使用者已決定、不用再提**：`10-15` 維持沿用、`2之1` 算同一個單元、全形括號裡的字不動、網址裡的逗號算網址的一部分、Markdown 路徑的括號只支援到兩層。
 
 **驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 1.15.0、開發版 `0.2.0+8c27a45.dirty` 上 `entry` 44 項 true、0 項 false，`entry-unread` 通過，見[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
 
