@@ -352,6 +352,16 @@ void test('D-172 例句的英文和中文翻譯各一行，喇叭在英文那一
   assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 She went home.']);
 });
 
+// Codex L2 的待釐清，使用者選「只有英文那行有」：翻譯裡有英文也不多一顆喇叭。
+void test('D-172 翻譯裡有英文：翻譯那一行沒有喇叭', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 例句：She went home. 她和 Tom 回家了。', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-2), ['She went home.', '她和 Tom 回家了。']);
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 She went home.']);
+});
+
 void test('D-145 第 3 步照打的對象是「正確拼字」那一行（最接近的答案）：照打它不標錯，走完線上寫它', async t => {
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: englishText, [PHONE]: reviewed(['e1', 'e2', 'e3']) } });
   assert.equal(lt(o.session), 'z1');

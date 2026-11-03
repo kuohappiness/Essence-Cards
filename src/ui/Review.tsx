@@ -489,7 +489,7 @@ function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, s
         return <div key={index} className="ec-ex-item">
           {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
           <div className="ec-ex-row"><Markdown app={app} text={line} sourcePath={card.deck} revealed tail={<Speaker texts={speak(line)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>
-          {translation && <div className="ec-ex-row" lang="zh-Hant"><Markdown app={app} text={translation} sourcePath={card.deck} revealed tail={<Speaker texts={speak(translation)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>}
+          {translation && <div className="ec-ex-row" lang="zh-Hant"><Markdown app={app} text={translation} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} /></div>}
         </div>;
       })}</div>}
       {hasSource && <div className="ec-tools">
