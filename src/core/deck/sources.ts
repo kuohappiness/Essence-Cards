@@ -400,13 +400,17 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   }
   const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
   // 讀完才去重：`本篇` 這種字會影響後面的意思（D-167 第 6 點）。只顯示的項目照文字比。
-  const seen = new Set<string>();
-  return items.map(({ codeLike, ...item }) => anyRead && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true as const } : item).filter(item => {
+  // 同一個目標寫兩次時按鈕留一個，診斷與確認依據不丟：後面的有問題就照它提示；有一項明寫了學期就不算沿用。
+  const kept = new Map<string, SourceItem>();
+  for (const { codeLike, ...item } of items) {
+    const marked: SourceItem = anyRead && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true } : item;
     const key = item.link.kind === 'text' ? item.text : JSON.stringify(item.link);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const first = kept.get(key);
+    if (!first) { kept.set(key, marked); continue; }
+    if (marked.problem && !first.problem) { first.text = marked.text; first.problem = marked.problem; }
+    if (!marked.needsUnit) delete first.needsUnit;
+  }
+  return [...kept.values()];
 }
 
 /** 「編號 名稱」的切法（§9-2）：第一個空白前是編號，半形空白、全形空白、Tab 都算；屬性和出處共用。 */
