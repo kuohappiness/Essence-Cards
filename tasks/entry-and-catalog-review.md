@@ -1,6 +1,26 @@
 # 入口與目錄第一批：L2 審查請求（給新開的 Codex session）
 
-狀態：第四輪待審：第三輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+狀態：第五輪待審：第四輪發現的修正（[D-167](../docs/decisions.md#d-167-出處的讀法不用猜的直接讀懂要猜的讓家長選)，下面第一節）；前兩輪的[報告與回應](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)。只審查，不改產品程式。
+
+## 再審（第五輪）：第四輪發現的修正
+
+只審第四輪報告的修正與相鄰案例，不必整包重審。基準 `14c4816`（第四輪審完的版本），待審分支 `claude/entry-and-catalog` 的最新 commit。逐項的處理與 commit 在[討論稿的〈Claude 回應 Codex 第四輪〉](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md#claude-回應-codex-第四輪2026-11-03>)。
+
+**請特別查**：
+
+- **歸屬**：這輪的修正有沒有帶進新的默默多算或默默漏算。`namesOther`、網址的 `hidden`、去重時合併診斷、零寬字元提早拿掉。
+- **`rawCutter`** 切出來的原文對不對；超過 `RAW_CUT_LIMIT` 時退回的文字。
+- **§9-1 的三個軸**：夠不夠第二批用。
+
+**實作者的取捨（不同意請說）**：`https://x.test,國二上 1-8` 可能真的是兩項，現在不算 1-8、有提示；Markdown 路徑的括號只認到兩層。
+
+**使用者已決定、不用再提**：`10-15` 維持沿用、`2之1` 算同一個單元、全形括號裡的字不動。除非有比已寫明的代價更嚴重的後果，再具體說。
+
+**嚴重度**：只把真實家長可能寫出、而且會默默算錯或擋住使用的字串列成 P1；要刻意構造才會發生的，請標明「刻意構造」，放在最後，由使用者決定要不要修。
+
+**驗證方式**：`npm run check`；`node experiments/source-reading/product-check.mjs "$(pwd)"`（不是盲測，只當回歸）。Windows 版 Obsidian 的結果寫在[任務說明〈結果〉](entry-and-catalog.md#結果)。沒跑 iPhone。
+
+回報照下面〈回報〉的格式，貼回對話或接在討論稿最後都可以；所有檔案都在這個 worktree，不要寫到主資料夾。
 
 ## 再審（第四輪）：第三輪發現的修正
 

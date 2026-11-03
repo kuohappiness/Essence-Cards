@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
+import { buildIndex } from '../src/core/catalog/index.ts';
 import { parseDeck, sourceLabel, sourceLinks } from '../src/core/deck/index.ts';
 import { createState } from '../src/state/index.ts';
 import { firstMaterial, resolveSource, unreadableSources, type UnitDecks } from '../src/ui/sources.ts';
@@ -140,6 +141,41 @@ void test('D-167 只有字：同一欄有讀懂別的就是說明，不提示；
   assert.deepEqual(unreadable('老師說過 p.44', material), ['老師說過 p.44']);
   assert.deepEqual(unreadable('課本第44頁、Workbook p.12', material), []);
   assert.deepEqual(unreadable('小五上 p.15', material), ['小五上 p.15']);
+});
+
+// Codex L2 第三、四輪的字串：單元都有卡組、材料都在，直接看目標算進哪些單元、提示了什麼。
+void test('D-167 從筆記到目錄與提示：目標算進哪些單元、提示哪些字', () => {
+  const head = (code: string, material: string): string => `---\n年級學期: 國二上\n科目: 自然\n單元: "${code}"\n材料: "[[${material}]]"\n---\n`;
+  const others = ['1-3', '1-8'].map(code => ({ path: `卡組/${code}.md`, deck: parseDeck(head(code, '乙') + '- 別的 ^b' + code.replace('-', '') + 'xyz\n    - 問 :: 答\n') }));
+  const { app } = appWith({ '材料/甲.md': { headings: ['睡眠的階段'] }, '材料/乙.md': { headings: [] } });
+  const cases: [string, string[], string[]][] = [
+    ['https://example.test/a,國二上1-3', [], ['https://example.test/a,國二上1-3']],
+    ['https://example.test/a,b', [], []],
+    ['https://example.test/a、國二上1-3', ['1-3'], []],
+    ['https://example.test/a, 國二上1-3', ['1-3'], []],
+    ['國二上1-3、https://example.test/a﹐國二上1-8', ['1-3', '1-8'], []],
+    ['國二上 1-3、不是國二上 1-8', ['1-3'], ['不是國二上 1-8']],
+    ['國二上 1-3、不是 p.46、p.45', ['1-3'], ['不是 p.46']],
+    ['國二上 1-3，不算這個', [], ['國二上 1-3', '不算這個']],
+    ['國二上 1-3 p.20，老師說不用背', ['1-3'], ['老師說不用背']],
+    ['[教材](版本(甲),國二上1-3p.44)', [], []],
+    ['[教材](100%.md)', [], []],
+    ['「附錄,國二上 1-3 p.20」', [], ['「附錄,國二上 1-3 p.20」']],
+    ['「睡眠的階段」', [], []],
+    ['國二上 1-3, 第5題, 1-8', ['1-3'], ['1-8']],
+    ['國二上 1-3、溶解, 1-8', ['1-3'], ['溶解, 1-8']],
+    ['p.44、p.44 和 1-8', [], ['p.44 和 1-8']],
+    ['國二上 1-3、1-8 p.44、國二上 1-8 p.44', ['1-3', '1-8'], []],
+    ['本篇、國二上 1-3、本篇、p.44', ['1-3'], []],
+    ['1-3 p.20、L1', [], ['1-3 p.20', 'L1']],
+  ];
+  for (const [text, counted, hinted] of cases) {
+    const deck = parseDeck(head('2-2', '甲') + `- 目標 ^abc123\n    - 問 :: 答\n    - 出處：${text}\n`);
+    const index = buildIndex([{ path: '卡組/本篇.md', deck }, ...others]);
+    assert.deepEqual(['1-3', '1-8'].filter(code => index.find('國二上', '自然', code)?.targets.some(each => each.id === 'abc123')), counted, text);
+    const units: UnitDecks = (term, code) => (index.find(term, '自然', code)?.decks ?? []).map(each => ({ path: each.path, materials: ['[[乙]]'], name: each.name }));
+    assert.deepEqual(unreadableSources(app, '卡組/本篇.md', deck, units).map(each => each.text), hinted, text);
+  }
 });
 
 void test('D-167 否定字只提示：材料裡有同名標題也不連；像編號的字併回舊標題時還是要提示', () => {
