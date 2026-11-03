@@ -2,7 +2,8 @@ import type { Prompt } from '../deck/index.ts';
 import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { dayOf, dayStart } from './time.ts';
-import type { Next, Pick, Progress, QueueItem, ReviewEntry, Slot, SubjectRow, Today, TodayInput } from './types.ts';
+import { practiceNext, practiceProgress } from './practice.ts';
+import type { Next, Pick, Progress, QueueItem, ReviewEntry, ScopeCount, Slot, SubjectRow, Today, TodayInput } from './types.ts';
 
 interface Answers {
   /** 今天的作答，不含錯題補強，依時間排。 */
@@ -32,7 +33,7 @@ function slotOf(today: Today, lt: string): Slot {
   return slot;
 }
 
-const wrong = (entry: ReviewEntry | undefined): boolean => entry?.r === 'miss' || entry?.r === 'near';
+export const wrong = (entry: ReviewEntry | undefined): boolean => entry?.r === 'miss' || entry?.r === 'near';
 
 /** 等再出的時間：今天以前的記憶依序套上今天的作答。 */
 function againAt(slot: Slot, entries: readonly ReviewEntry[]): number {
@@ -41,7 +42,7 @@ function againAt(slot: Slot, entries: readonly ReviewEntry[]): number {
   return dueAt(memory, slot.retention);
 }
 
-function choosePrompt(slot: Slot, entries: readonly ReviewEntry[]): Prompt {
+export function choosePrompt(slot: Slot, entries: readonly ReviewEntry[]): Prompt {
   const { prompts } = slot.target;
   const last = entries.at(-1);
   if (last && wrong(last)) {
@@ -63,11 +64,11 @@ function choosePrompt(slot: Slot, entries: readonly ReviewEntry[]): Prompt {
 
 export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   if (input.offset !== today.offset || dayOf(input.now, input.offset) !== today.day) return { kind: 'stale' };
+  if ('targets' in pick && 'since' in pick) return practiceNext(input, pick.targets, pick.since);
   const { valid, any } = answersOf(today, input);
   let scope: QueueItem[];
   if ('more' in pick) scope = today.more.filter(item => { const pair = slotOf(today, item.lt).pair; return pair === null || !valid.has(pair); });
-  else if ('deck' in pick) scope = today.share.filter(item => item.deck === pick.deck);
-  else scope = today.share.filter(item => item.subject === pick.subject);
+  else scope = shareOf(today, pick);
 
   let ready: { item: QueueItem; at: number } | null = null;
   let waiting: { item: QueueItem; at: number } | null = null;
@@ -90,6 +91,28 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
     typed: prompt.kind === 'qa' && prompt.typed !== null,
     early: !ready && !fresh,
   } };
+}
+
+/** 今天的份裡屬於這個範圍的；再複習一些不算。 */
+function shareOf(today: Today, pick: Exclude<Pick, { more: true }>): QueueItem[] {
+  if ('deck' in pick) return today.share.filter(item => item.deck === pick.deck);
+  if ('targets' in pick) { const ids = new Set(pick.targets); return today.share.filter(item => ids.has(item.lt)); }
+  return today.share.filter(item => item.subject === pick.subject);
+}
+
+/** 這個範圍現在的總數與完成數；答錯再出不增加總數，答對才算完成。再複習一些是 null。 */
+export function scopeCount(today: Today, input: TodayInput, pick: Pick): ScopeCount | null {
+  if ('more' in pick) return null;
+  if ('targets' in pick && 'since' in pick) return practiceProgress(input, pick.targets, pick.since);
+  const { valid } = answersOf(today, input);
+  const items = shareOf(today, pick);
+  return { done: items.filter(item => { const last = valid.get(item.lt)?.at(-1); return last !== undefined && !wrong(last); }).length, total: items.length };
+}
+
+/** 今天的份裡還沒完成的目標（單元的當日卡 N）。 */
+export function todayLeft(today: Today, input: TodayInput): Set<string> {
+  const { valid } = answersOf(today, input);
+  return new Set(today.share.filter(item => { const last = valid.get(item.lt)?.at(-1); return !last || wrong(last); }).map(item => item.lt));
 }
 
 export function progress(today: Today, input: TodayInput): Progress {

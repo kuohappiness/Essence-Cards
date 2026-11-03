@@ -20,6 +20,7 @@ export interface ReviewHost extends Plugin {
   device: string;
   state: State | null;
   startReview(pick: Pick): ReviewHandle | null;
+  entry: { close(): void } | null;
   on(kind: 'review', listener: (value: ReviewEvent) => void): () => void;
 }
 /** 寫一個結果檔，回傳路徑（dev.ts 的 writeResult）。 */
@@ -538,14 +539,19 @@ async function shootUi(host: ReviewHost, folder: string, base: State, visibility
       path = path ? path + '/' + part : part;
       if (!host.app.vault.getAbstractFileByPath(path)) await host.app.vault.createFolder(path);
     }
-    // 暫時的開始方式：命令打開選單（外掛真正的 state），截圖後關掉。
+    // 入口與目錄（外掛真正的 state），截圖後關掉。
     const commands = (host.app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands;
-    commands.executeCommandById(host.manifest.id + ':start-review');
-    await until(() => !!document.querySelector('.prompt'));
-    await record('開始複習的選單', { rows: Array.from(document.querySelectorAll('.prompt .suggestion-item'), text), ribbon: !!document.querySelector('.side-dock-ribbon-action[aria-label="Essence Cards：開始複習"]') }, '選單');
-    document.querySelector<HTMLElement>('.prompt input')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    commands.executeCommandById(host.manifest.id + ':open-entry');
+    await until(() => !!document.querySelector('.ec-entry'));
+    await record('入口', { rows: Array.from(document.querySelectorAll('.ec-sb'), text), ribbon: !!document.querySelector('.side-dock-ribbon-action[aria-label="Essence Cards：打開入口"]') }, '入口');
+    commands.executeCommandById(host.manifest.id + ':open-catalog');
+    await until(() => !!document.querySelector('.ec-en-title'));
+    await record('目錄', { rows: Array.from(document.querySelectorAll('.ec-tr-u'), text) }, '目錄');
+    document.querySelector<HTMLElement>('.ec-tr-name')?.click();
     await settle();
-    if (document.querySelector('.prompt')) document.querySelector('.modal-container')?.remove();
+    await record('目錄展開', { buttons: Array.from(document.querySelectorAll('.ec-u-btn'), text), targets: Array.from(document.querySelectorAll('.ec-tr-t'), text) }, '目錄展開');
+    host.entry?.close();
+    await settle();
 
     // 自然：打開時的焦點、Space 翻面、0.3 秒、數字鍵自評。
     handle = openReview({ app: host.app, state, pick: { subject: '自然' }, onEvent: measure.onEvent });

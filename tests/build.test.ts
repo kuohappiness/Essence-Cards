@@ -158,7 +158,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/move.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-backup.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-duplicates.ts', 'src/obsidian/dev-errors.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/move.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-backup.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-duplicates.ts', 'src/obsidian/dev-entry.ts', 'src/obsidian/dev-errors.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {
@@ -259,4 +259,11 @@ void test('D-148 手機替身載入正式的 main.js：不 require Node 或 Elec
   assert.ok(desktop.stub.required.includes('node:fs/promises'));
   assert.equal(desktop.stub.timers().registerInterval, 1);
   assert.equal(desktop.plugin.backup?.runner.status().ready, true);
+});
+
+void test('字標（D-095）：只留用到的字，放進 styles.css 不超過 20 KB；OFL 授權文字在 repo', async () => {
+  const css = await readFile(join(root, 'src/ui/wordmark.css'), 'utf8');
+  assert.ok(Buffer.byteLength(css) < 20_000, String(Buffer.byteLength(css)));
+  assert.match(css, /font-family: "Essence Cards Mark"; font-style: italic; font-weight: 500/);
+  assert.match(await readFile(join(root, 'src/ui/fonts/OFL.txt'), 'utf8'), /SIL Open Font License/);
 });

@@ -33,6 +33,10 @@ export interface ReadsOptions {
   batch: (texts: Texts, logs: Texts) => () => void;
   /** 這一篇這次讀不到：等核對的寫入先回覆。 */
   unreadable: (path: string) => void;
+  /** 讀取一直沒回來多久算讀不到（毫秒）。 */
+  stuckAfter: number;
+  /** unread 的內容變了（多了或少了）：只有入口與狀態列的提醒聽，不經 onChange，存檔按鈕等既有的監聽者不受影響。 */
+  unreadChanged: () => void;
 }
 
 export type Reads = ReturnType<typeof createReads>;
@@ -59,6 +63,16 @@ export function createReads(options: ReadsOptions) {
   /** 正在讀的批數（0 或 1：一次只讀一批）。 */
   let reading = 0;
   let unwatch: (() => void) | null = null;
+  /** 判定讀取卡住的計時（一批一個）；read 結束或關閉時清掉。 */
+  const stuckTimers = new Set<ReturnType<typeof setTimeout>>();
+  let lastUnread = '';
+  /** unread 變了才通知：一批可能連續加減好幾次。 */
+  function unreadCheck(): void {
+    const now = [...unread].sort().join('\n');
+    if (now === lastUnread) return;
+    lastUnread = now;
+    options.unreadChanged();
+  }
   // 連續讀不到的次數；決定下一次重試要等多久（Codex 審查 W5 的 F3：不能只等下一次通知）。
   let failures = 0;
   const retryDelay = (): number => Math.min(60_000, 1000 * 2 ** Math.max(0, failures - 1));
@@ -116,7 +130,20 @@ export function createReads(options: ReadsOptions) {
   async function read(paths: readonly string[]): Promise<void> {
     if (life.closed) return;
     const at = paths.map(path => marks.get(path));
-    const results = await Promise.allSettled(paths.map(path => files.read(path)));
+    // 一直沒回來的讀取也算讀不到（D-154、任務說明 §8）：iCloud 的佔位檔可能讓 read 一直不回來，unread() 不能只看讀失敗的。
+    const settled = new Set<string>();
+    const stuck = setTimeout(() => {
+      stuckTimers.delete(stuck);
+      for (const path of paths) if (!settled.has(path)) unread.add(path);
+      unreadCheck();
+    }, options.stuckAfter);
+    stuckTimers.add(stuck);
+    const reading = paths.map(path => files.read(path));
+    // 另外接，不串在讀取上：讀完之後的先後不能因為多了這個計時而改變。
+    reading.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); }; each.then(done, done); });
+    const results = await Promise.allSettled(reading);
+    clearTimeout(stuck);
+    stuckTimers.delete(stuck);
     if (life.closed) return;
     let failure: { error: unknown } | null = null;
     const texts: Texts = new Map(), logs: Texts = new Map();
@@ -125,6 +152,7 @@ export function createReads(options: ReadsOptions) {
       // 跨過這篇的 I/O（§2 第 3 點）：文字、null、reject 都不用，放回 pending；I/O 結束時已經（或會）排一批讀取。
       if (marks.get(path) !== at[i] || busy.has(path)) {
         pending.add(path);
+        if (result.status === 'fulfilled') unread.delete(path);
         continue;
       }
       if (result.status === 'rejected') {
@@ -146,6 +174,7 @@ export function createReads(options: ReadsOptions) {
       if (timer === null) schedule(retryDelay());
     } else if (!unread.size) failures = 0;
     finish();
+    unreadCheck();
   }
 
   /** 第一次載入（§2-1）：先監看；只有列不出來才整個重試，close() 之後放棄。列出來之後交給 load。 */
@@ -203,6 +232,8 @@ export function createReads(options: ReadsOptions) {
     stop(): void {
       if (timer !== null) clearTimeout(timer);
       timer = null;
+      for (const stuck of stuckTimers) clearTimeout(stuck);
+      stuckTimers.clear();
       wake?.();
       unwatch?.();
       unwatch = null;

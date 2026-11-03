@@ -1,5 +1,6 @@
 import { dayStart } from '../core/study/index.ts';
 import type { History, Pick, Progress, Today } from '../core/study/index.ts';
+import type { StudyPick } from '../state/index.ts';
 
 /** 完成畫面（W6 §2-6、D-070、D-120）。 */
 export interface DoneView {
@@ -26,8 +27,17 @@ export const subjectName = (subject: string | null): string => subject ?? '其�
 const statsText = ({ count, minutes }: { count: number; minutes: number }): string =>
   `今天複習了 ${String(count)} 張・${minutes < 1 ? '不到 1 分鐘' : '約 ' + String(minutes) + ' 分鐘'}`;
 
-export function doneView(pick: Pick, progress: Progress, stats: { count: number; minutes: number }): DoneView {
+/** 單元與卡組的範圍（任務說明 §5）的標題；其他範圍是 null。 */
+function scopeTitle(pick: StudyPick): string | null {
+  if ('unit' in pick) return 'since' in pick ? '這個單元練完了！' : '這個單元今天的份完成了！';
+  if ('deck' in pick) return 'since' in pick ? '這篇練完了！' : '這一篇今天的份完成了！';
+  return 'targets' in pick ? '這一輪完成了！' : null;
+}
+
+export function doneView(pick: StudyPick, progress: Progress, stats: { count: number; minutes: number }): DoneView {
   if ('more' in pick) return { title: '又多複習了一些', detail: statsText(stats), buttons: [{ kind: 'close', label: '結束複習' }] };
+  const scoped = scopeTitle(pick);
+  if (scoped) return { title: scoped, detail: statsText(stats), buttons: [{ kind: 'close', label: '結束複習' }] };
   const unfinished = progress.subjects.find(row => row.done < row.total);
   if (!unfinished) {
     return { title: '今天的份完成了！', detail: statsText(stats), buttons: [{ kind: 'more', label: '再複習一些', pick: { more: true } }, { kind: 'close', label: '結束複習' }] };

@@ -1,18 +1,17 @@
 import { Notice, type App } from 'obsidian';
 import { createRoot } from 'react-dom/client';
-import type { Pick } from '../core/study/index.ts';
 import { createSession, keyboardFit, type Session } from '../review/index.ts';
-import type { State } from '../state/index.ts';
+import type { State, StudyPick } from '../state/index.ts';
 import { Review, type ReviewEvent, type ReviewProps } from './Review.tsx';
+import { openFullscreen } from './fullscreen.ts';
 import { createSpeech, loadAutoRead, NO_ENGLISH_VOICE, saveAutoRead, type Speech } from './speech.ts';
 
-// 全螢幕（D-109、W6 §3-2）：一層蓋滿整個視窗，直接掛在 document.body，蓋住 Obsidian 的上下欄；
-// 觸控不往外傳給 Obsidian（往右滑才不會打開側欄）；鍵盤焦點留在畫面裡；✕ 或 Esc 離開。
+// 全螢幕的複習畫面（D-109、W6 §3-2）：外殼在 fullscreen.ts；✕ 或 Esc 離開。
 
 export interface OpenOptions {
   app: App;
   state: State;
-  pick: Pick;
+  pick: StudyPick;
   /** 選了科目的時間（performance.now）：量「從選了科目到第一張卡畫好」（L2 自選第 22 點）。 */
   pickedAt?: number;
   speech?: Speech;
@@ -22,38 +21,25 @@ export interface OpenOptions {
   /** 學生在旗子的選單選了一項（D-160）；沒傳就沒有旗子。 */
   onReport?: ReviewProps['onReport'];
   onClose?: () => void;
+  /** 打開出處：複習已經關掉、筆記還沒開的時候呼叫，入口也關掉，最上層才是筆記（任務說明 §1）。 */
+  onLink?: () => void;
 }
 export interface ReviewHandle { session: Session; close(): void }
 
-/** Tab 會停的元素（Obsidian 渲染的連結、音檔也算）。 */
-const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), a[href], audio[controls], [tabindex]:not([tabindex="-1"])';
-
 export function openReview(options: OpenOptions): ReviewHandle {
+  return mount(options, createSession({ state: options.state, pick: options.pick }));
+}
+
+/** 預覽（D-161）：同一個畫面，換一個不寫紀錄的 Session。 */
+export function openPreview(options: Omit<OpenOptions, 'pick' | 'onReport'>, session: Session): ReviewHandle {
+  return mount(options, session);
+}
+
+function mount(options: Omit<OpenOptions, 'pick'>, session: Session): ReviewHandle {
   const { app, state } = options;
   const pickedAt = options.pickedAt ?? performance.now();
-  const element = document.createElement('div');
-  element.className = 'ec-fullscreen';
-  element.tabIndex = -1;
-  // 畫面上的觸控不往外傳；左右滑的 preventDefault 在卡片那一層做。
-  element.addEventListener('touchstart', event => { event.stopPropagation(); }, { passive: true });
-  element.addEventListener('touchmove', event => { event.stopPropagation(); }, { passive: false });
-  element.addEventListener('touchend', event => { event.stopPropagation(); });
-  // 鍵盤焦點留在畫面裡（試作外掛 main.ts 的做法，Codex L2 F6）：Tab 從最後一個、Shift+Tab 從第一個或畫面本身繞到另一端；
-  // 不然焦點跑到被蓋住的 Obsidian（2026-10-27 用 Electron 送真的 Shift+Tab 實測），之後的快捷鍵都到不了複習畫面。
-  element.addEventListener('keydown', event => {
-    if (event.key !== 'Tab') return;
-    // inert 的不算（回報的選單開著時背後那幾塊，Codex L2 的 R1）：Tab 只在選單裡繞。
-    const items = Array.from(element.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(item => item.getClientRects().length > 0 && !item.closest('[inert]'));
-    const index = items.findIndex(item => item === document.activeElement);
-    if (!items.length) { event.preventDefault(); return; }
-    if (event.shiftKey ? index <= 0 : index === -1 || index === items.length - 1) {
-      event.preventDefault();
-      (event.shiftKey ? items[items.length - 1] : items[0]).focus();
-    }
-  });
-  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-  document.body.append(element);
-  const session = createSession({ state, pick: options.pick });
+  const shell = openFullscreen();
+  const { element } = shell;
   const speech = options.speech ?? createSpeech(() => { new Notice(NO_ENGLISH_VOICE); });
   // 複習畫面沒有 error boundary，也不加 fallback 畫面：React 沒接住的錯交給主機（D-155 第 2 點）。有傳 onError 才接，
   // 不然照 React 的預設印在 console。
@@ -119,9 +105,8 @@ export function openReview(options: OpenOptions): ReviewHandle {
       viewport?.removeEventListener('scroll', fit);
       speech.stop();
       root.unmount();
-      element.remove();
       session.close();
-      previous?.focus({ preventScroll: true });
+      shell.close();
       onEvent?.({ kind: 'closed' });
       options.onClose?.();
     },
@@ -131,8 +116,10 @@ export function openReview(options: OpenOptions): ReviewHandle {
     onRenderError={onError && ((error, path) => { onError(error, 'render', path); })}
     onReport={options.onReport} onMenu={open => { menuOpen = open; }}
     close={() => { handle.close(); }}
-    openLink={(linktext, sourcePath) => { handle.close(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
+    openLink={(linktext, sourcePath) => { handle.close(); options.onLink?.(); void app.workspace.openLinkText(linktext, sourcePath, true); }}
     materials={path => state.decks().find(entry => entry.path === path)?.deck.props.materials ?? []}
+    owner={path => state.decks().find(entry => entry.path === path)?.deck.props ?? { term: null, subject: null, unit: null }}
+    units={(path, term, code) => state.unitMaterials(path, term, code)}
     autoRead={{ get: () => loadAutoRead(app), set: on => { saveAutoRead(app, on); } }}
   />);
   element.focus({ preventScroll: true });

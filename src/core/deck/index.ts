@@ -6,4 +6,6 @@ export { setTargetId, blockIds } from './ids.ts';
 export { nameIds } from './markdown.ts';
 export type { NameIds } from './markdown.ts';
 export { isDeckPath, listDeckPaths, readDecks } from './read.ts';
-export type { Deck, DeckProps, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult } from './types.ts';
+export { codeKey, headingKey, sourceLabel, sourceLinks, splitUnit, termKey, termRank } from './sources.ts';
+export type { SourceItem, SourceLink, SourceOwner, SourceProblem } from './sources.ts';
+export type { Deck, DeckProps, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult } from './types.ts';

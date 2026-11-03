@@ -1,7 +1,7 @@
 import { baseForm } from '../core/deck/index.ts';
 import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Pick, Rating } from '../core/study/index.ts';
-import type { State } from '../state/index.ts';
+import type { State, StudyPick } from '../state/index.ts';
 import { crumb } from './crumb.ts';
 import { doneView, todayStats, type DoneView } from './done.ts';
 import { englishParts, fillBlank } from './english.ts';
@@ -48,6 +48,8 @@ export interface TypedView {
   finished: boolean;
   /** 有跳過的按鈕：第 1、2 步是「沒印象」；第 3 步一開始沒有，照打送出一次還是不對之後是「跳過」（D-158）。 */
   canSkip: boolean;
+  /** 跳過的按鈕換一個字（預覽是「顯示答案」，D-161）；沒有就照上面。 */
+  skipLabel?: string;
 }
 
 /** 這一次做過的一張（D-084：回看是「這一次」做過的）。 */
@@ -89,6 +91,8 @@ export interface CardView {
   viewing: { index: number; total: number } | null;
   /** 這一張第幾次從頭出現：切走超過 60 秒回來重新開始時加一（畫面用它換卡）；回看的卡是 0。 */
   shown: number;
+  /** 不作答也能往後的按鈕的字（預覽，D-161）；複習沒有。 */
+  nextLabel?: string;
 }
 interface TopView {
   /** 中間的文字：「還剩 N 張」或「再複習一些」。 */
@@ -98,6 +102,10 @@ interface TopView {
   canBack: boolean;
   /** 回看中：中間換成「回到目前 ›」。 */
   viewing: boolean;
+  /** 不是回看也能往後一張（預覽，D-161）。 */
+  canForward?: boolean;
+  /** 完成畫面也留著中間的文字（預覽一直標「預覽，不記錄」）。 */
+  pinned?: boolean;
 }
 export type View =
   | { kind: 'loading'; top: TopView }
@@ -139,12 +147,12 @@ export interface Session {
   /** 這一次做過的卡（測試與開發命令用）。 */
   history(): readonly DoneCard[];
   /** 目前的 pick（做哪一科或再複習一些）。 */
-  pick(): Pick;
+  pick(): StudyPick;
 }
 
 interface SessionOptions {
   state: State;
-  pick: Pick;
+  pick: StudyPick;
   now?: () => number;
 }
 
@@ -180,7 +188,7 @@ export function allowedFor(first: StepResult | null): readonly Rating[] {
 export function createSession(options: SessionOptions): Session {
   const { state } = options;
   const now = options.now ?? Date.now;
-  let pick = options.pick;
+  let pick: StudyPick = options.pick;
   const listeners = new Set<() => void>();
   const done: DoneCard[] = [];
   let current: Current | null = null;
@@ -242,12 +250,10 @@ export function createSession(options: SessionOptions): Session {
   function top(): TopView {
     const canBack = done.length > 0 && viewing !== 0;
     if (!loaded) return { center: '', fraction: null, canBack: false, viewing: false };
-    if ('more' in pick) return { center: '再複習一些', fraction: null, canBack, viewing: viewing !== null };
-    const progress = state.progress();
-    const subject = 'subject' in pick ? pick.subject : undefined;
-    const row = subject === undefined ? null : progress.subjects.find(r => r.subject === subject);
-    const total = row ? row.total : progress.total, finishedCount = row ? row.done : progress.done;
-    return { center: `還剩 ${String(Math.max(0, total - finishedCount))} 張`, fraction: total ? finishedCount / total : 1, canBack, viewing: viewing !== null };
+    // 目標集合、已完成數、剩餘數和選卡同一份（state.scope，技術債「一次複習的範圍」）。
+    const count = state.scope(pick);
+    if (!count) return { center: '再複習一些', fraction: null, canBack, viewing: viewing !== null };
+    return { center: `還剩 ${String(Math.max(0, count.total - count.done))} 張`, fraction: count.total ? count.done / count.total : 1, canBack, viewing: viewing !== null };
   }
 
   function cardView(): CardView | null {
@@ -491,7 +497,17 @@ export function createSession(options: SessionOptions): Session {
     if (pausedAt === null) return false;
     const away = now() - pausedAt;
     pausedAt = null;
-    if (!current) return false;
+    // 停在完成畫面、跨過清晨 4 點回來：照新的一天重新判斷（技術債「完成畫面跨過 4 點」）。
+    // 沒有變就不通知，畫面留著同一個物件（同一天回來時什麼都沒換）。
+    if (!current) {
+      if (!loaded) return false;
+      const before = view();
+      load();
+      cached = null;
+      if (current || JSON.stringify(view()) !== JSON.stringify(before)) notify();
+      else cached = before;
+      return false;
+    }
     // 沒超過 60 秒也通知一次：畫面重新判斷（例如只剩一個自評、切走前已走完的那張要自動換下一張，D-145）。
     if (away <= AWAY_LIMIT) { notify(); return false; }
     current = present(current.card, current.shown + 1);

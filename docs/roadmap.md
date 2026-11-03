@@ -10,10 +10,10 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 |---|---|---|---|---|
 | iCloud 雲端佔位檔（第一優先） | 已定案（[D-154](decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)）；Windows 實測與存檔受阻的提示已合併進 `main`（`9c07caa`，結果在任務說明〈結果〉） | iPhone 的 E1、E6、E8 在下一次 iPhone 實機測試；說明書的兩段與「電腦的 iCloud 要開著」跟說明書一起寫；技術債三列等觸發點 | iPhone 實機測試 | [任務說明](../tasks/icloud-placeholders.md) |
 | 正式版的錯誤紀錄與回報 | 已合併進 `main`（`87a0d2c`，[D-155](decisions.md#d-155-正式版的錯誤紀錄)、[D-160](decisions.md#d-160-學生在複習畫面回報問題點一個選項記進錯誤紀錄)，Codex L2 五輪後通過）；隨 `0.2.0` 裝到正式使用的 vault（2026-10-31，見已完成） | iPhone 的部分在下一次 iPhone 實機測試；說明書的句子跟說明書一起寫 | iPhone 實機測試 | [任務說明](../tasks/error-log.md) |
-| 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R6 (a) 隨環節 9 的技術債做完（見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時決定要不要加 happy-dom，R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
+| 第一個里程碑的品質檢查 | R1～R5、R7、R8 與 T2 已在 `main` 做完（R5 含 A3，見已完成）；R6 (a) 隨環節 9 的技術債做完（見已完成）；R10 記下即可 | R6 (b)、R9 等觸發點：R6 (b) 寫入口畫面時加了 happy-dom（`tests/fullscreen.test.ts`、`tests/entry-ui.test.ts`），R9 在下一次 iPhone 測試照做 | 觸發點 | [報告](<../Claude Codex Discussion/2026-10-27-milestone-1-review.md>) |
 | 國小社會預設 | v0.6；Sol 跑 v0.5 的 2-1、2-2：第 6 條有效；跨單元加題沒測到，兩課沒有同一個判準，R3 的提示也沒有加題的寫法，v0.6 已補（[試用紀錄](card-rules/trials.md)） | 使用者電腦上的 Claude 照任務說明用 v0.6 再跑 2-2，已有目標混進 10 項自製的小四目標；交回後這一串照封存的預期結果評分 | 使用者（開本機 session） | [預設](card-rules/elementary-social.md)、[任務說明](../tasks/elementary-social-sol-trial-3.md) |
 | 更新與相容 | 已定案（[D-149](decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝)～[D-151](decisions.md#d-151-內建製卡規則改版內建跟著外掛改了就是自訂版)）；更新防線完成；外掛內備份的第一部分（備份）隨 `0.2.0` 裝到正式使用的 vault，電腦上的外掛已自己做出第一份備份（2026-10-31，見已完成） | 外掛的備份位置已換成更新命令用的資料夾（[D-162](decisions.md#d-162-更新命令的安裝前備份保留和外掛的備份放同一個資料夾)，2026-10-31 核對：手動備份寫進那裡）；iPhone 重開後的版本行在下一次看「版本」命令時確認；還原畫面（第二部分）放到 v1 結案前（使用者 2026-10-29） | iPhone 實機測試 | [外掛內備份任務說明](../tasks/plugin-backup.md)、[規畫](plans/updates.md) |
-| 入口與目錄（第一批，[D-163](decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區)） | 規格談定；任務說明定稿；§9 格式查核做完，出處的寫法定在 [D-164](decisions.md#d-164-出處的寫法與讀法)；程式還沒開工 | 開分支 `claude/entry-and-catalog`（D-157 與填空標點都合併了） | Claude | [任務說明](../tasks/entry-and-catalog.md) |
+| 入口與目錄（第一批，[D-163](decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區)） | 已合併進 `main`，Codex L2 七輪後通過、Windows 實機通過（見已完成）；出處定在 [D-164](decisions.md#d-164-出處的寫法與讀法)、[D-169](decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選) | 還沒升版；iPhone 在下一次實機測試；第二批開工前先定出處結果的欄位（[任務 §9-1](../tasks/entry-and-catalog.md#9-1-模組)） | 使用者決定升版；iPhone 實機測試 | [任務說明](../tasks/entry-and-catalog.md)、[L2 審查請求](../tasks/entry-and-catalog-review.md) |
 | 節省 token 的流程優化 | 盤點完成：Codex 的週額度是瓶頸，一件高風險任務的 L2 七輪加討論約佔週額度 21%，主因是同一個對話一路沿用 | 和使用者一題一題談 T1～T5；L2 的輪數在「整理現有的開發 skill」討論串 | 使用者 | [討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>) |
 | 外掛架構逐環節檢視 | 整串檢視完成（2026-10-30）：九個環節都談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)、[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)、[D-158](decisions.md#d-158-打字卡看起來一樣的字元與多按的空白不算錯照打可以跳過)、[D-159](decisions.md#d-159-當天採用的錯題補強今天的份不變另有一個練習的選項)）；施工都在 [backlog](backlog.md#技術債)，環節 5 的存檔受阻提示已隨雲端佔位檔任務合併；環節 9 的四列與環節 5 的 W3 (a)(b) 已合併（見已完成）；觸發點已到的：環節 2 兩列（D1 已合併，見已完成；D-157 見上一列）；環節 3 的打字卡比對已合併（見已完成） | 照 backlog 各列的觸發點施工，不再另開檢視 | — | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
@@ -49,6 +49,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-03 | 入口與目錄第一批合併進 `main`（分支 `claude/entry-and-catalog`，[任務說明](../tasks/entry-and-catalog.md)）：入口、目錄瀏覽與練習、全部卡、預覽；出處的讀法定案（[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)）：不用猜的直接讀懂，要猜的只提示，模組化填入在第二批用到歸屬前完成；Codex L2 七輪（[報告](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）；Windows `entry` 44／44；還沒升版 |
 | 2026-11-03 | 國小社會預設 v0.5 用 Sol 跑康軒五上 2-1、2-2（[試用紀錄](card-rules/trials.md)）：第 6 條的習作判斷改好了；2-2 帶著 2-1 的 42 個目標跑，加題 0，兩課沒有同一個判準，R3 的提示也沒有加題的寫法 |
 | 2026-11-03 | 拿掉沒在用的 codex-brief skill（[D-168](decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)）：D-131 以後實作不再交給 Codex，常做的是請 Codex 查核；AGENTS 的分流改成查核走 code-quality |
 | 2026-11-03 | Obsidian 1.15.0 相容性檢查（[D-138](decisions.md#d-138-obsidian-出新的次版本時做一次相容性檢查)，[結果](../tasks/obsidian-1.15-compat.md)）：Windows 通過，開發命令全過，CodeMirror 沒變；1.15 移動清單時子項目會跟著動。npm 還沒有 1.15 的型別檔，iPhone 在下一次實機測試 |
@@ -57,5 +58,4 @@ flowchart LR
 | 2026-11-03 | 國小社會預設 v0.4（[D-166](decisions.md#d-166-國小社會預設試用後的修改換一個地方還成立嗎反方向照第-9-條)）：加「換一個地方還成立嗎」，從特色問地名照第 9 條；另外三點和 Codex 談過後不改，Sol 對照時檢查 |
 | 2026-11-03 | 發布前比較的轉接器合併進 `main`（分支 `claude/fervent-hodgkin-9c2bca`，程式到 `3c6cd96`）：每個版本用自己的 `state` 讀備份，閘門與重複的 ID 進比較資料，回傳型別不對或內容矛盾就是無法比較；Codex L2 六輪（[報告](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)）；比過正式使用的 vault 的備份：差異 0 項、沒有重複的 ID（裡面還沒有卡組）；還沒升版，條件見[技術債](backlog.md#技術債) |
 | 2026-11-02 | 國小社會：課本正文寫出地方和它的特色或變化時，另立「地方 → 特色」的目標（[D-165](decisions.md#d-165-國小社會課本正文點名的地方另立目標)），使用者看完第一次試用後選的；預設改成 v0.3，另外四點修改先和 Codex 談 |
-| 2026-11-02 | 重複的學習目標 ID 合併進 `main`（[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)，分支 `claude/reverent-wing-577df1`，程式到 `bf548db`）：同一個 ID 有好幾個目標在用時都先不出題、存檔不換號，家長選哪一個是新加的；Codex L2 五輪（[報告](<../Claude Codex Discussion/2026-11-02-duplicate-ids-review.md>)）；Windows `duplicates` 55／55；還沒升版 |
-| 2026-11-02 | 出處的寫法與讀法定案（[D-164](decisions.md#d-164-出處的寫法與讀法)）：只看字面、跨單元一律寫年級學期、段落標題寫連結、可以分行、常見手寫直接認得；製卡規則同步（程式還沒做） |
+| 2026-11-02 | 家長亂填出處是常態（[D-169](decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)）：只有開頭寫了年級學期才算別的單元，看不懂的通知教怎麼寫；模組化的輸入做成第四批的小表單，檔案格式不變 |

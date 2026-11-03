@@ -210,20 +210,19 @@ void test('R11 路徑：科目 › 年級學期 › 單元；缺的省略；學�
 });
 
 void test('R12 出處：頁碼、圖表例題（含子圖）、段落標題、連結；跨單元與年級學期；位置後面的說明照樣顯示', () => {
-  assert.deepEqual(sourceLinks(['p.44', '圖 2-14', '表 2-1', '例題 2-3', '圖 2-13 A']).map(item => item.link), [
+  assert.deepEqual(sourceLinks(['p.44', '圖 2-14', '表 2-1', '例題 2-3', '圖 2-13 A'], { term: '國二上', subject: '自然', unit: { code: '2-2' } }).map(item => item.link), [
     { kind: 'block', id: 'p44' }, { kind: 'block', id: 'fig2-14' }, { kind: 'block', id: 'tab2-1' }, { kind: 'block', id: 'ex2-3' }, { kind: 'block', id: 'fig2-13a' },
   ]);
-  assert.deepEqual(sourceLinks(['睡眠的階段']), [{ text: '睡眠的階段', link: { kind: 'heading', heading: '睡眠的階段' } }]);
-  assert.deepEqual(sourceLinks(['[[水溶液實驗影片筆記#溶解的速度]]'])[0].link, { kind: 'note', link: '水溶液實驗影片筆記#溶解的速度' });
-  assert.deepEqual(sourceLinks(['1-3 p.20', 'L3', '國一下 L5', '2-2 圖 2-14']).map(item => item.link), [
-    { kind: 'unit', term: null, unit: '1-3', rest: { kind: 'block', id: 'p20' } },
-    { kind: 'unit', term: null, unit: 'L3', rest: null },
+  assert.deepEqual(sourceLinks(['睡眠的階段'], { term: '國二上', subject: '自然', unit: { code: '2-2' } }), [{ text: '睡眠的階段', link: { kind: 'heading', heading: '睡眠的階段' } }]);
+  assert.deepEqual(sourceLinks(['[[水溶液實驗影片筆記#溶解的速度]]'], { term: '國二上', subject: '自然', unit: { code: '2-2' } })[0].link, { kind: 'note', link: '水溶液實驗影片筆記#溶解的速度' });
+  assert.deepEqual(sourceLinks(['國二上 1-3 p.20', '國一下 L5', '國二上 2-2 圖 2-14'], { term: '國二上', subject: '自然', unit: { code: '2-2' } }).map(item => item.link), [
+    { kind: 'unit', term: '國二上', unit: '1-3', rest: { kind: 'block', id: 'p20' } },
     { kind: 'unit', term: '國一下', unit: 'L5', rest: null },
-    { kind: 'unit', term: null, unit: '2-2', rest: { kind: 'block', id: 'fig2-14' } },
+    { kind: 'unit', term: '國二上', unit: '2-2', rest: { kind: 'block', id: 'fig2-14' } },
   ]);
-  assert.deepEqual(sourceLinks(['p.45 知識快遞'])[0], { text: 'p.45 知識快遞', link: { kind: 'block', id: 'p45' } });
-  // 認不得的（例如先備知識）先當成標題候選；材料裡沒有這個標題時，Obsidian 層照文字顯示、不做連結。
-  assert.deepEqual(sourceLinks(['先備：國一數學 比例式'])[0].link, { kind: 'heading', heading: '先備：國一數學 比例式' });
+  assert.deepEqual(sourceLinks(['p.45 知識快遞'], { term: '國二上', subject: '自然', unit: { code: '2-2' } })[0], { text: 'p.45 知識快遞', link: { kind: 'block', id: 'p45' } });
+  // 先備知識是文字，不做連結（D-087）；其他讀法的例子在 tests/sources.test.ts。
+  assert.deepEqual(sourceLinks(['先備：國一數學 比例式'], { term: '國二上', subject: '自然', unit: { code: '2-2' } })[0].link, { kind: 'text' });
 });
 
 void test('§2-4 能按的自評：一般卡四個；拼對記住了／太簡單；拼錯差一點／沒印象；按「沒印象」只剩沒印象', () => {

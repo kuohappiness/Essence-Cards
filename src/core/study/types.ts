@@ -167,7 +167,17 @@ export interface Today {
 export type Pick =
   | { subject: string | null }
   | { deck: string }
-  | { more: true };
+  | { more: true }
+  // 今天的份裡的這些目標（單元的當日卡）。
+  | { targets: readonly string[] }
+  // 全部卡的一輪（D-163 第 4 點）：這些目標，從 since 算。
+  | { targets: readonly string[]; since: number };
+
+/** 一次複習範圍的總數與完成數；再複習一些沒有總數。選卡、上方的「還剩 N 張」與完成畫面都照它（技術債「一次複習的範圍」）。 */
+export interface ScopeCount { done: number; total: number }
+
+/** 記憶配色（D-062）：灰未複習、橙快忘了、綠記得、藍很熟。 */
+export type MemoryColor = 'new' | 'near' | 'good' | 'easy';
 
 export interface Card {
   lt: string;

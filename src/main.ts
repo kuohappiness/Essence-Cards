@@ -8,14 +8,15 @@ import type { Files } from './core/files.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
+import { wireDeckActions } from './obsidian/deck-actions.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { versionText } from './obsidian/version.ts';
-import { createState, type ErrorSource, type State } from './state/index.ts';
-import { openReview, registerStart, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
-import type { Pick } from './core/study/index.ts';
+import { createState, type ErrorSource, type State, type StudyPick } from './state/index.ts';
+import { reminderView, type Session } from './review/index.ts';
+import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
@@ -27,7 +28,7 @@ const NOTICES: Partial<Record<ErrorSource, string>> = {
   write: 'Essence Cards：複習紀錄暫時寫不進去，會自動再試',
   read: 'Essence Cards：有些卡組或複習紀錄暫時讀不到，會自動再試',
 };
-/** 有內容需要新版才讀得懂（任務說明 2-2）：入口的「給家長」一區做好之前，載入時用通知提示一次。 */
+/** 有內容需要新版才讀得懂（任務說明 2-2）：手機載入時用通知提示一次；電腦由入口的提醒一區與狀態列提示（D-163 第 5 點）。 */
 const UPDATE_NOTICE = 'Essence Cards：有內容需要新版才讀得懂，請更新外掛';
 /** 學生在複習畫面回報之後的提示（D-160 第 3 點）；記錄器盡力而為，寫不進去時也照樣這樣說（D-160 的代價）。 */
 const REPORT_NOTICE = '已記下，可以跟家長說一聲';
@@ -78,6 +79,12 @@ export default class EssenceCardsPlugin extends Plugin {
   lockAlso: string[] = [];
   /** 開著的複習畫面（W6）；同時只有一個。 */
   review: ReviewHandle | null = null;
+  /** 開著的入口與目錄（D-163）；同時只有一個，複習畫面蓋在上面。 */
+  entry: EntryHandle | null = null;
+  /** 標題列的全部卡與預覽（D-146、D-161）。 */
+  private deckActions: { refresh: () => void } | null = null;
+  /** 狀態列的提醒（D-163 第 5 點）：只有電腦。 */
+  private statusBar: HTMLElement | null = null;
   /** 電腦上的備份（D-150）；手機、還沒載入或載入失敗是 null。 */
   backup: BackupWiring | null = null;
   /** 電腦專用的功能載入失敗的原因（設定頁顯示）。 */
@@ -109,9 +116,23 @@ export default class EssenceCardsPlugin extends Plugin {
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
     if (Platform.isDesktopApp) this.ids = this.wireIds();
     // 設定分頁（D-104、D-156 依功能分區）：「備份」一區；iPhone 上只寫「備份在電腦上做」。
-    this.settingTab = wireSettings({ plugin: this, backup: () => this.backup, backupError: () => this.backupError });
-    // 複習畫面的暫時入口（W6 §3-9）：命令與左側功能區的圖示；入口畫面做好時拿掉。
-    registerStart(this, { state: () => this.state, open: pick => { this.startReview(pick); } });
+    this.settingTab = wireSettings({ plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); } });
+    // 圖示和「打開入口」都開入口，「目錄」直接開目錄；Obsidian 啟動時不自動打開（D-057）。
+    this.addRibbonIcon('graduation-cap', 'Essence Cards：打開入口', () => { this.openEntry(); });
+    this.addCommand({ id: 'open-entry', name: '打開入口', callback: () => { this.openEntry(); } });
+    this.addCommand({ id: 'open-catalog', name: '目錄', callback: () => { this.openEntry('catalog'); } });
+    this.deckActions = wireDeckActions({
+      plugin: this, state: () => this.state,
+      start: pick => { this.startReview(pick); },
+      preview: session => { this.startPreview(session); },
+      notify: message => { new Notice(message); },
+    });
+    if (Platform.isDesktop) {
+      this.statusBar = this.addStatusBarItem();
+      this.statusBar.addClass('essence-cards-reminders');
+      this.statusBar.addEventListener('click', () => { this.openEntry(); });
+      this.statusBar.style.display = 'none';
+    }
     let calls = (): number => 0;
     let beforeLayoutReady: number | null = null;
     this.app.workspace.onLayoutReady(() => {
@@ -133,14 +154,16 @@ export default class EssenceCardsPlugin extends Plugin {
 
   onunload(): void {
     this.unloaded = true;
-    // 外掛停用時一起關掉複習畫面（什麼都不寫，D-074）。
+    // 外掛停用時一起關掉複習畫面與入口（什麼都不寫，D-074）。
     this.review?.close();
+    this.entry?.close();
     this.state?.close().catch((error: unknown) => { this.fail('close', error); });
   }
 
   /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
-  startReview(pick: Pick): ReviewHandle | null {
-    if (!this.state) return null;
+  startReview(pick: StudyPick): ReviewHandle | null {
+    // 停用之後不開畫面，也就不會記錄作答（什麼都不寫，D-074）。
+    if (!this.state || this.unloaded) return null;
     const pickedAt = performance.now();
     this.review?.close();
     this.review = openReview({
@@ -149,9 +172,61 @@ export default class EssenceCardsPlugin extends Plugin {
       onError: (error, where, path) => { this.fail(where, error, path); },
       // 學生的回報（D-160）：記進錯誤紀錄，不寫複習紀錄、不改排程；提示照第 3 點。
       onReport: (kind, card) => { this.errors.report({ kind, path: card.deck, lt: card.lt, v: card.v }); new Notice(REPORT_NOTICE); },
-      onClose: () => { this.review = null; },
+      onClose: () => { this.review = null; this.entry?.refresh(); },
+      onLink: () => { this.entry?.close(); },
     });
     return this.review;
+  }
+
+  /** 預覽（D-161）：不記錄，沒有回報的旗子；結束時回筆記。 */
+  private startPreview(session: Session): void {
+    if (!this.state || this.unloaded) return;
+    this.review?.close();
+    this.review = openPreview({
+      app: this.app, state: this.state,
+      onEvent: event => { this.emit('review', event); },
+      onError: (error, where, path) => { this.fail(where, error, path); },
+      onClose: () => { this.review = null; },
+    }, session);
+  }
+
+  /** 打開入口或目錄：全螢幕，還沒讀完也能開（寫「正在讀取卡組…」）。已經開著就換畫面。 */
+  openEntry(screen: 'entry' | 'catalog' = 'entry'): EntryHandle | null {
+    if (this.unloaded) return null;
+    if (this.entry) { this.entry.show(screen); return this.entry; }
+    this.entry = openEntry({
+      app: this.app, state: () => this.state, screen,
+      start: pick => { this.startReview(pick); },
+      openNote: (path, line) => { this.openNote(path, line); },
+      openSettings: () => { this.openSettings(); },
+      reminders: Platform.isDesktop,
+      covered: () => this.review !== null,
+      onError: error => { this.fail('ui', error); },
+      onClose: () => { this.entry = null; },
+    });
+    return this.entry;
+  }
+
+  /** 入口關掉，打開那篇筆記（line 從 0 算）。 */
+  private openNote(path: string, line?: number): void {
+    this.entry?.close();
+    this.app.workspace.openLinkText(path, '', 'tab', line === undefined ? undefined : { eState: { line } }).catch((error: unknown) => { this.fail('ui', error, path); });
+  }
+
+  /** 入口關掉，打開設定頁的 Essence Cards 分頁：設定視窗不被全螢幕蓋住。設定視窗的開法不在公開的型別裡。 */
+  private openSettings(): void {
+    this.entry?.close();
+    const setting = (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting;
+    setting?.open();
+    setting?.openTabById(this.manifest.id);
+  }
+
+  /** 狀態列（D-163 第 5 點）：只有電腦，內容只放在入口，這裡只是提示；沒有提醒時不顯示。 */
+  private updateReminders(): void {
+    if (!this.statusBar) return;
+    const { count } = reminderView(this.state);
+    this.statusBar.style.display = count ? '' : 'none';
+    this.statusBar.textContent = count ? `Essence Cards：${String(count)} 項提醒` : '';
   }
 
   /** 訂閱外掛的事件；回傳取消訂閱的函式。 */
@@ -225,6 +300,8 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 有內容需要新版才讀得懂：這次載入只提示一次（載入完，或之後重讀時才出現）。 */
   private updateWarned = false;
   private warnUpdate(): void {
+    // 電腦改由提醒一區與狀態列提示（D-163 第 5 點）。
+    if (Platform.isDesktop) return;
     const blocked = this.state?.blocked();
     if (this.updateWarned || !blocked || (!blocked.decks.length && !blocked.targets.length && !blocked.all)) return;
     this.updateWarned = true;
@@ -278,10 +355,13 @@ export default class EssenceCardsPlugin extends Plugin {
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.ids?.saver.refresh(); this.warnUpdate(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
+    // unread() 變了不經 onChange（§8）：這裡只更新狀態列，入口開著時自己也有訂。
+    this.state.onUnread(() => { this.updateReminders(); });
+    this.entry?.refresh();
     // 能讀到的讀完就完成：讀不到的那一篇先跳過，state 自己隔一段時間重試，恢復後自動納入（unread()；每次失敗都經過 onError）。
     // 只有列不出來時整個重試；停用外掛（close()）或程式本身的錯才會讓它 reject。程式本身的錯已經經過 onError（read 或 init，
     // tasks/error-log.md §2-3），停用不是故障，所以這裡只接住。
-    this.state.ready().then(() => { this.ids?.saver.refresh(); this.warnUpdate(); }, () => {});
+    this.state.ready().then(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); }, () => {});
   }
 }

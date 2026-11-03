@@ -4,10 +4,10 @@ import { createPortal } from 'react-dom';
 import { animate } from 'motion';
 import type { ReportKind } from '../core/errors/index.ts';
 import type { Rating } from '../core/study/index.ts';
-import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLinks } from '../review/index.ts';
-import type { Axis, CardView, DoneView, Gesture, Session, Spelling, TypedView } from '../review/index.ts';
+import { blankCount, extraLabel, fillBlank, gesture, lineSpeech, lockAxis, otherAnswers, RATING_LABELS, RATINGS, sourceLabel, sourceLinks } from '../review/index.ts';
+import type { Axis, CardView, DoneView, Gesture, Session, SourceOwner, Spelling, TypedView } from '../review/index.ts';
 import { Markdown } from './Markdown.tsx';
-import { firstMaterial, resolveSource } from './sources.ts';
+import { firstMaterial, resolveSource, type MaterialDeck } from './sources.ts';
 import type { Speech } from './speech.ts';
 
 // 複習畫面（W6 §3）：React＋Motion，只把 review 的狀態畫出來、把按鍵與手勢轉成動作，不自己做判斷。
@@ -30,6 +30,10 @@ export interface ReviewProps {
   openLink: (linktext: string, sourcePath: string) => void;
   /** 這篇卡組的「材料」（出處要在哪幾份裡找）。 */
   materials: (deckPath: string) => readonly string[];
+  /** 這一篇自己的屬性：出處的讀法要用（D-170）。 */
+  owner: (deckPath: string) => SourceOwner;
+  /** 跨單元的出處的候選（§10）：那個單元的每一篇與它的材料。 */
+  units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
   speech: Speech;
   autoRead: { get(): boolean; set(on: boolean): void };
   onEvent?: (event: ReviewEvent) => void;
@@ -221,7 +225,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
     focusApp();
   }
   const back = (): void => { if (!reportingRef.current && latest.current.top.canBack) void slide(1, () => { session.back(); }); };
-  const forward = (): void => { if (!reportingRef.current && latest.current.top.viewing) void slide(-1, () => { session.forward(); }); };
+  const forward = (): void => { if (!reportingRef.current && (latest.current.top.viewing || latest.current.top.canForward)) void slide(-1, () => { session.forward(); }); };
   const toCurrent = (): void => { if (!reportingRef.current && latest.current.top.viewing) void slide(-1, () => { session.toCurrent(); }); };
   /** 打開回報的選單（動畫期間不開）。 */
   const openMenu = (): void => { if (!busy.current) setReporting(true); };
@@ -253,8 +257,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
       touch.axis = touch.interactive ? 'vertical' : lockAxis(touch.axis, touch.dx, touch.dy);
       if (touch.axis === 'horizontal') {
         if (event.cancelable) event.preventDefault();
-        const { canBack, viewing } = latest.current.top;
-        const resist = (touch.dx > 0 && !canBack) || (touch.dx < 0 && !viewing);
+        const { canBack, viewing, canForward } = latest.current.top;
+        const resist = (touch.dx > 0 && !canBack) || (touch.dx < 0 && !viewing && !canForward);
         if (body.current && !reducedMotion()) body.current.style.transform = 'translateX(' + String(resist ? touch.dx * 0.18 : touch.dx) + 'px)';
       }
     };
@@ -264,8 +268,8 @@ export function Review(props: ReviewProps): React.JSX.Element {
       const p = Array.from(event.changedTouches).find(point => point.identifier === t.id);
       if (p) { t.dx = p.clientX - t.x; t.dy = p.clientY - t.y; }
       const ms = performance.now() - t.time;
-      const { canBack, viewing } = latest.current.top;
-      const outcome: Gesture = event.type === 'touchcancel' ? (t.axis === 'vertical' ? 'scroll' : 'bounce') : gesture(t.axis, t.dx, t.dy, ms, canBack, viewing);
+      const { canBack, viewing, canForward } = latest.current.top;
+      const outcome: Gesture = event.type === 'touchcancel' ? (t.axis === 'vertical' ? 'scroll' : 'bounce') : gesture(t.axis, t.dx, t.dy, ms, canBack, viewing || !!canForward);
       if (outcome !== 'tap') suppressClick.current = performance.now() + 450;
       if (outcome === 'back') back();
       else if (outcome === 'forward') forward();
@@ -325,7 +329,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <button type="button" className="ec-ico" aria-label="上一張" disabled={!top.canBack || animating} onClick={back}><Icon type="back" /></button>
       {top.viewing
         ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
-        : <span className="ec-count" aria-live="polite">{view.kind === 'done' ? '' : top.center}</span>}
+        : <span className="ec-count" aria-live="polite">{view.kind === 'done' && !top.pinned ? '' : top.center}</span>}
       {/* 沒有開關時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
       {english ? <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label> : <span aria-hidden="true" />}
       {/* 回報（D-160）：畫面上有卡才有，在 ✕ 左邊；沒有時也留一格空的 */}
@@ -344,16 +348,17 @@ export function Review(props: ReviewProps): React.JSX.Element {
       <div className="ec-body" ref={body}>
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
-        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
+        {view.kind === 'card' && <Card key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} owner={props.owner} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
           qRef={questionEl} sticky={stickyQuestion} actions={typing && <TypedActions typed={typing} animating={animating} submit={submit} skip={skip} />}
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
     </div>
     {/* 打字中沒有底部那一排：「沒印象」「確認」在題目正下方（TypedActions） */}
     {!typing && <div className="ec-actions" inert={reporting}>
-      {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>結束複習</button>}
+      {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>{view.done.buttons.find(button => button.kind === 'close')?.label ?? '結束複習'}</button>}
       {view.kind === 'card' && <Actions view={view.card} animating={animating} reveal={reveal} rate={rate} />}
     </div>}
+    {view.kind === 'card' && view.card.nextLabel && <div className="ec-next-row"><button type="button" className="ec-next" disabled={animating} onClick={forward}>{view.card.nextLabel}</button></div>}
     {reporting && view.kind === 'card' && <ReportMenu menuRef={menuEl} choose={choose} cancel={closeMenu} />}
   </div>;
 }
@@ -377,7 +382,7 @@ function ReportMenu({ menuRef, choose, cancel }: { menuRef: React.RefObject<HTML
  */
 function TypedActions({ typed, animating, submit, skip }: { typed: TypedView; animating: boolean; submit: () => void; skip: () => void }): React.JSX.Element {
   return <div className="ec-typed-actions">
-    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{typed.step === 3 ? '跳過' : RATING_LABELS.miss}</button>}
+    {typed.canSkip && <button type="button" className="ec-show ec-skip" disabled={animating} onClick={skip}>{typed.skipLabel ?? (typed.step === 3 ? '跳過' : RATING_LABELS.miss)}</button>}
     <button type="button" className="ec-show ec-confirm" disabled={animating || !typed.input.trim()} onClick={submit}>確認</button>
   </div>;
 }
@@ -405,6 +410,8 @@ function Done({ done, session, close }: { done: DoneView; session: Session; clos
 interface CardProps {
   view: CardView; app: App; speech: Speech;
   materials: (deckPath: string) => readonly string[];
+  owner: (deckPath: string) => SourceOwner;
+  units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
   openLink: (linktext: string, sourcePath: string) => void;
   tipOpen: boolean; setTipOpen: (open: boolean) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -421,7 +428,7 @@ interface CardProps {
   onPainted: () => void;
   onFail: (side: 'front' | 'back', error: unknown, path: string) => void;
 }
-function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
+function Card({ view, app, speech, materials, owner, units, openLink, tipOpen, setTipOpen, inputRef, onInput, slot, onSlot, qRef, sticky, actions, onPainted, onFail }: CardProps): React.JSX.Element {
   const { card, typed, revealed } = view;
   const prompt = card.prompt;
   const question = prompt.kind === 'qa' ? prompt.question : prompt.text;
@@ -434,9 +441,9 @@ function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inp
   // 三步還沒走完（不是回看）：題目有 ＿＿ 時在空格裡打（D-145），渲染後找不到空格才放在題目下面。
   const typing = typed !== null && !typed.finished && !view.viewing ? typed : null;
   const inline = typing !== null && lines > 0 && slot !== null;
-  const sources = sourceLinks(card.target.fields.sources);
+  const sources = sourceLinks(card.target.fields.sources, owner(card.deck));
   const deckMaterials = materials(card.deck);
-  const links = sources.map(item => ({ ...item, target: resolveSource(app, card.deck, deckMaterials, item.link) }));
+  const links = sources.map(item => ({ ...item, label: sourceLabel(item), target: resolveSource(app, card.deck, deckMaterials, item.link, (term, code) => units(card.deck, term, code)) }));
   const fallback = sources.length ? null : firstMaterial(app, card.deck, deckMaterials);
   const hasSource = links.some(item => item.target) || fallback !== null || links.length > 0;
   // 第 1 步拼錯：和拼對的打勾成對，用圓形的打叉（D-145，使用者 2026-10-28），不寫「不對」兩個字；讀螢幕的軟體念「錯誤」（使用者 2026-10-28）。
@@ -494,9 +501,9 @@ function Card({ view, app, speech, materials, openLink, tipOpen, setTipOpen, inp
       {hasSource && <div className="ec-tools">
         <span className={'ec-srcw' + (tipOpen ? ' is-tip' : '')}>
           <button type="button" className="ec-ico sm" aria-label="出處" onClick={() => { setTipOpen(!tipOpen); }}><Icon type="book" /></button>
-          {tipOpen && (links.length ? links : [{ text: '出處', link: { kind: 'text' as const }, target: fallback }]).map((item, index) => item.target
-            ? <button key={index} type="button" className="ec-tip" onClick={() => { openLink(item.target ?? '', card.deck); }}>{item.text} ↗</button>
-            : <span key={index} className="ec-tip is-text">{item.text}</span>)}
+          {tipOpen && (links.length ? links : [{ label: '出處', target: fallback }]).map((item, index) => item.target
+            ? <button key={index} type="button" className="ec-tip" onClick={() => { openLink(item.target ?? '', card.deck); }}>{item.label} ↗</button>
+            : <span key={index} className="ec-tip is-text">{item.label}</span>)}
         </span>
       </div>}
     </div>}

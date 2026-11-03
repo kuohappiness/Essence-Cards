@@ -1,11 +1,19 @@
 import { Platform, PluginSettingTab, Setting, setIcon } from 'obsidian';
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
+import { previewButton, previewReveal } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
-// 這次只有「備份」一區（tasks/plugin-backup.md §1-5），複習、學期、AI 製卡之後的任務再加。
+// 現在有「複習」（D-161，開關只存在這台裝置，D-163 第 6 點）與「備份」（tasks/plugin-backup.md §1-5）；學期、AI 製卡之後的任務再加。
 
+const REVIEW = {
+  section: '複習',
+  button: '顯示「預覽」按鈕',
+  buttonNote: '卡組筆記的標題列多一顆「預覽」，看卡片在複習畫面上的樣子，不記錄、不動排程。只影響這台裝置。',
+  reveal: '預覽時自動展開答案',
+  revealNote: '一進卡片就是背面。只影響這台裝置。',
+};
 const TEXTS = {
   section: '備份',
   phone: '備份在電腦上做',
@@ -53,6 +61,8 @@ export interface SettingsHost {
   backup: () => BackupWiring | null;
   /** 電腦專用的功能載入失敗的原因。 */
   backupError: () => string | null;
+  /** 預覽的開關變了：按鈕與命令立刻跟著，不用重開。 */
+  previewChanged: () => void;
 }
 
 class EssenceSettingTab extends PluginSettingTab {
@@ -71,6 +81,7 @@ class EssenceSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    this.review(containerEl);
     new Setting(containerEl).setName(TEXTS.section).setHeading();
     if (!Platform.isDesktopApp) {
       new Setting(containerEl).setDesc(TEXTS.phone);
@@ -83,6 +94,17 @@ class EssenceSettingTab extends PluginSettingTab {
     }
     this.location(containerEl, backup);
     this.status(containerEl, backup);
+  }
+
+  private review(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName(REVIEW.section).setHeading();
+    new Setting(containerEl).setName(REVIEW.button).setDesc(REVIEW.buttonNote).addToggle(toggle => toggle.setValue(previewButton.get(this.app)).onChange(on => {
+      previewButton.set(this.app, on);
+      this.host.previewChanged();
+    }));
+    new Setting(containerEl).setName(REVIEW.reveal).setDesc(REVIEW.revealNote).addToggle(toggle => toggle.setValue(previewReveal.get(this.app)).onChange(on => {
+      previewReveal.set(this.app, on);
+    }));
   }
 
   /** 備份的狀態變了：設定頁開著時重畫。 */

@@ -107,6 +107,8 @@ export interface ObsidianStub {
   required: string[];
   /** addSettingTab 加上的設定分頁。 */
   settingTabs: unknown[];
+  /** addStatusBarItem 加上的狀態列項目。 */
+  statusBar: { textContent: string; style: { display: string }; clicks: (() => void)[] }[];
   /** 這個 vault 的 localStorage 現在的值（app.loadLocalStorage）。 */
   storage: (key: string) => unknown;
   /** Markdown 分頁。 */
@@ -202,6 +204,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const handlers = new Map<string, ((...args: unknown[]) => void)[]>();
   const intervals: (() => void)[] = [];
   const leaves: Leaf[] = [];
+  const statusBar: ObsidianStub['statusBar'] = [];
   const app = {
     vault,
     workspace: {
@@ -232,6 +235,11 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     unload(): void { this.onunload(); for (const cleanup of this.cleanups.splice(0)) cleanup(); }
     addCommand(command: Command) { commands.set(command.id, command); return command; }
     addRibbonIcon(icon: string, title: string, callback: (evt: unknown) => unknown) { ribbons.push({ icon, title, callback }); return {}; }
+    addStatusBarItem() {
+      const item = { textContent: '', style: { display: '' }, clicks: [] as (() => void)[], addClass() {}, addEventListener(_type: string, callback: () => void) { item.clicks.push(callback); } };
+      statusBar.push(item);
+      return item;
+    }
     registerEditorExtension() { extensions++; }
     registerEvent() {}
     register(cleanup: () => void) { this.cleanups.push(cleanup); }
@@ -267,7 +275,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     MarkdownView: FakeMarkdownView,
     MarkdownRenderer: { render: (_app: unknown, markdown: string, el: { textContent: string }) => { el.textContent = markdown; return Promise.resolve(); } },
     setIcon: () => {}, editorInfoField: {}, apiVersion: 'test',
-    Platform: { isWin: true, isDesktopApp: !!options.desktop, isMobileApp: !options.desktop, isIosApp: false, isAndroidApp: false },
+    Platform: { isWin: true, isDesktop: !!options.desktop, isDesktopApp: !!options.desktop, isMobileApp: !options.desktop, isIosApp: false, isAndroidApp: false },
   };
   function load<T>(code: string): T {
     const module = { exports: {} as T };
@@ -287,7 +295,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const leaf = (path: string | null): Leaf => ({ view: new FakeMarkdownView(path), getViewState: () => ({ state: path ? { file: path } : {} }) });
   return {
     obsidian, app, notices, commands, ribbons, extensions: () => extensions, modals, protocol, writes, texts,
-    timers: () => ({ ...timers }), required, settingTabs, storage: key => storage.get(key) ?? null,
+    timers: () => ({ ...timers }), required, settingTabs, statusBar, storage: key => storage.get(key) ?? null,
     text: path => texts.get(path),
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout.splice(0)) callback(); },

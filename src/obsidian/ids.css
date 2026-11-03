@@ -16,7 +16,9 @@
 .essence-cards-save.is-missing { color: var(--interactive-accent); }
 .essence-cards-save.is-issues { color: var(--text-error); }
 .essence-cards-save.is-needs-update,
-.essence-cards-save.is-malformed { color: var(--text-warning); }
+.essence-cards-save.is-malformed,
+.essence-cards-save.is-properties,
+.essence-cards-save.is-sources { color: var(--text-warning); }
 
 .essence-cards-issue + .essence-cards-issue,
 .essence-cards-issue + .essence-cards-issue-intro {
@@ -27,3 +29,6 @@
 .essence-cards-issue-buttons { display: flex; flex-wrap: wrap; gap: var(--size-4-2); }
 .essence-cards-issue-note { color: var(--text-muted); font-size: var(--font-ui-small); }
 .essence-cards-issue-link { color: var(--text-accent); text-decoration: underline; cursor: pointer; }
+
+/* 全部卡的提醒（D-146）：「以後不再提醒」和按鈕之間留白 */
+.essence-cards-remind-off { display: flex; align-items: center; gap: var(--size-4-2); margin: var(--size-4-3) 0; }

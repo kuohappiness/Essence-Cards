@@ -26,7 +26,7 @@ const codes = (body: string) => deck(body).problems.map(p => p.code);
 
 void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題目與補充', () => {
   const parsed = parseDeck(examples[0]);
-  assert.deepEqual(parsed.props, { term: '國二上', subject: '自然', unit: { code: '2-2', name: '水溶液' }, materials: ['[[國二上自然 2-2 水溶液]]'], status: 'active', categories: [], isTranscript: false, need: null });
+  assert.deepEqual(parsed.props, { term: '國二上', subject: '自然', unit: { code: '2-2', name: '水溶液' }, materials: ['[[國二上自然 2-2 水溶液]]'], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
   assert.deepEqual(parsed.problems, []);
   const expected = [
     ['k3m9x2', '能說出溶質與溶劑的意思', '1 溶液', ['p.43'], '定義', 'medium', ['[[國二上自然 第一次段考]]'], [
@@ -58,7 +58,7 @@ void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題
 
 void test('§2-2 英文完整例子：兩方向、typed、例句與記憶錨點', () => {
   const parsed = parseDeck(examples[1]);
-  assert.deepEqual(parsed.props, { term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, materials: ['[[國二上英文 L1 Back to School]]'], status: 'active', categories: [], isTranscript: false, need: null });
+  assert.deepEqual(parsed.props, { term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, materials: ['[[國二上英文 L1 Back to School]]'], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
   assert.deepEqual(parsed.problems, []);
   const rows = [
     ['b4rw7k', 'borrow 英翻中', 'en-zh', 'borrow', 'borrow', 'v. 借入、向別人借', ['例句：Can I borrow your pen? 我可以借你的筆嗎？'], [], null],
@@ -321,9 +321,9 @@ void test('中翻英填空只提示、不要求 typed', () => {
 void test('只有結尾完整方向字樣才配對', () => {
   assert.equal(parseDeck('- 字 中翻英 補充\n  - Q :: A').targets[0].direction, null);
 });
-void test('欄位合併去重、單值只取首次、未知欄位忽略', () => {
+void test('欄位合併、備註與錯題補強去重（出處讀完才去重，D-170）、單值只取首次、未知欄位忽略', () => {
   const parsed = deck('  - 出處：1-3 p.20、p.44｜備註：A、B｜錯題補強：[[考試]]\n  - 類型：定義｜重要性：低｜狀態：暫停｜陌生：X\n  - Q :: A\n    - 出處:p.44、p.45｜備註:B、C｜錯題補強:[[考試]]、[[考試2]]\n    - 類型：因果｜重要性：高｜狀態：啟用');
-  assert.deepEqual(parsed.targets[0].fields, { sources: ['1-3 p.20', 'p.44', 'p.45'], type: '定義', importance: 'low', paused: true, remarks: ['A', 'B', 'C'], mistakes: ['[[考試]]', '[[考試2]]'] });
+  assert.deepEqual(parsed.targets[0].fields, { sources: ['1-3 p.20', 'p.44', 'p.44', 'p.45'], type: '定義', importance: 'low', paused: true, remarks: ['A', 'B', 'C'], mistakes: ['[[考試]]', '[[考試2]]'] });
   assert.deepEqual(parsed.problems.map(p => p.code), ['unknown-field', 'duplicate-field', 'duplicate-field', 'duplicate-field']);
 });
 void test('例句、記憶錨點不是未知資料；補充保留巢狀 Markdown', () => {
@@ -804,6 +804,158 @@ void test('I2 縮排改正：只改有題目的明確目標底下第一層；更
   assert.equal(assignIds(plain, { taken: new Set() }).text, plain);
   // 第一部分 §0-3 的 M1：補 ID 後縮排也改正。
   assert.equal(assignIds('- 目標\n        - Q :: A', { taken: new Set(), random: () => 0 }).text, '- 目標 ^aaaaaa\n  - Q :: A');
+});
+
+// ── 資料欄位分行（tasks/entry-and-catalog.md §9-4、D-164 第 4 點）──
+
+const MULTI = '- 比較三種溶液 ^k3m9x2\n    - 出處：\n        - p.44\n        - 國二上 1-3 p.20\n        - [[補充筆記#1-2 溶液]]\n    - 哪一種溶液的濃度最高？ :: 甲\n';
+const SINGLE = '- 比較三種溶液 ^k3m9x2\n    - 出處：p.44、國二上 1-3 p.20、[[補充筆記#1-2 溶液]]\n    - 哪一種溶液的濃度最高？ :: 甲\n';
+
+void test('§9-4 分行的出處和寫在同一行相同；指紋相同，不進背面補充', () => {
+  const multi = parseDeck(MULTI).targets[0], single = parseDeck(SINGLE).targets[0];
+  assert.deepEqual(multi.fields.sources, ['p.44', '國二上 1-3 p.20', '[[補充筆記#1-2 溶液]]']);
+  assert.deepEqual(multi.fields, single.fields);
+  assert.deepEqual(multi.prompts.map(p => p.fingerprint), single.prompts.map(p => p.fingerprint));
+  assert.deepEqual(multi.shared, []);
+  assert.deepEqual(qa(multi.prompts[0]).extras, []);
+  assert.deepEqual(parseDeck(MULTI).problems, []);
+});
+
+void test('§9-4 同一行又有子項目時合併，順序照筆記；子項目裡的頓號照切；備註、錯題補強同一條規則', () => {
+  const target = first('    - 出處：p.44\n        - p.45、p.46\n        - p.44\n    - 備註：\n        - 老師強調、必考\n    - 錯題補強：[[a]]\n        - [[b]]\n    - Q :: A');
+  assert.deepEqual(target.fields.sources, ['p.44', 'p.45', 'p.46', 'p.44'], '出處讀完才去重（D-170）');
+  assert.deepEqual(target.fields.remarks, ['老師強調', '必考']);
+  assert.deepEqual(target.fields.mistakes, ['[[a]]', '[[b]]']);
+  assert.deepEqual(first('    - 出處：\n    - Q :: A').fields.sources, [], '沒有子項目的空欄位');
+});
+
+void test('§9-4 子項目開頭是欄位名稱時當成欄位', () => {
+  const target = first('    - 出處：p.44\n        - 類型：定義\n        - 重要性：高\n    - Q :: A');
+  assert.deepEqual(target.fields.sources, ['p.44']);
+  assert.equal(target.fields.type, '定義');
+  assert.equal(target.fields.importance, 'high');
+  assert.deepEqual(codes('    - 出處：p.44\n        - 類型：定義\n    - Q :: A'), []);
+});
+
+void test('§9-4 三種忽略子項目的情況都給提示，不默默不見', () => {
+  const other = deck('    - 類型：\n        - 定義\n    - Q :: A');
+  assert.deepEqual(other.problems.map(p => [p.line, p.level, p.code]), [[2, 'hint', 'field-children']]);
+  assert.equal(other.targets[0].fields.type, null);
+  const joined = deck('    - 出處：｜類型：定義\n        - p.44\n    - Q :: A');
+  assert.deepEqual(joined.problems.map(p => [p.line, p.level, p.code]), [[2, 'hint', 'field-children']]);
+  assert.deepEqual(joined.targets[0].fields.sources, []);
+  assert.equal(joined.targets[0].fields.type, '定義');
+  const nested = deck('    - 出處：\n        - p.44\n            - p.45\n    - Q :: A');
+  assert.deepEqual(nested.problems.map(p => [p.line, p.level, p.code]), [[2, 'hint', 'field-children']]);
+  assert.deepEqual(nested.targets[0].fields.sources, ['p.44']);
+  assert.equal(nested.targets[0].ok, true, '提示不算寫錯');
+  // 沒有題目的一般筆記不回報。
+  assert.deepEqual(deck('    - 類型：\n        - 定義').problems, []);
+});
+
+void test('§9-4 補 ID 與改縮排不改到分行的意思：四格、七格、縮排過深、CRLF、Tab、沒有 ID', () => {
+  const cases = [
+    MULTI,
+    MULTI.replaceAll('\n', '\r\n'),
+    MULTI.replace(' ^k3m9x2', ''),
+    '- 目標\n       - 出處：\n              - p.44\n              - p.45\n       - Q :: A\n',
+    '- 目標\n            - 出處：\n                - p.44\n                - p.45\n            - Q :: A\n',
+    '- 目標\n  - 出處：\n    - p.44\n    - p.45\n  - Q :: A\n',
+    '- 目標\n\t- 出處：\n\t\t- p.44\n\t\t- p.45\n\t- Q :: A\n',
+    '- Q :: A\n    - 出處：\n        - p.44\n        - p.45\n',
+  ];
+  for (const text of cases) {
+    const before = parseDeck(text).targets[0];
+    const { text: once } = assignIds(text, { taken: new Set(), random: () => 0 });
+    const after = parseDeck(once).targets[0];
+    assert.deepEqual(after.fields, before.fields, text);
+    assert.deepEqual(after.prompts.map(p => p.fingerprint), before.prompts.map(p => p.fingerprint), text);
+    assert.equal(assignIds(once, { taken: new Set(), random: () => 0 }).text, once, text);
+    assert.ok(before.fields.sources.includes('p.44'), '分行的值讀得到：' + text);
+  }
+});
+
+void test('D-170 半形的 | 後面接欄位名稱加冒號也是分隔：類型不會被吞進出處；連結裡的、後面不是欄位名稱的都不算', () => {
+  const fields = (line: string) => parseDeck(`- 目標 ^abc123\n    - 問 :: 答\n    - ${line}\n`).targets[0].fields;
+  assert.deepEqual(fields('出處：p.44 | 類型：定義').sources, ['p.44']);
+  assert.equal(fields('出處：p.44 | 類型：定義').type, '定義');
+  assert.equal(fields('出處：p.44|重要性：高').importance, 'high');
+  assert.deepEqual(fields('出處：p.44｜類型：定義').sources, ['p.44'], '全形照舊');
+  assert.deepEqual(fields('出處：[[筆記|類型：x]]').sources, ['[[筆記|類型：x]]'], '連結裡的不算');
+  assert.deepEqual(fields('出處：p.44 | 重點').sources, ['p.44 | 重點'], '後面不是欄位名稱');
+  assert.deepEqual(fields('備註：[解法](a(b)|類型：補充)').remarks, ['[解法](a(b)|類型：補充)'], '連結路徑裡的成對括號');
+  assert.equal(fields('備註：[解法](a(b)|類型：補充)').type, null);
+  for (const inside of ['[[筆記｜類型：x]]', '[[筆記|類型：x]]', '[a](foo|類型：bar)', '[a](foo｜類型：bar)', '「附錄｜類型：x」', '「附錄|類型：x」', '［［筆記｜類型：x］］']) {
+    assert.deepEqual(fields('出處：' + inside).sources, [inside], inside);
+    assert.equal(fields('出處：' + inside).type, null, inside);
+  }
+  assert.deepEqual(fields('出處：[[a、b]]、「c、d」、p.1').sources, ['[[a、b]]', '「c、d」', 'p.1'], '頓號也一樣');
+  assert.deepEqual(fields('出處：https://x.test｜類型：定義').sources, ['https://x.test']);
+  assert.equal(fields('出處：https://x.test｜類型：定義').type, '定義');
+  assert.equal(fields('出處：[[筆記]]｜類型：定義').type, '定義');
+});
+
+// Codex L2 的 F3：欄位解析本來就接受冒號前的空白，分行也要讀得到。
+void test('§9-4 欄位名稱和冒號之間有空白：分行的值照樣讀到，提示裡的名稱也不帶空白', () => {
+  for (const head of ['出處 ：', '出處　：', '出處\t：', '出處 :']) {
+    const target = first('    - ' + head + '\n        - p.44\n        - p.45\n    - Q :: A');
+    assert.deepEqual(target.fields.sources, ['p.44', 'p.45'], head);
+    assert.deepEqual(codes('    - ' + head + '\n        - p.44\n    - Q :: A'), [], head);
+  }
+  assert.deepEqual(first('    - 備註 ：\n        - 老師強調\n    - Q :: A').fields.remarks, ['老師強調']);
+  assert.deepEqual(first('    - 錯題補強\t：\n        - [[a]]\n    - Q :: A').fields.mistakes, ['[[a]]']);
+  assert.match(deck('    - 類型 ：\n        - 定義\n    - Q :: A').problems[0].message, /「類型」底下/);
+});
+
+// Codex L2 的 F5：普通的子項目和帶欄位名稱的子項目混著寫，順序照筆記（D-164 第 5 點）。
+void test('§9-4 混用兩種子項目：順序照筆記', () => {
+  const mixed = first('    - 問 :: 答\n    - 出處：p.1\n        - p.2\n        - 出處：p.3\n        - p.4\n        - p.1\n        - p.3');
+  assert.deepEqual(mixed.fields.sources, ['p.1', 'p.2', 'p.3', 'p.4', 'p.1', 'p.3']);
+  const nested = first('    - 問 :: 答\n    - 出處：\n        - p.2\n            - 出處：p.3\n        - p.4');
+  assert.deepEqual(nested.fields.sources, ['p.2', 'p.3', 'p.4']);
+  assert.deepEqual(codes('    - 問 :: 答\n    - 出處：\n        - p.2\n            - 出處：p.3\n        - p.4'), [], '子項目底下是欄位時不算再分層');
+  const fields = first('    - 問 :: 答\n    - 備註：a\n        - 出處：p.1\n        - b\n    - 出處：p.2');
+  assert.deepEqual(fields.fields.remarks, ['a', 'b']);
+  assert.deepEqual(fields.fields.sources, ['p.1', 'p.2']);
+});
+
+// ── 屬性（§9-2）──
+
+void test('§9-2 單元的切法：全形空白、Tab 和半形空白相同；編號用原字串，不改大小寫與前導零', () => {
+  const unit = (value: string) => parseDeck('---\n單元: ' + value + '\n---\n').props.unit;
+  assert.deepEqual(unit('2-1　水溶液'), { code: '2-1', name: '水溶液' });
+  assert.deepEqual(unit('"2-1\\t水溶液"'), { code: '2-1', name: '水溶液' });
+  assert.deepEqual(unit('2-1 水溶液'), { code: '2-1', name: '水溶液' });
+  assert.deepEqual(unit('L01 Back to School'), { code: 'L01', name: 'Back to School' });
+  assert.deepEqual(unit('"03"'), { code: '03', name: '' });
+});
+
+// Codex L2 的 F6：行號看 YAML 解析出來的鍵，不是用文字切冒號。
+void test('§9-2 屬性的鍵加引號、跳脫或冒號前有空白：提示的行號照樣對', () => {
+  const lines = (text: string) => parseDeck(text).props.issues.map(issue => issue.line);
+  assert.deepEqual(lines('---\n科目: 自然\n"單元": 3\n"材料": [[教材]]\n---\n'), [2, 3]);
+  assert.deepEqual(lines("---\n科目: 自然\n'單元': 3\n---\n"), [2]);
+  assert.deepEqual(lines('---\n科目: 自然\n單元 : 3\n---\n'), [2]);
+  assert.deepEqual(lines('---\n科目: 自然\n"\\u55AE\\u5143": 3\n---\n'), [2]);
+  assert.deepEqual(lines('---\r\n科目: 自然\r\n"單元": 3\r\n---\r\n'), [2], 'CRLF');
+  assert.deepEqual(parseDeck('---\n科目: 自然\n"狀態": 奇怪\n---\n').problems.map(problem => [problem.line, problem.code]), [[2, 'unknown-property-value']]);
+});
+
+void test('§9-2 單元讀成數字、材料沒加引號：給提示，不默默變成沒有，也不一律轉成字串', () => {
+  for (const value of ['3', '03', '2.5']) {
+    const { props } = parseDeck('---\n科目: 自然\n單元: ' + value + '\n---\n');
+    assert.equal(props.unit, null, value);
+    assert.deepEqual(props.issues.map(issue => issue.line), [2], value);
+    assert.match(props.issues[0].message, /單元/);
+  }
+  const material = parseDeck('---\n材料: [[教材]]\n---\n').props;
+  assert.deepEqual(material.materials, []);
+  assert.deepEqual(material.issues.map(issue => issue.line), [1]);
+  assert.match(material.issues[0].message, /材料/);
+  // 反例：寫對的、沒寫的、空的都沒有提示。
+  for (const text of ['單元: "3"', '材料: "[[教材]]"', '材料:\n  - "[[教材]]"\n  - "[[講義]]"', '單元:', '材料:', '科目: 自然']) {
+    assert.deepEqual(parseDeck('---\n' + text + '\n---\n').props.issues, [], text);
+  }
 });
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
