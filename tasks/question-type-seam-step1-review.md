@@ -4,7 +4,7 @@
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
-[任務說明](question-type-seam.md) §2：把翻面、打字搬到接點，只搬不改。**只查行為有沒有變**，不評設計（接點的形狀 §1、之後的選詞填空 §3 以後不用看；L2 會看）。
+[任務說明](question-type-seam.md) §2：把翻面、打字搬到接點，只搬不改。**只查行為有沒有變**，不評設計（接點的形狀 §1、之後的比較選填 §3 以後不用看；L2 會看）。
 
 ## 基準
 
@@ -55,7 +55,7 @@
 
 ## 複查 F1（第二輪）
 
-新版改成同一分支的 `743601a`（`fix: keep the rating buttons and focus when the card type changes`）。舊版不變。分支之後合併了只改文件的 `main`，請以 `743601a` 的 `src`、`tests` 為準。
+新版改成同一分支的 `743601a`（`fix: keep the rating buttons and focus when the card type changes`）。舊版不變。分支之後合併了 `main`（`cf432af`，含考試範圍的程式），第一步的差分與軌跡請以 `743601a` 的 `src`、`tests` 為準。
 
 **修法**：底部那一排由元件（`screen.Bottom`）改成普通函式（`screen.bottom()`），`Review` 直接呼叫、放進同一個 `.ec-actions`，所以換題型時 React 看到的是同一棵樹。新測試 `tests/review-focus.test.ts` 在修正前兩個都失敗。
 
