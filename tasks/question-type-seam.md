@@ -1,6 +1,6 @@
 # 題型接點與選詞填空（D-181、D-178，給 Claude，本機執行）
 
-狀態：寫好，等格式查核（[請求](question-type-seam-format-review.md)）；§2 第一步不等查核；分支 `claude/question-type-seam-927507`，基準 `283f4c6`
+狀態：§2 第一步已實作，等 Codex 查行為（[請求](question-type-seam-step1-review.md)）；§3 寫法還在變動，定案前不送格式查核（[請求](question-type-seam-format-review.md)）、不動第二步；分支 `claude/question-type-seam-927507`，基準 `283f4c6`
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫這份用 **Opus、xhigh**，實作用 **Opus、高**（[quality.md](../docs/agents/quality.md)）。改解析、紀錄、排程、複習流程，跨模組，合併前要 L2。必讀 code-quality 的〈測試〉。
 
@@ -64,13 +64,12 @@ interface Flow {
 }
 interface Settled {
   lines: readonly ReviewLine[];           // 一個目標一行；翻面、打字一行
-  rating: Rating | null;                  // 按下的評分；回看時那一顆有底色
   look: LookBack;                         // 回看時的 typed／pick、能改成哪些評分、改了之後寫哪幾行
 }
 type FlowAction = { kind: 'reveal' } | { kind: 'input'; text: string } | { kind: 'submit' } | { kind: 'skip' };  // 第二步加 key、row、check
 ```
 
-`createFlow(card, { now })` 照 `questionType(card)` 查表。預覽的打字走另一個流程（`createPreviewTyped`：不走三步，D-161），翻面走同一個（多一個 `revealed` 的起點）。
+`createFlow(card, { now })` 照 `questionType(card)` 查表。預覽的打字走另一個流程（`createPreviewTyped`：不走三步，D-161），翻面走同一個（多一個 `revealed` 的起點）。預覽什麼都不寫，自評也不等 0.3 秒，所以它的流程（`createPreviewFlow`）沒有 `settle`、`revealedAt`。第一步的 `settle` 只收評分；第二步要 `settle(null)` 時才放寬。按下的評分留在 Session，第一步不放進 `Settled`。
 
 **四種邊界都試過**（D-181 要求接點試過這些）：孩子自評（翻面：`allowed` 全部）；一張卡走好幾步（打字：`act` 走三步，`allowed` 由第 1 步決定）；一張卡好幾格好幾個目標（選詞填空：`lines` 好幾行，`settle(null)` 不用選評分）；程式判一部分、孩子自評一部分（找錯題，還沒定案：`act` 判位置、`allowed` 限制評分、`lines` 帶證據，不用改 Session）。
 
@@ -83,6 +82,7 @@ interface Screen {
   Body(props): JSX.Element;               // 題目區
   Bottom(props): JSX.Element | null;      // 底部那一排
   tap(view, tools): void;                 // 點卡片：翻面／叫出鍵盤／什麼都不做
+  stage(view): string;                    // 舞台多加的 class（打字中的 is-typing）
 }
 const SCREENS: Record<QuestionType, Screen> = { flip, typed, pick };
 ```
@@ -107,6 +107,10 @@ const SCREENS: Record<QuestionType, Screen> = { flip, typed, pick };
 
 ## §3 卡組：名稱與題目（⏳ 格式查核）
 
+**這一節還沒定稿**（2026-11-05，另一個對話轉述，等使用者回答，定了寫回 `main`）：① 題型要不要改名（提案「比較填空」）；② 程式改認括號（名稱的字在組裡、答案都在組裡），不靠「相似字」這個結尾，結尾直接當卡片標題；③ 多於 5 個不算錯，6 個以內一排、7 個以上兩排；④ 只有兩個選項的組，到期時出兩句，降低猜對的機率。定案前下面的表只是目前的版本，程式識別字與測試都不寫死「選詞填空」「相似字」。
+
+使用者已決定：這個題型各科都能用，程式不分科，字鍵要放得下詞（`affect`、`質量`）；家長出題時勾選要不要用，勾選本身跟著 AI 製卡模組做，不在這次範圍。
+
 寫法照[規畫〈卡組怎麼寫〉](../docs/plans/similar-chars.md#卡組怎麼寫)。`parseDeck` 的結果：
 
 ```ts
@@ -116,11 +120,11 @@ interface Target { …; group?: PickGroup }   // 選填：沒有就是一般目�
 
 | 名稱 | 結果 |
 |---|---|
-| `寨（寨塞寒賽） 相似字` | `char: 寨`、`members: [寨,塞,寒,賽]`、`key` 是排序後的字接起來（順序不同是同一組） |
-| `寨(寨塞寒賽) 相似字`、`寨（寨、塞、寒、賽） 相似字`、`寨（寨 塞）  相似字` | 同上：半形括號、頓號、逗號、空白、多打的空白都容忍（記憶 `tolerate-typing-noise`）；沒有分隔符號時一個字一個（照 code point，避開造字的代理對） |
-| `寨（寨塞塞） 相似字` | 重複的只留一個 |
+| `寨（寨、塞、寒、賽） 相似字` | 正式的寫法（使用者 2026-11-05 同意，字和詞都放得下）：`char: 寨`、`members: [寨,塞,寒,賽]`、`key` 是排序後的字接起來（順序不同是同一組） |
+| `寨(寨、塞、寒、賽) 相似字`、`寨（寨,塞，寒 賽）  相似字`、`寨（寨塞寒賽） 相似字` | 同上：半形括號、逗號、空白、多打的空白都容忍（記憶 `tolerate-typing-noise`）；完全沒有分隔符號時一個字一個（照 code point，避開造字的代理對） |
+| `寨（寨、塞、塞） 相似字` | 重複的只留一個 |
 | `塞車 相似字`、`寨（山寨） 字義` | 不是比較卡，照一般目標，沒有提示 |
-| `寨（塞寒） 相似字`、`寨（寨） 相似字`、`寨（寨塞寒賽安交） 相似字` | error `pick-group-invalid`：字不在組裡、少於 2 個、多於 5 個（D-175、規畫）。跳過這個目標（§2-10），存檔按鈕與目錄照現有的路提示 |
+| `寨（塞、寒） 相似字`、`寨（寨） 相似字`、`寨（寨、塞、寒、賽、安、交） 相似字` | error `pick-group-invalid`：字不在組裡、少於 2 個、多於 5 個（D-175、規畫）。跳過這個目標（§2-10），存檔按鈕與目錄照現有的路提示 |
 
 **每一題**都要符合，有一題不符就整個目標算寫錯（error `pick-answer-invalid`）：問答題（不是填空）；題目剛好一個 `＿＿`（`＿` 連續兩個以上，和 `BLANK` 同一種認法）；答案去掉 `**`、`==`、前後空白後就是這個字（`char`）。
 
@@ -259,7 +263,7 @@ ID 變成重複（D-157）：目前這張牽涉的任何一個目標衝突，整
 
 ## §12 這次不做
 
-- 英文、自然接選詞填空（規畫 💡，範圍另一個對話在談）：`members` 的切法已經容得下詞，但字鍵的大小與排法沒驗過。
+- 家長出題時勾選要不要用這個題型：跟著 AI 製卡模組做。程式本身不分科（§3）。
 - 組的身分放寬（舊目標括號沒改、新字括號多一個字時，現在是兩組）：預設〈相似字〉標 💡，要用 L8 測，測了再決定改預設還是改程式。
 - 製卡規則改成只寫用哪個題型（題型專區第 3 段，跟重整製卡規則一起）。
 - 中文朗讀（[D-172](../docs/decisions.md#d-172-國小國語放進-v1) 之後另開一串）：比較卡沒有喇叭。
