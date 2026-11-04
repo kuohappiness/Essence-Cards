@@ -17,6 +17,8 @@ export interface EntryOptions {
   openSettings: () => void;
   reminders: boolean;
   covered: () => boolean;
+  /** 短暫的通知（Obsidian 的 Notice）。 */
+  notify: (message: string) => void;
   onError?: (error: unknown) => void;
   onClose?: () => void;
 }
@@ -37,6 +39,8 @@ export function openEntry(options: EntryOptions): EntryHandle {
   const listeners = new Set<() => void>();
   let version = 0;
   let screen: EntryScreen = options.screen ?? 'entry';
+  /** 考試範圍畫面回到哪裡（D-163 第 2 點）。 */
+  let origin: EntryScreen = 'entry';
   let closed = false;
   const refresh = (): void => {
     version++;
@@ -76,10 +80,15 @@ export function openEntry(options: EntryOptions): EntryHandle {
       subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
       version: () => version,
       screen: () => screen,
-      go(next) { screen = next; refresh(); },
+      go(next) {
+        if (next === 'scope') origin = screen;
+        screen = next;
+        refresh();
+      },
+      from: () => origin,
     }}
     state={options.state} start={options.start} openNote={options.openNote} openSettings={options.openSettings}
-    close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered}
+    close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered} notify={options.notify}
     terms={{ get: () => loadTerms(options.app), set: terms => { saveTerms(options.app, terms); } }}
   />);
   shell.element.focus({ preventScroll: true });

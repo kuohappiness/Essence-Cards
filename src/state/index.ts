@@ -1,9 +1,9 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
-import { buildIndex, paintCatalog, scopeDate, scopePeriod, targetsInScope } from '../core/catalog/index.ts';
-import type { Catalog, CatalogIndex, ScopeFile, ScopePeriod } from '../core/catalog/index.ts';
-export type { Catalog, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
+import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, targetsInScope } from '../core/catalog/index.ts';
+import type { Catalog, CatalogIndex, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
+export type { Catalog, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
 import { createExamFiles } from './exam.ts';
 import type { ExamChange, ExamResult } from './exam.ts';
@@ -79,6 +79,8 @@ export interface ExamView {
   period: ScopePeriod;
   /** 今天的日編號（清晨 4 點換日），算倒數用。 */
   day: number;
+  /** 上一份範圍的結束日（§6 的預先勾選）；沒有上一份是 null。 */
+  previousEnd: string | null;
 }
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
@@ -150,6 +152,10 @@ export interface State {
   version(): { build: string | null; own: 'waiting' | 'same' | 'queued' | 'written' | null; devices: VersionReport[] };
   /** 考試範圍現在的樣子；還沒 ready 也能問（settled 是 false）。 */
   exam(): ExamView;
+  /** 範圍那一列與設定畫面用的目錄（§6、§7）：只有單元的結構，不重播紀錄（顏色與當日卡是空的），所以入口每次刷新都能問；還沒 ready 是 null。 */
+  examCatalog(): Catalog | null;
+  /** 照這些變動存檔之後會有哪些要留意的（§8）：不寫檔，勾選改變時畫面再問一次；還沒 ready 是 null。 */
+  examCheck(change: ExamChange): ScopeCheck | null;
   /**
    * 建立或改範圍檔（§2-4）：畫面只交出變動，在 modify 的回呼裡改最新的內容；新檔撞名不蓋掉。有變動才記紀錄（§2-5）。
    * 寫好後立刻當成現在的內容重排，onChange 只通知一次。closed、loading；範圍檔還不知道或有讀不到的是 unread；回呼看到檔不見或已經結束是 changed；屬性區壞了是 broken。
@@ -414,6 +420,7 @@ export function createState(options: StateOptions): State {
       notifyChange();
     }
   }
+  const unitList = (): ScopeUnit[] => catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }));
   /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。 */
   let examWrites: Promise<unknown> = Promise.resolve();
   function examWrite(work: (day: number) => Promise<ExamResult>): Promise<ExamResult> {
@@ -606,7 +613,8 @@ export function createState(options: StateOptions): State {
     },
     catalog() {
       const { today, input: value } = fresh();
-      return paintCatalog(catalogIndex(), memoryColors(value), todayLeft(today, value));
+      const { chosen, usable } = selection(dayOf(value.now, value.offset));
+      return paintCatalog(catalogIndex(), memoryColors(value), todayLeft(today, value), usable ? chosen?.file : null);
     },
     deckTargets: path => life.loaded ? catalogIndex().deckTargets(path) : [],
     unitMaterials(path, term, code) {
@@ -632,12 +640,21 @@ export function createState(options: StateOptions): State {
     exam() {
       const at = now(), day = dayOf(at, offsetOf(at));
       const { chosen, usable, others } = selection(day);
-      return { settled: exam.settled(), missing: exam.missing(), path: chosen?.path ?? null, file: chosen?.file ?? null, usable, others, period: chosen ? scopePeriod(chosen.file) : { kind: 'none' }, day };
+      return { settled: exam.settled(), missing: exam.missing(), path: chosen?.path ?? null, file: chosen?.file ?? null, usable, others, period: chosen ? scopePeriod(chosen.file) : { kind: 'none' }, day, previousEnd: exam.previousEnd(day) };
+    },
+    examCatalog: () => life.loaded ? paintCatalog(catalogIndex(), new Map(), new Set()) : null,
+    examCheck(change) {
+      if (!life.loaded) return null;
+      const at = now();
+      const { chosen } = selection(dayOf(at, offsetOf(at)));
+      if (!chosen) return scopeCheck(parseScope(newScopeText({ id: 'x', add: change.add ?? [] })), catalogIndex());
+      const edited = editScope(exam.text(chosen.path) ?? '', change, unitList());
+      return scopeCheck(edited.kind === 'ok' ? parseScope(edited.text) : chosen.file, catalogIndex());
     },
     setExam(change) {
       return examWrite(day => {
         const { chosen } = selection(day);
-        return chosen ? exam.update(chosen.path, change, catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }))) : exam.create(change);
+        return chosen ? exam.update(chosen.path, change, unitList()) : exam.create(change);
       });
     },
     endExam() {

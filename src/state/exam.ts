@@ -1,5 +1,5 @@
 import type { Files } from '../core/files.ts';
-import { chooseScope, editScope, EXAM_FOLDER, isExamPath, newScopeText, parseScope, scopeFileName } from '../core/catalog/index.ts';
+import { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, parseScope, scopeFileName } from '../core/catalog/index.ts';
 import type { ScopeChange, ScopeFile, ScopeUnit } from '../core/catalog/index.ts';
 import { newId } from '../core/deck/index.ts';
 import type { ExamLog } from '../core/study/index.ts';
@@ -148,6 +148,8 @@ export function createExamFiles(options: ExamFilesOptions) {
     missing: (): number => [...reads.unread].filter(path => !known.has(path)).length,
     text: (path: string): string | null => known.get(path)?.text ?? null,
     choose: (day: number) => chooseScope([...known].map(([path, { file }]) => ({ path, file })), day),
+    /** 上一份範圍的結束日（§6 的預先勾選）。 */
+    previousEnd: (day: number): string | null => lastEnded([...known].map(([path, { file }]) => ({ path, file })), day),
     /** 改一份舊檔（§2-4）：回呼裡改最新的內容；有變動才記（§2-5）。 */
     async update(path: string, change: ExamChange | Pick<ScopeChange, 'ended'>, units: readonly ScopeUnit[]): Promise<ExamResult> {
       let before: ScopeFile | null = null;
