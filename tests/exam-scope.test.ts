@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseScope, isExamPath, parseScope as parse, readDate, scopeDay, scopePeriod, unitInScope } from '../src/core/catalog/index.ts';
+import { chooseScope, editScope, isExamPath, newScopeText, parseScope as parse, readDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from '../src/core/catalog/index.ts';
 import type { ScopeFile } from '../src/core/catalog/index.ts';
 import { dayOf } from '../src/core/study/index.ts';
 
@@ -278,4 +278,197 @@ void test('候選：只有看不懂、只有分類或空的檔，不會蓋過真
 void test('其他也生效的：同一次考試的副本與別的考試都列，結束的不列', () => {
   const list = [entry('a', '識別碼: x\n考試開始: 2026-10-28'), entry('b', '識別碼: x\n考試開始: 2026-10-28'), entry('c', '考試開始: 2026-11-01'), entry('d', '提前結束: 2026-10-20'), entry('e', '識別碼: y', '老師說\n')];
   assert.deepEqual(chooseScope(list, TODAY).others, ['b', 'c']);
+});
+
+// ── 寫回（§2-4、Codex F5）──
+
+const units = (...codes: string[]): { term: string; subject: string; code: string }[] => codes.map(code => unit('國二上', '自然', code));
+function edit(text: string, change: Parameters<typeof editScope>[1], known: readonly { term: string; subject: string; code: string }[] = []): string {
+  scopeCases.add(text);
+  const done = editScope(text, change, known);
+  assert.equal(done.kind, 'ok', text);
+  return done.kind === 'ok' ? done.text : '';
+}
+
+const FILE = `---
+識別碼: x7f3k2
+考試開始: 2026-10-28
+---
+# 範圍
+- 國二上 自然 2-1
+- 國二上 自然 2-2 水溶液
+- 國二上 自然 第2章第2節
+- 國二上 自然 2-9 老師手寫
+分類：醫學
+老師說第三節不考
+- 國二下 自然 2-2
+- 國二上 英文 L1
+`;
+const CHAPTER = `---
+識別碼: x7f3k2
+---
+- 國二上 自然 2
+- 國二上 自然 ２
+- 國二上 自然 2-9 老師手寫
+分類：醫學
+老師說第三節不考
+- 國二上 英文 L1
+`;
+const BOOK = units('2', '2-1', '2-1-3', '2-2', '2-3', '3-1');
+
+void test('勾與取消：只動那幾行，其他字一字不動', () => {
+  assert.equal(edit(FILE, { remove: units('2-2') }), FILE.replace('- 國二上 自然 2-2 水溶液\n- 國二上 自然 第2章第2節\n', ''), '別名與重複的行一起');
+  assert.equal(edit(FILE, { remove: units('2-9') }), FILE.replace('- 國二上 自然 2-9 老師手寫\n', ''));
+  assert.equal(edit(FILE, { add: units('2-3') }), FILE.replace('- 國二上 自然 2-9 老師手寫\n', '- 國二上 自然 2-9 老師手寫\n- 國二上 自然 2-3\n'), '同一學期同一科最後一行後面');
+  assert.equal(edit(FILE, { add: [unit('國一上', '自然', '1-1')] }), FILE.replace('- 國二下 自然 2-2\n', '- 國二下 自然 2-2\n- 國一上 自然 1-1\n'), '這個學期沒有行：同一科最後一行後面');
+  assert.equal(edit(FILE, { add: [unit('國二上', '英文', 'L2')] }), FILE.replace('- 國二上 英文 L1\n', '- 國二上 英文 L1\n- 國二上 英文 L2\n'));
+  assert.equal(edit(FILE, { add: [unit('國二上', '數學', '1')] }), FILE + '- 國二上 數學 1\n', '這一科沒有行就加在最後');
+  assert.equal(edit(FILE, { add: units('2-1') }), FILE, '已經有了');
+  assert.equal(edit(CHAPTER, { add: units('2-1') }), CHAPTER, '已經被整章包含');
+  assert.equal(edit(FILE, { remove: units('7-7') }), FILE, '沒有這一行');
+});
+
+void test('勾「2 全部」：被包含的行換成一行 2，放在第一個被換掉的位置；別的學期、看不懂的、分類留著', () => {
+  assert.equal(edit(FILE, { add: units('2') }), `---
+識別碼: x7f3k2
+考試開始: 2026-10-28
+---
+# 範圍
+- 國二上 自然 2
+分類：醫學
+老師說第三節不考
+- 國二下 自然 2-2
+- 國二上 英文 L1
+`);
+});
+
+void test('整章裡取消一個：2 換成目前有卡組的其他單元，只留最上層；明寫的行留著', () => {
+  assert.equal(edit(CHAPTER, { remove: units('2-2') }, BOOK), `---
+識別碼: x7f3k2
+---
+- 國二上 自然 2-1
+- 國二上 自然 2-3
+- 國二上 自然 2-9 老師手寫
+分類：醫學
+老師說第三節不考
+- 國二上 英文 L1
+`, '兩行都是 2（別名），只展開一次；2 自己的卡組不算了；2-1-3 由 2-1 包含');
+  assert.equal(edit(CHAPTER, { remove: units('2-1-3') }, BOOK), `---
+識別碼: x7f3k2
+---
+- 國二上 自然 2-2
+- 國二上 自然 2-3
+- 國二上 自然 2-9 老師手寫
+分類：醫學
+老師說第三節不考
+- 國二上 英文 L1
+`, '取消的單元有上一層：2-1 包含它，也不算了');
+  assert.equal(edit(CHAPTER, { remove: units('2-9') }, BOOK), `---
+識別碼: x7f3k2
+---
+- 國二上 自然 2-1
+- 國二上 自然 2-2
+- 國二上 自然 2-3
+分類：醫學
+老師說第三節不考
+- 國二上 英文 L1
+`, '明寫的行本身被取消');
+  const after = parseScope(edit(CHAPTER, { remove: units('2-2') }, BOOK));
+  assert.equal(unitInScope(after, unit('國二上', '自然', '2-2')), false);
+  assert.equal(unitInScope(after, unit('國二上', '自然', '2-1-3')), true);
+  assert.equal(unitInScope(after, unit('國二上', '自然', '2-4')), false, '之後才建立的不再自動算進去');
+  assert.equal(unitInScope(after, unit('國二上', '自然', '2')), false, '這個格式寫不出只考它自己');
+  assert.equal(unitInScope(after, unit('國二上', '自然', '2-9')), true);
+});
+
+void test('取消整章與底下的：一起刪', () => {
+  assert.equal(edit(FILE, { remove: units('2') }, BOOK), FILE.replace('- 國二上 自然 2-1\n- 國二上 自然 2-2 水溶液\n- 國二上 自然 第2章第2節\n- 國二上 自然 2-9 老師手寫\n', ''));
+});
+
+void test('先取消再新勾：同一次按確定', () => {
+  assert.equal(edit('---\n識別碼: x\n---\n- 國二上 自然 2-1\n', { remove: units('2-1'), add: units('2-2') }), '---\n識別碼: x\n---\n- 國二上 自然 2-2\n');
+});
+
+void test('日期：畫面改了的寫新值，沒改的標準化，看不懂的留原字，清空就刪；註解與別的屬性不動', () => {
+  const file = '---\n# 手寫的註解\n識別碼: x\n考試開始: 20261028 # 第一天\n老師: 王\n考試結束: 2026/10/29\n---\n- 國二上 自然 2\n';
+  assert.equal(edit(file, {}), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-10-28 # 第一天\n老師: 王\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n');
+  assert.equal(edit(file, { start: '2026-11-01' }), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-11-01 # 第一天\n老師: 王\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n');
+  assert.equal(edit(file, { end: null }), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-10-28 # 第一天\n老師: 王\n---\n- 國二上 自然 2\n');
+  assert.equal(edit('---\n考試開始: 10/28\n---\n', {}), '---\n考試開始: 10/28\n---\n', '看不懂的留原字');
+  assert.equal(edit('---\n考試開始: "2026-10-28"\n---\n', {}), '---\n考試開始: 2026-10-28\n---\n', '值沒變、只是寫法不同也寫成標準');
+  assert.equal(edit('---\n考試開始:\n---\n', { start: '2026-10-28' }), '---\n考試開始: 2026-10-28\n---\n', '空著的值');
+  assert.equal(edit('---\n考試結束: 2026-10-29\n---\n', { start: '2026-10-28' }), '---\n考試開始: 2026-10-28\n考試結束: 2026-10-29\n---\n', '開始寫在結束前面');
+  assert.equal(edit('---\n識別碼: x\n---\n', { end: '2026-10-29' }), '---\n識別碼: x\n考試結束: 2026-10-29\n---\n');
+  assert.equal(edit('---\n考試結束: 2026-10-29\n---\n', { end: null }), '---\n---\n', '唯一的屬性也能刪');
+  assert.equal(edit('---\n考試開始: [2026, 10]\n---\n', { start: '2026-10-28' }), '---\n考試開始: 2026-10-28\n---\n', '清單是看不懂的日期，畫面改了就換掉整個值');
+  assert.equal(edit('---\n考試開始: [2026, 10]\n---\n', {}), '---\n考試開始: [2026, 10]\n---\n');
+});
+
+void test('識別碼：第一次寫入補在屬性區最前面，已經有就不動；沒有屬性區就建一個', () => {
+  assert.equal(edit('---\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n', { id: 'abc123' }), '---\n識別碼: abc123\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n');
+  assert.equal(edit('---\n識別碼: x\n---\n', { id: 'abc123' }), '---\n識別碼: x\n---\n');
+  assert.equal(edit('---\n識別碼:\n---\n', { id: 'abc123' }), '---\n識別碼: abc123\n---\n', '空著的值');
+  assert.equal(edit('- 國二上 自然 2\n', { id: 'abc123' }), '---\n識別碼: abc123\n---\n- 國二上 自然 2\n');
+  assert.equal(edit('﻿- 國二上 自然 2\n', { id: 'abc123', start: '2026-10-28' }), '﻿---\n識別碼: abc123\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n', 'BOM 留在最前面');
+  assert.equal(edit('- 國二上 自然 2\n', {}), '- 國二上 自然 2\n', '沒有要補的就不建');
+});
+
+void test('提前結束：多一行，開始與結束日不動', () => {
+  assert.equal(edit('---\n識別碼: x\n考試開始: 2026-10-28\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n', { ended: '2026-10-24' }), '---\n識別碼: x\n考試開始: 2026-10-28\n考試結束: 2026-10-29\n提前結束: 2026-10-24\n---\n- 國二上 自然 2\n');
+});
+
+void test('換行照檔案原本的：CRLF、結尾沒換行都留著', () => {
+  const crlf = '---\r\n識別碼: x\r\n考試開始: 20261028\r\n---\r\n- 國二上 自然 2-1\r\n- 國二上 英文 L1\r\n';
+  assert.equal(edit(crlf, { add: units('2-2') }), '---\r\n識別碼: x\r\n考試開始: 2026-10-28\r\n---\r\n- 國二上 自然 2-1\r\n- 國二上 自然 2-2\r\n- 國二上 英文 L1\r\n');
+  assert.equal(edit('---\n識別碼: x\n---\n- 國二上 自然 2-1', { add: units('2-2') }), '---\n識別碼: x\n---\n- 國二上 自然 2-1\n- 國二上 自然 2-2');
+  assert.equal(edit('---\n識別碼: x\n---\n- 國二上 自然 2-1', { add: [unit('國二上', '數學', '1')] }), '---\n識別碼: x\n---\n- 國二上 自然 2-1\n- 國二上 數學 1');
+  assert.equal(edit('---\n識別碼: x\n---', { add: units('2-2') }), '---\n識別碼: x\n---\n- 國二上 自然 2-2', '屬性區後面沒有字');
+  assert.equal(edit('---\n識別碼: x\n---\n- 國二上 自然 2-1\n\n\n', { add: [unit('國二上', '數學', '1')] }), '---\n識別碼: x\n---\n- 國二上 自然 2-1\n- 國二上 數學 1\n\n\n', '加在最後一行有字的後面');
+});
+
+void test('不寫：檔不見或清空、已經結束、屬性區壞了', () => {
+  const blocked = (text: string): string => { const done = editScope(text, { add: units('2') }, []); return done.kind === 'blocked' ? done.reason : 'ok'; };
+  assert.equal(blocked(''), 'changed');
+  assert.equal(blocked('---\n識別碼: x\n提前結束: 2026-10-20\n---\n'), 'changed');
+  assert.equal(blocked('---\n考試開始: [\n---\n'), 'broken');
+  assert.equal(blocked('---\n考試開始: 2026-10-28\n'), 'broken');
+  assert.deepEqual(editScope('---\n{考試開始: 2026-10-28}\n---\n', { id: 'abc123' }, []), { kind: 'blocked', reason: 'broken' }, '一行的寫法加不了新的一行：不寫，不是寫壞');
+});
+
+void test('新檔的內容與檔名', () => {
+  assert.equal(newScopeText({ id: 'x7f3k2', start: '2026-10-28', end: '2026-10-29', add: [unit('國二上', '自然', '2'), unit('國二上', '英文', 'L1')] }), '---\n識別碼: x7f3k2\n考試開始: 2026-10-28\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n- 國二上 英文 L1\n');
+  assert.equal(newScopeText({ id: 'x7f3k2', add: [unit('國二上', '自然', '2')] }), '---\n識別碼: x7f3k2\n---\n- 國二上 自然 2\n');
+  assert.equal(scopeFileName('2026-10-28', [unit('國一下', '自然', '1'), unit('國二上', '自然', '2'), unit('B2', '自然', '3')]), '2026-10-28 國二上', '最新的認得的學期');
+  assert.equal(scopeFileName(null, [unit('國二上', '自然', '2')]), '日期未定 國二上');
+  assert.equal(scopeFileName('2026-10-28', [unit('B2', '自然', '2')]), '2026-10-28', '不認得的學期不放進檔名');
+  assert.equal(scopeFileName(null, [unit('B2', '自然', '2')]), '日期未定');
+});
+
+void test('寫得回去的單元才能勾：讀回來要是同一個', () => {
+  for (const each of [unit('國二上', '自然', '2'), unit('八上', 'Social Studies', 'L1-2'), unit('國二上', '英文', 'Starter'), unit('B2', '自然', '2-'), unit('國二上', 'Math2', 'L1')]) assert.equal(scopeWritable(each), true, JSON.stringify(each));
+  for (const each of [unit('B 2', '自然', '2'), unit('國二上', '社會 2 班', 'L1'), unit('國二上', '自然', '2,3'), unit('國二上', '自然', '水溶液 2')]) assert.equal(scopeWritable(each), false, JSON.stringify(each));
+});
+
+// ── 共用範例：登錄過的每個檔（要放在最後）──
+
+void test('往返與冪等：沒有要改的再按一次不變，只動屬性區，範圍照舊', () => {
+  assert.ok(scopeCases.size > 40, '範例要真的登錄進來');
+  for (const text of scopeCases) {
+    const plain = editScope(text, {}, []);
+    if (plain.kind === 'ok') {
+      assert.deepEqual(parseScope(plain.text).lines, parseScope(text).lines, '沒有要改的只碰日期的寫法：' + JSON.stringify(text));
+      assert.equal(parseScope(plain.text).id, parseScope(text).id, '沒有要改的不補識別碼');
+      assert.deepEqual(editScope(plain.text, {}, []), plain);
+    }
+    const once = editScope(text, { id: 'abc123' }, []);
+    if (once.kind !== 'ok') continue;
+    const twice = editScope(once.text, {}, []);
+    assert.deepEqual(twice, { kind: 'ok', text: once.text }, '第二次完全不變：' + JSON.stringify(text));
+    const before = parseScope(text), after = parseScope(once.text);
+    assert.deepEqual(after.lines.map(line => line.raw), before.lines.map(line => line.raw), '範圍行一字不動：' + JSON.stringify(text));
+    assert.deepEqual(after.lines.map(shown), before.lines.map(shown));
+    assert.equal(after.id, before.id ?? 'abc123');
+    assert.equal(after.ended, before.ended);
+    assert.deepEqual(scopePeriod(after), scopePeriod(before), '期間不變：' + JSON.stringify(text));
+  }
 });

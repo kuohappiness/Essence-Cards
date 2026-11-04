@@ -1,5 +1,5 @@
-import { isMap, parseDocument } from 'yaml';
-import { chapterAlias, codeKey, readTerm, termKey, tidy } from '../deck/index.ts';
+import { isMap, isNode, isScalar, parseDocument } from 'yaml';
+import { chapterAlias, codeKey, readTerm, termKey, termRank, tidy } from '../deck/index.ts';
 
 // 考試範圍檔（tasks/exam-scope.md §2、syntax.md §4、D-176）：只看字面，不看卡組。讀懂的、對不到卡組的、看不懂的分開，都留著讓畫面寫出來。
 
@@ -178,4 +178,174 @@ export function chooseScope<T extends { path: string; file: ScopeFile }>(entries
   const candidates = sorted.filter(each => hasUnit(each.file));
   const chosen = candidates[0] ?? sorted[0] ?? null;
   return { chosen, usable: candidates.length > 0, others: candidates.slice(1).map(each => each.path) };
+}
+
+// ── 寫回（§2-4）──
+
+/** 畫面交出的變動，在 Files.modify 的回呼裡套到最新的內容上。日期：沒給是畫面沒改，null 是清空。 */
+export interface ScopeChange {
+  add?: readonly ScopeUnit[];
+  remove?: readonly ScopeUnit[];
+  start?: string | null;
+  end?: string | null;
+  /** 提前結束的日期。 */
+  ended?: string;
+  /** 還沒有識別碼時補這個。 */
+  id?: string;
+}
+type ScopeEdit = { kind: 'ok'; text: string } | { kind: 'blocked'; reason: 'changed' | 'broken' };
+interface RawLine { raw: string; eol: string }
+
+function linesWithEnds(text: string): RawLine[] {
+  const lines: RawLine[] = [];
+  for (const match of text.matchAll(/([^\r\n]*)(\r\n|\n|\r|$)/g)) {
+    if (match[0] === '') break;
+    lines.push({ raw: match[1], eol: match[2] });
+  }
+  return lines;
+}
+const unitLine = (unit: ScopeUnit): string => `- ${unit.term} ${unit.subject} ${unit.code}`;
+const sameBook = (a: ScopeUnit, b: ScopeUnit): boolean => termOf(a.term) === termOf(b.term) && subjectOf(a.subject) === subjectOf(b.subject);
+const unitAt = (line: RawLine): ScopeUnit | null => { const read = readLine(line.raw, 0); return read?.kind === 'unit' ? read : null; };
+
+/** 屬性區的字：每個值照 YAML 的位置換，註解、別的屬性與引號不動。raw 以 \n 接起來，沒有結尾的換行。 */
+function editHead(raw: string, change: ScopeChange, before: ScopeFile): string {
+  // 先讓每一行都以換行結尾，插入與刪除就都是一整行。
+  const source = raw ? raw + '\n' : '';
+  const doc = parseDocument(source);
+  const pairs = isMap(doc.contents) ? doc.contents.items : [];
+  const edits: { from: number; to: number; text: string }[] = [];
+  const pairOf = (key: string) => pairs.find(pair => isScalar(pair.key) && pair.key.value === key);
+  const rangeOf = (node: unknown): [number, number] | null => {
+    const range = isNode(node) ? node.range : undefined;
+    return range ? [range[0], range[1]] : null;
+  };
+  const lineStart = (at: number): number => at === 0 ? 0 : source.lastIndexOf('\n', at - 1) + 1;
+  function setValue(key: string, text: string): boolean {
+    const pair = pairOf(key);
+    const keyRange = rangeOf(pair?.key);
+    if (!pair || !keyRange) return false;
+    const value = rangeOf(pair.value);
+    if (value && value[1] > value[0]) {
+      if (source.slice(value[0], value[1]) !== text) edits.push({ from: value[0], to: value[1], text });
+    } else {
+      const colon = source.indexOf(':', keyRange[1]) + 1;
+      edits.push({ from: colon, to: colon, text: ' ' + text });
+    }
+    return true;
+  }
+  function removeKey(key: string): void {
+    const pair = pairOf(key);
+    const keyRange = rangeOf(pair?.key);
+    if (!pair || !keyRange) return;
+    const last = rangeOf(pair.value)?.[1] ?? keyRange[1];
+    edits.push({ from: lineStart(keyRange[0]), to: source.indexOf('\n', last) + 1, text: '' });
+  }
+  /** 新的一行：at 是它要放的位置（一行的開頭）；沒給就放最後。 */
+  const insert = (at: number | null, text: string): void => { const where = at ?? source.length; edits.push({ from: where, to: where, text: text + '\n' }); };
+  function date(key: string, read: ScopeDate, wanted: string | null | undefined, after: number | null): void {
+    if (wanted === null) { removeKey(key); return; }
+    const text = wanted ?? (read.kind === 'ok' ? read.date : null);
+    if (text !== null && !setValue(key, text)) insert(after, `${key}: ${text}`);
+  }
+  if (before.id === null && change.id !== undefined && !setValue('識別碼', change.id)) insert(0, '識別碼: ' + change.id);
+  const endKey = rangeOf(pairOf('考試結束')?.key);
+  date('考試開始', before.start, change.start, endKey ? lineStart(endKey[0]) : null);
+  date('考試結束', before.end, change.end, null);
+  if (change.ended !== undefined) insert(null, '提前結束: ' + change.ended);
+  // 同一個位置的插入照加入的順序接起來；removeKey 與 setValue 的位置不會重疊。
+  let result = source;
+  const order = edits.map((each, index) => ({ each, index })).sort((a, b) => b.each.from - a.each.from || b.index - a.index);
+  for (const { each } of order) result = result.slice(0, each.from) + each.text + result.slice(each.to);
+  return result.endsWith('\n') ? result.slice(0, -1) : result;
+}
+
+/** 範圍行：先取消再新勾。units 是目前有卡組的單元，整章裡取消一個時用。 */
+function editBody(body: RawLine[], change: ScopeChange, units: readonly ScopeUnit[], eol: string): RawLine[] {
+  let lines = [...body];
+  const within = (line: RawLine, unit: ScopeUnit): { read: ScopeUnit } | null => {
+    const read = unitAt(line);
+    return read && sameBook(read, unit) ? { read } : null;
+  };
+  const made = (unit: ScopeUnit): RawLine => ({ raw: unitLine(unit), eol });
+  for (const unit of change.remove ?? []) {
+    const code = codeKey(unit.code);
+    lines = lines.filter(line => { const hit = within(line, unit); return !hit || !covers(code, codeKey(hit.read.code)); });
+    const upper = lines.filter(line => { const hit = within(line, unit); return hit !== null && covers(codeKey(hit.read.code), code); });
+    if (!upper.length) continue;
+    const staying = lines.filter(line => !upper.includes(line));
+    const under = upper.map(line => codeKey((unitAt(line) as ScopeUnit).code));
+    const rest = units.filter(each => {
+      const key = codeKey(each.code);
+      return sameBook(each, unit) && under.some(top => covers(top, key)) && !covers(code, key) && !covers(key, code)
+        && !staying.some(line => { const hit = within(line, each); return hit !== null && covers(codeKey(hit.read.code), key); });
+    });
+    const top = rest.filter(each => !rest.some(other => other !== each && codeKey(other.code) !== codeKey(each.code) && covers(codeKey(other.code), codeKey(each.code))));
+    const at = lines.indexOf(upper[0]);
+    lines = [...lines.slice(0, at), ...top.map(made), ...lines.slice(at + 1)].filter(line => !upper.includes(line));
+  }
+  for (const unit of change.add ?? []) {
+    const code = codeKey(unit.code);
+    if (lines.some(line => { const hit = within(line, unit); return hit !== null && covers(codeKey(hit.read.code), code); })) continue;
+    const inside = lines.filter(line => { const hit = within(line, unit); return hit !== null && covers(code, codeKey(hit.read.code)); });
+    if (inside.length) {
+      const at = lines.indexOf(inside[0]);
+      lines = [...lines.slice(0, at), { raw: unitLine(unit), eol: inside[0].eol }, ...lines.slice(at + 1)].filter(line => !inside.includes(line));
+      continue;
+    }
+    const subject = subjectOf(unit.subject);
+    const lastOf = (test: (line: RawLine) => boolean): number => lines.findLastIndex(test);
+    let after = lastOf(line => within(line, unit) !== null);
+    if (after < 0) after = lastOf(line => { const read = unitAt(line); return read !== null && subjectOf(read.subject) === subject; });
+    if (after < 0) after = lastOf(line => line.raw.trim() !== '');
+    lines = [...lines.slice(0, after + 1), made(unit), ...lines.slice(after + 1)];
+  }
+  return lines;
+}
+
+/** 把變動套到這份文字（§2-4）。空字串是檔不見或清空，已經結束的不改回去，屬性區壞了不寫。 */
+export function editScope(text: string, change: ScopeChange, units: readonly ScopeUnit[]): ScopeEdit {
+  if (text === '') return { kind: 'blocked', reason: 'changed' };
+  const before = parseScope(text);
+  if (before.broken) return { kind: 'blocked', reason: 'broken' };
+  if (before.ended) return { kind: 'blocked', reason: 'changed' };
+  const bom = text.startsWith('﻿') ? '﻿' : '';
+  const lines = linesWithEnds(text.slice(bom.length));
+  const eol = lines.find(line => line.eol)?.eol ?? '\n';
+  const close = lines[0]?.raw.trim() === '---' ? lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw)) : -1;
+  const headLines = close > 0 ? lines.slice(1, close) : [];
+  const raw = headLines.map(line => line.raw).join('\n');
+  const edited = editHead(raw, change, before);
+  let head: RawLine[];
+  if (close > 0) {
+    head = edited === raw ? lines.slice(0, close + 1) : [lines[0], ...(edited ? edited.split('\n').map(line => ({ raw: line, eol })) : []), lines[close]];
+  } else {
+    head = edited ? [{ raw: '---', eol }, ...edited.split('\n').map(line => ({ raw: line, eol })), { raw: '---', eol }] : [];
+  }
+  const body = lines.slice(close > 0 ? close + 1 : 0);
+  const next = editBody(body, change, units, eol);
+  // 中間的行都要有換行；結尾有沒有換行照原本的。
+  const all = [...head, ...next];
+  const endedWithEol = lines.length === 0 || lines[lines.length - 1].eol !== '';
+  const output = all.map((line, index) => ({ raw: line.raw, eol: index === all.length - 1 ? (endedWithEol ? line.eol || eol : '') : line.eol || eol }));
+  const result = bom + output.map(line => line.raw + line.eol).join('');
+  // 屬性區是清單以外的寫法（`{考試開始: 2026-10-28}`、`|`）時，一行一行的改法可能改壞：讀回來壞了就不寫。
+  return parseScope(result).broken ? { kind: 'blocked', reason: 'broken' } : { kind: 'ok', text: result };
+}
+
+/** 新檔的內容。 */
+export function newScopeText({ id, start, end, add }: { id: string; start?: string | null; end?: string | null; add: readonly ScopeUnit[] }): string {
+  const head = ['---', '識別碼: ' + id, ...(start ? ['考試開始: ' + start] : []), ...(end ? ['考試結束: ' + end] : []), '---'];
+  return [...head, ...add.map(unitLine), ''].join('\n');
+}
+/** 新檔的檔名（不含 .md 與資料夾）：考試開始日加勾選單元裡最新的認得的學期；建立後不改名（D-142 第 1 點）。 */
+export function scopeFileName(start: string | null, units: readonly ScopeUnit[]): string {
+  const terms = units.map(unit => termKey(unit.term)).filter(term => termRank(term) !== null);
+  const latest = terms.sort((a, b) => (termRank(b) ?? 0) - (termRank(a) ?? 0))[0];
+  return (start ?? '日期未定') + (latest ? ' ' + latest : '');
+}
+/** 這個單元寫成一行再讀回來是不是同一個（§2-4）：不是的不能用勾選加入。這個格式不多一種引號。 */
+export function scopeWritable(unit: ScopeUnit): boolean {
+  const read = readLine(unitLine(unit), 0);
+  return read?.kind === 'unit' && sameBook(read, unit) && codeKey(read.code) === codeKey(unit.code);
 }

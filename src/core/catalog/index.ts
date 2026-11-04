@@ -5,7 +5,7 @@ import type { MemoryColor } from '../study/index.ts';
 // 範圍與目錄（D-110、D-142 原則 1、2、5、6、8）：把 deck 認定的單元參照對到單元、算每個目標屬於哪些單元、單元與學期的排序。
 // 輸入是卡組與每個目標的記憶狀態，不 import study 的程式；deck、study 不 import 這裡。
 
-export { chooseScope, isExamPath, parseScope, readDate, scopeDay, scopePeriod, unitInScope } from './scope.ts';
+export { chooseScope, editScope, isExamPath, newScopeText, parseScope, readDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from './scope.ts';
 export type { ScopeFile } from './scope.ts';
 
 export interface CatalogDeck { path: string; deck: Deck }
