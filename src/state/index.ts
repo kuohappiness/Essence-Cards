@@ -425,17 +425,18 @@ export function createState(options: StateOptions): State {
   /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。輪到它時選定的已經不是畫面打開的那一份（前一筆結束了、被刪、改名、換了另一次考試）：不套上去（§6）。 */
   let examWrites: Promise<unknown> = Promise.resolve();
   function examWrite(opened: ExamTarget, work: (chosen: ReturnType<typeof exam.choose>['chosen'], day: number) => Promise<ExamResult>): Promise<ExamResult> {
-    const run = examWrites.then(async (): Promise<ExamResult> => {
+    const run = examWrites.then((): ExamResult | Promise<ExamResult> => {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
       if (!exam.settled() || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
-      const known = await exam.drain(EXAM_WAIT);
-      if (life.closed) return { kind: 'blocked', reason: 'closed' };
-      if (!known || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
-      const at = now(), day = dayOf(at, offsetOf(at));
-      const { chosen } = selection(day);
-      if ((chosen?.path ?? null) !== opened.path || (chosen?.file.id ?? null) !== opened.id) return { kind: 'blocked', reason: 'changed' };
-      return work(chosen, day);
+      return exam.drain<ExamResult>(EXAM_WAIT, known => {
+        if (life.closed) return { kind: 'blocked', reason: 'closed' };
+        if (!known || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
+        const at = now(), day = dayOf(at, offsetOf(at));
+        const { chosen } = selection(day);
+        if ((chosen?.path ?? null) !== opened.path || (chosen?.file.id ?? null) !== opened.id) return { kind: 'blocked', reason: 'changed' };
+        return work(chosen, day);
+      });
     });
     examWrites = run.catch(() => {});
     return run;

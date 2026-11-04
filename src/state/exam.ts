@@ -37,7 +37,7 @@ interface ExamFilesOptions {
 
 /** 回呼裡擋下來的（§2-4）：丟錯才不會建立或寫入。 */
 class ScopeBlocked extends Error {
-  readonly result: Extract<ReturnType<typeof editScope>, { kind: 'blocked' }>;
+  readonly result: Extract<ExamResult, { kind: 'blocked' }>;
   constructor(result: ScopeBlocked['result']) { super('範圍檔不能寫：' + result.reason); this.result = result; }
 }
 
@@ -154,9 +154,10 @@ export function createExamFiles(options: ExamFilesOptions) {
 
   /**
    * 寫入前先讀完已知的待讀（§4，Codex L2 的 R13；和卡組的 admit 同一個規則）：通知到了、還在排或正在讀的那一份可能是更早的考試。
-   * 一份一份讀，所以等的是「都讀完了」的那一聲。最多等 ms；回 true 是都有結果了（讀不到的在 unread）。
+   * 一份一份讀，所以等的是「都讀完了」的那一聲。最多等 ms。
+   * decide 收到 true 是都有結果了（讀不到的在 unread）；它和最後一次查待讀在同一個同步區段，中間不會再插進通知（Codex L2 的 R17）。
    */
-  async function drain(ms: number): Promise<boolean> {
+  async function drain<T>(ms: number, decide: (known: boolean) => T | Promise<T>): Promise<T> {
     let late = false;
     const id = setTimeout(() => { late = true; wakeDrain?.(); }, ms);
     const going = (): boolean => !late && !life.closed && reads.waiting();
@@ -166,7 +167,7 @@ export function createExamFiles(options: ExamFilesOptions) {
     }
     clearTimeout(id);
     wakeDrain = null;
-    return !reads.waiting();
+    return decide(!reads.waiting());
   }
 
   function timed(work: Promise<void>): Promise<void> {
@@ -240,6 +241,8 @@ export function createExamFiles(options: ExamFilesOptions) {
       };
       try {
         const text = await modify(path, latest => {
+          // 真正寫之前最後一個同步區段：開始寫之後才到的通知（別份）還來得及不寫，別份可能是更早的考試（Codex L2 的 R17）。同一份不用看，這裡拿到的就是最新的。
+          if (reads.waiting(path)) throw new ScopeBlocked({ kind: 'blocked', reason: 'unread' });
           const done = editScope(latest, { ...change, id: freshId() }, units);
           if (done.kind === 'blocked') throw new ScopeBlocked(done);
           const was = parseScope(latest);

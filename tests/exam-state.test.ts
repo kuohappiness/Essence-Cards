@@ -731,6 +731,30 @@ void test('通知排著還沒讀（delay 還沒到）：先讀完才決定；讀
   assert.deepEqual(h.logged().filter(line => line.set === 'exam'), []);
 });
 
+void test('通知夾在等完與寫入之間（R17）：不管排在哪一步，真正寫之前到的都不會寫到舊的選定檔', async t => {
+  const seen = new Set<string>();
+  for (let hops = 0; hops < 16; hops++) {
+    const h = await noticed(t);
+    const was = opened(h.state);
+    const ending = h.state.endExam(was);
+    for (let i = 0; i < hops; i++) await Promise.resolve();
+    const wroteFirst = h.memory.texts.get(NOTICED.a) !== NOTICED.textA;
+    seen.add(wroteFirst ? '寫完才到' : '寫之前到');
+    h.memory.write(NOTICED.b, NOTICED.earlier);
+    await tick(t);
+    await tick(t);
+    const result = await ending;
+    if (wroteFirst) assert.deepEqual(result, { kind: 'done' }, '第 ' + String(hops) + ' 步');
+    else {
+      assert.equal(result.kind, 'blocked', '第 ' + String(hops) + ' 步');
+      assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA, '第 ' + String(hops) + ' 步');
+    }
+    await tick(t);
+    assert.equal(h.state.exam().path, NOTICED.b, '之後都選到更早的那一份');
+  }
+  assert.deepEqual([...seen].sort(), ['寫之前到', '寫完才到'], '兩邊都有測到');
+});
+
 void test('通知排著還沒讀，讀到的比較晚：選定的沒變，照常寫', async t => {
   const h = await noticed(t);
   const was = opened(h.state);
@@ -738,6 +762,31 @@ void test('通知排著還沒讀，讀到的比較晚：選定的沒變，照常
   assert.deepEqual(await h.state.endExam(was), { kind: 'done' });
   assert.match(h.memory.texts.get(NOTICED.a) ?? '', /提前結束/);
   assert.equal(h.state.exam().path, NOTICED.b, '結束之後換另一份接手');
+});
+
+void test('寫入已經開始、回呼還沒進入時到的通知（R17）：別份的不寫；同一份的照最新內容寫', async t => {
+  const other = makeSlow(t, { ...DECKS, [NOTICED.a]: NOTICED.textA });
+  await readySlow(t, other.state);
+  const open = other.gate();
+  const ending = other.state.endExam(opened(other.state));
+  await tick(t, 0);
+  other.memory.write(NOTICED.b, NOTICED.earlier);
+  open();
+  assert.deepEqual(await ending, { kind: 'blocked', reason: 'unread' });
+  assert.equal(other.memory.texts.get(NOTICED.a), NOTICED.textA);
+  assert.deepEqual(other.exams(), []);
+
+  const same = makeSlow(t, { ...DECKS, [NOTICED.a]: NOTICED.textA });
+  await readySlow(t, same.state);
+  const openSame = same.gate();
+  const endingSame = same.state.endExam(opened(same.state));
+  await tick(t, 0);
+  const edited = NOTICED.textA + '- 國二上 英文 L1\n';
+  same.memory.write(NOTICED.a, edited);
+  openSame();
+  assert.deepEqual(await endingSame, { kind: 'done' });
+  const text = same.memory.texts.get(NOTICED.a) ?? '';
+  assert.ok(text.includes('提前結束') && text.includes('英文 L1'), text);
 });
 
 void test('正在讀、一直沒回來：最多等 2 秒就擋下來，只擋範圍檔；回來之後照常選', async t => {
