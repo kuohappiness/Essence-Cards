@@ -1,6 +1,6 @@
 # 考試範圍開工前的格式查核（給 Codex）
 
-狀態：等 Codex 查核
+狀態：做完（基準 `9be6eea`），見[報告與核對](<../Claude Codex Discussion/2026-11-04-exam-scope-format-review.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
