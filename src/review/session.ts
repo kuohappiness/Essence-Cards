@@ -1,72 +1,27 @@
-import { baseForm } from '../core/deck/index.ts';
-import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Pick, Rating } from '../core/study/index.ts';
 import type { State, StudyPick } from '../state/index.ts';
 import { crumb } from './crumb.ts';
 import { doneView, todayStats, type DoneView } from './done.ts';
-import { englishParts, fillBlank } from './english.ts';
-import { closest, copying, spelling, type Spelling } from './spelling.ts';
+import { createFlow, type Flow, type FlowAction, type LookBack } from './flow.ts';
+import type { TypedView } from './typed.ts';
 
 // 一次複習的狀態（W6 §2）：純程式，不碰 React 與 Obsidian。React 元件只把這裡的狀態畫出來、把按鍵與手勢轉成動作。
+// 一張卡走到有結果的整段在 Flow（flow.ts，D-181）；這裡只留取卡、上方的進度、回看、切走重來、衝突與停用、0.3 秒、寫紀錄。
 
-/** 自評四級，照 D-062 的順序：沒印象、差一點、記住了、太簡單。 */
-export const RATINGS: readonly Rating[] = ['miss', 'near', 'good', 'easy'];
-export const RATING_LABELS: Record<Rating, string> = { miss: '沒印象', near: '差一點', good: '記住了', easy: '太簡單' };
 /** 翻面後多少毫秒內的自評不算（D-096）。 */
 export const RATE_DELAY = 300;
 /** 切到背景連續超過這麼久，回來時目前這張從頭開始（W6 §2-1、L2 的 F4；操作上的折衷，不是驗證過的記憶門檻）。 */
 export const AWAY_LIMIT = 60_000;
-
-export type StepResult = 'right' | 'wrong' | 'skip';
-/** 第 2 步的結果；原形是 null 或等於某一個答案而跳過第 2 步時是 not-needed（syntax.md §5 的 retry）。 */
-type RetryResult = StepResult | 'not-needed';
-
-/** 打字卡（中翻英）的三步（D-121、W6 §2-3）。 */
-export interface TypedView {
-  step: 1 | 2 | 3;
-  /** 第 1 步的結果；第 1 步還在進行時是 null。評分只看它。 */
-  first: StepResult | null;
-  /** 第 2 步的結果；跳過第 2 步是 not-needed，還沒到或第 1 步拼對是 null。 */
-  second: RetryResult | null;
-  /** 第 2、3 步標「錯誤」（打叉的圖示，D-145、D-174）：拼錯進來才標，按「沒印象」進來不標。 */
-  notice: boolean;
-  /** 第 2 步的原形提示；其他步 null。 */
-  hint: string | null;
-  /** 寫在線上的答案：走完時是對中或照打的那一個（照打「正確拼字」那一行就寫它，D-145）；還沒走完是第一個（課本用的）。 */
-  answer: string;
-  /** 第 3 步：最後一次打的字和最接近的答案逐字比對（拼錯的字母標出）；其他步 null。 */
-  attempt: Spelling | null;
-  /** 第 3 步照打的對象：「正確拼字」那一行的答案（和最後一次打的字最接近的那個，D-145）；其他步與回看是 null。 */
-  copy: string | null;
-  /** 第 3 步照打：目前輸入和照打的對象照位置的即時比對（copying）；其他步 null。 */
-  live: Spelling | null;
-  /** 第 1 步拼錯或按「沒印象」時打的字和最接近答案的比對（回看時顯示）；拼對是 null。 */
-  firstAttempt: Spelling | null;
-  /** 目前輸入框的文字。 */
-  input: string;
-  /** 三步走完（答案出現、可以自評）。 */
-  finished: boolean;
-  /** 有跳過的按鈕：第 1、2 步是「沒印象」；第 3 步一開始沒有，照打送出一次還是不對之後是「跳過」（D-158）。 */
-  canSkip: boolean;
-  /** 跳過的按鈕換一個字（預覽是「顯示答案」，D-161）；沒有就照上面。 */
-  skipLabel?: string;
-}
 
 /** 這一次做過的一張（D-084：回看是「這一次」做過的）。 */
 interface DoneCard {
   card: Card;
   crumb: string;
   rating: Rating;
-  /** 這一筆紀錄的 t；改評分後是新的那一筆。 */
-  t: string;
-  typed: StepResult | null;
-  retry: RetryResult | null;
-  /** 打字卡：第 1 步打的字，和它與最接近答案的比對（回看時顯示）。 */
-  firstInput: string | null;
-  firstCompare: Spelling | null;
-  /** 打字卡：寫在線上的答案。 */
-  answer: string | null;
-  /** 回看時能改成的評分（打字卡照第 1 步；按「沒印象」的不能改）。 */
+  /** 這張卡寫下的每一行的 t；改評分後是新的那幾行。 */
+  written: readonly string[];
+  look: LookBack;
+  /** 回看時能改成的評分：照 look；ID 變成重複之後是空的（D-157）。 */
   changeable: readonly Rating[];
 }
 
@@ -154,30 +109,8 @@ interface SessionOptions {
 interface Current {
   card: Card;
   crumb: string;
-  revealed: boolean;
-  revealedAt: number | null;
-  typed: TypedView | null;
-  /** 英文的部分（題目）：喇叭與自動朗讀用。 */
-  autoRead: readonly string[] | null;
+  flow: Flow;
   shown: number;
-}
-
-/** 打字卡的答案與原形：原形是 null、或和某一個答案比對起來一樣（checkTyped 的規則，D-158）時跳過第 2 步（D-121）。 */
-function hintOf(card: Card): string | null {
-  const answers = card.prompt.kind === 'qa' ? card.prompt.typed ?? [] : [];
-  const base = baseForm(card.target);
-  if (base === null || answers.some(answer => typedKey(answer) === typedKey(base))) return null;
-  return base;
-}
-const answersOf = (card: Card): readonly string[] => card.prompt.kind === 'qa' && card.prompt.typed ? card.prompt.typed : [];
-/** 學生打的字對中的那一個答案；沒對中是 undefined。 */
-const matchOf = (card: Card, text: string): string | undefined => answersOf(card).find(answer => typedKey(answer) === typedKey(text));
-/** 能按的自評（D-066、D-116、D-121）：拼對只能記住了／太簡單；拼錯只能差一點／沒印象；按「沒印象」只剩沒印象。 */
-export function allowedFor(first: StepResult | null): readonly Rating[] {
-  if (first === null) return RATINGS;
-  if (first === 'right') return ['good', 'easy'];
-  if (first === 'wrong') return ['miss', 'near'];
-  return ['miss'];
 }
 
 export function createSession(options: SessionOptions): Session {
@@ -209,17 +142,13 @@ export function createSession(options: SessionOptions): Session {
     const next = state.next(pick);
     current = next.kind === 'card' ? present(next.card, 0) : null;
   }
-  /** 一張卡從題目開始：一般卡在正面，打字卡在第 1 步。 */
+  /** 一張卡從題目開始。 */
   function present(card: Card, shown: number): Current {
-    const english = card.target.direction !== null;
-    const typed: TypedView | null = card.typed ? {
-      step: 1, first: null, second: null, notice: false, hint: null, answer: answersOf(card)[0] ?? '', attempt: null, copy: null, live: null, firstAttempt: null, input: '', finished: false, canSkip: true,
-    } : null;
-    // 英翻中的題目一出現就念英文（D-116）。
-    const question = card.prompt.kind === 'qa' ? card.prompt.question : card.prompt.text;
-    const autoRead = english && card.target.direction === 'en-zh' ? englishParts(question) : null;
-    return { card, crumb: crumbOf(card), revealed: false, revealedAt: null, typed, autoRead: autoRead?.length ? autoRead : null, shown };
+    return { card, crumb: crumbOf(card), flow: createFlow(card, { now }), shown };
   }
+  /** 這張卡牽涉的每一個目標都還能寫（需要新版時會被停掉，任務說明 2-2）。 */
+  const canAnswer = (card: Card): boolean => card.blanks.every(blank => state.canAnswer(blank.lt));
+  const touches = (card: Card, ids: ReadonlySet<string>): boolean => card.blanks.some(blank => ids.has(blank.lt));
 
   const readyPromise = state.ready().then(() => {
     if (closed) return;
@@ -234,8 +163,8 @@ export function createSession(options: SessionOptions): Session {
   const unsubscribe = state.onChange(() => {
     if (!loaded) return;
     const conflicted = new Set(state.conflicts().map(each => each.id));
-    for (const entry of done) if (conflicted.has(entry.card.lt)) entry.changeable = [];
-    if (current && conflicted.has(current.card.lt)) {
+    for (const entry of done) if (touches(entry.card, conflicted)) entry.changeable = [];
+    if (current && touches(current.card, conflicted)) {
       load();
       if (viewing !== null) spoken();
     } else if (!current) load();
@@ -254,24 +183,18 @@ export function createSession(options: SessionOptions): Session {
   function cardView(): CardView | null {
     if (viewing !== null) {
       const entry = done[viewing];
-      const typedView: TypedView | null = entry.answer !== null ? {
-        step: 3, first: entry.typed, second: entry.retry, notice: false, hint: null, answer: entry.answer ?? '', attempt: entry.firstCompare, copy: null, live: null, firstAttempt: entry.firstCompare, input: entry.firstInput ?? '', finished: true, canSkip: false,
-      } : null;
       // 回看的那張後來被停掉（需要新版，任務說明 2-2）：不能改評分。
       return {
-        kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: typedView, allowed: state.canAnswer(entry.card.lt) ? entry.changeable : [], pressed: entry.rating,
+        kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: entry.look.typed, allowed: canAnswer(entry.card) ? entry.changeable : [], pressed: entry.rating,
         english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length }, shown: 0,
       };
     }
     if (!current) return null;
-    const { card, typed } = current;
-    // 打字卡：第 3 步就看得到答案與背面；能自評要等三步走完。
-    const revealed = typed ? typed.finished || typed.step === 3 : current.revealed;
-    const canRate = typed ? typed.finished : current.revealed;
-    const english = card.target.direction !== null;
+    const { card, flow } = current;
+    const { revealed, allowed, speakable, typed } = flow.view();
     return {
-      kind: 'card', card, crumb: current.crumb, revealed, typed, allowed: canRate ? allowedFor(typed ? typed.first : null) : [],
-      pressed: null, english, speakable: english && (card.target.direction === 'en-zh' || revealed), autoRead: current.autoRead, viewing: null, shown: current.shown,
+      kind: 'card', card, crumb: current.crumb, revealed, typed, allowed,
+      pressed: null, english: card.target.direction !== null, speakable, autoRead: flow.autoRead, viewing: null, shown: current.shown,
     };
   }
 
@@ -287,153 +210,33 @@ export function createSession(options: SessionOptions): Session {
     return cached;
   }
 
-  /** 翻面或答案出現：記下時間，0.3 秒內的自評不算。 */
-  function revealNow(): void {
-    if (!current) return;
-    current.revealed = true;
-    current.revealedAt = now();
-  }
-
   /** 每個動作開頭：上一個動作要念的已經念過了。 */
-  function spoken(): void { if (current) current.autoRead = null; }
+  function spoken(): void { if (current) current.flow.autoRead = null; }
 
-  function reveal(): void {
-    if (!current || current.typed || current.revealed || viewing !== null) return;
-    spoken();
-    revealNow();
-    notify();
-  }
-
-  function input(text: string): void {
-    if (!current?.typed || current.typed.finished || viewing !== null) return;
-    spoken();
-    const typed = current.typed;
-    typed.input = text;
-    if (typed.step === 3) typed.live = copying(text, typed.copy ?? typed.answer);
-    notify();
-  }
-
-  /** 進入第 3 步：答案與背面出現、顯示最後一次打的字和最接近答案的比對；自動朗讀在這時念（D-121）。 */
-  function enterStep3(typed: TypedView, card: Card, lastInput: string, misspelled: boolean): void {
-    const answers = answersOf(card);
-    typed.step = 3;
-    typed.hint = null;
-    typed.notice = misspelled;
-    typed.answer = answers[0] ?? '';
-    typed.copy = closest(lastInput, answers);
-    typed.attempt = spelling(lastInput, typed.copy);
-    typed.live = copying('', typed.copy);
-    typed.input = '';
-    typed.canSkip = false;
-    revealNow();
-    announceAnswer(card, typed.answer);
-  }
-  /** 中翻英的答案出現在畫面上：先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）。 */
-  function announceAnswer(card: Card, answer: string): void {
-    if (!current || card.target.direction !== 'zh-en') return;
-    const question = card.prompt.kind === 'qa' ? card.prompt.question : card.prompt.text;
-    const sentence = fillBlank(question, answer);
-    current.autoRead = sentence ? [answer, sentence] : [answer];
-  }
-  function finish(typed: TypedView, card: Card, matched: string, announce: boolean): void {
-    typed.finished = true;
-    typed.answer = matched;
-    typed.hint = null;
-    typed.notice = false;
-    typed.live = null;
-    typed.canSkip = false;
-    revealNow();
-    if (announce) announceAnswer(card, matched);
-  }
-
-  function submit(): void {
-    if (!current?.typed || current.typed.finished || viewing !== null) return;
-    spoken();
-    const { card, typed } = current;
-    const answers = answersOf(card);
-    const text = typed.input;
-    if (typed.step === 3) {
-      if (!text.trim()) return;
-      typed.live = copying(text, typed.copy ?? typed.answer);
-      // 照打任何一個答案都能結束；線上寫學生照打的那一個（拼對時寫對中的那一個，W6 §3-4）。還是不對就可以跳過（D-158）。
-      if (checkTyped(card.prompt, text)) finish(typed, card, matchOf(card, text) ?? typed.answer, false);
-      else typed.canSkip = true;
-      notify();
-      return;
-    }
-    if (!text.trim()) return;
-    const ok = checkTyped(card.prompt, text);
-    const matched = matchOf(card, text) ?? answers[0] ?? '';
-    if (typed.step === 1) {
-      if (ok) { typed.first = 'right'; finish(typed, card, matched, false); }
-      else {
-        typed.first = 'wrong';
-        typed.firstAttempt = spelling(text, closest(text, answers));
-        const hint = hintOf(card);
-        if (hint !== null) { typed.step = 2; typed.hint = hint; typed.notice = true; typed.input = ''; }
-        else { typed.second = 'not-needed'; enterStep3(typed, card, text, true); }
-      }
-    } else {
-      if (ok) { typed.second = 'right'; finish(typed, card, matched, true); }
-      else { typed.second = 'wrong'; enterStep3(typed, card, text, true); }
-    }
-    notify();
-  }
-
-  function skip(): void {
-    if (!current?.typed || current.typed.finished || viewing !== null) return;
-    const { card, typed } = current;
-    if (typed.step === 3) {
-      // 跳過照打（D-158）：線上寫照打的那一個；答案進第 3 步時已經念過，不再念。
-      if (!typed.canSkip) return;
-      spoken();
-      finish(typed, card, typed.copy ?? typed.answer, false);
-      notify();
-      return;
-    }
-    spoken();
-    const text = typed.input;
-    if (typed.step === 1) {
-      typed.first = 'skip';
-      typed.firstAttempt = spelling(text, closest(text, answersOf(card)));
-      const hint = hintOf(card);
-      if (hint !== null) { typed.step = 2; typed.hint = hint; typed.notice = false; typed.input = ''; }
-      else { typed.second = 'not-needed'; enterStep3(typed, card, text, false); }
-    } else {
-      typed.second = 'skip';
-      // 第 1 步拼錯過的，打叉一路標到走完（D-174）；一路按「沒印象」、沒拼過的不標。
-      enterStep3(typed, card, text, typed.first === 'wrong');
-    }
-    notify();
+  /** 一個作答動作交給這張卡的流程；回看時不算。 */
+  function act(action: FlowAction): void {
+    if (!current || viewing !== null) return;
+    if (current.flow.act(action)) notify();
   }
 
   function rate(rating: Rating): boolean {
     if (!loaded) return false;
     if (viewing !== null) return change(done[viewing], rating);
     if (!current) return false;
-    const { card, typed } = current;
-    const revealed = typed ? typed.finished : current.revealed;
-    if (!revealed || !allowedFor(typed ? typed.first : null).includes(rating)) return false;
-    if (current.revealedAt !== null && now() - current.revealedAt < RATE_DELAY) return false;
+    const { card, flow } = current;
+    if (!flow.view().allowed.includes(rating)) return false;
+    if (flow.revealedAt !== null && now() - flow.revealedAt < RATE_DELAY) return false;
     spoken();
-    const first = typed?.first ?? null, second = typed?.second ?? null;
+    const { lines, look } = flow.settle(rating);
     // 寫紀錄只經過 state.answer（W6 限制第 4 點）；寫不進去由 W5 的提示處理，畫面照常換下一張。
-    const t = state.answer({ lt: card.lt, r: rating, v: card.prompt.fingerprint, ...(first ? { typed: first } : {}), ...(second ? { retry: second } : {}) });
+    const written = lines.flatMap(line => state.answer(line) ?? []);
     // 這張在作答前被停掉（需要新版，任務說明 2-2）：沒有寫紀錄，不算做過、不進回看，換下一張。
-    if (t === null) {
+    if (!written.length) {
       load();
       notify();
       return true;
     }
-    // 回看時要顯示第 1 步打的字與比對：拼對的就是答案本身；拼錯或按「沒印象」的是 attempt（對最接近答案的比對）。
-    const firstCompare = typed ? (typed.firstAttempt ?? spelling(typed.answer, typed.answer)) : null;
-    done.push({
-      card, crumb: current.crumb, rating, t, typed: first, retry: second,
-      firstInput: firstCompare ? firstCompare.typed.map(l => l.char).join('') : null,
-      firstCompare,
-      answer: typed ? typed.answer : null,
-      changeable: typed ? (first === 'skip' ? [] : allowedFor(first)) : RATINGS,
-    });
+    done.push({ card, crumb: current.crumb, rating, written, look, changeable: look.changeable });
     load();
     notify();
     return true;
@@ -446,12 +249,16 @@ export function createSession(options: SessionOptions): Session {
   function change(entry: DoneCard, rating: Rating): boolean {
     // 取消與新的評分一起寫或一起不寫：那張後來被停掉（需要新版）就不能改，先問；取消涵蓋同一個 t 的所有作答，別台裝置同一刻的
     // 作答被停時取消會被拒（Codex L2 的 F1），這時新的評分也不寫。
-    if (entry.rating === rating || !entry.changeable.includes(rating) || !state.canAnswer(entry.card.lt)) return false;
-    if (state.answer({ undo: entry.t }) === null) return false;
-    const t = state.answer({ lt: entry.card.lt, r: rating, v: entry.card.prompt.fingerprint, ...(entry.typed ? { typed: entry.typed } : {}), ...(entry.retry ? { retry: entry.retry } : {}) });
-    // 同一個目標剛問過可以寫、取消也寫了，不會是 null；型別上仍要處理。
-    if (t === null) return false;
-    entry.t = t;
+    if (entry.rating === rating || !entry.changeable.includes(rating) || !canAnswer(entry.card)) return false;
+    for (const t of entry.written) if (state.answer({ undo: t }) === null) return false;
+    const written: string[] = [];
+    for (const line of entry.look.lines(rating)) {
+      const t = state.answer(line);
+      // 同一個目標剛問過可以寫、取消也寫了，不會是 null；型別上仍要處理。
+      if (t === null) return false;
+      written.push(t);
+    }
+    entry.written = written;
     entry.rating = rating;
     if (!current) load();
     notify();
@@ -499,7 +306,7 @@ export function createSession(options: SessionOptions): Session {
     // 沒超過 60 秒也通知一次：畫面重新判斷（例如只剩一個自評、切走前已走完的那張要自動換下一張，D-145）。
     if (away <= AWAY_LIMIT) { notify(); return false; }
     current = present(current.card, current.shown + 1);
-    if (viewing !== null) current.autoRead = null;
+    if (viewing !== null) current.flow.autoRead = null;
     notify();
     return true;
   }
@@ -514,7 +321,11 @@ export function createSession(options: SessionOptions): Session {
   return {
     view, ready: () => readyPromise,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    reveal, input, submit, skip, rate, back, forward, toCurrent, continueWith, pause, resume,
+    reveal() { act({ kind: 'reveal' }); },
+    input(text) { act({ kind: 'input', text }); },
+    submit() { act({ kind: 'submit' }); },
+    skip() { act({ kind: 'skip' }); },
+    rate, back, forward, toCurrent, continueWith, pause, resume,
     close() { closed = true; unsubscribe(); done.length = 0; current = null; listeners.clear(); },
     history: () => done,
     pick: () => pick,

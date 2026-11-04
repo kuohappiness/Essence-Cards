@@ -1,4 +1,5 @@
 import type { Target } from '../deck/index.ts';
+import { cardOf } from './compose.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { choosePrompt, wrong } from './session.ts';
@@ -116,12 +117,11 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     correct: prior.some(entry => entry.r === 'good' || entry.r === 'easy'), seen,
   };
   const prompt = choosePrompt(slot, valid.get(item.id) ?? []);
-  return { kind: 'card', card: {
+  return { kind: 'card', card: cardOf({
     lt: item.id, deck: item.path, target: item.target, prompt,
     isNew: slot.memory === null && !any.has(item.id),
-    typed: prompt.kind === 'qa' && prompt.typed !== null,
     early: !ready && !fresh,
-  } };
+  }) };
 }
 
 /** 卡組裡這些目標現在的記憶顏色（D-062）：灰未複習、橙到期或剛答錯、綠還沒到期、藍間隔超過 21 天。 */

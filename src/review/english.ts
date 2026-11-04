@@ -1,4 +1,6 @@
+import type { Prompt } from '../core/deck/index.ts';
 import { typedKey } from '../core/study/index.ts';
+import type { Card } from '../core/study/index.ts';
 
 // 英文的部分（D-082、D-116）：朗讀只念英文，不念中文翻譯；中翻英的例句把 ＿＿ 換成答案再念。
 
@@ -55,8 +57,24 @@ export function fillBlank(question: string, answer: string): string | null {
   return part ? part.replace(BLANK, answer) : null;
 }
 
+/** 題目的文字。 */
+export const questionOf = (prompt: Prompt): string => prompt.kind === 'qa' ? prompt.question : prompt.text;
+/** 題目一出現就念的：英翻中的題目念英文（D-116）；其他不念。 */
+export function openingSpeech(card: Card): readonly string[] | null {
+  const parts = card.target.direction === 'en-zh' ? englishParts(questionOf(card.prompt)) : [];
+  return parts.length ? parts : null;
+}
+/** 答案出現時念的：中翻英先念答案，再念把 ＿＿ 換成答案的例句（D-116、D-121）；其他不念。 */
+export function answerSpeech(card: Card, answer: string): readonly string[] | null {
+  if (card.target.direction !== 'zh-en') return null;
+  const sentence = fillBlank(questionOf(card.prompt), answer);
+  return sentence ? [answer, sentence] : [answer];
+}
+/** 喇叭現在可以出現：英翻中隨時；中翻英答案出現之後（D-082）。 */
+export const canSpeak = (card: Card, revealed: boolean): boolean => card.target.direction !== null && (card.target.direction === 'en-zh' || revealed);
+
 /** 中文字與全形標點。 */
-const CJK = /[\p{Script=Han}　-〿＀-￯]/u;
+const CJK =/[\p{Script=Han}　-〿＀-￯]/u;
 /**
  * 空格前面那段文字裡，英文句子從哪裡換行（D-145：中文句子後面接英文句子時，英文換到下一行）：
  * 最後一個中文字或全形標點的後面（UTF-16 位置）；沒有中文時 null（英文在前、中文提示在後的不換行）。

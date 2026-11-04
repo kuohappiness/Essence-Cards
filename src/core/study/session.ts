@@ -1,4 +1,5 @@
 import type { Prompt } from '../deck/index.ts';
+import { cardOf } from './compose.ts';
 import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { dayOf, dayStart } from './time.ts';
@@ -85,12 +86,11 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   if (!item) return { kind: 'done' };
   const slot = slotOf(today, item.lt);
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);
-  return { kind: 'card', card: {
+  return { kind: 'card', card: cardOf({
     lt: item.lt, deck: item.deck, target: slot.target, prompt,
     isNew: slot.memory === null && !any.has(item.lt),
-    typed: prompt.kind === 'qa' && prompt.typed !== null,
     early: !ready && !fresh,
-  } };
+  }) };
 }
 
 /** 今天的份裡屬於這個範圍的；再複習一些不算。 */

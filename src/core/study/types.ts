@@ -179,6 +179,13 @@ export interface ScopeCount { done: number; total: number }
 /** 記憶配色（D-062）：灰未複習、橙快忘了、綠記得、藍很熟。 */
 export type MemoryColor = 'new' | 'near' | 'good' | 'easy';
 
+/** 一張卡的一格：只對一個學習目標（D-114）。 */
+interface Blank {
+  lt: string;
+  target: Target;
+  prompt: Prompt;
+}
+
 export interface Card {
   lt: string;
   deck: string;
@@ -191,6 +198,8 @@ export interface Card {
   typed: boolean;
   /** 剛答錯、還沒到時間就提早出。 */
   early: boolean;
+  /** 這張卡的每一格，至少一格；翻面與打字就是自己那一格（D-181）。 */
+  blanks: readonly Blank[];
 }
 
 export type Next =
