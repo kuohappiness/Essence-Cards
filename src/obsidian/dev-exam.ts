@@ -2,8 +2,9 @@ import { MarkdownView, type App, type TFile } from 'obsidian';
 import { EXAM_FOLDER, scopeDate } from '../core/catalog/index.ts';
 import { capturePng, keepRendering } from './dev-review.ts';
 import { buttonOf, focusOk, inEntry, screens, sleep, text, until, type EntryDevHost } from './dev-entry.ts';
+import { clearTrial, makeTrial, newTrial, noteFolder, type Trial } from './dev-exam-files.ts';
 
-// 考試範圍的 Windows 實機（tasks/exam-scope.md §10）：只在電腦。在測試 vault 建暫時的卡組，走完設定、倒數、目錄標籤、外部修改、§8 的點開與結束，截圖對照樣式稿，結束時只清掉這次自己建的檔。
+// 考試範圍的 Windows 實機（tasks/exam-scope.md §10）：只在電腦。在測試 vault 建暫時的卡組，走完設定、倒數、目錄標籤、外部修改、§8 的點開與結束，截圖對照樣式稿，結束時只清掉有建立證據的檔（dev-exam-files.ts）。
 // do=run 一次走完。獨占鎖要 PowerShell 配合，分段跑：do=prep → run=reload → do=reopen → （鎖住）do=lock-on → （放開）do=lock-off → do=clean。
 
 const FOLDER = 'Essence Cards/考試測試';
@@ -48,33 +49,6 @@ const notices = (): string[] => Array.from(document.querySelectorAll('.notice'),
 const scopeRow = (): HTMLElement | undefined => inEntry('.ec-sc-row')[0];
 const scopeFiles = (app: App): TFile[] => app.vault.getFiles().filter(file => file.path.startsWith(EXAM_FOLDER + '/'));
 
-async function makeFiles(app: App): Promise<TFile[]> {
-  // 上一次刪掉的資料夾 iCloud 可能又放回硬碟，Obsidian 的清單卻還沒有：看硬碟，不看清單。
-  if (!(await app.vault.adapter.exists(FOLDER))) await app.vault.createFolder(FOLDER);
-  const created: TFile[] = [];
-  for (const [path, content] of Object.entries(FILES)) {
-    if (app.vault.getAbstractFileByPath(path)) throw Error('已經有這個檔，不覆寫：' + path);
-    created.push(await app.vault.create(path, content));
-  }
-  return created;
-}
-async function removeFiles(app: App): Promise<boolean | string[]> {
-  await sleep(1500);
-  for (const file of [...app.vault.getFiles().filter(each => each.path.startsWith(FOLDER + '/')), ...scopeFiles(app)]) await app.vault.delete(file).catch(() => { /* 開發命令：沒刪到的看結果。 */ });
-  await sleep(500);
-  for (const name of [FOLDER, EXAM_FOLDER]) {
-    const entry = app.vault.getFolderByPath(name);
-    if (entry && !entry.children.length) await app.vault.delete(entry, true).catch(() => { /* 同上。 */ });
-  }
-  await sleep(500);
-  const left: string[] = [];
-  for (const name of [FOLDER, EXAM_FOLDER]) {
-    if (!(await app.vault.adapter.exists(name))) continue;
-    await app.vault.adapter.rmdir(name, false).catch(() => { /* 同上。 */ });
-    if (await app.vault.adapter.exists(name)) left.push(name);
-  }
-  return left.length === 0 || left;
-}
 
 export async function examDev(host: EntryDevHost, action: string | undefined, folder: string): Promise<unknown> {
   const { app } = host;
@@ -118,9 +92,26 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
   const day = state.exam().day;
   const soon = scopeDate(day + 12), later = scopeDate(day + 13);
   const shortOf = (date: string): string => { const [, month, each] = date.split('-'); return `${String(Number(month))}/${String(Number(each))}`; };
+  /** 開始時已經有的範圍檔：不是這次建的，拒跑也不動它（R1）。 */
+  const already = new Set(scopeFiles(app).map(file => file.path));
+  const refused = { error: '測試 vault 已經有範圍檔，不動它', files: [...already] };
+  const trial = newTrial();
+  /** 分段跑的建立證據：`do=prep` 記下，`do=clean` 照它刪，跨過重新載入外掛。 */
+  const proof = folder.slice(0, folder.lastIndexOf('/')) + '/exam 建立的檔.json';
+  /** 流程建立的範圍檔：開始時沒有，內容寫到測試科目。 */
+  async function noteScopes(): Promise<void> {
+    for (const file of scopeFiles(app)) {
+      if (already.has(file.path) || trial.files.includes(file.path)) continue;
+      if ((await app.vault.read(file)).includes(SUBJECT)) trial.files.push(file.path);
+    }
+  }
+  const adapter = app.vault.adapter;
   try {
     if (action === 'prep') {
-      await makeFiles(app);
+      if (already.size) return refused;
+      if (await adapter.exists(proof)) return { error: '上一次分段跑還沒清（do=clean）', proof };
+      await noteFolder(app, trial, EXAM_FOLDER);
+      await makeTrial(app, trial, FOLDER, FILES);
       await until(() => state.catalog().terms.some(term => term.term === '高三下'));
       host.openEntry();
       await until(() => inEntry('.ec-en-today').length === 1);
@@ -136,7 +127,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       check('紅字', inEntry('.ec-sc-word.is-bad').map(text));
       check('通知', notices());
       host.entry?.close();
-      return { checks, scope: scopeFiles(app).map(file => file.path), day, soon };
+      return { checks, scope: scopeFiles(app).map(file => file.path), day, soon, trial };
     }
     if (action === 'reopen') {
       host.openEntry();
@@ -193,13 +184,16 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       return { checks };
     }
     if (action === 'clean') {
-      check('沒有留下暫時的檔與資料夾', await removeFiles(app));
+      if (!(await adapter.exists(proof))) return { error: '沒有建立的紀錄，不刪任何檔', proof };
+      check('沒有留下暫時的檔與資料夾', await clearTrial(app, JSON.parse(await adapter.read(proof)) as Trial));
+      await adapter.remove(proof);
       return { checks };
     }
 
     // ── do=run：一次走完 ──
-    if (scopeFiles(app).length) return { error: '測試 vault 已經有範圍檔，不動它', files: scopeFiles(app).map(file => file.path) };
-    await makeFiles(app);
+    if (already.size) return refused;
+    await noteFolder(app, trial, EXAM_FOLDER);
+    await makeTrial(app, trial, FOLDER, FILES);
     check('卡組讀進來了', await until(() => state.catalog().terms.some(term => term.term === '高三下')));
     await sleep(300);
 
@@ -341,7 +335,13 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     return { checks, shots, error: error instanceof Error ? error.stack : String(error) };
   } finally {
     host.entry?.close();
-    if (action === undefined || action === 'run') check('沒有留下暫時的檔與資料夾', await removeFiles(app));
+    await noteScopes();
+    if (action === 'prep' && trial.files.length) {
+      const root = proof.slice(0, proof.lastIndexOf('/'));
+      if (!(await adapter.exists(root))) await adapter.mkdir(root);
+      await adapter.write(proof, JSON.stringify(trial));
+    }
+    if ((action === undefined || action === 'run') && trial.files.length + trial.folders.length) check('沒有留下暫時的檔與資料夾', await clearTrial(app, trial));
     rendering.restore();
   }
 }
