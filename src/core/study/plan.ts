@@ -13,6 +13,12 @@ const MAX_GAP = 120_000;
 
 export const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 
+/** 這個目標現在用的保持率（tasks/exam-scope.md §5）：今天的份、全部卡與顏色都看這一個。考試範圍內、有考試期間才提高。 */
+export function retentionOf(input: Pick<TodayInput, 'exam' | 'settings'>, entry: DeckEntry, target: Target): number {
+  const { exam, settings } = input;
+  return exam?.hasPeriod && exam.contains(entry, target) ? Math.max(settings.retention, 0.9) : settings.retention;
+}
+
 /** 第一筆 at ≥ time 的位置；reviews 依時間排好（mergeHistory 的結果）。 */
 export function firstAtOrAfter(reviews: readonly ReviewEntry[], time: number): number {
   let low = 0, high = reviews.length;
@@ -115,7 +121,7 @@ export function planToday(input: TodayInput): Today {
   const candidates = new Map<string, Candidate>();
   for (const { entry, target, id } of chosen) {
     const inExam = exam !== null && exam.contains(entry, target);
-    const retention = inExam && exam.hasPeriod ? Math.max(settings.retention, 0.9) : settings.retention;
+    const retention = retentionOf(input, entry, target);
     const memory = memories.get(id) ?? null;
     const due = memory && dueAt(memory, retention);
     let lane: Lane;

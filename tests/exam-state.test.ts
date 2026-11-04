@@ -408,6 +408,30 @@ void test('紀錄與卡組讀不到照舊擋', async t => {
   assert.equal(h.state.writeBlock(), 'unread');
 });
 
+void test('§5 保持率同一個值：今天的份、全部卡的順序、目錄顏色', async t => {
+  // 間隔：good 一次之後，0.8 還沒到期、0.9 到期。
+  const answered = at('2026-10-19T12:00:00');
+  const log = 'Essence Cards/紀錄/2026-10 PC-test.jsonl';
+  const line = JSON.stringify({ t: '2026-10-19T12:00:00.000+08:00', lt: 'a', r: 'good', v: 'x' }) + '\n' + JSON.stringify({ t: '2026-10-19T12:00:00.000+08:00', lt: 'b', r: 'good', v: 'x' }) + '\n';
+  assert.ok(answered < NOON);
+  const later = NOON + 2 * DAY;
+  const off = make(t, { ...DECKS, [log]: line }, later);
+  await ready(t, off);
+  const on = make(t, { ...DECKS, [log]: line, [SCOPE]: '---\n識別碼: x\n考試開始: 2026-10-28\n---\n- 國二上 自然 2-1\n' }, later);
+  await ready(t, on);
+  const colorOf = (state: State): string | undefined => state.catalog().terms[0].subjects.flatMap(subject => subject.units).flatMap(unit => unit.targets).find(target => target.id === 'a')?.color;
+  const dueOff = off.lane('a'), dueOn = on.lane('a');
+  assert.equal(dueOff, undefined, '平常還沒到期');
+  assert.equal(dueOn, 'exam-due', '考前到期');
+  assert.equal(colorOf(off.state), 'good');
+  assert.equal(colorOf(on.state), 'near', '顏色用同一個值');
+  const key = on.state.catalog().terms[0].subjects.flatMap(subject => subject.units).find(unit => unit.code === '2-1')?.key ?? '';
+  const nextOff = off.state.next({ unit: key, since: later }), nextOn = on.state.next({ unit: key, since: later });
+  assert.ok(nextOff.kind === 'card' && nextOn.kind === 'card');
+  assert.equal(nextOff.card.early, false);
+  assert.equal(nextOn.card.lt, 'a');
+});
+
 void test('紀錄的行舊版也讀得懂：進 changes，不算作答，不帶 need', async t => {
   const h = make(t, DECKS);
   await ready(t, h);
