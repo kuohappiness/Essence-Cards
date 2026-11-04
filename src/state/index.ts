@@ -6,7 +6,7 @@ import type { Catalog, CatalogIndex, ScopeCheck, ScopeFile, ScopePeriod, ScopeUn
 export type { Catalog, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
 import { createExamFiles } from './exam.ts';
-import type { ExamChange, ExamResult } from './exam.ts';
+import type { ExamBlocked, ExamChange, ExamResult } from './exam.ts';
 export type { ExamChange, ExamResult } from './exam.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
@@ -424,18 +424,23 @@ export function createState(options: StateOptions): State {
   const unitList = (): ScopeUnit[] => catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }));
   /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。輪到它時選定的已經不是畫面打開的那一份（前一筆結束了、被刪、改名、換了另一次考試）：不套上去（§6）。 */
   let examWrites: Promise<unknown> = Promise.resolve();
-  function examWrite(opened: ExamTarget, work: (chosen: ReturnType<typeof exam.choose>['chosen'], day: number) => Promise<ExamResult>): Promise<ExamResult> {
+  function examWrite(opened: ExamTarget, work: (chosen: ReturnType<typeof exam.choose>['chosen'], day: number, admit: () => ExamBlocked | null) => Promise<ExamResult>): Promise<ExamResult> {
+    // 選定的還是畫面上那份、也沒有讀不到的：決定要寫時問一次，真正寫之前再問一次（Codex L2 的 R17、R21）。關閉不在這裡問：已經開始寫的讓它寫完（R14）。
+    const stale = (day: number): ExamBlocked | null => {
+      if (exam.unread.size) return { kind: 'blocked', reason: 'unread' };
+      const { chosen } = selection(day);
+      return (chosen?.path ?? null) !== opened.path || (chosen?.file.id ?? null) !== opened.id ? { kind: 'blocked', reason: 'changed' } : null;
+    };
+    const today = (): number => { const at = now(); return dayOf(at, offsetOf(at)); };
     const run = examWrites.then((): ExamResult | Promise<ExamResult> => {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
       if (!exam.settled() || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
       return exam.drain<ExamResult>(EXAM_WAIT, known => {
         if (life.closed) return { kind: 'blocked', reason: 'closed' };
-        if (!known || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
-        const at = now(), day = dayOf(at, offsetOf(at));
-        const { chosen } = selection(day);
-        if ((chosen?.path ?? null) !== opened.path || (chosen?.file.id ?? null) !== opened.id) return { kind: 'blocked', reason: 'changed' };
-        return work(chosen, day);
+        if (!known) return { kind: 'blocked', reason: 'unread' };
+        const day = today();
+        return stale(day) ?? work(selection(day).chosen, day, () => stale(today()));
       });
     });
     examWrites = run.catch(() => {});
@@ -659,10 +664,10 @@ export function createState(options: StateOptions): State {
       return scopeCheck(edited.kind === 'ok' ? parseScope(edited.text) : chosen.file, catalogIndex());
     },
     setExam(change, opened) {
-      return examWrite(opened, chosen => chosen ? exam.update(chosen.path, opened.id, change, unitList()) : exam.create(change));
+      return examWrite(opened, (chosen, _day, admit) => chosen ? exam.update(chosen.path, opened.id, change, unitList(), admit) : exam.create(change));
     },
     endExam(opened) {
-      return examWrite(opened, (chosen, day) => chosen ? exam.update(chosen.path, opened.id, { ended: scopeDate(day) }, []) : Promise.resolve({ kind: 'blocked', reason: 'changed' }));
+      return examWrite(opened, (chosen, day, admit) => chosen ? exam.update(chosen.path, opened.id, { ended: scopeDate(day) }, [], admit) : Promise.resolve({ kind: 'blocked', reason: 'changed' }));
     },
     onChange(listener) {
       listeners.add(listener);

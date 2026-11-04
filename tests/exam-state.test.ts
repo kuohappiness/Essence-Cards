@@ -266,12 +266,12 @@ function slowFiles(memory: MemoryFiles): { files: MemoryFiles['files']; gate: ()
     },
   };
 }
-function makeSlow(t: TestContext, initial: Record<string, string>): { state: State; memory: MemoryFiles; gate: () => () => void; exams: () => Record<string, unknown>[] } {
+function makeSlow(t: TestContext, initial: Record<string, string>, writeTimeout = 30): { state: State; memory: MemoryFiles; gate: () => () => void; exams: () => Record<string, unknown>[] } {
   if (!mocked.has(t)) t.mock.timers.enable({ apis: ['setTimeout'] });
   mocked.add(t);
   const memory = createMemoryFiles(initial);
   const { files, gate } = slowFiles(memory);
-  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: false, writeTimeout: 30, now: () => NOON, offset: () => OFFSET, onError() {}, random: () => 0 });
+  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: false, writeTimeout, now: () => NOON, offset: () => OFFSET, onError() {}, random: () => 0 });
   t.after(() => state.close());
   return { state, memory, gate, exams: () => examLines(memory) };
 }
@@ -787,6 +787,72 @@ void test('寫入已經開始、回呼還沒進入時到的通知（R17）：別
   assert.deepEqual(await endingSame, { kind: 'done' });
   const text = same.memory.texts.get(NOTICED.a) ?? '';
   assert.ok(text.includes('提前結束') && text.includes('英文 L1'), text);
+});
+
+void test('回呼進入之前別份已經有結果（R21）：選定換了或有讀不到的，畫面上那份不寫、不記；選定沒變照寫', async t => {
+  const WAIT = 1000;
+  const begin = async (start: (state: State) => Promise<unknown>): Promise<{ h: ReturnType<typeof makeSlow>; open: () => void; going: Promise<unknown> }> => {
+    const h = makeSlow(t, { ...DECKS, [NOTICED.a]: NOTICED.textA }, WAIT);
+    await readySlow(t, h.state);
+    const open = h.gate();
+    const going = start(h.state);
+    await tick(t, 0);
+    return { h, open, going };
+  };
+  const arrive = async (h: ReturnType<typeof makeSlow>, text: string): Promise<void> => {
+    h.memory.write(NOTICED.b, text);
+    await tick(t);
+    await tick(t);
+  };
+
+  // 讀到更早的考試：選定換了。結束和存檔走同一條。
+  for (const start of [finish, (state: State) => save(state, { start: '2026-10-25' })]) {
+    const { h, open, going } = await begin(start);
+    await arrive(h, NOTICED.earlier);
+    assert.equal(h.state.exam().path, NOTICED.b, '已經選到更早的考試');
+    open();
+    assert.deepEqual(await going, { kind: 'blocked', reason: 'changed' });
+    assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA);
+    assert.deepEqual(h.exams(), []);
+  }
+
+  // 讀不到：不知道它是不是更早的考試。
+  const failed = await begin(finish);
+  failed.h.memory.failing.add(NOTICED.b);
+  await arrive(failed.h, NOTICED.earlier);
+  assert.deepEqual(failed.h.state.unread(), [NOTICED.b]);
+  failed.open();
+  assert.deepEqual(await failed.going, { kind: 'blocked', reason: 'unread' });
+  assert.equal(failed.h.memory.texts.get(NOTICED.a), NOTICED.textA);
+  assert.deepEqual(failed.h.exams(), []);
+
+  // 對照：別份比較晚，選定還是畫面上這份，照寫，只記這一份。
+  const later = await begin(finish);
+  await arrive(later.h, '---\n識別碼: bbbbbb\n考試開始: 2026-11-02\n---\n- 國二上 英文 L1\n');
+  assert.equal(later.h.state.exam().path, NOTICED.a);
+  later.open();
+  assert.deepEqual(await later.going, { kind: 'done' });
+  assert.ok((later.h.memory.texts.get(NOTICED.a) ?? '').includes('提前結束'));
+  assert.deepEqual(later.h.exams().map(line => (line.val as { id: string }).id), ['x7f3k2']);
+});
+
+void test('擋下之後下一筆照現在的選定（R21）：結束的是讀到的那一份，只記它', async t => {
+  const h = makeSlow(t, { ...DECKS, [NOTICED.a]: NOTICED.textA }, 1000);
+  await readySlow(t, h.state);
+  const open = h.gate();
+  const first = finish(h.state);
+  await tick(t, 0);
+  h.memory.write(NOTICED.b, NOTICED.earlier);
+  await tick(t);
+  await tick(t);
+  open();
+  assert.deepEqual(await first, { kind: 'blocked', reason: 'changed' });
+  const second = finish(h.state);
+  await tick(t, 0);
+  assert.deepEqual(await second, { kind: 'done' });
+  assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA, '畫面上原本那份沒動');
+  assert.ok((h.memory.texts.get(NOTICED.b) ?? '').includes('提前結束'));
+  assert.deepEqual(h.exams().map(line => (line.val as { id: string }).id), ['bbbbbb']);
 });
 
 void test('正在讀、一直沒回來：最多等 2 秒就擋下來，只擋範圍檔；回來之後照常選', async t => {

@@ -20,6 +20,7 @@ export type ExamResult =
   | { kind: 'blocked'; reason: 'loading' | 'closed' | 'unread' | 'changed' | 'broken' | 'dates' }
   | { kind: 'blocked'; reason: 'special'; lost: string[] }
   | { kind: 'failed'; error: unknown };
+export type ExamBlocked = Extract<ExamResult, { kind: 'blocked' }>;
 
 interface ExamFilesOptions {
   files: Files;
@@ -37,8 +38,8 @@ interface ExamFilesOptions {
 
 /** 回呼裡擋下來的（§2-4）：丟錯才不會建立或寫入。 */
 class ScopeBlocked extends Error {
-  readonly result: Extract<ExamResult, { kind: 'blocked' }>;
-  constructor(result: ScopeBlocked['result']) { super('範圍檔不能寫：' + result.reason); this.result = result; }
+  readonly result: ExamBlocked;
+  constructor(result: ExamBlocked) { super('範圍檔不能寫：' + result.reason); this.result = result; }
 }
 
 /** 等寫入等到逾時（§6）：只結束等待，底層取消不了。 */
@@ -231,8 +232,8 @@ export function createExamFiles(options: ExamFilesOptions) {
     choose: (day: number) => chooseScope([...known].map(([path, { file }]) => ({ path, file })), day),
     /** 上一份範圍的結束日（§6 的預先勾選）。 */
     previousEnd: (day: number): string | null => lastEnded([...known].map(([path, { file }]) => ({ path, file })), day),
-    /** 改一份舊檔（§2-4）：回呼裡改最新的內容；有變動才記（§2-5）。id 是畫面打開時的識別碼。 */
-    async update(path: string, id: string | null, change: ExamChange | Pick<ScopeChange, 'ended'>, units: readonly ScopeUnit[]): Promise<ExamResult> {
+    /** 改一份舊檔（§2-4）：回呼裡改最新的內容；有變動才記（§2-5）。id 是畫面打開時的識別碼；admit 是真正寫之前再問一次這次寫入還算不算數。 */
+    async update(path: string, id: string | null, change: ExamChange | Pick<ScopeChange, 'ended'>, units: readonly ScopeUnit[], admit: () => ExamBlocked | null): Promise<ExamResult> {
       let before: ScopeFile | null = null;
       const record = (text: string): void => {
         const after = parseScope(text), was = before;
@@ -241,8 +242,10 @@ export function createExamFiles(options: ExamFilesOptions) {
       };
       try {
         const text = await modify(path, latest => {
-          // 真正寫之前最後一個同步區段：開始寫之後才到的通知（別份）還來得及不寫，別份可能是更早的考試（Codex L2 的 R17）。同一份不用看，這裡拿到的就是最新的。
+          // 真正寫之前最後一個同步區段：開始寫之後才到的別份，還在讀、讀完換了選定、讀不到，都還來得及不寫（Codex L2 的 R17、R21）。同一份不用等，這裡拿到的就是最新的。
           if (reads.waiting(path)) throw new ScopeBlocked({ kind: 'blocked', reason: 'unread' });
+          const stale = admit();
+          if (stale) throw new ScopeBlocked(stale);
           const done = editScope(latest, { ...change, id: freshId() }, units);
           if (done.kind === 'blocked') throw new ScopeBlocked(done);
           const was = parseScope(latest);
