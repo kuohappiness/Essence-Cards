@@ -623,6 +623,112 @@ void test('外掛產生的識別碼像數字（2e2345）：寫回讀到、紀錄
   assert.deepEqual(lines.filter(line => line.set === 'exam').map(line => line.val?.id), ['2e2345']);
 });
 
+/** R13：A 已經選定，B 的通知到了。B 比 A 早就該換 B。 */
+const NOTICED = { a: FOLDER + 'a.md', b: FOLDER + 'b.md', textA: scopeText('2026-10-22', '2026-10-23'), earlier: '---\n識別碼: bbbbbb\n考試開始: 2026-10-21\n---\n- 國二上 英文 L1\n', later: '---\n識別碼: cccccc\n考試開始: 2026-11-30\n---\n- 國二上 英文 L1\n' };
+const noticed = async (t: TestContext): Promise<Harness> => {
+  const h = make(t, { ...DECKS, [NOTICED.a]: NOTICED.textA });
+  await ready(t, h);
+  assert.equal(h.state.exam().path, NOTICED.a);
+  return h;
+};
+
+void test('通知排著還沒讀（delay 還沒到）：先讀完才決定；讀到更早的考試就不寫', async t => {
+  const h = await noticed(t);
+  const was = opened(h.state);
+  h.memory.write(NOTICED.b, NOTICED.earlier);
+  assert.deepEqual(await h.state.endExam(was), { kind: 'blocked', reason: 'changed' });
+  assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA, '暫定的那份沒有動');
+  assert.equal(h.state.exam().path, NOTICED.b, '讀到了，換它');
+  await flushLog(t, h.state);
+  assert.deepEqual(h.logged().filter(line => line.set === 'exam'), []);
+});
+
+void test('通知排著還沒讀，讀到的比較晚：選定的沒變，照常寫', async t => {
+  const h = await noticed(t);
+  const was = opened(h.state);
+  h.memory.write(NOTICED.b, NOTICED.later);
+  assert.deepEqual(await h.state.endExam(was), { kind: 'done' });
+  assert.match(h.memory.texts.get(NOTICED.a) ?? '', /提前結束/);
+  assert.equal(h.state.exam().path, NOTICED.b, '結束之後換另一份接手');
+});
+
+void test('正在讀、一直沒回來：最多等 2 秒就擋下來，只擋範圍檔；回來之後照常選', async t => {
+  const h = await noticed(t);
+  const was = opened(h.state);
+  const held = h.memory.holdRead(NOTICED.b);
+  h.memory.write(NOTICED.b, NOTICED.earlier);
+  await tick(t);
+  await held.started;
+  assert.deepEqual(h.state.unread(), [], '還不算讀不到');
+  let answered = false;
+  const ending = h.state.endExam(was).then(result => { answered = true; return result; });
+  await tick(t, 0); // 輪到它之後，2 秒才開始算。
+  await tick(t, 1999);
+  assert.equal(answered, false, '還在等');
+  assert.equal(h.state.writeBlock(), null, '卡組的寫入不擋');
+  await tick(t, 1);
+  assert.deepEqual(await ending, { kind: 'blocked', reason: 'unread' });
+  assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA);
+  held.release();
+  await tick(t, 0);
+  await tick(t, DELAY);
+  assert.equal(h.state.exam().path, NOTICED.b);
+  await flushLog(t, h.state);
+  assert.deepEqual(h.logged().filter(line => line.set === 'exam'), []);
+});
+
+void test('正在讀，等的時候回來了：照讀到的決定，不用等滿', async t => {
+  const h = await noticed(t);
+  const was = opened(h.state);
+  const held = h.memory.holdRead(NOTICED.b);
+  h.memory.write(NOTICED.b, NOTICED.earlier);
+  await tick(t);
+  await held.started;
+  const ending = h.state.endExam(was);
+  await tick(t, 100);
+  held.release();
+  assert.deepEqual(await ending, { kind: 'blocked', reason: 'changed' });
+  assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA);
+});
+
+void test('讀完發現讀不到：算讀不到，不寫；重試讀到後照常', async t => {
+  const h = await noticed(t);
+  const was = opened(h.state);
+  const held = h.memory.holdRead(NOTICED.b);
+  h.memory.write(NOTICED.b, NOTICED.earlier);
+  await tick(t);
+  await held.started;
+  const ending = h.state.endExam(was);
+  await tick(t, 100);
+  held.release(Error('讀不到'));
+  assert.deepEqual(await ending, { kind: 'blocked', reason: 'unread' });
+  assert.deepEqual(h.state.unread(), [NOTICED.b]);
+  assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA);
+});
+
+void test('等的時候關閉：不寫', async t => {
+  const h = await noticed(t);
+  const was = opened(h.state);
+  const held = h.memory.holdRead(NOTICED.b);
+  h.memory.write(NOTICED.b, NOTICED.earlier);
+  await tick(t);
+  await held.started;
+  const ending = h.state.endExam(was);
+  await tick(t, 100);
+  const closing = h.state.close();
+  assert.deepEqual(await ending, { kind: 'blocked', reason: 'closed' });
+  await tick(t, 1000);
+  await closing;
+  assert.equal(h.memory.texts.get(NOTICED.a), NOTICED.textA);
+});
+
+void test('自己剛寫完緊接著再寫：不算還沒讀完，不用等', async t => {
+  const h = await noticed(t);
+  assert.deepEqual(await save(h.state, { start: '2026-10-24', end: '2026-10-25' }), { kind: 'done' });
+  assert.deepEqual(await save(h.state, { end: '2026-10-26' }), { kind: 'done' });
+  assert.match(h.memory.texts.get(NOTICED.a) ?? '', /考試結束: 2026-10-26/);
+});
+
 void test('一份卡住、另一份讀到：先用讀到的（暫定），寫不了；之後的通知不排在它後面；它回來後重新選', async t => {
   const a = FOLDER + 'a.md', b = FOLDER + 'b.md';
   const h = make(t, { ...DECKS, [a]: scopeText('2026-11-20', '2026-11-21'), [b]: '---\n識別碼: bbbbbb\n考試開始: 2026-10-28\n---\n- 國二上 英文 L1\n' });

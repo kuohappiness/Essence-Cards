@@ -95,6 +95,7 @@ export function createExamFiles(options: ExamFilesOptions) {
     unsent = true;
     unsentTimer ??= setTimeout(sendChanged, options.delay);
   }
+  let wakeDrain: (() => void) | null = null;
   const reads = createReads({
     files,
     life,
@@ -102,7 +103,10 @@ export function createExamFiles(options: ExamFilesOptions) {
     watched: isExamPath,
     onError,
     alone: true,
-    quiet: sendChanged,
+    quiet() {
+      sendChanged();
+      wakeDrain?.();
+    },
     list: async () => [(await files.list(EXAM_FOLDER)).filter(isExamPath), []],
     // 讀取層把卡組以外的放在第二份。
     batch(_decks, texts) {
@@ -146,6 +150,23 @@ export function createExamFiles(options: ExamFilesOptions) {
       const id = setTimeout(resolve, ms);
       void start().then(() => { clearTimeout(id); resolve(); });
     });
+  }
+
+  /**
+   * 寫入前先讀完已知的待讀（§4，Codex L2 的 R13；和卡組的 admit 同一個規則）：通知到了、還在排或正在讀的那一份可能是更早的考試。
+   * 一份一份讀，所以等的是「都讀完了」的那一聲。最多等 ms；回 true 是都有結果了（讀不到的在 unread）。
+   */
+  async function drain(ms: number): Promise<boolean> {
+    let late = false;
+    const id = setTimeout(() => { late = true; wakeDrain?.(); }, ms);
+    const going = (): boolean => !late && !life.closed && reads.waiting();
+    while (going()) {
+      await reads.readNow();
+      if (going()) await new Promise<void>(resolve => { wakeDrain = resolve; });
+    }
+    clearTimeout(id);
+    wakeDrain = null;
+    return !reads.waiting();
   }
 
   function timed(work: Promise<void>): Promise<void> {
@@ -199,6 +220,7 @@ export function createExamFiles(options: ExamFilesOptions) {
   return {
     start,
     settle,
+    drain,
     settled: (): boolean => settled,
     revision: (): number => revision,
     unread: reads.unread,
@@ -256,6 +278,7 @@ export function createExamFiles(options: ExamFilesOptions) {
       reads.stop();
       sendChanged();
       firstDone();
+      wakeDrain?.();
     },
   };
 }

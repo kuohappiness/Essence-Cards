@@ -235,8 +235,8 @@ export function createReads(options: ReadsOptions) {
     bump,
     /** 第一次載入完成之前收到過通知：照檔案變動處理一次。 */
     catchUp(): void { if (noticed) schedule(); },
-    /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending 裡有不在 unread 的路徑（except 那一篇除外）。 */
-    waiting: (except?: string): boolean => reading > 0 || [...pending].some(path => path !== except && !unread.has(path)),
+    /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending、正在讀的裡面有不在 unread 的路徑（except 那一篇除外）。 */
+    waiting: (except?: string): boolean => reading > 0 || [...pending, ...flying].some(path => path !== except && !unread.has(path)),
     /** 這篇的 Cards I/O 開始（§2 第 1 點）：不開始讀，序號前進。 */
     hold(path: string): void {
       busy.add(path);
