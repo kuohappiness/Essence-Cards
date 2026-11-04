@@ -389,6 +389,35 @@ void test('建立新檔逾時：回呼已經進入，真的寫成了才記一行
   assert.deepEqual(h.exams().map(entry => (entry.val as { do: string }).do), ['建立']);
 });
 
+void test('重排看選定的身分、單元與期間：字形與順序不同不重排，換了識別碼要重排，改名選到同一份不重排', async t => {
+  const a = FOLDER + 'a.md';
+  const text = (id: string, ...lines: string[]): string => `---\n識別碼: ${id}\n考試開始: 2026-10-28\n---\n${lines.join('\n')}\n`;
+  const h = make(t, { ...DECKS, [a]: text('aaaaaa', '- 國二上 英文 L1', '- 國二上 自然 2-1') });
+  await ready(t, h);
+  const kept = async (next: string, name: string): Promise<void> => {
+    const before = h.state.today();
+    h.memory.write(a, next);
+    await tick(t);
+    assert.equal(h.state.today(), before, name);
+  };
+  await kept(text('aaaaaa', '- 國二上 英文 l1', '- 國二上 自然 2-1'), '大小寫');
+  await kept(text('aaaaaa', '- 國二上 自然 2-1', '- 國二上 英文 l1'), '順序');
+  await kept(text('aaaaaa', '- 國二上 自然 ２-１ 水溶液', '- 國二上 英文 l1'), '全形與名稱');
+  await kept(text('aaaaaa', '- 國二上 自然 2-1', '- 國二上 英文 l1', '- 國二上 自然 2-1'), '重複的行');
+  const named = h.state.today();
+  h.memory.rename(a, FOLDER + '改名.md');
+  await tick(t);
+  assert.equal(h.state.today(), named, '改名選到同一份');
+  const before = h.state.today();
+  h.memory.write(FOLDER + '改名.md', text('bbbbbb', '- 國二上 自然 2-1', '- 國二上 英文 l1'));
+  await tick(t);
+  assert.notEqual(h.state.today(), before, '內容一樣、識別碼不同：是另一次考試');
+  const unit = h.state.today();
+  h.memory.write(FOLDER + '改名.md', text('bbbbbb', '- 國二上 自然 2-1'));
+  await tick(t);
+  assert.notEqual(h.state.today(), unit, '單元變了');
+});
+
 void test('還沒 ready 與關閉之後擋下來', async t => {
   const h = make(t, DECKS);
   assert.deepEqual(await save(h.state, {}), { kind: 'blocked', reason: 'loading' });

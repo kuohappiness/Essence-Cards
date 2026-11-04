@@ -181,6 +181,11 @@ export function covers(code: string, other: string): boolean {
   if (code === other) return true;
   return other.startsWith(code + '-') && other.slice(code.length + 1).split('-').every(Boolean);
 }
+/** 這份範圍寫到哪些單元，和 unitInScope 同一種比法：字形與順序不同算一樣。 */
+export function scopeUnitKeys(file: Pick<ScopeFile, 'lines'>): string[] {
+  const keys = file.lines.flatMap(line => line.kind === 'unit' ? [JSON.stringify([termOf(line.term), subjectOf(line.subject), codeKey(line.code)])] : []);
+  return [...new Set(keys)].sort();
+}
 export function unitInScope(file: Pick<ScopeFile, 'lines'>, unit: ScopeUnit): boolean {
   const term = termOf(unit.term), subject = subjectOf(unit.subject), code = codeKey(unit.code);
   return file.lines.some(line => line.kind === 'unit' && termOf(line.term) === term && subjectOf(line.subject) === subject && covers(codeKey(line.code), code));

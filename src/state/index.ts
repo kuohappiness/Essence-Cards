@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
-import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, targetsInScope } from '../core/catalog/index.ts';
+import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
 import type { Catalog, CatalogIndex, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
 export type { Catalog, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
@@ -399,13 +399,12 @@ export function createState(options: StateOptions): State {
     }
     return scoped.scope;
   }
-  /** 上一次排今天的份時的範圍（只看單元與期間，不看路徑：改名選到同一份不重排）與畫面看到的樣子。 */
+  /** 上一次排今天的份時的範圍（身分、單元、期間；不看路徑與字形：改名選到同一份、`L1` 改成 `l1` 不重排）與畫面看到的樣子。 */
   let plannedKey = '', viewedKey = '';
   function examPlanKey(day: number): string {
     const { chosen, usable } = selection(day);
     if (!chosen || !usable) return '';
-    const units = chosen.file.lines.flatMap(line => line.kind === 'unit' ? [JSON.stringify([line.term, line.subject, line.code])] : []).sort();
-    return JSON.stringify([units, scopePeriod(chosen.file)]);
+    return JSON.stringify([chosen.file.id, scopeUnitKeys(chosen.file), scopePeriod(chosen.file)]);
   }
   function examViewKey(day: number): string {
     const { chosen, usable, others } = selection(day);
