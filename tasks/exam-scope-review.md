@@ -78,7 +78,7 @@
 - `npm run check`，要在沙箱外跑（[quality.md](../docs/agents/quality.md#檢查指令)）。實作者每個 commit 都由 pre-commit 跑過。
 - Windows 版 Obsidian：結果見[任務說明 §10](exam-scope.md#10-windows-實機claude-用開發版跑) 的〈結果〉。審查者不用重跑；要跑請先問使用者，測試 vault 各分支共用。
 - **沒驗到**：§10 的 iPhone 項目，併入下一次實機測試（[backlog](../docs/backlog.md)）。`tests/exam-ui.test.ts` 用的是 happy-dom，版面只有 Windows 截圖看過。
-- **沒重現**：Windows 跑了 6 次 `do=run`，有 1 次（`0.3.0+0761844`）「打 YYYYMMDD 離開欄位變標準格式」是 false，存進檔案的日期是對的。`DateField` 的 `onBlur` 讀的是上一次繪製的 `value`、`normal`；Chromium 不對沒有焦點的視窗發 focus 事件，所以推測是那次 Obsidian 沒有焦點，但 `AppActivate` 和 `BrowserWindow.blur` 都拿不走焦點，沒有驗證。開發命令之後會記 `視窗有焦點` 和 `blur 沒有發事件的次數`。如果你看出別的原因，請照一般發現回報。
+- **沒重現**：Windows 跑完 7 次 `do=run`，有 1 次（`0.3.0+0761844`）「打 YYYYMMDD 離開欄位變標準格式」是 false，存進檔案的日期是對的。`DateField` 的 `onBlur` 讀的是上一次繪製的 `value`、`normal`；Chromium 不對沒有焦點的視窗發 focus 事件，所以推測是那次 Obsidian 沒有焦點，但 `AppActivate` 和 `BrowserWindow.blur` 都拿不走焦點，沒有驗證。開發命令之後會記 `視窗有焦點` 和 `blur 沒有發事件的次數`。如果你看出別的原因，請照一般發現回報。
 
 ## 回報與權限
 
