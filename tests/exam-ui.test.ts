@@ -54,9 +54,10 @@ interface Screen extends MemoryFiles {
   settle: () => Promise<void>;
 }
 
-async function open(t: TestContext, texts: Record<string, string>, screen: 'entry' | 'catalog' | 'scope' = 'scope', now = NOW): Promise<Screen> {
+async function open(t: TestContext, texts: Record<string, string>, screen: 'entry' | 'catalog' | 'scope' = 'scope', setup?: (memory: MemoryFiles) => void): Promise<Screen> {
   const memory = createMemoryFiles(texts);
-  const clock = { now };
+  setup?.(memory);
+  const clock = { now: NOW };
   const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: false, stuckAfter: 20, now: () => clock.now, offset: () => 480, onError() {} });
   t.after(() => state.close());
   await state.ready();
@@ -332,6 +333,66 @@ void test('§6 寫不進去：留在畫面上寫原因，已勾的不丟', async
   assert.deepEqual(s.notices, []);
 });
 
+void test('§6 寫法特殊的單元灰掉寫原因，不能用勾選加入；勾整章再取消一個也不會寫它', async t => {
+  const s = await open(t, { ...DECKS, 'Essence Cards/怪.md': head('國二上', '自然', '2-9,3') + targets('x') });
+  const row = s.all('.ec-sc-u').find(each => each.textContent.includes('2-9,3'));
+  assert.ok(row?.textContent.includes('這個單元的屬性寫法特殊，不能用勾選加入'));
+  assert.equal(row?.querySelector('input')?.disabled, true);
+  await s.click(s.box('2 全部'));
+  await s.click(s.box('2-1 水溶液'));
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.ok(!(s.scope() ?? '').includes('2-9,3'));
+});
+
+void test('§6 範圍檔讀不到：寫暫時讀不到、存不了，已勾的不丟', async t => {
+  const path = FOLDER + 'a.md';
+  const s = await open(t, { ...DECKS, [path]: scopeText('2026-10-28', '', '- 國二上 自然 2-1') }, 'entry', memory => { memory.failing.add(path); });
+  assert.equal(s.all('.ec-sc-per')[0].textContent, '暫時讀不到');
+  assert.ok(!s.text().includes('還沒設定'), '不知道不是沒有');
+  await s.click(s.all('.ec-sc-row')[0]);
+  assert.ok(s.text().includes('考試範圍暫時讀不到，等一下再試'));
+  await s.click(s.box('2-2'));
+  const before = s.box('2-2').checked;
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.equal(s.all('.ec-sc-word.is-bad')[0]?.textContent, '考試範圍暫時讀不到，等一下再試');
+  assert.equal(s.box('2-2').checked, before);
+  assert.deepEqual(s.notices, []);
+});
+
+void test('§7 另一份讀不到時：看得到的那一份照常，多一行', async t => {
+  const broken = FOLDER + 'b.md';
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1'), [broken]: scopeText('2026-11-01', '', '- 國二上 自然 2-2') }, 'entry', memory => { memory.failing.add(broken); });
+  assert.equal(s.all('.ec-sc-per')[0].textContent, '10/28');
+  assert.deepEqual(s.all('.ec-sc-note.is-warn').map(each => each.textContent), ['有 1 份暫時讀不到']);
+});
+
+void test('§6 畫面開著時範圍檔被刪：寫原因，不把變動寫成一份新檔；重新打開才是新的', async t => {
+  const path = FOLDER + 'a.md';
+  const s = await open(t, { ...DECKS, [path]: scopeText('2026-10-28', '', '- 國二上 自然 2-1') });
+  await s.click(s.box('2-2'));
+  await act(async () => { s.remove(path); await wait(30); });
+  assert.equal(s.box('2-2').checked, true, '動過之後不跟著變');
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.equal(s.all('.ec-sc-word.is-bad')[0]?.textContent, '範圍檔被改名、刪除或已經結束，請重新打開這個畫面');
+  assert.equal(s.scope(), null);
+  await s.click(s.button('返回'));
+  await s.click(s.all('.ec-sc-row')[0]);
+  assert.ok(s.text().includes('已經先勾好'));
+});
+
+void test('§6 還沒動的時候跟著最新的：別處改了範圍，勾選跟著變；還有另一份生效時寫出來', async t => {
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1') });
+  assert.equal(s.box('2-2').checked, false);
+  await act(async () => { s.write(FOLDER + 'a.md', scopeText('2026-10-28', '', '- 國二上 自然 2-2')); await wait(30); });
+  assert.equal(s.box('2-2').checked, true);
+  assert.equal(s.box('2-1 水溶液').checked, false);
+  await act(async () => { s.write(FOLDER + 'b.md', scopeText('2026-11-01', '', '- 國二上 英文 L1').replace('識別碼: s1', '識別碼: s2')); await wait(30); });
+  assert.ok(s.text().includes('還有另一份也生效：' + FOLDER + 'b.md'));
+});
+
 // ── §6 結束 ──
 
 void test('§6 結束這次考試：有生效的範圍才有，第二下才生效，回到原處；之後再設定是新檔', async t => {
@@ -411,6 +472,8 @@ void test('§7 目錄：同一列；單元的「考試」標籤可以和草稿�
   const tags = s.all('.ec-tr-u').map(row => [row.querySelector('.ec-tr-name span')?.textContent, Array.from(row.querySelectorAll('.ec-tr-tag')).map(tag => tag.textContent)]);
   assert.deepEqual(tags, [['2-1 水溶液', ['考試']], ['2-2', ['考試']], ['2-3', ['考試']], ['2-4', ['考試', '草稿']], ['L1', []]]);
   assert.deepEqual(s.all('.ec-tr-sh').map(each => [each.querySelector('h2')?.textContent, each.querySelector('.ec-tr-ex')?.textContent ?? null]), [['自然', '距離考試：12 天（10/28）'], ['英文', null]]);
+  await act(async () => { s.write(FOLDER + 'a.md', scopeText('2026-10-28', '2026-10-29', '- 國二上 自然 2', '老師說的', '- 國二上 理化 9-9')); await wait(30); });
+  assert.deepEqual(s.all('.ec-sc-note.is-warn').map(each => each.textContent), ['有 1 行看不懂', '有 1 行對不到卡組'], '§2-6 的行數，目錄也有');
   s.clock.now = Date.parse('2026-10-28T05:00:00.000+08:00');
   s.handle.refresh();
   await s.settle();

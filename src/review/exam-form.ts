@@ -30,6 +30,8 @@ export interface ExamForm {
   others: readonly string[];
   /** 範圍還不知道（第一次的讀取沒有結果，或選定的檔都讀不到）：寫原因，存不了。 */
   unknown: boolean;
+  /** 勾的是哪一份；交出去的只有變動，存的時候選定的已經換了，就不能套上去。 */
+  path: string | null;
 }
 
 /** 這個單元裡自己的目標最早的作答是哪一天；都還沒作答是 null。 */
@@ -50,7 +52,7 @@ function presetKeys(terms: readonly ScopeRowTerm[], catalog: Catalog, history: H
   const cutoff = exam.previousEnd !== null ? scopeDay(exam.previousEnd) + 1 : exam.day - RECENT_DAYS;
   const first = firstAnswers(history);
   for (const row of term.subjects.flatMap(subject => subject.rows)) {
-    if (row.kind !== 'unit' || row.view?.status !== 'active') continue;
+    if (row.kind !== 'unit' || row.view?.status !== 'active' || !row.writable) continue;
     const days = row.view.targets.filter(target => target.from === null).flatMap(target => first.get(target.id) ?? []);
     if (!days.length || Math.min(...days) >= cutoff) keys.add(row.key);
   }
@@ -77,6 +79,7 @@ export function examForm(state: State | null): ExamForm | null {
     start: file ? dateText(file.start) : '', end: file ? dateText(file.end) : '',
     usable: exam.usable, others: exam.others,
     unknown: !exam.settled || (exam.missing > 0 && !file),
+    path: exam.path,
   };
 }
 
@@ -96,7 +99,7 @@ export function toggleRow(checked: ReadonlySet<string>, row: ScopeRow, on: boole
  */
 export function formChange(form: ExamForm, checked: ReadonlySet<string>, start: string, end: string): ExamChange {
   const rows = allRows(form);
-  const add = rows.filter(row => checked.has(row.key) && !row.inScope && !row.above.some(key => checked.has(key))).map(row => row.unit);
+  const add = rows.filter(row => checked.has(row.key) && !row.inScope && row.writable && !row.above.some(key => checked.has(key))).map(row => row.unit);
   const remove = rows.filter(row => !checked.has(row.key) && row.inScope && row.kind !== 'chapter').map(row => row.unit);
   const date = (text: string, from: string): string | null | undefined => {
     const now = normalDate(text);

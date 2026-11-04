@@ -74,6 +74,11 @@ function Editor(props: EditorProps): React.JSX.Element {
   const change = formChange(form, checked, from, to);
   const blocked = dates.start !== null || dates.end !== null || dates.order;
   async function run(work: () => Promise<Parameters<typeof examFailure>[0] | { kind: 'done' }>, message: string): Promise<void> {
+    // 畫面打開之後選定的那一份換了（被刪、改名、別處結束或新建）：變動不能套到別份上（§6）。
+    if (current?.exam().path !== form.path) {
+      setFailure(examFailure({ kind: 'blocked', reason: 'changed' }));
+      return;
+    }
     setBusy(true);
     setFailure(null);
     const result = await work();
