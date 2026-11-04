@@ -1,15 +1,15 @@
 <title>相似字比較卡</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Iansui&family=Noto+Sans+TC:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC&text=%E7%9C%9F%E7%9B%B4&display=swap">
 <style>
 /* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
-   卡片內容用芫荽：楷書的筆形接近課本，字形貼近教育部標準。按鈕的字和其他科目相同。
+   卡片內容暫定用芫荽：楷書的筆形接近課本，字形貼近教育部標準。按鈕的字和其他科目相同。不載入時退回 --fallback。
    畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線。 */
 :root{
   --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
   --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
-  --hanzi:"Iansui","BiauKai","Kaiti TC","DFKai-SB",serif;
+  --fallback:"BiauKai","Kaiti TC","DFKai-SB",-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --hanzi:"Iansui",var(--fallback);
   --ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -91,6 +91,8 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 .rate[data-k]::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--k)}
 .rate[data-k="good"]{--k:var(--good)}.rate[data-k="easy"]{--k:var(--easy)}
 .again{appearance:none;justify-self:start;background:none;border:0;padding:6px 2px;font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.foot{display:flex;flex-wrap:wrap;gap:0 16px}
+.phone.no-font{--hanzi:var(--fallback)}
 
 /* 說明 */
 .notes{display:grid;gap:22px;min-width:0}
@@ -118,7 +120,7 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
   <div class="layout">
     <div class="demo">
       <p class="eyebrow" id="eyebrow" hidden></p>
-      <section class="phone" aria-label="比較卡示意">
+      <section class="phone" id="phone" lang="zh-Hant" aria-label="比較卡示意">
         <div class="stage">
           <p class="card-title" id="cardTitle"></p>
           <ul class="rows" id="rows"></ul>
@@ -133,7 +135,10 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
         </div>
         <div class="rates" id="rates" hidden></div>
       </section>
-      <button class="again" id="restart" type="button">從頭再試，字鍵換個順序</button>
+      <div class="foot">
+        <button class="again" id="restart" type="button">從頭再試，字鍵換個順序</button>
+        <button class="again" id="fontToggle" type="button">看不載入字體的樣子</button>
+      </div>
     </div>
 
     <div class="notes">
@@ -167,10 +172,10 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 
       <section>
         <h2>字體</h2>
-        <p>你喜歡的那個字體叫霞鶩文楷，字形照的是傳承字形，不是台灣課本的標準，例如「真」會寫成另一種寫法。卡片上現在換成同一個字體底子改的芫荽，專為學習做，字形貼近教育部標準，看起來幾乎一樣。</p>
-        <div class="glyphs">
-          <span>霞鶩文楷</span><span class="g" style="font-family:'LXGW WenKai TC',serif">真直</span>
-          <span>芫荽</span><span class="g" style="font-family:var(--hanzi)">真直</span>
+        <p>暫定芫荽，專為學習做的台灣繁體字型，字形貼近教育部標準。不載入時，卡片照常能用，只是字體換成裝置內建的：iPhone 沒有預裝楷書，應該會是黑體，和現在外掛的卡片一樣；Windows 電腦是標楷體。下面第二行和卡片下方的按鈕，顯示的是你現在這台裝置的真實結果。</p>
+        <div class="glyphs" lang="zh-Hant">
+          <span>芫荽</span><span class="g" style="font-family:var(--hanzi)">寨塞寒賽</span>
+          <span>不載入</span><span class="g" style="font-family:var(--fallback)">寨塞寒賽</span>
         </div>
       </section>
 
@@ -347,6 +352,7 @@ function flyTo(keyButton, index) {
   const clone = document.createElement('span');
   clone.className = 'fly';
   clone.textContent = keyButton.textContent;
+  clone.style.fontFamily = getComputedStyle(keyButton).fontFamily;
   document.body.append(clone);
   const size = clone.getBoundingClientRect();
   const startX = from.left + from.width / 2 - size.width / 2;
@@ -558,6 +564,10 @@ el('skip').addEventListener('click', () => {
 });
 el('check').addEventListener('click', tapCheck);
 el('restart').addEventListener('click', restart);
+el('fontToggle').addEventListener('click', () => {
+  const off = el('phone').classList.toggle('no-font');
+  el('fontToggle').textContent = off ? '換回芫荽' : '看不載入字體的樣子';
+});
 el('cardTitle').textContent = '相似字：' + GROUP.map(g => g.ch).join('、');
 
 newCard(FIRST_CARD, '', 'first');
