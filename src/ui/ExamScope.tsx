@@ -88,7 +88,9 @@ function Editor(props: EditorProps): React.JSX.Element {
     if (!current) return;
     props.setFrom(normalDate(from));
     props.setTo(normalDate(to));
-    void run(() => current.setExam(change, form), dates.past ? DONE_PAST : DONE);
+    // 用按下去這一刻的複習日：畫面可能還停在跨過 4 點之前。
+    const past = checkDates(from, to, current.exam().day).past;
+    void run(() => current.setExam(change, form), past ? DONE_PAST : DONE);
   };
   const finish = (): void => {
     if (!armed) { setArmed(true); return; }

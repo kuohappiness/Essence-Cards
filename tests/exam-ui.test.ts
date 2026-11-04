@@ -476,6 +476,62 @@ void test('§7 倒數跟著時間：10/27 寫 1 天；10/28 04:00 起今天考�
   assert.ok(s.text().includes('還沒設定'));
 });
 
+void test('§4 §7 開著跨過清晨 4 點：沒有通知、沒有切回前景，倒數自己換成新的一天；關掉之後不再看', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1') }, 'entry');
+  const minute = async (iso: string): Promise<void> => { s.clock.now = Date.parse(iso); t.mock.timers.tick(60_000); await s.settle(); };
+  assert.equal(s.all('.ec-sb-ex')[0].textContent, '距離考試：12 天');
+  await minute('2026-10-28T03:59:00.000+08:00');
+  assert.equal(s.all('.ec-sb-ex')[0].textContent, '距離考試：1 天');
+  await minute('2026-10-28T04:00:00.000+08:00');
+  assert.equal(s.all('.ec-sb-ex')[0].textContent, '今天考試');
+  await minute('2026-10-29T03:59:00.000+08:00');
+  assert.equal(s.all('.ec-sb-ex')[0].textContent, '今天考試');
+  await minute('2026-10-29T04:00:00.000+08:00');
+  assert.equal(s.all('.ec-sb-ex').length, 0);
+  assert.ok(s.text().includes('還沒設定'));
+  let asked = 0;
+  const exam = s.state.exam.bind(s.state);
+  s.state.exam = () => { asked++; return exam(); };
+  await minute('2026-10-29T12:00:00.000+08:00');
+  assert.ok(asked > 0, '開著的時候每分鐘看一次');
+  await act(async () => { s.handle.close(); await Promise.resolve(); });
+  asked = 0;
+  await minute('2026-10-30T12:00:00.000+08:00');
+  assert.equal(asked, 0, '關掉之後不再看');
+});
+
+void test('§4 背景跨過清晨 4 點回來：是新的一天', async t => {
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1') }, 'entry');
+  s.clock.now = Date.parse('2026-10-28T04:00:00.000+08:00');
+  await act(async () => { document.dispatchEvent(new window.Event('visibilitychange') as unknown as Event); await Promise.resolve(); });
+  await s.settle();
+  assert.equal(s.all('.ec-sb-ex')[0].textContent, '今天考試');
+});
+
+void test('§6 開著設定畫面跨過清晨 4 點：灰字自己出現；還沒重畫就按確定，通知也用當下的日子', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('', '', '- 國二上 自然 2-1') });
+  await s.type('考試開始', '2026-10-27');
+  s.clock.now = Date.parse('2026-10-27T12:00:00.000+08:00');
+  t.mock.timers.tick(60_000);
+  await s.settle();
+  const gray = '這個日期已經過了，不會排進今天的複習';
+  assert.equal(s.text().includes(gray), false);
+  s.clock.now = Date.parse('2026-10-28T04:00:00.000+08:00');
+  t.mock.timers.tick(60_000);
+  await s.settle();
+  assert.ok(s.text().includes(gray), '不用切換畫面');
+  assert.equal(s.field('考試開始').value, '2026-10-27', '打的字不丟');
+
+  const late = await open(t, { ...DECKS, [FOLDER + 'b.md']: scopeText('', '', '- 國二上 自然 2-1') });
+  await late.type('考試開始', '2026-10-27');
+  late.clock.now = Date.parse('2026-10-28T04:00:00.000+08:00');
+  await late.click(late.button('確定'));
+  await late.settle();
+  assert.deepEqual(late.notices, ['已存，這個日期已經過了，不會生效'], '還沒到下一次檢查就按確定');
+});
+
 void test('§7 日期未定、日期有問題：列照常、不倒數；有問題多一行行數；範圍裡有的科目今天沒有卡，範圍那一列照常', async t => {
   const a = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('', '', '- 國二上 自然 2-1') }, 'entry');
   assert.equal(a.all('.ec-sc-per')[0].textContent, '日期未定');

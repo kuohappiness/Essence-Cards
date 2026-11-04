@@ -29,6 +29,9 @@ export interface EntryHandle {
   close(): void;
 }
 
+/** 多久看一次換日了沒有（毫秒）。 */
+const DAY_CHECK = 60_000;
+
 export function openEntry(options: EntryOptions): EntryHandle {
   const shell = openFullscreen();
   const { onError } = options;
@@ -61,6 +64,15 @@ export function openEntry(options: EntryOptions): EntryHandle {
   // 切到背景跨過清晨 4 點回來，要是新一天的份（§11）。
   const onVisibility = (): void => { if (document.visibilityState === 'visible') refresh(); };
   document.addEventListener('visibilitychange', onVisibility);
+  // 開著跨過清晨 4 點（tasks/exam-scope.md §4、§7）：沒有檔案通知、也沒有切回前景時，畫面自己換成新的一天。每分鐘看一次日編號：休眠、換時區都不用另外算。
+  const dayNow = (): number | null => options.state()?.exam().day ?? null;
+  let shownDay = dayNow();
+  const dayWatch = setInterval(() => {
+    const day = dayNow();
+    if (day === shownDay) return;
+    shownDay = day;
+    refresh();
+  }, DAY_CHECK);
   const handle: EntryHandle = {
     refresh() { attach(); refresh(); },
     show(next) { screen = next; refresh(); },
@@ -68,6 +80,7 @@ export function openEntry(options: EntryOptions): EntryHandle {
       if (closed) return;
       closed = true;
       document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(dayWatch);
       detach?.();
       root.unmount();
       shell.close();
