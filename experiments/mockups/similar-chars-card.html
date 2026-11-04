@@ -1,16 +1,13 @@
 <title>相似字比較卡</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Iansui&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
 /* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
-   卡片內容暫定用芫荽：楷書的筆形接近課本，字形貼近教育部標準。按鈕的字和其他科目相同。不載入時退回 --fallback。
+   字用裝置的系統字型，和外掛的卡片一樣是黑體，不載入字型（D-180）。
    畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線。 */
 :root{
   --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
   --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
-  --fallback:"BiauKai","Kaiti TC","DFKai-SB",-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;
-  --hanzi:"Iansui",var(--fallback);
-  --ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --ui:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei UI","Microsoft JhengHei","Noto Sans TC",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
@@ -24,7 +21,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;
   padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .wrap{max-width:1000px;margin:0 auto;display:grid;gap:18px}
-h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:balance}
+h1{font-size:27px;line-height:1.3;margin:0;text-wrap:balance}
 .lead{margin:6px 0 0;color:var(--muted);max-width:60ch}
 .layout{display:grid;gap:26px;grid-template-columns:minmax(0,1fr);align-items:start}
 @media (min-width:820px){.layout{grid-template-columns:minmax(0,400px) minmax(0,1fr)}.demo{position:sticky;top:16px}}
@@ -32,19 +29,19 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 
 /* 卡：外掛是沒有外框的安靜樣式，這裡的框只是在網頁上代表手機畫面 */
 .phone{background:var(--page);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;overflow:hidden}
-.card-title{margin:0 8px 4px;font-family:var(--hanzi);font-size:15px;line-height:1.5;color:var(--muted)}
+.card-title{margin:0 8px 4px;font-size:15px;line-height:1.5;color:var(--muted)}
 .stage{padding:14px 8px 8px;display:grid;gap:4px;min-height:252px;align-content:start}
 .eyebrow{margin:0;font-size:13px;color:var(--muted)}
 .rows{list-style:none;margin:0;padding:0;display:grid;gap:2px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:46px;padding:3px 8px;border-radius:10px;
-  font-family:var(--hanzi);font-size:20px;line-height:1.55;cursor:pointer;transition:background-color .12s ease}
+  font-size:20px;line-height:1.55;cursor:pointer;transition:background-color .12s ease}
 .row.on{background:color-mix(in srgb,var(--ink) 4%,transparent)}
 .row.lock{cursor:default}
 .row .txt{min-width:0}
 .mark{flex:none;font-family:var(--ui);font-size:14px;font-weight:700;width:14px;text-align:center}
 .mark.right{color:var(--good)}.mark.near{color:var(--near)}.mark.miss{color:var(--miss)}.mark.retry{color:var(--miss)}
 .slot{appearance:none;display:inline-block;background:none;border:0;border-bottom:2px solid var(--muted);padding:0;margin:0 3px;width:1.9em;
-  font-family:var(--hanzi);font-size:21px;line-height:1.3;color:var(--key);text-align:center;vertical-align:baseline;cursor:pointer}
+  font-size:21px;line-height:1.3;color:var(--key);text-align:center;vertical-align:baseline;cursor:pointer}
 .row.on .slot{border-bottom-color:var(--key);box-shadow:0 1px 0 var(--key)}
 .slot.right{color:var(--good);border-bottom-color:var(--good)}
 .slot.near{color:var(--near);border-bottom-color:var(--near)}
@@ -53,14 +50,14 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 .slot s{color:var(--miss)}
 .slot.pop{animation:pop .16s ease-out}
 @keyframes pop{0%{transform:scale(1.28)}100%{transform:scale(1)}}
-.fly{position:fixed;z-index:5;pointer-events:none;font-family:var(--hanzi);font-size:30px;color:var(--key);line-height:1}
+.fly{position:fixed;z-index:5;pointer-events:none;font-size:30px;color:var(--key);line-height:1}
 @media (prefers-reduced-motion:reduce){.slot.pop{animation:none}.row{transition:none}}
 
 /* 手指最常停的地方：字鍵在上，兩個動作在下，中間留空，連點才不會誤按「對答案」 */
 .tray{position:sticky;bottom:0;background:var(--page);padding:10px 12px calc(12px + env(safe-area-inset-bottom,0px));display:grid;gap:10px}
 .keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .key{appearance:none;height:60px;border:1px solid var(--line);border-radius:12px;background:none;
-  font-family:var(--hanzi);font-size:31px;line-height:1;cursor:pointer;transition:transform .06s ease,background-color .06s ease}
+  font-size:31px;line-height:1;cursor:pointer;transition:transform .06s ease,background-color .06s ease}
 .key:active{background:color-mix(in srgb,var(--ink) 6%,transparent);transform:scale(.96)}
 .key:disabled{opacity:.28;cursor:default;transform:none;background:none}
 .acts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px}
@@ -77,8 +74,8 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 /* 對答案之後：整組對照，也是每個字的結果 */
 .compare{display:grid;gap:12px;margin:14px 8px 10px}
 .cmp{display:grid;grid-template-columns:2.1rem minmax(0,1fr) auto;gap:2px 8px;align-items:baseline;padding:0 2px}
-.cmp .ch{font-family:var(--hanzi);font-size:25px;line-height:1.2}
-.cmp .why{font-family:var(--hanzi);font-size:16px;line-height:1.5;min-width:0}
+.cmp .ch{font-size:25px;line-height:1.2}
+.cmp .why{font-size:16px;line-height:1.5;min-width:0}
 .cmp .why b{font-weight:400;color:var(--key)}
 .cmp .words{display:block;font-size:15px;line-height:1.5;color:var(--muted)}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap}
@@ -92,7 +89,6 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 .rate[data-k="good"]{--k:var(--good)}.rate[data-k="easy"]{--k:var(--easy)}
 .again{appearance:none;justify-self:start;background:none;border:0;padding:6px 2px;font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .foot{display:flex;flex-wrap:wrap;gap:0 16px}
-.phone.no-font{--hanzi:var(--fallback)}
 
 /* 說明 */
 .notes{display:grid;gap:22px;min-width:0}
@@ -105,8 +101,6 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 .list{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
 .list li{min-width:0}
 .list a{color:var(--key);text-underline-offset:2px}
-.glyphs{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px;align-items:baseline;margin-top:8px;font-size:14px}
-.glyphs .g{font-size:34px;line-height:1.25;letter-spacing:.1em}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:.08em;background:var(--k)}
 :focus-visible{outline:2px solid var(--key);outline-offset:2px}
 </style>
@@ -137,7 +131,6 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
       </section>
       <div class="foot">
         <button class="again" id="restart" type="button">從頭再試，字鍵換個順序</button>
-        <button class="again" id="fontToggle" type="button">看不載入字體的樣子</button>
       </div>
     </div>
 
@@ -151,7 +144,7 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
           <div class="sit">點錯了沒發現，對答案才知道</div><div class="do">錯的格先不給答案，再選一次；剛才選的字變淡。再選對算差一點</div>
           <div class="sit">真的不會</div><div class="do">按「沒印象」，不用亂猜；對答案之前都還能改</div>
           <div class="sit">捲動畫面時碰到字鍵</div><div class="do">手指放開才算點，滑開不算</div>
-          <div class="sit">手指太粗、字太像</div><div class="do">字鍵高 60 點，比最低建議的 44 點大；字用楷書放大，看得清部件</div>
+          <div class="sit">手指太粗、字太像</div><div class="do">字鍵高 60 點，比最低建議的 44 點大；字放大，看得清部件</div>
         </div>
       </section>
 
@@ -168,15 +161,6 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
           <li>再出時換一句話，避免背句子。</li>
           <li>紀錄留下孩子選了哪個字，之後看得出「賽」和「塞」這一對常搞混。</li>
         </ul>
-      </section>
-
-      <section>
-        <h2>字體</h2>
-        <p>暫定芫荽，專為學習做的台灣繁體字型，字形貼近教育部標準。不載入時，卡片照常能用，只是字體換成裝置內建的：iPhone 沒有預裝楷書，應該會是黑體，和現在外掛的卡片一樣；Windows 電腦是標楷體。下面第二行和卡片下方的按鈕，顯示的是你現在這台裝置的真實結果。</p>
-        <div class="glyphs" lang="zh-Hant">
-          <span>芫荽</span><span class="g" style="font-family:var(--hanzi)">寨塞寒賽</span>
-          <span>不載入</span><span class="g" style="font-family:var(--fallback)">寨塞寒賽</span>
-        </div>
       </section>
 
       <section>
@@ -564,10 +548,6 @@ el('skip').addEventListener('click', () => {
 });
 el('check').addEventListener('click', tapCheck);
 el('restart').addEventListener('click', restart);
-el('fontToggle').addEventListener('click', () => {
-  const off = el('phone').classList.toggle('no-font');
-  el('fontToggle').textContent = off ? '換回芫荽' : '看不載入字體的樣子';
-});
 el('cardTitle').textContent = '相似字：' + GROUP.map(g => g.ch).join('、');
 
 newCard(FIRST_CARD, '', 'first');
