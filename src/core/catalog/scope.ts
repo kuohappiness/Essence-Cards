@@ -197,14 +197,18 @@ const hasUnit = (file: ScopeFile): boolean => file.lines.some(line => line.kind 
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 const groupOf = (each: { path: string; file: ScopeFile }): string => each.file.id === null ? 'path:' + each.path : 'id:' + each.file.id;
 
+/** 整組還沒結束的（§2-3 第 1 步）：同一個識別碼任一份結束，整組都結束。 */
+export function notEnded<T extends { path: string; file: ScopeFile }>(entries: readonly T[]): T[] {
+  const over = new Set(entries.filter(each => each.file.ended).map(groupOf));
+  return entries.filter(each => !over.has(groupOf(each)));
+}
+
 /**
  * 先按識別碼分組（同一個識別碼任一份結束，整組都結束，舊副本不會復活）；沒有識別碼的各自算一次考試。還生效而且有讀得懂的行才是候選；
  * 沒有候選但有還生效的檔時回傳那一份（usable 是 false），畫面寫行數，排程當成沒有範圍。others 是其他也生效的候選。
  */
 export function chooseScope<T extends { path: string; file: ScopeFile }>(entries: readonly T[], day: number): { chosen: T | null; usable: boolean; others: string[] } {
-  const over = new Set(entries.filter(each => each.file.ended).map(groupOf));
-  const alive = entries.filter(each => {
-    if (over.has(groupOf(each))) return false;
+  const alive = notEnded(entries).filter(each => {
     const period = scopePeriod(each.file);
     return period.kind !== 'ok' || day <= scopeDay(period.end);
   });
