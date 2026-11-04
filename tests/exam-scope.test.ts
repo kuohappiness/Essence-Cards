@@ -185,6 +185,9 @@ void test('屬性區壞了：日期算有問題，不會因為壞了就復活；
     ['---\n考試開始: [\n提前結束: 2026-11-04\n---\n- 國二上 自然 2\n', 1, true],
     ['---\n考試開始: 2026-10-28\n- 國二上 自然 2\n', 0, false],
     ['---\n提前結束: 2026-11-04\n- 國二上 自然 2\n', 0, true],
+    ['---\n考試開始: *missing\n---\n- 國二上 自然 2\n', 1, false],
+    ['---\n考試開始: &a [*a]\n---\n- 國二上 自然 2\n', 1, false],
+    ['---\n其他: &a [*a]\n---\n- 國二上 自然 2\n', 1, false],
   ];
   for (const [text, lines, ended] of broken) {
     const file = parseScope(text);
@@ -197,6 +200,22 @@ void test('屬性區壞了：日期算有問題，不會因為壞了就復活；
   assert.equal(plain.broken, false, '沒有屬性區不算壞');
   assert.equal(scopePeriod(plain).kind, 'none');
   assert.equal(parseScope('---\n---\n- 國二上 自然 2\n').broken, false, '空的屬性區不算壞');
+});
+
+void test('屬性區壞了還認得識別碼：舊副本不會復活；認不出來的只有它自己結束，寫不出是哪一次考試', () => {
+  const copy = { path: 'B.md', file: parseScope('---\n識別碼: aaaaaa\n---\n- 國二上 自然 2\n') };
+  const chosen = (text: string): string | null => chooseScope([{ path: 'A.md', file: parseScope(text) }, copy], scopeDay('2026-10-25')).chosen?.path ?? null;
+  for (const text of [
+    '---\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n- 國二上 自然 2\n',
+    '---\n識別碼: "aaaaaa" # 手寫的\n提前結束: 2026-10-20\n其他: [\n---\n',
+    "---\n  識別碼: 'aaaaaa'\n提前結束: 2026-10-20\n提前結束: 2026-10-21\n---\n",
+    '---\n識別碼: aaaaaa\n提前結束: 2026-10-20\n',
+  ]) {
+    assert.equal(parseScope(text).id, 'aaaaaa', text);
+    assert.equal(chosen(text), null, text);
+  }
+  assert.equal(chosen('---\n提前結束: 2026-10-20\n其他: [\n---\n'), 'B.md', '連識別碼都沒有：不知道是哪一次考試，不併');
+  assert.equal(chosen('---\n識別碼: # 手寫的\n提前結束: 2026-10-20\n其他: [\n---\n'), 'B.md', '空著的識別碼算沒有');
 });
 
 void test('識別碼：字串或數字都留著，空白算沒有；不檢查字母表', () => {

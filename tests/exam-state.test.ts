@@ -378,6 +378,23 @@ void test('範圍檔一直沒回來：ready() 最多等 2 秒；卡組照常；�
   assert.equal(late.state.exam().file, null, '關閉之後晚到的結果不回填');
 });
 
+void test('一份範圍檔的屬性區讀不出來（alias 接不上、繞圈）：只有它算壞，第一次載入照常讀完，另一份照用', async t => {
+  for (const bad of ['---\n考試開始: *missing\n---\n- 國二上 自然 2-1\n', '---\n考試開始: &a [*a]\n---\n- 國二上 自然 2-1\n']) {
+    const h = make(t, { ...DECKS, [FOLDER + 'a.md']: bad, [FOLDER + 'b.md']: scopeText() });
+    await ready(t, h);
+    assert.equal(h.state.exam().settled, true, bad);
+    assert.deepEqual(h.errors, [], bad);
+    assert.equal(h.state.exam().path, FOLDER + 'b.md', '日期有問題的排在後面');
+    assert.equal(h.lane('a'), 'exam-new', bad);
+    const only = make(t, { ...DECKS, [FOLDER + 'a.md']: bad });
+    await ready(t, only);
+    assert.equal(only.state.exam().settled, true, bad);
+    assert.equal(only.state.exam().period.kind, 'bad', bad);
+    assert.equal(only.state.today().slots.get('a')?.retention, 0.8, '範圍照算，不提高保持率：' + bad);
+    assert.deepEqual(await only.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'broken' });
+  }
+});
+
 void test('範圍檔的資料夾列不出來：自己重試，卡組照常', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const memory = createMemoryFiles({ ...DECKS, [SCOPE]: scopeText() });

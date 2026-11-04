@@ -114,6 +114,24 @@ function readLine(raw: string, line: number): ScopeLine | null {
 
 // ── 一份檔 ──
 
+/** 屬性區的值。讀不出來（YAML 有錯、alias 接不上或繞圈、最上層不是對照表）是 null；沒有字是空的對照表。 */
+function headValues(raw: string): Record<string, unknown> | null {
+  try {
+    const doc = parseDocument(raw);
+    if (doc.errors.length) return null;
+    const data = doc.toJS() as unknown;
+    if (data === null) return {};
+    // 繞圈的值到後面才會丟錯（比對、寫紀錄）：在這裡就算讀不出來。
+    JSON.stringify(data);
+    return isMap(doc.contents) && typeof data === 'object' ? data as Record<string, unknown> : null;
+  } catch { return null; }
+}
+/** 屬性區壞了還是要認得是哪一次考試（§2-2）：這一行還在就照用，有 `提前結束` 的壞檔才擋得住同一個識別碼的舊副本。 */
+function looseId(raw: string): string | null {
+  const value = (/^[ \t]*識別碼[ \t]*:[ \t]*(.*)$/m.exec(raw)?.[1] ?? '').replace(/(?:^|\s+)#.*$/, '').trim();
+  return (/^(["'])(.*)\1$/.exec(value)?.[2] ?? value).trim() || null;
+}
+
 /** 讀屬性區。沒有結束的 `---` 算壞，全部字都是屬性區（syntax §2-1 的「需要版本」同一種看法）。 */
 export function parseScope(text: string): ScopeFile {
   const pieces = text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
@@ -122,15 +140,14 @@ export function parseScope(text: string): ScopeFile {
   if (pieces[0].trim() === '---') {
     const close = pieces.findIndex((piece, index) => index > 0 && /^---\s*$/.test(piece));
     const raw = pieces.slice(1, close < 0 ? pieces.length : close).join('\n');
-    if (close < 0) return { ...file, broken: true, ended: raw.includes('提前結束') };
+    if (close < 0) return { ...file, broken: true, ended: raw.includes('提前結束'), id: looseId(raw) };
     body = close + 1;
-    const doc = parseDocument(raw);
-    const data = doc.errors.length ? undefined : doc.toJS() as unknown;
-    if (data === undefined || (data !== null && (!isMap(doc.contents) || typeof data !== 'object'))) {
+    const values = headValues(raw);
+    if (!values) {
       file.broken = true;
       file.ended = raw.includes('提前結束');
+      file.id = looseId(raw);
     } else {
-      const values = (data ?? {}) as Record<string, unknown>;
       const id = values['識別碼'];
       if ((typeof id === 'string' || typeof id === 'number') && String(id).trim()) file.id = String(id).trim();
       file.start = readDate(values['考試開始']);
