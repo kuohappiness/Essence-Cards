@@ -41,6 +41,9 @@ class ScopeBlocked extends Error {
   constructor(result: ScopeBlocked['result']) { super('範圍檔不能寫：' + result.reason); this.result = result; }
 }
 
+/** 等寫入等到逾時（§6）：只結束等待，底層取消不了。 */
+class WriteTimeout extends Error {}
+
 /** 紀錄行的欄位（§2-5）：讀得懂的每一行，照檔案的順序，只留年級學期、科目、編號。 */
 const unitsOf = (file: ScopeFile): string[] => file.lines.flatMap(line => line.kind === 'unit' ? [`${line.term} ${line.subject} ${line.code}`] : []);
 /** 寫入之前的內容：沒寫的日期沒有欄位，看不懂的日期照原字，原本沒有識別碼就沒有 id（§2-5）。 */
@@ -148,21 +151,40 @@ export function createExamFiles(options: ExamFilesOptions) {
   function timed(work: Promise<void>): Promise<void> {
     let id: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      id = setTimeout(() => { reject(Error(`寫進磁碟超過 ${String(options.writeTimeout)} ms 沒有回來（逾時），當成失敗`)); }, options.writeTimeout);
+      id = setTimeout(() => { reject(new WriteTimeout()); }, options.writeTimeout);
     });
     return Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
   }
-  /** 一次寫一個路徑：讀取不跨過這次 I/O（reads 的 hold），寫完立刻重讀一次。回傳寫下去的文字。 */
-  async function modify(path: string, edit: (text: string) => string): Promise<string> {
-    let written = '';
+  /**
+   * 一次寫一個路徑：讀取不跨過這次 I/O（reads 的 hold），寫完立刻重讀一次。回傳寫下去的文字。
+   * 逾時取消不了底層（Codex L2 的 R5）：回呼還沒進入的，之後進入時丟錯，不會寫；已經進入的可能等一下才寫成，真的寫成了才交給 late（記紀錄），關閉之後不記。
+   */
+  async function modify(path: string, edit: (text: string) => string, late: (text: string) => void): Promise<string> {
+    let written = '', entered = false, gaveUp = false;
     reads.hold(path);
+    const work = files.modify(path, text => {
+      if (gaveUp) throw Error('等這次寫入已經逾時，不寫了');
+      entered = true;
+      written = edit(text);
+      return written;
+    });
     try {
-      await timed(files.modify(path, text => { written = edit(text); return written; }));
+      await timed(work);
+      return written;
+    } catch (error) {
+      if (!(error instanceof WriteTimeout)) throw error;
+      gaveUp = true;
+      const waited = `寫進磁碟超過 ${String(options.writeTimeout)} ms 沒有回來（逾時），`;
+      if (!entered) throw Error(waited + '這次沒有存', { cause: error });
+      work.then(() => {
+        if (!life.closed) late(written);
+        reads.reread(path);
+      }, () => { /* 寫不進去：畫面已經寫了原因。 */ });
+      throw Error(waited + '可能等一下才寫好；請重新打開這個畫面確認', { cause: error });
     } finally {
       reads.unhold(path);
       reads.reread(path);
     }
-    return written;
   }
   /** 把這份文字當成現在的內容、重排；之後檔案通知讀到同一份不再通知（§2-4）。 */
   function adopt(path: string, text: string): void {
@@ -189,6 +211,11 @@ export function createExamFiles(options: ExamFilesOptions) {
     /** 改一份舊檔（§2-4）：回呼裡改最新的內容；有變動才記（§2-5）。id 是畫面打開時的識別碼。 */
     async update(path: string, id: string | null, change: ExamChange | Pick<ScopeChange, 'ended'>, units: readonly ScopeUnit[]): Promise<ExamResult> {
       let before: ScopeFile | null = null;
+      const record = (text: string): void => {
+        const after = parseScope(text), was = before;
+        if (was && 'ended' in change) options.logged({ ...logOf(after, '提前結束'), ended: change.ended });
+        else if (was && JSON.stringify(oldOf(was)) !== JSON.stringify(oldOf(after))) options.logged({ ...logOf(after, '改'), old: oldOf(was) });
+      };
       try {
         const text = await modify(path, latest => {
           const done = editScope(latest, { ...change, id: freshId() }, units);
@@ -198,10 +225,8 @@ export function createExamFiles(options: ExamFilesOptions) {
           if (was.id !== id) throw new ScopeBlocked({ kind: 'blocked', reason: 'changed' });
           before = was;
           return done.text;
-        });
-        const after = parseScope(text), was = before as ScopeFile | null;
-        if (was && 'ended' in change) options.logged({ ...logOf(after, '提前結束'), ended: change.ended });
-        else if (was && JSON.stringify(oldOf(was)) !== JSON.stringify(oldOf(after))) options.logged({ ...logOf(after, '改'), old: oldOf(was) });
+        }, record);
+        record(text);
         adopt(path, text);
         return { kind: 'done' };
       } catch (error) { return failure(error); }
@@ -216,9 +241,10 @@ export function createExamFiles(options: ExamFilesOptions) {
         for (let suffix = 1; ; suffix++) {
           const path = (suffix === 1 ? name : `${name} ${String(suffix)}`) + '.md';
           let taken = false;
-          await modify(path, latest => { taken = latest !== ''; return taken ? latest : text; });
+          const record = (): void => { if (!taken) options.logged(logOf(parseScope(text), '建立')); };
+          await modify(path, latest => { taken = latest !== ''; return taken ? latest : text; }, record);
           if (taken) continue;
-          options.logged(logOf(parseScope(text), '建立'));
+          record();
           adopt(path, text);
           return { kind: 'done' };
         }

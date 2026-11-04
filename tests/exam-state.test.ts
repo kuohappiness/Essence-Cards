@@ -59,6 +59,12 @@ function make(t: TestContext, initial: Record<string, string>, now = NOON): Harn
     logged: () => [...memory.texts].filter(([path]) => path.startsWith('Essence Cards/紀錄/') || path.endsWith('.jsonl')).flatMap(([, text]) => text.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)).filter(line => line.set === 'exam'),
   };
 }
+/** 把紀錄寫進檔（writer 的等待也是 setTimeout）。 */
+const flushLog = async (t: TestContext, state: State): Promise<void> => {
+  const done = state.flush();
+  await tick(t, 1000);
+  await done;
+};
 /** 畫面打開的是這一刻選定的那一份。 */
 const opened = (state: State): Parameters<State['endExam']>[0] => ({ path: state.exam().path, id: state.exam().file?.id ?? null });
 const save = (state: State, change: Parameters<State['setExam']>[0]): ReturnType<State['setExam']> => state.setExam(change, opened(state));
@@ -237,6 +243,150 @@ void test('打開時沒有範圍，別處新建了一份：不另建一份；打
   assert.deepEqual(await gone.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }, was), { kind: 'blocked', reason: 'changed' });
   assert.deepEqual(await gone.state.endExam(was), { kind: 'blocked', reason: 'changed' });
   assert.deepEqual([...gone.memory.texts.keys()].filter(path => path.startsWith(FOLDER)), []);
+});
+
+/** 真的 Files 同一個路徑排隊：下一次的 modify 等 gate 打開才進入回呼，後面的排在它後面。 */
+function slowFiles(memory: MemoryFiles): { files: MemoryFiles['files']; gate: () => () => void } {
+  let next: Promise<void> | null = null, tail: Promise<unknown> = Promise.resolve();
+  return {
+    files: {
+      ...memory.files,
+      modify(path, edit) {
+        const held = next;
+        next = null;
+        const run = tail.catch(() => {}).then(() => held).then(() => memory.files.modify(path, edit));
+        tail = run;
+        return run;
+      },
+    },
+    gate() {
+      let open = (): void => {};
+      next = new Promise<void>(resolve => { open = resolve; });
+      return open;
+    },
+  };
+}
+function makeSlow(t: TestContext, initial: Record<string, string>): { state: State; memory: MemoryFiles; gate: () => () => void; exams: () => Record<string, unknown>[] } {
+  if (!mocked.has(t)) t.mock.timers.enable({ apis: ['setTimeout'] });
+  mocked.add(t);
+  const memory = createMemoryFiles(initial);
+  const { files, gate } = slowFiles(memory);
+  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: false, writeTimeout: 30, now: () => NOON, offset: () => OFFSET, onError() {}, random: () => 0 });
+  t.after(() => state.close());
+  return { state, memory, gate, exams: () => examLines(memory) };
+}
+const examLines = (memory: MemoryFiles): Record<string, unknown>[] => [...memory.texts].filter(([path]) => path.endsWith('.jsonl')).flatMap(([, text]) => text.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)).filter(entry => entry.set === 'exam');
+const readySlow = async (t: TestContext, state: State): Promise<void> => { const done = state.ready(); await tick(t, 0); await done; };
+/** 排隊輪到它（微任務），計時才開始；再等到逾時。 */
+const expire = async (t: TestContext): Promise<void> => { await tick(t, 0); await tick(t, 30); };
+const failedWith = (result: Awaited<ReturnType<State['endExam']>>): string => result.kind === 'failed' && result.error instanceof Error ? result.error.message : JSON.stringify(result);
+
+void test('等寫入逾時，回呼還沒進入：回失敗、之後也不會寫；重試排在後面照常，只寫一次、只記一次', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const open = h.gate();
+  const ending = finish(h.state);
+  await expire(t);
+  assert.equal(failedWith(await ending), '寫進磁碟超過 30 ms 沒有回來（逾時），這次沒有存');
+  assert.equal(h.memory.texts.get(SCOPE), scopeText(), '還沒寫');
+  const retry = finish(h.state);
+  await tick(t, 0);
+  open();
+  await tick(t, 0);
+  assert.deepEqual(await retry, { kind: 'done' });
+  await flushLog(t, h.state);
+  assert.equal(h.memory.texts.get(SCOPE)?.match(/提前結束/g)?.length, 1);
+  assert.equal(h.exams().length, 1);
+});
+
+void test('等寫入逾時，回呼還沒進入，也沒有重試：之後打開不會默默結束考試', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const open = h.gate();
+  const ending = finish(h.state);
+  await expire(t);
+  await ending;
+  open();
+  await tick(t, 0);
+  await tick(t);
+  assert.equal(h.memory.texts.get(SCOPE), scopeText());
+  assert.equal(h.state.exam().path, SCOPE, '考試還在');
+  await flushLog(t, h.state);
+  assert.deepEqual(h.exams(), []);
+});
+
+void test('等寫入逾時，回呼已經進入：畫面寫可能等一下才寫好；真的寫成了才記；重新讀到結果', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const held = h.memory.holdModify(SCOPE);
+  const ending = finish(h.state);
+  await expire(t);
+  assert.equal(failedWith(await ending), '寫進磁碟超過 30 ms 沒有回來（逾時），可能等一下才寫好；請重新打開這個畫面確認');
+  await flushLog(t, h.state);
+  assert.deepEqual(h.exams(), [], '還不確定就不記');
+  held.release();
+  await tick(t, 0);
+  await flushLog(t, h.state);
+  assert.equal(h.exams().length, 1);
+  assert.equal((h.exams()[0].val as { do: string }).do, '提前結束');
+  await tick(t, DELAY);
+  assert.equal(h.state.exam().file, null, '讀到結束了，倒數消失');
+});
+
+void test('等寫入逾時，之後才發現寫不進去：不記，範圍照舊', async t => {
+  const memory = createMemoryFiles({ ...DECKS, [SCOPE]: scopeText() });
+  if (!mocked.has(t)) t.mock.timers.enable({ apis: ['setTimeout'] });
+  mocked.add(t);
+  let refuse = (): void => {};
+  const files = {
+    ...memory.files,
+    modify(path: string, edit: (text: string) => string) {
+      return new Promise<void>((_, reject) => {
+        edit(memory.texts.get(path) ?? '');
+        refuse = () => { reject(Error('寫不進去')); };
+      });
+    },
+  };
+  const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: false, writeTimeout: 30, now: () => NOON, offset: () => OFFSET, onError() {}, random: () => 0 });
+  t.after(() => state.close());
+  await readySlow(t, state);
+  const ending = finish(state);
+  await expire(t);
+  assert.match(failedWith(await ending), /可能等一下才寫好/);
+  refuse();
+  await tick(t, DELAY);
+  assert.equal(state.exam().path, SCOPE);
+  await flushLog(t, state);
+  assert.deepEqual(examLines(memory), []);
+});
+
+void test('等寫入逾時後關閉：之後寫成了也不記', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const held = h.memory.holdModify(SCOPE);
+  const ending = finish(h.state);
+  await expire(t);
+  await ending;
+  await h.state.close();
+  held.release();
+  await tick(t, 0);
+  assert.deepEqual(h.exams(), []);
+});
+
+void test('建立新檔逾時：回呼已經進入，真的寫成了才記一行建立', async t => {
+  const h = makeSlow(t, DECKS);
+  await readySlow(t, h.state);
+  const path = FOLDER + '2026-10-28 國二上.md';
+  const held = h.memory.holdModify(path);
+  const saving = save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
+  await expire(t);
+  assert.match(failedWith(await saving), /可能等一下才寫好/);
+  await flushLog(t, h.state);
+  assert.deepEqual(h.exams(), []);
+  held.release();
+  await tick(t, 0);
+  await flushLog(t, h.state);
+  assert.deepEqual(h.exams().map(entry => (entry.val as { do: string }).do), ['建立']);
 });
 
 void test('還沒 ready 與關閉之後擋下來', async t => {
