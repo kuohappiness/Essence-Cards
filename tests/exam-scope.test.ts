@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chooseScope, editScope, isExamPath, newScopeText, parseScope as parse, readDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from '../src/core/catalog/index.ts';
 import type { ScopeFile } from '../src/core/catalog/index.ts';
+import { newId } from '../src/core/deck/index.ts';
 import { dayOf } from '../src/core/study/index.ts';
+import { parse as parseYaml } from 'yaml';
 
 // 考試範圍檔（tasks/exam-scope.md §2、syntax.md §4）：預期值都來自那份說明的表，內容都是自編的。
 
@@ -200,6 +202,17 @@ void test('屬性區壞了：日期算有問題，不會因為壞了就復活；
   assert.equal(plain.broken, false, '沒有屬性區不算壞');
   assert.equal(scopePeriod(plain).kind, 'none');
   assert.equal(parseScope('---\n---\n- 國二上 自然 2\n').broken, false, '空的屬性區不算壞');
+});
+
+void test('範圍檔的新識別碼第一個字是字母：抽到的、撞到往下找的都是；卡組的 ID 不變', () => {
+  assert.equal(newId(() => 0.75, new Set(), { letterFirst: true }), 'u22222');
+  assert.equal(newId(() => 0.9999, new Set(['z99999']), { letterFirst: true }), 'aaaaaa', '撞到往下找，不會變成數字開頭');
+  assert.equal(newId(() => 0.75, new Set()), '222222', '卡組的 ID 照舊');
+  assert.equal(newId(() => 0.9999, new Set(['999999'])), 'aaaaaa');
+  // 為什麼第一個字是字母就夠：這些看起來像數字或關鍵字的，YAML 都讀成字串。
+  for (const id of ['e23456', 'nan234', 'inf234', 'true23', 'false2', 'null23', 'yes234', 'no2345', 'x23456']) {
+    assert.equal((parseYaml(`識別碼: ${id}`) as Record<string, unknown>)['識別碼'], id, id);
+  }
 });
 
 void test('識別碼照寫的字讀：YAML 當成數字的寫法不會變成別的；壞屬性區和正常的讀法相同', () => {

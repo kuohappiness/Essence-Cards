@@ -214,7 +214,7 @@ export function createExamFiles(options: ExamFilesOptions) {
     revision++;
     options.changed();
   }
-  const freshId = (): string => newId(options.random ?? Math.random, new Set([...known.values()].flatMap(each => each.file.id ?? [])));
+  const freshId = (): string => newId(options.random ?? Math.random, new Set([...known.values()].flatMap(each => each.file.id ?? [])), { letterFirst: true });
   const failure = (error: unknown): ExamResult => error instanceof ScopeBlocked ? error.result : { kind: 'failed', error };
 
   return {

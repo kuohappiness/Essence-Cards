@@ -675,7 +675,20 @@ void test('範圍檔讀不到（reject）：同批的卡組照常、ready() 不�
   assert.equal(h.state.exam().missing, 0);
 });
 
-void test('外掛產生的識別碼像數字（2e2345）：寫回讀到、紀錄都是原本的六個字', async t => {
+void test('手寫的識別碼像數字（2e2345）：寫回讀到、紀錄都是原本的六個字', async t => {
+  const h = make(t, { ...DECKS, [SCOPE]: '---\n識別碼: 2e2345\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' });
+  await ready(t, h);
+  assert.equal(h.state.exam().file?.id, '2e2345');
+  assert.deepEqual(await save(h.state, { start: '2026-10-29' }), { kind: 'done' });
+  assert.match(h.memory.texts.get(SCOPE) ?? '', /^識別碼: 2e2345\r?$/m);
+  await tick(t);
+  await tick(t);
+  assert.equal(h.state.exam().file?.id, '2e2345', '檔案通知讀回來也一樣');
+  await flushLog(t, h.state);
+  assert.deepEqual(h.logged().filter(line => line.set === 'exam').map(line => (line.val as { id?: string }).id), ['2e2345']);
+});
+
+void test('外掛產生的識別碼第一個字是字母：亂數抽到 2e2345 的那一組也寫不出像數字的字', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   mocked.add(t);
   const memory = createMemoryFiles(DECKS);
@@ -687,15 +700,15 @@ void test('外掛產生的識別碼像數字（2e2345）：寫回讀到、紀錄
   await tick(t, 0);
   await done;
   assert.deepEqual(await save(state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' }), { kind: 'done' });
-  assert.equal(state.exam().file?.id, '2e2345');
+  assert.equal(state.exam().file?.id, 'ue2345');
   await tick(t);
   await tick(t);
-  assert.equal(state.exam().file?.id, '2e2345', '檔案通知讀回來也一樣');
+  assert.equal(state.exam().file?.id, 'ue2345', '檔案通知讀回來也一樣');
   const log = state.flush();
   await tick(t, 1000);
   await log;
   const lines = [...memory.texts].filter(([path]) => path.endsWith('.jsonl')).flatMap(([, text]) => text.trim().split('\n').map(line => JSON.parse(line) as { set?: string; val?: { id?: string } }));
-  assert.deepEqual(lines.filter(line => line.set === 'exam').map(line => line.val?.id), ['2e2345']);
+  assert.deepEqual(lines.filter(line => line.set === 'exam').map(line => line.val?.id), ['ue2345']);
 });
 
 /** R13：A 已經選定，B 的通知到了。B 比 A 早就該換 B。 */
