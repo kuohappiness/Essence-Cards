@@ -1,6 +1,6 @@
 # 入口與目錄第二批（考試範圍）：L2 審查請求（給新開的 Codex session）
 
-狀態：第三輪待審（[報告與回應](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md>)）
+狀態：第三輪待修（[報告與回應](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
