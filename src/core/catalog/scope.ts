@@ -398,6 +398,20 @@ function headAsWanted(text: string, result: string, after: ScopeFile, change: Sc
     && otherProps(result) === otherProps(text);
 }
 
+/**
+ * 屬性區改完的行對回原本的行（§2-4，Codex L2 的 R16）：沒改到的連換行都不動，改到的用它原本的換行，新加的跟著它後面那一行，放最後的用檔案的換行。
+ * editHead 只刪、換、插，順序不變，所以往後找就對得上；對錯一樣的兩行也只差換行。
+ */
+function keepEols(edited: readonly string[], original: readonly RawLine[], eol: string): RawLine[] {
+  let at = 0;
+  return edited.map(raw => {
+    const found = original.findIndex((line, index) => index >= at && line.raw === raw);
+    if (found < 0) return { raw, eol: original[at]?.eol || eol };
+    at = found + 1;
+    return original[found];
+  });
+}
+
 /** 把變動套到這份文字（§2-4）。空字串是檔不見或清空，已經結束的不改回去，屬性區壞了不寫。 */
 export function editScope(text: string, change: ScopeChange, units: readonly ScopeUnit[]): ScopeEdit {
   if (text === '') return { kind: 'blocked', reason: 'changed' };
@@ -413,7 +427,7 @@ export function editScope(text: string, change: ScopeChange, units: readonly Sco
   const edited = editHead(raw, change, before);
   let head: RawLine[];
   if (close > 0) {
-    head = edited === raw ? lines.slice(0, close + 1) : [lines[0], ...(edited ? edited.split('\n').map(line => ({ raw: line, eol })) : []), lines[close]];
+    head = edited === raw ? lines.slice(0, close + 1) : [lines[0], ...(edited ? keepEols(edited.split('\n'), headLines, eol) : []), lines[close]];
   } else {
     head = edited ? [{ raw: '---', eol }, ...edited.split('\n').map(line => ({ raw: line, eol })), { raw: '---', eol }] : [];
   }

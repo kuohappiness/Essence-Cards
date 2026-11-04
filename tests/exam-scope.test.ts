@@ -557,6 +557,19 @@ void test('日期套到最新的內容上變成開始晚於結束：不寫；家
   assert.equal(edit(other, { start: '2026-10-27' }), other.replace('10-21', '10-27'), '另一邊看不懂：留原字，不算這次造成的');
 });
 
+void test('換行混在一起：沒改到的行連換行都不動，改到的用它原本的換行', () => {
+  const mixed = '---\r\n識別碼: aaaaaa\n# 註解\n考試開始: 2026-10-28\n其他: 1\n---\n- 國二上 自然 2\n';
+  assert.equal(edit(mixed, { start: '2026-10-29' }), mixed.replace('10-28', '10-29'), '第一行 CRLF、其他 LF');
+  assert.equal(edit(mixed, { start: null }), mixed.replace('考試開始: 2026-10-28\n', ''), '刪一行');
+  const inside = '---\r\n識別碼: aaaaaa\r\n考試開始: 2026-10-28\n其他: 1\r\n---\r\n- 國二上 自然 2\r\n';
+  assert.equal(edit(inside, { start: '2026-10-29' }), inside.replace('10-28', '10-29'), 'CRLF 裡夾一行 LF，改的就是那一行');
+  assert.equal(edit(inside, { end: '2026-10-30' }), inside.replace('考試開始: 2026-10-28\n其他: 1\r\n', '考試開始: 2026-10-28\n其他: 1\r\n考試結束: 2026-10-30\r\n'), '多的一行用檔案的換行');
+  const noStart = '---\r\n識別碼: aaaaaa\n考試結束: 2026-10-30\n---\n';
+  assert.equal(edit(noStart, { start: '2026-10-29' }), noStart.replace('考試結束', '考試開始: 2026-10-29\n考試結束'), '插在中間的新行跟著後面那一行');
+  const same = '---\r\n# 同一句\n# 同一句\r\n考試開始: 2026-10-28\n---\n';
+  assert.equal(edit(same, { start: '2026-10-29' }), same.replace('10-28', '10-29'), '一樣的兩行各留各的');
+});
+
 void test('屬性區不是一行一個屬性：只有要改的變了才寫，帶走別的屬性就不寫', () => {
   const blocked = { kind: 'blocked', reason: 'broken' };
   const line = '---\n{識別碼: aaaaaa, 考試開始: 2026-10-28, 其他: 保留}\n---\n- 國二上 自然 2\n';
