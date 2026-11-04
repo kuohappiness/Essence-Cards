@@ -247,6 +247,23 @@ void test('識別碼照寫的字讀：YAML 當成數字的寫法不會變成別�
   assert.equal(filled.kind === 'ok' ? parseScope(filled.text).id : null, '2e2345', '補上的識別碼像數字也寫得進去');
 });
 
+void test('壞屬性區裡完整的識別碼行和正常讀法相同：鍵有引號也認得，舊副本不會復活（R18）', () => {
+  for (const [line, id] of [['"識別碼": "school #1"', 'school #1'], ["'識別碼': abc234", 'abc234'], ['"識別碼" : 2e2345', '2e2345'], ['"\\u8B58\\u5225\\u78BC": abc234', 'abc234']]) {
+    assert.equal(parseScope(`---\n${line}\n---\n`).id, id, '正常：' + line);
+    assert.equal(parseScope(`---\n${line}\n其他: [\n---\n`).id, id, '壞屬性區：' + line);
+    assert.equal(parseScope(`---\n其他: [\n${line}\n---\n`).id, id, '壞的在前面：' + line);
+    assert.equal(parseScope(`---\n${line}\n`).id, id, '沒有結束的 ---：' + line);
+  }
+  for (const line of ['其他: "識別碼: abc234"', '# 識別碼: abc234', '其他: 識別碼', '識別碼', '識別碼: [abc234']) {
+    assert.equal(parseScope(`---\n${line}\n其他二: [\n---\n`).id, null, '不是識別碼：' + line);
+  }
+  const copy = { path: 'B.md', file: parseScope('---\n"識別碼": "school #1"\n---\n- 國二上 自然 2\n') };
+  const ended = { path: 'A.md', file: parseScope('---\n"識別碼": "school #1"\n提前結束: 2026-10-20\n其他: [\n---\n- 國二上 自然 2\n') };
+  assert.equal(chooseScope([ended, copy], scopeDay('2026-10-25')).chosen, null);
+  // 定下來的邊界：別名要看另一行，壞屬性區不跟（任務說明 §2-3），算認不出來。
+  assert.equal(parseScope('---\n錨點: &x 1e3\n識別碼: *x\n其他: [\n---\n').id, null);
+});
+
 void test('屬性區壞了還認得識別碼：舊副本不會復活；認不出來的只有它自己結束，寫不出是哪一次考試', () => {
   const copy = { path: 'B.md', file: parseScope('---\n識別碼: aaaaaa\n---\n- 國二上 自然 2\n') };
   const chosen = (text: string): string | null => chooseScope([{ path: 'A.md', file: parseScope(text) }, copy], scopeDay('2026-10-25')).chosen?.path ?? null;

@@ -34,6 +34,7 @@ void test('考前提醒：整組已經結束的舊副本不算；外掛當成沒
   assert.equal(remind({ a: ended, b: copy, c: null }, now).kind, 'unreadable', '讀不到的不知道是哪一次考試：還是要問');
   assert.deepEqual([remind({ a: '---\n識別碼: cccccc\n考試開始: 2026-10-26\n---\n分類：醫學\n' }, now).kind, remind({ a: '---\n識別碼: cccccc\n考試開始: 2026-10-26\n---\n' }, now).needsOk], ['soon', true], '只有分類、空的');
   assert.equal(remind({ a: '---\n識別碼: cccccc\n考試開始: 10/26\n---\n' }, now).kind, 'unreadable');
+  assert.equal(remind({ a: '---\n"識別碼": "school #1"\n提前結束: 2026-10-20\n其他: [\n---\n', b: '---\n"識別碼": "school #1"\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' }, now).kind, 'none', '鍵有引號也一樣（R18）');
   assert.equal(remind({ a: '---\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n', b: copy }, now).kind, 'none', '結束的那份屬性區壞了，識別碼還認得');
 });
 
