@@ -1,0 +1,568 @@
+<title>相似字比較卡</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
+   字用楷書：相似字的差別在部件，楷書的筆形最接近課本。 */
+:root{
+  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
+  --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
+  --hanzi:"LXGW WenKai TC","Kaiti TC","BiauKai","DFKai-SB",serif;
+  --ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
+  --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--easy:#8DB7FF;--on-ink:#121314;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
+  --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--easy:#8DB7FF;--on-ink:#121314;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.65;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.wrap{max-width:1000px;margin:0 auto;display:grid;gap:18px}
+h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:balance}
+.lead{margin:6px 0 0;color:var(--muted);max-width:60ch}
+.layout{display:grid;gap:26px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:820px){.layout{grid-template-columns:minmax(0,400px) minmax(0,1fr)}.demo{position:sticky;top:16px}}
+.demo{display:grid;gap:8px;min-width:0}
+
+/* 卡：外掛是沒有外框的安靜樣式，這裡的框只是在網頁上代表手機畫面 */
+.phone{background:var(--page);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;overflow:hidden}
+.stage{padding:16px 8px 8px;display:grid;gap:8px;min-height:284px;align-content:start}
+.eyebrow{margin:0 6px;font-size:13px;color:var(--muted)}
+.rows{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:46px;padding:3px 8px;border-radius:10px;
+  font-family:var(--hanzi);font-size:20px;line-height:1.55;cursor:pointer;transition:background-color .12s ease}
+.row.on{background:var(--press)}
+.row.lock{cursor:default}
+.row .txt{min-width:0}
+.mark{flex:none;font-family:var(--ui);font-size:14px;font-weight:700;width:14px;text-align:center}
+.mark.right{color:var(--good)}.mark.near{color:var(--near)}.mark.miss{color:var(--miss)}.mark.retry{color:var(--miss)}
+.slot{appearance:none;display:inline-block;background:none;border:0;border-bottom:2px solid var(--muted);padding:0;margin:0 3px;width:1.9em;
+  font-family:var(--hanzi);font-size:21px;font-weight:700;line-height:1.3;color:var(--key);text-align:center;vertical-align:baseline;cursor:pointer;border-radius:3px 3px 0 0}
+.row.on .slot{border-bottom:3px solid var(--key);background:color-mix(in srgb,var(--key) 14%,transparent)}
+.slot.right{color:var(--good);border-bottom-color:var(--good)}
+.slot.near{color:var(--near);border-bottom-color:var(--near)}
+.slot.miss{color:var(--miss);border-bottom-color:var(--miss)}
+.slot.unknown{color:var(--muted)}
+.slot s{color:var(--miss);font-weight:400}
+.slot.pop{animation:pop .16s ease-out}
+@keyframes pop{0%{transform:scale(1.28)}100%{transform:scale(1)}}
+.fly{position:fixed;z-index:5;pointer-events:none;font-family:var(--hanzi);font-size:30px;font-weight:700;color:var(--key);line-height:1}
+@media (prefers-reduced-motion:reduce){.slot.pop{animation:none}.row{transition:none}}
+
+/* 手指最常停的地方：字鍵在上，兩個動作在下，中間留空，連點才不會誤按「對答案」 */
+.tray{position:sticky;bottom:0;background:var(--page);padding:6px 12px calc(12px + env(safe-area-inset-bottom,0px));display:grid;gap:10px;border-top:1px solid var(--line)}
+.say{margin:0;font-size:13px;color:var(--muted);min-height:1.65em}
+.say.warn{color:var(--miss)}
+.keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.key{appearance:none;height:60px;border:1px solid var(--line);border-radius:12px;background:var(--page);
+  font-family:var(--hanzi);font-size:31px;font-weight:700;line-height:1;cursor:pointer;transition:transform .06s ease,background-color .06s ease}
+.key:active{background:var(--press);transform:scale(.96)}
+.key:disabled{opacity:.28;cursor:default;transform:none;background:var(--page)}
+.acts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px}
+.act{appearance:none;height:48px;border-radius:12px;border:1px solid var(--line);background:none;font-size:15px;font-weight:500;cursor:pointer}
+.act:active{background:var(--press)}
+#skip{color:var(--muted)}
+#check{color:var(--muted);font-variant-numeric:tabular-nums}
+#check.ready{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+#check.ready:active{opacity:.85;background:var(--ink)}
+#check.nudge{animation:nudge .3s ease}
+@keyframes nudge{0%,100%{transform:none}35%{transform:scale(1.03)}}
+@media (prefers-reduced-motion:reduce){#check.nudge{animation:none}.key{transition:none}.key:active{transform:none}}
+
+/* 對答案之後：整組對照，也是每個字的結果 */
+.compare{display:grid;gap:0;margin:2px 8px 0;border-top:1px solid var(--line)}
+.cmp{display:grid;grid-template-columns:2.1rem minmax(0,1fr) auto;gap:2px 8px;align-items:baseline;padding:8px 2px;border-bottom:1px solid var(--line)}
+.cmp:last-child{border-bottom:0}
+.cmp .ch{font-family:var(--hanzi);font-size:25px;font-weight:700;line-height:1.2}
+.cmp .why{font-size:14px;line-height:1.5;min-width:0}
+.cmp .why b{color:var(--key);font-family:var(--hanzi);font-size:16px}
+.cmp .slip{display:block;font-size:13px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.chip.good{color:var(--good)}.chip.near{color:var(--near)}.chip.miss{color:var(--miss)}.chip.easy{color:var(--easy)}
+.rates{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);border-top:1px solid var(--line)}
+.rate{appearance:none;height:52px;border:0;background:none;display:flex;align-items:center;justify-content:center;gap:8px;font-size:16px;cursor:pointer}
+.rate+.rate{border-left:1px solid var(--line)}
+.rate:active{background:var(--press)}
+.rate[data-k]::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--k)}
+.rate[data-k="good"]{--k:var(--good)}.rate[data-k="easy"]{--k:var(--easy)}
+.again{appearance:none;justify-self:start;background:none;border:0;padding:6px 2px;font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+
+/* 說明 */
+.notes{display:grid;gap:22px;min-width:0}
+.notes h2{font-size:16px;font-weight:700;margin:0 0 6px}
+.notes p{margin:0}
+.tbl{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:0;font-size:14px;border-top:1px solid var(--line)}
+.tbl>div{padding:7px 8px 7px 0;border-bottom:1px solid var(--line);min-width:0}
+.tbl>.do{padding-right:0}
+.tbl .sit{color:var(--muted)}
+.list{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
+.list li{min-width:0}
+.list a{color:var(--key);text-underline-offset:2px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:.08em;background:var(--k)}
+:focus-visible{outline:2px solid var(--key);outline-offset:2px}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>相似字比較卡</h1>
+    <p class="lead">寨、塞、寒、賽，一格一個學習目標。可以故意點錯、連點、亂按，看看順不順手。這是網頁示意，不是外掛的正式畫面。</p>
+  </header>
+
+  <div class="layout">
+    <div class="demo">
+      <section class="phone" aria-label="比較卡示意">
+        <div class="stage">
+          <p class="eyebrow" id="eyebrow" hidden></p>
+          <ul class="rows" id="rows"></ul>
+          <div class="compare" id="compare" hidden></div>
+        </div>
+        <div class="tray" id="tray">
+          <p class="say" id="say" aria-live="polite"></p>
+          <div class="keys" id="keys"></div>
+          <div class="acts">
+            <button class="act" id="skip" type="button">沒印象</button>
+            <button class="act" id="check" type="button"></button>
+          </div>
+        </div>
+        <div class="rates" id="rates" hidden></div>
+      </section>
+      <button class="again" id="restart" type="button">從頭再試，字鍵換個順序</button>
+    </div>
+
+    <div class="notes">
+      <section>
+        <h2>點錯了怎麼辦</h2>
+        <div class="tbl">
+          <div class="sit">點到隔壁的字，自己有發現</div><div class="do">點那一句（整列都可以點），再點對的字，直接換掉，不用先清</div>
+          <div class="sit">手抖連點，一次想填兩格</div><div class="do">0.3 秒內重複點同一個字只算一次</div>
+          <div class="sit">最後一格填完，手順勢多按一下</div><div class="do">「對答案」在另一排，填完 0.35 秒內按了不算</div>
+          <div class="sit">點錯了沒發現，對答案才知道</div><div class="do">錯的格先不給答案，再選一次；剛才選的字變淡。再選對算差一點</div>
+          <div class="sit">真的不會</div><div class="do">按「沒印象」，不用亂猜；對答案之前都還能改</div>
+          <div class="sit">捲動畫面時碰到字鍵</div><div class="do">手指放開才算點，滑開不算</div>
+          <div class="sit">手指太粗、字太像</div><div class="do">字鍵高 60 點，比最低建議的 44 點大；字用楷書放大，看得清部件</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>每個字各自加強</h2>
+        <div class="tbl">
+          <div class="sit"><span class="dot" style="--k:var(--good)"></span>第一次就對</div><div class="do">記住了。全部都對時，也可以改按太簡單</div>
+          <div class="sit"><span class="dot" style="--k:var(--near)"></span>第一次錯，再選對</div><div class="do">差一點，約 10 分鐘後再出</div>
+          <div class="sit"><span class="dot" style="--k:var(--miss)"></span>再選也錯，或按沒印象</div><div class="do">沒印象，約 1 分鐘後再出</div>
+        </div>
+        <ul class="list">
+          <li>孩子不用一格一格自評，程式照每一格的結果記到那個字的目標。</li>
+          <li>只有到期的字才出句子，其他字留在字鍵上一起比較，不用陪考。幾個字同時到期就併成一張。</li>
+          <li>再出時換一句話，避免背句子。</li>
+          <li>紀錄留下孩子選了哪個字，之後看得出「賽」和「塞」這一對常搞混。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>研究依據</h2>
+        <ul class="list">
+          <li><a href="https://bvbvf1.bib-bvb.de/vufind/PrimoRecord/cdi_proquest_miscellaneous_1434025545">Kang &amp; Pashler 2012</a>：相似的東西交錯著看，好處來自能互相比較。實驗材料是畫風，不是漢字。</li>
+          <li><a href="https://link.springer.com/doi/10.1007/BF03395423">Epstein 等 2002</a>：選擇題當場回饋、答到對為止，有助於保留和修正第一次的錯誤。</li>
+          <li><a href="https://doi.org/10.3758/MC.36.3.604">Butler &amp; Roediger 2008</a>：選擇題的錯誤選項可能被記成答案，回饋能減少這種情況，所以對答案後一定給整組對照。</li>
+          <li><a href="https://pcllab.github.io/downloads/2008/2008_Butler_Karpicke_Roediger_JEPLMC.pdf">Butler、Karpicke &amp; Roediger 2008</a>：沒把握卻答對的題目，有回饋時記住的比例約加倍，所以全對也給對照。</li>
+          <li><a href="https://doi.org/10.1145/2396636.2396671">Anthony 等 2012</a>：孩子在行動裝置上的點擊常落在目標外，要預期會點錯。</li>
+        </ul>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px">都只讀到摘要或節錄。用在孩子選相似字上的效果還要實際驗證。</p>
+      </section>
+
+      <section>
+        <h2>還要確認的</h2>
+        <ul class="list">
+          <li>沒發現的手滑會算差一點，而差一點在排程上等於沒想起來，那個字會提早回來。我沒有做「我是點錯」的按鈕，因為程式分不出手滑和真的不會。實際多常發生，要看紀錄。</li>
+          <li>字鍵大小、0.3 秒和 0.35 秒是我定的起點，要在 iPhone 實測。</li>
+          <li>字鍵都在眼前，這張卡考的是認得出該用哪個字，不是寫得出來；字形卡照舊。</li>
+          <li>句子和部件的說法是我寫的示意；「貝」只寫到部件。正式內容由 AI 照辭典寫、家長審。</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const GROUP = [
+  { ch: '寨', why: '下面是<b>木</b>，木頭圍成的防守地：山寨、寨子' },
+  { ch: '塞', why: '下面是<b>土</b>，用土堵住：塞車、塞住' },
+  { ch: '寒', why: '下面兩點是<b>冰</b>，冷到結冰：寒流、寒假' },
+  { ch: '賽', why: '下面是<b>貝</b>（古代的錢）：比賽、賽跑' },
+];
+const FIRST_CARD = [
+  { before: '盜匪躲在山', after: '裡。', ans: '寨' },
+  { before: '下班時間，高速公路大', after: '車。', ans: '塞' },
+  { before: '冬天的', after: '流來了。', ans: '寒' },
+  { before: '接力', after: '跑好刺激。', ans: '賽' },
+  { before: '水管', after: '住了。', ans: '塞' },
+];
+const SECOND_SENTENCE = {
+  寨: { before: '這座古老的', after: '子建在山頂上。', ans: '寨' },
+  塞: { before: '感冒鼻', after: '了，聞不到味道。', ans: '塞' },
+  寒: { before: '再過兩週就放', after: '假了。', ans: '寒' },
+  賽: { before: '籃球比', after: '開始了。', ans: '賽' },
+};
+const RATE_NAME = { good: '記住了', easy: '太簡單', near: '差一點', miss: '沒印象' };
+const WORST = { good: 0, easy: 0, near: 1, miss: 2 };
+const SAME_KEY_MS = 300;
+const AFTER_FILL_MS = 350;
+
+const el = id => document.getElementById(id);
+const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let order = GROUP.map(g => g.ch);
+let card = null;
+let firstRound = {};
+let lastTap = { key: '', time: -1000 };
+let lastFill = -1000;
+
+function newCard(sentences, eyebrow, stage) {
+  card = {
+    stage,
+    eyebrow,
+    phase: 'answer',
+    cursor: 0,
+    blanks: sentences.map(s => ({ ...s, pick: '', first: '', second: '', status: 'open' })),
+  };
+  el('tray').hidden = false;
+  el('rates').hidden = true;
+  el('compare').hidden = true;
+  paintKeys();
+  paint();
+}
+
+function paintKeys() {
+  el('keys').replaceChildren(...order.map(ch => {
+    const key = document.createElement('button');
+    key.className = 'key';
+    key.type = 'button';
+    key.textContent = ch;
+    key.addEventListener('click', () => tapKey(ch, key));
+    return key;
+  }));
+}
+
+function nextEmpty(from) {
+  const n = card.blanks.length;
+  for (let step = 1; step <= n; step += 1) {
+    const i = (from + step) % n;
+    if (!card.blanks[i].pick) return i;
+  }
+  return -1;
+}
+function nextRetry() {
+  return card.blanks.findIndex(b => b.status === 'retry');
+}
+
+function slotContent(slot, blank) {
+  if (card.phase === 'result') {
+    slot.textContent = blank.ans;
+    slot.classList.add(blank.status === 'right' ? 'right' : blank.status);
+    return;
+  }
+  if (blank.status === 'right') { slot.textContent = blank.pick; slot.classList.add('right'); return; }
+  if (blank.status === 'retry') { const s = document.createElement('s'); s.textContent = blank.first; slot.replaceChildren(s); return; }
+  if (blank.status === 'near') { slot.textContent = blank.pick; slot.classList.add('near'); return; }
+  if (blank.status === 'miss') { slot.textContent = '？'; slot.classList.add('unknown'); return; }
+  if (blank.pick === '?') { slot.textContent = '？'; slot.classList.add('unknown'); return; }
+  slot.textContent = blank.pick || '　';
+}
+
+function markFor(status) {
+  return { right: '✓', near: '✓', miss: '✕', retry: '✕' }[status] || '';
+}
+
+function paint(popIndex = -1) {
+  el('eyebrow').hidden = !card.eyebrow;
+  el('eyebrow').textContent = card.eyebrow || '';
+  el('rows').replaceChildren(...card.blanks.map((blank, i) => {
+    const row = document.createElement('li');
+    const active = i === card.cursor && card.phase !== 'result';
+    const movable = card.phase === 'answer' || (card.phase === 'retry' && blank.status === 'retry');
+    row.className = 'row' + (active ? ' on' : '') + (movable ? '' : ' lock');
+    const text = document.createElement('span');
+    text.className = 'txt';
+    text.append(blank.before);
+    const slot = document.createElement('button');
+    slot.type = 'button';
+    slot.className = 'slot' + (i === popIndex && !calm ? ' pop' : '');
+    slot.dataset.i = String(i);
+    slot.setAttribute('aria-label', '第 ' + (i + 1) + ' 格');
+    slotContent(slot, blank);
+    text.append(slot, blank.after);
+    row.append(text);
+    const status = card.phase === 'result' && blank.status === 'miss' ? 'miss' : blank.status;
+    // 記號的位置一開始就留好，對答案時句子才不會突然換行
+    const mark = document.createElement('span');
+    mark.className = 'mark ' + status;
+    mark.textContent = card.phase === 'answer' ? '' : markFor(status);
+    row.append(mark);
+    row.addEventListener('click', () => tapRow(i));
+    return row;
+  }));
+  paintTray();
+}
+
+function paintTray() {
+  if (card.phase === 'result') return;
+  const check = el('check');
+  const say = el('say');
+  say.classList.remove('warn');
+  [...el('keys').children].forEach(key => {
+    const blank = card.blanks[card.cursor];
+    key.disabled = card.phase === 'retry' && blank && key.textContent === blank.first;
+  });
+  if (card.phase === 'retry') {
+    const left = card.blanks.filter(b => b.status === 'retry').length;
+    say.textContent = left + ' 格不對，答案先不說。再選一次，選了就算數。';
+    say.classList.add('warn');
+    check.textContent = '再選一次';
+    check.classList.remove('ready');
+    return;
+  }
+  const empties = card.blanks.filter(b => !b.pick).length;
+  const filled = card.blanks.length - empties;
+  check.textContent = empties ? '還有 ' + empties + ' 格' : '對答案';
+  check.classList.toggle('ready', !empties);
+  if (!empties) say.textContent = '看一下，沒問題就對答案。要改就點那一句。';
+  else if (filled) say.textContent = '點錯了，就點那一句再選一次。';
+  else say.textContent = '點字，會填進亮起來的那一格。';
+}
+
+function flyTo(keyButton, index) {
+  if (calm) return;
+  const slot = document.querySelector('.slot[data-i="' + index + '"]');
+  if (!slot || !slot.animate) return;
+  const from = keyButton.getBoundingClientRect();
+  const to = slot.getBoundingClientRect();
+  const clone = document.createElement('span');
+  clone.className = 'fly';
+  clone.textContent = keyButton.textContent;
+  document.body.append(clone);
+  const size = clone.getBoundingClientRect();
+  const startX = from.left + from.width / 2 - size.width / 2;
+  const startY = from.top + from.height / 2 - size.height / 2;
+  const endX = to.left + to.width / 2 - size.width / 2;
+  const endY = to.top + to.height / 2 - size.height / 2;
+  clone.style.left = '0px';
+  clone.style.top = '0px';
+  const motion = clone.animate([
+    { transform: 'translate(' + startX + 'px,' + startY + 'px) scale(1)', opacity: 1 },
+    { transform: 'translate(' + endX + 'px,' + endY + 'px) scale(.7)', opacity: .35 },
+  ], { duration: 150, easing: 'ease-out' });
+  motion.onfinish = () => clone.remove();
+  motion.oncancel = () => clone.remove();
+}
+
+function tapRow(i) {
+  if (card.phase === 'answer') { card.cursor = i; paint(); return; }
+  if (card.phase === 'retry' && card.blanks[i].status === 'retry') { card.cursor = i; paint(); }
+}
+
+function tapKey(ch, keyButton) {
+  const now = performance.now();
+  const repeated = ch === lastTap.key && now - lastTap.time < SAME_KEY_MS;
+  lastTap = { key: ch, time: now };
+  if (repeated) return;
+  fill(ch, keyButton);
+}
+
+function fill(value, keyButton) {
+  if (card.phase === 'answer') {
+    if (card.cursor < 0) { nudge(); return; }
+    const i = card.cursor;
+    card.blanks[i].pick = value;
+    card.cursor = nextEmpty(i);
+    lastFill = performance.now();
+    paint(i);
+    if (keyButton) flyTo(keyButton, i);
+    return;
+  }
+  if (card.phase !== 'retry' || card.cursor < 0) return;
+  const blank = card.blanks[card.cursor];
+  if (value === blank.first) return;
+  blank.second = value;
+  blank.pick = value;
+  blank.status = value === blank.ans ? 'near' : 'miss';
+  card.cursor = nextRetry();
+  if (card.cursor < 0) showResult();
+  else paint();
+}
+
+function nudge() {
+  const check = el('check');
+  check.classList.remove('nudge');
+  void check.offsetWidth;
+  check.classList.add('nudge');
+}
+
+function tapCheck() {
+  if (card.phase !== 'answer') return;
+  if (card.blanks.some(b => !b.pick)) { card.cursor = card.blanks.findIndex(b => !b.pick); paint(); nudge(); return; }
+  if (performance.now() - lastFill < AFTER_FILL_MS) return;
+  card.blanks.forEach(blank => {
+    blank.first = blank.pick;
+    if (blank.pick === '?') blank.status = 'miss';
+    else blank.status = blank.pick === blank.ans ? 'right' : 'retry';
+  });
+  card.cursor = nextRetry();
+  if (card.cursor < 0) showResult();
+  else { card.phase = 'retry'; paint(); }
+}
+
+function ratingsOfCard() {
+  const result = {};
+  card.blanks.forEach(blank => {
+    const rate = blank.status === 'right' ? 'good' : blank.status;
+    if (!(blank.ans in result) || WORST[rate] > WORST[result[blank.ans]]) result[blank.ans] = rate;
+  });
+  return result;
+}
+
+function slipsOfCard() {
+  const slips = {};
+  card.blanks.forEach(blank => {
+    if (blank.first && blank.first !== '?' && blank.first !== blank.ans) slips[blank.ans] = blank.first;
+  });
+  return slips;
+}
+
+function showResult() {
+  card.phase = 'result';
+  card.cursor = -1;
+  paint();
+  const ratings = ratingsOfCard();
+  const slips = slipsOfCard();
+  el('tray').hidden = true;
+  el('compare').hidden = false;
+  el('compare').replaceChildren(...GROUP.map(g => {
+    const row = document.createElement('div');
+    row.className = 'cmp';
+    const ch = document.createElement('span');
+    ch.className = 'ch';
+    ch.textContent = g.ch;
+    const why = document.createElement('span');
+    why.className = 'why';
+    why.innerHTML = g.why;
+    if (slips[g.ch]) {
+      const slip = document.createElement('span');
+      slip.className = 'slip';
+      slip.textContent = '第一次選了「' + slips[g.ch] + '」';
+      why.append(slip);
+    }
+    const chip = document.createElement('span');
+    if (ratings[g.ch]) {
+      chip.className = 'chip ' + ratings[g.ch];
+      chip.textContent = RATE_NAME[ratings[g.ch]];
+    }
+    row.append(ch, why, chip);
+    return row;
+  }));
+  const allRight = Object.values(ratings).every(r => r === 'good');
+  const buttons = allRight
+    ? [['good', '記住了'], ['easy', '太簡單']]
+    : [[null, '下一張']];
+  el('rates').replaceChildren(...buttons.map(([k, label]) => {
+    const button = document.createElement('button');
+    button.className = 'rate';
+    button.type = 'button';
+    if (k) button.dataset.k = k;
+    button.textContent = label;
+    button.addEventListener('click', () => leaveResult(ratings, k));
+    return button;
+  }));
+  el('rates').hidden = false;
+}
+
+function leaveResult(ratings, chosen) {
+  const final = { ...ratings };
+  if (chosen === 'easy') Object.keys(final).forEach(ch => { final[ch] = 'easy'; });
+  if (card.stage === 'first') {
+    firstRound = final;
+    const weak = Object.keys(final).filter(ch => final[ch] === 'near' || final[ch] === 'miss');
+    if (weak.length) {
+      newCard(weak.map(ch => SECOND_SENTENCE[ch]), '幾張卡之後：只有剛才沒答對的字再出，換一句話。', 'weak');
+    } else {
+      newCard([SECOND_SENTENCE['塞']], '過幾天：假設只有「塞」到期，畫面就只有這一句，其他字留在字鍵上。', 'due');
+    }
+    return;
+  }
+  showEnd(final);
+}
+
+function showEnd(lastRound) {
+  el('eyebrow').hidden = false;
+  el('eyebrow').textContent = '這一組做完了。每個字接下來各走各的：';
+  el('rows').replaceChildren();
+  el('compare').hidden = false;
+  el('compare').replaceChildren(...GROUP.map(g => {
+    const row = document.createElement('div');
+    row.className = 'cmp';
+    const ch = document.createElement('span');
+    ch.className = 'ch';
+    ch.textContent = g.ch;
+    const why = document.createElement('span');
+    why.className = 'why';
+    const first = firstRound[g.ch];
+    const later = lastRound[g.ch];
+    if (later === 'near' || later === 'miss') why.textContent = '再出時還沒答對，等一下會再出一次';
+    else if (first === 'near' || first === 'miss') why.textContent = '再出時答對了，間隔從短的開始重新拉長';
+    else why.textContent = '這個字沒問題，間隔拉長，不用陪其他字複習';
+    const chip = document.createElement('span');
+    chip.className = 'chip ' + first;
+    chip.textContent = RATE_NAME[first];
+    row.append(ch, why, chip);
+    return row;
+  }));
+  const button = document.createElement('button');
+  button.className = 'rate';
+  button.type = 'button';
+  button.textContent = '從頭再試';
+  button.addEventListener('click', restart);
+  el('rates').replaceChildren(button);
+  el('rates').hidden = false;
+  el('tray').hidden = true;
+}
+
+function shuffled(list) {
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.join('') === list.join('') ? [...copy.slice(1), copy[0]] : copy;
+}
+
+function restart() {
+  order = shuffled(order);
+  firstRound = {};
+  lastTap = { key: '', time: -1000 };
+  newCard(FIRST_CARD, '', 'first');
+}
+
+el('skip').addEventListener('click', () => {
+  if (card.phase === 'answer') {
+    if (card.cursor < 0) { nudge(); return; }
+    fill('?', null);
+    return;
+  }
+  if (card.phase === 'retry') {
+    const blank = card.blanks[card.cursor];
+    if (!blank) return;
+    blank.second = '?';
+    blank.status = 'miss';
+    card.cursor = nextRetry();
+    if (card.cursor < 0) showResult();
+    else paint();
+  }
+});
+el('check').addEventListener('click', tapCheck);
+el('restart').addEventListener('click', restart);
+
+newCard(FIRST_CARD, '', 'first');
+</script>
