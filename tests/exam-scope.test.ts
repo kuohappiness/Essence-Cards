@@ -264,6 +264,37 @@ void test('壞屬性區裡完整的識別碼行和正常讀法相同：鍵有引
   assert.equal(parseScope('---\n錨點: &x 1e3\n識別碼: *x\n其他: [\n---\n').id, null);
 });
 
+void test('壞屬性區只看最外層的行：多行的值與巢狀的鍵不是這份檔的識別碼，和正常讀法相同（R22）', () => {
+  // 第三個是最外層的縮排：整份一起縮排也是合法的 YAML。
+  const cases: [string, string | null, string][] = [
+    ['備註: |\n  {"識別碼": "bbbbbb"}\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['備註: |\n  識別碼: bbbbbb\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['備註: |-\n  "識別碼": bbbbbb\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['備註: >\n  識別碼: bbbbbb\n\n  識別碼: cccccc\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['外層:\n  識別碼: bbbbbb\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['備註: |\n  識別碼: bbbbbb', null, ''],
+    ['外層:\n  識別碼: bbbbbb', null, ''],
+    ['備註: "第一行\n  識別碼: bbbbbb\n  第三行"\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['外層: {\n  識別碼: bbbbbb\n  }\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['外層:\n  內層: |\n    識別碼: bbbbbb\n  識別碼: cccccc\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['外層:\n- 識別碼: bbbbbb\n識別碼: aaaaaa', 'aaaaaa', ''],
+    ['# 註解\n  識別碼: aaaaaa\n  備註: |\n    識別碼: bbbbbb', 'aaaaaa', '  '],
+    ['  備註: |\n    識別碼: bbbbbb\n  識別碼: aaaaaa', 'aaaaaa', '  '],
+    ['  外層:\n    識別碼: bbbbbb', null, '  '],
+  ];
+  for (const [head, id, indent] of cases) {
+    assert.equal(parseScope(`---\n${head}\n---\n`).id, id, '正常：' + head);
+    assert.equal(parseScope(`---\n${head}\n${indent}其他: [\n---\n`).id, id, '壞屬性區：' + head);
+    assert.equal(parseScope(`---\n${head}\n${indent}其他: [\n`).id, id, '沒有結束的 ---：' + head);
+  }
+  // 多打的空白不是多行的值：這一行前面沒有開多行值的行，照認。
+  assert.equal(parseScope('---\n其他: 1\n  識別碼: aaaaaa\n其他二: [\n---\n').id, 'aaaaaa');
+  // 結束的 A 的備註裡寫著 B 的識別碼：B 是另一次考試，不跟著結束。
+  const ended = { path: 'A.md', file: parseScope('---\n備註: |\n  {"識別碼": "bbbbbb"}\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n- 國二上 自然 2\n') };
+  const other = { path: 'B.md', file: parseScope('---\n識別碼: bbbbbb\n---\n- 國二上 自然 2\n') };
+  assert.equal(chooseScope([ended, other], scopeDay('2026-10-25')).chosen?.path, 'B.md');
+});
+
 void test('屬性區壞了還認得識別碼：舊副本不會復活；認不出來的只有它自己結束，寫不出是哪一次考試', () => {
   const copy = { path: 'B.md', file: parseScope('---\n識別碼: aaaaaa\n---\n- 國二上 自然 2\n') };
   const chosen = (text: string): string | null => chooseScope([{ path: 'A.md', file: parseScope(text) }, copy], scopeDay('2026-10-25')).chosen?.path ?? null;

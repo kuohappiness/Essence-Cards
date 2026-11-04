@@ -36,6 +36,7 @@ void test('考前提醒：整組已經結束的舊副本不算；外掛當成沒
   assert.equal(remind({ a: '---\n識別碼: cccccc\n考試開始: 10/26\n---\n' }, now).kind, 'unreadable');
   assert.equal(remind({ a: '---\n"識別碼": "school #1"\n提前結束: 2026-10-20\n其他: [\n---\n', b: '---\n"識別碼": "school #1"\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' }, now).kind, 'none', '鍵有引號也一樣（R18）');
   assert.equal(remind({ a: '---\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n', b: copy }, now).kind, 'none', '結束的那份屬性區壞了，識別碼還認得');
+  assert.equal(remind({ a: '---\n備註: |\n  {"識別碼": "bbbbbb"}\n識別碼: aaaaaa\n提前結束: 2026-10-20\n其他: [\n---\n', b: '---\n識別碼: bbbbbb\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' }, now).kind, 'soon', '結束的那份備註裡寫著另一次考試的識別碼：另一次照常提醒（R22）');
 });
 
 void test('考前提醒：前 7 天內、考試期間印提醒並要 --exam-ok；7 天以外與沒有生效的不用；清晨 4 點換日', () => {

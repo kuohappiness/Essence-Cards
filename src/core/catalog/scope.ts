@@ -134,9 +134,17 @@ function headValues(raw: string): Record<string, unknown> | null {
 /** 屬性區壞了還是要認得是哪一次考試（§2-2）：這一行還在就照用，有 `提前結束` 的壞檔才擋得住同一個識別碼的舊副本。 */
 function looseId(raw: string): string | null {
   // 每一行自己照正常的讀法讀，鍵與值的引號、註解、像數字的字才會和沒壞的副本一樣（R15、R18）。別名要看另一行，這裡不跟。
+  // 開了多行的值的行（值空著、`|`、`>`，或引號、括號沒收），底下縮排更深的行屬於它，不是這份檔的識別碼（R22）。其他多打的空白照認。
+  let owner: number | null = null;
   for (const line of raw.split('\n')) {
-    const id = idOf(headValues(line.trim()));
+    const text = line.trim();
+    if (!text || text.startsWith('#')) continue;
+    const indent = line.indexOf(text);
+    if (owner !== null && indent > owner) continue;
+    const values = headValues(text);
+    const id = idOf(values);
     if (id !== null) return id;
+    owner = !values || Object.values(values).every(value => value === null || value === '') ? indent : null;
   }
   return null;
 }
