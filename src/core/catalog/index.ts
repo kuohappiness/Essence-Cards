@@ -5,8 +5,9 @@ import type { MemoryColor } from '../study/index.ts';
 // 範圍與目錄（D-110、D-142 原則 1、2、5、6、8）：把 deck 認定的單元參照對到單元、算每個目標屬於哪些單元、單元與學期的排序。
 // 輸入是卡組與每個目標的記憶狀態，不 import study 的程式；deck、study 不 import 這裡。
 
-export { chooseScope, editScope, isExamPath, newScopeText, parseScope, readDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from './scope.ts';
-export type { ScopeFile } from './scope.ts';
+export { chooseScope, editScope, EXAM_FOLDER, isExamPath, newScopeText, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from './scope.ts';
+export type { ScopeChange, ScopeFile, ScopePeriod, ScopeUnit } from './scope.ts';
+export { targetsInScope } from './scope-view.ts';
 
 export interface CatalogDeck { path: string; deck: Deck }
 type DeckStatus = Deck['props']['status'];
@@ -32,6 +33,23 @@ export interface UnitNode {
   targets: UnitTarget[];
   problems: UnitProblem[];
 }
+/** 目標屬於的一個單元。basis：own 自己的單元；written 出處明寫了年級學期；carried 出處的學期是沿用前一項的（§8）。 */
+interface MemberUnit { term: string; subject: string; code: string; basis: 'own' | 'written' | 'carried' }
+/** 範圍用的歸屬（tasks/exam-scope.md §3）：只有啟用、可以出題、自己有科目的目標；對到卡組與對不到的單元都算。 */
+interface ScopeMember {
+  id: string;
+  name: string;
+  path: string;
+  line: number;
+  /** 出處整欄的原文。 */
+  sources: readonly string[];
+  subject: string;
+  /** 自己的單元（「小四上 2-1」）；沒有單元是檔名。 */
+  own: string;
+  units: MemberUnit[];
+  /** 出處有疑似漏掉的（§1 的 missed）。 */
+  missed: boolean;
+}
 /** 對到單元的參照，或對不到的（這一批不建目錄節點，D-033；第二批的考試範圍要用，不能當成「沒有關係」）。 */
 interface UnitRef { id: string; path: string; term: string; subject: string | null; code: string }
 
@@ -42,6 +60,8 @@ export interface CatalogIndex {
   others: UnitNode[];
   /** 對不到單元的參照。 */
   unresolved: UnitRef[];
+  /** 每個目標屬於哪些單元。 */
+  members: ScopeMember[];
   /** 單元的鍵 → 單元（含「其他」組）。 */
   unit(key: string): UnitNode | null;
   /** 找單元（跨單元的出處用）：同一個年級學期、科目與編號。 */
@@ -152,6 +172,7 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
     unit.targets.push(target);
   };
   const unresolved: UnitRef[] = [];
+  const members: ScopeMember[] = [];
   // 兩輪：先放每一篇自己的目標，別的單元來的才會排在後面，也才標「來自」。
   const owned: { entry: CatalogDeck; target: Target & { id: string }; own: string; label: string | null }[] = [];
   for (const entry of sorted) {
@@ -170,9 +191,19 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
     deckIds.set(entry.path, ids);
   }
   for (const { entry, target, own, label } of owned) {
-    const { subject } = entry.deck.props;
+    const { subject, term, unit: ownUnit } = entry.deck.props;
     const written = new Set<string>();
-    for (const { link } of sourceLinks(target.fields.sources, entry.deck.props)) {
+    const items = sourceLinks(target.fields.sources, entry.deck.props);
+    const belongs = new Map<string, MemberUnit>();
+    if (subject !== null && term !== null && ownUnit !== null) belongs.set(own, { term, subject, code: ownUnit.code, basis: 'own' });
+    for (const { link, basis = 'written' } of items) {
+      if (link.kind !== 'unit' || subject === null) continue;
+      const key = unitKey(link.term, subject, link.unit), known = belongs.get(key);
+      if (!known) belongs.set(key, { term: link.term, subject, code: link.unit, basis });
+      else if (known.basis === 'carried') known.basis = basis;
+    }
+    if (subject !== null) members.push({ id: target.id, name: target.name, path: entry.path, line: target.line, sources: target.fields.sources, subject, own: label ?? fileName(entry.path), units: [...belongs.values()], missed: items.some(item => item.missed) });
+    for (const { link } of items) {
       if (link.kind !== 'unit') continue;
       const key = subject !== null ? unitKey(link.term, subject, link.unit) : null;
       if (key === own) continue;
@@ -186,7 +217,7 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
   const units = [...nodes.values()].filter(unit => unit.code !== null).sort(compareUnit);
   const others = [...nodes.values()].filter(unit => unit.code === null).sort((a, b) => compareText(a.key, b.key));
   return {
-    units, others, unresolved,
+    units, others, unresolved, members,
     unit: key => nodes.get(key) ?? null,
     find: (term, subject, code) => nodes.get(unitKey(term, subject, code)) ?? null,
     unitTargets(key) {

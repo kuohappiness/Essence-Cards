@@ -3,7 +3,7 @@ import { chapterAlias, codeKey, readTerm, termKey, termRank, tidy } from '../dec
 
 // 考試範圍檔（tasks/exam-scope.md §2、syntax.md §4、D-176）：只看字面，不看卡組。讀懂的、對不到卡組的、看不懂的分開，都留著讓畫面寫出來。
 
-const EXAM_FOLDER = 'Essence Cards/考試範圍';
+export const EXAM_FOLDER = 'Essence Cards/考試範圍';
 export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md');
 
 /** 一行範圍。line 從 0 算，raw 是原字；unit 的三欄是讀到的標準寫法。 */
@@ -24,7 +24,7 @@ export interface ScopeFile {
   lines: ScopeLine[];
 }
 /** 單元的身分：年級學期、科目、編號，都是原字，比對時才去雜訊。 */
-interface ScopeUnit { term: string; subject: string; code: string }
+export interface ScopeUnit { term: string; subject: string; code: string }
 
 // ── 日期 ──
 
@@ -49,8 +49,10 @@ export function readDate(value: unknown): ScopeDate {
 }
 /** 日期的日編號，和 study 的 dayOf 同一種算法（清晨 4 點換日）。 */
 export const scopeDay = (date: string): number => Date.parse(date + 'T00:00:00Z') / DAY;
+/** 日編號換回 `YYYY-MM-DD`。 */
+export const scopeDate = (day: number): string => new Date(day * DAY).toISOString().slice(0, 10);
 
-type ScopePeriod = { kind: 'none' | 'bad' } | { kind: 'ok'; start: string; end: string };
+export type ScopePeriod = { kind: 'none' | 'bad' } | { kind: 'ok'; start: string; end: string };
 /** 考試期間（§2-2 的表）：只有一邊就是一天。 */
 export function scopePeriod(file: ScopeFile): ScopePeriod {
   const { start, end } = file;
@@ -150,7 +152,7 @@ function covers(code: string, other: string): boolean {
   if (code === other) return true;
   return other.startsWith(code + '-') && other.slice(code.length + 1).split('-').every(Boolean);
 }
-export function unitInScope(file: ScopeFile, unit: ScopeUnit): boolean {
+export function unitInScope(file: Pick<ScopeFile, 'lines'>, unit: ScopeUnit): boolean {
   const term = termOf(unit.term), subject = subjectOf(unit.subject), code = codeKey(unit.code);
   return file.lines.some(line => line.kind === 'unit' && termOf(line.term) === term && subjectOf(line.subject) === subject && covers(codeKey(line.code), code));
 }
