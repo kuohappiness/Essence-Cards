@@ -80,14 +80,14 @@ Session 留下：取卡、`top`、回看清單、切走重來、衝突與停用�
 ```ts
 interface Screen {
   Body(props): JSX.Element;               // 題目區
-  Bottom(props): JSX.Element | null;      // 底部那一排
+  bottom(props): ReactNode;               // 底部那一排的內容；null 是沒有這一排
   tap(view, tools): void;                 // 點卡片：翻面／叫出鍵盤／什麼都不做
   stage(view): string;                    // 舞台多加的 class（打字中的 is-typing）
 }
 const SCREENS: Record<QuestionType, Screen> = { flip, typed, pick };
 ```
 
-`tests/helpers/review-ui.ts` 的替身只讓根元件有 hook，所以 `Screen` 都沒有 hook，狀態都在 `Flow`；打字的自動取得焦點留在 `Review` 根元件（看 `view.card.typed`，第一步不動）。翻面與打字共用題目、背面、出處的骨架（`QaCard`，由題型給差別的部分）。
+`tests/helpers/review-ui.ts` 的替身只讓根元件有 hook，所以 `Screen` 都沒有 hook，狀態都在 `Flow`；打字的自動取得焦點留在 `Review` 根元件（看 `view.card.typed`，第一步不動）。翻面與打字共用題目、背面、出處的骨架（`QaCard`，由題型給差別的部分）。`bottom` 是普通函式、不是元件，`Review` 直接呼叫、放進同一個 `.ec-actions`：換題型時同一顆評分按鈕留在原處，焦點不掉（Codex 第一步查核 F1）。
 
 ## §2 第一步：只搬不改
 

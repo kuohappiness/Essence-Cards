@@ -37,8 +37,6 @@ interface BodyProps {
 interface BottomProps {
   view: CardView;
   animating: boolean;
-  /** 回報的選單開著：背後不能操作（inert）。 */
-  reporting: boolean;
   reveal: () => void;
   rate: (rating: Rating) => void;
 }
@@ -51,8 +49,11 @@ interface TapTools {
 interface Screen {
   /** 題目區。 */
   Body: (props: BodyProps) => React.JSX.Element;
-  /** 底部那一排；沒有就是 null。 */
-  Bottom: (props: BottomProps) => React.JSX.Element | null;
+  /**
+   * 底部那一排的內容；null 是沒有這一排。是普通函式、不是元件，由 Review 直接呼叫、放進同一個 .ec-actions：這樣翻面卡與打字卡互換時，
+   * 同一顆評分按鈕留在原處，焦點不掉（題型接點第一步的 Codex 查核 F1）。
+   */
+  bottom: (props: BottomProps) => React.ReactNode;
   /** 點卡片的空白處（回看時不會到這裡）。 */
   tap: (view: CardView, tools: TapTools) => void;
   /** 舞台多加的 class。 */
@@ -171,11 +172,9 @@ function FlipBody(props: BodyProps): React.JSX.Element {
 
 const flip: Screen = {
   Body: FlipBody,
-  Bottom: ({ view, animating, reporting, reveal, rate }) => <div className="ec-actions" inert={reporting}>
-    {!view.viewing && !view.revealed
-      ? <button type="button" className="ec-show" disabled={animating} onClick={reveal}>顯示答案</button>
-      : <Rates view={view} shown={view.viewing ? RATINGS : view.allowed} animating={animating} rate={rate} />}
-  </div>,
+  bottom: ({ view, animating, reveal, rate }) => !view.viewing && !view.revealed
+    ? <button type="button" className="ec-show" disabled={animating} onClick={reveal}>顯示答案</button>
+    : <Rates view={view} shown={view.viewing ? RATINGS : view.allowed} animating={animating} rate={rate} />,
   tap(view, { reveal }) { if (!view.revealed) reveal(); },
   stage: () => '',
 };
@@ -256,11 +255,11 @@ function TypedBody(props: BodyProps): React.JSX.Element {
 
 const typedScreen: Screen = {
   Body: TypedBody,
-  Bottom({ view, animating, reporting, rate }) {
+  bottom({ view, animating, rate }) {
     // 打字中沒有底部那一排：「沒印象」「確認」在題目正下方（TypedActions）。
     if (typingOf(view)) return null;
     const shown = view.viewing && view.allowed.length === 0 ? [view.pressed].filter((r): r is Rating => r !== null) : view.allowed;
-    return <div className="ec-actions" inert={reporting}><Rates view={view} shown={shown} animating={animating} rate={rate} /></div>;
+    return <Rates view={view} shown={shown} animating={animating} rate={rate} />;
   },
   // 點卡片任何地方都叫出鍵盤（D-145：輸入框在空格裡，點得到的範圍比原本那一整行小）。
   tap(view, { focusInput }) { if (view.typed && !view.typed.finished) focusInput(); },

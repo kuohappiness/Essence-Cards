@@ -280,6 +280,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const top = view.top;
   const english = view.kind === 'card' && view.card.english;
   const screen = view.kind === 'card' ? SCREENS[questionType(view.card.card)] : null;
+  const bottom = screen && view.kind === 'card' ? screen.bottom({ view: view.card, animating, reveal, rate }) : undefined;
   return <div className="ec-app" ref={appEl} tabIndex={-1} onKeyDown={onKey}>
     {/* 回報的選單開著時，背後的東西不能取得焦點也不能操作（inert，Codex L2 的 R1）：Tab 只在選單裡走 */}
     <div className="ec-top" inert={reporting}>
@@ -308,10 +309,10 @@ export function Review(props: ReviewProps): React.JSX.Element {
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
     </div>
-    {view.kind !== 'card' && <div className="ec-actions" inert={reporting}>
+    {bottom !== null && <div className="ec-actions" inert={reporting}>
       {view.kind === 'done' && <button type="button" className="ec-show" onClick={props.close}>{view.done.buttons.find(button => button.kind === 'close')?.label ?? '結束複習'}</button>}
+      {bottom}
     </div>}
-    {screen && view.kind === 'card' && <screen.Bottom view={view.card} animating={animating} reporting={reporting} reveal={reveal} rate={rate} />}
     {view.kind === 'card' && view.card.nextLabel && <div className="ec-next-row"><button type="button" className="ec-next" disabled={animating} onClick={forward}>{view.card.nextLabel}</button></div>}
     {reporting && view.kind === 'card' && <ReportMenu menuRef={menuEl} choose={choose} cancel={closeMenu} />}
   </div>;
