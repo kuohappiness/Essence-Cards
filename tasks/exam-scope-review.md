@@ -1,8 +1,32 @@
 # 入口與目錄第二批（考試範圍）：L2 審查請求（給新開的 Codex session）
 
-狀態：第二輪待修（[報告與回應](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md>)）
+狀態：第三輪待審（[報告與回應](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
+
+## 再審（第三輪）：第二輪發現的修正
+
+**這一輪只讀**：本節、〈審查對象〉、討論稿的〈[Claude 回應：第二輪](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md#claude-回應第二輪2026-11-04>)〉與〈[Claude 回應：第一輪](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md#claude-回應第一輪2026-11-04>)〉的〈實作者自己選的做法〉（第二輪跑的時候還沒有這份）。之前的內容需要時，照 R1～R16 的標題只查相關的。
+
+**範圍**：基準 `424e9a9a8d2ec27fa846b8a724172573636fa3b2`（第二輪待審），待審 `0d8d4081b53a7b7d18e5900e8b17ac00e3c00edf`，`git diff 424e9a9..0d8d408 -- src tests tools`（5 個修正 commit，每項發現一個：`e35c310` R15、`b22dd2f` R13、`c74d26d` R14、`9420637` R12、`0d8d408` R16）。`8934893` 和本節的文件 commit 不用審。
+
+**還沒結的發現**：R12～R16，看修正有沒有做到，以及同類的其他輸入。
+
+**可能碰到的已結項目**：第二輪表格寫通過的 R6、R8、R9、R10、R11，以及第一輪的 R2、R3、R4、R5、R7。這次碰到 `headValues`、`looseId`（R7）、`editScope` 重組屬性區（R2、R8）、`reads.waiting`（R4）、`close()`（R5）；沒碰到的路徑不用再看。
+
+**請特別找**：
+
+- `drain`（R13）：計時、`quiet`、`stop()` 的先後，有沒有不收尾或叫醒落空的組合；等待期間排著的下一筆與 `close()` 疊起來最久等多久；自己剛寫完引起的通知會不會把下一筆擋住；`waiting` 加上 `flying` 有沒有影響卡組那條（`alone` 只用在範圍檔）。
+- `close()` 等 `examWrites`（R14）：排著的第二筆有沒有被寫；停用外掛最久會被卡多久；和 `writes.idle()` 的先後。
+- `headValues`（R15）：別名指到數字、`1.5`、`1e3`、`.inf`、帶正負號、空值、數字配上引號；`parseScope`、`set: exam` 紀錄行、`tools/exam-reminder.ts` 用的是不是同一個值；`looseId` 認得的和正常讀法有沒有不一致。
+- `keepEols`（R16）：往後對回原行時，會不會讓沒改到的行換行跑掉；行內 YAML 與多行的值。
+- `clearTrial`、`noteScope`（R12）：只掃一眼。開發命令只有測試 vault 用得到。
+
+**使用者已決定、不用再提**：任務說明〈使用者決定的〉1～8、〈小選擇〉1～3、〈固定格式帶出來的小選擇〉4～9。兩份〈Claude 回應〉的〈實作者自己選的做法〉是實作者定的，不是使用者定的，有意見請照提。
+
+**真實路徑與輪數**：照 [D-171](../docs/decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 3 點，每項發現標真實路徑會不會發生；沒有擋合併的發現就直接寫「通過」。這是第三輪，第四輪之後還有擋合併的發現就交給使用者。
+
+**驗證方式**：`npm run check`，要在沙箱外跑（[quality.md](../docs/agents/quality.md#檢查指令)）。實作者跑過的與沒跑的見〈Claude 回應：第二輪〉的〈驗證〉。報告接在討論稿最後；所有檔案都在這個 worktree，不要寫到主資料夾。
 
 ## 審查對象
 
