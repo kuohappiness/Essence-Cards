@@ -39,7 +39,8 @@ const scopeRow = (): HTMLElement | undefined => inEntry('.ec-sc-row')[0];
 const scopeFiles = (app: App): TFile[] => app.vault.getFiles().filter(file => file.path.startsWith(EXAM_FOLDER + '/'));
 
 async function makeFiles(app: App): Promise<TFile[]> {
-  if (!app.vault.getAbstractFileByPath(FOLDER)) await app.vault.createFolder(FOLDER);
+  // 上一次刪掉的資料夾 iCloud 可能又放回硬碟，Obsidian 的清單卻還沒有：看硬碟，不看清單。
+  if (!(await app.vault.adapter.exists(FOLDER))) await app.vault.createFolder(FOLDER);
   const created: TFile[] = [];
   for (const [path, content] of Object.entries(FILES)) {
     if (app.vault.getAbstractFileByPath(path)) throw Error('已經有這個檔，不覆寫：' + path);
@@ -47,7 +48,7 @@ async function makeFiles(app: App): Promise<TFile[]> {
   }
   return created;
 }
-async function removeFiles(app: App): Promise<boolean> {
+async function removeFiles(app: App): Promise<boolean | string[]> {
   await sleep(1500);
   for (const file of [...app.vault.getFiles().filter(each => each.path.startsWith(FOLDER + '/')), ...scopeFiles(app)]) await app.vault.delete(file).catch(() => { /* 開發命令：沒刪到的看結果。 */ });
   await sleep(500);
@@ -55,7 +56,14 @@ async function removeFiles(app: App): Promise<boolean> {
     const entry = app.vault.getFolderByPath(name);
     if (entry && !entry.children.length) await app.vault.delete(entry, true).catch(() => { /* 同上。 */ });
   }
-  return [FOLDER, EXAM_FOLDER].every(name => !app.vault.getAbstractFileByPath(name));
+  await sleep(500);
+  const left: string[] = [];
+  for (const name of [FOLDER, EXAM_FOLDER]) {
+    if (!(await app.vault.adapter.exists(name))) continue;
+    await app.vault.adapter.rmdir(name, false).catch(() => { /* 同上。 */ });
+    if (await app.vault.adapter.exists(name)) left.push(name);
+  }
+  return left.length === 0 || left;
 }
 
 export async function examDev(host: EntryDevHost, action: string | undefined, folder: string): Promise<unknown> {
@@ -72,6 +80,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
   /** 淺色與深色各截一張，再換回原本的。 */
   async function capture(name: string): Promise<void> {
     await sleep(300);
+    if (!(await app.vault.adapter.exists(folder))) await app.vault.adapter.mkdir(folder);
     for (const theme of dark ? ['dark', 'light'] : ['light', 'dark']) {
       document.body.classList.toggle('theme-dark', theme === 'dark');
       document.body.classList.toggle('theme-light', theme === 'light');
@@ -110,7 +119,12 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       await sleep(100);
       typeInto(fieldOf('考試開始'), soon);
       await sleep(100);
+      check('勾好了', checkedRows());
+      check('開始日期', fieldOf('考試開始')?.value);
       await confirm();
+      check('存完的畫面', text(inEntry('.ec-en-title')[0]));
+      check('紅字', inEntry('.ec-sc-word.is-bad').map(text));
+      check('通知', notices());
       host.entry?.close();
       return { checks, scope: scopeFiles(app).map(file => file.path), day, soon };
     }
@@ -263,6 +277,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     await capture('入口 外部修改');
     await openScope();
     check('設定畫面列出看不懂的行', inEntry('.ec-sc-raw p').map(text));
+    inEntry('.ec-sc-raw')[0]?.scrollIntoView({ block: 'center' });
     await capture('設定 看不懂的行');
     boxOf('2-3')?.click();
     await sleep(100);
@@ -272,6 +287,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     for (const each of inEntry('.ec-sc-go')) each.click();
     await sleep(100);
     check('§8 列', inEntry('.ec-sc-item').map(text));
+    inEntry('.ec-sc-check')[0]?.scrollIntoView({ block: 'center' });
     await capture('設定 還不確定');
     await phone(async () => { await capture('設定 手機寬度'); });
     await confirm();
