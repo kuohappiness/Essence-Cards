@@ -7,7 +7,7 @@ export const EXAM_FOLDER = 'Essence Cards/考試範圍';
 export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md');
 
 /** 一行範圍。line 從 0 算，raw 是原字；unit 的三欄是讀到的標準寫法。 */
-type ScopeLine =
+export type ScopeLine =
   | { kind: 'unit'; line: number; raw: string; term: string; subject: string; code: string }
   | { kind: 'category' | 'unreadable'; line: number; raw: string };
 /** 日期：none 是沒寫；bad 的 why 分看不懂（format）與不存在（nonexistent），畫面寫的字不同。 */
@@ -19,6 +19,8 @@ export interface ScopeFile {
   end: ScopeDate;
   /** 有 `提前結束` 這一行（值是什麼都算）。 */
   ended: boolean;
+  /** `提前結束` 的日期；讀不懂是 null。 */
+  endedOn: string | null;
   /** 屬性區讀不出來：日期算有問題，外掛不寫這種檔（§2-2）。 */
   broken: boolean;
   lines: ScopeLine[];
@@ -115,7 +117,7 @@ function readLine(raw: string, line: number): ScopeLine | null {
 /** 讀屬性區。沒有結束的 `---` 算壞，全部字都是屬性區（syntax §2-1 的「需要版本」同一種看法）。 */
 export function parseScope(text: string): ScopeFile {
   const pieces = text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
-  const file: ScopeFile = { id: null, start: { kind: 'none' }, end: { kind: 'none' }, ended: false, broken: false, lines: [] };
+  const file: ScopeFile = { id: null, start: { kind: 'none' }, end: { kind: 'none' }, ended: false, endedOn: null, broken: false, lines: [] };
   let body = 0;
   if (pieces[0].trim() === '---') {
     const close = pieces.findIndex((piece, index) => index > 0 && /^---\s*$/.test(piece));
@@ -134,6 +136,8 @@ export function parseScope(text: string): ScopeFile {
       file.start = readDate(values['考試開始']);
       file.end = readDate(values['考試結束']);
       file.ended = Object.hasOwn(values, '提前結束');
+      const endedOn = readDate(values['提前結束']);
+      if (endedOn.kind === 'ok') file.endedOn = endedOn.date;
     }
   }
   for (let at = body; at < pieces.length; at++) {
@@ -145,10 +149,10 @@ export function parseScope(text: string): ScopeFile {
 
 // ── 比對 ──
 
-const termOf = (term: string): string => tidy(termKey(term)).trim().toLowerCase();
-const subjectOf = (subject: string): string => tidy(subject).trim().toLowerCase();
+export const termOf = (term: string): string => tidy(termKey(term)).trim().toLowerCase();
+export const subjectOf = (subject: string): string => tidy(subject).trim().toLowerCase();
 /** 層級照編號（D-033）：相同，或在它底下而且後面每一段都不是空的（`2-`、`2--1` 不在 `2` 底下）。 */
-function covers(code: string, other: string): boolean {
+export function covers(code: string, other: string): boolean {
   if (code === other) return true;
   return other.startsWith(code + '-') && other.slice(code.length + 1).split('-').every(Boolean);
 }
@@ -161,13 +165,13 @@ export function unitInScope(file: Pick<ScopeFile, 'lines'>, unit: ScopeUnit): bo
 
 const hasUnit = (file: ScopeFile): boolean => file.lines.some(line => line.kind === 'unit');
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
+const groupOf = (each: { path: string; file: ScopeFile }): string => each.file.id === null ? 'path:' + each.path : 'id:' + each.file.id;
 
 /**
  * 先按識別碼分組（同一個識別碼任一份結束，整組都結束，舊副本不會復活）；沒有識別碼的各自算一次考試。還生效而且有讀得懂的行才是候選；
  * 沒有候選但有還生效的檔時回傳那一份（usable 是 false），畫面寫行數，排程當成沒有範圍。others 是其他也生效的候選。
  */
 export function chooseScope<T extends { path: string; file: ScopeFile }>(entries: readonly T[], day: number): { chosen: T | null; usable: boolean; others: string[] } {
-  const groupOf = (each: T): string => each.file.id === null ? 'path:' + each.path : 'id:' + each.file.id;
   const over = new Set(entries.filter(each => each.file.ended).map(groupOf));
   const alive = entries.filter(each => {
     if (over.has(groupOf(each))) return false;
@@ -180,6 +184,23 @@ export function chooseScope<T extends { path: string; file: ScopeFile }>(entries
   const candidates = sorted.filter(each => hasUnit(each.file));
   const chosen = candidates[0] ?? sorted[0] ?? null;
   return { chosen, usable: candidates.length > 0, others: candidates.slice(1).map(each => each.path) };
+}
+
+/**
+ * 上一份範圍的結束日（§6 的預先勾選）：整組結束的用有 `提前結束` 那一份的日期（讀不懂就用它的結束日），舊副本不算；其他的是已經過了的結束日。
+ * 沒有讀得懂的行的不算一次考試。沒有上一份是 null。
+ */
+export function lastEnded(entries: readonly { path: string; file: ScopeFile }[], day: number): string | null {
+  const over = new Set(entries.filter(each => each.file.ended).map(groupOf));
+  const dates: string[] = [];
+  for (const each of entries) {
+    if (!hasUnit(each.file)) continue;
+    const period = scopePeriod(each.file);
+    const end = period.kind === 'ok' ? period.end : null;
+    const date = over.has(groupOf(each)) ? (each.file.ended ? each.file.endedOn ?? end : null) : end !== null && day > scopeDay(end) ? end : null;
+    if (date !== null) dates.push(date);
+  }
+  return dates.sort().at(-1) ?? null;
 }
 
 // ── 寫回（§2-4）──

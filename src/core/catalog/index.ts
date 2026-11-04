@@ -1,13 +1,17 @@
 import { codeKey, sourceLinks, termKey, termRank } from '../deck/index.ts';
 import type { Deck, Target } from '../deck/index.ts';
 import type { MemoryColor } from '../study/index.ts';
+import { compareCode, compareTerm } from './order.ts';
+import { unitInScope } from './scope.ts';
+import type { ScopeFile } from './scope.ts';
 
 // 範圍與目錄（D-110、D-142 原則 1、2、5、6、8）：把 deck 認定的單元參照對到單元、算每個目標屬於哪些單元、單元與學期的排序。
 // 輸入是卡組與每個目標的記憶狀態，不 import study 的程式；deck、study 不 import 這裡。
 
-export { chooseScope, editScope, EXAM_FOLDER, isExamPath, newScopeText, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from './scope.ts';
+export { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from './scope.ts';
 export type { ScopeChange, ScopeFile, ScopePeriod, ScopeUnit } from './scope.ts';
-export { targetsInScope } from './scope-view.ts';
+export { scopeAfter, scopeCheck, scopeCountdown, scopeDates, scopeHasSubject, scopeLabels, scopeNotes, scopeRows, scopeStartDate, targetsInScope } from './scope-view.ts';
+export type { ScopeCheck, ScopeRow, ScopeRowTerm } from './scope-view.ts';
 
 export interface CatalogDeck { path: string; deck: Deck }
 type DeckStatus = Deck['props']['status'];
@@ -76,37 +80,6 @@ const practiced = (unit: UnitNode): readonly UnitTarget[] => unit.status === 'ac
 
 const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
-
-/** 自然排序：連續的數字照數值比（`L2` 在 `L10` 前），平手時比原字串（`L01` 與 `L1`），不用輸入順序。 */
-function natural(a: string, b: string): number {
-  const parts = (text: string): string[] => text.match(/\d+|\D+/g) ?? [];
-  const left = parts(a), right = parts(b);
-  for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    const x = left[i], y = right[i];
-    const numeric = /^\d/.test(x) && /^\d/.test(y);
-    const order = numeric ? compareDigits(x, y) : compareText(x, y);
-    if (order) return order;
-  }
-  return left.length - right.length || compareText(a, b);
-}
-function compareDigits(a: string, b: string): number {
-  const x = a.replace(/^0+(?=\d)/, ''), y = b.replace(/^0+(?=\d)/, '');
-  return x.length - y.length || compareText(x, y);
-}
-/** 同一學期同一科裡：數字編號 → 英文編號 → 其他（§9-2）。 */
-const codeKind = (code: string): number => /^[0-9]+(?:-[0-9]+)*$/.test(code) ? 0 : /^[A-Za-z]+[0-9]+$/.test(code) ? 1 : 2;
-/** 認得的學期照順序，其他文字排在認得的後面，彼此比原字串。 */
-function compareTerm(a: string, b: string): number {
-  const x = termRank(termKey(a)), y = termRank(termKey(b));
-  if (x !== null && y !== null) return x - y;
-  if (x !== null) return -1;
-  if (y !== null) return 1;
-  return compareText(a, b);
-}
-const compareCode = (a: string, b: string): number => {
-  const x = codeKey(a), y = codeKey(b);
-  return codeKind(x) - codeKind(y) || natural(x, y) || compareText(a, b);
-};
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const usableTarget = (target: Target): target is Target & { id: string } => target.id !== null && target.ok && !target.fields.paused && target.prompts.length > 0;
@@ -246,6 +219,8 @@ export interface UnitView extends Omit<UnitNode, 'targets'> {
   color: MemoryColor;
   /** 當日卡的 N：今天的份裡還沒完成的。 */
   today: number;
+  /** 單元本身在選定的範圍裡（D-097 的「考試」標籤）：目標從別的單元算進去時，它自己的單元不標。 */
+  inExam: boolean;
 }
 export interface TermView { term: string; subjects: { subject: string; units: UnitView[] }[] }
 export interface Catalog {
@@ -264,8 +239,8 @@ function latestTerm(terms: readonly string[]): string | null {
   return known.at(-1) ?? terms[0] ?? null;
 }
 
-/** 畫面要的資料：索引加上每個目標現在的記憶顏色、今天的份裡還沒完成的目標。畫面不自己算。 */
-export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>): Catalog {
+/** 畫面要的資料：索引加上每個目標現在的記憶顏色、今天的份裡還沒完成的目標、選定的範圍。畫面不自己算。 */
+export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>, scope: Pick<ScopeFile, 'lines'> | null = null): Catalog {
   const view = (unit: UnitNode): UnitView => {
     // 全部暫停：標「暫停」、數字 0；全部是草稿：不顯示數字（§3）。兩種都沒有可以練的目標。
     const targets = practiced(unit).map(target => ({ ...target, color: colors.get(target.id) ?? 'new' }));
@@ -273,6 +248,7 @@ export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, Me
       ...unit, targets, color: unitColor(targets.map(target => target.color)),
       count: unit.status === 'draft' ? null : targets.length,
       today: targets.filter(target => today.has(target.id)).length,
+      inExam: scope !== null && unit.code !== null && unit.term !== null && unit.subject !== null && unitInScope(scope, { term: unit.term, subject: unit.subject, code: unit.code }),
     };
   };
   const terms: TermView[] = [];
