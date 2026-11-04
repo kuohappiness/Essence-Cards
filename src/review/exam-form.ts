@@ -141,6 +141,7 @@ export function checkDates(start: string, end: string, day: number): DateCheck {
 /** 擋下來的原因（§6）：留在畫面上，已勾的不丟。 */
 export function examFailure(result: Exclude<ExamResult, { kind: 'done' }>): string {
   if (result.kind === 'failed') return '寫不進去：' + (result.error instanceof Error ? result.error.message : String(result.error));
+  if (result.reason === 'special') return `「${result.lost.join('、')}」的編號寫法特殊，範圍檔寫不出來，不能只取消這一章的一部分：請留著整章，或連它一起取消`;
   return {
     loading: '還在讀取，請稍候再試',
     unread: '考試範圍暫時讀不到，等一下再試',

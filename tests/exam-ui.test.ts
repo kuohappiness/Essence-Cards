@@ -424,6 +424,21 @@ void test('§6 別處同時把結束日改得更早：寫原因、留在畫面�
   assert.ok(s.scope()?.includes('考試開始: 2026-10-21'));
 });
 
+void test('§6 整章裡有寫法特殊的單元：只取消別節時寫原因、不存；連它一起取消就存得進去', async t => {
+  const s = await open(t, { ...DECKS, 'Essence Cards/自然 特殊.md': head('國二上', '自然', '2-9,3') + targets('z'), [FOLDER + 'a.md']: scopeText('', '', '- 國二上 自然 2') });
+  const before = s.scope();
+  await s.click(s.box('2-1 水溶液'));
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.equal(s.all('.ec-sc-word.is-bad')[0]?.textContent, '「2-9,3」的編號寫法特殊，範圍檔寫不出來，不能只取消這一章的一部分：請留著整章，或連它一起取消');
+  assert.equal(s.scope(), before);
+  assert.equal(s.box('2-1 水溶液').checked, false, '已勾的不丟');
+  await s.click(s.box('2-9,3'));
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.equal(s.scope(), '---\n識別碼: s1\n---\n- 國二上 自然 2-2\n- 國二上 自然 2-3\n');
+});
+
 void test('§7 入口：倒數只有範圍寫到的科目、數字粗體；期間；一科一行；範圍外的科目沒有', async t => {
   const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '2026-10-29', '- 國二上 自然 2-1', '- 國二上 自然 2-2') }, 'entry');
   assert.deepEqual(s.all('.ec-sb').map(row => [row.querySelector('.ec-en-name')?.textContent, row.querySelector('.ec-sb-ex')?.textContent ?? null]), [['自然', '距離考試：12 天'], ['英文', null]]);

@@ -13,10 +13,11 @@ import type { Life } from './reads.ts';
 
 /** 畫面交出的變動（§2-4）：新勾的、取消的、有改的日期。 */
 export type ExamChange = Pick<ScopeChange, 'add' | 'remove' | 'start' | 'end'>;
-/** done 是寫好了（或本來就沒有要改的）；blocked 的原因畫面要寫出來，已勾的不丟。 */
+/** done 是寫好了（或本來就沒有要改的）；blocked 的原因畫面要寫出來，已勾的不丟。special 的 lost 是存了會掉出範圍的單元編號。 */
 export type ExamResult =
   | { kind: 'done' }
   | { kind: 'blocked'; reason: 'loading' | 'closed' | 'unread' | 'changed' | 'broken' | 'dates' }
+  | { kind: 'blocked'; reason: 'special'; lost: string[] }
   | { kind: 'failed'; error: unknown };
 
 interface ExamFilesOptions {
@@ -35,8 +36,8 @@ interface ExamFilesOptions {
 
 /** 回呼裡擋下來的（§2-4）：丟錯才不會建立或寫入。 */
 class ScopeBlocked extends Error {
-  readonly reason: 'changed' | 'broken' | 'dates';
-  constructor(reason: 'changed' | 'broken' | 'dates') { super('範圍檔不能寫：' + reason); this.reason = reason; }
+  readonly result: Extract<ReturnType<typeof editScope>, { kind: 'blocked' }>;
+  constructor(result: ScopeBlocked['result']) { super('範圍檔不能寫：' + result.reason); this.result = result; }
 }
 
 /** 紀錄行的欄位（§2-5）：讀得懂的每一行，照檔案的順序，只留年級學期、科目、編號。 */
@@ -136,7 +137,7 @@ export function createExamFiles(options: ExamFilesOptions) {
     options.changed();
   }
   const freshId = (): string => newId(options.random ?? Math.random, new Set([...known.values()].flatMap(each => each.file.id ?? [])));
-  const failure = (error: unknown): ExamResult => error instanceof ScopeBlocked ? { kind: 'blocked', reason: error.reason } : { kind: 'failed', error };
+  const failure = (error: unknown): ExamResult => error instanceof ScopeBlocked ? error.result : { kind: 'failed', error };
 
   return {
     start,
@@ -156,7 +157,7 @@ export function createExamFiles(options: ExamFilesOptions) {
       try {
         const text = await modify(path, latest => {
           const done = editScope(latest, { ...change, id: freshId() }, units);
-          if (done.kind === 'blocked') throw new ScopeBlocked(done.reason);
+          if (done.kind === 'blocked') throw new ScopeBlocked(done);
           before = parseScope(latest);
           return done.text;
         });

@@ -400,6 +400,33 @@ void test('整章裡取消一個：2 換成目前有卡組的其他單元，只�
   assert.equal(unitInScope(after, unit('國二上', '自然', '2-9')), true);
 });
 
+void test('整章裡取消一個：寫不回去的單元存了會掉出範圍，不寫、指出是哪個；一起取消或只取消它都照常', () => {
+  const chapter = '---\n識別碼: x\n---\n- 國二上 自然 2\n';
+  const odd = unit('國二上', '自然', '2-9,3');
+  const book = [...units('2-1'), odd, ...units('2-10')];
+  assert.equal(scopeWritable(odd), false, '直接勾就擋掉的那一種');
+  assert.equal(unitInScope(parseScope(chapter), odd), true, '整章本來包含它');
+  assert.deepEqual(editScope(chapter, { remove: units('2-1') }, book), { kind: 'blocked', reason: 'special', lost: ['2-9,3'] });
+  assert.equal(edit(chapter, { remove: [...units('2-1'), odd] }, book), '---\n識別碼: x\n---\n- 國二上 自然 2-10\n');
+  assert.equal(edit(chapter, { remove: [odd] }, book), '---\n識別碼: x\n---\n- 國二上 自然 2-1\n- 國二上 自然 2-10\n');
+  assert.equal(edit(chapter, { add: units('3') }, book), chapter + '- 國二上 自然 3\n', '沒有取消就不用展開');
+});
+
+void test('整章裡取消一個的性質：取消前後，只有取消的與包含它的不在範圍，其他都還在', () => {
+  const chapter = '---\n識別碼: x\n---\n- 國二上 自然 2\n';
+  const book = units('2', '2-1', '2-1-3', '2-1-4', '2-2', '2-10');
+  const answers: Record<string, string[]> = {
+    '2-1-3': ['2-1-4', '2-2', '2-10'],
+    '2-1': ['2-2', '2-10'],
+    '2-2': ['2-1', '2-1-3', '2-1-4', '2-10'],
+    '2-10': ['2-1', '2-1-3', '2-1-4', '2-2'],
+  };
+  for (const [removed, kept] of Object.entries(answers)) {
+    const file = parseScope(edit(chapter, { remove: units(removed) }, book));
+    assert.deepEqual(book.filter(each => unitInScope(file, each)).map(each => each.code), kept, removed);
+  }
+});
+
 void test('取消整章與底下的：一起刪', () => {
   assert.equal(edit(FILE, { remove: units('2') }, BOOK), FILE.replace('- 國二上 自然 2-1\n- 國二上 自然 2-2 水溶液\n- 國二上 自然 第2章第2節\n- 國二上 自然 2-9 老師手寫\n', ''));
 });

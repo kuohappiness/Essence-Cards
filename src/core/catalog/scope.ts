@@ -241,7 +241,7 @@ export interface ScopeChange {
   /** 還沒有識別碼時補這個。 */
   id?: string;
 }
-type ScopeEdit = { kind: 'ok'; text: string } | { kind: 'blocked'; reason: 'changed' | 'broken' | 'dates' };
+type ScopeEdit = { kind: 'ok'; text: string } | { kind: 'blocked'; reason: 'changed' | 'broken' | 'dates' } | { kind: 'blocked'; reason: 'special'; lost: string[] };
 interface RawLine { raw: string; eol: string }
 
 function linesWithEnds(text: string): RawLine[] {
@@ -332,7 +332,8 @@ function editBody(body: RawLine[], change: ScopeChange, units: readonly ScopeUni
     const under = upper.map(line => codeKey((unitAt(line) as ScopeUnit).code));
     const rest = units.filter(each => {
       const key = codeKey(each.code);
-      return sameBook(each, unit) && under.some(top => covers(top, key)) && !covers(code, key) && !covers(key, code)
+      // 同一次取消的都不展開：寫不回去的展開了就拿不掉（讀回來是看不懂的行）。
+      return sameBook(each, unit) && under.some(top => covers(top, key)) && !isRemoved(each, change)
         && !staying.some(line => { const hit = within(line, each); return hit !== null && covers(codeKey(hit.read.code), key); });
     });
     const top = rest.filter(each => !rest.some(other => other !== each && codeKey(other.code) !== codeKey(each.code) && covers(codeKey(other.code), codeKey(each.code))));
@@ -356,6 +357,12 @@ function editBody(body: RawLine[], change: ScopeChange, units: readonly ScopeUni
     lines = [...lines.slice(0, after + 1), made(unit), ...lines.slice(after + 1)];
   }
   return lines;
+}
+
+/** 這個單元就是這次取消的，或在它底下，或包含它（整章裡取消一個，整章就不算了）。 */
+function isRemoved(unit: ScopeUnit, change: ScopeChange): boolean {
+  const code = codeKey(unit.code);
+  return (change.remove ?? []).some(each => sameBook(each, unit) && (covers(codeKey(each.code), code) || covers(code, codeKey(each.code))));
 }
 
 const OWN_KEYS = new Set(['識別碼', '考試開始', '考試結束', '提前結束']);
@@ -404,6 +411,9 @@ export function editScope(text: string, change: ScopeChange, units: readonly Sco
   // 畫面只看得到打開時的另一邊：套到最新的內容上才變成開始晚於結束（別台改了另一邊），不寫（§2-4）。畫面沒改日期時，家長原本的值照舊留著。
   const inverted = after.start.kind === 'ok' && after.end.kind === 'ok' && after.start.date > after.end.date;
   if (inverted && (change.start != null || change.end != null)) return { kind: 'blocked', reason: 'dates' };
+  // 沒有取消的單元都要還在（§2-4）：整章展開時，寫不回去的單元（`2-9,3`）一行寫不出來，存了就掉出範圍。
+  const lost = units.filter(unit => unitInScope(before, unit) && !unitInScope(after, unit) && !isRemoved(unit, change));
+  if (lost.length) return { kind: 'blocked', reason: 'special', lost: lost.map(unit => unit.code) };
   return { kind: 'ok', text: result };
 }
 
