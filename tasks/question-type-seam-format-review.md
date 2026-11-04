@@ -1,18 +1,18 @@
-# 題型接點與比較選填開工前的格式查核（給 Codex）
+# 題型接點與比較點選開工前的格式查核（給 Codex）
 
 狀態：待查（寫法已定：D-182）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
-依 [D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點、[D-182](../docs/decisions.md#d-182-比較選填各科都能用家長出題時勾選) 第 4 點（邊界由這次查核定）與 [quality.md〈開工前的格式查核〉](../docs/agents/quality.md#開工前的格式查核)：[任務說明](question-type-seam.md)的 §3、§4、§5-4 第 2 點會改出題語法的解析與複習紀錄的欄位。程式還沒動。
+依 [D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點、[D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選) 第 4 點（邊界由這次查核定）與 [quality.md〈開工前的格式查核〉](../docs/agents/quality.md#開工前的格式查核)：[任務說明](question-type-seam.md)的 §3、§4、§5-4 第 2 點會改出題語法的解析與複習紀錄的欄位。程式還沒動。
 
 **現在所有的卡片都是測試用的**（使用者 2026-11-05），正式使用的 vault 沒有卡組：舊紀錄、舊卡組接不接得上不是擋開工的理由，不用為它找反例；查的是這個格式本身立不立得住，以及之後有真實資料時會不會出事。
 
 ## 基準
 
-分支 `claude/question-type-seam-927507` 這份請求所在的 commit，hash 寫進報告；工作目錄是 `.claude/worktrees/state-split-c5c7bf`。第一步的接點已經 commit，比較選填的程式還沒動。`docs/syntax.md` 還沒改，要等這次查核的結果：任務說明寫的是提案，和 syntax 不一致的地方請判斷該改哪一邊。
+分支 `claude/question-type-seam-927507` 這份請求所在的 commit，hash 寫進報告；工作目錄是 `.claude/worktrees/state-split-c5c7bf`。第一步的接點已經 commit，比較點選的程式還沒動。`docs/syntax.md` 還沒改，要等這次查核的結果：任務說明寫的是提案，和 syntax 不一致的地方請判斷該改哪一邊。
 
-只讀：任務說明 §3、§4、§5-2、§5-4、§6 的評分那幾句、〈實作者自己選的做法〉；[規畫](../docs/plans/similar-chars.md)；[D-178](../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標)、[D-182](../docs/decisions.md#d-182-比較選填各科都能用家長出題時勾選)；syntax §0-1、§2-3、§2-6、§2-8、§2-10、§5、§5-2；`src/core/deck/parse.ts`、`src/core/study/entries.ts`、`src/core/study/history.ts`、`src/core/study/plan.ts` 的 `secondsBySubject`；製卡預設 [〈相似字〉](../docs/card-rules/elementary-chinese.md#相似字)。
+只讀：任務說明 §3、§4、§5-2、§5-4、§6 的評分那幾句、〈實作者自己選的做法〉；[規畫](../docs/plans/similar-chars.md)；[D-178](../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標)、[D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選)；syntax §0-1、§2-3、§2-6、§2-8、§2-10、§5、§5-2；`src/core/deck/parse.ts`、`src/core/study/entries.ts`、`src/core/study/history.ts`、`src/core/study/plan.ts` 的 `secondsBySubject`；製卡預設 [〈相似字〉](../docs/card-rules/elementary-chinese.md#相似字)。
 
 ## 查什麼
 

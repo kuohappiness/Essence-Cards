@@ -1,16 +1,16 @@
-# 題型接點與比較選填（D-181、D-178、D-182，給 Claude，本機執行）
+# 題型接點與比較點選（D-181、D-178、D-182，給 Claude，本機執行）
 
 狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），等複查（[請求](question-type-seam-step1-review.md)）；§3 照 D-182 定稿，等格式查核（[請求](question-type-seam-format-review.md)）；兩個都過才動第二步；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫這份用 **Opus、xhigh**，實作用 **Opus、高**（[quality.md](../docs/agents/quality.md)）。改解析、紀錄、排程、複習流程，跨模組，合併前要 L2。必讀 code-quality 的〈測試〉。
 
-依據：[D-181](../docs/decisions.md#d-181-題型是可以接上的模組開題型專區) 第 5 點（先搬舊的兩種，再接比較選填）、[D-178](../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標) 、[D-182](../docs/decisions.md#d-182-比較選填各科都能用家長出題時勾選) 與[相似字比較卡的規畫](../docs/plans/similar-chars.md)（規格，這份不重抄）、[D-179](../docs/decisions.md#d-179-介面的每一項都要有必要性非必要不出現)、[題型專區](../docs/question-types.md)的〈定案一個題型要回答什麼〉。示意頁原始檔 `experiments/mockups/similar-chars-card.html`。
+依據：[D-181](../docs/decisions.md#d-181-題型是可以接上的模組開題型專區) 第 5 點（先搬舊的兩種，再接比較點選）、[D-178](../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標) 、[D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選) 與[相似字比較卡的規畫](../docs/plans/similar-chars.md)（規格，這份不重抄）、[D-179](../docs/decisions.md#d-179-介面的每一項都要有必要性非必要不出現)、[題型專區](../docs/question-types.md)的〈定案一個題型要回答什麼〉。示意頁原始檔 `experiments/mockups/similar-chars-card.html`。
 
 ## 和「不做」比較（D-153）
 
 - **不做會怎樣**：差別直接寫在流程裡。`src/review/session.ts` 與 `src/ui/Review.tsx` 共 47 處左右判斷是不是打字卡（粗估），`src/review/preview.ts` 另外實作一份翻面與打字。比較卡要一張好幾個目標，`Card` 只有一個 `lt`（`src/core/study/types.ts`）、`rate` 與 `change` 一次一行（`src/review/session.ts:410`、`:446`），所有共用的路都要改；不抽接點，每多一種題型再改一輪。
 - **做的代價**：打字卡調過很多輪，搬動可能弄壞；孩子感覺不到好處，好處在之後的開發。解法：第一步只搬不改，現有測試一字不改全部通過，另外跑一次新舊版的差分（§2-5），Codex 只查行為；正式使用的 vault 還沒有卡組，現在搬最便宜（D-181）。
-- **更小的做法**：只有比較選填走接點，舊的兩種不動：D-181 比較過，新舊兩套並存，接點也只試過一種，第四種可能要回頭改。不抽接點、每處再加一句：同上。
+- **更小的做法**：只有比較點選走接點，舊的兩種不動：D-181 比較過，新舊兩套並存，接點也只試過一種，第四種可能要回頭改。不抽接點、每處再加一句：同上。
 
 ## 排程與分支
 
@@ -18,7 +18,7 @@
 |---|---|---|---|
 | 0 | 這份說明；§3、§4、§5-4 的格式查核 | Claude 寫，新開的 Codex 查 | §3、§4 實作前要看到結果 |
 | 1 | §2：翻面、打字搬到接點，獨立 commit | Claude 實作；Codex 只查行為 | 不等格式查核 |
-| 2 | §3～§9：接比較選填 | Claude 實作 | 第 1 步的查核通過；§3、§4 等格式查核 |
+| 2 | §3～§9：接比較點選 | Claude 實作 | 第 1 步的查核通過；§3、§4 等格式查核 |
 | 3 | §10：Windows 實機；L2；iPhone 項目併進 backlog | Claude、Codex | 第 2 步 |
 | 4 | 合併；`docs/question-types.md` 第 2、3 段、roadmap、syntax 更新 | Claude | L2 通過 |
 
@@ -28,7 +28,7 @@
 
 **一句話**：一種題型 = 四張表各填一列。共同的流程（拿下一張、進度、回看、切走 60 秒重來、寫紀錄、預覽）只透過接點和題型說話，不再判斷是哪一種。新增題型時 `QuestionType` 多一個值，TypeScript 會指出每張表缺哪一列（`Record<QuestionType, …>`），是機械檢查，不靠人記得。
 
-| 接點 | 位置 | 這一列要回答什麼 | 翻面 | 打字 | 比較選填 |
+| 接點 | 位置 | 這一列要回答什麼 | 翻面 | 打字 | 比較點選 |
 |---|---|---|---|---|---|
 | 認得出來 | `src/core/deck/question-types.ts` | 名稱與題目怎麼認、哪些算寫錯 | 其他全部 | 名稱「 中翻英」，答案能比對 | 名稱「字（組） 結尾」，每題一個空格、答案在組裡（§3） |
 | 怎麼組成一張卡 | `src/core/study/compose.ts` | 這張卡有哪幾格、出哪一題 | 一格 | 一格 | 同組到期的併成一張（§5） |
@@ -48,7 +48,7 @@ interface Card {
 }
 ```
 
-`questionType(card)` 是唯一判斷題型的地方（`group` 有值是比較選填，`typed` 是打字，其他是翻面）；`Card` 不再多存一份題型。`nextCard`、`practiceNext` 與預覽各自重複的 `typed: prompt.kind === 'qa' && …` 併成一個 `cardOf`。
+`questionType(card)` 是唯一判斷題型的地方（`group` 有值是比較點選，`typed` 是打字，其他是翻面）；`Card` 不再多存一份題型。`nextCard`、`practiceNext` 與預覽各自重複的 `typed: prompt.kind === 'qa' && …` 併成一個 `cardOf`。
 
 ### 1-2 作答流程（`Flow`，`src/review/flow.ts`）
 
@@ -71,7 +71,7 @@ type FlowAction = { kind: 'reveal' } | { kind: 'input'; text: string } | { kind:
 
 `createFlow(card, { now })` 照 `questionType(card)` 查表。預覽的打字走另一個流程（`createPreviewTyped`：不走三步，D-161），翻面走同一個（多一個 `revealed` 的起點）。預覽什麼都不寫，自評也不等 0.3 秒，所以它的流程（`createPreviewFlow`）沒有 `settle`、`revealedAt`。第一步的 `settle` 只收評分；第二步要 `settle(null)` 時才放寬。按下的評分留在 Session，第一步不放進 `Settled`。
 
-**四種邊界都試過**（D-181 要求接點試過這些）：孩子自評（翻面：`allowed` 全部）；一張卡走好幾步（打字：`act` 走三步，`allowed` 由第 1 步決定）；一張卡好幾格好幾個目標（比較選填：`lines` 好幾行，`settle(null)` 不用選評分）；程式判一部分、孩子自評一部分（找錯題，還沒定案：`act` 判位置、`allowed` 限制評分、`lines` 帶證據，不用改 Session）。
+**四種邊界都試過**（D-181 要求接點試過這些）：孩子自評（翻面：`allowed` 全部）；一張卡走好幾步（打字：`act` 走三步，`allowed` 由第 1 步決定）；一張卡好幾格好幾個目標（比較點選：`lines` 好幾行，`settle(null)` 不用選評分）；程式判一部分、孩子自評一部分（找錯題，還沒定案：`act` 判位置、`allowed` 限制評分、`lines` 帶證據，不用改 Session）。
 
 Session 留下：取卡、`top`、回看清單、切走重來、衝突與停用、0.3 秒、寫紀錄。`Session` 的方法與 `CardView` 的欄位都不變，`reveal`、`input`、`submit`、`skip` 轉成 `act`；第二步新增 `act(action)`（字鍵、句子、對答案）與 `commit()`（有錯時的「下一張」），新題型不用再加方法。
 
@@ -107,7 +107,7 @@ const SCREENS: Record<QuestionType, Screen> = { flip, typed, pick };
 
 ## §3 卡組：名稱與題目（⏳ 格式查核）
 
-寫法照 [D-182](../docs/decisions.md#d-182-比較選填各科都能用家長出題時勾選) 與[規畫〈卡組怎麼寫〉](../docs/plans/similar-chars.md#卡組怎麼寫)：程式認括號，不認結尾的詞；結尾是卡片的標題；各科都能用，字和詞都放得下，程式不分科。這份說明寫「字」的地方，詞也一樣。`parseDeck` 的結果：
+寫法照 [D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選) 與[規畫〈卡組怎麼寫〉](../docs/plans/similar-chars.md#卡組怎麼寫)：程式認括號，不認結尾的詞；結尾是卡片的標題；各科都能用，字和詞都放得下，程式不分科。這份說明寫「字」的地方，詞也一樣。`parseDeck` 的結果：
 
 ```ts
 interface PickGroup { word: string; members: readonly string[]; key: string; title: string }
