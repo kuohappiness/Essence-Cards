@@ -470,6 +470,24 @@ void test('寫得回去的單元才能勾：讀回來要是同一個', () => {
 
 // ── 共用範例：登錄過的每個檔（要放在最後）──
 
+void test('屬性區不是一行一個屬性：只有要改的變了才寫，帶走別的屬性就不寫', () => {
+  const blocked = { kind: 'blocked', reason: 'broken' };
+  const line = '---\n{識別碼: aaaaaa, 考試開始: 2026-10-28, 其他: 保留}\n---\n- 國二上 自然 2\n';
+  assert.deepEqual(editScope(line, { start: null }, []), blocked, '同一行的識別碼與別的屬性不能跟著刪');
+  assert.deepEqual(editScope(line, { end: '2026-10-29' }, []), blocked, '加不了新的一行');
+  assert.deepEqual(editScope(line, { ended: '2026-10-20' }, []), blocked);
+  assert.equal(edit(line, { start: '2026-11-01' }), '---\n{識別碼: aaaaaa, 考試開始: 2026-11-01, 其他: 保留}\n---\n- 國二上 自然 2\n', '只換值的改得了');
+  assert.equal(edit(line, { add: units('3') }), line + '- 國二上 自然 3\n', '屬性區沒有要改的：範圍行照寫');
+  const scalar = '---\n識別碼: aaaaaa\n考試開始: |\n  2026-10-28\n其他: 保留\n---\n- 國二上 自然 2\n';
+  assert.deepEqual(editScope(scalar, { start: null }, []), blocked, '多行的值：下一行不能跟著刪');
+  assert.deepEqual(editScope(scalar, { start: '2026-11-01' }, []), blocked);
+  const lines = '---\n{識別碼: aaaaaa,\n 考試開始: 2026-10-28,\n 其他: 保留}\n---\n';
+  assert.equal(edit(lines, { start: null }), '---\n{識別碼: aaaaaa,\n 其他: 保留}\n---\n', '分行的對照表刪一行還是對的');
+  assert.deepEqual(editScope('---\n{識別碼: aaaaaa,\n 考試開始: 2026-10-28}\n---\n', { start: null }, []), blocked, '刪一行就壞的不寫');
+  const comment = '---\n識別碼: aaaaaa # 不要改\n考試開始: 2026-10-28 # 第一天\n巢狀: {考試開始: 2026-10-30}\n其他: [1, 2]\n---\n';
+  assert.equal(edit(comment, { start: null }), '---\n識別碼: aaaaaa # 不要改\n巢狀: {考試開始: 2026-10-30}\n其他: [1, 2]\n---\n', '只刪頂層的那一行，別的都留著');
+});
+
 void test('往返與冪等：沒有要改的再按一次不變，只動屬性區，範圍照舊', () => {
   assert.ok(scopeCases.size > 40, '範例要真的登錄進來');
   for (const text of scopeCases) {

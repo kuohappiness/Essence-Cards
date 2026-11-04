@@ -132,14 +132,22 @@ function looseId(raw: string): string | null {
   return (/^(["'])(.*)\1$/.exec(value)?.[2] ?? value).trim() || null;
 }
 
+const piecesOf = (text: string): string[] => text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
+/** 屬性區的字與結束的 `---` 在第幾段（沒有結束是 -1）；沒有屬性區是 null。 */
+function headOf(pieces: readonly string[]): { raw: string; close: number } | null {
+  if (pieces[0].trim() !== '---') return null;
+  const close = pieces.findIndex((piece, index) => index > 0 && /^---\s*$/.test(piece));
+  return { raw: pieces.slice(1, close < 0 ? pieces.length : close).join('\n'), close };
+}
+
 /** 讀屬性區。沒有結束的 `---` 算壞，全部字都是屬性區（syntax §2-1 的「需要版本」同一種看法）。 */
 export function parseScope(text: string): ScopeFile {
-  const pieces = text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
+  const pieces = piecesOf(text);
   const file: ScopeFile = { id: null, start: { kind: 'none' }, end: { kind: 'none' }, ended: false, endedOn: null, broken: false, lines: [] };
   let body = 0;
-  if (pieces[0].trim() === '---') {
-    const close = pieces.findIndex((piece, index) => index > 0 && /^---\s*$/.test(piece));
-    const raw = pieces.slice(1, close < 0 ? pieces.length : close).join('\n');
+  const head = headOf(pieces);
+  if (head) {
+    const { raw, close } = head;
     if (close < 0) return { ...file, broken: true, ended: raw.includes('提前結束'), id: looseId(raw) };
     body = close + 1;
     const values = headValues(raw);
@@ -343,6 +351,22 @@ function editBody(body: RawLine[], change: ScopeChange, units: readonly ScopeUni
   return lines;
 }
 
+const OWN_KEYS = new Set(['識別碼', '考試開始', '考試結束', '提前結束']);
+/** 外掛不碰的屬性（比對用）。 */
+function otherProps(text: string): string {
+  const head = headOf(piecesOf(text));
+  return JSON.stringify(Object.entries((head && headValues(head.raw)) ?? {}).filter(([key]) => !OWN_KEYS.has(key)));
+}
+/** 讀回來是不是要的結果（§2-4）：只有這次要改的變了。清單以外的寫法（`{考試開始: 2026-10-28}`、`|`）一行一行地改，可能改壞，也可能帶走別的屬性。 */
+function headAsWanted(text: string, result: string, change: ScopeChange, before: ScopeFile): boolean {
+  const after = parseScope(result);
+  const wanted = (read: ScopeDate, value: string | null | undefined): ScopeDate => value === undefined ? read : value === null ? { kind: 'none' } : { kind: 'ok', date: value };
+  return !after.broken && after.id === (before.id ?? change.id ?? null) && after.ended === (change.ended !== undefined)
+    && JSON.stringify(after.start) === JSON.stringify(wanted(before.start, change.start))
+    && JSON.stringify(after.end) === JSON.stringify(wanted(before.end, change.end))
+    && otherProps(result) === otherProps(text);
+}
+
 /** 把變動套到這份文字（§2-4）。空字串是檔不見或清空，已經結束的不改回去，屬性區壞了不寫。 */
 export function editScope(text: string, change: ScopeChange, units: readonly ScopeUnit[]): ScopeEdit {
   if (text === '') return { kind: 'blocked', reason: 'changed' };
@@ -369,8 +393,7 @@ export function editScope(text: string, change: ScopeChange, units: readonly Sco
   const endedWithEol = lines.length === 0 || lines[lines.length - 1].eol !== '';
   const output = all.map((line, index) => ({ raw: line.raw, eol: index === all.length - 1 ? (endedWithEol ? line.eol || eol : '') : line.eol || eol }));
   const result = bom + output.map(line => line.raw + line.eol).join('');
-  // 屬性區是清單以外的寫法（`{考試開始: 2026-10-28}`、`|`）時，一行一行的改法可能改壞：讀回來壞了就不寫。
-  return parseScope(result).broken ? { kind: 'blocked', reason: 'broken' } : { kind: 'ok', text: result };
+  return headAsWanted(text, result, change, before) ? { kind: 'ok', text: result } : { kind: 'blocked', reason: 'broken' };
 }
 
 /** 新檔的內容。 */

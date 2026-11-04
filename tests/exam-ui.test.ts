@@ -328,7 +328,7 @@ void test('§6 寫不進去：留在畫面上寫原因，已勾的不丟', async
   await s.click(s.box('2-2'));
   await s.click(s.button('確定'));
   await s.settle();
-  assert.ok(s.text().includes('範圍檔的屬性區寫壞了，請先修好再設定'));
+  assert.ok(s.text().includes('範圍檔的屬性區寫壞了，或不是一行一個屬性，請先修好再設定'));
   assert.equal(s.box('2-2').checked, true);
   assert.deepEqual(s.notices, []);
 });
