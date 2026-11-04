@@ -5,16 +5,16 @@
 /* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
    字用楷書：相似字的差別在部件，楷書的筆形最接近課本。 */
 :root{
-  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
+  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--grid:#BDBBB2;--press:#ECEFF4;
   --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
   --hanzi:"LXGW WenKai TC","Kaiti TC","BiauKai","DFKai-SB",serif;
   --ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--grid:#55585E;--press:#263043;
   --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--easy:#8DB7FF;--on-ink:#121314;color-scheme:dark}}
 :root[data-theme="dark"]{
-  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--grid:#55585E;--press:#263043;
   --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--easy:#8DB7FF;--on-ink:#121314;color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.65;
@@ -29,7 +29,16 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 
 /* 卡：外掛是沒有外框的安靜樣式，這裡的框只是在網頁上代表手機畫面 */
 .phone{background:var(--page);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;overflow:hidden}
-.stage{padding:16px 8px 8px;display:grid;gap:8px;min-height:284px;align-content:start}
+/* 卡片標題：作業簿的田字格，裡面是兩個人並肩的「比」 */
+.card-head{display:flex;align-items:center;gap:12px;padding:16px 18px 13px;border-bottom:1px solid var(--line)}
+.grid-mark{flex:none;width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--grid);border-radius:3px;
+  font-family:var(--hanzi);font-size:32px;line-height:1;color:var(--ink);
+  background-image:repeating-linear-gradient(to right,var(--grid) 0 3px,transparent 3px 6px),repeating-linear-gradient(to bottom,var(--grid) 0 3px,transparent 3px 6px);
+  background-size:100% 1px,1px 100%;background-position:0 50%,50% 0;background-repeat:no-repeat}
+.card-titles{min-width:0;display:grid;gap:1px}
+.card-title{margin:0;font-family:var(--hanzi);font-size:22px;font-weight:700;line-height:1.3;letter-spacing:.08em}
+.card-sub{margin:0;font-size:13px;line-height:1.5;color:var(--muted)}
+.stage{padding:10px 8px 8px;display:grid;gap:8px;min-height:252px;align-content:start}
 .eyebrow{margin:0 6px;font-size:13px;color:var(--muted)}
 .rows{list-style:none;margin:0;padding:0;display:grid;gap:2px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:46px;padding:3px 8px;border-radius:10px;
@@ -79,6 +88,7 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 .cmp .ch{font-family:var(--hanzi);font-size:25px;font-weight:700;line-height:1.2}
 .cmp .why{font-size:14px;line-height:1.5;min-width:0}
 .cmp .why b{color:var(--key);font-family:var(--hanzi);font-size:16px}
+.cmp .words{display:block;font-family:var(--hanzi);font-size:15px;line-height:1.5}
 .cmp .slip{display:block;font-size:13px;color:var(--muted)}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap}
 .chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
@@ -115,6 +125,13 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
   <div class="layout">
     <div class="demo">
       <section class="phone" aria-label="比較卡示意">
+        <header class="card-head">
+          <span class="grid-mark" aria-hidden="true">比</span>
+          <div class="card-titles">
+            <h2 class="card-title">相似字比一比</h2>
+            <p class="card-sub" id="cardSub"></p>
+          </div>
+        </header>
         <div class="stage">
           <p class="eyebrow" id="eyebrow" hidden></p>
           <ul class="rows" id="rows"></ul>
@@ -189,10 +206,10 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 
 <script>
 const GROUP = [
-  { ch: '寨', why: '下面是<b>木</b>，木頭圍成的防守地：山寨、寨子' },
-  { ch: '塞', why: '下面是<b>土</b>，用土堵住：塞車、塞住' },
-  { ch: '寒', why: '下面兩點是<b>冰</b>，冷到結冰：寒流、寒假' },
-  { ch: '賽', why: '下面是<b>貝</b>（古代的錢）：比賽、賽跑' },
+  { ch: '寨', why: '下面是<b>木</b>，木頭圍成的防守地', words: '山寨、寨子' },
+  { ch: '塞', why: '下面是<b>土</b>，用土堵住', words: '塞車、塞住' },
+  { ch: '寒', why: '下面兩點是<b>冰</b>，冷到結冰', words: '寒流、寒假' },
+  { ch: '賽', why: '下面是<b>貝</b>（古代的錢）', words: '比賽、賽跑' },
 ];
 const FIRST_CARD = [
   { before: '盜匪躲在山', after: '裡。', ans: '寨' },
@@ -229,6 +246,7 @@ function newCard(sentences, eyebrow, stage) {
     cursor: 0,
     blanks: sentences.map(s => ({ ...s, pick: '', first: '', second: '', status: 'open' })),
   };
+  el('cardSub').textContent = sentences.length > 1 ? '每一句該用哪個字？' : '這一句該用哪個字？';
   el('tray').hidden = false;
   el('rates').hidden = true;
   el('compare').hidden = true;
@@ -357,6 +375,8 @@ function flyTo(keyButton, index) {
   ], { duration: 150, easing: 'ease-out' });
   motion.onfinish = () => clone.remove();
   motion.oncancel = () => clone.remove();
+  // 手機切到背景時動畫可能停住，分身不能留在畫面上
+  setTimeout(() => clone.remove(), 400);
 }
 
 function tapRow(i) {
@@ -435,6 +455,7 @@ function slipsOfCard() {
 function showResult() {
   card.phase = 'result';
   card.cursor = -1;
+  el('cardSub').textContent = '比一比，差別就在這裡';
   paint();
   const ratings = ratingsOfCard();
   const slips = slipsOfCard();
@@ -449,6 +470,10 @@ function showResult() {
     const why = document.createElement('span');
     why.className = 'why';
     why.innerHTML = g.why;
+    const words = document.createElement('span');
+    words.className = 'words';
+    words.textContent = g.words;
+    why.append(words);
     if (slips[g.ch]) {
       const slip = document.createElement('span');
       slip.className = 'slip';
@@ -496,8 +521,8 @@ function leaveResult(ratings, chosen) {
 }
 
 function showEnd(lastRound) {
-  el('eyebrow').hidden = false;
-  el('eyebrow').textContent = '這一組做完了。每個字接下來各走各的：';
+  el('eyebrow').hidden = true;
+  el('cardSub').textContent = '這一組做完了，每個字接下來各走各的';
   el('rows').replaceChildren();
   el('compare').hidden = false;
   el('compare').replaceChildren(...GROUP.map(g => {
