@@ -1,6 +1,6 @@
 # 入口與目錄第二批（考試範圍）：L2 審查請求（給新開的 Codex session）
 
-狀態：第五輪未通過，等使用者決定（[報告與回應](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md>)）
+狀態：結束。第五輪留下 R25，使用者 2026-11-05 決定不修，記進技術債後合併（[報告與回應](<../Claude Codex Discussion/2026-11-04-exam-scope-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
