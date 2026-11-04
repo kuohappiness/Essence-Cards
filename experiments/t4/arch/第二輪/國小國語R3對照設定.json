@@ -1,0 +1,20 @@
+{
+  "說明": "國小國語預設 v0.1 的對照：同一個模型、同一份教材，只用 R3 的四份提示，不接預設（docs/card-rules/elementary-chinese.md 待驗證、D-175 曾考慮的做法）。其他和 國小國語設定.json 相同。",
+  "不需考題凍結": true,
+  "models": {
+    "sol-plan": {"provider":"chatgpt-plan","model":"gpt-6.1-sol","baseUrl":"https://api.openai.com/v1","authentication":"Sign in with ChatGPT：dynamic_agent_client + PKCE；獨立本機憑證","outputLimit":null,"modelMaxOutputTokens":128000,"outputLimitNote":"方案預覽明文不接受 max_output_tokens；模型公開上限不代表方案路線的實際上限，留待 G3 預試。","documentation":["https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference","https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations","https://developers.openai.com/api/docs/models/gpt-6.1-sol"],"parameters":{"reasoning":{"effort":"high"},"store":false,"stream":true}}
+  },
+  "configs": {
+    "R3": [
+      { "model": "sol-plan", "system": ["格式.md", "../短規則.md", "判斷邊界.md", "五步.md"], "input": [], "output": ["全貌", "架構", "卡組"] }
+    ]
+  },
+  "materials": {
+    "L7": {
+      "unit": "國小五上國語 L7",
+      "title": "國小五上國語 L7 美景閒情──詩兩首",
+      "任務資料": ["學生：國小五年級（小五上）", "科目：國語", "單元：第七課 美景閒情──詩兩首", "學習目的：準備段考", "允許 AI 補充：是", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師用書，含給老師的註記），以及出版社隨課本提供的形音輕鬆學與字義分析"]
+    }
+  },
+  "正式生成": { "materials": ["L7"], "configs": ["R3"] }
+}

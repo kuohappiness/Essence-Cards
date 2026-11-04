@@ -1,0 +1,20 @@
+{
+  "說明": "國小國語預設 v0.1 用 Sol 跑翰林五上 L7（docs/card-rules/trials.md 2026-11-04）；程式只讀。提示與接法和第二輪的 R3、sol-plan 相同，最後接上預設。預設是 repo 外的複本：拿掉 elementary-chinese.md 開頭的狀態與待驗證（裡面的「估 35～45 個」會影響要量的目標數），本文一字不改；複本放在 --out 旁邊，路徑相對於 experiments/t4/arch/第二輪。這次沒有考題要凍結。對照組在 國小國語R3對照設定.json。",
+  "不需考題凍結": true,
+  "models": {
+    "sol-plan": {"provider":"chatgpt-plan","model":"gpt-6.1-sol","baseUrl":"https://api.openai.com/v1","authentication":"Sign in with ChatGPT：dynamic_agent_client + PKCE；獨立本機憑證","outputLimit":null,"modelMaxOutputTokens":128000,"outputLimitNote":"方案預覽明文不接受 max_output_tokens；模型公開上限不代表方案路線的實際上限，留待 G3 預試。","documentation":["https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference","https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations","https://developers.openai.com/api/docs/models/gpt-6.1-sol"],"parameters":{"reasoning":{"effort":"high"},"store":false,"stream":true}}
+  },
+  "configs": {
+    "R3": [
+      { "model": "sol-plan", "system": ["格式.md", "../短規則.md", "判斷邊界.md", "五步.md", "../../../../../教材/國小國文/五上(翰林)/預設試用/L7/預設v0.1送出版.md"], "input": [], "output": ["全貌", "架構", "卡組"] }
+    ]
+  },
+  "materials": {
+    "L7": {
+      "unit": "國小五上國語 L7",
+      "title": "國小五上國語 L7 美景閒情──詩兩首",
+      "任務資料": ["學生：國小五年級（小五上）", "科目：國語", "單元：第七課 美景閒情──詩兩首", "學習目的：準備段考", "允許 AI 補充：是", "學生已有的學習目標：無", "家長調整：無", "教材：課本轉錄稿（教師用書，含給老師的註記），以及出版社隨課本提供的形音輕鬆學與字義分析"]
+    }
+  },
+  "正式生成": { "materials": ["L7"], "configs": ["R3"] }
+}
