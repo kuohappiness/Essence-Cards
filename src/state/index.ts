@@ -1,10 +1,13 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
-import { buildIndex, paintCatalog } from '../core/catalog/index.ts';
-import type { Catalog, CatalogIndex } from '../core/catalog/index.ts';
+import { buildIndex, paintCatalog, scopeDate, scopePeriod, targetsInScope } from '../core/catalog/index.ts';
+import type { Catalog, CatalogIndex, ScopeFile, ScopePeriod } from '../core/catalog/index.ts';
 export type { Catalog, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
+import { createExamFiles } from './exam.ts';
+import type { ExamChange, ExamResult } from './exam.ts';
+export type { ExamChange, ExamResult } from './exam.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
@@ -14,7 +17,7 @@ export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, memoryColors, mergeHistory, nextCard, parseLine, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
-import type { DeckEntry, DuplicateId, History, NewEntry, Next, Pick, Progress, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
+import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
 import type { VersionReport } from '../core/backup/index.ts';
@@ -60,6 +63,23 @@ export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
  * 沒有 since 是單元的當日卡，有 since 是單元的全部卡；deck 加 since 是卡組筆記的全部卡（D-146）。目標集合每次都照 state 現在讀到的內容算。
  */
 export type StudyPick = Pick | { unit: string } | { unit: string; since: number } | { deck: string; since: number };
+/** 考試範圍現在的樣子（tasks/exam-scope.md §3、§4）：入口、目錄與設定畫面都看這一份。 */
+export interface ExamView {
+  /** 第一次的讀取有結果了。false 是「不知道」：寫「暫時讀不到」，不寫「還沒設定」（§4）。 */
+  settled: boolean;
+  /** 列出來或通知過、從來沒讀到的份數。 */
+  missing: number;
+  /** 選定的那一份；沒有是 null。 */
+  path: string | null;
+  file: ScopeFile | null;
+  /** 有讀得懂的行：排程當成有範圍。false 時畫面寫行數（§2-3 第 6 點）。 */
+  usable: boolean;
+  /** 其他也生效的那幾份（設定畫面寫「還有另一份也生效」）。 */
+  others: readonly string[];
+  period: ScopePeriod;
+  /** 今天的日編號（清晨 4 點換日），算倒數用。 */
+  day: number;
+}
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
 
@@ -78,9 +98,9 @@ export interface State {
    */
   ready(): Promise<LoadTimings>;
   /**
-   * 列出來或通知過、但最近一次讀不到的路徑（卡組與紀錄），以及讀取一直沒回來（stuckAfter）的路徑，照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
-   * 不是空的時候占用資訊不完整，補 ID、還原、當成新的都暫停（save、resolve 回 blocked unread，fillIds 回傳 false；
-   * D-134 不能把「不知道」當成「沒用過」）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
+   * 列出來或通知過、但最近一次讀不到的路徑（卡組、紀錄與範圍檔），以及讀取一直沒回來（stuckAfter）的路徑，照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
+   * 卡組與紀錄有讀不到的時候占用資訊不完整，補 ID、還原、當成新的都暫停（save、resolve 回 blocked unread，fillIds 回傳 false；
+   * D-134 不能把「不知道」當成「沒用過」）；只有範圍檔讀不到不擋（tasks/exam-scope.md §4）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
    * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
    */
   unread(): readonly string[];
@@ -92,7 +112,7 @@ export interface State {
    * targets 是讀不懂的紀錄行停掉的學習目標；all 是有一行辨認不出影響範圍，全部學習目標都停。每次重讀都重新判斷。
    */
   blocked(): { decks: readonly string[]; targets: readonly string[]; all: boolean };
-  /** 目前的輸入：decks、history、settings、exam: null、呼叫當下的 now 與 offset。 */
+  /** 目前的輸入：decks、history、settings、選定的考試範圍（沒有或讀不懂是 null）、呼叫當下的 now 與 offset。 */
   input(): TodayInput;
   /** 今天的份；過了清晨 4 點或 offset 變了，先重排。 */
   today(): Today;
@@ -128,7 +148,16 @@ export interface State {
    * （包括這台剛排進寫入的那一行），不是即時狀態。
    */
   version(): { build: string | null; own: 'waiting' | 'same' | 'queued' | 'written' | null; devices: VersionReport[] };
-  /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫。 */
+  /** 考試範圍現在的樣子；還沒 ready 也能問（settled 是 false）。 */
+  exam(): ExamView;
+  /**
+   * 建立或改範圍檔（§2-4）：畫面只交出變動，在 modify 的回呼裡改最新的內容；新檔撞名不蓋掉。有變動才記紀錄（§2-5）。
+   * 寫好後立刻當成現在的內容重排，onChange 只通知一次。closed、loading；範圍檔還不知道或有讀不到的是 unread；回呼看到檔不見或已經結束是 changed；屬性區壞了是 broken。
+   */
+  setExam(change: ExamChange): Promise<ExamResult>;
+  /** 結束這次考試（§2-2）：選定的那一份多一行 `提前結束`，立刻失效；還有另一份生效就換它接手。擋下來的原因同 setExam。 */
+  endExam(): Promise<ExamResult>;
+  /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫；考試範圍只改了看不懂的行數這類只影響畫面的，也會呼叫但不重排。 */
   onChange(listener: () => void): () => void;
   /** unread() 的內容變了（多了或少了）；另外一條，不經 onChange，所以存檔按鈕不多更新一次（任務說明 §8、§11）。 */
   onUnread(listener: () => void): () => void;
@@ -168,6 +197,8 @@ export interface State {
 }
 
 const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
+/** 第一次載入最多等範圍檔多久（毫秒，tasks/exam-scope.md §4）。 */
+const EXAM_WAIT = 2000;
 const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [], held: [], incomplete: false };
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
@@ -200,6 +231,13 @@ export function createState(options: StateOptions): State {
   const life: Life = { loaded: false, closed: false };
   const listeners = new Set<() => void>();
   const unreadListeners = new Set<() => void>();
+  const stuckAfter = options.stuckAfter ?? 30_000;
+  function unreadChanged(): void {
+    if (life.closed) return;
+    for (const listener of [...unreadListeners]) {
+      try { listener(); } catch (error) { report(error, 'listener'); }
+    }
+  }
   const reads = createReads({
     files,
     life,
@@ -208,15 +246,17 @@ export function createState(options: StateOptions): State {
     onError: error => { report(error, 'read'); },
     batch,
     unreadable: path => { writes.unreadable(path); },
-    stuckAfter: options.stuckAfter ?? 30_000,
-    unreadChanged() {
-      if (life.closed) return;
-      for (const listener of [...unreadListeners]) {
-        try { listener(); } catch (error) { report(error, 'listener'); }
-      }
-    },
+    stuckAfter,
+    unreadChanged,
   });
   const unread = reads.unread;
+  const exam = createExamFiles({
+    files, delay, stuckAfter, writeTimeout, random: options.random,
+    onError: error => { report(error, 'read'); },
+    changed: examChanged,
+    unreadChanged,
+    logged: val => { record({ set: 'exam', val }); },
+  });
 
   // 原始紀錄每一行的 lt 由紀錄模組算（history.seen，技術債 A1）；tracker 要 Set，照 history 物件的身分快取一個。
   let seenIds: { of: History; ids: Set<string> } | null = null;
@@ -288,12 +328,22 @@ export function createState(options: StateOptions): State {
   }
   /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（§2-1）。 */
   const blockedText = (path: string, text?: string): boolean => gated.includes(path) || (text !== undefined && needsUpdate(parseDeck(text)));
-  function replan(): void {
-    current = planToday(input());
+  function notifyChange(): void {
     if (life.closed) return;
     for (const listener of [...listeners]) {
       try { listener(); } catch (error) { report(error, 'listener'); }
     }
+  }
+  /** 排今天的份，記下用的是哪一種考試範圍：之後比這個決定要不要重排（§4）。 */
+  function plan(value: TodayInput): Today {
+    const day = dayOf(value.now, value.offset);
+    plannedKey = examPlanKey(day);
+    viewedKey = examViewKey(day);
+    return planToday(value);
+  }
+  function replan(): void {
+    current = plan(input());
+    notifyChange();
   }
   /** 存檔或家長選了之後，state 把這份文字當成這篇卡組現在的內容（tracker 已經比對過），立刻重排。 */
   function adopt(path: string): void {
@@ -321,15 +371,72 @@ export function createState(options: StateOptions): State {
     return pick;
   }
 
+  // ── 考試範圍（tasks/exam-scope.md §3、§4）──
+
+  /** 選定的結果：內容或日子變了才重選。 */
+  let selected: { day: number; revision: number; value: ReturnType<typeof exam.choose> } | null = null;
+  function selection(day: number): ReturnType<typeof exam.choose> {
+    if (selected?.day !== day || selected.revision !== exam.revision()) selected = { day, revision: exam.revision(), value: exam.choose(day) };
+    return selected.value;
+  }
+  /** 範圍換成排程要的樣子：範圍或索引變了才重算，不新建物件。讀不懂的當成沒有範圍。 */
+  let scoped: { file: ScopeFile; index: CatalogIndex; scope: ExamScope } | null = null;
+  function examScope(day: number): ExamScope | null {
+    const { chosen, usable } = selection(day);
+    if (!chosen || !usable) return null;
+    const index = catalogIndex();
+    if (scoped?.file !== chosen.file || scoped.index !== index) {
+      const ids = targetsInScope(chosen.file, index);
+      scoped = { file: chosen.file, index, scope: { contains: (_entry, target) => target.id !== null && ids.has(target.id), hasPeriod: scopePeriod(chosen.file).kind === 'ok' } };
+    }
+    return scoped.scope;
+  }
+  /** 上一次排今天的份時的範圍（只看單元與期間，不看路徑：改名選到同一份不重排）與畫面看到的樣子。 */
+  let plannedKey = '', viewedKey = '';
+  function examPlanKey(day: number): string {
+    const { chosen, usable } = selection(day);
+    if (!chosen || !usable) return '';
+    const units = chosen.file.lines.flatMap(line => line.kind === 'unit' ? [JSON.stringify([line.term, line.subject, line.code])] : []).sort();
+    return JSON.stringify([units, scopePeriod(chosen.file)]);
+  }
+  function examViewKey(day: number): string {
+    const { chosen, usable, others } = selection(day);
+    const file = chosen?.file;
+    return JSON.stringify([exam.settled(), usable, others, file ? [file.id, file.start, file.end, file.lines.map(line => [line.kind, line.raw])] : null]);
+  }
+  /** 範圍檔變了（§4）：單元、期間、生效變了才重排一次；只有看不懂的行數或另一份的路徑變了，只通知畫面；讀到同一份不會到這裡。 */
+  function examChanged(): void {
+    if (!life.loaded || life.closed) return;
+    const at = now(), day = dayOf(at, offsetOf(at));
+    if (examPlanKey(day) !== plannedKey) replan();
+    else if (examViewKey(day) !== viewedKey) {
+      viewedKey = examViewKey(day);
+      notifyChange();
+    }
+  }
+  /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。 */
+  let examWrites: Promise<unknown> = Promise.resolve();
+  function examWrite(work: (day: number) => Promise<ExamResult>): Promise<ExamResult> {
+    const run = examWrites.then((): Promise<ExamResult> | ExamResult => {
+      if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
+      if (!exam.settled() || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
+      const at = now();
+      return work(dayOf(at, offsetOf(at)));
+    });
+    examWrites = run.catch(() => {});
+    return run;
+  }
+
   function input(): TodayInput {
     if (!life.loaded) throw Error('state 還沒 ready');
-    const at = now();
-    return { decks: planList, history, settings, exam: null, now: at, offset: offsetOf(at) };
+    const at = now(), offset = offsetOf(at);
+    return { decks: planList, history, settings, exam: examScope(dayOf(at, offset)), now: at, offset };
   }
   /** 換日或換時區就重排（W4 的 F3：日編號相同、時區不同也要重排）。 */
   function fresh(): { today: Today; input: TodayInput } {
     const value = input();
-    if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) current = planToday(value);
+    if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) current = plan(value);
     return { today: current, input: value };
   }
 
@@ -416,16 +523,20 @@ export function createState(options: StateOptions): State {
   };
   const loadQueue = (paths: string[]): Promise<void> => reads.queue(() => reads.read(paths)).catch((error: unknown) => { queueFailed = true; throw error; });
   async function load(begin: number, deckPaths: string[], logPaths: string[]): Promise<LoadTimings> {
+    // 範圍檔同時開始讀，正常情況第一次就排對；一直沒回來也不卡住 ready()（§4）。
+    const examRead = exam.settle(EXAM_WAIT);
     // 卡組一批、紀錄一批（自己的紀錄也讀），和之後的檔案變動走同一個 read。
     await loadQueue(deckPaths);
     const afterDecks = performance.now();
     await loadQueue(logPaths);
     const afterHistory = performance.now();
     if (life.closed) throw new Closed();
+    await examRead;
+    if (life.closed) throw new Closed();
     // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
     checkApp();
     life.loaded = true;
-    current = planToday(input());
+    current = plan(input());
     const end = performance.now();
     reads.catchUp();
     return { decks: afterDecks - begin, history: afterHistory - afterDecks, plan: end - afterHistory, total: end - begin };
@@ -458,7 +569,7 @@ export function createState(options: StateOptions): State {
       });
       return loading;
     },
-    unread: () => [...unread].sort(),
+    unread: () => [...new Set([...unread, ...exam.unread])].sort(),
     deckStatus: path => !life.loaded ? { missing: 0, issues: [], malformed: [] } : gated.includes(path) ? { missing: 0, issues: [], malformed: [], needsUpdate: true } : tracker.status(path),
     save: editor => writes.enqueue(() => writes.edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
     // 問題已經跟著改名搬到別的路徑：不是這個編輯器的那一篇，不準備（stale）。
@@ -486,7 +597,7 @@ export function createState(options: StateOptions): State {
       const chosen = studyPick(pick);
       const next = nextCard(today, value, chosen);
       if (next.kind !== 'stale') return next;
-      current = planToday(value);
+      current = plan(value);
       return nextCard(current, value, chosen);
     },
     scope(pick) {
@@ -518,6 +629,23 @@ export function createState(options: StateOptions): State {
       if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
       return t;
     },
+    exam() {
+      const at = now(), day = dayOf(at, offsetOf(at));
+      const { chosen, usable, others } = selection(day);
+      return { settled: exam.settled(), missing: exam.missing(), path: chosen?.path ?? null, file: chosen?.file ?? null, usable, others, period: chosen ? scopePeriod(chosen.file) : { kind: 'none' }, day };
+    },
+    setExam(change) {
+      return examWrite(day => {
+        const { chosen } = selection(day);
+        return chosen ? exam.update(chosen.path, change, catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }))) : exam.create(change);
+      });
+    },
+    endExam() {
+      return examWrite(day => {
+        const { chosen } = selection(day);
+        return chosen ? exam.update(chosen.path, { ended: scopeDate(day) }, []) : Promise.resolve({ kind: 'blocked', reason: 'changed' });
+      });
+    },
     onChange(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
@@ -536,6 +664,7 @@ export function createState(options: StateOptions): State {
     async close() {
       life.closed = true;
       reads.stop();
+      exam.stop();
       // 寫成、等核對的工作回 saved（已寫進磁碟的內容下次載入照實讀回）；在寫的那一份等結果明確，最多 writeTimeout（§5）。
       writes.stop();
       await writes.idle();

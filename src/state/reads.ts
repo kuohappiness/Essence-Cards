@@ -37,6 +37,8 @@ export interface ReadsOptions {
   stuckAfter: number;
   /** unread 的內容變了（多了或少了）：只有入口與狀態列的提醒聽，不經 onChange，存檔按鈕等既有的監聽者不受影響。 */
   unreadChanged: () => void;
+  /** 第一次載入要列哪些檔；預設是卡組與紀錄（範圍檔自己一份，tasks/exam-scope.md §3）。 */
+  list?: () => Promise<[string[], string[]]>;
 }
 
 export type Reads = ReturnType<typeof createReads>;
@@ -185,7 +187,7 @@ export function createReads(options: ReadsOptions) {
       const begin = performance.now();
       let lists: [string[], string[]];
       try {
-        lists = await Promise.all([listDeckPaths(files), files.list(LOG_FOLDER).then(paths => paths.filter(isLogPath))]);
+        lists = await (options.list ? options.list() : Promise.all([listDeckPaths(files), files.list(LOG_FOLDER).then(paths => paths.filter(isLogPath))]));
       } catch (error) {
         // 已經關閉時列不出來，是停用中途的結果，不是故障：不報、不重試。
         if (life.closed) throw new Closed({ cause: error });

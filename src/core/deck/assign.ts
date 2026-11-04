@@ -41,6 +41,27 @@ function fixIndent(text: string, skip: ReadonlySet<number> | undefined): string 
   return JSON.stringify(parseDeck(fixed).targets) === JSON.stringify(deck.targets) ? fixed : text;
 }
 
+/** 新的 ID（6 個字元，D-115）：抽到用過的就依字母表順序找下一個，固定 random 也會終止。 */
+export function newId(random: () => number, used: ReadonlySet<string>): string {
+  let id = '';
+  for (let i = 0; i < 6; i++) {
+    const value = random();
+    if (!(value >= 0 && value < 1)) throw Error('random 必須回傳 0（含）到 1（不含）');
+    id += alphabet[Math.floor(value * alphabet.length)];
+  }
+  for (let attempts = 0; used.has(id); attempts++) {
+    if (attempts >= space) throw Error('沒有可用的學習目標 ID');
+    const chars = [...id];
+    for (let i = 5; i >= 0; i--) {
+      const next = (alphabet.indexOf(chars[i]) + 1) % alphabet.length;
+      chars[i] = alphabet[next];
+      if (next) break;
+    }
+    id = chars.join('');
+  }
+  return id;
+}
+
 export function assignIds(text: string, options: AssignOptions): AssignResult {
   // 縮排改正不增減行，skip 的行號照樣對得上。
   const source = fixIndent(text, options.skip);
@@ -57,23 +78,7 @@ export function assignIds(text: string, options: AssignOptions): AssignResult {
   const used = new Set([...options.taken, ...existing, ...named]);
   const random = options.random ?? Math.random;
   function nextId(): string {
-    let id = '';
-    for (let i = 0; i < 6; i++) {
-      const value = random();
-      if (!(value >= 0 && value < 1)) throw Error('random 必須回傳 0（含）到 1（不含）');
-      id += alphabet[Math.floor(value * alphabet.length)];
-    }
-    // 固定 random 也要終止：衝突時從抽到的 ID 依字母表順序找下一個。
-    for (let attempts = 0; used.has(id); attempts++) {
-      if (attempts >= space) throw Error('沒有可用的學習目標 ID');
-      const chars = [...id];
-      for (let i = 5; i >= 0; i--) {
-        const next = (alphabet.indexOf(chars[i]) + 1) % alphabet.length;
-        chars[i] = alphabet[next];
-        if (next) break;
-      }
-      id = chars.join('');
-    }
+    const id = newId(random, used);
     used.add(id);
     return id;
   }

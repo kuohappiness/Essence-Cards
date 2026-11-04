@@ -34,7 +34,7 @@ void test('state 對外只透過 index 匯出 createState 與裝置碼', async (
 });
 void test('deck 對外只透過指定 index 匯出', async () => {
   const module = await import('../src/core/deck/index.ts');
-  assert.deepEqual(Object.keys(module).sort(), ['assignIds', 'baseForm', 'blockIds', 'chapterAlias', 'codeKey', 'headingKey', 'isDeckPath', 'listDeckPaths', 'nameIds', 'parseDeck', 'readDecks', 'readTerm', 'setTargetId', 'sourceLabel', 'sourceLinks', 'splitUnit', 'termKey', 'termRank', 'tidy']);
+  assert.deepEqual(Object.keys(module).sort(), ['assignIds', 'baseForm', 'blockIds', 'chapterAlias', 'codeKey', 'headingKey', 'isDeckPath', 'listDeckPaths', 'nameIds', 'newId', 'parseDeck', 'readDecks', 'readTerm', 'setTargetId', 'sourceLabel', 'sourceLinks', 'splitUnit', 'termKey', 'termRank', 'tidy']);
 });
 
 void test('src 裡只有 study/fsrs.ts 能 import、export、動態 import 或 require ts-fsrs', async () => {
