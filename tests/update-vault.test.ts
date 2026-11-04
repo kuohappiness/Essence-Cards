@@ -41,11 +41,20 @@ void test('考前提醒：前 7 天內、考試期間印提醒並要 --exam-ok�
   assert.deepEqual(remind({}, now), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
 });
 
+void test('考前提醒：讀法和外掛相同：日期的多種寫法認得，提前結束的不算，同一個識別碼的舊副本也不算', () => {
+  const now = at('2026-10-21', '20:00');
+  assert.equal(remind({ a: scope('20261028') }, now).kind, 'soon');
+  assert.equal(remind({ a: scope('2026/10/21') }, now).kind, 'during');
+  const ended = '---\n識別碼: x\n考試開始: 2026-10-22\n提前結束: 2026-10-20\n---\n- 國二上 自然 2-1\n';
+  assert.equal(remind({ a: ended }, now).kind, 'none');
+  assert.equal(remind({ a: ended, b: '---\n識別碼: x\n考試開始: 2026-10-22\n---\n- 國二上 自然 2-1\n' }, now).kind, 'none');
+});
+
 void test('考前提醒：沒填日期是日期未定；讀不到（讀不到檔、屬性區壞了、日期寫法不對）照實說，不當成沒有考試', () => {
   const now = at('2026-10-21', '20:00');
   assert.deepEqual(remind({ a: scope() }, now), { kind: 'undated', needsOk: false, message: '考試範圍「a」還沒填考試日期，日期未定' });
   assert.equal(remind({ a: scope(), b: scope('2026-12-20') }, now).kind, 'none');
-  for (const text of [null, '---\n考試開始: [\n---\n', '---\n考試開始: 2026-10-28\n', '---\n考試開始: 2026/10/28\n---\n', '---\n考試開始: 2026-02-30\n---\n']) {
+  for (const text of [null, '---\n考試開始: [\n---\n', '---\n考試開始: 2026-10-28\n', '---\n考試開始: 10/28\n---\n', '---\n考試開始: 2026-02-30\n---\n']) {
     const result = remind({ a: text }, now);
     assert.deepEqual([result.kind, result.needsOk], ['unreadable', true], String(text));
     assert.match(result.message, /不當成沒有考試/);
