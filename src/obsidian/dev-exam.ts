@@ -2,7 +2,7 @@ import { MarkdownView, type App, type TFile } from 'obsidian';
 import { EXAM_FOLDER, scopeDate } from '../core/catalog/index.ts';
 import { capturePng, keepRendering } from './dev-review.ts';
 import { buttonOf, focusOk, inEntry, screens, sleep, text, until, type EntryDevHost } from './dev-entry.ts';
-import { clearTrial, makeTrial, newTrial, noteFolder, type Trial } from './dev-exam-files.ts';
+import { clearTrial, makeTrial, newTrial, noteFolder, noteScope, type Trial } from './dev-exam-files.ts';
 
 // 考試範圍的 Windows 實機（tasks/exam-scope.md §10）：只在電腦。在測試 vault 建暫時的卡組，走完設定、倒數、目錄標籤、外部修改、§8 的點開與結束，截圖對照樣式稿，結束時只清掉有建立證據的檔（dev-exam-files.ts）。
 // do=run 一次走完。獨占鎖要 PowerShell 配合，分段跑：do=prep → run=reload → do=reopen → （鎖住）do=lock-on → （放開）do=lock-off → do=clean。
@@ -96,18 +96,21 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
   const already = new Set(scopeFiles(app).map(file => file.path));
   const refused = { error: '測試 vault 已經有範圍檔，不動它', files: [...already] };
   const trial = newTrial();
-  /** 這次建的卡組都寫上這個記號，清的時候核對（R12）。 */
-  const mark = '試跑: ' + Math.random().toString(36).slice(2, 10);
-  const marked = Object.fromEntries(Object.entries(FILES).map(([path, text]) => [path, text.replace('---\n', `---\n${mark}\n`)]));
+  /** 這次建的卡組都寫上這個記號，清的時候核對（R12）；科目也是這次才有的，存下的範圍檔靠它認（R19）。 */
+  const run = Math.random().toString(36).slice(2, 10);
+  const mark = '試跑: ' + run, subject = SUBJECT + run;
+  const marked = Object.fromEntries(Object.entries(FILES).map(([path, text]) => [path, text.replaceAll(SUBJECT, subject).replace('---\n', `---\n${mark}\n`)]));
   /** 分段跑的建立證據：`do=prep` 記下，`do=clean` 照它刪，跨過重新載入外掛。 */
   const proof = folder.slice(0, folder.lastIndexOf('/')) + '/exam 建立的檔.json';
-  /** 這次按「確定」存下的範圍檔：看存完選定的那一份，不掃資料夾（別的分支留下、同步才到的也寫著測試科目，R12）。 */
-  const noteScope = (): void => {
-    const { path, file } = state.exam();
-    if (!path || !file?.id || already.has(path) || trial.files.some(each => each.path === path)) return;
-    if (file.lines.some(line => line.kind === 'unit' && line.subject === SUBJECT)) trial.files.push({ path, mark: '識別碼: ' + file.id });
-  };
   const adapter = app.vault.adapter;
+  /** 分段跑的後面幾步：建立紀錄裡的那一份範圍檔，不是資料夾的第一份（R19）。 */
+  const provenScope = async (): Promise<TFile> => {
+    const saved = JSON.parse(await adapter.read(proof)) as Trial;
+    const path = saved.files.find(each => each.path.startsWith(EXAM_FOLDER + '/'))?.path;
+    const file = path ? app.vault.getFileByPath(path) : null;
+    if (!file) throw Error('建立的紀錄裡沒有範圍檔');
+    return file;
+  };
   try {
     if (action === 'prep') {
       if (already.size) return refused;
@@ -125,7 +128,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       check('勾好了', checkedRows());
       check('開始日期', fieldOf('考試開始')?.value);
       await confirm();
-      noteScope();
+      await noteScope(app, trial, EXAM_FOLDER, subject);
       check('存完的畫面', text(inEntry('.ec-en-title')[0]));
       check('紅字', inEntry('.ec-sc-word.is-bad').map(text));
       check('通知', notices());
@@ -141,7 +144,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       return { checks };
     }
     if (action === 'lock-on') {
-      const [file] = scopeFiles(app);
+      const file = await provenScope();
       app.vault.trigger('modify', file);
       check('讀不到的清單', await until(() => state.unread().includes(file.path), 5000));
       host.openEntry();
@@ -173,7 +176,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       return { checks, shots };
     }
     if (action === 'lock-off') {
-      const [file] = scopeFiles(app);
+      const file = await provenScope();
       check('放開後恢復', await until(() => !state.unread().includes(file.path), 70_000));
       host.openEntry();
       await until(() => inEntry('.ec-en-today').length === 1);
@@ -246,13 +249,12 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     check('整章連動', checkedRows());
     await capture('設定 勾好了');
     await confirm();
-    noteScope();
+    const scope = await noteScope(app, trial, EXAM_FOLDER, subject);
     check('存完回入口', inEntry('.ec-en-today').length === 1);
     check('通知', notices().filter(each => each.includes('考試範圍')));
     await capture('入口 倒數');
-    check('倒數', inEntry('.ec-sb').map(row => [text(row.querySelector('.ec-en-name')), text(row.querySelector('.ec-sb-ex'))]).filter(([name]) => name === SUBJECT || name === '考試英文'));
+    check('倒數', inEntry('.ec-sb').map(row => [text(row.querySelector('.ec-en-name')), text(row.querySelector('.ec-sb-ex'))]).filter(([name]) => name === subject || name === '考試英文'));
     check('那一列', text(scopeRow()));
-    const [scope] = scopeFiles(app);
     const path = scope.path;
     const first = await app.vault.read(scope);
     check('檔名', path);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
-import { clearTrial, makeTrial, newTrial, noteFolder } from '../src/obsidian/dev-exam-files.ts';
+import { clearTrial, makeTrial, newTrial, noteFolder, noteScope } from '../src/obsidian/dev-exam-files.ts';
 
 // 開發命令只清有建立證據的檔（Codex L2 的 R1）：共用的測試 vault 裡別人的檔，拒跑、建到一半失敗、清理時都不能少。
 
@@ -25,6 +25,7 @@ function disk(files: Record<string, string> = {}, folders: string[] = []): Disk 
       return Promise.resolve();
     },
     getFileByPath: (path: string) => map.has(path) ? { path } : null,
+    getFiles: () => [...map.keys()].map(path => ({ path })),
     read(file: { path: string }) {
       return refuse.has(file.path) ? Promise.reject(Error('讀不到：' + file.path)) : Promise.resolve(map.get(file.path) ?? '');
     },
@@ -83,6 +84,32 @@ void test('分段跑：證據寫成 JSON 再讀回來，一樣只清記著的', 
   assert.deepEqual(await clearTrial(d.app, JSON.parse(JSON.stringify(trial)) as typeof trial, 0), ['範圍']);
   assert.deepEqual([...d.files.keys()], ['範圍/同步來的.md']);
   assert.equal(await noteFolder(d.app, newTrial(), '範圍'), false, '已經在的不算這次建的');
+});
+
+void test('記下這次存的範圍檔：認這次才有的科目；別次試跑同步進來的不記，清理也不會刪（R19）', async () => {
+  const other = '---\n識別碼: other2\n---\n- 高三下 考試測試zzz 1-1\n';
+  const mine = '---\n識別碼: mine22\n---\n- 高三下 考試測試abc 1-1\n';
+  const d = disk({ '範圍/別次的.md': other, '範圍/這次的.md': mine, 'T/卡組.md': '科目: 考試測試abc' });
+  const trial = newTrial();
+  const file = await noteScope(d.app, trial, '範圍', '考試測試abc');
+  assert.equal(file.path, '範圍/這次的.md');
+  assert.deepEqual(trial.files, [{ path: '範圍/這次的.md', mark: '識別碼: mine22' }]);
+  d.files.set('範圍/這次的.md', mine + '- 流程改過\n');
+  assert.equal(await clearTrial(d.app, trial, 0), true);
+  assert.deepEqual([...d.files.keys()], ['範圍/別次的.md', 'T/卡組.md']);
+});
+
+void test('認不出這次存的範圍檔（沒有、不只一份、沒有識別碼）：丟錯，什麼都不記', async () => {
+  const cases: Record<string, string>[] = [
+    { '範圍/別次的.md': '---\n識別碼: other2\n---\n- 高三下 考試測試zzz 1-1\n' },
+    { '範圍/甲.md': '---\n識別碼: aaaaaa\n---\n- 高三下 考試測試abc 1-1\n', '範圍/乙.md': '---\n識別碼: bbbbbb\n---\n- 高三下 考試測試abc 1-1\n' },
+    { '範圍/甲.md': '- 高三下 考試測試abc 1-1\n' },
+  ];
+  for (const files of cases) {
+    const trial = newTrial();
+    await assert.rejects(noteScope(disk(files).app, trial, '範圍', '考試測試abc'), /認不出這次存的範圍檔/);
+    assert.deepEqual(trial.files, []);
+  }
 });
 
 void test('同一個路徑被同步換成別的檔：路徑對、內容不是這次的，留著、回報出來；分段跑也一樣', async () => {

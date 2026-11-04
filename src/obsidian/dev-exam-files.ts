@@ -1,4 +1,5 @@
-import type { App } from 'obsidian';
+import type { App, TFile } from 'obsidian';
+import { parseScope } from '../core/catalog/index.ts';
 
 // 開發命令 exam 在測試 vault 建的暫時檔（tasks/exam-scope.md §10）：只清有建立證據的。共用的測試 vault 可能有別的分支留下、同步才到的檔，不能看到就刪（Codex L2 的 R1）。
 
@@ -24,6 +25,23 @@ export async function makeTrial(app: App, trial: Trial, folder: string, wanted: 
     await app.vault.create(path, content);
     trial.files.push({ path, mark });
   }
+}
+
+/**
+ * 記下這次按「確定」存下的範圍檔：內容寫著這次才有的字（subject）的那一份。別次試跑、同步進來的不會有，不會被認成自己的（Codex L2 的 R19）。
+ * 不是剛好一份就丟錯，什麼都不記：試跑停下來，沒記的檔留著。記號用識別碼：之後流程會改這個檔，這一行不變。
+ */
+export async function noteScope(app: App, trial: Trial, folder: string, subject: string): Promise<TFile> {
+  const made: { file: TFile; text: string }[] = [];
+  for (const file of app.vault.getFiles()) {
+    if (!file.path.startsWith(folder + '/')) continue;
+    const text = await app.vault.read(file);
+    if (text.includes(subject)) made.push({ file, text });
+  }
+  const id = made.length === 1 ? parseScope(made[0].text).id : null;
+  if (id === null) throw Error(`認不出這次存的範圍檔（寫著 ${subject} 的有 ${String(made.length)} 份）`);
+  trial.files.push({ path: made[0].file.path, mark: '識別碼: ' + id });
+  return made[0].file;
 }
 
 /** 只刪記著、內容還是這次的檔；記著的資料夾空了才刪。回報 true，或還留著的路徑（別人的檔、讀不到的不猜，留著也要看得到）。 */
