@@ -8,7 +8,7 @@
 
 ## 基準
 
-分支 `claude/exam-scope-c0f437`，這份請求所在的 commit（`git log -1 --format=%h -- tasks/exam-scope-format-review.md`）；工作目錄是 `.claude/worktrees/busy-meitner-e52ff7`。`docs/syntax.md` 的 §2-5、§4、§5 還沒改，要等這次查核的結果：任務說明寫的是提案，和 syntax 不一致的地方請判斷該改哪一邊。
+分支 `claude/exam-scope-c0f437` 的最新 commit，hash 寫進報告；工作目錄是 `.claude/worktrees/busy-meitner-e52ff7`。`docs/syntax.md` 的 §2-5、§4、§5 還沒改，要等這次查核的結果：任務說明寫的是提案，和 syntax 不一致的地方請判斷該改哪一邊。
 
 只讀：任務說明 §1、§2、§3、§4、§8；[D-176](../docs/decisions.md#d-176-考試範圍第二批的選擇手改的範圍檔不默默失效提前結束立刻失效)、[D-098](../docs/decisions.md#d-098-考試範圍只用在大考日期改成考試期間)、[D-105](../docs/decisions.md#d-105-回測要用的紀錄先收好)、[D-115](../docs/decisions.md#d-115-回頭查要用的證據先收好)、[D-142](../docs/decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-033](../docs/decisions.md#d-033-教材目錄)、[D-170](../docs/decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)；[syntax.md §2-5、§4、§5](../docs/syntax.md#4-考試範圍)；`src/core/deck/sources.ts`、`src/core/study/entries.ts`、`src/core/catalog/index.ts`、`src/state/reads.ts`。不用讀任務說明的畫面細節（§6、§7），除非查核時用得到。
 
