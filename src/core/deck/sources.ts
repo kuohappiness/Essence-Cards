@@ -35,7 +35,7 @@ export interface SourceOwner { term: string | null; subject: string | null; unit
 
 const ZERO_WIDTH = /[\u200B\u200C\u200D\uFEFF]/g;
 
-function tidy(text: string): string {
+export function tidy(text: string): string {
   return text
     .replace(ZERO_WIDTH, '')
     .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
@@ -120,7 +120,7 @@ export function termRank(term: string): number | null {
 }
 
 /** 開頭的年級學期；`二上`、`第三冊`、`B2` 要靠學制或教材才知道，不認（D-170 第 4 點）。 */
-function readTerm(text: string): { term: string; length: number } | null {
+export function readTerm(text: string): { term: string; length: number } | null {
   const named = /^(國小|小學|國中|高中|小|國|高) ?([一二三四五六1-6]) ?(?:年級)? ?\(? ?([上下])(?: ?\))?(?: ?(?:學期|冊))?/.exec(text);
   if (named) {
     const grade = /\d/.test(named[2]) ? ZH_GRADE[Number(named[2]) - 1] : named[2];
@@ -157,7 +157,7 @@ const PLACE_START = /^(?:(?:pp?|pg|page)\.? ?\d|第 ?\S*? ?頁|\d+(?: ?[-~至到
 
 const CHAPTER = new RegExp(`第 ?(${NUMBER}) ?章(?: ?第 ?(${NUMBER}) ?節)?`, 'g');
 /** 字裡的 `第1章第3節`、`第2章` 換成編號；中文數字寫法不對的留原字。 */
-function chapterAlias(text: string): string {
+export function chapterAlias(text: string): string {
   return text.replace(CHAPTER, (match, a: string, b: string | undefined) => {
     const first = toNumber(a), second = b === undefined ? null : toNumber(b);
     if (first === null || (b !== undefined && second === null)) return match;
