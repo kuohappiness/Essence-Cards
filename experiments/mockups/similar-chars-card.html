@@ -3,7 +3,7 @@
 <style>
 /* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
    字用裝置的系統字型，和外掛的卡片一樣是黑體，不載入字型（D-180）。
-   畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線；填好的字和句子同色，沒有邊框（D-182 第 8 點）。 */
+   畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線；填好的字和句子同色，底線回到灰色（D-182 第 8 點）。 */
 :root{
   --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
   --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
@@ -43,7 +43,6 @@ h1{font-size:27px;line-height:1.3;margin:0;text-wrap:balance}
 .slot{appearance:none;display:inline-block;background:none;border:0;border-bottom:2px solid var(--muted);padding:0;margin:0 3px;width:1.9em;
   line-height:1.3;color:var(--ink);text-align:center;vertical-align:baseline;cursor:pointer}
 .row.on .slot{border-bottom-color:var(--key);box-shadow:0 1px 0 var(--key)}
-.slot.filled,.slot.right,.slot.near,.slot.miss{border-bottom-color:transparent}
 .slot.right{color:var(--good)}
 .slot.near{color:var(--near)}
 .slot.miss{color:var(--miss)}
@@ -270,10 +269,9 @@ function slotContent(slot, blank) {
   if (blank.status === 'right') { slot.textContent = blank.pick; slot.classList.add('right'); return; }
   if (blank.status === 'retry') { const s = document.createElement('s'); s.textContent = blank.first; slot.replaceChildren(s); return; }
   if (blank.status === 'near') { slot.textContent = blank.pick; slot.classList.add('near'); return; }
-  if (blank.status === 'miss') { slot.textContent = '？'; slot.classList.add('unknown', 'filled'); return; }
-  if (blank.pick === '?') { slot.textContent = '？'; slot.classList.add('unknown', 'filled'); return; }
+  if (blank.status === 'miss') { slot.textContent = '？'; slot.classList.add('unknown'); return; }
+  if (blank.pick === '?') { slot.textContent = '？'; slot.classList.add('unknown'); return; }
   slot.textContent = blank.pick || '　';
-  slot.classList.toggle('filled', Boolean(blank.pick));
 }
 
 function markFor(status) {
