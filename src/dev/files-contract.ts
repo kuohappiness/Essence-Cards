@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 
 /**
- * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4）。Node 的測試與 Obsidian 的開發命令跑同一份；
+ * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4；C18 是 tasks/exam-scope.md §2-4）。Node 的測試與 Obsidian 的開發命令跑同一份；
  * 改名與刪除不在 Files 介面裡，由兩邊各自提供（Node 用 node:fs，Obsidian 用 vault.rename、vault.delete）。
  */
 export interface ContractOps {
@@ -113,6 +113,17 @@ export const contractCases: readonly ContractCase[] = [
       same(await files.read(path), 'before', '丟錯之後');
       await files.modify(path, text => text + ' after');
       same(await files.read(path), 'before after', '下一次 modify');
+    },
+  },
+  {
+    // 範圍檔被刪掉時，改動不能變成建立一份新的（tasks/exam-scope.md §2-4）。
+    code: 'C18', title: '不存在的檔，edit 丟出錯誤：modify reject、不建立，下一次照常',
+    async run({ files, dir }) {
+      const path = `${dir}/c18.md`;
+      await rejects(() => files.modify(path, () => { throw Error('停止'); }), 'edit 丟錯時 modify');
+      same(await files.read(path), null, '丟錯之後');
+      await files.modify(path, () => 'after');
+      same(await files.read(path), 'after', '下一次 modify');
     },
   },
   {
