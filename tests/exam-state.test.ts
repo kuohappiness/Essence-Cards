@@ -159,6 +159,18 @@ void test('回呼看到檔不見或已經結束、屬性區壞了：不寫、不
   assert.equal((await failing.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] })).kind, 'failed');
 });
 
+void test('畫面改了開始日，別台同時把結束日改得更早：不寫、不記，期間沒有變成有問題', async t => {
+  const h = make(t, { ...DECKS, [SCOPE]: scopeText('2026-10-21', '2026-10-28') });
+  await ready(t, h);
+  const changed = scopeText('2026-10-21', '2026-10-25');
+  h.memory.texts.set(SCOPE, changed);
+  assert.deepEqual(await h.state.setExam({ start: '2026-10-27' }), { kind: 'blocked', reason: 'dates' });
+  assert.equal(h.memory.texts.get(SCOPE), changed);
+  assert.deepEqual(h.logged().filter(entry => entry.set === 'exam'), []);
+  await tick(t);
+  assert.equal(h.state.exam().period.kind, 'ok');
+});
+
 void test('還沒 ready 與關閉之後擋下來', async t => {
   const h = make(t, DECKS);
   assert.deepEqual(await h.state.setExam({}), { kind: 'blocked', reason: 'loading' });

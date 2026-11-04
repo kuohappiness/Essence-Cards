@@ -413,6 +413,17 @@ void test('§6 結束這次考試：有生效的範圍才有，第二下才生�
 
 // ── §7 入口 ──
 
+void test('§6 別處同時把結束日改得更早：寫原因、留在畫面上，打的日期不丟', async t => {
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-21', '2026-10-28', '- 國二上 自然 2-1') });
+  await s.type('考試開始', '2026-10-27');
+  s.texts.set(FOLDER + 'a.md', scopeText('2026-10-21', '2026-10-25', '- 國二上 自然 2-1'));
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.equal(s.all('.ec-sc-word.is-bad')[0]?.textContent, '別處改了日期，開始日會晚於結束日，這次沒有存；請重新打開這個畫面');
+  assert.equal(s.field('考試開始').value, '2026-10-27');
+  assert.ok(s.scope()?.includes('考試開始: 2026-10-21'));
+});
+
 void test('§7 入口：倒數只有範圍寫到的科目、數字粗體；期間；一科一行；範圍外的科目沒有', async t => {
   const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '2026-10-29', '- 國二上 自然 2-1', '- 國二上 自然 2-2') }, 'entry');
   assert.deepEqual(s.all('.ec-sb').map(row => [row.querySelector('.ec-en-name')?.textContent, row.querySelector('.ec-sb-ex')?.textContent ?? null]), [['自然', '距離考試：12 天'], ['英文', null]]);

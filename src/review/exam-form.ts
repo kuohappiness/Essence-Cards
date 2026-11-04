@@ -146,6 +146,7 @@ export function examFailure(result: Exclude<ExamResult, { kind: 'done' }>): stri
     unread: '考試範圍暫時讀不到，等一下再試',
     changed: '範圍檔被改名、刪除或已經結束，請重新打開這個畫面',
     broken: '範圍檔的屬性區寫壞了，或不是一行一個屬性，請先修好再設定',
+    dates: '別處改了日期，開始日會晚於結束日，這次沒有存；請重新打開這個畫面',
     closed: '外掛正在關閉，這次沒有存',
   }[result.reason];
 }

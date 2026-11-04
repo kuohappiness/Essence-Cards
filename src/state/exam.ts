@@ -16,7 +16,7 @@ export type ExamChange = Pick<ScopeChange, 'add' | 'remove' | 'start' | 'end'>;
 /** done 是寫好了（或本來就沒有要改的）；blocked 的原因畫面要寫出來，已勾的不丟。 */
 export type ExamResult =
   | { kind: 'done' }
-  | { kind: 'blocked'; reason: 'loading' | 'closed' | 'unread' | 'changed' | 'broken' }
+  | { kind: 'blocked'; reason: 'loading' | 'closed' | 'unread' | 'changed' | 'broken' | 'dates' }
   | { kind: 'failed'; error: unknown };
 
 interface ExamFilesOptions {
@@ -35,8 +35,8 @@ interface ExamFilesOptions {
 
 /** 回呼裡擋下來的（§2-4）：丟錯才不會建立或寫入。 */
 class ScopeBlocked extends Error {
-  readonly reason: 'changed' | 'broken';
-  constructor(reason: 'changed' | 'broken') { super('範圍檔不能寫：' + reason); this.reason = reason; }
+  readonly reason: 'changed' | 'broken' | 'dates';
+  constructor(reason: 'changed' | 'broken' | 'dates') { super('範圍檔不能寫：' + reason); this.reason = reason; }
 }
 
 /** 紀錄行的欄位（§2-5）：讀得懂的每一行，照檔案的順序，只留年級學期、科目、編號。 */

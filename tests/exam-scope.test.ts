@@ -411,7 +411,7 @@ void test('先取消再新勾：同一次按確定', () => {
 void test('日期：畫面改了的寫新值，沒改的標準化，看不懂的留原字，清空就刪；註解與別的屬性不動', () => {
   const file = '---\n# 手寫的註解\n識別碼: x\n考試開始: 20261028 # 第一天\n老師: 王\n考試結束: 2026/10/29\n---\n- 國二上 自然 2\n';
   assert.equal(edit(file, {}), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-10-28 # 第一天\n老師: 王\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n');
-  assert.equal(edit(file, { start: '2026-11-01' }), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-11-01 # 第一天\n老師: 王\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n');
+  assert.equal(edit(file, { start: '2026-10-20' }), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-10-20 # 第一天\n老師: 王\n考試結束: 2026-10-29\n---\n- 國二上 自然 2\n');
   assert.equal(edit(file, { end: null }), '---\n# 手寫的註解\n識別碼: x\n考試開始: 2026-10-28 # 第一天\n老師: 王\n---\n- 國二上 自然 2\n');
   assert.equal(edit('---\n考試開始: 10/28\n---\n', {}), '---\n考試開始: 10/28\n---\n', '看不懂的留原字');
   assert.equal(edit('---\n考試開始: 2026.10.28\n---\n', {}), '---\n考試開始: 2026-10-28\n---\n', '值沒變、只是寫法不同也寫成標準');
@@ -480,6 +480,23 @@ void test('寫得回去的單元才能勾：讀回來要是同一個', () => {
 });
 
 // ── 共用範例：登錄過的每個檔（要放在最後）──
+
+void test('日期套到最新的內容上變成開始晚於結束：不寫；家長原本的值，畫面沒改就留著', () => {
+  const latest = '---\n識別碼: x\n考試開始: 2026-10-21\n考試結束: 2026-10-25\n---\n- 國二上 自然 2\n';
+  const dates = { kind: 'blocked', reason: 'dates' };
+  assert.deepEqual(editScope(latest, { start: '2026-10-27' }, []), dates, '畫面把開始改成 10/27，別台把結束改成 10/25');
+  assert.deepEqual(editScope(latest, { end: '2026-10-20' }, []), dates);
+  assert.deepEqual(editScope(latest, { start: '2026-10-27', add: units('3') }, []), dates, '一起勾的也不寫');
+  assert.equal(edit(latest, { start: '2026-10-25' }), latest.replace('10-21', '10-25'), '同一天可以');
+  assert.equal(edit(latest, { start: '2026-10-27', end: '2026-10-28' }), latest.replace('10-21', '10-27').replace('10-25', '10-28'), '兩邊都改的是對的');
+  assert.equal(edit(latest, { start: null }), latest.replace('考試開始: 2026-10-21\n', ''));
+  const inverted = '---\n識別碼: x\n考試開始: 2026-10-30\n考試結束: 2026-10-25\n---\n- 國二上 自然 2\n';
+  assert.equal(edit(inverted, { add: units('3') }), inverted + '- 國二上 自然 3\n', '畫面沒改日期：原本的留著，日期有問題照舊寫出來');
+  assert.deepEqual(editScope(inverted, { start: '2026-10-29' }, []), dates, '畫面改了還是不對');
+  assert.equal(edit(inverted, { start: '2026-10-20' }), inverted.replace('10-30', '10-20'), '改對了就寫');
+  const other = '---\n考試開始: 2026-10-21\n考試結束: 10/25\n---\n';
+  assert.equal(edit(other, { start: '2026-10-27' }), other.replace('10-21', '10-27'), '另一邊看不懂：留原字，不算這次造成的');
+});
 
 void test('屬性區不是一行一個屬性：只有要改的變了才寫，帶走別的屬性就不寫', () => {
   const blocked = { kind: 'blocked', reason: 'broken' };

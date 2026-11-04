@@ -241,7 +241,7 @@ export interface ScopeChange {
   /** 還沒有識別碼時補這個。 */
   id?: string;
 }
-type ScopeEdit = { kind: 'ok'; text: string } | { kind: 'blocked'; reason: 'changed' | 'broken' };
+type ScopeEdit = { kind: 'ok'; text: string } | { kind: 'blocked'; reason: 'changed' | 'broken' | 'dates' };
 interface RawLine { raw: string; eol: string }
 
 function linesWithEnds(text: string): RawLine[] {
@@ -365,8 +365,7 @@ function otherProps(text: string): string {
   return JSON.stringify(Object.entries((head && headValues(head.raw)) ?? {}).filter(([key]) => !OWN_KEYS.has(key)));
 }
 /** 讀回來是不是要的結果（§2-4）：只有這次要改的變了。清單以外的寫法（`{考試開始: 2026-10-28}`、`|`）一行一行地改，可能改壞，也可能帶走別的屬性。 */
-function headAsWanted(text: string, result: string, change: ScopeChange, before: ScopeFile): boolean {
-  const after = parseScope(result);
+function headAsWanted(text: string, result: string, after: ScopeFile, change: ScopeChange, before: ScopeFile): boolean {
   const wanted = (read: ScopeDate, value: string | null | undefined): ScopeDate => value === undefined ? read : value === null ? { kind: 'none' } : { kind: 'ok', date: value };
   return !after.broken && after.id === (before.id ?? change.id ?? null) && after.ended === (change.ended !== undefined)
     && JSON.stringify(after.start) === JSON.stringify(wanted(before.start, change.start))
@@ -400,7 +399,12 @@ export function editScope(text: string, change: ScopeChange, units: readonly Sco
   const endedWithEol = lines.length === 0 || lines[lines.length - 1].eol !== '';
   const output = all.map((line, index) => ({ raw: line.raw, eol: index === all.length - 1 ? (endedWithEol ? line.eol || eol : '') : line.eol || eol }));
   const result = bom + output.map(line => line.raw + line.eol).join('');
-  return headAsWanted(text, result, change, before) ? { kind: 'ok', text: result } : { kind: 'blocked', reason: 'broken' };
+  const after = parseScope(result);
+  if (!headAsWanted(text, result, after, change, before)) return { kind: 'blocked', reason: 'broken' };
+  // 畫面只看得到打開時的另一邊：套到最新的內容上才變成開始晚於結束（別台改了另一邊），不寫（§2-4）。畫面沒改日期時，家長原本的值照舊留著。
+  const inverted = after.start.kind === 'ok' && after.end.kind === 'ok' && after.start.date > after.end.date;
+  if (inverted && (change.start != null || change.end != null)) return { kind: 'blocked', reason: 'dates' };
+  return { kind: 'ok', text: result };
 }
 
 /** 新檔的內容。 */
