@@ -200,6 +200,8 @@ void test('D-145 背面補充的名稱自己一行：一到六個字、不含空
   assert.deepEqual(extraLabel('![[W6 擴散示意圖.svg]]'), { label: null, body: '![[W6 擴散示意圖.svg]]' });
   assert.deepEqual(extraLabel('**記憶錨點**：粗體'), { label: null, body: '**記憶錨點**：粗體' }, '有 Markdown 記號：照原文');
   assert.deepEqual(extraLabel('記憶錨點：'), { label: null, body: '記憶錨點：' }, '冒號後面沒有內容：照原文');
+  assert.deepEqual(extraLabel('記憶錨點：\n    - 甲；\n    - 乙。\n    - 丙。'), { label: '記憶錨點', body: '- 甲；\n- 乙。\n- 丙。' }, 'D-185 寫在名稱底下的子項目：同一層，不會變成第一行的下一層');
+  assert.deepEqual(extraLabel('詳解：\n    - 甲\n        - 乙'), { label: '詳解', body: '- 甲\n    - 乙' }, '真的有下一層的照留');
 });
 
 void test('D-145 冠詞和後面的字連在一起換行：a、an、the 後面的空白換成不斷行空白', () => {
