@@ -27,12 +27,22 @@ const boxOf = (label: string): HTMLInputElement | null => {
 };
 const checkedRows = (): string[] => inEntry('.ec-sc-u').filter(each => isBox(each)?.checked).map(each => text(each.querySelector('.ec-sc-name span')));
 const fieldOf = (name: '考試開始' | '考試結束'): HTMLInputElement | null => inEntry('input[type="text"]').find(each => each.getAttribute('aria-label') === name) as HTMLInputElement | undefined ?? null;
-function typeInto(input: HTMLInputElement | null, value: string, leave = true): void {
+/** blur() 沒有發事件的次數：Obsidian 的視窗沒有焦點時（使用者在別的視窗），focus()、blur() 不發事件。 */
+let silentBlurs = 0;
+function typeInto(input: HTMLInputElement | null, value: string): void {
   if (!input) return;
   input.focus();
   Reflect.set(Object.getPrototypeOf(input) as object, 'value', value, input);
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  if (leave) input.blur();
+  let left = false;
+  const mark = (): void => { left = true; };
+  input.addEventListener('focusout', mark, { once: true });
+  input.blur();
+  input.removeEventListener('focusout', mark);
+  if (left) return;
+  // 補上離開欄位的事件（React 的 onBlur 聽 focusout），這樣結果不看使用者正在用哪個視窗。
+  silentBlurs++;
+  input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
 }
 const notices = (): string[] => Array.from(document.querySelectorAll('.notice'), text);
 const scopeRow = (): HTMLElement | undefined => inEntry('.ec-sc-row')[0];
@@ -207,6 +217,8 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     typeInto(fieldOf('考試開始'), soon.replace(/-/g, ''));
     await sleep(100);
     check('打 YYYYMMDD 離開欄位變標準格式', fieldOf('考試開始')?.value === soon);
+    check('視窗有焦點', document.hasFocus());
+    check('blur 沒有發事件的次數', silentBlurs);
     const pick = inEntry('input[type="date"]')[1] as HTMLInputElement | undefined;
     if (pick) {
       Reflect.set(Object.getPrototypeOf(pick) as object, 'value', later, pick);
