@@ -396,6 +396,8 @@ R23、R24、R25 都在技術債，觸發點到了再做。
 
 ### 驗證
 
-- Windows、Node 24.13.0，把 `main` 併進分支後（`6994812`）的完整 `npm run check`：exit 0，1372 項全過。`main` 這段只有文件與決定索引，`src`、`tests`、`tools` 和 `1a7d61b` 相同。
+- Windows、Node 24.13.0，把 `main` 併進分支、寫完本節後（`b4f688e`）的完整 `npm run check`：exit 0，1372 項全過。`main` 這段只有文件與決定索引，`src`、`tests`、`tools` 和 `1a7d61b` 相同。
+- 這之前在 `6994812` 跑的那一次沒過（exit 1，1367 項，2 項失敗）：`tests/quality.test.ts` 讀檔時 `UNKNOWN: unknown error, read`，`tests/state-unread.test.ts` 整個檔一開始就掛掉。同一段時間別的指令也當掉，或出現 `fork: Resource temporarily unavailable`。程式相同，單獨重跑這兩個檔 23 項全過，再跑完整檢查也全過，所以判斷是當時機器資源不夠，確切原因沒有查出來。
+- **更正**：本節第一版（`b4f688e`）在這裡寫 `6994812` 全過，那是我沒看結果就先填的，是錯的。
 - Windows 實機用 `1a7d61b`（見〈Claude 回應：第四輪〉），程式之後沒有再改，所以沒有重跑。
 - 沒跑：iPhone 與兩台 iCloud 同步，記在 [backlog](../docs/backlog.md)，併入下一次實機測試。
