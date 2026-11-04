@@ -96,22 +96,24 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
   const already = new Set(scopeFiles(app).map(file => file.path));
   const refused = { error: '測試 vault 已經有範圍檔，不動它', files: [...already] };
   const trial = newTrial();
+  /** 這次建的卡組都寫上這個記號，清的時候核對（R12）。 */
+  const mark = '試跑: ' + Math.random().toString(36).slice(2, 10);
+  const marked = Object.fromEntries(Object.entries(FILES).map(([path, text]) => [path, text.replace('---\n', `---\n${mark}\n`)]));
   /** 分段跑的建立證據：`do=prep` 記下，`do=clean` 照它刪，跨過重新載入外掛。 */
   const proof = folder.slice(0, folder.lastIndexOf('/')) + '/exam 建立的檔.json';
-  /** 流程建立的範圍檔：開始時沒有，內容寫到測試科目。 */
-  async function noteScopes(): Promise<void> {
-    for (const file of scopeFiles(app)) {
-      if (already.has(file.path) || trial.files.includes(file.path)) continue;
-      if ((await app.vault.read(file)).includes(SUBJECT)) trial.files.push(file.path);
-    }
-  }
+  /** 這次按「確定」存下的範圍檔：看存完選定的那一份，不掃資料夾（別的分支留下、同步才到的也寫著測試科目，R12）。 */
+  const noteScope = (): void => {
+    const { path, file } = state.exam();
+    if (!path || !file?.id || already.has(path) || trial.files.some(each => each.path === path)) return;
+    if (file.lines.some(line => line.kind === 'unit' && line.subject === SUBJECT)) trial.files.push({ path, mark: '識別碼: ' + file.id });
+  };
   const adapter = app.vault.adapter;
   try {
     if (action === 'prep') {
       if (already.size) return refused;
       if (await adapter.exists(proof)) return { error: '上一次分段跑還沒清（do=clean）', proof };
       await noteFolder(app, trial, EXAM_FOLDER);
-      await makeTrial(app, trial, FOLDER, FILES);
+      await makeTrial(app, trial, FOLDER, marked, mark);
       await until(() => state.catalog().terms.some(term => term.term === '高三下'));
       host.openEntry();
       await until(() => inEntry('.ec-en-today').length === 1);
@@ -123,6 +125,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       check('勾好了', checkedRows());
       check('開始日期', fieldOf('考試開始')?.value);
       await confirm();
+      noteScope();
       check('存完的畫面', text(inEntry('.ec-en-title')[0]));
       check('紅字', inEntry('.ec-sc-word.is-bad').map(text));
       check('通知', notices());
@@ -193,7 +196,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     // ── do=run：一次走完 ──
     if (already.size) return refused;
     await noteFolder(app, trial, EXAM_FOLDER);
-    await makeTrial(app, trial, FOLDER, FILES);
+    await makeTrial(app, trial, FOLDER, marked, mark);
     check('卡組讀進來了', await until(() => state.catalog().terms.some(term => term.term === '高三下')));
     await sleep(300);
 
@@ -243,6 +246,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     check('整章連動', checkedRows());
     await capture('設定 勾好了');
     await confirm();
+    noteScope();
     check('存完回入口', inEntry('.ec-en-today').length === 1);
     check('通知', notices().filter(each => each.includes('考試範圍')));
     await capture('入口 倒數');
@@ -335,7 +339,6 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     return { checks, shots, error: error instanceof Error ? error.stack : String(error) };
   } finally {
     host.entry?.close();
-    await noteScopes();
     if (action === 'prep' && trial.files.length) {
       const root = proof.slice(0, proof.lastIndexOf('/'));
       if (!(await adapter.exists(root))) await adapter.mkdir(root);
