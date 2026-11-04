@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-03 | 國小社會預設 v0.6 測跨單元加題（[試用紀錄](../card-rules/trials.md)）：混入 10 項自製的小四目標再跑 2-2，Sol 加了 8 項、10 題，ID 全對；但不寫待核對，只給名稱會過度合併；預設改成 v0.7 |
 | 2026-11-03 | 入口與目錄第一批合併進 `main`（分支 `claude/entry-and-catalog`，[任務說明](../../tasks/entry-and-catalog.md)）：入口、目錄瀏覽與練習、全部卡、預覽；出處的讀法定案（[D-170](../decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)）：不用猜的直接讀懂，要猜的只提示，模組化填入在第二批用到歸屬前完成；Codex L2 七輪（[報告](<../../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）；Windows `entry` 44／44；還沒升版 |
 | 2026-11-03 | 國小社會預設 v0.5 用 Sol 跑康軒五上 2-1、2-2（[試用紀錄](../card-rules/trials.md)）：第 6 條的習作判斷改好了；2-2 帶著 2-1 的 42 個目標跑，加題 0，兩課沒有同一個判準，R3 的提示也沒有加題的寫法 |
 | 2026-11-03 | 拿掉沒在用的 codex-brief skill（[D-168](../decisions.md#d-168-拿掉-codex-brief請-codex-查核走-code-quality)）：D-131 以後實作不再交給 Codex，常做的是請 Codex 查核；AGENTS 的分流改成查核走 code-quality |
