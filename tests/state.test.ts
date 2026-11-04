@@ -99,7 +99,8 @@ void test('T6 讀取：只讀卡組與紀錄資料夾正下方的紀錄，today 
   assert.deepEqual(state.history(), await readHistory(files));
   assert.deepEqual(state.history().reviews.map(entry => entry.lt), ['b', 'e1', 'zzzzz2']);
   const input = state.input();
-  assert.deepEqual(input, { decks: state.decks(), history: state.history(), settings: { capMinutes: 30, retention: 0.8, filter: [] }, exam: null, now: clock.now, offset: 480 });
+  assert.deepEqual(input, { decks: state.decks(), history: state.history(), settings: { capMinutes: 30, retention: 0.8, filter: [] }, exam: input.exam, now: clock.now, offset: 480 });
+  assert.equal(input.exam?.hasPeriod, false, '範圍資料夾裡的筆記照範圍檔讀，沒有期間');
   const today = state.today();
   assert.deepEqual(today, planToday(input));
   // b 前一天 miss；e1 記得了，換出中翻英 z1。

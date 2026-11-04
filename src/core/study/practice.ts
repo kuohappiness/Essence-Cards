@@ -1,9 +1,9 @@
 import type { Target } from '../deck/index.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
-import { compareText, firstAtOrAfter } from './plan.ts';
+import { compareText, firstAtOrAfter, retentionOf } from './plan.ts';
 import { choosePrompt, wrong } from './session.ts';
 import { dayOf, dayStart } from './time.ts';
-import type { Memory, MemoryColor, Next, ReviewEntry, Slot, TodayInput } from './types.ts';
+import type { DeckEntry, Memory, MemoryColor, Next, ReviewEntry, Slot, TodayInput } from './types.ts';
 
 // 全部卡的一輪（D-097、D-146、D-163 第 4 點）：依目標集合選卡（D-142 原則 5）。Today.slots 只有今天會出的目標，所以不能借 more。
 // 一輪從按下去的時間 since 算：今天稍早答過的這一輪照樣出；since 之後的作答裡最後一次是記住了或太簡單的算完成；答錯照 D-062 的時間再出。
@@ -12,7 +12,7 @@ const IMPORTANCE = { high: 0, medium: 1, low: 2 } as const;
 /** 間隔超過這麼多天算很熟（D-062）。 */
 const WELL_KNOWN_DAYS = 21;
 
-interface Item { id: string; path: string; target: Target }
+interface Item { id: string; path: string; entry: DeckEntry; target: Target }
 
 /** 目標集合在卡組裡的樣子，照輸入的順序；不在卡組裡的（改掉了、刪掉了）不算。 */
 function itemsOf(input: TodayInput, ids: readonly string[]): Item[] {
@@ -20,7 +20,7 @@ function itemsOf(input: TodayInput, ids: readonly string[]): Item[] {
   const items: Item[] = [];
   for (const entry of input.decks) {
     for (const target of entry.deck.targets) {
-      if (target.id !== null && wanted.delete(target.id)) items.push({ id: target.id, path: entry.path, target });
+      if (target.id !== null && wanted.delete(target.id)) items.push({ id: target.id, path: entry.path, entry, target });
     }
   }
   return items;
@@ -53,13 +53,13 @@ export function practiceProgress(input: TodayInput, ids: readonly string[], sinc
  * 雙向配對的兩個方向都出，英翻中排在中翻英前面。記憶看 since 之前的紀錄，所以這一輪答過之後順序不會變。
  */
 function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory>, input: TodayInput, since: number): Item[] {
-  const retention = input.settings.retention;
   const day = dayOf(since, input.offset);
   const start = dayStart(day, input.offset), end = dayStart(day + 1, input.offset);
+  const dueOf = (item: Item, memory: Memory): number => dueAt(memory, retentionOf(input, item.entry, item.target));
   const bucket = (item: Item): number => {
     const memory = memories.get(item.id);
     if (!memory) return 3;
-    if (dueAt(memory, retention) >= end) return memory.last.at >= start ? 4 : 2;
+    if (dueOf(item, memory) >= end) return memory.last.at >= start ? 4 : 2;
     return wrong(memory.last) && memory.last.src !== 'mistake' ? 0 : 1;
   };
   const compare = (a: Item, b: Item): number => {
@@ -67,7 +67,7 @@ function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory
     const order = group - bucket(b);
     if (order) return order;
     const x = memories.get(a.id), y = memories.get(b.id);
-    if (group === 0 && x && y) return dueAt(x, retention) - dueAt(y, retention) || compareText(a.id, b.id);
+    if (group === 0 && x && y) return dueOf(a, x) - dueOf(b, y) || compareText(a.id, b.id);
     if (group === 1 && x && y) return IMPORTANCE[a.target.fields.importance] - IMPORTANCE[b.target.fields.importance] || recall(x, start) - recall(y, start) || compareText(a.id, b.id);
     if ((group === 2 || group === 4) && x && y) return recall(x, since) - recall(y, since) || compareText(a.id, b.id);
     return compareText(a.path, b.path) || a.target.line - b.target.line;
@@ -93,7 +93,6 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const { valid, any } = roundAnswers(reviews, since);
   // 再出的時間看到現在為止全部的作答（含這一輪），和今天的份相同。
   const latest = replay(reviews.filter(entry => wanted.has(entry.lt)));
-  const retention = input.settings.retention;
   let ready: { item: Item; at: number } | null = null;
   let waiting: { item: Item; at: number } | null = null;
   let fresh: Item | null = null;
@@ -102,7 +101,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     if (!entries) { fresh ??= item; continue; }
     if (!wrong(entries.at(-1))) continue;
     const memory = latest.get(item.id);
-    const at = memory ? dueAt(memory, retention) : input.now;
+    const at = memory ? dueAt(memory, retentionOf(input, item.entry, item.target)) : input.now;
     if (at <= input.now) { if (!ready || at < ready.at) ready = { item, at }; }
     else if (!waiting || at < waiting.at) waiting = { item, at };
   }
@@ -112,7 +111,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const seen = new Map<string, number>();
   for (const entry of prior) if (entry.v !== null) seen.set(entry.v, entry.at);
   const slot: Slot = {
-    target: item.target, pair: null, memory: memories.get(item.id) ?? null, retention, inExam: false,
+    target: item.target, pair: null, memory: memories.get(item.id) ?? null, retention: retentionOf(input, item.entry, item.target), inExam: input.exam?.contains(item.entry, item.target) ?? false,
     correct: prior.some(entry => entry.r === 'good' || entry.r === 'easy'), seen,
   };
   const prompt = choosePrompt(slot, valid.get(item.id) ?? []);
@@ -126,14 +125,15 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
 
 /** 卡組裡這些目標現在的記憶顏色（D-062）：灰未複習、橙到期或剛答錯、綠還沒到期、藍間隔超過 21 天。 */
 export function memoryColors(input: TodayInput): Map<string, MemoryColor> {
-  const ids = new Set(input.decks.flatMap(entry => entry.deck.targets.flatMap(target => target.id ?? [])));
-  const memories = replay(input.history.reviews.filter(entry => ids.has(entry.lt)));
-  const retention = input.settings.retention;
+  // 同一個 ID 只算第一次出現的（重複的 ID 不出題，D-157）。
+  const owners = new Map<string, { entry: DeckEntry; target: Target }>();
+  for (const entry of input.decks) for (const target of entry.deck.targets) if (target.id !== null && !owners.has(target.id)) owners.set(target.id, { entry, target });
+  const memories = replay(input.history.reviews.filter(entry => owners.has(entry.lt)));
   const colors = new Map<string, MemoryColor>();
-  for (const id of ids) {
+  for (const [id, { entry, target }] of owners) {
     const memory = memories.get(id);
     if (!memory) { colors.set(id, 'new'); continue; }
-    const due = dueAt(memory, retention);
+    const due = dueAt(memory, retentionOf(input, entry, target));
     if (wrong(memory.last) || due <= input.now) colors.set(id, 'near');
     else colors.set(id, (due - memory.last.at) / 86_400_000 > WELL_KNOWN_DAYS ? 'easy' : 'good');
   }

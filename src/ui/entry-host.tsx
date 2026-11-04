@@ -17,6 +17,8 @@ export interface EntryOptions {
   openSettings: () => void;
   reminders: boolean;
   covered: () => boolean;
+  /** 短暫的通知（Obsidian 的 Notice）。 */
+  notify: (message: string) => void;
   onError?: (error: unknown) => void;
   onClose?: () => void;
 }
@@ -26,6 +28,9 @@ export interface EntryHandle {
   show(screen: EntryScreen): void;
   close(): void;
 }
+
+/** 多久看一次換日了沒有（毫秒）。 */
+const DAY_CHECK = 60_000;
 
 export function openEntry(options: EntryOptions): EntryHandle {
   const shell = openFullscreen();
@@ -37,6 +42,8 @@ export function openEntry(options: EntryOptions): EntryHandle {
   const listeners = new Set<() => void>();
   let version = 0;
   let screen: EntryScreen = options.screen ?? 'entry';
+  /** 考試範圍畫面回到哪裡（D-163 第 2 點）。 */
+  let origin: EntryScreen = 'entry';
   let closed = false;
   const refresh = (): void => {
     version++;
@@ -57,6 +64,15 @@ export function openEntry(options: EntryOptions): EntryHandle {
   // 切到背景跨過清晨 4 點回來，要是新一天的份（§11）。
   const onVisibility = (): void => { if (document.visibilityState === 'visible') refresh(); };
   document.addEventListener('visibilitychange', onVisibility);
+  // 開著跨過清晨 4 點（tasks/exam-scope.md §4、§7）：沒有檔案通知、也沒有切回前景時，畫面自己換成新的一天。每分鐘看一次日編號：休眠、換時區都不用另外算。
+  const dayNow = (): number | null => options.state()?.exam().day ?? null;
+  let shownDay = dayNow();
+  const dayWatch = setInterval(() => {
+    const day = dayNow();
+    if (day === shownDay) return;
+    shownDay = day;
+    refresh();
+  }, DAY_CHECK);
   const handle: EntryHandle = {
     refresh() { attach(); refresh(); },
     show(next) { screen = next; refresh(); },
@@ -64,6 +80,7 @@ export function openEntry(options: EntryOptions): EntryHandle {
       if (closed) return;
       closed = true;
       document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(dayWatch);
       detach?.();
       root.unmount();
       shell.close();
@@ -76,10 +93,15 @@ export function openEntry(options: EntryOptions): EntryHandle {
       subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
       version: () => version,
       screen: () => screen,
-      go(next) { screen = next; refresh(); },
+      go(next) {
+        if (next === 'scope') origin = screen;
+        screen = next;
+        refresh();
+      },
+      from: () => origin,
     }}
     state={options.state} start={options.start} openNote={options.openNote} openSettings={options.openSettings}
-    close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered}
+    close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered} notify={options.notify}
     terms={{ get: () => loadTerms(options.app), set: terms => { saveTerms(options.app, terms); } }}
   />);
   shell.element.focus({ preventScroll: true });

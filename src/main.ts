@@ -202,6 +202,7 @@ export default class EssenceCardsPlugin extends Plugin {
       openSettings: () => { this.openSettings(); },
       reminders: Platform.isDesktop,
       covered: () => this.review !== null,
+      notify: message => { new Notice(message); },
       onError: error => { this.fail('ui', error); },
       onClose: () => { this.entry = null; },
     });

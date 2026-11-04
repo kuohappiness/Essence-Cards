@@ -273,7 +273,7 @@ void test('回傳的型別不同也是接不上，不能靠真假值往下算：
   const table: [string, string, string, RegExp][] = [
     [state, 'canAnswer: answerable', 'canAnswer: (lt: string) => Promise.resolve(answerable(lt))', /canAnswer.*型別不同/],
     [state, 'canAnswer: answerable', 'canAnswer: () => undefined', /canAnswer.*型別不同/],
-    [state, 'unread: () => [...unread].sort()', 'unread: () => Promise.resolve([...unread].sort())', /unread.*型別不同/],
+    [state, 'unread: () => [...new Set([...unread, ...exam.unread])].sort()', 'unread: () => Promise.resolve([...unread].sort())', /unread.*型別不同/],
     [state, 'all: history.incomplete', 'whole: history.incomplete', /blocked.*all.*型別不同/],
     [study, "export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';", "export { review, replay, intervalDays, recall } from './fsrs.ts';\nexport const dueAt = () => NaN;", /dueAt.*型別不同/],
     [study, "export { formatTime, dayOf, dayStart, parseTime } from './time.ts';", "export { formatTime, dayStart, parseTime } from './time.ts';\nexport const dayOf = () => Promise.resolve(0);", /dayOf.*型別不同/],
@@ -293,7 +293,7 @@ void test('回傳的型別不同也是接不上，不能靠真假值往下算：
   const collections: [string, string, string, RegExp][] = [
     [state, gates, "blocked: () => ({ decks: gated.join(''), targets: history.held, all: history.incomplete })", /blocked\(\)\.decks.*型別不同/],
     [state, gates, "blocked: () => ({ decks: gated, targets: history.held.join(''), all: history.incomplete })", /blocked\(\)\.targets.*型別不同/],
-    [state, 'unread: () => [...unread].sort()', "unread: () => ''", /unread.*型別不同/],
+    [state, 'unread: () => [...new Set([...unread, ...exam.unread])].sort()', "unread: () => ''", /unread.*型別不同/],
     [state, 'history: () => history,', "history: () => ({ ...history, reviews: '' }),", /reviews.*型別不同/],
     [state, todayOf, "today: () => ({ ...fresh().today, share: '' }),", /share.*型別不同/],
     [state, todayOf, "today: () => ({ ...fresh().today, more: '' }),", /more.*型別不同/],
@@ -652,7 +652,7 @@ void test('發布前比較：開兩個 worktree 各跑轉接器；同一個 comm
   assert.match(same.old.build, /^0\.3\.0\+[0-9a-f]{7,}$/);
   const text = await readFile(same.report, 'utf8');
   assert.match(text, new RegExp('輸入的 SHA-256：' + same.zip));
-  assert.match(text, /限制：考試範圍（`exam`）目前是 null/);
+  assert.match(text, /限制：考試範圍照各版本自己的讀法/);
   assert.match(text, /沒有差異。/);
   assert.match(text, /## 讀取閘門\n\n舊版：\n\n- 需要新版才讀得懂的卡組：沒有\n/);
   const broken = await compareVersions({ backup, old: first, new: 'HEAD', root: repo, install, now: () => NOW + 1000 });

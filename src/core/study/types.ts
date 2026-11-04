@@ -46,7 +46,21 @@ export type NewEntry =
   // 版本行（syntax.md §5-1）：val 是 BUILD 原樣，沒有 deck、lt。
   | { set: 'app'; val: string }
   | { set: 'status'; deck: string; val: '草稿' | '啟用' | '暫停' }
-  | { set: 'status'; lt: string; val: '啟用' | '暫停' };
+  | { set: 'status'; lt: string; val: '啟用' | '暫停' }
+  // 考試範圍（syntax.md §5、tasks/exam-scope.md §2-5）：只記外掛自己的寫入。
+  | { set: 'exam'; val: ExamLog };
+
+export interface ExamLog {
+  id: string;
+  do: '建立' | '改' | '提前結束';
+  /** 寫完之後讀得懂的每一行：年級學期、科目、編號，照檔案的順序。 */
+  units: string[];
+  start?: string;
+  end?: string;
+  ended?: string;
+  /** 這次寫入之前的內容；只有「改」。 */
+  old?: { id?: string; units: string[]; start?: string; end?: string };
+}
 
 export interface History {
   reviews: ReviewEntry[];

@@ -83,6 +83,8 @@ const EXAMPLES: [string, SourceLink[], boolean?, SourceOwner?][] = [
   // 否定段自己點名了別的東西：說的不是前面的單元
   ['國二上 1-3，不算國二下 1-3', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是 1-8', [u13(), { kind: 'text' }], true], ['國二上 1-3，不算 1-3 p.20', [u13(), { kind: 'text' }], true],
   ['國二上 1-3、不是國二上 1-8', [u13(), { kind: 'text' }], true], ['國二上 1-3、不是 p.46、p.45', [u13(), { kind: 'text' }, u13(page(45))], true], ['國二上 1-3，不算 L2', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是第四十四頁', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是國二下', [u13(), { kind: 'text' }], true], ['國二上 1-3，不是 [[筆記]]', [u13(), { kind: 'text' }], true],
+  // 否定段的別名就是前面那個單元（tasks/exam-scope.md §1）；別的節不是
+  ['國二上 1-3，不算第1章第3節', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算第一章第三節', [{ kind: 'text' }, { kind: 'text' }], true], ['國二上 1-3，不算第1章第4節', [u13(), { kind: 'text' }], true], ['國二上 1-3 p.20，不算第1章第3節', [u13(page(20)), { kind: 'text' }], true],
   // 範圍寫反、不確定：不連
   ['p.46-44', [heading('p.46-44')], true], ['p.44-5', [heading('p.44-5')], true], ['p.44-44', [heading('p.44-44')], true], ['第46-44頁', [heading('第46-44頁')], true], ['p53 基因', [heading('p53 基因')], true], ['第十百頁', [heading('第十百頁')]], ['pp.44', [page(44)]],
 ];
@@ -118,7 +120,7 @@ function outside(text: string, change: Change): string {
   return out + change(text.slice(last));
 }
 /** 意思：單元比鍵；舊標題由 Obsidian 層去雜訊之後才比材料，所以也比鍵。要不要提示、算不算說明也是意思的一部分。 */
-const meaning = (items: readonly SourceItem[]): string => JSON.stringify(items.map(({ link, problem, needsUnit, remark }) => ({ link, problem, needsUnit, remark })), (key, value: unknown) => {
+const meaning = (items: readonly SourceItem[]): string => JSON.stringify(items.map(({ link, problem, needsUnit, remark, basis, missed }) => ({ link, problem, needsUnit, remark, basis, missed })), (key, value: unknown) => {
   if (key === 'unit') return codeKey(value as string);
   if (key === 'heading') return headingKey(value as string);
   return value;
@@ -267,6 +269,77 @@ void test('D-170 讀完才去重：本篇這種字會影響後面的意思；一
   assert.deepEqual(read('國二上 L1、L2 p.44、p.44').map(item => item.needsUnit), [undefined, true], '接著寫的位置沒有明寫學期，沿用的標記留著');
   assert.deepEqual(read('國二上 L1、L2 p.44、44').map(item => item.needsUnit), [undefined, true]);
   assert.deepEqual(read('國一上 Starter p.12、國一上 Starter p.12').map(item => item.needsUnit), [true], '其他編號寫兩次還是要對目錄');
+});
+
+// 出處結果的欄位（tasks/exam-scope.md §1，Codex 格式查核 F1）：預期值都來自那份說明的表。
+
+const OWN: SourceOwner = { term: '國二上', subject: '自然', unit: { code: '1-1' } };
+function place(link: SourceLink): string {
+  switch (link.kind) {
+    case 'unit': return link.term + ' ' + link.unit + (link.rest ? ' ' + place(link.rest) : '');
+    case 'block': return link.id;
+    case 'heading': return '#' + link.heading;
+    case 'note': return '[[' + link.link + ']]';
+    case 'text': return '字';
+  }
+}
+interface Fields { to: string; basis?: string; missed?: true; problem?: string; needsUnit?: true }
+const fieldsOf = (text: string, own: SourceOwner = OWN): Fields[] => read(text, own).map(item => ({
+  to: place(item.link), ...(item.basis ? { basis: item.basis } : {}), ...(item.missed ? { missed: item.missed } : {}), ...(item.problem ? { problem: item.problem } : {}), ...(item.needsUnit ? { needsUnit: item.needsUnit } : {}),
+}));
+
+const FIELD_CASES: [string, Fields[], SourceOwner?][] = [
+  ['國二上 1-3 p.20', [{ to: '國二上 1-3 p20', basis: 'written' }]],
+  ['國一上 Starter p.12', [{ to: '國一上 Starter p12', basis: 'written', needsUnit: true }]],
+  ['國一上 L1、L2 p.44、p.45', [{ to: '國一上 L1', basis: 'written' }, { to: '國一上 L2 p44', basis: 'carried', needsUnit: true }, { to: '國一上 L2 p45', basis: 'carried' }]],
+  ['國一上 L1、p.45', [{ to: '國一上 L1', basis: 'written' }, { to: '國一上 L1 p45', basis: 'written' }]],
+  ['國二上 1-3, 10-15 p.44', [{ to: '國二上 1-3', basis: 'written' }, { to: '國二上 10-15 p44', basis: 'carried', needsUnit: true }]],
+  ['國二上 1-3、國二上 1-8、1-8', [{ to: '國二上 1-3', basis: 'written' }, { to: '國二上 1-8', basis: 'written' }]],
+  ['國二上 1-3、1-8、國二上 1-8', [{ to: '國二上 1-3', basis: 'written' }, { to: '國二上 1-8', basis: 'written' }]],
+  ['小五上 p.15', [{ to: '#小五上 p.15', missed: true, problem: 'term-only' }]],
+  ['國二上 p.15', [{ to: 'p15', missed: true, problem: 'term-only' }]],
+  ['1-3 p.20', [{ to: 'p20', missed: true, problem: 'before' }]],
+  ['1-3', [{ to: '#1-3', missed: true }]],
+  ['2-1 水溶液', [{ to: '#2-1 水溶液', missed: true }]],
+  ['L1', [{ to: '#L1', missed: true }]],
+  ['p.44 及 1-8 p.45', [{ to: 'p44' }, { to: 'p45', missed: true, problem: 'leftover' }]],
+  ['p.44 也算 L1', [{ to: 'p44', missed: true, problem: 'leftover' }], { term: '國一上', subject: '英文', unit: { code: 'L3' } }],
+  ['https://x.test,8上L1', [{ to: '字', missed: true, problem: 'leftover' }]],
+  ['p.44 https://x.test,8上L1 45', [{ to: 'p44', missed: true, problem: 'leftover' }, { to: 'p45' }]],
+  ['p.44，https://x.test,8上L1，45', [{ to: 'p44' }, { to: '字', missed: true, problem: 'leftover' }, { to: '#45', missed: true }]],
+  ['p.44、p.44 和 1-8', [{ to: 'p44', missed: true, problem: 'leftover' }]],
+  ['溶解, 1-8', [{ to: '#溶解, 1-8', missed: true }]],
+  ['國二上 1-3，不算第1章第3節', [{ to: '字', problem: 'negative' }, { to: '字', problem: 'negative' }]],
+  ['國二上 1-3，不是第 3 頁', [{ to: '國二上 1-3', basis: 'written' }, { to: '字', problem: 'negative' }]],
+  ['國二上 1-3，不是 1-8', [{ to: '國二上 1-3', basis: 'written' }, { to: '字', problem: 'negative' }]],
+  ['國二上 1-3 p.20，不算第1章第3節', [{ to: '國二上 1-3 p20', basis: 'written' }, { to: '字', problem: 'negative' }]],
+  ['國二上 1-3 p.20，老師說不用背', [{ to: '國二上 1-3 p20', basis: 'written' }, { to: '字', problem: 'negative' }]],
+  // 不算疑似漏掉：普通標題、只有位置的問題、不同類的編號夾在說明裡、連結與「」裡的字、否定段
+  ['溶解, 擴散', [{ to: '#溶解, 擴散' }]],
+  ['p.46-44', [{ to: '#p.46-44', problem: 'position' }]],
+  ['p.20 維生素 B12', [{ to: 'p20' }]],
+  ['p.44，L1 水溶液', [{ to: 'p44' }, { to: '#L1 水溶液' }]],
+  ['「國二上 1-3」', [{ to: '#國二上 1-3' }]],
+  ['[[國二上 1-3]]', [{ to: '[[國二上 1-3]]' }]],
+  ['https://x.test?year=2026-10', [{ to: '字' }]],
+  ['不要算國二上 1-3', [{ to: '字', problem: 'negative' }]],
+];
+
+void test('出處結果的欄位：歸屬依據、疑似漏掉、對目錄才知道、位置與字句，各指到哪一項', () => {
+  const wrong = FIELD_CASES.flatMap(([text, expected, own]) => {
+    const got = fieldsOf(text, own);
+    return JSON.stringify(got) === JSON.stringify(expected) ? [] : [{ text, expected, got }];
+  });
+  assert.deepEqual(wrong, []);
+});
+
+void test('出處結果的欄位：只有單元才有歸屬依據', () => {
+  for (const [text] of FIELD_CASES) for (const item of read(text, OWN)) assert.equal(item.basis !== undefined, item.link.kind === 'unit', text);
+});
+
+void test('出處結果的欄位：對不到目錄時的提示不變，L2 的 p.44、p.45 只報 p.44', () => {
+  const deck = parseDeck('---\n年級學期: 國一上\n科目: 英文\n單元: "L3"\n---\n- 目標 ^abc123\n    - 問 :: 答\n    - 出處：國一上 L1、L2 p.44、p.45\n');
+  assert.deepEqual(unreadableSources(NO_MATERIALS, 'o.md', deck, (_term, code) => code === 'L1' ? [{ path: 'l1.md', materials: [] }] : []).map(each => each.text), ['L2 p.44']);
 });
 
 void test('D-170 項目的邊界：不同行的字不會接成一個連結', () => {
