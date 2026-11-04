@@ -23,6 +23,10 @@ export interface SourceItem {
   needsUnit?: true;
   /** 同一欄有讀懂別的，這一段只是字：材料裡找得到標題就連，找不到不提示。 */
   remark?: true;
+  /** 只在單元：written 這個單元明寫了年級學期；carried 這個單元的學期是沿用前一項的，它後面的位置也是（tasks/exam-scope.md §1）。 */
+  basis?: 'written' | 'carried';
+  /** 字面上有單元的線索、但沒有算進歸屬（`小五上 p.15`、`1-3 p.20`、網址裡的編號）。普通標題要比材料才知道，不算。 */
+  missed?: true;
 }
 /** 這一篇自己的屬性：本科的名稱、本篇的編號（`L3 p.30` 就是這一篇）、自己的學期。 */
 export interface SourceOwner { term: string | null; subject: string | null; unit: { code: string } | null }
@@ -151,6 +155,16 @@ function toNumber(text: string): string | null {
 const AFTER_CODE = '(?=$| |[(,]|[pP]\\.? ?\\d|第 ?\\d|圖|表|例題|\\uE000)';
 const PLACE_START = /^(?:(?:pp?|pg|page)\.? ?\d|第 ?\S*? ?頁|\d+(?: ?[-~至到] ?\d+)? ?頁|(?:圖|表|例題|範例|fig(?:ure)?\.?|table|example) ?\d|\uE000)/i;
 
+const CHAPTER = new RegExp(`第 ?(${NUMBER}) ?章(?: ?第 ?(${NUMBER}) ?節)?`, 'g');
+/** 字裡的 `第1章第3節`、`第2章` 換成編號；中文數字寫法不對的留原字。 */
+function chapterAlias(text: string): string {
+  return text.replace(CHAPTER, (match, a: string, b: string | undefined) => {
+    const first = toNumber(a), second = b === undefined ? null : toNumber(b);
+    if (first === null || (b !== undefined && second === null)) return match;
+    return second === null ? first : `${first}-${second}`;
+  });
+}
+
 interface Code { code: string; rest: string; other?: true }
 /** 年級學期後面的編號；開頭是位置、中文字或沒寫完時 null。other：不是標準形狀，對不到目錄才提示。 */
 function readCode(text: string): Code | null {
@@ -233,7 +247,7 @@ const NOTE_ONLY = /^(?:第 ?\d+ ?[題段行])$/;
 const MATERIAL = /^(?:[\u3400-\u9FFF]{1,2}的?|[A-Za-z]+)$/;
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-interface UnitName { term: string; code: string }
+interface UnitName { term: string; code: string; basis: 'written' | 'carried' }
 /** codeLike：只有字但像編號，不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。written：這一段自己明寫了年級學期與標準的編號。 */
 interface Pending extends SourceItem { codeLike?: true; written?: true }
 
@@ -251,8 +265,10 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   let scope: UnitName | 'this' | null = 'this', lastPlace: string | null = null, carry: UnitName | null = null;
 
   const inScope = (link: SourceLink): SourceLink => scope && scope !== 'this' ? { kind: 'unit', term: scope.term, unit: scope.code, rest: link } : link;
+  /** 這個位置屬於別的單元時，歸屬依據跟著那個單元。 */
+  const basisOf = (): Pick<SourceItem, 'basis'> => scope && scope !== 'this' ? { basis: scope.basis } : {};
   /** 接著前一個位置的一項；按鈕寫完整，只有數字看不懂。 */
-  const follow = (id: string, text: string): Pending => { lastPlace = id; return { text, link: inScope({ kind: 'block', id }) }; };
+  const follow = (id: string, text: string): Pending => { lastPlace = id; return { text, link: inScope({ kind: 'block', id }), ...basisOf() }; };
   /** 字裡有本篇那種字母的編號（英文卡組的 `也算 L1`）；`p.20 維生素 B12` 不算。 */
   const hasOwnKindCode = (text: string): boolean => ownLetters !== null && new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(ownLetters)}\\d+(?![A-Za-z0-9])`, 'i').test(text);
   const looksLikeCode = (text: string): boolean => hasCode(text) || hasOwnKindCode(text);
@@ -288,7 +304,8 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     // 先看有沒有頁、圖：`不是第3頁` 說的是頁，只是號碼和單元 3 一樣。
     if (scan(segment, tokens).found.length) return true;
     const written = escapeRegExp(code).replace(/^([A-Za-z]+)(?=\d)/, '$1 ?');
-    let text = segment.replace(new RegExp(`(?<![0-9A-Za-z-])${written}(?![0-9A-Za-z-])`, 'gi'), '');
+    // 別名就是同一個單元（`第1章第3節` 是 1-3）。
+    let text = chapterAlias(segment).replace(new RegExp(`(?<![0-9A-Za-z-])${written}(?![0-9A-Za-z-])`, 'gi'), '');
     for (let at = 0; at < text.length; at++) {
       const read = readTerm(text.slice(at));
       if (read?.term === term) { text = text.slice(0, at) + text.slice(at + read.length); break; }
@@ -337,11 +354,11 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
         scope = term.term === ownTerm ? 'this' : null;
         if (scope === 'this' && found.length) {
           const texts = pieces(found, segment.length - after.trim().length);
-          return found.map((each, at) => ({ text: texts[at], link: each.link, problem: 'term-only' as const }));
+          return found.map((each, at) => ({ text: texts[at], link: each.link, problem: 'term-only' as const, missed: true as const }));
         }
-        return [asHeading({ problem: 'term-only' })];
+        return [asHeading({ problem: 'term-only', missed: true })];
       }
-      unit = { term: term.term, code: code.code };
+      unit = { term: term.term, code: code.code, basis: 'written' };
       needsUnit = code.other === true;
       rest = code.rest;
     } else if (SELF.test(segment)) {
@@ -356,7 +373,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
         if (followed) return [followed];
         const code = listed(segment);
         if (code && carry) {
-          unit = { term: carry.term, code: code.code };
+          unit = { term: carry.term, code: code.code, basis: 'carried' };
           needsUnit = true;
           rest = code.rest;
         }
@@ -366,32 +383,40 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const written = unit !== null && !needsUnit ? { written: true as const } : {};
 
     const { found, left, before, bad, hidden } = scan(rest, tokens);
-    if (scope === null && found.length) return [asHeading({ problem: 'term-only' })];
+    if (scope === null && found.length) return [asHeading({ problem: 'term-only', missed: true })];
     if (!found.length) {
-      const problem: SourceProblem | undefined = bad ? 'position' : hidden || looksLikeCode(left) || /^(?:\d+|[A-Za-z]+\d+)$/.test(left) ? 'leftover' : undefined;
+      // 沒用到的字有單元的線索：疑似漏掉，和要不要提示、提示哪一種無關（`p.46-44 1-3` 的 problem 是 position）。
+      const clue = hidden || looksLikeCode(left) || /^(?:\d+|[A-Za-z]+\d+)$/.test(left);
+      const missed = clue ? { missed: true as const } : {};
+      const problem: SourceProblem | undefined = bad ? 'position' : clue ? 'leftover' : undefined;
       if (unit) {
         // 單元後面的字留在 rest：Obsidian 層比那個單元的名稱與材料的標題。
         lastPlace = null;
-        return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}), ...written }];
+        return [{ text: display, link: { kind: 'unit', term: unit.term, unit: unit.code, rest: left ? { kind: 'heading', heading: restore(left, tokens) } : null }, basis: unit.basis, ...(problem ? { problem } : {}), ...(needsUnit ? { needsUnit: true as const } : {}), ...missed, ...written }];
       }
       // 後面的編號、數字不接過這些字（D-170 第 6 點）。
       forget();
-      if (hidden && left) return [asHeading({ problem: 'leftover' })];
-      if (selfRef && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
+      if (hidden && left) return [asHeading({ problem: 'leftover', ...missed })];
+      if (selfRef && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}), ...missed }];
       // 網址：只有字，不是位置，也不算看不懂。
-      if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}) }];
-      if (bad) return [asHeading({ problem: 'position' })];
-      return [asHeading(problem ? { codeLike: true } : {})];
+      if (/\uE000/.test(segment) && !left) return [{ text: display, link: { kind: 'text' }, ...(problem ? { problem } : {}), ...missed }];
+      if (bad) return [asHeading({ problem: 'position', ...missed })];
+      return [asHeading(problem ? { codeLike: true, ...missed } : {})];
     }
     const texts = pieces(found, segment.length - rest.length);
     const placed: Pending[] = found.map((each, at) => {
       lastPlace = each.link.kind === 'block' ? each.link.id : null;
-      return { text: texts[at], link: inScope(each.link), ...written };
+      return { text: texts[at], link: inScope(each.link), ...basisOf(), ...written };
     });
     if (needsUnit) placed[0].needsUnit = true;
     const final = placed[placed.length - 1];
     if (bad) final.problem = 'position';
-    if (left && !before && /^\d+$/.test(left) && lastPlace?.startsWith('p')) return [...placed, follow('p' + left, 'p.' + left)];
+    if (hidden || (left && looksLikeCode(left))) final.missed = true;
+    // 同一段的尾數照接（`p.44 https://x.test,8上L1 45`）；隔了網址也要先留下提示。
+    if (left && !before && /^\d+$/.test(left) && lastPlace?.startsWith('p')) {
+      if (hidden) final.problem ??= 'leftover';
+      return [...placed, follow('p' + left, 'p.' + left)];
+    }
     // 單元與位置之間的字是說明，孤立的數字不是：用途要家長說明（`國二上 1-3 44 p.45`）。
     if (/^\d+$/.test(before)) placed[0].problem ??= 'before';
     if (!unit && !selfRef && before && !MATERIAL.test(before)) placed[0].problem ??= 'before';
@@ -430,7 +455,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     const added = items.slice(start);
     if (added.length > 1 && added.every(each => each.link.kind === 'heading')) {
       const problem = added.find(each => each.problem)?.problem;
-      items.splice(start, added.length, { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}), ...(added.some(each => each.codeLike) ? { codeLike: true as const } : {}) });
+      items.splice(start, added.length, { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}), ...(added.some(each => each.missed) ? { missed: true as const } : {}), ...(added.some(each => each.codeLike) ? { codeLike: true as const } : {}) });
     }
   }
   const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
@@ -444,6 +469,8 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     if (!first) { kept.set(key, marked); continue; }
     if (marked.problem && !first.problem) { first.text = marked.text; first.problem = marked.problem; }
     if (written) delete first.needsUnit;
+    if (item.basis === 'written') first.basis = 'written';
+    if (item.missed) first.missed = true;
   }
   return [...kept.values()];
 }
