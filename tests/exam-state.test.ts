@@ -373,6 +373,81 @@ void test('等寫入逾時後關閉：之後寫成了也不記', async t => {
   assert.deepEqual(h.exams(), []);
 });
 
+void test('關閉時範圍還在寫：等到有結果才算關好，紀錄跟著寫進去', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const held = h.memory.holdModify(SCOPE);
+  const ending = finish(h.state);
+  await tick(t, 0);
+  let closed = false;
+  const closing = h.state.close().then(() => { closed = true; });
+  await tick(t, 0);
+  assert.equal(closed, false, '還在寫，不算關好');
+  held.release();
+  await tick(t, 0);
+  assert.deepEqual(await ending, { kind: 'done' });
+  await tick(t, 1000);
+  await closing;
+  assert.equal(h.exams().length, 1, '寫成了，紀錄也在');
+  await tick(t, 1000);
+  assert.equal(h.exams().length, 1, '關好之後沒有再多');
+});
+
+void test('關閉時範圍一直沒寫完：最多等到逾時；關好之後才寫成的不記', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const held = h.memory.holdModify(SCOPE);
+  const ending = finish(h.state);
+  await tick(t, 0);
+  let closed = false;
+  const closing = h.state.close().then(() => { closed = true; });
+  await tick(t, 29);
+  assert.equal(closed, false);
+  await tick(t, 1);
+  assert.match(failedWith(await ending), /可能等一下才寫好/);
+  await tick(t, 1000);
+  await closing;
+  held.release();
+  await tick(t, 0);
+  await tick(t, 1000);
+  assert.deepEqual(h.exams(), []);
+});
+
+void test('關閉時範圍還排著、回呼沒進入：最多等到逾時；之後不會寫', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const open = h.gate();
+  const ending = finish(h.state);
+  await tick(t, 0);
+  const closing = h.state.close();
+  await tick(t, 30);
+  assert.match(failedWith(await ending), /這次沒有存/);
+  await tick(t, 1000);
+  await closing;
+  open();
+  await tick(t, 0);
+  assert.equal(h.memory.texts.get(SCOPE), scopeText(), '沒有寫');
+  assert.deepEqual(h.exams(), []);
+});
+
+void test('關閉時範圍還在寫、寫不進去：不記，照常關好', async t => {
+  const h = makeSlow(t, { ...DECKS, [SCOPE]: scopeText() });
+  await readySlow(t, h.state);
+  const open = h.gate();
+  h.memory.control.failModify = true;
+  const ending = finish(h.state);
+  await tick(t, 0);
+  const closing = h.state.close();
+  await tick(t, 0);
+  open();
+  await tick(t, 0);
+  assert.equal((await ending).kind, 'failed');
+  h.memory.control.failModify = false;
+  await tick(t, 1000);
+  await closing;
+  assert.deepEqual(h.exams(), []);
+});
+
 void test('建立新檔逾時：回呼已經進入，真的寫成了才記一行建立', async t => {
   const h = makeSlow(t, DECKS);
   await readySlow(t, h.state);

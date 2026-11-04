@@ -685,6 +685,8 @@ export function createState(options: StateOptions): State {
       // 寫成、等核對的工作回 saved（已寫進磁碟的內容下次載入照實讀回）；在寫的那一份等結果明確，最多 writeTimeout（§5）。
       writes.stop();
       await writes.idle();
+      // 範圍檔也一樣（Codex L2 的 R14）：寫成了紀錄要跟著寫進去；每次寫最多 writeTimeout，之後才寫成的不記。
+      await examWrites;
       await reads.idle();
       await writer.flush();
     },
