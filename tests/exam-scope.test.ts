@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isExamPath, parseScope as parse, readDate, scopeDay, scopePeriod, unitInScope } from '../src/core/catalog/index.ts';
+import { chooseScope, isExamPath, parseScope as parse, readDate, scopeDay, scopePeriod, unitInScope } from '../src/core/catalog/index.ts';
 import type { ScopeFile } from '../src/core/catalog/index.ts';
 import { dayOf } from '../src/core/study/index.ts';
 
@@ -218,4 +218,64 @@ void test('範圍檔的路徑：考試範圍資料夾裡的 md，子資料夾也
   assert.equal(isExamPath('Essence Cards/考試範圍/舊的/2026-10-28 國二上.md'), true);
   assert.equal(isExamPath('Essence Cards/考試範圍/附件.png'), false);
   assert.equal(isExamPath('Essence Cards/自然/2-1.md'), false);
+});
+
+// ── 選哪一份（§2-3、Codex F4）──
+
+const entry = (path: string, head: string, body = '- 國二上 自然 2\n') => ({ path, file: parseScope(`---\n${head}\n---\n${body}`) });
+const TODAY = scopeDay('2026-10-20');
+function chosen(entries: ReturnType<typeof entry>[], day = TODAY): string | null {
+  const first = chooseScope(entries, day);
+  const second = chooseScope([...entries].reverse(), day);
+  assert.equal(second.chosen?.path, first.chosen?.path, '和輸入順序無關');
+  return first.chosen?.path ?? null;
+}
+
+void test('選定：有效期間的開始日早的先，只寫結束日的用結束日；沒有期間與日期有問題的排後面；平手比路徑', () => {
+  assert.equal(chosen([]), null);
+  assert.equal(chosen([entry('b', '考試開始: 2026-10-28'), entry('a', '考試開始: 2026-10-29')]), 'b');
+  assert.equal(chosen([entry('a', '考試開始: 2026-10-28'), entry('b', '考試結束: 2026-10-25')]), 'b', '只寫結束日');
+  assert.equal(chosen([entry('a', '識別碼: x'), entry('b', '考試開始: 2026-10-28')]), 'b', '沒有期間排後面');
+  assert.equal(chosen([entry('a', '考試開始: 10/28'), entry('b', '考試開始: 2026-10-28')]), 'b', '日期有問題排後面');
+  assert.equal(chosen([entry('b', '考試開始: 10/28'), entry('a', '識別碼: x')]), 'a', '兩種之間比路徑');
+  assert.equal(chosen([entry('a', '識別碼: x'), entry('b', '考試開始: 10/28')]), 'a');
+  assert.equal(chosen([entry('B', '考試開始: 2026-10-28'), entry('a', '考試開始: 2026-10-28')]), 'B', '路徑是字串比較，不看語系');
+});
+
+void test('生效：開始日還沒到也算；結束日當天還算，隔天不算；日期未定與日期有問題不會自動失效', () => {
+  const exam = [entry('a', '考試開始: 2026-10-28\n考試結束: 2026-10-29')];
+  assert.equal(chosen(exam, scopeDay('2026-10-01')), 'a');
+  assert.equal(chosen(exam, scopeDay('2026-10-29')), 'a');
+  assert.equal(chosen(exam, scopeDay('2026-10-30')), null);
+  assert.equal(chosen([entry('a', '識別碼: x')], scopeDay('2030-01-01')), 'a');
+  assert.equal(chosen([entry('a', '考試開始: 10/28')], scopeDay('2030-01-01')), 'a');
+  assert.equal(chosen([entry('a', '考試開始: 2026-10-20')], scopeDay('2026-10-21')), null, '只寫開始就是一天');
+});
+
+void test('提前結束：同一個識別碼任一份結束，整組都結束，舊副本不會復活；別的識別碼接手', () => {
+  const ended = entry('a', '識別碼: x\n考試開始: 2026-10-28\n提前結束: 2026-10-20');
+  const copy = entry('b', '識別碼: x\n考試開始: 2026-10-28');
+  assert.equal(chosen([ended, copy]), null);
+  assert.equal(chosen([ended, copy, entry('c', '識別碼: y\n考試開始: 2026-11-28')]), 'c');
+  assert.equal(chosen([entry('a', '提前結束: 2026-10-20'), entry('b', '考試開始: 2026-10-28')]), 'b', '沒有識別碼的各算一次考試，不併');
+  assert.equal(chosen([entry('a', '識別碼: x\n提前結束: 亂寫'), entry('b', '識別碼: x')]), null, '值看不懂也算結束');
+  const broken = { path: 'a', file: parseScope('---\n識別碼: x\n提前結束: [\n---\n- 國二上 自然 2\n') };
+  assert.equal(chooseScope([broken], TODAY).chosen, null, '屬性區壞了但字裡有提前結束');
+});
+
+void test('候選：只有看不懂、只有分類或空的檔，不會蓋過真的範圍；只有它時回傳它，但不能用', () => {
+  const real = entry('z', '考試開始: 2026-12-01');
+  for (const body of ['老師說第三節不考\n', '分類：醫學\n', '', '# 只有標題\n']) {
+    const empty = entry('a', '考試開始: 2026-10-28', body);
+    assert.equal(chosen([empty, real]), 'z', body);
+    assert.deepEqual(chooseScope([empty], TODAY).usable, false, body);
+    assert.equal(chooseScope([empty], TODAY).chosen?.path, 'a', body);
+  }
+  assert.equal(chooseScope([real], TODAY).usable, true);
+  assert.equal(chooseScope([entry('a', '識別碼: x', '- 今天 自然 2\n')], TODAY).usable, true, '對不到卡組的也算讀得懂');
+});
+
+void test('其他也生效的：同一次考試的副本與別的考試都列，結束的不列', () => {
+  const list = [entry('a', '識別碼: x\n考試開始: 2026-10-28'), entry('b', '識別碼: x\n考試開始: 2026-10-28'), entry('c', '考試開始: 2026-11-01'), entry('d', '提前結束: 2026-10-20'), entry('e', '識別碼: y', '老師說\n')];
+  assert.deepEqual(chooseScope(list, TODAY).others, ['b', 'c']);
 });

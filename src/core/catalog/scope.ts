@@ -154,3 +154,28 @@ export function unitInScope(file: ScopeFile, unit: ScopeUnit): boolean {
   const term = termOf(unit.term), subject = subjectOf(unit.subject), code = codeKey(unit.code);
   return file.lines.some(line => line.kind === 'unit' && termOf(line.term) === term && subjectOf(line.subject) === subject && covers(codeKey(line.code), code));
 }
+
+// ── 選哪一份（§2-3）──
+
+const hasUnit = (file: ScopeFile): boolean => file.lines.some(line => line.kind === 'unit');
+const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
+
+/**
+ * 先按識別碼分組（同一個識別碼任一份結束，整組都結束，舊副本不會復活）；沒有識別碼的各自算一次考試。還生效而且有讀得懂的行才是候選；
+ * 沒有候選但有還生效的檔時回傳那一份（usable 是 false），畫面寫行數，排程當成沒有範圍。others 是其他也生效的候選。
+ */
+export function chooseScope<T extends { path: string; file: ScopeFile }>(entries: readonly T[], day: number): { chosen: T | null; usable: boolean; others: string[] } {
+  const groupOf = (each: T): string => each.file.id === null ? 'path:' + each.path : 'id:' + each.file.id;
+  const over = new Set(entries.filter(each => each.file.ended).map(groupOf));
+  const alive = entries.filter(each => {
+    if (over.has(groupOf(each))) return false;
+    const period = scopePeriod(each.file);
+    return period.kind !== 'ok' || day <= scopeDay(period.end);
+  });
+  /** 有效期間的開始日；沒有期間或日期有問題的排在後面。 */
+  const startOf = (each: T): string => { const period = scopePeriod(each.file); return period.kind === 'ok' ? period.start : '9'; };
+  const sorted = [...alive].sort((a, b) => compareText(startOf(a), startOf(b)) || compareText(a.path, b.path));
+  const candidates = sorted.filter(each => hasUnit(each.file));
+  const chosen = candidates[0] ?? sorted[0] ?? null;
+  return { chosen, usable: candidates.length > 0, others: candidates.slice(1).map(each => each.path) };
+}
