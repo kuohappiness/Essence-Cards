@@ -368,6 +368,18 @@ void test('§7 另一份讀不到時：看得到的那一份照常，多一行',
   assert.deepEqual(s.all('.ec-sc-note.is-warn').map(each => each.textContent), ['有 1 份暫時讀不到']);
 });
 
+void test('§4 一份卡住、另一份讀到：入口用讀到的，多寫「有 1 份暫時讀不到」；設定畫面存不了', async t => {
+  const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1'), [FOLDER + 'b.md']: scopeText('2026-10-20', '', '- 國二上 英文 L1') }, 'entry', memory => { memory.holdRead(FOLDER + 'b.md'); });
+  await act(async () => { await wait(40); });
+  assert.equal(s.all('.ec-sc-per')[0].textContent, '10/28');
+  assert.deepEqual(s.all('.ec-sc-note.is-warn').map(each => each.textContent), ['有 1 份暫時讀不到']);
+  await s.click(s.all('.ec-sc-row')[0]);
+  await s.click(s.box('2-2'));
+  await s.click(s.button('確定'));
+  await s.settle();
+  assert.equal(s.all('.ec-sc-word.is-bad')[0]?.textContent, '考試範圍暫時讀不到，等一下再試');
+});
+
 void test('§6 畫面開著時範圍檔被刪：寫原因，不把變動寫成一份新檔；重新打開才是新的', async t => {
   const path = FOLDER + 'a.md';
   const s = await open(t, { ...DECKS, [path]: scopeText('2026-10-28', '', '- 國二上 自然 2-1') });

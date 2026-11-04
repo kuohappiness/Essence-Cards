@@ -421,6 +421,63 @@ void test('範圍檔讀不到（reject）：同批的卡組照常、ready() 不�
   assert.equal(h.state.exam().missing, 0);
 });
 
+void test('一份卡住、另一份讀到：先用讀到的（暫定），寫不了；之後的通知不排在它後面；它回來後重新選', async t => {
+  const a = FOLDER + 'a.md', b = FOLDER + 'b.md';
+  const h = make(t, { ...DECKS, [a]: scopeText('2026-11-20', '2026-11-21'), [b]: '---\n識別碼: bbbbbb\n考試開始: 2026-10-28\n---\n- 國二上 英文 L1\n' });
+  const held = h.memory.holdRead(b);
+  const done = h.state.ready();
+  await tick(t, 0);
+  await held.started;
+  await tick(t, 2000);
+  await done;
+  assert.equal(h.state.exam().path, a, '讀到的那份先用');
+  assert.equal(h.lane('a'), 'exam-new', '範圍內的卡照考前排');
+  assert.equal(h.retention(), 0.9);
+  assert.equal(h.state.exam().settled, false, '還不知道另一份');
+  assert.deepEqual(await save(h.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'unread' });
+  await tick(t, 30_000);
+  assert.deepEqual(h.state.unread(), [b], '一直沒回來算讀不到');
+  assert.equal(h.state.exam().missing, 1);
+  h.memory.write(a, scopeText('2026-11-22', '2026-11-23'));
+  await tick(t);
+  await tick(t);
+  const period = h.state.exam().period;
+  assert.equal(period.kind === 'ok' ? period.start : null, '2026-11-22', '讀到的那份之後的修改照常處理');
+  h.memory.write(b, '---\n識別碼: bbbbbb\n考試開始: 2026-10-29\n---\n- 國二上 英文 L1\n');
+  await tick(t);
+  held.release();
+  await tick(t, 0);
+  await tick(t, 0);
+  assert.equal(h.state.exam().settled, true);
+  assert.deepEqual(h.state.unread(), []);
+  const back = h.state.exam();
+  assert.equal(back.path, b, '它是更早的考試：重新選');
+  assert.equal(back.period.kind === 'ok' ? back.period.start : null, '2026-10-29', '卡住的時候又改了：讀完再讀一次，舊內容不留著');
+});
+
+void test('一份讀失敗、一份卡住：讀失敗的重試不等卡住的那份；都回來才算知道了', async t => {
+  const a = FOLDER + 'a.md', b = FOLDER + 'b.md';
+  const h = make(t, { ...DECKS, [a]: scopeText('2026-11-20', '2026-11-21'), [b]: '---\n識別碼: bbbbbb\n考試開始: 2026-10-28\n---\n- 國二上 英文 L1\n' });
+  h.memory.failing.add(a);
+  const held = h.memory.holdRead(b);
+  const done = h.state.ready();
+  await tick(t, 0);
+  await tick(t, 2000);
+  await done;
+  assert.equal(h.state.exam().file, null);
+  assert.equal(h.state.exam().settled, false);
+  h.memory.failing.delete(a);
+  await tick(t, 2000);
+  await tick(t);
+  assert.equal(h.state.exam().path, a, '重試成功');
+  assert.equal(h.state.exam().settled, false, '另一份還沒回來');
+  held.release();
+  await tick(t, 0);
+  assert.equal(h.state.exam().settled, true);
+  assert.equal(h.state.exam().path, b);
+  assert.equal(h.errors.length, 2, '第一次讀失敗一次、第一次重試一次；不多報');
+});
+
 void test('範圍檔一直沒回來：ready() 最多等 2 秒；卡組照常；讀到後重排；close 不等它、晚到的結果不回填', async t => {
   const h = make(t, { ...DECKS, [SCOPE]: scopeText() });
   const held = h.memory.holdRead(SCOPE);

@@ -39,6 +39,13 @@ export interface ReadsOptions {
   unreadChanged: () => void;
   /** 第一次載入要列哪些檔；預設是卡組與紀錄（範圍檔自己一份，tasks/exam-scope.md §3）。 */
   list?: () => Promise<[string[], string[]]>;
+  /**
+   * 一份一份讀、讀到就交付（範圍檔，tasks/exam-scope.md §4）：卡住的那份不擋別份，也不擋之後的通知。
+   * 卡組與紀錄不用：一批要一起才排得對，讀不到也由寫入門檻擋著（D-134）。
+   */
+  alone?: boolean;
+  /** alone：這一刻沒有正在讀的了。 */
+  quiet?: () => void;
 }
 
 export type Reads = ReturnType<typeof createReads>;
@@ -64,6 +71,8 @@ export function createReads(options: ReadsOptions) {
   const busy = new Set<string>();
   /** 正在讀的批數（0 或 1：一次只讀一批）。 */
   let reading = 0;
+  /** alone 正在讀的路徑：同一份一次讀一個，晚到的舊內容才不會蓋掉新的。 */
+  const flying = new Set<string>();
   let unwatch: (() => void) | null = null;
   /** 判定讀取卡住的計時（一批一個）；read 結束或關閉時清掉。 */
   const stuckTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -114,11 +123,24 @@ export function createReads(options: ReadsOptions) {
   async function apply(): Promise<void> {
     if (life.closed) return;
     // 正在 I/O 的那一篇不讀，留在 pending（§2 第 2 點）；讀取開始後才到的通知留著等下一批（第 4 點）。
-    const paths = [...pending].filter(path => !busy.has(path));
+    const paths = [...pending].filter(path => !busy.has(path) && !flying.has(path));
     if (!paths.length) return;
     for (const path of paths) pending.delete(path);
+    if (options.alone) {
+      for (const path of paths) readAlone(path);
+      return;
+    }
     reading++;
     try { await read(paths); } finally { reading--; }
+  }
+  function readAlone(path: string): void {
+    flying.add(path);
+    void read([path]).finally(() => {
+      flying.delete(path);
+      // 讀的期間又有通知或寫入：讀完再讀一次。讀不到的重試在 read 裡已經排好了（timer 不是 null）。
+      if (pending.has(path) && timer === null) schedule(unread.has(path) ? retryDelay() : 0);
+      if (!flying.size) options.quiet?.();
+    }).catch(onError);
   }
   /** 不等 delay，排一批讀取（I/O 結束後、寫入前先讀完待讀）；錯誤已經在 queue 交給 onError。 */
   const readNow = (): Promise<void> => queue(apply).catch(() => {});
@@ -225,9 +247,9 @@ export function createReads(options: ReadsOptions) {
       busy.delete(path);
       bump(path);
     },
-    /** 把這篇放進 pending、立刻讀（不等 delay）。 */
-    reread(path: string): void {
-      pending.add(path);
+    /** 把這幾篇放進 pending、立刻讀（不等 delay）。 */
+    reread(...paths: string[]): void {
+      for (const path of paths) pending.add(path);
       void readNow();
     },
     /** 關閉：清掉排好的讀取、叫醒列不出來時的等待、停止監看。 */

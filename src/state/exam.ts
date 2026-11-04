@@ -9,6 +9,7 @@ import type { Life } from './reads.ts';
 /**
  * 範圍檔的讀與寫（tasks/exam-scope.md §3、§2-4、§4）：自己一份讀取層，和卡組、紀錄不同一條。讀取層的 read 等整批，一個卡住的 iCloud 佔位檔
  * 會卡住同一列後面所有的讀取，寫入前的等待也跟著等；分開之後範圍檔讀不到不會擋卡組的寫入（D-134 的理由是不知道 ID 用過沒，範圍檔沒有 ID）。
+ * 範圍檔之間也不互相等（alone）：一份卡住，讀到的那份先用。
  */
 
 /** 畫面交出的變動（§2-4）：新勾的、取消的、有改的日期。 */
@@ -63,24 +64,56 @@ export function createExamFiles(options: ExamFilesOptions) {
   /** 第一次列出來了、都有結果了。還沒的話是「不知道」：不當成沒有範圍，不能寫（§4）。 */
   let settled = false;
   let revision = 0;
+  /** 第一次列出來、還沒有結果的（讀到、確定沒有、讀失敗都算結果）；還沒列出來是 null。 */
+  let first: Set<string> | null = null;
+  let firstDone = (): void => { /* 列出來時才換成真的。 */ };
+  /** 第一次的結果都到了：只回傳 true 一次。 */
+  function checkSettled(): boolean {
+    if (settled || first?.size !== 0) return false;
+    settled = true;
+    revision++;
+    firstDone();
+    return true;
+  }
+  /**
+   * 內容變了還沒通知：別份還在讀時先不通知，最多再等一次 delay。改名的舊路徑與新路徑是分開讀的，舊的先讀到 null，中間那一下不算沒有範圍（§4）；
+   * 真的有一份卡住時，讀到的等這一下就用。
+   */
+  let unsent = false;
+  let unsentTimer: ReturnType<typeof setTimeout> | null = null;
+  function sendChanged(): void {
+    if (unsentTimer !== null) clearTimeout(unsentTimer);
+    unsentTimer = null;
+    if (!unsent || life.closed) return;
+    unsent = false;
+    try { options.changed(); } catch (error) { onError(error); }
+  }
+  function changedSoon(): void {
+    unsent = true;
+    unsentTimer ??= setTimeout(sendChanged, options.delay);
+  }
   const reads = createReads({
     files,
     life,
     delay: options.delay,
     watched: isExamPath,
     onError,
+    alone: true,
+    quiet: sendChanged,
     list: async () => [(await files.list(EXAM_FOLDER)).filter(isExamPath), []],
     // 讀取層把卡組以外的放在第二份。
     batch(_decks, texts) {
       let changed = false;
       for (const [path, text] of texts) {
+        first?.delete(path);
         if (text === null) changed = known.delete(path) || changed;
         else if (known.get(path)?.text !== text) { known.set(path, { text, file: parseScope(text) }); changed = true; }
       }
       if (changed) revision++;
-      return () => { if (changed && life.loaded) options.changed(); };
+      return () => { if (checkSettled() || changed) changedSoon(); };
     },
-    unreadable() { /* 範圍檔沒有等核對的寫入。 */ },
+    // 範圍檔沒有等核對的寫入；這裡只是第一次的結果到了。
+    unreadable(path) { first?.delete(path); },
     stuckAfter: options.stuckAfter,
     unreadChanged: options.unreadChanged,
   });
@@ -89,13 +122,15 @@ export function createExamFiles(options: ExamFilesOptions) {
   /** 開始讀。錯誤都已經（或在這裡）交給 onError，ready() 不跟著失敗（§4）；close() 就是結束。 */
   function start(): Promise<void> {
     started ??= reads.start(async (_begin, paths) => {
-      await reads.queue(() => reads.read(paths));
-      if (life.closed) throw new Closed();
+      // 列出來之後各讀各的：讀到的先用，之後的通知照常處理（§4）；全部有結果才算知道了。
+      first = new Set(paths);
       life.loaded = true;
-      settled = true;
-      revision++;
-      options.changed();
+      const done = new Promise<void>(resolve => { firstDone = resolve; });
+      if (checkSettled()) options.changed();
+      reads.reread(...paths);
       reads.catchUp();
+      await done;
+      if (life.closed) throw new Closed();
     }).catch((error: unknown) => {
       // read 的錯在 queue 已經報過；這裡只剩讀取那一列以外的。多報一次比漏掉好，所以不分。
       if (!(error instanceof Closed)) onError(error);
@@ -193,6 +228,8 @@ export function createExamFiles(options: ExamFilesOptions) {
     stop(): void {
       life.closed = true;
       reads.stop();
+      sendChanged();
+      firstDone();
     },
   };
 }

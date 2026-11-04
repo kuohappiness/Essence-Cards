@@ -58,7 +58,7 @@ export function examRow(state: State | null): ExamRowView {
   const catalog = state?.examCatalog() ?? null;
   if (!state || !catalog) return nothing;
   const { settled, missing, file, usable, period } = state.exam();
-  if (!settled || (missing > 0 && !file)) return { ...nothing, status: '暫時讀不到' };
+  if (!file && (!settled || missing > 0)) return { ...nothing, status: '暫時讀不到' };
   if (!file) return { ...nothing, status: '還沒設定' };
   const { unreadable, unmatched } = scopeNotes(file, catalog);
   const count = (n: number, word: string): string[] => n > 0 ? [`有 ${String(n)} ${word}`] : [];
