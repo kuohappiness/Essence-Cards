@@ -23,6 +23,7 @@
 - [AI 與外掛生態](ai-and-ecosystem.md)
 - [Essence Capture](capture.md)
 - [Essence Mindboard](mindboard.md)
+- [相似字比較卡](similar-chars.md)
 - [獨立 App](standalone-app.md)
 - [更新與相容](updates.md)
 - [維修與查修的準備](maintenance.md)
