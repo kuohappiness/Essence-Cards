@@ -64,6 +64,8 @@ export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
  */
 export type StudyPick = Pick | { unit: string } | { unit: string; since: number } | { deck: string; since: number };
 /** 考試範圍現在的樣子（tasks/exam-scope.md §3、§4）：入口、目錄與設定畫面都看這一份。 */
+/** 畫面打開時選定的是哪一份。 */
+interface ExamTarget { path: string | null; id: string | null }
 export interface ExamView {
   /** 第一次的讀取有結果了。false 是「不知道」：寫「暫時讀不到」，不寫「還沒設定」（§4）。 */
   settled: boolean;
@@ -160,9 +162,9 @@ export interface State {
    * 建立或改範圍檔（§2-4）：畫面只交出變動，在 modify 的回呼裡改最新的內容；新檔撞名不蓋掉。有變動才記紀錄（§2-5）。
    * 寫好後立刻當成現在的內容重排，onChange 只通知一次。closed、loading；範圍檔還不知道或有讀不到的是 unread；回呼看到檔不見或已經結束是 changed；屬性區壞了是 broken。
    */
-  setExam(change: ExamChange): Promise<ExamResult>;
+  setExam(change: ExamChange, opened: ExamTarget): Promise<ExamResult>;
   /** 結束這次考試（§2-2）：選定的那一份多一行 `提前結束`，立刻失效；還有另一份生效就換它接手。擋下來的原因同 setExam。 */
-  endExam(): Promise<ExamResult>;
+  endExam(opened: ExamTarget): Promise<ExamResult>;
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫；考試範圍只改了看不懂的行數這類只影響畫面的，也會呼叫但不重排。 */
   onChange(listener: () => void): () => void;
   /** unread() 的內容變了（多了或少了）；另外一條，不經 onChange，所以存檔按鈕不多更新一次（任務說明 §8、§11）。 */
@@ -421,15 +423,17 @@ export function createState(options: StateOptions): State {
     }
   }
   const unitList = (): ScopeUnit[] => catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }));
-  /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。 */
+  /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。輪到它時選定的已經不是畫面打開的那一份（前一筆結束了、被刪、改名、換了另一次考試）：不套上去（§6）。 */
   let examWrites: Promise<unknown> = Promise.resolve();
-  function examWrite(work: (day: number) => Promise<ExamResult>): Promise<ExamResult> {
+  function examWrite(opened: ExamTarget, work: (chosen: ReturnType<typeof exam.choose>['chosen'], day: number) => Promise<ExamResult>): Promise<ExamResult> {
     const run = examWrites.then((): Promise<ExamResult> | ExamResult => {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (!life.loaded) return { kind: 'blocked', reason: 'loading' };
       if (!exam.settled() || exam.unread.size) return { kind: 'blocked', reason: 'unread' };
-      const at = now();
-      return work(dayOf(at, offsetOf(at)));
+      const at = now(), day = dayOf(at, offsetOf(at));
+      const { chosen } = selection(day);
+      if ((chosen?.path ?? null) !== opened.path || (chosen?.file.id ?? null) !== opened.id) return { kind: 'blocked', reason: 'changed' };
+      return work(chosen, day);
     });
     examWrites = run.catch(() => {});
     return run;
@@ -651,17 +655,11 @@ export function createState(options: StateOptions): State {
       const edited = editScope(exam.text(chosen.path) ?? '', change, unitList());
       return scopeCheck(edited.kind === 'ok' ? parseScope(edited.text) : chosen.file, catalogIndex());
     },
-    setExam(change) {
-      return examWrite(day => {
-        const { chosen } = selection(day);
-        return chosen ? exam.update(chosen.path, change, unitList()) : exam.create(change);
-      });
+    setExam(change, opened) {
+      return examWrite(opened, chosen => chosen ? exam.update(chosen.path, opened.id, change, unitList()) : exam.create(change));
     },
-    endExam() {
-      return examWrite(day => {
-        const { chosen } = selection(day);
-        return chosen ? exam.update(chosen.path, { ended: scopeDate(day) }, []) : Promise.resolve({ kind: 'blocked', reason: 'changed' });
-      });
+    endExam(opened) {
+      return examWrite(opened, (chosen, day) => chosen ? exam.update(chosen.path, opened.id, { ended: scopeDate(day) }, []) : Promise.resolve({ kind: 'blocked', reason: 'changed' }));
     },
     onChange(listener) {
       listeners.add(listener);

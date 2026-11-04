@@ -151,14 +151,17 @@ export function createExamFiles(options: ExamFilesOptions) {
     choose: (day: number) => chooseScope([...known].map(([path, { file }]) => ({ path, file })), day),
     /** 上一份範圍的結束日（§6 的預先勾選）。 */
     previousEnd: (day: number): string | null => lastEnded([...known].map(([path, { file }]) => ({ path, file })), day),
-    /** 改一份舊檔（§2-4）：回呼裡改最新的內容；有變動才記（§2-5）。 */
-    async update(path: string, change: ExamChange | Pick<ScopeChange, 'ended'>, units: readonly ScopeUnit[]): Promise<ExamResult> {
+    /** 改一份舊檔（§2-4）：回呼裡改最新的內容；有變動才記（§2-5）。id 是畫面打開時的識別碼。 */
+    async update(path: string, id: string | null, change: ExamChange | Pick<ScopeChange, 'ended'>, units: readonly ScopeUnit[]): Promise<ExamResult> {
       let before: ScopeFile | null = null;
       try {
         const text = await modify(path, latest => {
           const done = editScope(latest, { ...change, id: freshId() }, units);
           if (done.kind === 'blocked') throw new ScopeBlocked(done);
-          before = parseScope(latest);
+          const was = parseScope(latest);
+          // 同一個路徑換成另一次考試（同步把別的檔換過來，state 還沒讀到）：別人改的別的行留著，但不是這次考試就不寫。
+          if (was.id !== id) throw new ScopeBlocked({ kind: 'blocked', reason: 'changed' });
+          before = was;
           return done.text;
         });
         const after = parseScope(text), was = before as ScopeFile | null;

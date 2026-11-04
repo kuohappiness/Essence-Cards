@@ -59,6 +59,10 @@ function make(t: TestContext, initial: Record<string, string>, now = NOON): Harn
     logged: () => [...memory.texts].filter(([path]) => path.startsWith('Essence Cards/紀錄/') || path.endsWith('.jsonl')).flatMap(([, text]) => text.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)).filter(line => line.set === 'exam'),
   };
 }
+/** 畫面打開的是這一刻選定的那一份。 */
+const opened = (state: State): Parameters<State['endExam']>[0] => ({ path: state.exam().path, id: state.exam().file?.id ?? null });
+const save = (state: State, change: Parameters<State['setExam']>[0]): ReturnType<State['setExam']> => state.setExam(change, opened(state));
+const finish = (state: State): ReturnType<State['endExam']> => state.endExam(opened(state));
 const ready = async (t: TestContext, h: Harness): Promise<void> => {
   const done = h.state.ready();
   await tick(t, 0);
@@ -73,7 +77,7 @@ void test('無範圍 → 建立有期間的範圍，同一天：lane 與保持�
   assert.deepEqual(h.state.exam().file, null);
   assert.equal(h.state.exam().settled, true);
   const before = h.changed();
-  const result = await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28', end: '2026-10-29' });
+  const result = await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28', end: '2026-10-29' });
   assert.deepEqual(result, { kind: 'done' });
   assert.equal(h.changed(), before + 1, '存範圍時 onChange 只通知一次');
   assert.equal(h.lane('a'), 'exam-new');
@@ -93,12 +97,12 @@ void test('無範圍 → 建立有期間的範圍，同一天：lane 與保持�
 void test('紀錄行：建立、改（有 old）、提前結束；沒有變動不記、不寫', async t => {
   const h = make(t, DECKS);
   await ready(t, h);
-  await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28', end: '2026-10-29' });
+  await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28', end: '2026-10-29' });
   const id = h.state.exam().file?.id;
-  await h.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] });
-  await h.state.setExam({});
-  await h.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] });
-  await h.state.endExam();
+  await save(h.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] });
+  await save(h.state, {});
+  await save(h.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] });
+  await finish(h.state);
   await h.state.flush();
   const lines = h.logged().map(({ val }) => val);
   assert.deepEqual(lines, [
@@ -111,13 +115,13 @@ void test('紀錄行：建立、改（有 old）、提前結束；沒有變動�
 void test('紀錄行：手寫的檔第一次按確定：補識別碼算改，old 照原字；只有日期的寫法變了不記', async t => {
   const h = make(t, { ...DECKS, [SCOPE]: '---\n考試開始: 10/28\n---\n- 國二上 自然 2-1\n' });
   await ready(t, h);
-  await h.state.setExam({ start: '2026-10-28' });
+  await save(h.state, { start: '2026-10-28' });
   await h.state.flush();
   const id = h.state.exam().file?.id;
   assert.deepEqual(h.logged().map(({ val }) => val), [{ id, do: '改', units: ['國二上 自然 2-1'], start: '2026-10-28', old: { units: ['國二上 自然 2-1'], start: '10/28' } }]);
   const only = make(t, { ...DECKS, [SCOPE]: '---\n識別碼: x\n考試開始: 20261028\n---\n- 國二上 自然 2-1\n' });
   await ready(t, only);
-  await only.state.setExam({});
+  await save(only.state, {});
   await only.state.flush();
   assert.equal(only.memory.texts.get(SCOPE), '---\n識別碼: x\n考試開始: 2026-10-28\n---\n- 國二上 自然 2-1\n', '下次按確定才標準化');
   assert.deepEqual(only.logged(), []);
@@ -127,15 +131,15 @@ void test('撞名不蓋掉，換後綴；空檔寫進去', async t => {
   const h = make(t, { ...DECKS, [SCOPE]: '老師說\n' });
   // 那一份只有看不懂的行：選到它；要有另一種情況才會建立新檔，所以先結束它。
   await ready(t, h);
-  await h.state.endExam();
+  await finish(h.state);
   assert.match(h.memory.texts.get(SCOPE) ?? '', /提前結束/);
-  await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
+  await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
   assert.match(h.memory.texts.get(SCOPE) ?? '', /老師說/, '舊檔內容不變');
   assert.match(h.memory.texts.get(FOLDER + '2026-10-28 國二上 2.md') ?? '', /- 國二上 自然 2\n$/);
   const empty = make(t, { ...DECKS });
   await ready(t, empty);
   empty.memory.texts.set(SCOPE, '');
-  await empty.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
+  await save(empty.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
   assert.match(empty.memory.texts.get(SCOPE) ?? '', /- 國二上 自然 2\n$/, '空檔沒有內容可丟');
 });
 
@@ -143,20 +147,20 @@ void test('回呼看到檔不見或已經結束、屬性區壞了：不寫、不
   const h = make(t, { ...DECKS, [SCOPE]: scopeText() });
   await ready(t, h);
   h.memory.texts.delete(SCOPE);
-  assert.deepEqual(await h.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual(await save(h.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'changed' });
   assert.equal(h.memory.texts.has(SCOPE), false, '不建立');
   const ended = make(t, { ...DECKS, [SCOPE]: scopeText() });
   await ready(t, ended);
   ended.memory.texts.set(SCOPE, scopeText().replace('---\n-', '提前結束: 2026-10-19\n---\n-'));
-  assert.deepEqual(await ended.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual(await save(ended.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'changed' });
   const broken = make(t, { ...DECKS, [SCOPE]: '---\n考試開始: [\n---\n- 國二上 自然 2-1\n' });
   await ready(t, broken);
-  assert.deepEqual(await broken.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'broken' });
+  assert.deepEqual(await save(broken.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'broken' });
   assert.equal(broken.memory.texts.get(SCOPE), '---\n考試開始: [\n---\n- 國二上 自然 2-1\n');
   const failing = make(t, { ...DECKS, [SCOPE]: scopeText() });
   await ready(t, failing);
   failing.memory.control.failModify = true;
-  assert.equal((await failing.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] })).kind, 'failed');
+  assert.equal((await save(failing.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] })).kind, 'failed');
 });
 
 void test('畫面改了開始日，別台同時把結束日改得更早：不寫、不記，期間沒有變成有問題', async t => {
@@ -164,20 +168,84 @@ void test('畫面改了開始日，別台同時把結束日改得更早：不寫
   await ready(t, h);
   const changed = scopeText('2026-10-21', '2026-10-25');
   h.memory.texts.set(SCOPE, changed);
-  assert.deepEqual(await h.state.setExam({ start: '2026-10-27' }), { kind: 'blocked', reason: 'dates' });
+  assert.deepEqual(await save(h.state, { start: '2026-10-27' }), { kind: 'blocked', reason: 'dates' });
   assert.equal(h.memory.texts.get(SCOPE), changed);
   assert.deepEqual(h.logged().filter(entry => entry.set === 'exam'), []);
   await tick(t);
   assert.equal(h.state.exam().period.kind, 'ok');
 });
 
+void test('同一個路徑換成另一次考試，state 還沒讀到：舊畫面的變動與結束都不寫、不記；同一次考試上別人改的別的行留著', async t => {
+  const A = '---\n識別碼: aaaaaa\n---\n- 國二上 自然 2-1\n';
+  const h = make(t, { ...DECKS, [SCOPE]: A });
+  await ready(t, h);
+  const target = opened(h.state);
+  const other = '---\n識別碼: cccccc\n---\n- 國二上 自然 4\n';
+  const add = { add: [{ term: '國二上', subject: '英文', code: 'L1' }] };
+  h.memory.texts.set(SCOPE, other);
+  assert.deepEqual(await h.state.setExam(add, target), { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual(await h.state.endExam(target), { kind: 'blocked', reason: 'changed' });
+  assert.equal(h.memory.texts.get(SCOPE), other);
+  assert.deepEqual(h.logged().filter(entry => entry.set === 'exam'), []);
+
+  const same = make(t, { ...DECKS, [SCOPE]: A });
+  await ready(t, same);
+  const mine = opened(same.state);
+  same.memory.texts.set(SCOPE, A + '- 國二上 自然 2-2\n老師說第三節不考\n');
+  assert.deepEqual(await same.state.setExam(add, mine), { kind: 'done' });
+  assert.equal(same.memory.texts.get(SCOPE), A + '- 國二上 自然 2-2\n老師說第三節不考\n- 國二上 英文 L1\n', '同一次考試：別人改的行留著');
+
+  const none = make(t, { ...DECKS, [SCOPE]: '- 國二上 自然 2-1\n' });
+  await ready(t, none);
+  const bare = opened(none.state);
+  none.memory.texts.set(SCOPE, A);
+  assert.deepEqual(await none.state.setExam(add, bare), { kind: 'blocked', reason: 'changed' }, '打開時沒有識別碼，現在有：分不出是不是同一次');
+  assert.equal(none.memory.texts.get(SCOPE), A);
+});
+
+void test('排隊時選定的換了：前一筆結束讓另一份接手，舊畫面晚到的變動不會落到那一份', async t => {
+  const first = FOLDER + 'a.md', second = FOLDER + 'b.md';
+  const later = '---\n識別碼: bbbbbb\n考試開始: 2026-11-20\n---\n- 國二上 自然 2-1\n';
+  const h = make(t, { ...DECKS, [first]: '---\n識別碼: aaaaaa\n考試開始: 2026-10-28\n---\n- 國二上 自然 2-1\n', [second]: later });
+  await ready(t, h);
+  const target = opened(h.state);
+  assert.equal(target.path, first);
+  const add = { add: [{ term: '國二上', subject: '英文', code: 'L1' }] };
+  const ending = h.state.endExam(target), late = h.state.setExam(add, target), lateEnd = h.state.endExam(target);
+  assert.deepEqual(await ending, { kind: 'done' });
+  assert.deepEqual(await late, { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual(await lateEnd, { kind: 'blocked', reason: 'changed' });
+  assert.equal(h.memory.texts.get(second), later);
+  assert.equal(h.state.exam().path, second);
+  assert.deepEqual(h.logged().filter(entry => entry.set === 'exam').map(entry => (entry.val as { id: string; do: string }).id), ['aaaaaa']);
+});
+
+void test('打開時沒有範圍，別處新建了一份：不另建一份；打開時有，現在沒有：不建立', async t => {
+  const h = make(t, DECKS);
+  await ready(t, h);
+  const target = opened(h.state);
+  h.memory.write(SCOPE, scopeText());
+  await tick(t);
+  assert.deepEqual(await h.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }, target), { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual([...h.memory.texts.keys()].filter(path => path.startsWith(FOLDER)), [SCOPE]);
+
+  const gone = make(t, { ...DECKS, [SCOPE]: scopeText() });
+  await ready(t, gone);
+  const was = opened(gone.state);
+  gone.memory.remove(SCOPE);
+  await tick(t);
+  assert.deepEqual(await gone.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }, was), { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual(await gone.state.endExam(was), { kind: 'blocked', reason: 'changed' });
+  assert.deepEqual([...gone.memory.texts.keys()].filter(path => path.startsWith(FOLDER)), []);
+});
+
 void test('還沒 ready 與關閉之後擋下來', async t => {
   const h = make(t, DECKS);
-  assert.deepEqual(await h.state.setExam({}), { kind: 'blocked', reason: 'loading' });
+  assert.deepEqual(await save(h.state, {}), { kind: 'blocked', reason: 'loading' });
   await ready(t, h);
   await h.state.close();
-  assert.deepEqual(await h.state.setExam({}), { kind: 'blocked', reason: 'closed' });
-  assert.deepEqual(await h.state.endExam(), { kind: 'blocked', reason: 'closed' });
+  assert.deepEqual(await save(h.state, {}), { kind: 'blocked', reason: 'closed' });
+  assert.deepEqual(await finish(h.state), { kind: 'blocked', reason: 'closed' });
 });
 
 void test('範圍變動不改已完成數；今天答對的目標重排後還是完成', async t => {
@@ -185,7 +253,7 @@ void test('範圍變動不改已完成數；今天答對的目標重排後還是
   await ready(t, h);
   h.state.answer({ lt: 'a', r: 'good', v: 'x' });
   const before = h.state.progress();
-  await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2-1' }], start: '2026-10-28' });
+  await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2-1' }], start: '2026-10-28' });
   const after = h.state.progress();
   assert.equal(after.done, before.done);
   assert.equal(after.subjects.find(row => row.subject === '自然')?.done, 1);
@@ -195,7 +263,7 @@ void test('結束這次考試：當場變回平常，檔案的開始與結束日
   const h = make(t, { ...DECKS, [SCOPE]: scopeText() });
   await ready(t, h);
   assert.equal(h.lane('a'), 'exam-new');
-  assert.deepEqual(await h.state.endExam(), { kind: 'done' });
+  assert.deepEqual(await finish(h.state), { kind: 'done' });
   assert.equal(h.lane('a'), 'new');
   assert.equal(h.retention(), 0.8);
   assert.equal(h.state.exam().file, null);
@@ -205,7 +273,7 @@ void test('結束這次考試：當場變回平常，檔案的開始與結束日
   await ready(t, two);
   assert.equal(two.lane('a'), 'exam-new');
   assert.deepEqual(two.state.exam().others, [other]);
-  await two.state.endExam();
+  await finish(two.state);
   assert.equal(two.lane('a'), 'new');
   assert.equal(two.lane('c'), 'exam-new', '換它接手，不是回到平常');
   assert.equal(two.state.exam().path, other);
@@ -339,7 +407,7 @@ void test('範圍檔讀不到（reject）：同批的卡組照常、ready() 不�
   assert.equal(h.lane('a'), 'new', '第一次讀不到：今天的份當成沒有範圍');
   assert.equal(h.state.exam().file, null);
   assert.equal(h.state.exam().missing, 1);
-  assert.deepEqual(await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }] }), { kind: 'blocked', reason: 'unread' });
+  assert.deepEqual(await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }] }), { kind: 'blocked', reason: 'unread' });
   assert.equal(h.state.writeBlock(), null, '卡組的寫入不擋');
   h.memory.failing.delete(SCOPE);
   await tick(t, 1000);
@@ -369,7 +437,7 @@ void test('範圍檔一直沒回來：ready() 最多等 2 秒；卡組照常；�
   await done;
   assert.equal(h.lane('a'), 'new');
   assert.equal(h.state.exam().settled, false);
-  assert.deepEqual(await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }] }), { kind: 'blocked', reason: 'unread' });
+  assert.deepEqual(await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }] }), { kind: 'blocked', reason: 'unread' });
   const before = h.changed();
   held.release();
   await tick(t, 0);
@@ -403,7 +471,7 @@ void test('一份範圍檔的屬性區讀不出來（alias 接不上、繞圈）
     assert.equal(only.state.exam().settled, true, bad);
     assert.equal(only.state.exam().period.kind, 'bad', bad);
     assert.equal(only.state.today().slots.get('a')?.retention, 0.8, '範圍照算，不提高保持率：' + bad);
-    assert.deepEqual(await only.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'broken' });
+    assert.deepEqual(await save(only.state, { add: [{ term: '國二上', subject: '英文', code: 'L1' }] }), { kind: 'blocked', reason: 'broken' });
   }
 });
 
@@ -464,7 +532,7 @@ void test('§5 保持率同一個值：今天的份、全部卡的順序、目�
 void test('紀錄的行舊版也讀得懂：進 changes，不算作答，不帶 need', async t => {
   const h = make(t, DECKS);
   await ready(t, h);
-  await h.state.setExam({ add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
+  await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' });
   const history = h.state.history();
   assert.equal(history.reviews.length, 0);
   assert.equal(history.incomplete, false);

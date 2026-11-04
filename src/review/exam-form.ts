@@ -30,8 +30,9 @@ export interface ExamForm {
   others: readonly string[];
   /** 範圍還不知道（第一次的讀取沒有結果，或選定的檔都讀不到）：寫原因，存不了。 */
   unknown: boolean;
-  /** 勾的是哪一份；交出去的只有變動，存的時候選定的已經換了，就不能套上去。 */
+  /** 勾的是哪一份（路徑與識別碼）；交出去的只有變動，存的時候選定的已經換了，就不能套上去。 */
   path: string | null;
+  id: string | null;
 }
 
 /** 這個單元裡自己的目標最早的作答是哪一天；都還沒作答是 null。 */
@@ -79,7 +80,7 @@ export function examForm(state: State | null): ExamForm | null {
     start: file ? dateText(file.start) : '', end: file ? dateText(file.end) : '',
     usable: exam.usable, others: exam.others,
     unknown: !exam.settled || (exam.missing > 0 && !file),
-    path: exam.path,
+    path: exam.path, id: file?.id ?? null,
   };
 }
 
