@@ -1,22 +1,25 @@
 <title>相似字比較卡</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Iansui&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC&text=%E7%9C%9F%E7%9B%B4&display=swap">
 <style>
 /* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
-   字用楷書：相似字的差別在部件，楷書的筆形最接近課本。 */
+   卡片內容用芫荽：楷書的筆形接近課本，字形貼近教育部標準。按鈕的字和其他科目相同。
+   畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線。 */
 :root{
-  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--grid:#BDBBB2;--press:#ECEFF4;
+  --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
   --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
-  --hanzi:"LXGW WenKai TC","Kaiti TC","BiauKai","DFKai-SB",serif;
+  --hanzi:"Iansui","BiauKai","Kaiti TC","DFKai-SB",serif;
   --ui:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--grid:#55585E;--press:#263043;
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
   --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--easy:#8DB7FF;--on-ink:#121314;color-scheme:dark}}
 :root[data-theme="dark"]{
-  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--grid:#55585E;--press:#263043;
+  --page:#121314;--bg:#1B1D1F;--ink:#E6E7E9;--muted:#959AA2;--line:#2F3236;--press:#263043;
   --key:#B69CF5;--miss:#FF8A80;--near:#FFB25E;--good:#68D398;--easy:#8DB7FF;--on-ink:#121314;color-scheme:dark}
 *{box-sizing:border-box}
+html{font-synthesis:none}
 body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.65;
   padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -29,67 +32,55 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 
 /* 卡：外掛是沒有外框的安靜樣式，這裡的框只是在網頁上代表手機畫面 */
 .phone{background:var(--page);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;overflow:hidden}
-/* 卡片標題：作業簿的田字格，裡面是兩個人並肩的「比」 */
-.card-head{display:flex;align-items:center;gap:12px;padding:16px 18px 13px;border-bottom:1px solid var(--line)}
-.grid-mark{flex:none;width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--grid);border-radius:3px;
-  font-family:var(--hanzi);font-size:32px;line-height:1;color:var(--ink);
-  background-image:repeating-linear-gradient(to right,var(--grid) 0 3px,transparent 3px 6px),repeating-linear-gradient(to bottom,var(--grid) 0 3px,transparent 3px 6px);
-  background-size:100% 1px,1px 100%;background-position:0 50%,50% 0;background-repeat:no-repeat}
-.card-titles{min-width:0;display:grid;gap:1px}
-.card-title{margin:0;font-family:var(--hanzi);font-size:22px;font-weight:700;line-height:1.3;letter-spacing:.08em}
-.card-sub{margin:0;font-size:13px;line-height:1.5;color:var(--muted)}
-.stage{padding:10px 8px 8px;display:grid;gap:8px;min-height:252px;align-content:start}
-.eyebrow{margin:0 6px;font-size:13px;color:var(--muted)}
+.card-title{margin:0 8px 4px;font-family:var(--hanzi);font-size:15px;line-height:1.5;color:var(--muted)}
+.stage{padding:14px 8px 8px;display:grid;gap:4px;min-height:252px;align-content:start}
+.eyebrow{margin:0;font-size:13px;color:var(--muted)}
 .rows{list-style:none;margin:0;padding:0;display:grid;gap:2px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:4px;min-height:46px;padding:3px 8px;border-radius:10px;
   font-family:var(--hanzi);font-size:20px;line-height:1.55;cursor:pointer;transition:background-color .12s ease}
-.row.on{background:var(--press)}
+.row.on{background:color-mix(in srgb,var(--ink) 4%,transparent)}
 .row.lock{cursor:default}
 .row .txt{min-width:0}
 .mark{flex:none;font-family:var(--ui);font-size:14px;font-weight:700;width:14px;text-align:center}
 .mark.right{color:var(--good)}.mark.near{color:var(--near)}.mark.miss{color:var(--miss)}.mark.retry{color:var(--miss)}
 .slot{appearance:none;display:inline-block;background:none;border:0;border-bottom:2px solid var(--muted);padding:0;margin:0 3px;width:1.9em;
-  font-family:var(--hanzi);font-size:21px;font-weight:700;line-height:1.3;color:var(--key);text-align:center;vertical-align:baseline;cursor:pointer;border-radius:3px 3px 0 0}
-.row.on .slot{border-bottom:3px solid var(--key);background:color-mix(in srgb,var(--key) 14%,transparent)}
+  font-family:var(--hanzi);font-size:21px;line-height:1.3;color:var(--key);text-align:center;vertical-align:baseline;cursor:pointer}
+.row.on .slot{border-bottom-color:var(--key);box-shadow:0 1px 0 var(--key)}
 .slot.right{color:var(--good);border-bottom-color:var(--good)}
 .slot.near{color:var(--near);border-bottom-color:var(--near)}
 .slot.miss{color:var(--miss);border-bottom-color:var(--miss)}
 .slot.unknown{color:var(--muted)}
-.slot s{color:var(--miss);font-weight:400}
+.slot s{color:var(--miss)}
 .slot.pop{animation:pop .16s ease-out}
 @keyframes pop{0%{transform:scale(1.28)}100%{transform:scale(1)}}
-.fly{position:fixed;z-index:5;pointer-events:none;font-family:var(--hanzi);font-size:30px;font-weight:700;color:var(--key);line-height:1}
+.fly{position:fixed;z-index:5;pointer-events:none;font-family:var(--hanzi);font-size:30px;color:var(--key);line-height:1}
 @media (prefers-reduced-motion:reduce){.slot.pop{animation:none}.row{transition:none}}
 
 /* 手指最常停的地方：字鍵在上，兩個動作在下，中間留空，連點才不會誤按「對答案」 */
-.tray{position:sticky;bottom:0;background:var(--page);padding:6px 12px calc(12px + env(safe-area-inset-bottom,0px));display:grid;gap:10px;border-top:1px solid var(--line)}
-.say{margin:0;font-size:13px;color:var(--muted);min-height:1.65em}
-.say.warn{color:var(--miss)}
+.tray{position:sticky;bottom:0;background:var(--page);padding:10px 12px calc(12px + env(safe-area-inset-bottom,0px));display:grid;gap:10px}
 .keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.key{appearance:none;height:60px;border:1px solid var(--line);border-radius:12px;background:var(--page);
-  font-family:var(--hanzi);font-size:31px;font-weight:700;line-height:1;cursor:pointer;transition:transform .06s ease,background-color .06s ease}
-.key:active{background:var(--press);transform:scale(.96)}
-.key:disabled{opacity:.28;cursor:default;transform:none;background:var(--page)}
+.key{appearance:none;height:60px;border:1px solid var(--line);border-radius:12px;background:none;
+  font-family:var(--hanzi);font-size:31px;line-height:1;cursor:pointer;transition:transform .06s ease,background-color .06s ease}
+.key:active{background:color-mix(in srgb,var(--ink) 6%,transparent);transform:scale(.96)}
+.key:disabled{opacity:.28;cursor:default;transform:none;background:none}
 .acts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:8px}
 .act{appearance:none;height:48px;border-radius:12px;border:1px solid var(--line);background:none;font-size:15px;font-weight:500;cursor:pointer}
-.act:active{background:var(--press)}
+.act:active{background:color-mix(in srgb,var(--ink) 6%,transparent)}
 #skip{color:var(--muted)}
-#check{color:var(--muted);font-variant-numeric:tabular-nums}
-#check.ready{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
-#check.ready:active{opacity:.85;background:var(--ink)}
+#check{opacity:.4}
+#check.ready{opacity:1}
+#check.again-label{opacity:1;color:var(--muted);cursor:default}
 #check.nudge{animation:nudge .3s ease}
 @keyframes nudge{0%,100%{transform:none}35%{transform:scale(1.03)}}
 @media (prefers-reduced-motion:reduce){#check.nudge{animation:none}.key{transition:none}.key:active{transform:none}}
 
 /* 對答案之後：整組對照，也是每個字的結果 */
-.compare{display:grid;gap:0;margin:2px 8px 0;border-top:1px solid var(--line)}
-.cmp{display:grid;grid-template-columns:2.1rem minmax(0,1fr) auto;gap:2px 8px;align-items:baseline;padding:8px 2px;border-bottom:1px solid var(--line)}
-.cmp:last-child{border-bottom:0}
-.cmp .ch{font-family:var(--hanzi);font-size:25px;font-weight:700;line-height:1.2}
-.cmp .why{font-size:14px;line-height:1.5;min-width:0}
-.cmp .why b{color:var(--key);font-family:var(--hanzi);font-size:16px}
-.cmp .words{display:block;font-family:var(--hanzi);font-size:15px;line-height:1.5}
-.cmp .slip{display:block;font-size:13px;color:var(--muted)}
+.compare{display:grid;gap:12px;margin:14px 8px 10px}
+.cmp{display:grid;grid-template-columns:2.1rem minmax(0,1fr) auto;gap:2px 8px;align-items:baseline;padding:0 2px}
+.cmp .ch{font-family:var(--hanzi);font-size:25px;line-height:1.2}
+.cmp .why{font-family:var(--hanzi);font-size:16px;line-height:1.5;min-width:0}
+.cmp .why b{font-weight:400;color:var(--key)}
+.cmp .words{display:block;font-size:15px;line-height:1.5;color:var(--muted)}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap}
 .chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
 .chip.good{color:var(--good)}.chip.near{color:var(--near)}.chip.miss{color:var(--miss)}.chip.easy{color:var(--easy)}
@@ -112,6 +103,8 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 .list{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
 .list li{min-width:0}
 .list a{color:var(--key);text-underline-offset:2px}
+.glyphs{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px;align-items:baseline;margin-top:8px;font-size:14px}
+.glyphs .g{font-size:34px;line-height:1.25;letter-spacing:.1em}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:.08em;background:var(--k)}
 :focus-visible{outline:2px solid var(--key);outline-offset:2px}
 </style>
@@ -124,21 +117,14 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
 
   <div class="layout">
     <div class="demo">
+      <p class="eyebrow" id="eyebrow" hidden></p>
       <section class="phone" aria-label="比較卡示意">
-        <header class="card-head">
-          <span class="grid-mark" aria-hidden="true">比</span>
-          <div class="card-titles">
-            <h2 class="card-title">相似字比一比</h2>
-            <p class="card-sub" id="cardSub"></p>
-          </div>
-        </header>
         <div class="stage">
-          <p class="eyebrow" id="eyebrow" hidden></p>
+          <p class="card-title" id="cardTitle"></p>
           <ul class="rows" id="rows"></ul>
           <div class="compare" id="compare" hidden></div>
         </div>
         <div class="tray" id="tray">
-          <p class="say" id="say" aria-live="polite"></p>
           <div class="keys" id="keys"></div>
           <div class="acts">
             <button class="act" id="skip" type="button">沒印象</button>
@@ -177,6 +163,15 @@ h1{font-family:var(--hanzi);font-size:27px;line-height:1.3;margin:0;text-wrap:ba
           <li>再出時換一句話，避免背句子。</li>
           <li>紀錄留下孩子選了哪個字，之後看得出「賽」和「塞」這一對常搞混。</li>
         </ul>
+      </section>
+
+      <section>
+        <h2>字體</h2>
+        <p>你喜歡的那個字體叫霞鶩文楷，字形照的是傳承字形，不是台灣課本的標準，例如「真」會寫成另一種寫法。卡片上現在換成同一個字體底子改的芫荽，專為學習做，字形貼近教育部標準，看起來幾乎一樣。</p>
+        <div class="glyphs">
+          <span>霞鶩文楷</span><span class="g" style="font-family:'LXGW WenKai TC',serif">真直</span>
+          <span>芫荽</span><span class="g" style="font-family:var(--hanzi)">真直</span>
+        </div>
       </section>
 
       <section>
@@ -246,7 +241,6 @@ function newCard(sentences, eyebrow, stage) {
     cursor: 0,
     blanks: sentences.map(s => ({ ...s, pick: '', first: '', second: '', status: 'open' })),
   };
-  el('cardSub').textContent = sentences.length > 1 ? '每一句該用哪個字？' : '這一句該用哪個字？';
   el('tray').hidden = false;
   el('rates').hidden = true;
   el('compare').hidden = true;
@@ -329,27 +323,19 @@ function paint(popIndex = -1) {
 function paintTray() {
   if (card.phase === 'result') return;
   const check = el('check');
-  const say = el('say');
-  say.classList.remove('warn');
   [...el('keys').children].forEach(key => {
     const blank = card.blanks[card.cursor];
     key.disabled = card.phase === 'retry' && blank && key.textContent === blank.first;
   });
   if (card.phase === 'retry') {
-    const left = card.blanks.filter(b => b.status === 'retry').length;
-    say.textContent = left + ' 格不對，答案先不說。再選一次，選了就算數。';
-    say.classList.add('warn');
     check.textContent = '再選一次';
     check.classList.remove('ready');
+    check.classList.add('again-label');
     return;
   }
-  const empties = card.blanks.filter(b => !b.pick).length;
-  const filled = card.blanks.length - empties;
-  check.textContent = empties ? '還有 ' + empties + ' 格' : '對答案';
-  check.classList.toggle('ready', !empties);
-  if (!empties) say.textContent = '看一下，沒問題就對答案。要改就點那一句。';
-  else if (filled) say.textContent = '點錯了，就點那一句再選一次。';
-  else say.textContent = '點字，會填進亮起來的那一格。';
+  check.classList.remove('again-label');
+  check.textContent = '對答案';
+  check.classList.toggle('ready', card.blanks.every(b => b.pick));
 }
 
 function flyTo(keyButton, index) {
@@ -444,21 +430,11 @@ function ratingsOfCard() {
   return result;
 }
 
-function slipsOfCard() {
-  const slips = {};
-  card.blanks.forEach(blank => {
-    if (blank.first && blank.first !== '?' && blank.first !== blank.ans) slips[blank.ans] = blank.first;
-  });
-  return slips;
-}
-
 function showResult() {
   card.phase = 'result';
   card.cursor = -1;
-  el('cardSub').textContent = '比一比，差別就在這裡';
   paint();
   const ratings = ratingsOfCard();
-  const slips = slipsOfCard();
   el('tray').hidden = true;
   el('compare').hidden = false;
   el('compare').replaceChildren(...GROUP.map(g => {
@@ -474,12 +450,6 @@ function showResult() {
     words.className = 'words';
     words.textContent = g.words;
     why.append(words);
-    if (slips[g.ch]) {
-      const slip = document.createElement('span');
-      slip.className = 'slip';
-      slip.textContent = '第一次選了「' + slips[g.ch] + '」';
-      why.append(slip);
-    }
     const chip = document.createElement('span');
     if (ratings[g.ch]) {
       chip.className = 'chip ' + ratings[g.ch];
@@ -521,8 +491,8 @@ function leaveResult(ratings, chosen) {
 }
 
 function showEnd(lastRound) {
-  el('eyebrow').hidden = true;
-  el('cardSub').textContent = '這一組做完了，每個字接下來各走各的';
+  el('eyebrow').hidden = false;
+  el('eyebrow').textContent = '這一組做完了，每個字接下來各走各的。這一頁只有示意頁才有。';
   el('rows').replaceChildren();
   el('compare').hidden = false;
   el('compare').replaceChildren(...GROUP.map(g => {
@@ -588,6 +558,7 @@ el('skip').addEventListener('click', () => {
 });
 el('check').addEventListener('click', tapCheck);
 el('restart').addEventListener('click', restart);
+el('cardTitle').textContent = '相似字：' + GROUP.map(g => g.ch).join('、');
 
 newCard(FIRST_CARD, '', 'first');
 </script>

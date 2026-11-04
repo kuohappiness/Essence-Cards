@@ -49,6 +49,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-04 | 開[題型專區](question-types.md)，題型當成可以接上的模組（[D-181](decisions.md#d-181-題型是可以接上的模組開題型專區)）；比較卡標題只留字組，介面「非必要不出現」寫進產品原則（[D-179](decisions.md#d-179-介面的每一項都要有必要性非必要不出現)）；國文卡用楷書（[D-180](decisions.md#d-180-國文卡用楷書)），💡 建議字體芫荽 |
 | 2026-11-04 | 比較卡的畫面定案，翻面的對照寫進國語預設 v0.2；最高原則澄清成「優勢明顯才該做」；相似字改做點字比較卡，一格一個學習目標（[D-178](decisions.md#d-178-相似字用點字比較卡一格一個學習目標)）；最高原則「優勢明顯、又沒有解決不了的代價就該做」寫進 AGENTS（[D-177](decisions.md#d-177-先問會不會明顯更好優勢明顯代價解決得了就該做)） |
 | 2026-11-04 | 正式使用的 vault 升到 `0.3.0+5b3dc94`（tag `v0.3.0`）：[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)、入口與目錄第一批、[D-173](decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)、[D-174](decisions.md#d-174-iphone-實機測試後的複習畫面調整不自動換卡直接照打也打叉例句分行)。發布前比較差異 0 項（vault 沒有卡組，沒比到真實卡片）；電腦與 iPhone 重開後版本行相符，外掛自己做了 `new-version` 備份。iPhone 的標點換行沒有用眼睛看，正式 vault 沒有卡組，靠 2026-11-03 的 `md-cases` |
 | 2026-11-04 | 國小國語的學習地圖定案（[D-175](decisions.md#d-175-國小國語的學習地圖字是根生字拆成字形字義讀音)）：字義是核心，生字拆成字形、字義、讀音三種目標，語境分三階；預設草稿 [elementary-chinese.md](card-rules/elementary-chinese.md) v0.1 經 Codex 查核兩輪，試用另開對話 |
@@ -58,4 +59,3 @@ flowchart LR
 | 2026-11-03 | 節省 token 的流程定案（[D-171](decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)，[討論稿](<../Claude Codex Discussion/2026-11-03-token-saving.md>)）：量過 Codex 與電腦上的 Claude，大頭是長對話每次重讀整段；Codex 每輪新開、只讀需要的、L2 第四輪後停，Claude 40 萬就壓縮 |
 | 2026-11-03 | code-quality 補兩句（review.md）：修審查發現時整類一次修、回歸測試涵蓋同類；請審查者特別看的邊界先自己測。依據：三份 L2（[錯誤紀錄](<../Claude Codex Discussion/2026-10-31-error-log-review.md>)、[發布前比較](<../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)、[更新防線第二部分](<../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）22 項發現中，10 項屬這兩類 |
 | 2026-11-03 | 國小社會預設 v0.6 測跨單元加題（[試用紀錄](card-rules/trials.md)）：混入 10 項自製的小四目標再跑 2-2，Sol 加了 8 項、10 題，ID 全對；但不寫待核對，只給名稱會過度合併；預設改成 v0.7 |
-| 2026-11-03 | 入口與目錄第一批合併進 `main`（分支 `claude/entry-and-catalog`，[任務說明](../tasks/entry-and-catalog.md)）：入口、目錄瀏覽與練習、全部卡、預覽；出處的讀法定案（[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)）：不用猜的直接讀懂，要猜的只提示，模組化填入在第二批用到歸屬前完成；Codex L2 七輪（[報告](<../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）；Windows `entry` 44／44；還沒升版 |

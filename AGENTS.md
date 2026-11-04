@@ -35,6 +35,7 @@
 | `docs/product.md` | 為什麼做、為誰做、原則、範圍（v1／第二階段／不做） |
 | `docs/architecture.md` | 術語、概念模型、模組邊界、平台、資料存放、AI 的位置 |
 | `docs/syntax.md` | 出題語法與資料格式：卡組筆記、轉錄稿、錯題本、考試範圍、複習紀錄、AI 輸出快照怎麼寫 |
+| `docs/question-types.md` | 題型專區：有哪些題型、各自適合練什麼、怎麼接上 |
 | `docs/decisions.md` | 已確認的決定與理由（D-ID）；開頭有索引 |
 | `docs/roadmap.md` | 開發現況、下一步、路線圖、最近完成的事 |
 | `docs/backlog.md` | v1 任務與第二階段候選的統一入口、待決問題與歷史索引 |
