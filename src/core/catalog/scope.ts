@@ -275,7 +275,11 @@ function editHead(raw: string, change: ScopeChange, before: ScopeFile): string {
     if (!pair || !keyRange) return false;
     const value = rangeOf(pair.value);
     if (value && value[1] > value[0]) {
-      if (source.slice(value[0], value[1]) !== text) edits.push({ from: value[0], to: value[1], text });
+      // 引號留著（§2-4）：只換裡面的字。
+      const style = isScalar(pair.value) ? pair.value.type : null;
+      const quote = style === 'QUOTE_DOUBLE' ? '"' : style === 'QUOTE_SINGLE' ? "'" : '';
+      const written = quote + text + quote;
+      if (source.slice(value[0], value[1]) !== written) edits.push({ from: value[0], to: value[1], text: written });
     } else {
       const colon = source.indexOf(':', keyRange[1]) + 1;
       edits.push({ from: colon, to: colon, text: ' ' + text });
@@ -297,10 +301,13 @@ function editHead(raw: string, change: ScopeChange, before: ScopeFile): string {
     if (text !== null && !setValue(key, text)) insert(after, `${key}: ${text}`);
   }
   if (before.id === null && change.id !== undefined && !setValue('識別碼', change.id)) insert(0, '識別碼: ' + change.id);
-  const endKey = rangeOf(pairOf('考試結束')?.key);
-  date('考試開始', before.start, change.start, endKey ? lineStart(endKey[0]) : null);
-  date('考試結束', before.end, change.end, null);
+  // 提前結束只多一行，原本的日期連寫法都不動（§2-2）；標準化只在按「確定」時（§2-4）。
   if (change.ended !== undefined) insert(null, '提前結束: ' + change.ended);
+  else {
+    const endKey = rangeOf(pairOf('考試結束')?.key);
+    date('考試開始', before.start, change.start, endKey ? lineStart(endKey[0]) : null);
+    date('考試結束', before.end, change.end, null);
+  }
   // 同一個位置的插入照加入的順序接起來；removeKey 與 setValue 的位置不會重疊。
   let result = source;
   const order = edits.map((each, index) => ({ each, index })).sort((a, b) => b.each.from - a.each.from || b.index - a.index);
