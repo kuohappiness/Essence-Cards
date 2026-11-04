@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { catalogView, entryView, reminderView } from '../review/index.ts';
+import { catalogView, entryView, examRow, examSubject, reminderView } from '../review/index.ts';
 import type { Catalog, State, StudyPick, UnitView } from '../state/index.ts';
+import { Icon } from './entry-icon.tsx';
+import { ExamScope } from './ExamScope.tsx';
 import type { TermOpen } from './prefs.ts';
 
 // 入口與目錄（D-095、D-097、D-163）：同一個全螢幕裡切換，不開第二層；資料都來自 review 與 state，畫面不自己算。
 
-export type EntryScreen = 'entry' | 'catalog';
+export type EntryScreen = 'entry' | 'catalog' | 'scope';
 /** 主機（entry-host）持有的外部狀態：現在是哪個畫面，資料有沒有變。 */
 interface EntryStore {
   subscribe(listener: () => void): () => void;
   version(): number;
   screen(): EntryScreen;
   go(screen: EntryScreen): void;
+  /** 考試範圍畫面是從哪裡進來的（D-163 第 2 點）：✕、返回、存好都回那裡。 */
+  from(): EntryScreen;
 }
 export interface EntryProps {
   store: EntryStore;
@@ -28,18 +32,10 @@ export interface EntryProps {
   terms: { get(): TermOpen; set(terms: TermOpen): void };
   /** 複習畫面蓋在上面：焦點是它的，這裡不搶。 */
   covered: () => boolean;
+  /** 短暫的通知（存好了、已結束）。 */
+  notify: (message: string) => void;
 }
 
-const PATHS = {
-  play: <path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none" />,
-  gear: <><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8" /></>,
-  close: <path d="M6 6l12 12M18 6 6 18" />,
-  back: <path d="m15 5-7 7 7 7" />,
-  next: <path d="m9 5 7 7-7 7" />,
-};
-function Icon({ type, size = 20 }: { type: keyof typeof PATHS; size?: number }): React.JSX.Element {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{PATHS[type]}</svg>;
-}
 const NOTHING_TODAY = '今天沒有要複習的卡';
 
 export function Entry(props: EntryProps): React.JSX.Element {
@@ -54,11 +50,12 @@ export function Entry(props: EntryProps): React.JSX.Element {
   const onKey = (event: React.KeyboardEvent): void => {
     if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (screen === 'catalog') store.go('entry');
+    if (screen === 'scope') store.go(store.from());
+    else if (screen === 'catalog') store.go('entry');
     else props.close();
   };
   return <div className="ec-app ec-entry" ref={root} tabIndex={-1} onKeyDown={onKey}>
-    {screen === 'entry' ? <Home {...props} /> : <Directory {...props} version={version} />}
+    {screen === 'entry' ? <Home {...props} /> : screen === 'catalog' ? <Directory {...props} version={version} /> : <ExamScope {...props} version={version} />}
   </div>;
 }
 
@@ -82,7 +79,11 @@ function Home(props: EntryProps): React.JSX.Element {
       {ready && !view.rows.length && <p className="ec-en-none">{NOTHING_TODAY}</p>}
       {ready && view.rows.length > 0 && <div className="ec-sb-list">
         {view.rows.map(row => <div key={row.name} className={'ec-sb' + (row.finished ? ' is-done' : '')}>
-          <span className="ec-en-l1"><span className="ec-en-name">{row.name}</span><span className="ec-en-n">{row.done}/{row.total}</span></span>
+          <span className="ec-sb-left">
+            <span className="ec-en-l1"><span className="ec-en-name">{row.name}</span><span className="ec-en-n">{row.done}/{row.total}</span></span>
+            {row.countdown === 'today' && <span className="ec-sb-ex">今天考試</span>}
+            {typeof row.countdown === 'number' && <span className="ec-sb-ex">距離考試：<b>{row.countdown}</b> 天</span>}
+          </span>
           {row.finished
             ? <button type="button" className="ec-sb-btn" disabled>完成</button>
             : <button type="button" className="ec-sb-btn" aria-label={'開始' + row.name} onClick={() => { props.start(row.pick); }}><Icon type="play" size={14} /><span>{row.minutes} 分鐘</span></button>}
@@ -90,11 +91,26 @@ function Home(props: EntryProps): React.JSX.Element {
         </div>)}
       </div>}
       {ready && view.more && <button type="button" className="ec-en-more" onClick={() => { props.start({ more: true }); }}>再複習一些</button>}
+      <ExamRow {...props} />
       <button type="button" className="ec-en-row" onClick={() => { props.store.go('catalog'); }}><span>目錄</span><Icon type="next" size={18} /></button>
       {props.reminders && <Reminders state={state} />}
     </div>
     <p className="ec-en-mark" lang="en">Essence Cards</p>
   </>;
+}
+
+/** 「考試範圍與日期」那一列（tasks/exam-scope.md §7）：不收合，考前看範圍就是這一區的用途；點了進設定。 */
+function ExamRow({ state, store }: EntryProps): React.JSX.Element {
+  const view = examRow(state());
+  return <button type="button" className="ec-en-row ec-sc-row" onClick={() => { store.go('scope'); }}>
+    <span className="ec-sc-body">
+      <span className="ec-sc-head"><span>考試範圍與日期</span>{view.status !== null && <span className="ec-sc-per">{view.status}</span>}</span>
+      {view.subjects.length > 0 && <span className="ec-sc-lines">{view.subjects.map(each => <span key={each.subject} className="ec-sc-line"><b>{each.subject}</b><span>{each.label}</span></span>)}</span>}
+      {view.after !== null && <span className="ec-sc-note">{view.after}</span>}
+      {view.notes.map(note => <span key={note} className="ec-sc-note is-warn">{note}</span>)}
+    </span>
+    <Icon type="next" size={18} />
+  </button>;
 }
 
 /** 提醒一區（D-163 第 5 點）：只有電腦；沒有提醒時整區消失。說明書還沒寫，先不放連結。 */
@@ -140,6 +156,7 @@ function Directory(props: EntryProps & { version: number }): React.JSX.Element {
       <button type="button" className="ec-ico" aria-label="關閉目錄" onClick={back}><Icon type="close" /></button>
     </div>
     <div className="ec-en-scroll">
+      <ExamRow {...props} />
       <div className="ec-seg" role="group" aria-label="目錄">
         {(['today', 'all'] as const).map(each => <button key={each} type="button" aria-pressed={mode === each} onClick={() => { setMode(each); }}>{each === 'today' ? '當日' : '全部'}</button>)}
       </div>
@@ -176,7 +193,10 @@ function Tree(props: TreeProps): React.JSX.Element {
       return <div key={group.key} className="ec-tr-group">
         {header(group.key, group.label, on)}
         {on && group.subjects.map(subject => <section key={subject.subject}>
-          <h2 className="ec-tr-subject">{subject.subject}</h2>
+          <div className="ec-tr-sh">
+            <h2 className="ec-tr-subject">{subject.subject}</h2>
+            <ExamSubject {...props} term={group.key} subject={subject.subject} />
+          </div>
           {subject.units.map(unit => <UnitRow key={unit.key} unit={unit} {...props} />)}
         </section>)}
       </div>;
@@ -189,6 +209,11 @@ function Tree(props: TreeProps): React.JSX.Element {
       </div>;
     })()}
   </>;
+}
+
+function ExamSubject({ state, term, subject }: EntryProps & { term: string; subject: string }): React.JSX.Element | null {
+  const text = examSubject(state(), term, subject);
+  return text === null ? null : <span className="ec-tr-ex">{text}</span>;
 }
 
 const TAG = { draft: '草稿', paused: '暫停' } as const;
@@ -205,6 +230,7 @@ function UnitRow({ unit, openUnits, toggle, start, openNote }: TreeProps & { uni
       <button type="button" className={'ec-tr-exp' + (open ? ' is-open' : '')} aria-expanded={open} aria-label={'展開' + unit.name} disabled={!expandable} onClick={() => { toggle(unit.key); }}><Icon type="next" size={16} /></button>
       <button type="button" className="ec-tr-name" onClick={() => { if (active) toggle(unit.key); else openNote(unit.decks[0].path); }}>
         <span>{unit.name}</span>
+        {unit.inExam && <span className="ec-tr-tag is-exam">考試</span>}
         {unit.status !== 'active' && <span className="ec-tr-tag">{TAG[unit.status]}</span>}
       </button>
       {!open && unit.count !== null && <span className="ec-tr-due" data-m={unit.color}>{unit.count}</span>}

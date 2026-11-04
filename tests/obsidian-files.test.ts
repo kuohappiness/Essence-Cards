@@ -22,6 +22,8 @@ class TFolder extends TAbstractFile { children: TAbstractFile[] = []; }
 function vault() {
   const entries = new Map<string, TAbstractFile>();
   const texts = new Map<string, string>();
+  // 硬碟上有、Obsidian 的清單還沒有的資料夾（Windows 實機遇到，tasks/exam-scope.md §10）。
+  const disk = new Set<string>();
   const tick = (): Promise<void> => new Promise(resolve => { setImmediate(resolve); });
   const parent = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')));
   const attach = (entry: TAbstractFile): void => {
@@ -31,15 +33,23 @@ function vault() {
   };
   const needParent = (path: string): void => {
     const up = parent(path);
-    if (up && !(entries.get(up) instanceof TFolder)) throw Error('上層資料夾不存在：' + up);
+    if (up && !(entries.get(up) instanceof TFolder) && !disk.has(up)) throw Error('上層資料夾不存在：' + up);
   };
   return {
     folders: () => [...entries.values()].filter(entry => entry instanceof TFolder).map(entry => entry.path).sort(),
+    onDisk: (path: string) => { disk.add(path); },
+    adapter: {
+      async stat(path: string) {
+        await tick();
+        if (disk.has(path) || entries.get(path) instanceof TFolder) return { type: 'folder' };
+        return entries.get(path) instanceof TFile ? { type: 'file' } : null;
+      },
+    },
     getAbstractFileByPath: (path: string) => entries.get(path) ?? null,
     getFiles: () => [...entries.values()].filter(entry => entry instanceof TFile),
     async createFolder(path: string) {
       await tick();
-      if (entries.has(path)) throw Error('Folder already exists.');
+      if (entries.has(path) || disk.has(path)) throw Error('Folder already exists.');
       needParent(path);
       attach(new TFolder(path));
     },
@@ -85,4 +95,20 @@ void test('§4 建資料夾失敗、而那個路徑不是資料夾（例如是�
   // 別的原因（例如沒有權限）建不了，再查一次也不是資料夾：照原樣拋出。
   const denied = { vault: { ...vault(), createFolder: () => Promise.reject(Error('沒有權限')) } };
   await assert.rejects(obsidianFiles(denied).append('x/y.jsonl', 'z'), /沒有權限/);
+  // 硬碟上那個路徑是檔案：也不是資料夾。
+  const blocked = { vault: { ...vault(), createFolder: () => Promise.reject(Error('Folder already exists.')), adapter: { stat: () => Promise.resolve({ type: 'file' }) } } };
+  await assert.rejects(obsidianFiles(blocked).append('x/y.jsonl', 'z'), /already exists/);
+  // 連查都查不了：交出原本的錯，不是查詢的錯。
+  const unknown = { vault: { ...vault(), createFolder: () => Promise.reject(Error('沒有權限')), adapter: { stat: () => Promise.reject(Error('查不了')) } } };
+  await assert.rejects(obsidianFiles(unknown).append('x/y.jsonl', 'z'), /沒有權限/);
+});
+
+void test('§6 資料夾在硬碟上、Obsidian 的清單還沒有（iCloud 剛同步來）：照常寫進去，不報 Folder already exists', async () => {
+  const app = { vault: vault() };
+  app.vault.onDisk('考試範圍');
+  const files = obsidianFiles(app);
+  await files.modify('考試範圍/a.md', () => 'x');
+  assert.equal(await files.read('考試範圍/a.md'), 'x');
+  await files.append('考試範圍/b.jsonl', 'y');
+  assert.equal(await files.read('考試範圍/b.jsonl'), 'y\n');
 });

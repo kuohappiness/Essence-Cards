@@ -1,9 +1,17 @@
 import { codeKey, sourceLinks, termKey, termRank } from '../deck/index.ts';
 import type { Deck, Target } from '../deck/index.ts';
 import type { MemoryColor } from '../study/index.ts';
+import { compareCode, compareTerm } from './order.ts';
+import { unitInScope } from './scope.ts';
+import type { ScopeFile } from './scope.ts';
 
 // 範圍與目錄（D-110、D-142 原則 1、2、5、6、8）：把 deck 認定的單元參照對到單元、算每個目標屬於哪些單元、單元與學期的排序。
 // 輸入是卡組與每個目標的記憶狀態，不 import study 的程式；deck、study 不 import 這裡。
+
+export { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, notEnded, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeUnitKeys, scopeWritable, unitInScope } from './scope.ts';
+export type { ScopeChange, ScopeFile, ScopePeriod, ScopeUnit } from './scope.ts';
+export { scopeAfter, scopeCheck, scopeCountdown, scopeDates, scopeHasSubject, scopeLabels, scopeNotes, scopeRows, scopeStartDate, targetsInScope } from './scope-view.ts';
+export type { ScopeCheck, ScopeRow, ScopeRowTerm } from './scope-view.ts';
 
 export interface CatalogDeck { path: string; deck: Deck }
 type DeckStatus = Deck['props']['status'];
@@ -29,6 +37,23 @@ export interface UnitNode {
   targets: UnitTarget[];
   problems: UnitProblem[];
 }
+/** 目標屬於的一個單元。basis：own 自己的單元；written 出處明寫了年級學期；carried 出處的學期是沿用前一項的（§8）。 */
+interface MemberUnit { term: string; subject: string; code: string; basis: 'own' | 'written' | 'carried' }
+/** 範圍用的歸屬（tasks/exam-scope.md §3）：只有啟用、可以出題、自己有科目的目標；對到卡組與對不到的單元都算。 */
+interface ScopeMember {
+  id: string;
+  name: string;
+  path: string;
+  line: number;
+  /** 出處整欄的原文。 */
+  sources: readonly string[];
+  subject: string;
+  /** 自己的單元（「小四上 2-1」）；沒有單元是檔名。 */
+  own: string;
+  units: MemberUnit[];
+  /** 出處有疑似漏掉的（§1 的 missed）。 */
+  missed: boolean;
+}
 /** 對到單元的參照，或對不到的（這一批不建目錄節點，D-033；第二批的考試範圍要用，不能當成「沒有關係」）。 */
 interface UnitRef { id: string; path: string; term: string; subject: string | null; code: string }
 
@@ -39,6 +64,8 @@ export interface CatalogIndex {
   others: UnitNode[];
   /** 對不到單元的參照。 */
   unresolved: UnitRef[];
+  /** 每個目標屬於哪些單元。 */
+  members: ScopeMember[];
   /** 單元的鍵 → 單元（含「其他」組）。 */
   unit(key: string): UnitNode | null;
   /** 找單元（跨單元的出處用）：同一個年級學期、科目與編號。 */
@@ -53,37 +80,6 @@ const practiced = (unit: UnitNode): readonly UnitTarget[] => unit.status === 'ac
 
 const unitKey = (term: string, subject: string, code: string): string => JSON.stringify([termKey(term), subject, codeKey(code)]);
 const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
-
-/** 自然排序：連續的數字照數值比（`L2` 在 `L10` 前），平手時比原字串（`L01` 與 `L1`），不用輸入順序。 */
-function natural(a: string, b: string): number {
-  const parts = (text: string): string[] => text.match(/\d+|\D+/g) ?? [];
-  const left = parts(a), right = parts(b);
-  for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    const x = left[i], y = right[i];
-    const numeric = /^\d/.test(x) && /^\d/.test(y);
-    const order = numeric ? compareDigits(x, y) : compareText(x, y);
-    if (order) return order;
-  }
-  return left.length - right.length || compareText(a, b);
-}
-function compareDigits(a: string, b: string): number {
-  const x = a.replace(/^0+(?=\d)/, ''), y = b.replace(/^0+(?=\d)/, '');
-  return x.length - y.length || compareText(x, y);
-}
-/** 同一學期同一科裡：數字編號 → 英文編號 → 其他（§9-2）。 */
-const codeKind = (code: string): number => /^[0-9]+(?:-[0-9]+)*$/.test(code) ? 0 : /^[A-Za-z]+[0-9]+$/.test(code) ? 1 : 2;
-/** 認得的學期照順序，其他文字排在認得的後面，彼此比原字串。 */
-function compareTerm(a: string, b: string): number {
-  const x = termRank(termKey(a)), y = termRank(termKey(b));
-  if (x !== null && y !== null) return x - y;
-  if (x !== null) return -1;
-  if (y !== null) return 1;
-  return compareText(a, b);
-}
-const compareCode = (a: string, b: string): number => {
-  const x = codeKey(a), y = codeKey(b);
-  return codeKind(x) - codeKind(y) || natural(x, y) || compareText(a, b);
-};
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const usableTarget = (target: Target): target is Target & { id: string } => target.id !== null && target.ok && !target.fields.paused && target.prompts.length > 0;
@@ -149,6 +145,7 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
     unit.targets.push(target);
   };
   const unresolved: UnitRef[] = [];
+  const members: ScopeMember[] = [];
   // 兩輪：先放每一篇自己的目標，別的單元來的才會排在後面，也才標「來自」。
   const owned: { entry: CatalogDeck; target: Target & { id: string }; own: string; label: string | null }[] = [];
   for (const entry of sorted) {
@@ -167,9 +164,19 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
     deckIds.set(entry.path, ids);
   }
   for (const { entry, target, own, label } of owned) {
-    const { subject } = entry.deck.props;
+    const { subject, term, unit: ownUnit } = entry.deck.props;
     const written = new Set<string>();
-    for (const { link } of sourceLinks(target.fields.sources, entry.deck.props)) {
+    const items = sourceLinks(target.fields.sources, entry.deck.props);
+    const belongs = new Map<string, MemberUnit>();
+    if (subject !== null && term !== null && ownUnit !== null) belongs.set(own, { term, subject, code: ownUnit.code, basis: 'own' });
+    for (const { link, basis = 'written' } of items) {
+      if (link.kind !== 'unit' || subject === null) continue;
+      const key = unitKey(link.term, subject, link.unit), known = belongs.get(key);
+      if (!known) belongs.set(key, { term: link.term, subject, code: link.unit, basis });
+      else if (known.basis === 'carried') known.basis = basis;
+    }
+    if (subject !== null) members.push({ id: target.id, name: target.name, path: entry.path, line: target.line, sources: target.fields.sources, subject, own: label ?? fileName(entry.path), units: [...belongs.values()], missed: items.some(item => item.missed) });
+    for (const { link } of items) {
       if (link.kind !== 'unit') continue;
       const key = subject !== null ? unitKey(link.term, subject, link.unit) : null;
       if (key === own) continue;
@@ -183,7 +190,7 @@ export function buildIndex(decks: readonly CatalogDeck[], stopped: (id: string) 
   const units = [...nodes.values()].filter(unit => unit.code !== null).sort(compareUnit);
   const others = [...nodes.values()].filter(unit => unit.code === null).sort((a, b) => compareText(a.key, b.key));
   return {
-    units, others, unresolved,
+    units, others, unresolved, members,
     unit: key => nodes.get(key) ?? null,
     find: (term, subject, code) => nodes.get(unitKey(term, subject, code)) ?? null,
     unitTargets(key) {
@@ -212,6 +219,8 @@ export interface UnitView extends Omit<UnitNode, 'targets'> {
   color: MemoryColor;
   /** 當日卡的 N：今天的份裡還沒完成的。 */
   today: number;
+  /** 單元本身在選定的範圍裡（D-097 的「考試」標籤）：目標從別的單元算進去時，它自己的單元不標。 */
+  inExam: boolean;
 }
 export interface TermView { term: string; subjects: { subject: string; units: UnitView[] }[] }
 export interface Catalog {
@@ -230,8 +239,8 @@ function latestTerm(terms: readonly string[]): string | null {
   return known.at(-1) ?? terms[0] ?? null;
 }
 
-/** 畫面要的資料：索引加上每個目標現在的記憶顏色、今天的份裡還沒完成的目標。畫面不自己算。 */
-export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>): Catalog {
+/** 畫面要的資料：索引加上每個目標現在的記憶顏色、今天的份裡還沒完成的目標、選定的範圍。畫面不自己算。 */
+export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>, scope: Pick<ScopeFile, 'lines'> | null = null): Catalog {
   const view = (unit: UnitNode): UnitView => {
     // 全部暫停：標「暫停」、數字 0；全部是草稿：不顯示數字（§3）。兩種都沒有可以練的目標。
     const targets = practiced(unit).map(target => ({ ...target, color: colors.get(target.id) ?? 'new' }));
@@ -239,6 +248,7 @@ export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, Me
       ...unit, targets, color: unitColor(targets.map(target => target.color)),
       count: unit.status === 'draft' ? null : targets.length,
       today: targets.filter(target => today.has(target.id)).length,
+      inExam: scope !== null && unit.code !== null && unit.term !== null && unit.subject !== null && unitInScope(scope, { term: unit.term, subject: unit.subject, code: unit.code }),
     };
   };
   const terms: TermView[] = [];

@@ -31,22 +31,22 @@ export interface EntryDevHost extends Plugin {
   openEntry(screen?: 'entry' | 'catalog'): unknown;
 }
 
-const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
-async function until(check: () => boolean, ms = 8000): Promise<boolean> {
+export const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
+export async function until(check: () => boolean, ms = 8000): Promise<boolean> {
   const end = performance.now() + ms;
   while (performance.now() < end) { if (check()) return true; await sleep(30); }
   return check();
 }
-const text = (el: Element | null | undefined): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
-const screens = (): HTMLElement[] => Array.from(document.querySelectorAll<HTMLElement>('.ec-fullscreen'));
-const inEntry = (selector: string): HTMLElement[] => Array.from(document.querySelector('.ec-entry')?.querySelectorAll<HTMLElement>(selector) ?? []);
+export const text = (el: Element | null | undefined): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+export const screens = (): HTMLElement[] => Array.from(document.querySelectorAll<HTMLElement>('.ec-fullscreen'));
+export const inEntry = (selector: string): HTMLElement[] => Array.from(document.querySelector('.ec-entry')?.querySelectorAll<HTMLElement>(selector) ?? []);
 /** 複習畫面（蓋在最上面的那一層）裡的元素。 */
 const inReview = (selector: string): HTMLElement[] => {
   const top = [...screens()].reverse().find(each => !each.querySelector('.ec-entry'));
   return Array.from(top?.querySelectorAll<HTMLElement>(selector) ?? []);
 };
-const buttonOf = (list: HTMLElement[], name: string): HTMLElement | undefined => list.find(each => text(each) === name || each.getAttribute('aria-label') === name);
-const focusOk = (): boolean => document.activeElement !== document.body && document.activeElement !== null;
+export const buttonOf = (list: HTMLElement[], name: string): HTMLElement | undefined => list.find(each => text(each) === name || each.getAttribute('aria-label') === name);
+export const focusOk = (): boolean => document.activeElement !== document.body && document.activeElement !== null;
 const logs = async (app: App): Promise<string> => {
   const paths = app.vault.getFiles().filter(file => file.path.startsWith('Essence Cards/紀錄/') && file.path.endsWith('.jsonl') && !file.path.includes('/錯誤/')).map(file => file.path).sort();
   return (await Promise.all(paths.map(async path => path + '\n' + await app.vault.adapter.read(path)))).join('\n');

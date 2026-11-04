@@ -3,7 +3,7 @@ import { parseDeck, readProperties } from './parse.ts';
 import type { AssignOptions, AssignResult } from './types.ts';
 
 const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
-const space = alphabet.length ** 6;
+const letters = alphabet.replace(/\d/g, '');
 
 /**
  * D-135：有題目的明確目標底下第一層的項目，清單符號比目標的內容欄多 4 欄以上（Obsidian 當成目標那一行的接續文字）時，
@@ -41,6 +41,35 @@ function fixIndent(text: string, skip: ReadonlySet<number> | undefined): string 
   return JSON.stringify(parseDeck(fixed).targets) === JSON.stringify(deck.targets) ? fixed : text;
 }
 
+/**
+ * 新的 ID（6 個字元，D-115）：抽到用過的就依字母表順序找下一個，固定 random 也會終止。
+ * letterFirst：第一個字只用字母。考試範圍的識別碼寫在屬性區，像數字的字（`2e2345`）別的工具可能讀成數字或改寫（使用者 2026-11-04）。
+ */
+export function newId(random: () => number, used: ReadonlySet<string>, options: { letterFirst?: boolean } = {}): string {
+  const first = options.letterFirst ? letters : alphabet;
+  const charsAt = (position: number): string => position === 0 ? first : alphabet;
+  let id = '';
+  for (let i = 0; i < 6; i++) {
+    const value = random();
+    if (!(value >= 0 && value < 1)) throw Error('random 必須回傳 0（含）到 1（不含）');
+    const allowed = charsAt(i);
+    id += allowed[Math.floor(value * allowed.length)];
+  }
+  const space = first.length * alphabet.length ** 5;
+  for (let attempts = 0; used.has(id); attempts++) {
+    if (attempts >= space) throw Error('沒有可用的學習目標 ID');
+    const chars = [...id];
+    for (let i = 5; i >= 0; i--) {
+      const allowed = charsAt(i);
+      const next = (allowed.indexOf(chars[i]) + 1) % allowed.length;
+      chars[i] = allowed[next];
+      if (next) break;
+    }
+    id = chars.join('');
+  }
+  return id;
+}
+
 export function assignIds(text: string, options: AssignOptions): AssignResult {
   // 縮排改正不增減行，skip 的行號照樣對得上。
   const source = fixIndent(text, options.skip);
@@ -57,23 +86,7 @@ export function assignIds(text: string, options: AssignOptions): AssignResult {
   const used = new Set([...options.taken, ...existing, ...named]);
   const random = options.random ?? Math.random;
   function nextId(): string {
-    let id = '';
-    for (let i = 0; i < 6; i++) {
-      const value = random();
-      if (!(value >= 0 && value < 1)) throw Error('random 必須回傳 0（含）到 1（不含）');
-      id += alphabet[Math.floor(value * alphabet.length)];
-    }
-    // 固定 random 也要終止：衝突時從抽到的 ID 依字母表順序找下一個。
-    for (let attempts = 0; used.has(id); attempts++) {
-      if (attempts >= space) throw Error('沒有可用的學習目標 ID');
-      const chars = [...id];
-      for (let i = 5; i >= 0; i--) {
-        const next = (alphabet.indexOf(chars[i]) + 1) % alphabet.length;
-        chars[i] = alphabet[next];
-        if (next) break;
-      }
-      id = chars.join('');
-    }
+    const id = newId(random, used);
     used.add(id);
     return id;
   }

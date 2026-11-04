@@ -16,5 +16,7 @@ export { crumb } from './crumb.ts';
 export { extraLabel, splitTranslation } from './extras.ts';
 export { headingKey, sourceLabel, sourceLinks } from './sources.ts';
 export type { SourceLink, SourceOwner } from './sources.ts';
-export { catalogView, entryView, reminderView } from './entry.ts';
+export { catalogView, entryView, examRow, examSubject, reminderView } from './entry.ts';
+export { checkDates, examFailure, examForm, formChange, normalDate, ORDER_WORD, toggleRow } from './exam-form.ts';
+export type { ExamForm, ScopeRow } from './exam-form.ts';
 export { createPreview } from './preview.ts';

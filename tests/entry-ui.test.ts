@@ -59,7 +59,7 @@ async function open(t: TestContext, texts: Record<string, string>, setup: Setup 
   await act(async () => {
     handle = openEntry({
       app, state: setup.state ?? (() => state), screen: setup.screen, reminders: setup.reminders ?? false, covered: () => covered.value,
-      start: pick => { starts.push(pick); }, openNote: (path, line) => { notes.push([path, line]); }, openSettings: () => { settings++; },
+      start: pick => { starts.push(pick); }, openNote: (path, line) => { notes.push([path, line]); }, openSettings: () => { settings++; }, notify() {},
       onClose: () => { closed = true; },
     });
     await Promise.resolve();
@@ -99,7 +99,7 @@ void test('§2 入口：今日複習、一科一列（順序照 progress）、N 
   assert.deepEqual(s.all('.ec-sb .ec-en-name').map(each => each.textContent), ['自然', '英文', '其他'], '其他排最後（D-133）');
   assert.deepEqual(s.all('.ec-sb .ec-en-n').map(each => each.textContent), ['0/2', '0/1', '0/1']);
   assert.deepEqual(s.all('.ec-sb-btn').map(each => each.textContent), ['1 分鐘', '1 分鐘', '1 分鐘']);
-  for (const word of ['考試', '濾網', '已濾掉', '抽測', '還沒設定', '再複習一些']) assert.ok(!s.text().includes(word), word);
+  for (const word of ['濾網', '已濾掉', '抽測', '距離考試', '再複習一些']) assert.ok(!s.text().includes(word), word);
   assert.ok(s.text().includes('Essence Cards'), '字標');
   await s.click(s.button('開始自然'));
   assert.deepEqual(s.starts, [{ subject: '自然' }]);
@@ -215,8 +215,8 @@ void test('§3 結構：學期可收合、最新的展開、其他收著；預�
   const rows = s.all('.ec-tr-u').map(row => [row.querySelector('.ec-tr-name')?.textContent, row.querySelector('.ec-tr-due')?.textContent ?? null, row.querySelector('.ec-tr-due')?.getAttribute('data-m') ?? null]);
   assert.deepEqual(rows, [['2-1 水溶液', '3', 'new'], ['2-2草稿', null, null], ['2-3暫停', '0', 'new'], ['L1', '1', 'new']]);
   assert.equal(s.all('.ec-u-btn').length, 0, '單元都收起');
-  // 沒有圖例、沒有管理、沒有考試範圍（§3）。
-  for (const word of ['管理', '考試', '圖例']) assert.ok(!s.text().includes(word), word);
+  // 沒有圖例、沒有管理（§3）；考試範圍在 exam-ui.test.ts。
+  for (const word of ['管理', '圖例']) assert.ok(!s.text().includes(word), word);
 });
 
 void test('§3 學期收合存 saveLocalStorage，下次照存的', async t => {

@@ -38,12 +38,15 @@ export function createObsidianFiles(app: App): Files {
   /**
    * 建一層資料夾。兩個不同的檔同時第一次寫進同一個不存在的資料夾時會一起建，後到的那個失敗（D-155 第 4 點）：失敗時再查一次，
    * 已經是資料夾就照常往下（是別的寫入建好的），不是就照原樣拋出。
+   * 清單沒有、硬碟上有也算（iCloud 剛同步來，Obsidian 還沒掃到；tasks/exam-scope.md §10 在 Windows 遇到）。
    */
   async function createFolder(folder: string): Promise<void> {
     try {
       await vault.createFolder(folder);
     } catch (error) {
-      if (!(vault.getAbstractFileByPath(folder) instanceof TFolder)) throw error;
+      if (vault.getAbstractFileByPath(folder) instanceof TFolder) return;
+      const found = await vault.adapter.stat(folder).catch(() => null);
+      if (found?.type !== 'folder') throw error;
     }
   }
   /** 資料夾裡的每個檔（含子資料夾）；檔案就是它自己。 */
