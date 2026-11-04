@@ -59,6 +59,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-03 | 節省 token 的流程定案（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)，[討論稿](<../../Claude Codex Discussion/2026-11-03-token-saving.md>)）：量過 Codex 與電腦上的 Claude，大頭是長對話每次重讀整段；Codex 每輪新開、只讀需要的、L2 第四輪後停，Claude 40 萬就壓縮 |
 | 2026-11-03 | code-quality 補兩句（review.md）：修審查發現時整類一次修、回歸測試涵蓋同類；請審查者特別看的邊界先自己測。依據：三份 L2（[錯誤紀錄](<../../Claude Codex Discussion/2026-10-31-error-log-review.md>)、[發布前比較](<../../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)、[更新防線第二部分](<../../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）22 項發現中，10 項屬這兩類 |
 | 2026-11-03 | 國小社會預設 v0.6 測跨單元加題（[試用紀錄](../card-rules/trials.md)）：混入 10 項自製的小四目標再跑 2-2，Sol 加了 8 項、10 題，ID 全對；但不寫待核對，只給名稱會過度合併；預設改成 v0.7 |
 | 2026-11-03 | 入口與目錄第一批合併進 `main`（分支 `claude/entry-and-catalog`，[任務說明](../../tasks/entry-and-catalog.md)）：入口、目錄瀏覽與練習、全部卡、預覽；出處的讀法定案（[D-170](../decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選)）：不用猜的直接讀懂，要猜的只提示，模組化填入在第二批用到歸屬前完成；Codex L2 七輪（[報告](<../../Claude Codex Discussion/2026-11-02-entry-and-catalog-review.md>)）；Windows `entry` 44／44；還沒升版 |
