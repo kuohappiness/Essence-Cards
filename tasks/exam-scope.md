@@ -1,6 +1,6 @@
 # 入口與目錄，第二批：考試範圍（D-163，給 Claude，本機執行）
 
-狀態：使用者 2026-11-04 同意（決定寫在 [D-176](../docs/decisions.md#d-176-考試範圍第二批的選擇手改的範圍檔不默默失效提前結束立刻失效)）；範圍檔的固定格式、日期規則與文末的小選擇同日定案；格式查核做完（[報告與核對](<../Claude Codex Discussion/2026-11-04-exam-scope-format-review.md>)），§1～§4、§8 照核對結果改過；程式開工中
+狀態：使用者 2026-11-04 同意（決定寫在 [D-176](../docs/decisions.md#d-176-考試範圍第二批的選擇手改的範圍檔不默默失效提前結束立刻失效)）；範圍檔的固定格式、日期規則與文末的小選擇同日定案；格式查核做完（[報告與核對](<../Claude Codex Discussion/2026-11-04-exam-scope-format-review.md>)），§1～§4、§8 照核對結果改過；程式與 Windows 實機做完（分支 `claude/exam-scope-c0f437`，§10 的〈結果〉），[等 Codex L2](exam-scope-review.md)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。跨模組、改資料格式、動到排程與讀檔，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1～§3 會改寫進使用者檔案的格式，開工前做格式查核（`tasks/exam-scope-format-review.md`）。
 
