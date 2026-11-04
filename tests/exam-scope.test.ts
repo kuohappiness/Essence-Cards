@@ -595,7 +595,14 @@ void test('換行混在一起：沒改到的行連換行都不動，改到的用
   assert.equal(edit(inside, { start: '2026-10-29' }), inside.replace('10-28', '10-29'), 'CRLF 裡夾一行 LF，改的就是那一行');
   assert.equal(edit(inside, { end: '2026-10-30' }), inside.replace('考試開始: 2026-10-28\n其他: 1\r\n', '考試開始: 2026-10-28\n其他: 1\r\n考試結束: 2026-10-30\r\n'), '多的一行用檔案的換行');
   const noStart = '---\r\n識別碼: aaaaaa\n考試結束: 2026-10-30\n---\n';
-  assert.equal(edit(noStart, { start: '2026-10-29' }), noStart.replace('考試結束', '考試開始: 2026-10-29\n考試結束'), '插在中間的新行跟著後面那一行');
+  assert.equal(edit(noStart, { start: '2026-10-29' }), noStart.replace('考試結束', '考試開始: 2026-10-29\r\n考試結束'), '插在中間的新行也用檔案的換行');
+  const both = '---\n識別碼: aaaaaa\n考試開始: 2026-10-22\n考試結束: 2026-10-28\r\n其他: 1\n---\n';
+  assert.equal(edit(both, { start: '2026-10-23', end: '2026-10-29' }), both.replace('10-22', '10-23').replace('10-28', '10-29'), '連續兩行都改（R20）');
+  const lone = '---\r識別碼: aaaaaa\r考試開始: 2026-10-22\r---\r- 國二上 自然 2\r';
+  assert.equal(edit(lone, { start: '2026-10-23' }), lone.replace('10-22', '10-23'), '單獨的 CR');
+  const block = '---\n識別碼: aaaaaa\n考試開始: |-\n  2026-10-22\n\n其他: 1\n---\n';
+  assert.equal(edit(block, { start: null }), '---\n識別碼: aaaaaa\n\n其他: 1\n---\n', '刪多行的值：後面的空行留著（R20）');
+  assert.equal(edit(block, { start: '2026-10-23' }), '---\n識別碼: aaaaaa\n考試開始: 2026-10-23\n\n其他: 1\n---\n', '改多行的值：後面的空行留著');
   const same = '---\r\n# 同一句\n# 同一句\r\n考試開始: 2026-10-28\n---\n';
   assert.equal(edit(same, { start: '2026-10-29' }), same.replace('10-28', '10-29'), '一樣的兩行各留各的');
 });
@@ -609,8 +616,8 @@ void test('屬性區不是一行一個屬性：只有要改的變了才寫，帶
   assert.equal(edit(line, { start: '2026-11-01' }), '---\n{識別碼: aaaaaa, 考試開始: 2026-11-01, 其他: 保留}\n---\n- 國二上 自然 2\n', '只換值的改得了');
   assert.equal(edit(line, { add: units('3') }), line + '- 國二上 自然 3\n', '屬性區沒有要改的：範圍行照寫');
   const scalar = '---\n識別碼: aaaaaa\n考試開始: |\n  2026-10-28\n其他: 保留\n---\n- 國二上 自然 2\n';
-  assert.deepEqual(editScope(scalar, { start: null }, []), blocked, '多行的值：下一行不能跟著刪');
-  assert.deepEqual(editScope(scalar, { start: '2026-11-01' }, []), blocked);
+  assert.equal(edit(scalar, { start: null }), '---\n識別碼: aaaaaa\n其他: 保留\n---\n- 國二上 自然 2\n', '多行的值：下一行不會跟著刪');
+  assert.equal(edit(scalar, { start: '2026-11-01' }), '---\n識別碼: aaaaaa\n考試開始: 2026-11-01\n其他: 保留\n---\n- 國二上 自然 2\n', '多行的值換成一行');
   const lines = '---\n{識別碼: aaaaaa,\n 考試開始: 2026-10-28,\n 其他: 保留}\n---\n';
   assert.equal(edit(lines, { start: null }), '---\n{識別碼: aaaaaa,\n 其他: 保留}\n---\n', '分行的對照表刪一行還是對的');
   assert.deepEqual(editScope('---\n{識別碼: aaaaaa,\n 考試開始: 2026-10-28}\n---\n', { start: null }, []), blocked, '刪一行就壞的不寫');
@@ -623,7 +630,8 @@ void test('往返與冪等：沒有要改的再按一次不變，只動屬性區
   for (const text of scopeCases) {
     const plain = editScope(text, {}, []);
     if (plain.kind === 'ok') {
-      assert.deepEqual(parseScope(plain.text).lines, parseScope(text).lines, '沒有要改的只碰日期的寫法：' + JSON.stringify(text));
+      assert.deepEqual(parseScope(plain.text).lines.map(line => line.raw), parseScope(text).lines.map(line => line.raw), '沒有要改的只碰日期的寫法：' + JSON.stringify(text));
+      assert.deepEqual(parseScope(plain.text).lines.map(shown), parseScope(text).lines.map(shown));
       assert.equal(parseScope(plain.text).id, parseScope(text).id, '沒有要改的不補識別碼');
       assert.deepEqual(editScope(plain.text, {}, []), plain);
     }

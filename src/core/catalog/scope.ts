@@ -277,17 +277,20 @@ const unitLine = (unit: ScopeUnit): string => `- ${unit.term} ${unit.subject} ${
 const sameBook = (a: ScopeUnit, b: ScopeUnit): boolean => termOf(a.term) === termOf(b.term) && subjectOf(a.subject) === subjectOf(b.subject);
 const unitAt = (line: RawLine): ScopeUnit | null => { const read = readLine(line.raw, 0); return read?.kind === 'unit' ? read : null; };
 
-/** 屬性區的字：每個值照 YAML 的位置換，註解、別的屬性與引號不動。raw 以 \n 接起來，沒有結尾的換行。 */
-function editHead(raw: string, change: ScopeChange, before: ScopeFile): string {
-  // 先讓每一行都以換行結尾，插入與刪除就都是一整行。
-  const source = raw ? raw + '\n' : '';
+/**
+ * 屬性區的字：每個值照 YAML 的位置換，註解、別的屬性與引號不動。raw 是每一行連同自己的換行，所以沒改到的字連換行都不動（§2-4，Codex L2 的 R16、R20）；新的一行用 eol。
+ */
+function editHead(raw: string, change: ScopeChange, before: ScopeFile, eol: string): string {
+  // 單獨的 \r 算換行（piecesOf 也這樣讀），YAML 不認得。長度相同，位置兩邊通用。
+  const source = raw.replace(/\r(?!\n)/g, '\n');
   const doc = parseDocument(source);
   const pairs = isMap(doc.contents) ? doc.contents.items : [];
   const edits: { from: number; to: number; text: string }[] = [];
   const pairOf = (key: string) => pairs.find(pair => isScalar(pair.key) && pair.key.value === key);
   const rangeOf = (node: unknown): [number, number] | null => {
     const range = isNode(node) ? node.range : undefined;
-    return range ? [range[0], range[1]] : null;
+    // 多行的值（`|-`）範圍包含後面的空行，那些不是這個值的字。
+    return range ? [range[0], source.slice(0, range[1]).trimEnd().length] : null;
   };
   const lineStart = (at: number): number => at === 0 ? 0 : source.lastIndexOf('\n', at - 1) + 1;
   function setValue(key: string, text: string): boolean {
@@ -315,7 +318,7 @@ function editHead(raw: string, change: ScopeChange, before: ScopeFile): string {
     edits.push({ from: lineStart(keyRange[0]), to: source.indexOf('\n', last) + 1, text: '' });
   }
   /** 新的一行：at 是它要放的位置（一行的開頭）；沒給就放最後。 */
-  const insert = (at: number | null, text: string): void => { const where = at ?? source.length; edits.push({ from: where, to: where, text: text + '\n' }); };
+  const insert = (at: number | null, text: string): void => { const where = at ?? source.length; edits.push({ from: where, to: where, text: text + eol }); };
   function date(key: string, read: ScopeDate, wanted: string | null | undefined, after: number | null): void {
     if (wanted === null) { removeKey(key); return; }
     const text = wanted ?? (read.kind === 'ok' ? read.date : null);
@@ -330,10 +333,10 @@ function editHead(raw: string, change: ScopeChange, before: ScopeFile): string {
     date('考試結束', before.end, change.end, null);
   }
   // 同一個位置的插入照加入的順序接起來；removeKey 與 setValue 的位置不會重疊。
-  let result = source;
+  let result = raw;
   const order = edits.map((each, index) => ({ each, index })).sort((a, b) => b.each.from - a.each.from || b.index - a.index);
   for (const { each } of order) result = result.slice(0, each.from) + each.text + result.slice(each.to);
-  return result.endsWith('\n') ? result.slice(0, -1) : result;
+  return result;
 }
 
 /** 範圍行：先取消再新勾。units 是目前有卡組的單元，整章裡取消一個時用。 */
@@ -401,20 +404,6 @@ function headAsWanted(text: string, result: string, after: ScopeFile, change: Sc
     && otherProps(result) === otherProps(text);
 }
 
-/**
- * 屬性區改完的行對回原本的行（§2-4，Codex L2 的 R16）：沒改到的連換行都不動，改到的用它原本的換行，新加的跟著它後面那一行，放最後的用檔案的換行。
- * editHead 只刪、換、插，順序不變，所以往後找就對得上；對錯一樣的兩行也只差換行。
- */
-function keepEols(edited: readonly string[], original: readonly RawLine[], eol: string): RawLine[] {
-  let at = 0;
-  return edited.map(raw => {
-    const found = original.findIndex((line, index) => index >= at && line.raw === raw);
-    if (found < 0) return { raw, eol: original[at]?.eol || eol };
-    at = found + 1;
-    return original[found];
-  });
-}
-
 /** 把變動套到這份文字（§2-4）。空字串是檔不見或清空，已經結束的不改回去，屬性區壞了不寫。 */
 export function editScope(text: string, change: ScopeChange, units: readonly ScopeUnit[]): ScopeEdit {
   if (text === '') return { kind: 'blocked', reason: 'changed' };
@@ -426,13 +415,13 @@ export function editScope(text: string, change: ScopeChange, units: readonly Sco
   const eol = lines.find(line => line.eol)?.eol ?? '\n';
   const close = lines[0]?.raw.trim() === '---' ? lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw)) : -1;
   const headLines = close > 0 ? lines.slice(1, close) : [];
-  const raw = headLines.map(line => line.raw).join('\n');
-  const edited = editHead(raw, change, before);
+  const raw = headLines.map(line => line.raw + line.eol).join('');
+  const edited = editHead(raw, change, before, eol);
   let head: RawLine[];
   if (close > 0) {
-    head = edited === raw ? lines.slice(0, close + 1) : [lines[0], ...(edited ? keepEols(edited.split('\n'), headLines, eol) : []), lines[close]];
+    head = edited === raw ? lines.slice(0, close + 1) : [lines[0], ...linesWithEnds(edited), lines[close]];
   } else {
-    head = edited ? [{ raw: '---', eol }, ...edited.split('\n').map(line => ({ raw: line, eol })), { raw: '---', eol }] : [];
+    head = edited ? [{ raw: '---', eol }, ...linesWithEnds(edited), { raw: '---', eol }] : [];
   }
   const body = lines.slice(close > 0 ? close + 1 : 0);
   const next = editBody(body, change, units, eol);
