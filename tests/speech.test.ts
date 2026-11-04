@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSpeech } from '../src/ui/speech.ts';
+import type { App } from 'obsidian';
+import { createSpeech, loadAutoRead, saveAutoRead } from '../src/ui/speech.ts';
 
 // 用假的 speechSynthesis 測：念哪幾段、先停掉正在念的、沒有英文語音時（D-082、D-116）。
 
@@ -55,4 +56,17 @@ void test('沒有 speechSynthesis：say 與 stop 都不拋錯', () => {
   const speech = createSpeech(() => {});
   speech.say(['went']);
   speech.stop();
+});
+
+void test('D-186 自動朗讀：沒動過開關的預設開，關過的留在關，再打開也記得', () => {
+  const stored = new Map<string, unknown>();
+  const app = {
+    loadLocalStorage: (key: string) => stored.get(key) ?? null,
+    saveLocalStorage: (key: string, value: unknown) => { stored.set(key, value); },
+  } as unknown as App;
+  assert.equal(loadAutoRead(app), true, '沒動過：開');
+  saveAutoRead(app, false);
+  assert.equal(loadAutoRead(app), false, '關過：留在關');
+  saveAutoRead(app, true);
+  assert.equal(loadAutoRead(app), true, '再打開：開');
 });
