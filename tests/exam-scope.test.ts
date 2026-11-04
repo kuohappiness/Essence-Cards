@@ -202,6 +202,38 @@ void test('屬性區壞了：日期算有問題，不會因為壞了就復活；
   assert.equal(parseScope('---\n---\n- 國二上 自然 2\n').broken, false, '空的屬性區不算壞');
 });
 
+void test('識別碼照寫的字讀：YAML 當成數字的寫法不會變成別的；壞屬性區和正常的讀法相同', () => {
+  const both = (written: string, id: string | null): void => {
+    assert.equal(parseScope(`---\n識別碼: ${written}\n---\n`).id, id, written);
+    assert.equal(parseScope(`---\n識別碼: ${written}\n其他: [\n---\n`).id, id, '壞屬性區：' + written);
+    assert.equal(parseScope(`---\n識別碼: ${written}\n`).id, id, '沒有結束的 ---：' + written);
+  };
+  for (const id of ['2e2345', '3e8', '012345', '0x12ab', '0o1234', '1.50', '123456', '+12345', 'aaaaaa']) both(id, id);
+  both('"school #1"', 'school #1');
+  both("'a''b'", "a'b");
+  both('"a\\"b"', 'a"b');
+  both('"2e2345"', '2e2345');
+  both('plain # 註解', 'plain');
+  both('a#b', 'a#b');
+  both('" 前後有空白 "', '前後有空白');
+  both('', null);
+  both('""', null);
+  both('true', null);
+  assert.equal(parseScope('---\n別名: &id 2e2345\n識別碼: *id\n---\n').id, '2e2345', '別名指到的也照原字');
+  assert.equal(parseScope('---\n{識別碼: 2e2345, 考試開始: 2026-10-28}\n---\n').id, '2e2345');
+  assert.equal(parseScope('---\n識別碼: [\n提前結束: 2026-10-20\n---\n').id, null, '這一行本身就壞了：算認不出來');
+
+  const copy = { path: 'B.md', file: parseScope('---\n識別碼: "school #1"\n---\n- 國二上 自然 2\n') };
+  const ended = parseScope('---\n識別碼: "school #1"\n提前結束: 2026-10-20\n其他: [\n---\n');
+  assert.equal(chooseScope([{ path: 'A.md', file: ended }, copy], scopeDay('2026-10-25')).chosen, null, '正常的副本和壞掉的那份是同一次考試');
+  assert.notEqual(parseScope('---\n識別碼: 2e2345\n---\n').id, parseScope('---\n識別碼: 3e4567\n---\n').id, '不同的字不會變成同一次考試');
+
+  const written = editScope('---\n識別碼: 2e2345\n---\n- 國二上 自然 2\n', { start: '2026-10-28' }, []);
+  assert.deepEqual(written, { kind: 'ok', text: '---\n識別碼: 2e2345\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' }, '屬性讀回來還是同一個');
+  const filled = editScope('---\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n', { end: '2026-10-29', id: '2e2345' }, []);
+  assert.equal(filled.kind === 'ok' ? parseScope(filled.text).id : null, '2e2345', '補上的識別碼像數字也寫得進去');
+});
+
 void test('屬性區壞了還認得識別碼：舊副本不會復活；認不出來的只有它自己結束，寫不出是哪一次考試', () => {
   const copy = { path: 'B.md', file: parseScope('---\n識別碼: aaaaaa\n---\n- 國二上 自然 2\n') };
   const chosen = (text: string): string | null => chooseScope([{ path: 'A.md', file: parseScope(text) }, copy], scopeDay('2026-10-25')).chosen?.path ?? null;

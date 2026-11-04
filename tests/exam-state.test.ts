@@ -600,6 +600,29 @@ void test('範圍檔讀不到（reject）：同批的卡組照常、ready() 不�
   assert.equal(h.state.exam().missing, 0);
 });
 
+void test('外掛產生的識別碼像數字（2e2345）：寫回讀到、紀錄都是原本的六個字', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  mocked.add(t);
+  const memory = createMemoryFiles(DECKS);
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let at_ = 0;
+  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: true, now: () => NOON, offset: () => OFFSET, onError: () => {}, random: () => ('2e2345'.split('').map(char => alphabet.indexOf(char) / alphabet.length))[at_++ % 6] + 0.001 });
+  t.after(() => state.close());
+  const done = state.ready();
+  await tick(t, 0);
+  await done;
+  assert.deepEqual(await save(state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28' }), { kind: 'done' });
+  assert.equal(state.exam().file?.id, '2e2345');
+  await tick(t);
+  await tick(t);
+  assert.equal(state.exam().file?.id, '2e2345', '檔案通知讀回來也一樣');
+  const log = state.flush();
+  await tick(t, 1000);
+  await log;
+  const lines = [...memory.texts].filter(([path]) => path.endsWith('.jsonl')).flatMap(([, text]) => text.trim().split('\n').map(line => JSON.parse(line) as { set?: string; val?: { id?: string } }));
+  assert.deepEqual(lines.filter(line => line.set === 'exam').map(line => line.val?.id), ['2e2345']);
+});
+
 void test('一份卡住、另一份讀到：先用讀到的（暫定），寫不了；之後的通知不排在它後面；它回來後重新選', async t => {
   const a = FOLDER + 'a.md', b = FOLDER + 'b.md';
   const h = make(t, { ...DECKS, [a]: scopeText('2026-11-20', '2026-11-21'), [b]: '---\n識別碼: bbbbbb\n考試開始: 2026-10-28\n---\n- 國二上 英文 L1\n' });

@@ -1,4 +1,4 @@
-import { isMap, isNode, isScalar, parseDocument } from 'yaml';
+import { isAlias, isMap, isNode, isScalar, parseDocument } from 'yaml';
 import { chapterAlias, codeKey, readTerm, termKey, termRank, tidy } from '../deck/index.ts';
 
 // 考試範圍檔（tasks/exam-scope.md §2、syntax.md §4、D-176）：只看字面，不看卡組。讀懂的、對不到卡組的、看不懂的分開，都留著讓畫面寫出來。
@@ -123,13 +123,23 @@ function headValues(raw: string): Record<string, unknown> | null {
     if (data === null) return {};
     // 繞圈的值到後面才會丟錯（比對、寫紀錄）：在這裡就算讀不出來。
     JSON.stringify(data);
-    return isMap(doc.contents) && typeof data === 'object' ? data as Record<string, unknown> : null;
+    if (!isMap(doc.contents) || typeof data !== 'object') return null;
+    // 識別碼是字，不是數：`2e2345`、`012345`、`0x12ab` 照 YAML 會變成別的值，不同的字還可能變成同一個（Codex L2 的 R15）。
+    const node = doc.get('識別碼', true);
+    const id = isAlias(node) ? node.resolve(doc) : node;
+    if (isScalar(id) && typeof id.value === 'number' && id.source) return { ...data, 識別碼: id.source };
+    return data as Record<string, unknown>;
   } catch { return null; }
 }
 /** 屬性區壞了還是要認得是哪一次考試（§2-2）：這一行還在就照用，有 `提前結束` 的壞檔才擋得住同一個識別碼的舊副本。 */
 function looseId(raw: string): string | null {
-  const value = (/^[ \t]*識別碼[ \t]*:[ \t]*(.*)$/m.exec(raw)?.[1] ?? '').replace(/(?:^|\s+)#.*$/, '').trim();
-  return (/^(["'])(.*)\1$/.exec(value)?.[2] ?? value).trim() || null;
+  // 這一行自己照正常的讀法讀，引號、註解、像數字的字才會和沒壞的副本一樣（R15）。
+  const line = /^[ \t]*識別碼[ \t]*:.*$/m.exec(raw)?.[0];
+  return line ? idOf(headValues(line.trim())) : null;
+}
+function idOf(values: Record<string, unknown> | null): string | null {
+  const id = values?.['識別碼'];
+  return (typeof id === 'string' || typeof id === 'number') && String(id).trim() ? String(id).trim() : null;
 }
 
 const piecesOf = (text: string): string[] => text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
@@ -156,8 +166,7 @@ export function parseScope(text: string): ScopeFile {
       file.ended = raw.includes('提前結束');
       file.id = looseId(raw);
     } else {
-      const id = values['識別碼'];
-      if ((typeof id === 'string' || typeof id === 'number') && String(id).trim()) file.id = String(id).trim();
+      file.id = idOf(values);
       file.start = readDate(values['考試開始']);
       file.end = readDate(values['考試結束']);
       file.ended = Object.hasOwn(values, '提前結束');
