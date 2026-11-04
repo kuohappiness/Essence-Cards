@@ -33,6 +33,7 @@
 | R-011 | Knowt | 筆記→多模式練習 | 免費學習，AI 有額度；已確認 PDF 匯出 | 第二輪 |
 | R-012 | StudySmarter | 教材畫線→卡片→弱項 | Premium CSV 不含格式／圖片／公式 | 第二輪 |
 | R-013 | Ágora（Claude 技能） | 教材衝突、保留題、校準、錯因分類 | MIT 開源；在 Claude 對話裡使用 | 2026-10-14 已整理，見 [Ágora 研究](agora.md) |
+| R-014 | [字形辨義](https://kuohappiness.github.io/glyph-meaning-game/)（使用者提供） | 一組相似字一起比較 | 免費網頁遊戲；[GitHub](https://github.com/kuohappiness/glyph-meaning-game) | 2026-11-04 列入，見 [R-014](#r-014-字形辨義使用者提供) |
 
 ## R-001 RemNote｜官網初查完成
 
@@ -351,6 +352,14 @@
 - [離線範圍](https://studysmarter.zendesk.com/hc/en-gb/articles/7698982988572-Practice-flashcards-offline)
 - [CSV 匯出限制](https://studysmarter.zendesk.com/hc/en-gb/articles/18447712394012-Flashcard-Export-Function)
 - [Premium 與試用](https://studysmarter.zendesk.com/hc/en-gb/articles/360011129199-Become-a-StudySmarter-Premium-Member)
+
+## R-014 字形辨義（使用者提供）
+
+- [成品頁面](https://kuohappiness.github.io/glyph-meaning-game/)、[GitHub](https://github.com/kuohappiness/glyph-meaning-game)。2026-11-04 看的版本是 `ff1f847`；Claude 開過頁面、讀過題庫，沒有整課玩完。
+- **是什麼**：給 8 至 12 歲兒童的翰林版字形辨義遊戲，目前有四上、五上的期中（第一至第六課）。
+- **怎麼比較**：每頁把一組相似字一起列出，例如「堅 / 緊 / 豎 / 腎」，附每個字的常用造詞，再用幾句話考這一組，孩子把造詞拖進句子。難度分簡單、中等、困難三級，答錯的可以輸出 PDF。
+- **分組的來源**：五上第一課的組和翰林的「形音輕鬆學」字形辨別幾乎相同。
+- **為什麼列在這裡**：使用者 2026-11-04 認為相似字要一起比較，效果比較好，以這個遊戲當參考（[backlog](../backlog.md#v1-需要做的任務)）。
 
 ## 研究結論與優先順序｜助理提案
 
