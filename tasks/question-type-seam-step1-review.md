@@ -1,6 +1,6 @@
 # 題型接點第一步的行為查核（給 Codex）
 
-狀態：待查
+狀態：第一輪查出 F1（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-step1-review.md>)），已修，等複查（本檔最後一節）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
@@ -22,6 +22,7 @@
 2. `session.history()` 的 `DoneCard` 結構換了（`t` 變 `written`，打字的欄位收進 `look`）；產品程式沒有人讀，測試只讀 `card.lt`、`rating`。
 3. 回看的 `TypedView` 不再每次算一個新物件（內容相同）。
 4. `src/core/study/index.ts` 多匯出 `cardOf`、`questionType`，`tests/boundaries.test.ts` 的清單跟著加兩個名字。這是四個鎖定的測試檔以外唯一改的測試。
+5. `src/review/index.ts` 多匯出 `questionOf`，給畫面共用原本的題目取值（第一輪查核補的）。
 
 ## 已經跑過的（新版 commit 上重跑過，輸出在腳本資料夾）
 
@@ -51,3 +52,21 @@
 ## 回報
 
 只回報，不改產品程式與文件。寫在 `Claude Codex Discussion/2026-11-05-question-type-seam-step1-review.md`，標題下第一行寫狀態。每項寫觸發條件、預期與實際、影響、位置與證據，區分「已重現」與「看規格推斷」，另標真實路徑會不會發生。沒有發現也寫明查了什麼、跑了什麼、哪些沒跑與原因。
+
+## 複查 F1（第二輪）
+
+新版改成同一分支的 `743601a`（`fix: keep the rating buttons and focus when the card type changes`）。舊版不變。分支之後合併了只改文件的 `main`，請以 `743601a` 的 `src`、`tests` 為準。
+
+**修法**：底部那一排由元件（`screen.Bottom`）改成普通函式（`screen.bottom()`），`Review` 直接呼叫、放進同一個 `.ec-actions`，所以換題型時 React 看到的是同一棵樹。新測試 `tests/review-focus.test.ts` 在修正前兩個都失敗。
+
+**第一輪的盲點已補**：同一個資料夾多了真 React 的軌跡（`dom-trace.mjs`、`dom-compare.mjs`，用法見 `README.txt`）。React 19 加 happy-dom 畫新舊 `Review`，餵同一串亂數動作（打字、按鍵含 Enter 的預設點擊、點擊、改焦點、時間、切走、別台裝置寫入），每一步寫下整棵 DOM、**每個節點的身分編號**（重新掛載就拿到新號）、`activeElement`、朗讀、事件、紀錄檔。它抓得到 `8bd9feb` 的 F1（40 串有 19 串不同）。
+
+**修正後跑過的**（`743601a`，輸出是資料夾裡的 `f1-*.out`）：`npm run check` 1210 個測試全過；`diff.mjs` 2000 串 × 80 步、`ui-diff.ts` 500 串 × 60 步、`parse-diff.mjs` 19782 份、軌跡 120 串 × 50 步（種子 7，6120 步）都 0 差異；`mutate.mjs` 20 處全部抓到。這些都還是沒有版面、真的輸入法、Obsidian 的 Markdown 渲染。
+
+**查什麼**：
+
+1. F1 的重現路徑在新版是否消失；這個修法有沒有帶來別的差異（`inert`、回報選單開著時、打字中沒有這一排、完成畫面）。
+2. 重跑軌跡，換一個種子；看 `dom-trace.mjs` 有沒有把差異比掉（例如 `ATTRS` 漏了什麼、動作走不到什麼）。
+3. 第一輪的四個差分也重跑一次：只有 `screens.tsx`、`Review.tsx` 兩個產品檔改過。
+
+結果接在同一份報告後面，加「第二輪」一節，狀態行改成最新的結論。
