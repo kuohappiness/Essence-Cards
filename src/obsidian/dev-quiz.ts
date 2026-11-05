@@ -5,7 +5,7 @@ import { quizMark } from '../ui/prefs.ts';
 import { inEntry, screens, sleep, text, until, type EntryDevHost } from './dev-entry.ts';
 import { clearTrial, makeTrial, newTrial, noteFolder } from './dev-exam-files.ts';
 import { buttonIn, enabled, inReview, typeInto } from './dev-practice.ts';
-import { capturePng, keepRendering } from './dev-review.ts';
+import { capturePng, keepRendering, webContents } from './dev-review.ts';
 import { createObsidianFiles } from './files.ts';
 import { quizLinkResolver } from './quiz-links.ts';
 
@@ -18,6 +18,15 @@ const MOVED = FOLDER + '/搬走', OTHER = FOLDER + '/同名';
 const narrowStyle = '.ec-fullscreen { right: auto !important; width: 375px !important; }';
 
 interface LinkConfig { getConfig(key: string): unknown; setConfig(key: string, value: unknown): void }
+
+/** Obsidian 現在開著的視窗（改名時問要不要更新連結的那個）。 */
+const openModal = (): HTMLElement | undefined => Array.from(document.querySelectorAll<HTMLElement>('.modal-container')).at(-1);
+const modalButtons = (modal: HTMLElement | undefined): HTMLButtonElement[] => Array.from(modal?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+/** 卡住時看畫面上有什麼（URI 帶 do=probe）：只讀，不按。 */
+export function quizProbe(): unknown {
+  const modal = openModal();
+  return { modal: modal ? text(modal) : null, classes: modal?.className ?? null, buttons: modalButtons(modal).map(text), clickable: Array.from(modal?.querySelectorAll('[class*="button"]') ?? []).map(each => [each.tagName, each.className, text(each)]), screens: screens().length };
+}
 
 export async function quizDev(host: EntryDevHost, folder: string, device: string): Promise<unknown> {
   const { app } = host;
@@ -107,25 +116,27 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     const known = trial.files.find(each => each.path === from);
     if (known) known.path = to;
   };
-  /** Obsidian 問要不要更新連結的那個視窗：回報字，照 wanted 按；沒出現回報 null。 */
-  const answerModal = async (wanted: 'accept' | 'reject'): Promise<{ text: string; buttons: string[]; pressed: string | null } | null> => {
-    const seen = await until(() => document.querySelector('.modal-container') !== null, 2500);
-    if (!seen) return null;
-    const modal = Array.from(document.querySelectorAll<HTMLElement>('.modal-container')).at(-1);
-    const buttons = Array.from(modal?.querySelectorAll<HTMLButtonElement>('button') ?? []);
-    const pick = buttons.find(each => wanted === 'reject' ? /don.?t|do not|不/i.test(text(each)) : /update|更新/i.test(text(each)) && !/always|永遠|總是|don.?t|do not|不/i.test(text(each)));
-    pick?.click();
-    await until(() => document.querySelector('.modal-container') === null, 2000);
-    return { text: text(modal), buttons: buttons.map(text), pressed: pick ? text(pick) : null };
+  /** Obsidian 問要不要更新連結的那個視窗：回報字，照 wanted 按；改名先結束、一直沒有視窗回報 null。按鈕認不出來時關掉視窗，不讓命令卡住。 */
+  const answerModal = async (wanted: 'accept' | 'reject', finished: () => boolean): Promise<{ text: string; buttons: string[]; pressed: string | null } | null> => {
+    await until(() => finished() || openModal() !== undefined, 20000);
+    const modal = openModal();
+    if (!modal) return null;
+    const buttons = modalButtons(modal);
+    // 三個按鈕：總是更新、僅此一次、不更新（Obsidian 1.15.0 中文介面實機讀到）。「總是」會改掉 alwaysUpdateLinks，不按。
+    const pick = buttons.find(each => (wanted === 'reject' ? /不更新|don.?t|do not/i : /僅此一次|once/i).test(text(each)));
+    const seen = { text: text(modal), buttons: buttons.map(text), pressed: pick ? text(pick) : null };
+    if (pick) pick.click();
+    else modal.querySelector<HTMLElement>('.modal-close-button')?.click();
+    await until(() => openModal() === undefined, 3000);
+    return seen;
   };
 
   try {
     quizMark.set(app, true);
-    // 這次才建的資料夾：先記子資料夾，清理時才刪得掉。
+    // 這次才建的資料夾：清理照順序刪，子資料夾要排在前面。
+    await makeTrial(app, trial, FOLDER, originals, mark);
     await noteFolder(app, trial, QUIZ_FOLDER);
     await noteFolder(app, trial, EXAM_FOLDER);
-    await makeTrial(app, trial, FOLDER, originals, mark);
-    trial.folders.reverse();
     trial.folders.unshift(MOVED, OTHER);
     check('卡組讀進來了', await until(() => state.deckTargets(WORDS).length === 3 && state.deckTargets(GRAMMAR).length === 2));
     await sleep(300);
@@ -257,6 +268,7 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     const unitPractice = buttonIn(entryRows()[0], '全部卡');
     check('單元的全部卡是兩篇加起來', unitPractice ? text(unitPractice) : null);
     if (unitFile) await state.cancelQuiz(mine()[0]);
+    await closeAll();
 
     // ── §1 §5 連結 ──
     const grammarLink = (path: string): string => `- [[${path.replace(/\.md$/, '')}]]`;
@@ -266,9 +278,12 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     if (!linkFile) throw Error('沒有建單篇的小考檔');
     const linkLine = async (): Promise<string> => (await app.vault.read(linkFile)).split(/\r?\n/).at(-2) ?? '';
     const move = async (to: string, wanted?: 'accept' | 'reject'): Promise<unknown> => {
-      const moved = app.fileManager.renameFile(file(grammar), to);
-      const modal = wanted ? await answerModal(wanted) : null;
-      await moved;
+      let finished = false;
+      const moved = app.fileManager.renameFile(file(grammar), to).finally(() => { finished = true; });
+      const modal = wanted ? await answerModal(wanted, () => finished) : null;
+      // 不用無限等：視窗沒答到時這個 promise 不會結束，下面的清理還是要跑。
+      const ended = await Promise.race([moved.then(() => true), sleep(15000).then(() => false)]);
+      if (!ended) throw Error('改名等了 15 秒沒有結束：' + JSON.stringify(modal));
       renamed(grammar, to);
       grammar = to;
       await sleep(1000);
@@ -278,6 +293,8 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     links.setConfig('alwaysUpdateLinks', true);
     check('自動更新開：改名', await move(`${FOLDER}/L3 文法改名 ${run}.md`));
     check('自動更新開：只搬資料夾', await move(`${MOVED}/L3 文法改名 ${run}.md`));
+    check('自動更新開：只搬資料夾後入口', (await openHome(), entryRows().map(text)));
+    await closeAll();
     links.setConfig('alwaysUpdateLinks', false);
     check('自動更新關：接受', await move(`${FOLDER}/L3 文法再改名 ${run}.md`, 'accept'));
     check('自動更新關：拒絕', await move(`${FOLDER}/L3 文法第三次 ${run}.md`, 'reject'));
@@ -301,17 +318,26 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
       const line = editor.lineCount() - 2;
       editor.setSelection({ line, ch: 2 }, { line, ch: editor.getLine(line).length });
       editor.replaceSelection('');
+      const keys = webContents();
+      keys?.focus?.();
       editor.focus();
       editor.setCursor({ line, ch: 2 });
-      document.execCommand('insertText', false, '[[L3 文法第三次');
-      const suggested = await until(() => document.querySelector('.suggestion-container .suggestion-item') !== null, 3000);
+      // 真的按鍵：程式插字（execCommand、replaceRange）不算使用者輸入，不會叫出建議清單（2026-11-06 實機：字只進了畫面，沒有進檔案）。
+      for (const each of '[[L3 文法第三次') {
+        keys?.sendInputEvent?.({ type: 'char', keyCode: each });
+        await sleep(40);
+      }
+      const suggested = await until(() => document.querySelector('.suggestion-container .suggestion-item') !== null, 5000);
       check('建議清單出現了', suggested);
       check('建議清單', Array.from(document.querySelectorAll('.suggestion-container .suggestion-item')).slice(0, 4).map(text));
+      check('打字後的那一行', editor.getLine(line));
       await capture('建議清單');
       if (suggested) {
-        document.querySelector<HTMLElement>('.suggestion-container .suggestion-item')?.click();
-        await sleep(300);
-      }
+        keys?.sendInputEvent?.({ type: 'keyDown', keyCode: 'Return' });
+        keys?.sendInputEvent?.({ type: 'keyUp', keyCode: 'Return' });
+        await sleep(500);
+      } else editor.setLine(line, grammarLink(grammar));
+      check('選了之後的那一行', editor.getLine(line));
       await view.save();
       await sleep(800);
       check('修好之後的連結', await linkLine());
@@ -385,9 +411,10 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
   } finally {
     host.review?.close();
     host.entry?.close();
-    quizMark.set(app, wasMark);
+    // 小考標記關回預設，不還原成跑之前的值：上一次試跑中斷時，「跑之前」可能是它自己留下的開著。
+    quizMark.set(app, false);
     links.setConfig('alwaysUpdateLinks', wasLinks);
-    check('設定還原', { 小考標記: quizMark.get(app) === wasMark, 自動更新連結: links.getConfig('alwaysUpdateLinks') === wasLinks });
+    check('設定還原', { 小考標記: quizMark.get(app) === false, 跑之前的小考標記: wasMark, 自動更新連結: links.getConfig('alwaysUpdateLinks') === wasLinks, 跑之前的自動更新連結: wasLinks });
     // iCloud 正在同步剛改過的檔時刪不掉（2026-11-05 遇過）：等一下再清一次。
     let left = await clearTrial(app, trial);
     if (left !== true) { await sleep(5000); left = await clearTrial(app, trial); }
