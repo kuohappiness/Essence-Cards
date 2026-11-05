@@ -71,7 +71,11 @@ export function QuizButton({ state, openNote, input, at }: Pick<EntryProps, 'sta
   </>;
 }
 
+const CHANGED = quizFailure({ kind: 'blocked', reason: 'changed' });
+
 function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'state' | 'openNote'> & { view: Exclude<QuizButtonView, { kind: 'problem' }>; input: QuizInput; close: () => void }): React.JSX.Element | null {
+  // 打開選單時的那一次小考（L2 R3）：之後的改日期與取消都對它做。別台裝置取消、同一個目標換成另一份時，不悄悄改成建新的或改另一份。
+  const [opened] = useState(view.row);
   const [other, setOther] = useState(false);
   const [typed, setTyped] = useState(view.row?.date ?? '');
   const [busy, setBusy] = useState(false);
@@ -90,7 +94,7 @@ function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'sta
     if (result.kind === 'done') close();
     else setFailure(quizFailure(result));
   }
-  const set = (date: string): void => { void run(() => current.setQuiz(input, date, view.row)); };
+  const set = (date: string): void => { void run(() => current.setQuiz(input, date, opened)); };
   const check = checkQuizDate(typed, day);
   const onKey = (event: React.KeyboardEvent): void => {
     if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
@@ -98,11 +102,15 @@ function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'sta
     event.stopPropagation();
     close();
   };
+  // 自己按的還在寫時，畫面先看到自己的結果，不算別處改的。
+  if (!busy && (view.row?.key ?? null) !== (opened?.key ?? null)) return <div className="ec-qz-menu" onKeyDown={onKey}>
+    <p className="ec-sc-word is-bad" role="alert">{CHANGED}</p>
+  </div>;
   return <div className="ec-qz-menu" onKeyDown={onKey}>
     <div className="ec-qz-days">
       {quizChoices(day).map(choice => <button key={choice.label} type="button" className="ec-u-btn" disabled={busy} onClick={() => { set(choice.date); }}>{choice.label}</button>)}
       <button type="button" className="ec-u-btn" aria-expanded={other} disabled={busy} onClick={() => { setOther(!other); }}>其他日期</button>
-      {view.row && <button type="button" className="ec-u-btn is-quiet" disabled={busy} onClick={() => { const { row } = view; void run(() => current.cancelQuiz(row)); }}>取消小考</button>}
+      {opened && <button type="button" className="ec-u-btn is-quiet" disabled={busy} onClick={() => { void run(() => current.cancelQuiz(opened)); }}>取消小考</button>}
     </div>
     {other && <form className="ec-qz-other" onSubmit={event => { event.preventDefault(); if (check.date !== null && !busy) set(check.date); }}>
       <DateField label="日期" name="小考日期" hint="例如 2026-11-07" value={typed} set={setTyped} bad={check.word !== null} />

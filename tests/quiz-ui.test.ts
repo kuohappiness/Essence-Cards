@@ -325,6 +325,48 @@ void test('§3 Esc 只收起選單，不離開目錄', async t => {
   assert.ok(s.has('小考'));
 });
 
+void test('L2 R3 選單開著時別台裝置取消了這次小考：選單寫已經改過、按不下去，不會變成新的一份；收起再打開才重來', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考 11/7'));
+  await s.click(s.button('其他日期'));
+  await s.type('2026-11-09');
+  await act(async () => { s.write(FOLDER + 'a.md', quizText('2026-11-07', L3, 'q4m8t2', '取消: 2026-11-05\n')); await wait(25); });
+  const menu = s.all('.ec-qz-menu')[0];
+  assert.ok(menu, '選單還在，寫出原因');
+  assert.match(menu.textContent ?? '', /這個小考剛被別處改過，請再看一次/);
+  for (const name of ['今天', '明天', '後天', '確定', '取消小考']) assert.equal(s.has(name, menu), false, name + ' 按不到');
+  assert.deepEqual(s.quizFiles(), [FOLDER + 'a.md'], '沒有建新檔');
+  await s.click(s.button('小考'));
+  assert.equal(s.all('.ec-qz-menu').length, 0, '按一下收起');
+  await s.click(s.button('小考'));
+  assert.ok(s.has('明天'), '再打開是新的選單');
+});
+
+void test('L2 R3 選單開著時同一個單元多了一份別人設的小考：不建第二份', async t => {
+  const s = await open(t);
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考'));
+  await act(async () => { s.write(FOLDER + 'b.md', quizText('2026-11-08', L3, 'bbbbbb')); await wait(25); });
+  const menu = s.all('.ec-qz-menu')[0];
+  assert.ok(menu);
+  assert.match(menu.textContent ?? '', /這個小考剛被別處改過，請再看一次/);
+  assert.equal(s.has('明天', menu), false);
+  assert.deepEqual(s.quizFiles(), [FOLDER + 'b.md']);
+});
+
+void test('L2 R3 自己按的設定與取消不算「別處改過」：選單照常收起', async t => {
+  const s = await open(t);
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考'));
+  await s.click(s.button('明天'));
+  assert.equal(s.all('.ec-qz-menu').length, 0);
+  await s.click(s.button('小考 11/6'));
+  await s.click(s.button('取消小考'));
+  assert.equal(s.all('.ec-qz-menu').length, 0);
+  assert.equal(s.text().includes('別處改過'), false);
+});
+
 void test('§3 電腦與手機都有：手機沒有暫停的按鈕，小考按鈕一樣在', async t => {
   const phone = await open(t);
   await phone.expand('L3 Vocabulary');
