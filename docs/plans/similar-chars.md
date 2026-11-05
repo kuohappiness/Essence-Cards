@@ -1,6 +1,6 @@
 # 相似字比較卡
 
-> 狀態：定案：v1 要做、一格一個目標、畫面、翻面的對照（2026-11-04），出題、評分、卡組與紀錄的寫法（使用者 2026-11-05 逐條確認）都已定（[D-178](../decisions.md#d-178-相似字用點字比較卡一格一個學習目標)、[D-179](../decisions.md#d-179-介面的每一項都要有必要性非必要不出現)、[D-182](../decisions.md#d-182-比較點選各科都能用家長出題時勾選)）；任務說明在另一個對話寫。
+> 狀態：定案：v1 要做、一格一個目標、畫面、翻面的對照（2026-11-04），出題、評分、卡組與紀錄的寫法（使用者 2026-11-05 逐條確認）都已定（[D-178](../decisions.md#d-178-相似字用點字比較卡一格一個學習目標)、[D-179](../decisions.md#d-179-介面的每一項都要有必要性非必要不出現)、[D-182](../decisions.md#d-182-比較點選各科都能用家長出題時勾選)）；程式合併進 `main`（2026-11-06，[任務說明](../../tasks/question-type-seam.md)），iPhone 還沒測。
 
 示意頁：[相似字比較卡](https://claude.ai/artifact/QEqH3nWRU1h29jGAHA2Hvh)（私人頁面）；原始檔在 [`experiments/mockups/similar-chars-card.html`](../../experiments/mockups/similar-chars-card.html)。題型是[點選填空](../question-types.md#點選填空)。參考：[字形辨義](../research/software.md#r-014-字形辨義使用者提供)。
 

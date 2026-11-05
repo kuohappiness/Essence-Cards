@@ -168,8 +168,8 @@ void test('D-089 #13 typed 保留大小寫，僅清格式與頭尾空白', () =>
 void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案、answer 與指紋和拆開之前相同', () => {
   const english = readFileSync(new URL('../docs/card-rules/english.md', import.meta.url), 'utf8');
   const sources = [
-    ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown'),
-    // 只看中翻英這個例子：英文規則裡文法的 ` | ` 例子（D-193）程式還沒認「文法」結尾，接上時另外測。
+    // 只看中翻英這個例子：§2-3 的比較卡另外測；英文規則裡文法的 ` | ` 例子（D-193）程式還沒認「文法」結尾，接上時另外測。
+    ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown').filter(text => text.includes('made up his mind | made his mind up')),
     ...indentedFences(english).filter(text => text.includes('made up his mind | made his mind up')),
   ];
   assert.equal(sources.length, 2);
@@ -182,6 +182,21 @@ void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案�
     assert.deepEqual([both.answer, both.typed, both.fingerprint], ['made up his mind | made his mind up', ['made up his mind', 'made his mind up'], '9938603d']);
     assert.deepEqual(both.extras, ['詳解：made up his mind 和 made his mind up 都對，課本用前者']);
   }
+});
+
+// syntax §2-3 的比較卡範例（任務說明 §11）：經過這裡的 parseDeck，也跟著進 deckCases 的往返與冪等。
+void test('syntax §2-3 的比較卡範例：三個字都是比較卡，沒有問題', () => {
+  const part = syntax.slice(syntax.indexOf('#### 比較卡'), syntax.indexOf('### 2-4'));
+  const [text, ...rest] = indentedFences(part, 'markdown');
+  assert.deepEqual(rest, []);
+  const deck = parseDeck(text);
+  assert.deepEqual(deck.problems, []);
+  const members = ['寨', '塞', '寒'];
+  assert.deepEqual(deck.targets.map(t => [t.group?.word, t.group?.members, t.group?.title, t.prompts.length, t.ok]), [
+    ['寨', members, '相似字', 2, true],
+    ['塞', members, '相似字', 2, true],
+    ['寒', members, '相似字', 2, true],
+  ]);
 });
 for (const [name, answer, typed, fingerprint, problems] of [
   ['`a|b` 前後沒空格也認得', 'a|b', ['a', 'b'], '434fa34e', []],
