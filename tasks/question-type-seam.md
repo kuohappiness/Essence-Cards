@@ -1,6 +1,6 @@
 # 題型接點與點選填空（D-181、D-178、D-182、D-192，給 Claude，本機執行）
 
-狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），第二輪複查通過（[請求](question-type-seam-step1-review.md)）；§3、§4、§5-4、§8、§10、§11 已依格式查核第四輪（R4-1～R4-5）改寫，Claude 已回應（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）；使用者 2026-11-05 同意「離開筆記時自動加標記」與「讀寫同一版發布」（D-191 第 4、5 點）；使用者 2026-11-05 決定格式查核到第四輪為止，接著實作第二步，第四輪之後改的部分由合併前的 L2 查；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-191 的文件）；§3～§10 已實作並合併 `main` 到分支 `claude/compare-pick-34bcaf`，Windows 實機通過（§10 的結果），等 L2（[請求](question-type-seam-review.md)）
+狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），第二輪複查通過（[請求](question-type-seam-step1-review.md)）；§3、§4、§5-4、§8、§10、§11 已依格式查核第四輪（R4-1～R4-5）改寫，Claude 已回應（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）；使用者 2026-11-05 同意「離開筆記時自動加標記」與「讀寫同一版發布」（D-191 第 4、5 點）；使用者 2026-11-05 決定格式查核到第四輪為止，接著實作第二步，第四輪之後改的部分由合併前的 L2 查；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-191 的文件）；§3～§10 已實作並合併 `main` 到分支 `claude/compare-pick-34bcaf`，Windows 實機通過（§10 的結果）；L2 第一輪的 R1～R3 已修（`572bb1b`、`8b6d6be`、`4d6c518`），等第二輪（[請求](question-type-seam-review.md)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫這份用 **Opus、xhigh**，實作用 **Opus、高**（[quality.md](../docs/agents/quality.md)）。改解析、紀錄、排程、複習流程，跨模組，合併前要 L2。必讀 code-quality 的〈測試〉。
 
@@ -364,13 +364,21 @@ ID 變成重複（D-157）：目前這張牽涉的任何一個目標衝突，整
 
 沒跑的：iPhone 全部（上面那一條）；輸入法組字**中途**按 Enter（遠端偵錯送不出真的輸入法按鍵，這段程式沒改）。
 
+**L2 第一輪修正後的重驗（2026-11-06，建置 `0.4.0+4d6c518`）**：只重跑 R1、R2 碰到的部分，其他項目沒有重跑（`status.ts` 改用同一個入口，暫停、恢復只靠自動測試）。截圖和腳本的位置寫在 [L2 請求](question-type-seam-review.md#驗證方式)。
+
+| 項目 | 結果 |
+|---|---|
+| 屬性區開頭有空白、Tab、全形空白（R1） | 離開筆記前後都是國語、暫停，今天的份 0；`需要版本` 補成 0.4.0，ID 2 個；第一行照原樣，標記在原屬性區裡；第二次離開文字相同 |
+| ID 衝突，`{ deck }`（R2） | 一格，字鍵寨、塞，結果 `right:寨`，對照兩行都在（各有記憶錨點與常用詞），紀錄只有 `寨:good` |
+| ID 衝突，全部卡 `{ deck, since }`（R2） | 同上，用新的卡組跑（第一次跑是劇本把上一段的作答算進這一輪） |
+
 ## §11 驗收條件（第二步）
 
 測試只透過公開介面：`parseDeck`、`planToday`、`nextCard`、`createSession`（接真的 `createState`）、`createPreview`、`Review`（`tests/helpers/review-ui.ts`）。例子用規畫與示意頁的字。
 
 **解析**：§3 兩張表的每一列與判斷順序的每一點，用 `parseDeck` 固定預期值（包括 `group`、`problems` 的 code 與行號，每個目標最多一種比較卡的代碼）；另測連結、圖片、嵌入、程式碼、公式、`%%` 裡的假空格，字元參照，`＿`、`＿＿`、`＿ ＿`、`＿**＿**`、`__`，一個子項目與兩個子項目的答案，同一個目標的題目有的符合有的不符，問答混填空，同組不同順序同一個 `key`，`a（a、bc）` 和 `ab（ab、c）` 不同組；補 ID 前後結果相同（含 `寨（寨、塞） 山＿＿ :: 寨` 與沒有空格的隱式問答）；`borrow  中翻英` 的 `pairKey` 沒有尾端空白、配得上 `borrow 英翻中`；全形空白的中翻英、英翻中各測配對；`能看出中文語序　中翻英` 的錯誤和半形相同。`deckCases` 有比較卡，往返與冪等自動受保護；syntax 的新範例跑得過解析；舊版（`v0.3.0` 標籤的 `parseDeck`）讀同一份當問答卡，每一題的指紋相同、題型是翻面。`check-syntax` 照 §10 的表，每一列一份稿，固定代碼、行號與退出碼；只有不符、提醒的稿退出碼是 0。
 
-**卡組的標記**（§3）：`markNeed` 固定 §3 的 20 種寫法（成功的逐字比輸出，舊值帶行尾註解、引號的鍵要看註解和鍵的寫法留著；`null` 的文字不動；加進 `deckCases`，往返與冪等）；有比較卡才寫，只有 `pick-answer-invalid` 的目標也寫；補 ID、當成新的、還原三個入口都帶標記，同名目標與前方有隱式題時挑到的 ID 不變；只加標記、補 ID 加標記、寫後只失去標記（`confirmed` 是 `null`，結果是 `stale`）；原本標得比 `PICK_NEEDS` 高、這次只改 ID、寫後被降成 `PICK_NEEDS`：也是 `stale`；ID 都有只缺標記時 `deckStatus` 不是沒有要做的，`fillIds` 寫得進去；`markNeed` 回 `null` 時這篇一字不改、新目標仍沒有 ID、`v0.3.0` 讀到的佇列前後相同，補 ID、當成新的、還原三個入口都是，`deckStatus` 是 `refused`，重建 `state` 之後還是；`fillIds: false`（手機）不寫；備份閘門關著不寫；`build` 不明不寫。帶標記的卡組在這個建置**真的出比較卡**（`canRead(PICK_NEEDS, releaseOf(BUILD))` 只是數字，兩個都驗）。`v0.3.0` 標籤的程式讀寫回的卡組：不出題、不進今天的份、`blocked().decks` 有它、不再改寫；同一篇沒有標記、目標沒有 ID：也不出。`releaseProblems`（隔離的暫存 repo）：tag 不在 `main` 上有 problem，detached 在 `main` 的 tag 上沒有。
+**卡組的標記**（§3）：`markNeed` 固定 §3 的 20 種寫法與 L2 R1 的 6 種打字雜訊（成功的逐字比輸出，舊值帶行尾註解、引號的鍵要看註解和鍵的寫法留著；`null` 的文字不動；加進 `deckCases`，往返與冪等）；有比較卡才寫，只有 `pick-answer-invalid` 的目標也寫；補 ID、當成新的、還原三個入口都帶標記，同名目標與前方有隱式題時挑到的 ID 不變；只加標記、補 ID 加標記、寫後只失去標記（`confirmed` 是 `null`，結果是 `stale`）；原本標得比 `PICK_NEEDS` 高、這次只改 ID、寫後被降成 `PICK_NEEDS`：也是 `stale`；ID 都有只缺標記時 `deckStatus` 不是沒有要做的，`fillIds` 寫得進去；`markNeed` 回 `null` 時這篇一字不改、新目標仍沒有 ID、`v0.3.0` 讀到的佇列前後相同，補 ID、當成新的、還原三個入口都是，`deckStatus` 是 `refused`，重建 `state` 之後還是；`fillIds: false`（手機）不寫；備份閘門關著不寫；`build` 不明不寫。帶標記的卡組在這個建置**真的出比較卡**（`canRead(PICK_NEEDS, releaseOf(BUILD))` 只是數字，兩個都驗）。`v0.3.0` 標籤的程式讀寫回的卡組：不出題、不進今天的份、`blocked().decks` 有它、不再改寫；同一篇沒有標記、目標沒有 ID：也不出。`releaseProblems`（隔離的暫存 repo）：tag 不在 `main` 上有 problem，detached 在 `main` 的 tag 上沒有。
 
 **紀錄**：§4 表的每一列；比較卡的行用舊版 `parseLine` 讀得懂；欄位順序 `pick`、`retry`、`also`、`with`；第一次按沒印象是 `pick: null` 沒有 `retry`，最上層與 `also` 各一次；`？（？、！） 比較` 點了 `？` 是 `pick: "？"`、照一般字鍵判定，和沒印象分得開；同一個字兩格一行、最差的在最上層、另一格在 `also`；`also` 形狀不對當沒有；第二行起 `with` 是第一行的 `t`，第一行被拒、中間一行被拒時也對，一行的卡沒有 `with`；`sameReview`：逐字相同的副本算一筆，`also` 不同算兩筆，`with` 不同或一有一沒有算兩筆，同集合異順序、空陣列與沒有這個欄位算相同，有效集合與出題結果不看讀檔順序；第一行已落盤、第二行暫時失敗後重試，跨月份時路徑照原本的 `t`，重開重併的行與結果固定；重新 `mergeHistory` 與 `appendLine` 結果相同；既有的翻面、打字行逐字不變。
 
@@ -441,3 +449,5 @@ ID 變成重複（D-157）：目前這張牽涉的任何一個目標衝突，整
 30. 合併 `main`（小考前的密集複習）時自己決定的：暫停、恢復只改狀態那一行，不補標記（`need: null`；標記在離開筆記、存檔時補，§3）；「這輪第一次就答對」把比較卡寫的每一行都交給 `firstTry`，一個字一個分母；`session.history()` 的形狀是第一步就換的，`main` 的 `tests/practice.test.ts` 跟著改讀 `written[0].t`（只改取值，預期值不動）。
 31. §11 的「syntax 的新範例跑得過解析」留到第 4 步：`docs/syntax.md` 合併時才更新，現在沒有新範例可跑。§11 的其他條款在送 L2 前請一個沒參與實作的代理逐句對過一次測試，缺的都補了（`tests/pick-log.test.ts`、`tests/pick-render.test.ts` 等），產品程式沒改。空格的位置除了 `md-cases`，另外用手寫的 HTML 測 `postProcess`，每次都跑；`md-cases` 要開 Obsidian，只有實機時跑。
 32. §1 原本寫「四張表」，實作時只有作答與畫面是 `Record<QuestionType, …>`，解析與組卡是函式（L2 的 R3）。比較過把這兩個也包成表：翻面和打字的組卡是同一個函式，解析有順序（中翻英、英翻中優先），又分「每一題」和「每個目標」兩個時機，包起來呼叫端還是要自己接，表只多一層殼，少接也不會報錯。新增題型真正怕的是解析或組卡沒接上，所以改成 `tests/question-types.test.ts` 一張 `Record<QuestionType, string>` 的範例：少一列編譯不過，範例從筆記的文字跑到 `questionType`，沒接上測試不過，比只查表裡有沒有這一列更強。§1 跟著改。探針（2026-11-05）：`QuestionType` 多一個值，`tsc` 指出 4 處缺列（`flow.ts` 兩處、`screens.tsx`、這個測試）。
+33. L2 的 R1 修法和報告驗證的不同：報告驗證的是拒絕寫入，這裡統一讀寫兩端對屬性區的判斷（`frontmatterLines`），第一行有打字雜訊的卡組照樣寫上標記，第一行照原樣。解析器本來就把它當屬性區，§3 的條件也成立；拒絕的話這篇要等人看到提示、改好才能複習，多打一個空白又是常態。v0.3.0 的規則相同，舊裝置一樣擋住。核對同時改嚴：`shape` 換成 `meaning`，比全部屬性。
+34. L2 的 R2：`DeckEntry` 多一個選用的 `whole`，只有 `deck.targets` 裁過才有。沒有把 `deck.targets` 改成整篇、另外傳候選：排程到處讀 `deck.targets`，改掉要碰的地方多，漏掉一處衝突的字就會出題；現在漏接的結果只是少一行對照。

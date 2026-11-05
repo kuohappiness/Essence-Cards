@@ -1,10 +1,27 @@
 # 題型接點與點選填空的 L2（給 Codex）
 
-狀態：待審
+狀態：第一輪待修，R1～R3 已修；第二輪待審
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查、不改產品程式；要重現時用隔離的暫存資料，不碰測試 vault 與正式使用的 vault。
 
 這個分支跨模組，改了解析、寫回筆記、紀錄、排程與複習流程，照 [quality.md](../docs/agents/quality.md) 合併前要 L2。先讀 code-quality 的 `review.md`。
+
+## 第二輪（修正 R1～R3 之後）
+
+這一輪只讀：本節、下面的〈審查對象〉、[上一輪報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-l2.md>)的〈Claude 的核對與回應〉。其他章節與第一輪的內容預設不讀，需要時照標題或發現 ID 只查相關的。
+
+- **看差異**：`git diff 31f20d4 <待審 commit>`。程式只有 `572bb1b`（R1）、`8b6d6be`（R2）、`4d6c518`（R3）三個 commit，之後只改文件。
+- **還沒結的發現**：R1、R2、R3。逐項判斷修好了沒有、有沒有帶進新問題。
+- **可能碰到的已結項目與驗收證據**：標記的往返、冪等與寫法（`tests/mark-need.test.ts`、`tests/deck.test.ts` 的 `deckCases`）；舊版擋住（D-191，`tests/pick-old-version.test.ts`）；暫停、恢復只改狀態那一行（`tests/state-need.test.ts`）；ID 衝突不出題（D-157，`tests/pick-flow.test.ts`）。
+- **請特別看**：
+  1. R1 的修法和你驗證的不同：沒有拒絕，統一辨識後寫進去。舉得出「寫進去會壞、拒絕才對」的輸入嗎？請實跑。
+  2. `frontmatterLines`（`src/core/deck/parse.ts`）現在有三個使用者：`readProperties`、`need.ts`、`status.ts`。`catalog/scope.ts` 有自己一份，我判斷規則相同沒動，請對過。舊卡組的讀取有沒有因此改變？
+  3. `meaning` 比原本的 `shape` 嚴：有沒有原本寫得上、現在被誤拒的卡組？
+  4. `DeckEntry.whole`：還有誰讀 `deck.targets` 時應該看整篇，或者不該看？
+  5. R3：§1 的新寫法和第 32 點站不站得住，範例表真的抓得到漏接嗎？
+  6. 〈實作者自己選的做法〉第 33、34 點，上一輪沒看過。
+- **驗證**：照下面〈驗證方式〉，測試指令已加 `tests/question-types.test.ts`。
+- **報告**：寫在同一份 `Claude Codex Discussion/2026-11-05-question-type-seam-l2.md` 的最後，加〈第二輪〉，更新標題下的狀態行。其他規則同〈回報與權限〉。
 
 ## 審查對象
 
@@ -56,16 +73,16 @@ npm run check
 ```
 
 ```bash
-node --test --test-timeout=120000 tests/pick-render.test.ts tests/pick-flow.test.ts tests/pick-plan.test.ts tests/pick-queue.test.ts tests/pick-log.test.ts tests/pick-look.test.ts tests/pick-preview.test.ts tests/pick-ui.test.ts tests/pick-deck.test.ts tests/pick-old-version.test.ts tests/mark-need.test.ts tests/state-need.test.ts tests/need-lines.test.ts tests/check-syntax-pick.test.ts tests/compare-versions.test.ts
+node --test --test-timeout=120000 tests/question-types.test.ts tests/pick-render.test.ts tests/pick-flow.test.ts tests/pick-plan.test.ts tests/pick-queue.test.ts tests/pick-log.test.ts tests/pick-look.test.ts tests/pick-preview.test.ts tests/pick-ui.test.ts tests/pick-deck.test.ts tests/pick-old-version.test.ts tests/mark-need.test.ts tests/state-need.test.ts tests/need-lines.test.ts tests/check-syntax-pick.test.ts tests/compare-versions.test.ts
 ```
 
 ```bash
 node experiments/t4/check-syntax.mjs --selftest
 ```
 
-**實作者跑過的**（結果在[任務說明 §10 的 Windows 實機結果](question-type-seam.md#windows-實機的結果2026-11-05)）：`npm run check`（pre-commit，每個 commit）；`npm run build`；§10 列的 Windows 項目，建置 `0.4.0+59c4b96`；`md-cases` 在隔離環境與測試 vault 各一次。實機之後只補測試與文件，產品程式沒改。
+**實作者跑過的**（結果在[任務說明 §10 的 Windows 實機結果](question-type-seam.md#windows-實機的結果2026-11-05)）：`npm run check`（pre-commit，每個 commit）；`npm run build`；§10 列的 Windows 項目，建置 `0.4.0+59c4b96`；`md-cases` 在隔離環境與測試 vault 各一次。第一輪之後 R1、R2 改了程式，碰到的部分用 `0.4.0+4d6c518` 重跑（§10 結果的最後一段）；R3 只有測試與註解。這組指定測試有一次偶發失敗，查不出是哪一個，見報告〈跑過與沒跑的〉。
 
-截圖與腳本不進 repo：`C:\Users\kuo\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_fa1934dd-c734-4953-974e-eef1a0a4b88a\question-type-seam-real-run-59c4b96\`，用法寫在 `README.txt`。
+截圖與腳本不進 repo：`C:\Users\kuo\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_fa1934dd-c734-4953-974e-eef1a0a4b88a\question-type-seam-real-run-59c4b96\`，用法寫在 `README.txt`。第一輪修正後的重驗在旁邊的 `question-type-seam-real-run-4d6c518\`。
 
 **沒跑的**：
 
@@ -74,7 +91,7 @@ node experiments/t4/check-syntax.mjs --selftest
 
 ## 實作者自己選的做法
 
-規格沒寫、由實作者決定的地方，逐條寫在[任務說明的〈實作者自己選的做法〉](question-type-seam.md#實作者自己選的做法l2-請先看)（第 1～31 點，含理由），請先看這些。第 19（`0.4.0` 暫定）、25（詞的字鍵一排最多 4 個，和 D-182 第 6 點的「6 個以內一排」不同）、27（比較句的英文換行）、28（實機環境）、30（合併時的決定）、31（§11 留到第 4 步的一條）是實機與合併才加的，還沒有人看過。
+規格沒寫、由實作者決定的地方，逐條寫在[任務說明的〈實作者自己選的做法〉](question-type-seam.md#實作者自己選的做法l2-請先看)（第 1～34 點，含理由），請先看這些。第 19（`0.4.0` 暫定）、25（詞的字鍵一排最多 4 個，和 D-182 第 6 點的「6 個以內一排」不同）、27（比較句的英文換行）、28（實機環境）、30（合併時的決定）、31（§11 留到第 4 步的一條）是實機與合併才加的；第 32～34 點是第一輪之後才加的。
 
 ## 回報與權限
 
