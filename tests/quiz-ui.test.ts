@@ -367,6 +367,70 @@ void test('L2 R3 自己按的設定與取消不算「別處改過」：選單照
   assert.equal(s.text().includes('別處改過'), false);
 });
 
+/** 從現在有焦點的元素按 Esc（真的鍵盤事件從這裡開始冒泡）。 */
+async function escape(): Promise<void> {
+  await act(async () => {
+    const focused = document.activeElement as HTMLElement | null;
+    assert.ok(focused, '有焦點');
+    focused.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) as unknown as Event);
+    await Promise.resolve();
+  });
+}
+
+void test('L2 R4 焦點還在小考按鈕上按 Esc：先收起選單、焦點留在按鈕，留在目錄；再按一次才回入口', async t => {
+  const s = await open(t);
+  await s.expand('L3 Vocabulary');
+  const trigger = s.button('小考');
+  trigger.focus();
+  await s.click(trigger);
+  assert.ok(s.all('.ec-qz-menu')[0]);
+  assert.ok(document.activeElement === trigger, '打開選單不搬焦點');
+  await escape();
+  assert.equal(s.all('.ec-qz-menu').length, 0, '選單收起來');
+  assert.ok(s.all('.ec-tr-ub').length > 0, '還在目錄，單元還展開著');
+  assert.ok(document.activeElement === s.button('小考'), '焦點回到小考按鈕');
+  await escape();
+  assert.equal(s.all('.ec-tr-ub').length, 0, '第二次才回入口');
+});
+
+void test('L2 R4 焦點在選單裡（日期欄）按 Esc：收起選單，焦點回到小考按鈕', async t => {
+  const s = await open(t);
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考'));
+  await s.click(s.button('其他日期'));
+  const input = s.all('input[type="text"]').find(each => each.getAttribute('aria-label') === '小考日期');
+  assert.ok(input);
+  input.focus();
+  await escape();
+  assert.equal(s.all('.ec-qz-menu').length, 0);
+  assert.ok(s.all('.ec-tr-ub').length > 0, '還在目錄');
+  assert.ok(document.activeElement === s.button('小考'), '焦點回到小考按鈕');
+});
+
+void test('L2 R4 列出兩份時按 Esc：目錄先收起清單；入口也是先收起清單，不關掉畫面', async t => {
+  const files = { [FOLDER + 'a.md']: quizText('2026-11-06'), [FOLDER + 'b.md']: quizText('2026-11-07') };
+  const s = await open(t, files);
+  await s.expand('L3 Vocabulary');
+  const trigger = s.button('這個小考有兩份不一樣的檔');
+  trigger.focus();
+  await s.click(trigger);
+  assert.ok(s.has(FOLDER + 'b.md'));
+  await escape();
+  assert.equal(s.has(FOLDER + 'b.md'), false, '清單收起來');
+  assert.ok(s.all('.ec-tr-ub').length > 0, '還在目錄');
+
+  const home = await open(t, files, { screen: 'entry' });
+  const fix = home.all('.ec-qz-fix')[0];
+  assert.ok(fix);
+  fix.focus();
+  await home.click(fix);
+  assert.ok(home.has(FOLDER + 'a.md'));
+  await escape();
+  assert.equal(home.has(FOLDER + 'a.md'), false, '清單收起來');
+  assert.equal(home.all('.ec-qz-fix').length, 1, '入口還開著');
+  assert.ok(document.activeElement === home.all('.ec-qz-fix')[0], '焦點回到那一列');
+});
+
 void test('§3 電腦與手機都有：手機沒有暫停的按鈕，小考按鈕一樣在', async t => {
   const phone = await open(t);
   await phone.expand('L3 Vocabulary');

@@ -19,8 +19,22 @@ function QuizCopies({ row, openNote }: { row: QuizRow; openNote: EntryProps['ope
 }
 
 /** 入口那一列（§4）。正常的按全部卡；待修正的寫原因，點了打開那份檔（兩份不一樣的列出兩份）。 */
+/** Esc 先收起選單或列出的兩份（L2 R4）：焦點還在按鈕上時事件不經過選單，所以收在包住兩者的那一層，收起後焦點回到按鈕。 */
+function useEscape(open: boolean, close: () => void): { trigger: React.RefObject<HTMLButtonElement | null>; onKey: (event: React.KeyboardEvent) => void } {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const onKey = (event: React.KeyboardEvent): void => {
+    if (!open || event.key !== 'Escape' || event.nativeEvent.isComposing) return;
+    // 只收起這一層，不離開目錄、不關掉入口。
+    event.stopPropagation();
+    close();
+    trigger.current?.focus();
+  };
+  return { trigger, onKey };
+}
+
 export function QuizEntryRow({ row, state, start, openNote, notify }: Actions & { row: QuizRowView }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const { trigger, onKey } = useEscape(open, () => { setOpen(false); });
   const title = row.subject ? `${row.subject} ${row.name}` : row.name;
   const practice = <button type="button" className="ec-sb-btn" disabled={row.problem !== null || row.count === 0} onClick={() => { const ref = row.refs[0]; start({ ...ref, since: Date.now() }); }}><Icon type="play" size={14} /><span>全部卡 {row.count}</span></button>;
   const line = <i className="ec-sb-bar" aria-hidden="true" />;
@@ -38,8 +52,8 @@ export function QuizEntryRow({ row, state, start, openNote, notify }: Actions & 
     {line}
   </div>;
   const copies = row.problem === 'copies';
-  return <div className="ec-sb ec-qz">
-    <button type="button" className="ec-qz-fix" aria-expanded={copies ? open : undefined} onClick={() => { if (copies) setOpen(!open); else openNote(row.paths[0]); }}>
+  return <div className="ec-sb ec-qz" onKeyDown={onKey}>
+    <button ref={trigger} type="button" className="ec-qz-fix" aria-expanded={copies ? open : undefined} onClick={() => { if (copies) setOpen(!open); else openNote(row.paths[0]); }}>
       <span className="ec-en-name">{title}</span>
       {row.when !== null && <span className="ec-sb-ex">{row.when}</span>}
       <span className="ec-sb-ex is-warn">{row.word}</span>
@@ -57,18 +71,19 @@ export function QuizEntryRow({ row, state, start, openNote, notify }: Actions & 
 /** 目錄的「小考」按鈕（§3）：按下去選日期；設好之後寫日期，再按一次可以改或取消；只有壞掉的檔時寫原因，點了去修。 */
 export function QuizButton({ state, openNote, input, at }: Pick<EntryProps, 'state' | 'openNote'> & { input: QuizInput; at: QuizRef }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const { trigger, onKey } = useEscape(open, () => { setOpen(false); });
   const view = quizButton(state(), at);
   const warn = view.kind === 'problem' ? ' is-warn' : '';
   const press = (): void => {
     if (view.kind === 'problem' && view.row.problem !== 'copies') openNote(view.row.paths[0]);
     else setOpen(!open);
   };
-  return <>
-    <button type="button" className={'ec-u-btn' + warn} aria-expanded={open} onClick={press}>{view.label}</button>
+  return <span className="ec-qz-ctl" onKeyDown={onKey}>
+    <button ref={trigger} type="button" className={'ec-u-btn' + warn} aria-expanded={open} onClick={press}>{view.label}</button>
     {open && (view.kind === 'problem'
       ? <QuizCopies row={view.row} openNote={openNote} />
       : <QuizMenu state={state} openNote={openNote} view={view} input={input} close={() => { setOpen(false); }} />)}
-  </>;
+  </span>;
 }
 
 const CHANGED = quizFailure({ kind: 'blocked', reason: 'changed' });
@@ -96,17 +111,11 @@ function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'sta
   }
   const set = (date: string): void => { void run(() => current.setQuiz(input, date, opened)); };
   const check = checkQuizDate(typed, day);
-  const onKey = (event: React.KeyboardEvent): void => {
-    if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
-    // 只收起這個選單，不離開目錄。
-    event.stopPropagation();
-    close();
-  };
   // 自己按的還在寫時，畫面先看到自己的結果，不算別處改的。
-  if (!busy && (view.row?.key ?? null) !== (opened?.key ?? null)) return <div className="ec-qz-menu" onKeyDown={onKey}>
+  if (!busy && (view.row?.key ?? null) !== (opened?.key ?? null)) return <div className="ec-qz-menu">
     <p className="ec-sc-word is-bad" role="alert">{CHANGED}</p>
   </div>;
-  return <div className="ec-qz-menu" onKeyDown={onKey}>
+  return <div className="ec-qz-menu">
     <div className="ec-qz-days">
       {quizChoices(day).map(choice => <button key={choice.label} type="button" className="ec-u-btn" disabled={busy} onClick={() => { set(choice.date); }}>{choice.label}</button>)}
       <button type="button" className="ec-u-btn" aria-expanded={other} disabled={busy} onClick={() => { setOther(!other); }}>其他日期</button>
