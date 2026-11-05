@@ -12,6 +12,10 @@ import type { AdapterInput } from '../tools/compare/adapter.ts';
 import { diffSnapshots } from '../tools/compare/snapshot.ts';
 import type { AdapterResult, Snapshot, TodaySnap } from '../tools/compare/snapshot.ts';
 import { compareVersions } from '../tools/compare-versions.ts';
+import { nextCard, questionType } from '../src/core/study/index.ts';
+import { canRead, PICK_NEEDS, releaseOf } from '../src/core/version/index.ts';
+import { createState } from '../src/state/index.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
 import { goal, makeVault, review, tempFolder } from './helpers/vault.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -117,7 +121,7 @@ void test('比較：讀取閘門的改變都抓得到；一邊沒有重複 ID �
 
 void test('比較：今天的份順序不同一定報，ID 裡有分隔符也一樣；從 share 搬到 more 也算（Codex 第五次審查 F6）', () => {
   const today = (...items: [TodaySnap['list'], string][]): Snapshot => ({ ...base(), today: items.map(([list, lt]) =>
-    ({ list, lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, prompt: null, direction: null })) });
+    ({ list, lt, deck: 'Essence Cards/A.md', lane: 'due', retention: 0.8, seconds: 15, prompt: null, direction: null })) });
   assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'a,share:a']), today(['share', 'a,share:a'], ['share', 'a']), time), ['今天的份的順序不同：a、a,share:a → a,share:a、a']);
   assert.deepEqual(diffSnapshots(today(['share', 'a'], ['share', 'b']), today(['share', 'a'], ['share', 'b']), time), []);
   assert.deepEqual(diffSnapshots(today(['share', 'a']), today(['more', 'a']), time), ['今天的份的順序不同：a → a', '今天的份裡 a 的 list："share" → "more"']);
@@ -157,10 +161,10 @@ const git = (dir: string, ...args: string[]): string =>
 const linkModules = (dir: string): Promise<void> => symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
 
 /** 真正部署過的版本（tag）：clone 到暫存資料夾，不動這個 repo 的 worktree 清單。沒有 tag 時失敗，不跳過（CI 的 checkout 要 fetch-depth: 0）。 */
-async function deployed(t: TestContext): Promise<string> {
+async function deployed(t: TestContext, tag = 'v0.2.0'): Promise<string> {
   const dir = await tempFolder(t, 'essence-deployed-');
   git(root, 'clone', '-q', '--no-checkout', root, dir);
-  git(dir, 'checkout', '-q', 'v0.2.0');
+  git(dir, 'checkout', '-q', tag);
   await linkModules(dir);
   return dir;
 }
@@ -243,6 +247,66 @@ void test('讀取能力看那一版自己的版號：同一份標記，新的讀
   const lines = diffSnapshots(before, after, time);
   assert.ok(lines.includes('紀錄行不再停掉：aaa111'), lines.join('\n'));
   assert.ok(lines.includes('Essence Cards/C.md：需要新版才讀得懂 → 讀得懂'), lines.join('\n'));
+});
+
+// 發布比較的兩份凍結資料（tasks/question-type-seam.md §11）。31 張每張隔 8 秒答對，所以估的秒數是 8（30 個間隔夠了），不是預設的 15；三種舊題型都有。
+const FLIP_TYPED = '---\n科目: 英文\n---\n' + Array.from({ length: 29 }, (_, i) => goal('flp' + String(100 + i))).join('')
+  + '- 能記住光合作用 ^cls111\n    - 植物行光合作用需要==陽光==。\n- borrow 中翻英 ^typ111\n    - 我可以借你的筆嗎？Can I ＿＿ your pen? :: borrow\n';
+const FLIP_LT = [...Array.from({ length: 29 }, (_, i) => 'flp' + String(100 + i)), 'cls111', 'typ111'];
+const EIGHT = FLIP_LT.map((lt, i) => review(`2026-10-20T20:${String(Math.floor(i * 8 / 60)).padStart(2, '0')}:${String(i * 8 % 60).padStart(2, '0')}.000+08:00`, lt)).join('\n') + '\n';
+
+void test('發布比較：只有翻面、打字的資料，v0.3.0 和現在零差異；估的秒數也比到了，值是手算的 8 秒', async t => {
+  const input = { now: NOW, offset: 480, files: { [A]: FLIP_TYPED, [LOG]: EIGHT } };
+  const before = await snapshot(await deployed(t, 'v0.3.0'), input), after = await snapshot(root, input);
+  assert.equal(after.today.length, FLIP_LT.length);
+  assert.deepEqual([...new Set(after.today.map(item => item.seconds))], [8]);
+  assert.deepEqual(diffSnapshots(before, after, time), []);
+  // 改了估法、順序沒變也報得出來（快照原本沒有 seconds，§11）。
+  const slower = structuredClone(after);
+  slower.today[0].seconds = 9;
+  assert.deepEqual(diffSnapshots(after, slower, time), [`今天的份裡 ${after.today[0].lt} 的 seconds：8 → 9`]);
+});
+
+const MARKED = `---\n科目: 國語\n需要版本: ${PICK_NEEDS}\n---\n` + `- 寨（寨、塞） 相似字 ^zhai00
+    - 盜匪躲在山＿＿裡。 :: 寨
+    - 古老的＿＿子。 :: 寨
+    - 住在＿＿裡。 :: 寨
+- 塞（寨、塞） 相似字 ^sai000
+    - 下班時間大＿＿車。 :: 塞
+    - 水管＿＿住了。 :: 塞
+    - 這條路又＿＿住了。 :: 塞
+`;
+void test('發布比較：有標記的混合卡組，舊版整篇擋、新版出比較、其他篇照常；這個建置真的出比較卡，不只是版號比得過', async t => {
+  const files = { [A]: FLIP_TYPED, [C]: MARKED, [LOG]: EIGHT };
+  const input = { now: NOW, offset: 480, files };
+  const before = await snapshot(await deployed(t, 'v0.3.0'), input), after = await snapshot(root, input);
+  assert.deepEqual(before.gates.decks, [C]);
+  assert.deepEqual(after.gates.decks, []);
+  assert.deepEqual(before.decks.map(deck => deck.path), [A]);
+  assert.deepEqual(after.decks.map(deck => deck.path), [A, C]);
+  assert.deepEqual(after.decks[0], before.decks[0], '其他篇照常');
+  assert.deepEqual(after.today.filter(item => item.deck === A), before.today, '其他篇今天的份不變');
+  assert.deepEqual(after.today.filter(item => item.deck === C).map(item => [item.lt, item.list, item.lane, item.seconds]), [['zhai00', 'share', 'new', 7.5], ['sai000', 'share', 'new', 7.5]], '新版整組進今天的份；一張卡的預設 15 秒兩個目標分（國語沒有紀錄）');
+  const lines = diffSnapshots(before, after, time);
+  assert.deepEqual(lines.filter(line => !line.startsWith('今天的份的順序不同')), [`${C}：需要新版才讀得懂 → 讀得懂`, 'sai000 的下次到期：（沒有這個目標） → （新卡）', 'zhai00 的下次到期：（沒有這個目標） → （新卡）']);
+  assert.equal(lines.length, 4);
+
+  // 快照看不出題型：用公開的取卡介面看，build 照外掛建置時的寫法（manifest 的版本加 commit）。
+  const { version } = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: string };
+  const build = `${version}+1a2b3c4`;
+  assert.equal(canRead(PICK_NEEDS, releaseOf(build)), true);
+  const memory = createMemoryFiles(files);
+  const state = createState({ files: memory.files, device: 'PC-test', build, delay: 1, fillIds: false, now: () => NOW, offset: () => 480 });
+  t.after(() => state.close());
+  await state.ready();
+  assert.deepEqual(state.blocked().decks, []);
+  const compare = nextCard(state.today(), state.input(), { deck: C });
+  assert.equal(compare.kind, 'card');
+  if (compare.kind !== 'card') return;
+  assert.equal(questionType(compare.card), 'pick');
+  assert.deepEqual(compare.card.group?.members, ['寨', '塞']);
+  const flip = nextCard(state.today(), state.input(), { deck: A });
+  assert.equal(flip.kind === 'card' ? questionType(flip.card) : null, 'flip');
 });
 
 void test('接不上就丟錯（比較的一方寫無法比較）：版號不是正式版號、state 沒有閘門、沒有讀取能力的模組、比較時想寫版本行以外的內容', async t => {
@@ -470,7 +534,7 @@ const fakeGood = () => ({
     blocked: { decks: [C], targets: ['hld111'], all: false },
     canAnswer: true,
     input: { settings: { retention: 0.9 } },
-    today: { share: [{ lt: 'aaa111', deck: A, lane: 'due' }], more: [{ lt: 'bbb222', deck: A, lane: 'new' }],
+    today: { share: [{ lt: 'aaa111', deck: A, lane: 'due', seconds: 8.5 }], more: [{ lt: 'bbb222', deck: A, lane: 'new', seconds: 7.5 }],
       slots: new Map([['aaa111', { retention: 0.8, target: { direction: 'en-zh' } }], ['bbb222', { retention: 0.8, target: { direction: 'en-zh' } }]]) },
     conflicts: [{ id: 'dup111', targets: [{ path: A, line: 0, name: 'A' }] }],
   },
@@ -482,7 +546,7 @@ const fakeSnapshot: Snapshot = {
     targets: [{ key: 'aaa111', id: 'aaa111', name: 'A', line: 0, ok: true, fingerprints: ['11111111'], importance: 'medium', paused: false, direction: 'en-zh' }],
     problems: [{ line: 1, level: 'error', code: 'x' }] }],
   due: { aaa111: NOW + 0.5 },
-  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, prompt: '11111111', direction: 'en-zh' }],
+  today: [{ list: 'share', lt: 'aaa111', deck: A, lane: 'due', retention: 0.8, seconds: 8.5, prompt: '11111111', direction: 'en-zh' }, { list: 'more', lt: 'bbb222', deck: A, lane: 'new', retention: 0.8, seconds: 7.5, prompt: '11111111', direction: 'en-zh' }],
   days: days(1),
 };
 const WRONG: [string, () => unknown][] = [
