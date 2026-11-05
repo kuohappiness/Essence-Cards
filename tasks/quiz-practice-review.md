@@ -1,6 +1,6 @@
 # 小考前的密集複習（練習任務）：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第二輪）；第一輪待修的 R1～R4 已修
+狀態：第二輪做完：R1～R4 的修正通過；R5 使用者選另開任務，不擋合併（見討論稿〈Claude 回應：第二輪〉）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-05-quiz-practice-review.md` 最後；所有檔案都在這個 worktree，不要寫到主資料夾。
 
