@@ -6,10 +6,22 @@ export function encodeEntry(t: string, entry: NewEntry): string {
   if ('set' in entry) {
     return JSON.stringify({ t, set: entry.set, ...('deck' in entry ? { deck: entry.deck } : 'lt' in entry ? { lt: entry.lt } : {}), val: entry.val });
   }
-  // 欄位順序 t, lt, r, v, typed, retry, src（syntax.md §5）。
+  // 欄位順序 t, lt, r, v, typed, pick, retry, also, with, src（syntax.md §5、tasks/question-type-seam.md §4）。
   return JSON.stringify({ t, lt: entry.lt, r: entry.r, ...('v' in entry ? { v: entry.v } : {}),
-    ...('typed' in entry && entry.typed ? { typed: entry.typed } : {}), ...('retry' in entry && entry.retry ? { retry: entry.retry } : {}),
+    ...('typed' in entry && entry.typed ? { typed: entry.typed } : {}),
+    ...('pick' in entry && entry.pick !== undefined ? { pick: entry.pick } : {}),
+    ...('retry' in entry && entry.retry ? { retry: entry.retry } : {}),
+    ...('also' in entry && entry.also?.length ? { also: entry.also.map(({ v, r, pick, retry }) => ({ v, r, pick, ...(retry ? { retry } : {}) })) } : {}),
+    ...('with' in entry && entry.with ? { with: entry.with } : {}),
     ...(entry.src ? { src: entry.src } : {}) });
+}
+
+/** also 裡的指紋：形狀不對就當沒有（pick、retry 與 also 的其他欄位只是證據，不讀）。 */
+function alsoOf(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value) || !value.length) return null;
+  const cells = value as unknown[];
+  const prints = cells.map(cell => cell !== null && typeof cell === 'object' ? (cell as { v?: unknown }).v : null);
+  return prints.every(print => typeof print === 'string') ? prints : null;
 }
 
 /** 從完整 JSON 解析；壞 JSON 的尾段救回由 mergeHistory 處理並留下 problem。 */
@@ -37,5 +49,7 @@ export function parseLine(line: string): LogEntry | null {
   if (typeof data.lt !== 'string' || !data.lt || !['easy', 'good', 'near', 'miss'].includes(data.r as string)) return null;
   if (data.src != null && typeof data.src !== 'string') return null;
   if (typeof data.v !== 'string' && !(data.src === 'mistake' && data.v == null)) return null;
-  return { kind: 'review', t: data.t, at: time.at, offset: time.offset, lt: data.lt, r: data.r as Rating, v: data.v as string | null ?? null, typed: typeof data.typed === 'string' ? data.typed : null, src: data.src as string | null ?? null };
+  const also = alsoOf(data.also);
+  return { kind: 'review', t: data.t, at: time.at, offset: time.offset, lt: data.lt, r: data.r as Rating, v: data.v as string | null ?? null, typed: typeof data.typed === 'string' ? data.typed : null, src: data.src as string | null ?? null,
+    ...(typeof data.with === 'string' ? { with: data.with } : {}), ...(also ? { also } : {}) };
 }

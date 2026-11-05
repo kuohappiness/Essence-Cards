@@ -2,6 +2,7 @@ import type { Prompt } from '../deck/index.ts';
 import { cardOf } from './compose.ts';
 import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
+import { shownWith } from './shown.ts';
 import { dayOf, dayStart } from './time.ts';
 import { practiceNext, practiceProgress } from './practice.ts';
 import type { Next, Pick, Progress, QueueItem, ReviewEntry, ScopeCount, Slot, SubjectRow, Today, TodayInput } from './types.ts';
@@ -52,12 +53,11 @@ export function choosePrompt(slot: Slot, entries: readonly ReviewEntry[]): Promp
   }
   if (!slot.correct && !entries.some(entry => entry.r === 'good' || entry.r === 'easy')) return prompts[0];
   if (prompts.length === 1) return prompts[0];
-  const seen = new Map(slot.seen);
-  for (const entry of entries) if (entry.v !== null) seen.set(entry.v, entry.at);
+  const seen = shownWith(slot.seen, entries);
   // 進階題裡最久沒出的：從沒出過的先（照筆記順序），再來是最後一次出現最早的。
-  let best = prompts[1], bestAt = seen.get(best.fingerprint) ?? -Infinity;
+  let best = prompts[1], bestAt = seen.get(best.fingerprint)?.at ?? -Infinity;
   for (const prompt of prompts.slice(2)) {
-    const at = seen.get(prompt.fingerprint) ?? -Infinity;
+    const at = seen.get(prompt.fingerprint)?.at ?? -Infinity;
     if (at < bestAt) { best = prompt; bestAt = at; }
   }
   return best;

@@ -1,8 +1,9 @@
 import type { Target } from '../deck/index.ts';
 import { findDuplicateIds } from './duplicates.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
+import { addShown } from './shown.ts';
 import { dayOf, dayStart } from './time.ts';
-import type { DeckEntry, Lane, Memory, QueueItem, ReviewEntry, Slot, Today, TodayInput } from './types.ts';
+import type { DeckEntry, Lane, Memory, QueueItem, ReviewEntry, Shown, Slot, Today, TodayInput } from './types.ts';
 
 const LANES: readonly Lane[] = ['relearn', 'exam-due', 'exam-new', 'due', 'new'];
 const IMPORTANCE = { high: 0, medium: 1, low: 2 } as const;
@@ -108,14 +109,13 @@ export function planToday(input: TodayInput): Today {
   const before = reviews.slice(0, firstAtOrAfter(reviews, start)).filter(entry => ids.has(entry.lt));
   const memories = replay(before);
   const correct = new Set<string>();
-  const seen = new Map<string, Map<string, number>>();
+  const seen = new Map<string, Shown>();
   for (const entry of before) {
     if (entry.src === 'mistake') continue;
     if (entry.r === 'good' || entry.r === 'easy') correct.add(entry.lt);
-    if (entry.v === null) continue;
-    const times = seen.get(entry.lt);
-    if (times) times.set(entry.v, entry.at);
-    else seen.set(entry.lt, new Map([[entry.v, entry.at]]));
+    const shown = seen.get(entry.lt);
+    if (shown) addShown(shown, entry);
+    else seen.set(entry.lt, addShown(new Map(), entry));
   }
 
   const candidates = new Map<string, Candidate>();
@@ -175,7 +175,7 @@ export function planToday(input: TodayInput): Today {
     if (more.length === 0 && used + item.seconds <= budget) { used += item.seconds; share.push(item); }
     else more.push(item);
     slots.set(c.id, { target: c.target, pair: pairOf.get(c.id) ?? null, memory: c.memory, retention: c.retention, inExam: c.inExam,
-      correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map<string, number>() });
+      correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map() as Shown });
   }
   return { day, offset, share, more, slots };
 }

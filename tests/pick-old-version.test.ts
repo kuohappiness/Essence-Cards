@@ -6,6 +6,7 @@ import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitEnv } from '../tools/git.ts';
+import { encodeEntry } from '../src/core/study/index.ts';
 import { PICK_NEEDS } from '../src/core/version/index.ts';
 import { createState } from '../src/state/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
@@ -62,4 +63,21 @@ void test('v0.3.0 讀沒有標記、目標沒有 ID 的比較卡組：也不出�
   const old = await oldVersion(t, { [P]: CARD, [OTHER]: PLAIN }, OTHER);
   assert.deepEqual(old.today, ['bbb222']);
   assert.deepEqual(old.blocked.decks, []);
+});
+
+void test('v0.3.0 的 parseLine 讀比較卡的行：每一行都是合法的作答，新欄位都忽略（不用 need）', async t => {
+  const dir = await tempFolder(t, 'essence-v030-');
+  git(root, 'clone', '-q', '--no-checkout', root, dir);
+  git(dir, 'checkout', '-q', 'v0.3.0');
+  await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
+  const T = '2026-11-05T20:15:03.250+08:00';
+  const lines = [
+    encodeEntry(T, { lt: 'a', r: 'near', v: 'v1', pick: '塞', retry: 'right' }),
+    encodeEntry(T, { lt: 'b', r: 'miss', v: 'v2', pick: null, with: T }),
+    encodeEntry(T, { lt: 'c', r: 'near', v: 'v3', pick: 'lend', retry: 'right', also: [{ v: 'v4', r: 'good', pick: 'borrow' }], with: T }),
+  ];
+  const script = "import { parseLine } from './src/core/study/index.ts'; console.log(JSON.stringify(JSON.parse(process.argv[1]).map(line => parseLine(line))));";
+  const read = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script, JSON.stringify(lines)], { cwd: dir, env, encoding: 'utf8' })) as unknown[];
+  const common = { kind: 'review', t: T, at: Date.parse(T), offset: 480, typed: null, src: null };
+  assert.deepEqual(read, [{ ...common, lt: 'a', r: 'near', v: 'v1' }, { ...common, lt: 'b', r: 'miss', v: 'v2' }, { ...common, lt: 'c', r: 'near', v: 'v3' }]);
 });

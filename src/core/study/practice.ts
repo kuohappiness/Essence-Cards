@@ -3,6 +3,7 @@ import { cardOf } from './compose.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { compareText, firstAtOrAfter, retentionOf } from './plan.ts';
 import { choosePrompt, wrong } from './session.ts';
+import { shownWith } from './shown.ts';
 import { dayOf, dayStart } from './time.ts';
 import type { DeckEntry, Memory, MemoryColor, Next, ReviewEntry, Slot, TodayInput } from './types.ts';
 
@@ -109,8 +110,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const item = ready?.item ?? fresh ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const prior = before.filter(entry => entry.lt === item.id && entry.src !== 'mistake');
-  const seen = new Map<string, number>();
-  for (const entry of prior) if (entry.v !== null) seen.set(entry.v, entry.at);
+  const seen = shownWith(new Map(), prior);
   const slot: Slot = {
     target: item.target, pair: null, memory: memories.get(item.id) ?? null, retention: retentionOf(input, item.entry, item.target), inExam: input.exam?.contains(item.entry, item.target) ?? false,
     correct: prior.some(entry => entry.r === 'good' || entry.r === 'easy'), seen,
