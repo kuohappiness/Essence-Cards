@@ -1,4 +1,4 @@
-import type { Prompt, Target } from '../deck/index.ts';
+import type { PickGroup, Prompt, Target } from '../deck/index.ts';
 import type { Blank, Card, CardGroup, Shown } from './types.ts';
 
 // 題型接點的第二張表（D-181）：這張卡是哪一種題型、有哪幾格。其他三張表在 core/deck/question-types.ts、review/flow.ts、ui/screens.tsx。
@@ -62,6 +62,19 @@ function rotation(target: Target, shown: Shown): Prompt[] {
   return distinct.sort((a, b) => at(a) - at(b) || count(a) - count(b));
 }
 
+/** 一格：答案照 group（選中的目標的括號）的寫法，和字鍵相同。 */
+function cellOf(group: PickGroup, mate: PickMate, prompt: Prompt): Blank {
+  return { lt: mate.lt, target: mate.target, prompt, answer: group.members[group.memberKeys.indexOf(mate.target.group?.wordKey ?? '')] };
+}
+
+/** 格子定了之後的一張卡：打散格子與字鍵（§5-3），lt、target、prompt 是選中的目標在畫面上的第一格。 */
+function assembled(fields: { deck: string; isNew: boolean; early: boolean }, chosen: PickMate, cells: readonly Blank[], deckTargets: readonly Target[]): Card {
+  const random = seeded(seedOf(cells));
+  const blanks = shuffled(cells, random);
+  const first = blanks.find(each => each.target === chosen.target) ?? blanks[0];
+  return { lt: chosen.lt, deck: fields.deck, target: chosen.target, prompt: first.prompt, isNew: fields.isNew, typed: false, early: fields.early, blanks, group: groupOf(chosen.target, deckTargets, random) };
+}
+
 /** 字鍵與對照：這篇卡組裡同一組的字，不看它在不在這次的範圍裡（§5-1）。字鍵三個以上時順序一定和括號不同（§5-3）。 */
 function groupOf(chosen: Target, deckTargets: readonly Target[], random: () => number): CardGroup {
   const group = chosen.group;
@@ -84,23 +97,35 @@ export function pickCardOf(fields: { deck: string; isNew: boolean; early: boolea
   const chosen = mates[0];
   const group = chosen.target.group;
   if (!group) throw TypeError('不是比較卡：' + chosen.target.name);
-  const answerOf = (target: Target): string => group.members[group.memberKeys.indexOf(target.group?.wordKey ?? '')];
-  const cell = (mate: PickMate, prompt: Prompt): Blank => ({ lt: mate.lt, target: mate.target, prompt, answer: answerOf(mate.target) });
   const cells: Blank[] = [];
   const rest: { mate: PickMate; prompt: Prompt }[] = [];
   // 照筆記順序排，範圍怎麼排都是同一張卡。
   for (const mate of [...mates].sort((a, b) => a.target.line - b.target.line)) {
     const order = rotation(mate.target, mate.shown);
     const count = group.members.length === 2 && mate.shown.size > 0 ? 2 : 1;
-    for (const prompt of order.slice(0, count)) cells.push(cell(mate, prompt));
+    for (const prompt of order.slice(0, count)) cells.push(cellOf(group, mate, prompt));
     if (order.length > count) rest.push({ mate, prompt: order[count] });
   }
   if (rest.length && group.members.every(member => cells.filter(each => each.answer === member).length === 1)) {
     const extra = rest[Math.floor(seeded(seedOf(cells))() * rest.length)];
-    cells.push(cell(extra.mate, extra.prompt));
+    cells.push(cellOf(group, extra.mate, extra.prompt));
   }
-  const random = seeded(seedOf(cells));
-  const blanks = shuffled(cells, random);
-  const first = blanks.find(each => each.lt === chosen.lt) ?? blanks[0];
-  return { lt: chosen.lt, deck: fields.deck, target: chosen.target, prompt: first.prompt, isNew: fields.isNew, typed: false, early: fields.early, blanks, group: groupOf(chosen.target, deckTargets, random) };
+  return assembled(fields, chosen, cells, deckTargets);
+}
+
+/**
+ * 預覽（§9）：這一組一張「第一次」的卡（每個字第一句加多放的一句），剩下的句子各一張（一格，字鍵照樣整組；兩個選項的組也一樣）。
+ * members 是這一組要出的目標，照筆記順序，至少一個。
+ */
+export function pickPreviewCards(deck: string, members: readonly Target[], deckTargets: readonly Target[]): Card[] {
+  const fields = { deck, isNew: false, early: false };
+  const mates = members.map((target): PickMate => ({ lt: target.id ?? '', target, shown: new Map() as Shown }));
+  const first = pickCardOf(fields, mates, deckTargets);
+  const rest = mates.flatMap(mate => rotation(mate.target, mate.shown)
+    .filter(prompt => !first.blanks.some(blank => blank.prompt === prompt))
+    .map(prompt => {
+      if (!mate.target.group) throw TypeError('不是比較卡：' + mate.target.name);
+      return assembled(fields, mate, [cellOf(mate.target.group, mate, prompt)], deckTargets);
+    }));
+  return [first, ...rest];
 }

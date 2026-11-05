@@ -8,7 +8,7 @@ export { findDuplicateIds } from './duplicates.ts';
 export type { DuplicateId, DuplicateTarget } from './duplicates.ts';
 export { nextCard, progress, scopeCount, todayLeft, checkTyped, typedKey, typedUnits } from './session.ts';
 export { memoryColors } from './practice.ts';
-export { cardOf, questionType } from './compose.ts';
+export { cardOf, pickPreviewCards, questionType } from './compose.ts';
 export type { QuestionType } from './compose.ts';
 export type { Rating, PickCell, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, ExamLog, LogWriter, History, Memory } from './types.ts';
 export type { TypedUnit } from './session.ts';

@@ -60,7 +60,7 @@ void test('src 裡只有 study/fsrs.ts 能 import、export、動態 import 或 r
 // readHistory、readDecks 給 tools/bench-study.ts 與測試用，產品程式走 state（技術債 A5、D-105）；parseTime 給備份清單的時間檢查（syntax §8）。
 void test('study 只匯出任務指定的公開介面，不洩漏 ts-fsrs 的型別或類別', async () => {
   const module = await import('../src/core/study/index.ts');
-  assert.deepEqual(Object.keys(module).sort(), ['LOG_FOLDER', 'appendLine', 'cardOf', 'checkTyped', 'createLogWriter', 'dayOf', 'dayStart', 'dueAt', 'encodeEntry', 'findDuplicateIds', 'formatTime', 'intervalDays', 'isLogPath', 'logPath', 'memoryColors', 'mergeHistory', 'nextCard', 'parseLine', 'parseTime', 'planToday', 'progress', 'questionType', 'readHistory', 'recall', 'replay', 'review', 'scopeCount', 'todayLeft', 'typedKey', 'typedUnits'].sort());
+  assert.deepEqual(Object.keys(module).sort(), ['LOG_FOLDER', 'appendLine', 'cardOf', 'checkTyped', 'createLogWriter', 'dayOf', 'dayStart', 'dueAt', 'encodeEntry', 'findDuplicateIds', 'formatTime', 'intervalDays', 'isLogPath', 'logPath', 'memoryColors', 'mergeHistory', 'nextCard', 'parseLine', 'parseTime', 'pickPreviewCards', 'planToday', 'progress', 'questionType', 'readHistory', 'recall', 'replay', 'review', 'scopeCount', 'todayLeft', 'typedKey', 'typedUnits'].sort());
 });
 
 // 範圍與目錄（tasks/entry-and-catalog.md §9-1）：deck、study 不 import catalog；catalog 從 study 只拿型別。

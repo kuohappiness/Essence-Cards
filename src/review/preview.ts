@@ -1,5 +1,5 @@
 import type { Deck, Target } from '../core/deck/index.ts';
-import { cardOf } from '../core/study/index.ts';
+import { cardOf, pickPreviewCards } from '../core/study/index.ts';
 import type { Card } from '../core/study/index.ts';
 import { crumb } from './crumb.ts';
 import { createPreviewFlow } from './flow.ts';
@@ -17,11 +17,20 @@ export interface PreviewOptions {
   reveal: boolean;
 }
 
-/** 這一篇的每一題（同一個目標的整個題目池），照筆記順序；寫錯的目標跳過。還沒補 ID 的目標 lt 是空字串，畫面只拿它組鍵。 */
+/**
+ * 這一篇的每一題（同一個目標的整個題目池），照筆記順序；寫錯的目標跳過。還沒補 ID 的目標 lt 是空字串，畫面只拿它組鍵。
+ * 比較卡（tasks/question-type-seam.md §9）：一組的卡放在組裡第一個目標的位置。
+ */
 function cardsOf(path: string, targets: readonly Target[]): Card[] {
-  return targets.filter(target => target.ok).flatMap(target => target.prompts.map(prompt => cardOf({
-    lt: target.id ?? '', deck: path, target, prompt, isNew: false, early: false,
-  })));
+  const ok = targets.filter(target => target.ok);
+  const groups = new Set<string>();
+  return ok.flatMap(target => {
+    const key = target.group?.key;
+    if (key === undefined) return target.prompts.map(prompt => cardOf({ lt: target.id ?? '', deck: path, target, prompt, isNew: false, early: false }));
+    if (groups.has(key)) return [];
+    groups.add(key);
+    return pickPreviewCards(path, ok.filter(each => each.group?.key === key), targets);
+  });
 }
 
 /** 沒有任何題目時是 null：呼叫的一方用通知說明，不開畫面。 */
