@@ -454,9 +454,23 @@ void test('§3 §1 正常的小考和壞掉的檔在同一個單元：可以改�
   await s.click(s.button('小考 11/6'));
   const other = s.all('.ec-qz-menu .ec-tr-problem')[0];
   assert.ok(other, '壞的那份有地方看');
-  assert.ok(other.textContent?.includes('b.md'));
+  assert.equal(other.textContent, '另一份小考：小考日期有問題（' + FOLDER + 'b.md）');
   await s.click(other);
   assert.deepEqual(s.notes, [FOLDER + 'b.md']);
+});
+
+void test('L2 R5 正常的小考旁邊另一份是兩份不一樣：寫兩份不一樣、列出兩份，不寫成日期有問題', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07', L3, 'aaaaaa'), [FOLDER + 'b1.md']: quizText('2026-11-07', L3, 'bbbbbb'), [FOLDER + 'b2.md']: quizText('2026-11-09', L3, 'bbbbbb') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考 11/7'));
+  const menu = s.all('.ec-qz-menu')[0];
+  assert.ok(menu);
+  assert.match(menu.textContent ?? '', /另一份小考：這個小考有兩份不一樣的檔/);
+  assert.equal(/日期有問題/.test(menu.textContent ?? ''), false);
+  assert.ok((menu.textContent ?? '').includes('請留下對的那一份'));
+  await s.click(s.button(FOLDER + 'b2.md', menu));
+  await s.click(s.button(FOLDER + 'b1.md', menu));
+  assert.deepEqual(s.notes, [FOLDER + 'b2.md', FOLDER + 'b1.md']);
 });
 
 void test('§3 §1 同一個識別碼兩份不一樣：目錄寫出來，點了列出兩份，各自打開', async t => {

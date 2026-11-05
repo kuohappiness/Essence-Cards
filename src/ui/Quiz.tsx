@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { checkQuizDate, COPIES_NOTE, quizButton, quizChoices, quizFailure } from '../review/index.ts';
+import { checkQuizDate, COPIES_NOTE, quizButton, quizChoices, quizFailure, quizOtherLabel } from '../review/index.ts';
 import type { QuizButtonView, QuizRowView } from '../review/index.ts';
 import type { QuizInput, QuizRef, QuizResult, QuizRow } from '../state/index.ts';
 import { Icon } from './entry-icon.tsx';
@@ -10,9 +10,10 @@ import { DateField } from './ExamScope.tsx';
 
 type Actions = Pick<EntryProps, 'state' | 'start' | 'openNote' | 'notify'>;
 
-/** 同一個識別碼、兩份不一樣（§1）：列出來請家長留下對的那一份，不自己挑。 */
-function QuizCopies({ row, openNote }: { row: QuizRow; openNote: EntryProps['openNote'] }): React.JSX.Element {
+/** 同一個識別碼、兩份不一樣（§1）：列出來請家長留下對的那一份，不自己挑。title 是目錄選單裡另一份的原因，和旁邊待修正的字同色。 */
+function QuizCopies({ row, openNote, title }: { row: QuizRow; openNote: EntryProps['openNote']; title?: string }): React.JSX.Element {
   return <div className="ec-qz-copies">
+    {title !== undefined && <><span className="ec-sb-ex is-warn">{title}</span><br /></>}
     {COPIES_NOTE}
     <ul>{row.paths.map(path => <li key={path}><button type="button" onClick={() => { openNote(path); }}>{path}</button></li>)}</ul>
   </div>;
@@ -126,7 +127,9 @@ function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'sta
       {check.word !== null && <p className="ec-sc-word is-bad">{check.word}</p>}
       <button type="submit" className="ec-qz-ok" disabled={busy || check.date === null}>確定</button>
     </form>}
-    {view.others.map(row => <button key={row.key} type="button" className="ec-tr-problem" onClick={() => { openNote(row.paths[0]); }}>另有一份小考日期有問題：{row.paths[0]}</button>)}
+    {view.others.map(row => row.problem === 'copies'
+      ? <QuizCopies key={row.key} row={row} openNote={openNote} title={quizOtherLabel(row)} />
+      : <button key={row.key} type="button" className="ec-tr-problem" onClick={() => { openNote(row.paths[0]); }}>{quizOtherLabel(row)}（{row.paths[0]}）</button>)}
     {failure !== null && <p className="ec-sc-word is-bad" role="alert">{failure}</p>}
   </div>;
 }

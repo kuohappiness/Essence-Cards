@@ -62,6 +62,11 @@ export function quizButton(state: State | null, at: QuizRef): QuizButtonView {
   return others.length ? { kind: 'problem', label: others[0].problem ? WORDS[others[0].problem] : '小考', row: others[0], others: others.slice(1) } : blank;
 }
 
+/** 目錄選單裡同一個目標的另一份（L2 R5）：照它自己的問題寫，不假設都是日期有問題。同一個目標兩份正常的只留早的（§1），所以另一份都是待修正的。 */
+export function quizOtherLabel(row: QuizRow): string {
+  return row.problem === null ? '另一份小考' : '另一份小考：' + WORDS[row.problem];
+}
+
 /** 按下去的選項（§3）：今天、明天、後天。 */
 export function quizChoices(day: number): { label: string; date: string }[] {
   return ['今天', '明天', '後天'].map((label, at) => ({ label, date: scopeDate(day + at) }));
