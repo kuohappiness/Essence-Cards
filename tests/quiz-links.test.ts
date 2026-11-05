@@ -59,6 +59,68 @@ void test('§1 大小寫不同還是同一篇：Windows、iPhone 的檔名不分
   assert.deepEqual(resolver([lower, upper], { 'english L3': lower }).resolve('english L3', FROM), { kind: 'several' }, '只差大小寫的兩個檔也算重名');
 });
 
+/**
+ * Obsidian 1.15.0 的 getLinkpathDest（從 app.js 唯讀抽出，L2 R1）：先找檔名一樣的檔，確切的位置對上就是它；
+ * 對不上時退回路徑尾巴相同的檔（和小考檔同一個資料夾開頭的排前面）。`/` 開頭的不退回。
+ */
+function obsidianFirst(paths: string[]) {
+  const base = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+  const folder = (path: string): string => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+  return (link: string, from: string): string | null => {
+    let wanted = (link + '.md').toLowerCase();
+    const named = paths.filter(path => base(path.toLowerCase()) === base(wanted));
+    if (!named.length) return null;
+    if (base(wanted) === wanted && named.length === 1) return named[0];
+    let near = folder(from).toLowerCase();
+    if (wanted.startsWith('./') || wanted.startsWith('../')) {
+      if (wanted.startsWith('./')) wanted = wanted.slice(2);
+      while (wanted.startsWith('../')) { wanted = wanted.slice(3); near = folder(near); }
+      wanted = (near ? near + '/' : '') + wanted;
+    }
+    if (wanted.startsWith('/')) wanted = wanted.slice(1);
+    const exact = named.find(path => path.toLowerCase() === wanted);
+    if (exact) return exact;
+    if (link.startsWith('/')) return null;
+    const tails = named.filter(path => path.toLowerCase().endsWith(wanted)).sort();
+    return [...tails.filter(path => path.toLowerCase().startsWith(near)), ...tails.filter(path => !path.toLowerCase().startsWith(near))][0] ?? null;
+  };
+}
+function realResolver(paths: string[]) {
+  const first = obsidianFirst(paths);
+  const app = {
+    metadataCache: { getFirstLinkpathDest(link: string, from: string) { const path = first(link, from); return path ? { path } : null; } },
+    vault: { getFiles: () => paths.map(path => ({ path })) },
+  } as unknown as App;
+  return quizLinkResolver(app);
+}
+
+void test('L2 R1 完整路徑那一篇不在了：Obsidian 退回尾巴相同的另一份（整包備份），這裡算找不到，不練到備份', () => {
+  const nested = 'Essence Cards/備份/' + WORDS;
+  const resolve = realResolver([nested]);
+  assert.deepEqual(resolve('Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'none' });
+  assert.deepEqual(resolve('essence cards/學業/國二上英文 l3 單字', FROM), { kind: 'none' }, '大小寫不同也是完整路徑');
+  assert.deepEqual(resolve('/Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'none' });
+  assert.deepEqual(resolve('國二上英文 L3 單字', FROM), { kind: 'file', path: nested }, '只寫檔名、只有一份時照舊接受');
+});
+
+void test('L2 R1 相對路徑也要對到確切的位置：那一篇不在了不退回尾巴相同的檔', () => {
+  const relative = '../../學業/國二上英文 L3 單字';
+  assert.deepEqual(realResolver([WORDS])(relative, FROM), { kind: 'file', path: WORDS });
+  assert.deepEqual(realResolver([WORDS])('./國二上英文 L3 單字', 'Essence Cards/學業/x.md'), { kind: 'file', path: WORDS });
+  const nested = 'Essence Cards/備份/' + WORDS;
+  assert.deepEqual(realResolver([nested])(relative, FROM), { kind: 'none' });
+});
+
+void test('L2 R1 照 Obsidian 的讀法：自動更新後的短連結、一段路徑、完整路徑與整包備份並存，都照舊', () => {
+  const backup = 'Essence Cards/備份/' + WORDS;
+  const resolve = realResolver([WORDS, backup, 'Essence Cards/學業/自然 2-1.md']);
+  assert.deepEqual(resolve('Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'file', path: WORDS });
+  assert.deepEqual(resolve('Essence Cards/備份/Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'file', path: backup });
+  assert.deepEqual(resolve('國二上英文 L3 單字', FROM), { kind: 'several' });
+  assert.deepEqual(resolve('備份/Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'file', path: backup }, 'Obsidian 最短的寫法');
+  assert.deepEqual(realResolver([WORDS])('學業/國二上英文 L3 單字', FROM), { kind: 'file', path: WORDS });
+});
+
 void test('§1 尾巴剛好一樣但資料夾名不同的不算重名：比的是整段路徑', () => {
   const { resolve } = resolver([WORDS, 'Essence Cards/補習國二上英文 L3 單字.md'], { '國二上英文 L3 單字': WORDS });
   assert.deepEqual(resolve('國二上英文 L3 單字', FROM), { kind: 'file', path: WORDS });
