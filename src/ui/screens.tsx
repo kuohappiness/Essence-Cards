@@ -1,64 +1,16 @@
-import type { App } from 'obsidian';
 import { createPortal } from 'react-dom';
 import type { QuestionType, Rating } from '../core/study/index.ts';
 import { blankCount, extraLabel, fillBlank, lineSpeech, otherAnswers, questionOf, RATING_LABELS, RATINGS, sourceLabel, sourceLinks, splitTranslation } from '../review/index.ts';
-import type { CardView, SourceOwner, Spelling, TypedView } from '../review/index.ts';
+import type { CardView, Spelling, TypedView } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
-import { firstMaterial, resolveSource, type MaterialDeck } from './sources.ts';
+import { pickScreen } from './PickCard.tsx';
+import { Rates, type BodyProps, type Screen } from './screen.tsx';
+import { firstMaterial, resolveSource } from './sources.ts';
 import type { Speech } from './speech.ts';
 
 // 題型接點的第四張表（D-181）：題目區、底部那一排、點卡片做什麼。其他三張表在 core/deck/question-types.ts、core/study/compose.ts、review/flow.ts。
 // 這裡都沒有 hook，狀態都在 review 的 Flow；hook 留在 Review 的根元件（tests/helpers/review-ui.ts 的替身也只讓根元件有 hook）。
-
-interface BodyProps {
-  view: CardView; app: App; speech: Speech;
-  materials: (deckPath: string) => readonly string[];
-  owner: (deckPath: string) => SourceOwner;
-  units: (deckPath: string, term: string, code: string) => readonly MaterialDeck[];
-  openLink: (linktext: string, sourcePath: string) => void;
-  tipOpen: boolean; setTipOpen: (open: boolean) => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  /** 打字卡的輸入框改了字（回報的選單開著時 Review 不交給 session）。 */
-  onInput: (value: string) => void;
-  /** 題目裡的空格：undefined 是題目還沒渲染好，null 是題目沒有 ＿＿（輸入框放在題目下面）。 */
-  slot: HTMLElement | null | undefined;
-  onSlot: (slot: HTMLElement | null) => void;
-  qRef: React.RefObject<HTMLDivElement | null>;
-  /** 題目固定在上方（不太高的題目）。 */
-  sticky: boolean;
-  animating: boolean;
-  submit: () => void;
-  skip: () => void;
-  onPainted: () => void;
-  onFail: (side: 'front' | 'back', error: unknown, path: string) => void;
-}
-
-interface BottomProps {
-  view: CardView;
-  animating: boolean;
-  reveal: () => void;
-  rate: (rating: Rating) => void;
-}
-
-interface TapTools {
-  reveal: () => void;
-  focusInput: () => void;
-}
-
-interface Screen {
-  /** 題目區。 */
-  Body: (props: BodyProps) => React.JSX.Element;
-  /**
-   * 底部那一排的內容；null 是沒有這一排。是普通函式、不是元件，由 Review 直接呼叫、放進同一個 .ec-actions：這樣翻面卡與打字卡互換時，
-   * 同一顆評分按鈕留在原處，焦點不掉（題型接點第一步的 Codex 查核 F1）。
-   */
-  bottom: (props: BottomProps) => React.ReactNode;
-  /** 點卡片的空白處（回看時不會到這裡）。 */
-  tap: (view: CardView, tools: TapTools) => void;
-  /** 舞台多加的 class。 */
-  stage: (view: CardView) => string;
-}
 
 /** 字母的比對：拼錯的畫刪除線（你拼的、照著打一次）或紫色（正確拼字）。 */
 function Letters({ letters, mode }: { letters: Spelling['typed']; mode: 'typed' | 'expected' }): React.JSX.Element {
@@ -152,13 +104,6 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
   </article>;
 }
 
-/** 評分那一排。 */
-function Rates({ view, shown, animating, rate }: { view: CardView; shown: readonly Rating[]; animating: boolean; rate: (rating: Rating) => void }): React.JSX.Element {
-  return <div className="ec-rates">
-    {shown.map(rating => <button key={rating} type="button" className="ec-rate" data-k={rating} disabled={animating || (view.viewing !== null && !view.allowed.includes(rating) && view.pressed !== rating)} aria-pressed={view.pressed === rating} onClick={() => { rate(rating); }}>{RATING_LABELS[rating]}</button>)}
-  </div>;
-}
-
 function FlipBody(props: BodyProps): React.JSX.Element {
   const { view, app, speech, onFail } = props;
   const { card, revealed } = view;
@@ -176,6 +121,7 @@ const flip: Screen = {
     ? <button type="button" className="ec-show" disabled={animating} onClick={reveal}>顯示答案</button>
     : <Rates view={view} shown={view.viewing ? RATINGS : view.allowed} animating={animating} rate={rate} />,
   tap(view, { reveal }) { if (!view.revealed) reveal(); },
+  enter(_view, { reveal }) { reveal(); },
   stage: () => '',
 };
 
@@ -263,7 +209,8 @@ const typedScreen: Screen = {
   },
   // 點卡片任何地方都叫出鍵盤（D-145：輸入框在空格裡，點得到的範圍比原本那一整行小）。
   tap(view, { focusInput }) { if (view.typed && !view.typed.finished) focusInput(); },
+  enter(_view, { reveal }) { reveal(); },
   stage: view => typingOf(view) ? ' is-typing' : '',
 };
 
-export const SCREENS: Record<QuestionType, Screen> = { flip, typed: typedScreen, pick: flip };
+export const SCREENS: Record<QuestionType, Screen> = { flip, typed: typedScreen, pick: pickScreen };

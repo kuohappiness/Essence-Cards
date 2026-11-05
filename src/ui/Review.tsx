@@ -5,7 +5,7 @@ import type { ReportKind } from '../core/errors/index.ts';
 import { questionType } from '../core/study/index.ts';
 import type { Rating } from '../core/study/index.ts';
 import { gesture, lockAxis, RATINGS } from '../review/index.ts';
-import type { Axis, DoneView, Gesture, Session, SourceOwner } from '../review/index.ts';
+import type { Axis, DoneView, FlowAction, Gesture, Session, SourceOwner } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { SCREENS } from './screens.tsx';
 import type { MaterialDeck } from './sources.ts';
@@ -163,6 +163,18 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const reveal = (): void => { if (held()) return; session.reveal(); focusApp(); };
   const submit = (): void => { if (!held()) session.submit(); };
   const skip = (): void => { if (!held()) session.skip(); };
+  const act = (action: FlowAction): void => { if (!held()) session.act(action); };
+  /** 「下一張」（比較卡有錯時）：回看時沒有這個按鈕，Enter 也不算。 */
+  const next = (): void => {
+    const current = latest.current;
+    if (held() || current.kind !== 'card' || current.card.viewing) return;
+    commit(() => session.commit());
+  };
+  /** Space、Enter：各題型自己決定（比較卡是對答案與下一張）。 */
+  const enter = (): void => {
+    const current = latest.current;
+    if (current.kind === 'card') SCREENS[questionType(current.card.card)].enter(current.card, { reveal, act, commit: next });
+  };
   const rate = (rating: Rating): void => {
     if (held()) return;
     const current = latest.current;
@@ -263,7 +275,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
     else if (event.key === 'ArrowLeft') { event.preventDefault(); back(); }
     else if (event.key === 'ArrowRight') { event.preventDefault(); forward(); }
     else if (/^[1-4]$/.test(event.key)) { event.preventDefault(); rate(RATINGS[Number(event.key) - 1]); }
-    else if ((event.key === ' ' || event.key === 'Enter') && !target.closest('button')) { event.preventDefault(); reveal(); }
+    else if ((event.key === ' ' || event.key === 'Enter') && !target.closest('button')) { event.preventDefault(); enter(); }
   };
 
   /** 第一張卡畫好、自評後下一張畫好：量測（§4）。 */
@@ -280,7 +292,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
   const top = view.top;
   const english = view.kind === 'card' && view.card.english;
   const screen = view.kind === 'card' ? SCREENS[questionType(view.card.card)] : null;
-  const bottom = screen && view.kind === 'card' ? screen.bottom({ view: view.card, animating, reveal, rate }) : undefined;
+  const bottom = screen && view.kind === 'card' ? screen.bottom({ view: view.card, animating, reveal, rate, act, commit: next, focusApp }) : undefined;
   return <div className="ec-app" ref={appEl} tabIndex={-1} onKeyDown={onKey}>
     {/* 回報的選單開著時，背後的東西不能取得焦點也不能操作（inert，Codex L2 的 R1）：Tab 只在選單裡走 */}
     <div className="ec-top" inert={reporting}>
@@ -305,7 +317,7 @@ export function Review(props: ReviewProps): React.JSX.Element {
         {view.kind === 'loading' && <p className="ec-loading">正在讀取卡組…</p>}
         {view.kind === 'done' && <Done done={view.done} session={session} close={props.close} />}
         {screen && view.kind === 'card' && <screen.Body key={cardKey} view={view.card} app={app} speech={speech} materials={props.materials} owner={props.owner} units={props.units} openLink={props.openLink} tipOpen={tipOpen} setTipOpen={setTipOpen} inputRef={inputEl} slot={cardSlot} onSlot={onSlot} onInput={value => { if (!reportingRef.current) session.input(value); }}
-          qRef={questionEl} sticky={stickyQuestion} animating={animating} submit={submit} skip={skip}
+          qRef={questionEl} sticky={stickyQuestion} animating={animating} submit={submit} skip={skip} act={act}
           onPainted={painted} onFail={(side, error, path) => { props.onEvent?.({ kind: 'render-failed', lt: view.card.card.lt, side }); props.onRenderError?.(error, path); }} />}
       </div>
     </div>
