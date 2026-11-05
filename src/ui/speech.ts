@@ -41,7 +41,7 @@ export function createSpeech(onMissing: () => void): Speech {
   };
 }
 
-/** 自動朗讀開關（D-116）：每台裝置各自記住，存在 Obsidian 的本機儲存（不隨 vault 同步）；新裝置預設關。 */
+/** 自動朗讀開關（D-116）：每台裝置各自記住，存在 Obsidian 的本機儲存（不隨 vault 同步）；沒動過開關的預設開，關過的留在關（D-186）。 */
 const AUTO_READ_KEY = 'essence-cards-auto-read';
-export function loadAutoRead(app: App): boolean { return app.loadLocalStorage(AUTO_READ_KEY) === true; }
+export function loadAutoRead(app: App): boolean { return app.loadLocalStorage(AUTO_READ_KEY) !== false; }
 export function saveAutoRead(app: App, on: boolean): void { app.saveLocalStorage(AUTO_READ_KEY, on); }

@@ -59,6 +59,9 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-04 | iPhone 測試後的修改合併進 `main`（`25deec7`）：複習畫面不自動換卡、拼錯進照打會打叉、例句英中分行（[D-174](../decisions.md#d-174-iphone-實機測試後的複習畫面調整不自動換卡直接照打也打叉例句分行)），iPhone 的錯誤全收（[D-173](../decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)）；Codex L2 四輪後結案，iPhone 下一次確認 |
+| 2026-11-04 | 節省 token 量了一次對照（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 6 點）：Codex 四輪其實在同一個對話，等檢查時的輪詢佔輸入約 43%；使用者決定流程不改 |
+| 2026-11-03 | 下一次 iPhone 實機測試做完（[結果](../../tasks/iphone-test-2026-11.md)）：Obsidian 1.15、入口與目錄、打字卡、離線作答都通過；修了三項畫面（[D-174](../decisions.md#d-174-iphone-實機測試後的複習畫面調整不自動換卡直接照打也打叉例句分行)）；stack 沒有位置與「保持下載」待處理 |
 | 2026-11-03 | 節省 token 的流程定案（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型)，[討論稿](<../../Claude Codex Discussion/2026-11-03-token-saving.md>)）：量過 Codex 與電腦上的 Claude，大頭是長對話每次重讀整段；Codex 每輪新開、只讀需要的、L2 第四輪後停，Claude 40 萬就壓縮 |
 | 2026-11-03 | code-quality 補兩句（review.md）：修審查發現時整類一次修、回歸測試涵蓋同類；請審查者特別看的邊界先自己測。依據：三份 L2（[錯誤紀錄](<../../Claude Codex Discussion/2026-10-31-error-log-review.md>)、[發布前比較](<../../Claude Codex Discussion/2026-11-02-compare-gates-review.md>)、[更新防線第二部分](<../../Claude Codex Discussion/2026-10-29-update-safeguards-2-review.md>)）22 項發現中，10 項屬這兩類 |
 | 2026-11-03 | 國小社會預設 v0.6 測跨單元加題（[試用紀錄](../card-rules/trials.md)）：混入 10 項自製的小四目標再跑 2-2，Sol 加了 8 項、10 題，ID 全對；但不寫待核對，只給名稱會過度合併；預設改成 v0.7 |

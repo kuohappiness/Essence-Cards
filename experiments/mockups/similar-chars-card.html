@@ -3,7 +3,7 @@
 <style>
 /* 版面：手機一欄；寬螢幕左邊是可操作的卡，右邊是說明。配色照外掛的複習畫面（src/ui/tokens.css）。
    字用裝置的系統字型，和外掛的卡片一樣是黑體，不載入字型（D-180）。
-   畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線。 */
+   畫面上每一樣都要有必要性（D-179）：沒有圖示、副標、提示句，選取只用很淡的底和紫色底線；填好的字和句子同色，底線回到灰色（D-182 第 8 點）。 */
 :root{
   --page:#FAFAF9;--bg:#EFF0EC;--ink:#1D1F23;--muted:#6A6F77;--line:#DEDFDA;--press:#ECEFF4;
   --key:#7A5BC7;--miss:#B3261E;--near:#8F4C00;--good:#17693A;--easy:#2862B9;--on-ink:#FAFAF9;
@@ -41,16 +41,16 @@ h1{font-size:27px;line-height:1.3;margin:0;text-wrap:balance}
 .mark{flex:none;font-family:var(--ui);font-size:14px;font-weight:700;width:14px;text-align:center}
 .mark.right{color:var(--good)}.mark.near{color:var(--near)}.mark.miss{color:var(--miss)}.mark.retry{color:var(--miss)}
 .slot{appearance:none;display:inline-block;background:none;border:0;border-bottom:2px solid var(--muted);padding:0;margin:0 3px;width:1.9em;
-  font-size:21px;line-height:1.3;color:var(--key);text-align:center;vertical-align:baseline;cursor:pointer}
+  line-height:1.3;color:var(--ink);text-align:center;vertical-align:baseline;cursor:pointer}
 .row.on .slot{border-bottom-color:var(--key);box-shadow:0 1px 0 var(--key)}
-.slot.right{color:var(--good);border-bottom-color:var(--good)}
-.slot.near{color:var(--near);border-bottom-color:var(--near)}
-.slot.miss{color:var(--miss);border-bottom-color:var(--miss)}
+.slot.right{color:var(--good)}
+.slot.near{color:var(--near)}
+.slot.miss{color:var(--miss)}
 .slot.unknown{color:var(--muted)}
 .slot s{color:var(--miss)}
 .slot.pop{animation:pop .16s ease-out}
 @keyframes pop{0%{transform:scale(1.28)}100%{transform:scale(1)}}
-.fly{position:fixed;z-index:5;pointer-events:none;font-size:30px;color:var(--key);line-height:1}
+.fly{position:fixed;z-index:5;pointer-events:none;font-size:30px;color:var(--ink);line-height:1}
 @media (prefers-reduced-motion:reduce){.slot.pop{animation:none}.row{transition:none}}
 
 /* 手指最常停的地方：字鍵在上，兩個動作在下，中間留空，連點才不會誤按「對答案」 */
