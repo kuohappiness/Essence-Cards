@@ -95,6 +95,7 @@
 .ec-app .ec-tr-pc .ec-tr-deck { flex: 1; width: auto; min-width: 0; }
 .ec-tr-pc .ec-tr-deck span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ec-app .ec-tr-pc .ec-u-btn { flex: none; }
+.ec-app .ec-tr-pc .ec-u-btn.is-quiet { padding: 0 6px; border-color: transparent; color: var(--ec-muted); font-weight: 500; }
 .ec-tr-ts { margin: 0; padding: 0; list-style: none; }
 .ec-tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
 .ec-tr-from { display: block; color: var(--ec-muted); font-size: var(--ec-size-meta); }

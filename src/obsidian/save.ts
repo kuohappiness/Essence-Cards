@@ -87,7 +87,7 @@ function applyText(editor: Editor, before: string, after: string): void {
  * 開著的筆記交給 state 寫入（tasks/state-writes.md §7）：path 是按下時的那一篇；換篇、改名之後 text() 回傳 null，
  * 內容已經不是 before 時 apply 不改；persist 等編輯器把內容寫進磁碟（view.save()）。
  */
-function editorOf(view: MarkdownView, path: string): EditorHandle {
+export function editorOf(view: MarkdownView, path: string): EditorHandle {
   const editor = view.editor;
   return {
     path,

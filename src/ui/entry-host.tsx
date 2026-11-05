@@ -1,6 +1,6 @@
 import type { App } from 'obsidian';
 import { createRoot } from 'react-dom/client';
-import type { State, StudyPick } from '../state/index.ts';
+import type { DeckStatusValue, State, StudyPick } from '../state/index.ts';
 import { Entry, type EntryScreen } from './Entry.tsx';
 import { openFullscreen } from './fullscreen.ts';
 import { loadTerms, saveTerms } from './prefs.ts';
@@ -19,6 +19,8 @@ export interface EntryOptions {
   covered: () => boolean;
   /** 短暫的通知（Obsidian 的 Notice）。 */
   notify: (message: string) => void;
+  /** 暫停或恢復一篇，只有電腦傳（D-183 第 6 點）。 */
+  setDeckStatus?: (path: string, value: DeckStatusValue) => Promise<string | null>;
   onError?: (error: unknown) => void;
   onClose?: () => void;
 }
@@ -101,7 +103,7 @@ export function openEntry(options: EntryOptions): EntryHandle {
       from: () => origin,
     }}
     state={options.state} start={options.start} openNote={options.openNote} openSettings={options.openSettings}
-    close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered} notify={options.notify}
+    close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered} notify={options.notify} setDeckStatus={options.setDeckStatus}
     terms={{ get: () => loadTerms(options.app), set: terms => { saveTerms(options.app, terms); } }}
   />);
   shell.element.focus({ preventScroll: true });

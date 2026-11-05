@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { catalogView, entryView, examRow, examSubject, reminderView } from '../review/index.ts';
-import type { Catalog, State, StudyPick, UnitView } from '../state/index.ts';
+import type { Catalog, DeckStatusValue, State, StudyPick, UnitView } from '../state/index.ts';
 import { Icon } from './entry-icon.tsx';
 import { ExamScope } from './ExamScope.tsx';
 import type { TermOpen } from './prefs.ts';
@@ -34,6 +34,8 @@ export interface EntryProps {
   covered: () => boolean;
   /** 短暫的通知（存好了、已結束）。 */
   notify: (message: string) => void;
+  /** 暫停或恢復一篇，回傳要提示的字（D-183 第 6 點）：只有電腦有，手機不寫卡組（D-142 第 4 點）。 */
+  setDeckStatus?: (path: string, value: DeckStatusValue) => Promise<string | null>;
 }
 
 const NOTHING_TODAY = '今天沒有要複習的卡';
@@ -225,10 +227,18 @@ function deckLabel(deck: UnitView['decks'][number], decks: UnitView['decks']): s
   return `${deck.name}（${deck.path.split('/').at(-2) ?? ''}）`;
 }
 
-function UnitRow({ unit, openUnits, toggle, start, openNote, state }: TreeProps & { unit: UnitView }): React.JSX.Element {
+function UnitRow({ unit, openUnits, toggle, start, openNote, state, notify, setDeckStatus }: TreeProps & { unit: UnitView }): React.JSX.Element {
   const active = unit.status === 'active';
-  // 兩篇以上啟用才列出來（D-189 第 3 點）：只有一篇時，單元的全部卡就是那一篇。
   const practiced = unit.decks.filter(deck => deck.status === 'active');
+  // 兩篇以上啟用才有單篇的全部卡（D-189 第 3 點）：只有一篇時，單元的全部卡就是那一篇。
+  const several = practiced.length > 1;
+  /** 暫停／恢復（D-183 第 6 點）：電腦上、單元有兩篇以上；草稿沒有。 */
+  const statusButton = (deck: UnitView['decks'][number]): React.JSX.Element | null => {
+    if (!setDeckStatus || unit.decks.length < 2 || deck.status === 'draft') return null;
+    const value = deck.status === 'paused' ? '啟用' : '暫停';
+    return <button type="button" className="ec-u-btn is-quiet" onClick={() => { void setDeckStatus(deck.path, value).then(tip => { if (tip) notify(tip); }); }}>{value === '啟用' ? '恢復' : '暫停'}</button>;
+  };
+  const listed = several ? practiced : practiced.filter(deck => statusButton(deck));
   // 全部是草稿或暫停：點了打開筆記（§3）；好幾篇時展開箭頭列出全部。
   const expandable = active || unit.decks.length > 1 || unit.problems.length > 0;
   const open = openUnits.has(unit.key) && expandable;
@@ -248,11 +258,12 @@ function UnitRow({ unit, openUnits, toggle, start, openNote, state }: TreeProps 
       </span>}
     </div>
     {open && <div className="ec-tr-open">
-      {practiced.length > 1 && practiced.map(deck => {
+      {listed.map(deck => {
         const count = state()?.deckTargets(deck.path).length ?? 0;
         return <div key={deck.path} className="ec-tr-pc">
           <button type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span></button>
-          <button type="button" className="ec-u-btn" disabled={count === 0} onClick={() => { start({ deck: deck.path, since: Date.now() }); }}><Icon type="play" size={12} />全部卡 {count}</button>
+          {statusButton(deck)}
+          {several && <button type="button" className="ec-u-btn" disabled={count === 0} onClick={() => { start({ deck: deck.path, since: Date.now() }); }}><Icon type="play" size={12} />全部卡 {count}</button>}
         </div>;
       })}
       {unit.problems.map(problem =><button key={problem.kind} type="button" className="ec-tr-problem" onClick={() => { openNote(problem.path, problem.line); }}>{problem.count} 個{PROBLEM[problem.kind]}</button>)}
@@ -262,7 +273,11 @@ function UnitRow({ unit, openUnits, toggle, start, openNote, state }: TreeProps 
           <span>{target.name}{target.from && <small className="ec-tr-from">來自{target.from}</small>}</span>
         </li>)}
       </ul>}
-      {rest.map(deck => <button key={deck.path} type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span>{deck.status !== 'active' &&<span className="ec-tr-tag">{TAG[deck.status]}</span>}</button>)}
+      {rest.map(deck => {
+        const link = <button key={deck.path} type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span>{deck.status !== 'active' && <span className="ec-tr-tag">{TAG[deck.status]}</span>}</button>;
+        const button = statusButton(deck);
+        return button ? <div key={deck.path} className="ec-tr-pc">{link}{button}</div> : link;
+      })}
     </div>}
   </>;
 }

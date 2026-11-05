@@ -399,13 +399,42 @@ void test('§2 別的篇裡同樣的字不算一對', async t => {
   assert.deepEqual(drill(h, h.round()).order, ['e1', 'z1', 'a'], '筆記順序，沒有隔開');
 });
 
+/** 不經過選卡，直接照這個順序答。 */
+const answerAll = (h: Harness, lts: readonly string[], r: Rating = 'good'): void => {
+  for (const lt of lts) { h.state.answer({ lt, r, v: '12345678' }); h.clock.now += 1000; }
+};
+const nextOf = (h: Harness, pick: StudyPick): string | false => { const next = h.state.next(pick); return next.kind === 'card' && next.card.lt; };
+
 void test('§2 錯題補強的作答不算間隔', async t => {
-  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets(...ids('m', 1, 10)) });
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(2) + targets(...ids('m', 1, 10)) });
   const round = h.round();
-  assert.deepEqual(drill(h, round, () => 'good', 1).order, ['e1']);
-  for (const lt of ids('m', 1, 10)) { h.state.answer({ lt, r: 'miss', src: 'mistake' }); h.clock.now += 1000; }
-  const next = h.state.next(round);
-  assert.equal(next.kind === 'card' && next.card.lt, 'm1', 'z1 之後答過的 10 張都是錯題補強，還不夠隔');
+  answerAll(h, ['e2', ...ids('m', 1, 10), 'e1']);
+  for (const lt of ids('x', 1, 10)) { h.state.answer({ lt, r: 'miss', src: 'mistake' }); h.clock.now += 1000; }
+  assert.equal(nextOf(h, round), 'z2', 'z1 排在前面，但 e1 之後只有錯題補強，還不夠隔');
+});
+
+void test('§2 「其他」不含自己：對方之後自己又答過一次不算一個', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets(...ids('m', 1, 8), 'w') });
+  const round = h.round();
+  answerAll(h, ['z1', ...ids('m', 1, 8)]);
+  answerAll(h, ['e1', 'w'], 'miss');
+  h.clock.now += 120_000;
+  assert.equal(nextOf(h, round), 'w', 'e1 比較早到期，但 z1 之後只答過 9 個其他的目標');
+  answerAll(h, ['w']);
+  assert.equal(nextOf(h, round), 'e1', '沒有別張了，不讓學生等');
+});
+
+void test('§2 到時間的先於新卡；一樣多就照原本的順序', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b', 'c') });
+  const round = h.round();
+  answerAll(h, ['c'], 'miss');
+  h.clock.now += 120_000;
+  assert.equal(nextOf(h, round), 'c', 'a、b 是新卡，排在前面也要等');
+});
+
+void test('§2 都不夠隔、隔得一樣多：照原本的順序', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + '- w 英翻中 ^e\n    - w :: 字\n- w 中翻英 ^z1\n    - 字一 :: w\n- w 中翻英 ^z2\n    - 字二 :: w\n' });
+  assert.deepEqual(drill(h, h.round()).order, ['e', 'z1', 'z2']);
 });
 
 void test('§2 回看取消一筆：取消的那一筆不算作答，間隔跟著變', async t => {

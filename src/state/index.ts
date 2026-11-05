@@ -1,5 +1,5 @@
 import type { Files } from '../core/files.ts';
-import { isDeckPath, parseDeck } from '../core/deck/index.ts';
+import { isDeckPath, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
 import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
 import type { Catalog, CatalogIndex, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
@@ -63,6 +63,8 @@ export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
  * 沒有 since 是單元的當日卡，有 since 是單元的全部卡；deck 加 since 是卡組筆記的全部卡（D-146）。目標集合每次都照 state 現在讀到的內容算。
  */
 export type StudyPick = Pick | { unit: string } | { unit: string; since: number } | { deck: string; since: number };
+/** 目錄的暫停／恢復寫進卡組屬性 `狀態` 的值。 */
+export type DeckStatusValue = '啟用' | '暫停';
 /** 考試範圍現在的樣子（tasks/exam-scope.md §3、§4）：入口、目錄與設定畫面都看這一份。 */
 /** 畫面打開時選定的是哪一份。 */
 interface ExamTarget { path: string | null; id: string | null }
@@ -191,6 +193,11 @@ export interface State {
    * 回傳 true；沒有要改、門檻沒過、途中變了（stale）回傳 false；寫不進去或逾時 reject（已配出的 ID 保留、不重用）。
    */
   fillIds(path: string): Promise<boolean>;
+  /**
+   * 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只改屬性區的 `狀態`，和補 ID 走同一條寫入（同一列、同樣的門檻，手機回 blocked phone）；editor 是開著那篇的編輯器，沒開著是 null。
+   * 改了字（done、saved）才記一行 `set: status`；已經是這個值、草稿、檔不見了是 unchanged；屬性區讀不懂、只改一行讀不回來是 unwritable，都不寫。寫不進去回 failed，不丟錯。
+   */
+  setDeckStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
   /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
@@ -599,6 +606,21 @@ export function createState(options: StateOptions): State {
       if (result.kind === 'failed') throw result.error;
       // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
       return result.kind === 'done' || result.kind === 'saved';
+    },
+    async setDeckStatus(path, value, editor) {
+      let unwritable = false;
+      const plan = (text: string): Prepared | null => {
+        // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
+        track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
+        if (parseDeck(text).props.status === 'draft') return null;
+        const next = setStatusLine(text, value);
+        if (next === null) unwritable = true;
+        return next === null ? null : { text: next, expect: [], fresh: [], record: null };
+      };
+      const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
+      if (unwritable) return { kind: 'unwritable' };
+      if (result.kind === 'done' || result.kind === 'saved') record({ set: 'status', deck: path, val: value });
+      return result;
     },
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
