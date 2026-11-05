@@ -1,6 +1,6 @@
 # 題型接點與比較點選開工前的格式查核（給 Codex）
 
-狀態：待查（寫法已定：D-182）
+狀態：第一輪查核完成，有開工前要處理的發現，待 Claude 核對（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
