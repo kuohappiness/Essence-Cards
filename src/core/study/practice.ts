@@ -182,7 +182,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     const early = !ready.length && !fresh.length;
     const others = items.filter(other => other !== item && other.path === item.path && other.target.group?.key === item.target.group?.key
       && joins(valid.get(other.id), early, () => dueBy(other)));
-    return { kind: 'card', card: pickCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)], item.entry.deck.targets) };
+    return { kind: 'card', card: pickCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)], item.entry.whole ?? item.entry.deck.targets) };
   }
   const prior = priorOf(item.id);
   const seen = shownWith(new Map(), prior);

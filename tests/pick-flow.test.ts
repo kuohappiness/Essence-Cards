@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry, questionType } from '../src/core/study/index.ts';
 import { AWAY_LIMIT, RATE_DELAY } from '../src/review/index.ts';
+import type { Session } from '../src/review/index.ts';
 import { answers, CHARS, check, DECK, fill, heldLine, keysOf, ltsOnScreen, PC, PHONE, pick, printOf, QUESTION, rights, setup, skip, stage, START, tap, texts, TWO, view, WRONG } from './helpers/pick-session.ts';
 
 // 比較卡的作答流程（tasks/question-type-seam.md §6）：createSession 接真的 createState。預期值來自 §4、§6 的表。
@@ -373,4 +374,39 @@ void test('單元的範圍也併成一張：{unit} 和今天的份一樣 5 格 4
   const s = await h.open({ unit: '["國二上","國語","2-1"]' });
   assert.equal(view(s).card.blanks.length, 5);
   assert.deepEqual([...keysOf(s)].sort(), ['塞', '寒', '寨', '賽']);
+});
+
+// 不出題的字（§5-1：ID 重複、和需要新版的卡組同一個 ID）：字鍵與對照照樣有，只是不出它的句子（L2 的 R2）。
+const ANCHORED = `---
+科目: 國語
+---
+- 寨（寨、塞） 相似字 ^zhai00
+    - 山＿＿裡。 :: 寨
+    - 記憶錨點：**木**圍起來：山寨
+- 塞（寨、塞） 相似字 ^sai000
+    - 大＿＿車。 :: 塞
+    - 記憶錨點：**土**堵住：塞車
+`;
+const ROWS = [['寨', '**木**圍起來：山寨'], ['塞', '**土**堵住：塞車']];
+const rowsOf = (s: Session): (string | null)[][] => (view(s).card.group?.rows ?? []).map(row => [row.member, row.anchor]);
+for (const [name, other] of [
+  ['別篇有同一個 ID', '---\n科目: 自然\n---\n- 能說明 ^sai000\n    - 問 :: 答\n'],
+  ['需要新版的卡組有同一個 ID', '---\n科目: 自然\n需要版本: 9.9.9\n---\n- 能說明 ^sai000\n    - 問 :: 答\n'],
+] as const) {
+  void test(`${name}：只出另一個字，對照還是兩行；今天的份和全部卡的一輪都是`, async t => {
+    const h = await setup(t, { [DECK]: ANCHORED, 'Essence Cards/別篇.md': other });
+    for (const pick of [{ subject: '國語' }, { deck: DECK }, { deck: DECK, since: h.clock.now }] as const) {
+      const s = await h.open(pick);
+      assert.deepEqual(view(s).card.blanks.map(blank => blank.lt), ['zhai00'], JSON.stringify(pick));
+      assert.deepEqual(rowsOf(s), ROWS, JSON.stringify(pick));
+      assert.deepEqual([...keysOf(s)].sort(), ['塞', '寨'], JSON.stringify(pick));
+    }
+  });
+}
+
+void test('同一篇有同一個 ID 兩次：不出那個字，對照還是有（D-157）', async t => {
+  const h = await setup(t, { [DECK]: ANCHORED + '- 能說明 ^sai000\n    - 問 :: 答\n' });
+  const s = await h.open({ subject: '國語' });
+  assert.deepEqual(view(s).card.blanks.map(blank => blank.lt), ['zhai00']);
+  assert.deepEqual(rowsOf(s), ROWS);
 });

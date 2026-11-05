@@ -84,7 +84,8 @@ function pickCard(item: QueueItem, slot: Slot, scope: readonly QueueItem[], toda
     const entries = valid.get(other.lt);
     return joins(entries, early, () => againAt(each, entries ?? []) <= input.now);
   });
-  const deckTargets = input.decks.find(entry => entry.path === item.deck)?.deck.targets ?? [slot.target];
+  const entry = input.decks.find(each => each.path === item.deck);
+  const deckTargets = entry ? entry.whole ?? entry.deck.targets : [slot.target];
   return pickCardOf({ deck: item.deck, isNew: slot.memory === null && !any.has(item.lt), early }, [mateOf(item.lt), ...others.map(other => mateOf(other.lt))], deckTargets);
 }
 

@@ -325,7 +325,7 @@ export function createState(options: StateOptions): State {
     planList = deckList.map(entry => {
       const skip = tracker.lines(entry.path);
       const drop = (t: Target): boolean => skip.has(t.line) || (t.id !== null && gatedIds.has(t.id));
-      return entry.deck.targets.some(drop) ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !drop(t)) } } : entry;
+      return entry.deck.targets.some(drop) ? { path: entry.path, deck: { ...entry.deck, targets: entry.deck.targets.filter(t => !drop(t)) }, whole: entry.deck.targets } : entry;
     });
   }
   /** 這個目標的紀錄讀得懂：不是讀不懂的紀錄行停掉的、紀錄不是不完整、不在需要新版的卡組裡（§5-2、§2-1）。 */

@@ -120,6 +120,11 @@ export interface DeckEntry {
   /** vault 裡的路徑；同時是排序與「當日卡」的鍵。 */
   path: string;
   deck: Deck;
+  /**
+   * 這篇全部的目標，只有 deck.targets 裁過才有（ID 重複、和需要新版的卡組同一個 ID：不排程、不出題）。
+   * 比較卡的字鍵與對照看這份：不出題的字還是要比較（tasks/question-type-seam.md §5-1、L2 的 R2）。
+   */
+  whole?: readonly Target[];
 }
 
 export interface Settings {
