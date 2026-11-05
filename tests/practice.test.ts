@@ -580,6 +580,37 @@ void test('§3 這一輪有一筆別台裝置的作答：不顯示；這一輪�
   assert.equal('score' in doneOf(s.view()), false);
 });
 
+for (const [name, lt, r] of [['別的目標', 'b', 'miss'], ['同一個目標、別的評分', 'a', 'miss'], ['別的目標、一樣的評分', 'b', 'good']] as const) void test(`§3 別台裝置同一個毫秒的作答（${name}）：時間一樣也認得出不是這次寫的，不顯示`, async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／1');
+  h.write(PHONE, encodeEntry(s.history()[0].t, { lt, r, v: '12345678' }) + '\n');
+  await h.settle();
+  assert.equal(h.state.history().reviews.length, 2);
+  // 那個目標被算成答錯時會再出一次。
+  while (s.view().kind === 'card') h.rate(s, 'good');
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 這次寫的少了一筆（被別處取消）：算不準，不顯示；同一筆讀到兩次不算多一筆', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  h.rate(s, 'good');
+  const [first, second] = s.history();
+  h.write(PHONE, encodeEntry(first.t, { lt: 'a', r: 'good', v: first.card.prompt.fingerprint }) + '\n');
+  await h.settle();
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+  h.write(PHONE, encodeEntry(new Date(h.clock.now).toISOString().replace('Z', '+00:00'), { undo: second.t }) + '\n');
+  await h.settle();
+  assert.equal(h.state.history().reviews.length, 1);
+  // 被取消的那個目標算沒答過，再出一次。
+  assert.equal(card(s.view()), 'b');
+  h.rate(s, 'good');
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
 void test('§3 當日卡、今天的份、再複習一些的完成畫面沒有這一行；這一輪沒有作答也沒有', async t => {
   const decks = { [DECK]: HEAD('2-1') + targets('a'), [OTHER]: HEAD('2-2') + targets('b') };
   const h = await setup(t, decks);
