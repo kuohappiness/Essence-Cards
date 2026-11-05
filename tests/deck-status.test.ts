@@ -3,7 +3,7 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { replay } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
-import type { State, StateOptions, UnitView } from '../src/state/index.ts';
+import type { DeckStatusValue, State, StateOptions, UnitView, WriteResult } from '../src/state/index.ts';
 import { createMemoryEditor } from './helpers/editor.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
 
@@ -139,6 +139,71 @@ void test('開著的筆記：改在編輯器裡、存進磁碟；編輯器裡比
   other.open = 'Essence Cards/別篇.md';
   assert.equal((await h.state.setDeckStatus(REST, '暫停', other)).kind, 'stale');
   assert.equal(h.texts.get(REST), DECKS[REST]);
+});
+
+/** 按下去、寫進磁碟之後、核對讀取之前，外部（同步）把筆記改成 overwrite 的結果。沒開著的筆記停在 modify 回來之前，開著的停在 persist 回來之前。 */
+async function pressThenOverwrite(h: Harness, path: string, value: DeckStatusValue, editing: boolean, overwrite: (written: string) => string): Promise<WriteResult | { kind: 'unwritable' }> {
+  const original = h.texts.get(path) ?? '';
+  if (editing) {
+    const editor = createMemoryEditor(h, path, original);
+    const persist = editor.persist.bind(editor);
+    editor.persist = async () => { await persist(); h.write(path, overwrite(h.texts.get(path) ?? '')); };
+    return h.state.setDeckStatus(path, value, editor);
+  }
+  const held = h.holdModify(path);
+  const writing = h.state.setDeckStatus(path, value, null);
+  while (h.texts.get(path) === original) await new Promise(resolve => setImmediate(resolve));
+  h.write(path, overwrite(h.texts.get(path) ?? ''));
+  held.release();
+  return writing;
+}
+
+for (const [how, editing] of [['沒開著的筆記', false], ['開著的筆記', true]] as const) {
+  void test(`${how}：寫進去之後、核對之前被同步蓋回原本的狀態：回 stale，不記；目錄照讀到的；再按一次就好`, async t => {
+    const h = await setup(t);
+    const result = await pressThenOverwrite(h, WORDS, '暫停', editing, () => DECKS[WORDS]);
+    assert.equal(result.kind, 'stale');
+    assert.deepEqual(await changes(h), []);
+    assert.deepEqual(statuses(h), { [WORDS]: 'active', [REST]: 'active' });
+    assert.deepEqual(h.state.deckStatus(WORDS).issues, [], '沒有多出假的待處理問題');
+    assert.equal((await h.state.setDeckStatus(WORDS, '暫停', editing ? createMemoryEditor(h, WORDS, DECKS[WORDS]) : null)).kind, 'done');
+    assert.deepEqual(await changes(h), [{ set: 'status', deck: WORDS, val: '暫停' }]);
+    assert.deepEqual(statuses(h), { [WORDS]: 'paused', [REST]: 'active' });
+  });
+
+  void test(`${how}：恢復時被蓋回暫停、暫停時被換成草稿也一樣：讀回來不是要的狀態就不算`, async t => {
+    const paused = head('狀態: 暫停\n') + targets('a', 'b');
+    const h = await setup(t, { ...DECKS, [WORDS]: paused });
+    assert.equal((await pressThenOverwrite(h, WORDS, '啟用', editing, () => paused)).kind, 'stale');
+    assert.deepEqual(await changes(h), []);
+    assert.deepEqual(statuses(h), { [WORDS]: 'paused', [REST]: 'active' });
+    // 換成草稿：不是暫停也不是啟用。
+    const h2 = await setup(t);
+    assert.equal((await pressThenOverwrite(h2, WORDS, '暫停', editing, () => head('狀態: 草稿\n') + targets('a', 'b'))).kind, 'stale');
+    assert.deepEqual(await changes(h2), []);
+  });
+
+  void test(`${how}：核對時多了別的字、換了寫法，狀態還是要的：採用，記一行`, async t => {
+    const extra = '- 別的目標 ^other1\n    - 問 :: 答\n';
+    const h = await setup(t);
+    const result = await pressThenOverwrite(h, WORDS, '暫停', editing, written => written.replace('狀態: 暫停', '狀態: "暫停"') + extra);
+    assert.equal(result.kind, 'done');
+    assert.equal(h.texts.get(WORDS), head('狀態: "暫停"\n') + targets('a', 'b') + extra);
+    assert.deepEqual(await changes(h), [{ set: 'status', deck: WORDS, val: '暫停' }]);
+    assert.deepEqual(statuses(h), { [WORDS]: 'paused', [REST]: 'active' });
+  });
+}
+
+void test('寫進去、核對讀不到：回 saved，記一行；之後讀到了不多記，目錄跟上', async t => {
+  const h = await setup(t);
+  h.failing.add(WORDS);
+  assert.equal((await h.state.setDeckStatus(WORDS, '暫停', null)).kind, 'saved');
+  assert.equal(h.texts.get(WORDS), head('狀態: 暫停\n') + targets('a', 'b'));
+  assert.deepEqual(await changes(h), [{ set: 'status', deck: WORDS, val: '暫停' }]);
+  h.failing.delete(WORDS);
+  h.notify(WORDS);
+  while (statuses(h)[WORDS] !== 'paused') await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(await changes(h), [{ set: 'status', deck: WORDS, val: '暫停' }]);
 });
 
 void test('狀態和補 ID 不混在一起：還沒有 ID 的目標不補，其他字元不動', async t => {

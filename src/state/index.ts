@@ -615,7 +615,7 @@ export function createState(options: StateOptions): State {
         if (parseDeck(text).props.status === 'draft') return null;
         const next = setStatusLine(text, value);
         if (next === null) unwritable = true;
-        return next === null ? null : { text: next, expect: [], fresh: [], record: null };
+        return next === null ? null : { text: next, expect: [], fresh: [], record: null, status: parseDeck(next).props.status };
       };
       const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
       if (unwritable) return { kind: 'unwritable' };
