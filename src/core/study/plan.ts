@@ -47,14 +47,17 @@ interface Candidate {
 /** 每一科最近 30 天作答間隔的中位數（秒）；間隔不夠的科目用預設。 */
 function secondsBySubject(reviews: readonly ReviewEntry[], from: number, to: number, subjectOf: ReadonlyMap<string, string | null>): Map<string | null, number> {
   const gaps = new Map<string | null, number[]>();
-  let previous: number | null = null;
+  let previous: number | null = null, batch: string | null = null;
   for (let i = firstAtOrAfter(reviews, from); i < reviews.length && reviews[i].at < to; i++) {
     const entry = reviews[i];
     if (entry.src === 'mistake') continue;
     const gap = previous === null ? 0 : entry.at - previous;
     previous = entry.at;
+    // 同一張比較卡的行（tasks/question-type-seam.md §5-4）：with 等於前一行的批次時不算一個間隔。第一行還沒同步時，看得到的第一行代表這張卡。
+    const sameCard = entry.with !== undefined && entry.with === batch;
+    batch = entry.with ?? entry.t;
     const subject = subjectOf.get(entry.lt);
-    if (gap <= 0 || gap > MAX_GAP || subject === undefined) continue;
+    if (sameCard || gap <= 0 || gap > MAX_GAP || subject === undefined) continue;
     const list = gaps.get(subject);
     if (list) list.push(gap);
     else gaps.set(subject, [gap]);
