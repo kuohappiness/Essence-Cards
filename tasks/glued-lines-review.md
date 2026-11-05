@@ -1,6 +1,6 @@
 # 紀錄接在一起的行（S6）：格式查核與 L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第一輪）；還沒合併
+狀態：第一輪通過（格式查核與 L2，[回報](<../Claude Codex Discussion/2026-11-05-glued-lines-review.md>)）；待使用者同意合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報寫在這個 worktree 的 `Claude Codex Discussion/2026-11-05-glued-lines-review.md`（新檔，標題下第一行寫狀態）；所有檔案都在這個 worktree，不要寫到主資料夾。
 
