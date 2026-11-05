@@ -4,7 +4,10 @@ import { chapterAlias, codeKey, readTerm, termKey, termRank, tidy } from '../dec
 // 考試範圍檔（tasks/exam-scope.md §2、syntax.md §4、D-176）：只看字面，不看卡組。讀懂的、對不到卡組的、看不懂的分開，都留著讓畫面寫出來。
 
 export const EXAM_FOLDER = 'Essence Cards/考試範圍';
-export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md');
+/** 留給小考（D-189 第 5 點）：只有 `考試範圍/` 直接底下、名稱剛好是 `小考` 的那一層與它底下；`小考備份/`、`舊的/小考/` 照舊是段考範圍。 */
+const QUIZ_FOLDER = EXAM_FOLDER + '/小考';
+const isQuizPath = (path: string): boolean => path.startsWith(QUIZ_FOLDER + '/');
+export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md') && !isQuizPath(path);
 
 /** 一行範圍。line 從 0 算，raw 是原字；unit 的三欄是讀到的標準寫法。 */
 export type ScopeLine =
@@ -191,6 +194,15 @@ export function parseScope(text: string): ScopeFile {
   }
   return file;
 }
+
+/** 屬性區有頂層 `小考日期`（D-189 第 5 點）：只看鍵在不在，值是空的或寫錯也算。屬性區讀不出來就看不到鍵，照段考算日期有問題。 */
+function hasQuizDate(text: string): boolean {
+  const head = headOf(piecesOf(text));
+  const values = head && head.close >= 0 ? headValues(head.raw) : null;
+  return values !== null && Object.hasOwn(values, '小考日期');
+}
+/** 段考讀一份內容：`isExamPath` 是讀之前的第一步，這是讀到之後的第二步。搬出 `小考/` 的小考檔回傳 null，不算段考範圍（否則會變成一份生效、沒有日期的範圍）。 */
+export const parseExamFile = (text: string): ScopeFile | null => hasQuizDate(text) ? null : parseScope(text);
 
 // ── 比對 ──
 

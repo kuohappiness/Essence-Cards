@@ -1,5 +1,7 @@
 /* 複習畫面（W6 §3）：版面、字級、間距照樣式稿 entry-and-reveal.html 與試作外掛的 Review.css；顏色與節奏用 tokens.css 的變數。 */
 .ec-fullscreen { position: fixed; inset: 0; z-index: 1000000; box-sizing: border-box; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); background: #FAFAF9; outline: none; }
+/* Obsidian 的通知（層級 60 上下）平常被全螢幕蓋住：按鈕被擋下時的提示要看得到。 */
+body:has(.ec-fullscreen) .notice-container { z-index: 1000001; }
 body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: var(--ec-size-base)/1.5 var(--ec-font-ui); -webkit-tap-highlight-color: transparent; outline: none; }
 .ec-app * { box-sizing: border-box; }
@@ -125,6 +127,7 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-done-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); color: var(--ec-done); }
 .ec-done-mark svg { width: 30px; height: 30px; }
 .ec-done h2 { margin: 14px 0 0; font-size: var(--ec-size-title); font-weight: 600; text-wrap: balance; }
+.ec-done-score { margin: 0; font-variant-numeric: tabular-nums; }
 .ec-done-sub { margin: 0; color: var(--ec-muted); font-variant-numeric: tabular-nums; }
 .ec-app .ec-start { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 50px; margin-top: 22px; padding: 0 20px; border: 1px solid var(--ec-ink); border-radius: 16px; background: var(--ec-ink); color: var(--ec-page); font-size: var(--ec-size-button); font-weight: 600; letter-spacing: .04em; }
 .ec-app .ec-start:active { opacity: .86; }

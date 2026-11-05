@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { ESSENCE_ROOT, PLUGIN_DATA, hashBytes, lastVersions, openBackup, readBuild } from '../src/core/backup/index.ts';
 import type { BackupManifest } from '../src/core/backup/index.ts';
+import { EXAM_FOLDER, isExamPath } from '../src/core/catalog/index.ts';
 import { formatTime, isLogPath } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
 import { compareVersions, LIMITS } from './compare-versions.ts';
-import { examReminder, SCOPE_FOLDER } from './exam-reminder.ts';
+import { examReminder } from './exam-reminder.ts';
 import { git, gitEnv } from './git.ts';
 import type { Reminder } from './exam-reminder.ts';
 import { installVault, isTestVault, localFolder, releaseProblems } from './install.ts';
@@ -60,10 +61,10 @@ const npmCheck = async (root: string): Promise<void> => {
   }
 };
 
-/** 生效中的考試範圍的提醒；列不出或讀不到就是 unreadable，不當成沒有考試。 */
+/** 生效中的考試範圍的提醒；列不出或讀不到就是 unreadable，不當成沒有考試。讀內容之前就篩掉小考檔（D-189），讀不到的小考檔也不算。 */
 async function reminder(vault: string, now: number, offset: number): Promise<Reminder> {
   let paths: string[];
-  try { paths = (await listTree(vault, SCOPE_FOLDER)).filter(path => path.endsWith('.md')); } catch (error) {
+  try { paths = (await listTree(vault, EXAM_FOLDER)).filter(isExamPath); } catch (error) {
     return { kind: 'unreadable', needsOk: true, message: '列不出考試範圍的資料夾（' + (error as Error).message + '），不當成沒有考試；這一版可以考後再裝，由家長決定' };
   }
   const scopes = await Promise.all(paths.map(async path => ({ path, text: await readFile(join(vault, path), 'utf8').catch(() => null) })));

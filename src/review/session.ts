@@ -3,7 +3,7 @@ import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Pick, Rating } from '../core/study/index.ts';
 import type { State, StudyPick } from '../state/index.ts';
 import { crumb } from './crumb.ts';
-import { doneView, todayStats, type DoneView } from './done.ts';
+import { doneView, firstTry, todayStats, type DoneView } from './done.ts';
 import { englishParts, fillBlank } from './english.ts';
 import { closest, copying, spelling, type Spelling } from './spelling.ts';
 
@@ -280,7 +280,9 @@ export function createSession(options: SessionOptions): Session {
     if (!loaded) return { kind: 'loading', top: header };
     const card = cardView();
     if (card) return { kind: 'card', top: header, card };
-    return { kind: 'done', top: header, done: doneView(pick, state.progress(), todayStats(state.history(), state.today())) };
+    // 只有單元與單篇的全部卡（D-189 第 2 點）；done 照作答的順序，回看改評分時裡面的 t 已經換成新的那一筆。
+    const tried = 'since' in pick && !('targets' in pick) ? firstTry(state.history().reviews, pick.since, done.map(each => ({ t: each.t, lt: each.card.lt }))) : null;
+    return { kind: 'done', top: header, done: doneView(pick, state.progress(), todayStats(state.history(), state.today()), tried) };
   }
   function view(): View {
     cached ??= compute();

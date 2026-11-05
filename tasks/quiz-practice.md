@@ -1,6 +1,6 @@
 # 小考前的密集複習：練習任務（D-189，給 Claude，本機執行）
 
-狀態：使用者 2026-11-05 同意（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；程式與 Windows 實機做完（分支 `claude/quiz-practice`，見〈結果〉）；[Codex L2](quiz-practice-review.md) 第二輪：四項修正通過，R5 的舊技術債使用者選另開任務、不擋合併；最後的 commit（`3ab6f9f`）的完整檢查與 Windows 實機通過，待使用者同意合併；iPhone 還沒測
+狀態：已合併（2026-11-05，使用者同意；[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；程式與 Windows 實機做完，見〈結果〉；[Codex L2](quiz-practice-review.md) 第二輪四項修正通過，R5 的舊技術債使用者選另開任務；iPhone 與 §1 的發布驗收還沒做
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（設計已在 D-189 與[討論稿](<../Claude Codex Discussion/2026-11-04-quiz-review.md>)兩輪做完）。動到選卡順序、讀考試範圍的檔、寫回使用者的筆記與紀錄，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。這份任務不改任何檔案格式（`set: status` 已在 [syntax §5](../docs/syntax.md#5-複習紀錄)），不用格式查核。
 
@@ -112,7 +112,7 @@ D-183 第 6 點、D-189 第 3 點。分開驗收：§2～§4 可以先過，這�
 
 ## 結果
 
-分支 `claude/quiz-practice`，程式到 `78a84c4`，併 `main` 到 `3ab6f9f`（2026-11-05）；還沒合併。[L2](quiz-practice-review.md) 第二輪四項修正通過；R5（紀錄只缺換行的舊技術債）[使用者選另開任務](<../Claude Codex Discussion/2026-11-05-quiz-practice-review.md#claude-回應第二輪2026-11-05>)，不擋合併。
+分支 `claude/quiz-practice`，程式到 `78a84c4`，併 `main` 到 `3ab6f9f`，使用者同意後合併進 `main`（2026-11-05）。[L2](quiz-practice-review.md) 第二輪四項修正通過；R5（紀錄只缺換行的舊技術債）[使用者選另開任務](<../Claude Codex Discussion/2026-11-05-quiz-practice-review.md#claude-回應第二輪2026-11-05>)，不擋合併。
 
 **最後的 commit（`3ab6f9f`）**：pre-commit 的 `npm run check` 通過。Windows 實機：Obsidian 1.15.0、建置 `0.3.0+3ab6f9f`、開發命令 `quiz-practice`；結果檔 `Essence W6/結果/quiz-practice Windows-c50c 2026-11-05 173408.json`，截圖在 `Essence W6/結果/練習 2026-11-05 173348/`（測試 vault）。檢查沒有 false，結果和下面 `7bf6313` 那一次相同：同一個字的兩張都隔 5 個、`這輪第一次就答對 11／12`、暫停後單元的全部卡只剩 12、紀錄多 `暫停`、`啟用` 兩行、編輯器有沒存的字時跳提示、磁碟不動。L2 第一輪修正動到的完成畫面數字、暫停的核對與寫紀錄，這次都在 Obsidian 裡跑過。之後只有文件的 commit。
 
@@ -151,4 +151,4 @@ D-183 第 6 點、D-189 第 3 點。分開驗收：§2～§4 可以先過，這�
 
 **實機留下的**：作答與 `set: status` 留在測試 vault 的紀錄檔（ID 每次都是新的，不影響別的卡組）。第二次試跑時 iCloud 正在同步的檔刪不掉，已經加上重試；刪掉的資料夾 iCloud 會放回空的，收尾時手動拿掉了。
 
-**還沒做**：iPhone 實機（寫進 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」）；合併。
+**還沒做**：iPhone 實機（寫進 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」）；§1 的發布驗收（升版時確認裝出去的建置與執行的升版工具都含這一節）。

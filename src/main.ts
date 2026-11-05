@@ -9,6 +9,7 @@ import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
 import { wireDeckActions } from './obsidian/deck-actions.ts';
+import { changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
@@ -203,6 +204,7 @@ export default class EssenceCardsPlugin extends Plugin {
       reminders: Platform.isDesktop,
       covered: () => this.review !== null,
       notify: message => { new Notice(message); },
+      setDeckStatus: Platform.isDesktopApp ? (path, value) => this.state ? changeDeckStatus(this.app, this.state, path, value, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
       onError: error => { this.fail('ui', error); },
       onClose: () => { this.entry = null; },
     });

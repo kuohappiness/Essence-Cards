@@ -8,7 +8,7 @@ import type { ScopeFile } from './scope.ts';
 // 範圍與目錄（D-110、D-142 原則 1、2、5、6、8）：把 deck 認定的單元參照對到單元、算每個目標屬於哪些單元、單元與學期的排序。
 // 輸入是卡組與每個目標的記憶狀態，不 import study 的程式；deck、study 不 import 這裡。
 
-export { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, notEnded, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeUnitKeys, scopeWritable, unitInScope } from './scope.ts';
+export { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, notEnded, parseExamFile, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeUnitKeys, scopeWritable, unitInScope } from './scope.ts';
 export type { ScopeChange, ScopeFile, ScopePeriod, ScopeUnit } from './scope.ts';
 export { scopeAfter, scopeCheck, scopeCountdown, scopeDates, scopeHasSubject, scopeLabels, scopeNotes, scopeRows, scopeStartDate, targetsInScope } from './scope-view.ts';
 export type { ScopeCheck, ScopeRow, ScopeRowTerm } from './scope-view.ts';

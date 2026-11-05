@@ -1,8 +1,8 @@
 import { entryCheck, entryUnread, type EntryDevHost } from './dev-entry.ts';
 import { examDev } from './dev-exam.ts';
+import { practiceDev } from './dev-practice.ts';
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
-import { encodeEntry, logPath, parseLine } from '../core/study/index.ts';
 import type { NewEntry } from '../core/study/index.ts';
 import { compareAssigned, compareLists, type ListItem, type Mismatch } from '../dev/compare.ts';
 import { runFilesContract } from '../dev/files-contract.ts';
@@ -86,6 +86,8 @@ const commands: Record<string, DevCommand> = {
   'entry-unread': { name: 'Essence 開發：讀不到的提醒（URI 帶 file、do）', run: (host, _ids, params) => entryUnread(hostFor(host), params.file, params.do, `${W6_ROOT}/結果`), desktop: true, root: W6_ROOT },
   // tasks/exam-scope.md §10：設定、倒數、目錄標籤、外部修改、§8、結束；獨占鎖分段跑（URI 帶 do，見 dev-exam.ts）。
   exam: { name: 'Essence 開發：考試範圍（截圖）', run: (host, _ids, params) => examDev(hostFor(host), params.do, `${W6_ROOT}/結果/考試 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  // 小考前的密集複習（tasks/quiz-practice.md §6）：目錄的單篇入口、練一輪、完成畫面、暫停與恢復、小考檔。
+  'quiz-practice': { name: 'Essence 開發：小考前的密集複習（截圖）', run: host => practiceDev(hostFor(host), `${W6_ROOT}/結果/練習 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
   'ui-phone': { name: 'Essence 開發：畫面與鍵盤（手機寬度）', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 手機寬度 ${stampOf(new Date())}`, true), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
@@ -228,15 +230,12 @@ async function answer(host: Host): Promise<unknown> {
   };
   const todayBefore = snapshot();
   const before = { reviews: state.history().reviews.length, progress: state.progress() };
-  // 寫一筆、等寫完，回傳 encodeEntry 的結果與它的檔案（和 state 寫檔的路徑相同）。
+  // 寫一筆、等寫完，回傳排進寫入的那一行與它的檔案。
   async function write(entry: NewEntry) {
-    const t = state.answer(entry);
-    if (t === null) throw Error('這個學習目標需要新版才讀得懂，不能寫：' + JSON.stringify(entry));
-    const line = encodeEntry(t, entry);
-    const stamp = parseLine(line);
-    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
+    const queued = state.answerLine(entry);
+    if (queued === null) throw Error('這個學習目標需要新版才讀得懂，不能寫：' + JSON.stringify(entry));
     await state.flush();
-    return { t, line, path: logPath(host.device, stamp.at, stamp.offset) };
+    return queued;
   }
   const good = await write({ lt: target.id, r: 'good', v: target.prompts[0].fingerprint });
   const afterGood = { reviews: state.history().reviews.length, progress: state.progress() };

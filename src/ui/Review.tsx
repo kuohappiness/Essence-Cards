@@ -390,6 +390,7 @@ function Done({ done, session, close }: { done: DoneView; session: Session; clos
   return <div className="ec-done">
     <div className="ec-done-mark"><Icon type="check" /></div>
     <h2>{done.title}</h2>
+    {done.score && <p className="ec-done-score">{done.score}</p>}
     <p className="ec-done-sub">{done.detail}</p>
     {primary?.pick && <button type="button" className="ec-start" onClick={() => { session.continueWith(primary.pick ?? { more: true }); }}>{primary.label}</button>}
     {!primary && <span className="ec-done-hint" onClick={close} />}

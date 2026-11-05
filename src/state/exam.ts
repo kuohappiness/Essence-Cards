@@ -1,5 +1,5 @@
 import type { Files } from '../core/files.ts';
-import { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, parseScope, scopeFileName } from '../core/catalog/index.ts';
+import { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, parseExamFile, parseScope, scopeFileName } from '../core/catalog/index.ts';
 import type { ScopeChange, ScopeFile, ScopeUnit } from '../core/catalog/index.ts';
 import { newId } from '../core/deck/index.ts';
 import type { ExamLog } from '../core/study/index.ts';
@@ -114,8 +114,11 @@ export function createExamFiles(options: ExamFilesOptions) {
       let changed = false;
       for (const [path, text] of texts) {
         first?.delete(path);
-        if (text === null) changed = known.delete(path) || changed;
-        else if (known.get(path)?.text !== text) { known.set(path, { text, file: parseScope(text) }); changed = true; }
+        if (known.get(path)?.text === text) continue;
+        // 沒有這份，或是搬出 小考/ 的小考檔（D-189）：都當成沒有。
+        const file = text === null ? null : parseExamFile(text);
+        if (text === null || file === null) changed = known.delete(path) || changed;
+        else { known.set(path, { text, file }); changed = true; }
       }
       if (changed) revision++;
       return () => { if (checkSettled() || changed) changedSoon(); };
@@ -246,6 +249,8 @@ export function createExamFiles(options: ExamFilesOptions) {
           if (reads.waiting(path)) throw new ScopeBlocked({ kind: 'blocked', reason: 'unread' });
           const stale = admit();
           if (stale) throw new ScopeBlocked(stale);
+          // 同一個路徑換成小考檔，state 還沒讀到（D-189）：段考不讀，也不寫。
+          if (parseExamFile(latest) === null) throw new ScopeBlocked({ kind: 'blocked', reason: 'changed' });
           const done = editScope(latest, { ...change, id: freshId() }, units);
           if (done.kind === 'blocked') throw new ScopeBlocked(done);
           const was = parseScope(latest);
