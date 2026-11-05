@@ -409,6 +409,20 @@ void test('YAML 未知狀態提示位於狀態行', () => {
   assert.equal(parsed.props.status, 'active'); assert.equal(parsed.problems[0].line, 2); assert.equal(parsed.problems[0].targetLine, null);
 });
 
+// 比較點選（tasks/question-type-seam.md §3）的寫法也受下面往返與冪等的保護；預期值在 tests/pick-deck.test.ts。
+void test('比較卡的卡組登錄進共用的範例', () => {
+  const decks = [
+    '### 相似字\n- 寨（寨、塞、寒、賽） 相似字\n    - 盜匪躲在山＿＿裡。 :: 寨\n    - 這座古老的＿＿子建在山頂上。 :: 寨\n    - 記憶錨點：下面是**木**，木頭圍成的防守地：山寨、寨子\n- 塞（寨、塞、寒、賽） 相似字\n    - 下班時間，高速公路大＿＿車。 :: 塞\n    - 水管＿＿住了。 :: 塞\n',
+    '- 寨 ^abc222（寨、塞） 比較\n    - 山＿＿ :: 寨\n',
+    '---\n科目: 國語\n---\n- light（輕的）（light、lit） 比較\n    - The bag is ＿＿. :: light\n',
+    '- 寨（寨、塞） 比較\r\n    - 下班時間大＿＿車。 :: 塞\r\n',
+    '- 寨（寨、塞） 山＿＿ :: 寨\n',
+    '- borrow（borrow、lend）　中翻英\n    - 借入＿＿ :: borrow\n',
+  ];
+  for (const text of decks) assert.ok(parseDeck(text).targets.length);
+  assert.equal(assignIds(decks[0], { taken: new Set() }).assigned.length, 2);
+});
+
 // 需要版本（syntax.md §0-1、§2-1，D-149 第 3 點）：parseDeck 只照實回報標記，讀不讀得懂由知道這台版本的一方判斷。
 // need：沒寫是 null；值是字串時是那個字串（格式由讀取端檢查）；值不是字串、或屬性區讀不出來而原文含「需要版本」時是 false。
 void test('§2-1 需要版本：照實回報字串；沒寫是 null；寫了但不是字串是 false（有標記但壞掉）', () => {

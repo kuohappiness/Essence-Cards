@@ -4,7 +4,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { splitOutsideLinks, splitUnit } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { typedAnswer } from './question-types.ts';
+import { readPick, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
 
 const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
@@ -129,7 +129,8 @@ export function parseDeck(text: string): Deck {
         if (distinct.length === 1) { id = distinct[0]; idProblem = 'misplaced-id'; } else { id = null; idProblem = 'ambiguous-id'; idCandidates = distinct; }
       }
     }
-    const directionMatch = / (英翻中|中翻英)$/.exec(name);
+    // 方向前面的空白半形全形都算，pairKey 不留尾端空白（tasks/question-type-seam.md §3 第 2 點）。
+    const directionMatch = /[ 　]+(英翻中|中翻英)$/.exec(name);
     const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
     const target: Target = { id, name, line: root.line, implicit, section: root.section,
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
@@ -241,6 +242,12 @@ export function parseDeck(text: string): Deck {
       // 一般筆記不是目標，不回報它的欄位提示。
       for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
       continue;
+    }
+    const pick = readPick(target);
+    if (pick.group) target.group = pick.group;
+    for (const { line, level, code, message } of pick.problems) {
+      problems.push({ line, targetLine: root.line, level, code, message });
+      if (level === 'error') target.ok = false;
     }
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');

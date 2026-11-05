@@ -30,7 +30,7 @@ export function stripId(text: string): { text: string; id: string | null } {
   return match ? { text: head.slice(0, match.index) + (newline < 0 ? '' : text.slice(newline)), id: match[1] } : { text, id: null };
 }
 /** 相同長度的遮罩，保留 cloze 在原文裡的 UTF-16 位置。 */
-function maskInline(text: string): string {
+export function maskInline(text: string): string {
   const markers = /`+|\${1,2}/g;
   let masked = '', cursor = 0;
   for (let match = markers.exec(text); match; match = markers.exec(text)) {
