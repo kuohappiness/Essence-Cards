@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { assignIds, parseDeck } from '../src/core/deck/index.ts';
 import type { ProblemCode } from '../src/core/deck/index.ts';
 
-// 比較點選的卡組寫法（tasks/question-type-seam.md §3）。預期值照任務說明的表，不用同樣的算法再算一次。
+// 點選填空的卡組寫法（tasks/question-type-seam.md §3）。預期值照任務說明的表，不用同樣的算法再算一次。
 
 const S = '盜匪躲在山＿＿裡。';
 /** 一個明確目標，題目都是比較句，答案是 answer。 */
