@@ -64,6 +64,16 @@ void test('v0.3.0 讀新版寫回的比較卡組：不出題、blocked 有它、
   assert.deepEqual(old, { today: ['bbb222'], decks: [OTHER], blocked: { decks: [P], targets: [], all: false }, fill: false, save: { kind: 'blocked', reason: 'needs-update' }, text: written });
 });
 
+void test('v0.3.0 讀屬性區開頭有打字雜訊、寫回標記的卡組：一樣擋住（L2 的 R1）', async t => {
+  const memory = createMemoryFiles({ [P]: ` ---\n科目: 國語\n---\n${CARD}` });
+  const writer = createState({ files: memory.files, device: 'Windows-2c9e', build: `${PICK_NEEDS}+1a2b3c4`, delay: 1, fillIds: true, random: () => 0 });
+  t.after(() => writer.close());
+  await writer.ready();
+  assert.equal(await writer.fillIds(P), true);
+  const old = await oldVersion(t, { [P]: memory.texts.get(P) as string, [OTHER]: PLAIN }, OTHER);
+  assert.deepEqual([old.today, old.decks, old.blocked.decks], [['bbb222'], [OTHER], [P]]);
+});
+
 void test('v0.3.0 讀沒有標記、目標沒有 ID 的比較卡組：也不出題（ID 和標記是同一次寫入）', async t => {
   const old = await oldVersion(t, { [P]: CARD, [OTHER]: PLAIN }, OTHER);
   assert.deepEqual(old.today, ['bbb222']);

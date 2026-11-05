@@ -1,4 +1,4 @@
-// 寫入端標記的 20 種寫法（tasks/question-type-seam.md §3〈怎麼寫〉）：原文與預期的結果，null 是加不上、文字不動。
+// 寫入端標記的寫法（tasks/question-type-seam.md §3〈怎麼寫〉的 20 種，加上解析認得的打字雜訊，L2 的 R1）：原文與預期的結果，null 是加不上、文字不動。
 // tests/mark-need.test.ts 逐字比輸出，tests/deck.test.ts 登錄進往返與冪等。
 export const NEED = '0.4.0';
 export const BODY = '- 寨（寨、塞） 相似字 ^abc222\n    - 山＿＿ :: 寨\n';
@@ -25,5 +25,11 @@ export const NEED_FORMS: Record<string, [string, string | null]> = {
   YAML寫壞: [`---\n科目: [\n---\n${BODY}`, null],
   最上層是清單: [`---\n- 甲\n---\n${BODY}`, null],
   沒有結束: [`---\n科目: 國語\n${BODY}`, null],
+  開頭前面有空白: [` ---\n科目: 國語\n---\n${BODY}`, ` ---\n科目: 國語\n需要版本: 0.4.0\n---\n${BODY}`],
+  開頭前面有Tab: [`\t---\n科目: 國語\n---\n${BODY}`, `\t---\n科目: 國語\n需要版本: 0.4.0\n---\n${BODY}`],
+  開頭前面有全形空白: [`　---\n科目: 國語\n---\n${BODY}`, `　---\n科目: 國語\n需要版本: 0.4.0\n---\n${BODY}`],
+  分隔線後面有全形空白: [`---　\n科目: 國語\n---　\n${BODY}`, `---　\n科目: 國語\n需要版本: 0.4.0\n---　\n${BODY}`],
+  'BOM、空白、CRLF': [`${BOM} ---\r\n科目: 國語\r\n---\r\n${BODY}`, `${BOM} ---\r\n科目: 國語\r\n需要版本: 0.4.0\r\n---\r\n${BODY}`],
+  開頭前面有空白又有舊值: [` ---\n需要版本: 0.2.0\n---\n${BODY}`, ` ---\n需要版本: 0.4.0\n---\n${BODY}`],
   重複的鍵: [`---\n需要版本: 0.2.0\n"需要版本": 0.3.0\n---\n${BODY}`, null],
 };

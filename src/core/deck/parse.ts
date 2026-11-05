@@ -34,22 +34,32 @@ function unescapeYaml(text: string): string {
  */
 const mentionsNeed = (raw: string): boolean => raw.includes('需要版本') || unescapeYaml(raw).includes('需要版本');
 
+/**
+ * 屬性區在哪幾行，讀、標記、狀態都看這裡（L2 的 R1：判斷不同時，寫的一方會在屬性區上面再建一個）：
+ * 第一行去掉 BOM 與前後空白是 `---`；Obsidian 只認 `---` 當結尾，YAML 的 `...` 不算（W5 對照，2026-10-25）。
+ * 沒有屬性區是 null，有開頭沒結束是 'unclosed'。
+ */
+export function frontmatterLines(lines: readonly Line[]): { close: number } | 'unclosed' | null {
+  if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return null;
+  const close = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw));
+  return close < 0 ? 'unclosed' : { close };
+}
+
 export function readProperties(lines: Line[]): { props: DeckProps; start: number; problems: Problem[] } {
   const props = defaultProps();
   const problems: Problem[] = [];
-  if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return { props, start: 0, problems };
-  // Obsidian 只認 `---` 當結尾；YAML 的 `...` 不算（W5 對照，2026-10-25）。
-  const end = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw));
+  const bounds = frontmatterLines(lines);
+  if (bounds === null) return { props, start: 0, problems };
   const hint = (line: number, message: string): void => { problems.push({ line, level: 'hint', code: 'unknown-property-value', message, targetLine: null }); };
   // 沒有結束的屬性區，Obsidian 當成一般文字，底下的清單照樣顯示（W5 對照）。
-  if (end < 0) {
+  if (bounds === 'unclosed') {
     hint(0, '屬性區塊沒有結束，Obsidian 把它當成一般文字；先使用預設值');
     // 沒有結束就看到檔尾（syntax.md §2-1）。
     if (mentionsNeed(lines.slice(1).map(line => line.raw).join('\n'))) props.need = false;
     return { props, start: 0, problems };
   }
-  const start = end + 1;
-  const raw = lines.slice(1, end).map(line => line.raw).join('\n');
+  const start = bounds.close + 1;
+  const raw = lines.slice(1, bounds.close).map(line => line.raw).join('\n');
   try {
     const doc = parseDocument(raw);
     if (doc.errors.length) throw Error('無法解析屬性');

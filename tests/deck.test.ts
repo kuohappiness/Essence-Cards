@@ -1038,8 +1038,8 @@ void test('setDeckStatus：屬性區讀不懂、改了讀不回來的都不寫�
   for (const text of broken) assert.equal(setDeckStatus(text, '暫停'), null, text);
 });
 
-void test('標記的 20 種寫法（寫之前、寫之後）都受下面往返與冪等的保護（§3）', () => {
-  assert.equal(Object.keys(NEED_FORMS).length, 20);
+void test('標記的每一種寫法（寫之前、寫之後）都受下面往返與冪等的保護（§3）', () => {
+  assert.equal(Object.keys(NEED_FORMS).length, 26);
   for (const [text, want] of Object.values(NEED_FORMS)) {
     parseDeck(text);
     if (want !== null) parseDeck(want);
@@ -1065,6 +1065,8 @@ after(() => {
       assert.equal(markNeed(marked, '99.0.0'), marked, context + '：標記第二次改字');
       assert.equal(parse(marked).props.need, '99.0.0', context + '：讀不到標記');
       assert.deepEqual(fingerprints(marked), fingerprints(text), context + '：標記改了題目');
+      const meaning = (source: string) => ({ ...parse(source).props, need: null, issues: null });
+      assert.deepEqual(meaning(marked), meaning(text), context + '：標記改了別的屬性');
     }
     // 新配的 ID 彼此不重複、也不和原本的重複；原本就重複的不動（D-157）。
     const known = new Set(before.targets.flatMap(t => t.id ?? []));

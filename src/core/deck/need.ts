@@ -1,5 +1,6 @@
 import { isMap, isScalar, parseDocument } from 'yaml';
-import { parseDeck } from './parse.ts';
+import { linesOf } from './markdown.ts';
+import { frontmatterLines, parseDeck } from './parse.ts';
 import type { Deck } from './types.ts';
 
 // 卡組的 `需要版本`（tasks/question-type-seam.md §3、D-191）：第一個會寫它的功能是點選填空。讀的一方在 parse.ts 與 core/version。
@@ -10,12 +11,12 @@ interface Frontmatter { start: number; close: number; body: string }
 
 /** 屬性區的位置：沒有屬性區是 null，有開頭沒結束是 'unclosed'（Obsidian 當成一般文字，不知道該加在哪裡）。 */
 function frontmatter(text: string): Frontmatter | 'unclosed' | null {
-  const bom = text.startsWith('﻿') ? 1 : 0;
-  const first = /^---[ \t]*\r?\n/.exec(text.slice(bom));
-  if (!first) return null;
-  const start = bom + first[0].length;
-  const fence = /^---[ \t]*(\r?\n|$)/m.exec(text.slice(start));
-  return fence ? { start, close: start + fence.index, body: text.slice(start, start + fence.index) } : 'unclosed';
+  const lines = linesOf(text);
+  const bounds = frontmatterLines(lines);
+  if (bounds === null || bounds === 'unclosed') return bounds;
+  const offset = (line: number): number => lines.slice(0, line).reduce((sum, each) => sum + each.raw.length + each.eol.length, 0);
+  const start = offset(1), close = offset(bounds.close);
+  return { start, close, body: text.slice(start, close) };
 }
 
 /** 屬性區的值；YAML 寫壞、最上層不是對照表是 null。 */
@@ -30,7 +31,8 @@ function values(raw: string): Record<string, unknown> | null {
 }
 
 const others = (props: Record<string, unknown>): string => JSON.stringify(Object.entries(props).filter(([key]) => key !== KEY));
-const shape = (deck: Deck): string => JSON.stringify(deck.targets.map(t => [t.id, t.name, t.prompts.map(p => p.fingerprint)]));
+/** 除了標記之外，這篇讀起來是什麼：屬性（解析看到的）與每個目標的 ID、名稱、指紋。 */
+const meaning = (deck: Deck): string => JSON.stringify([{ ...deck.props, need: null, issues: null }, deck.targets.map(t => [t.id, t.name, t.prompts.map(p => p.fingerprint)])]);
 
 /**
  * 把 `需要版本` 設成 need：**先試再驗，不重新序列化**。沒有屬性區就建一個；YAML 解析得到這個鍵時只換它的值（用 YAML 給的位置，
@@ -63,5 +65,5 @@ export function markNeed(text: string, need: string): string | null {
   const read = after === null || after === 'unclosed' ? null : values(after.body);
   if (!read || read[KEY] !== need || others(read) !== others(before)) return null;
   const deck = parseDeck(next);
-  return deck.props.need === need && shape(deck) === shape(parseDeck(text)) ? next : null;
+  return deck.props.need === need && meaning(deck) === meaning(parseDeck(text)) ? next : null;
 }

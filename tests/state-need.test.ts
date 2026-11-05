@@ -146,6 +146,20 @@ void test('同名目標與前方有隱式題：當成新的挑到的 ID 和不�
   assert.equal(await run({}), MARK + plain);
 });
 
+void test('屬性區開頭有打字雜訊：標記加在裡面，科目、暫停、不認得的鍵都還在（L2 的 R1）', async t => {
+  for (const first of [' ---', '\t---', '　---']) {
+    const head = `${first}\n科目: 國語\n狀態: 暫停\n自訂: keep-me\n`;
+    const h = await setup(t, { [P]: `${head}---\n${WITH_ID}` });
+    assert.deepEqual(h.state.today().share, [], first);
+    assert.equal(await h.state.fillIds(P), true, first);
+    assert.equal(h.read(), `${head}需要版本: ${PICK_NEEDS}\n---\n${WITH_ID}`, first);
+    const { subject, status, need } = h.state.decks()[0].deck.props;
+    assert.deepEqual([subject, status, need], ['國語', 'paused', PICK_NEEDS], first);
+    assert.deepEqual(h.state.today().share, [], '暫停的還是暫停');
+    assert.equal(h.state.deckStatus(P).mark, undefined, first);
+  }
+});
+
 void test('markNeed 回 null：這篇一字不改，新目標沒有 ID，deckStatus 是 refused，重建 state 之後還是', async t => {
   const text = FLOW + FRESH + PLAIN;
   const h = await setup(t, { [P]: text });

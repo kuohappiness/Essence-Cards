@@ -1,6 +1,6 @@
 import { isAlias, isMap, isNode, isScalar, parseDocument } from 'yaml';
 import { linesOf } from './markdown.ts';
-import { parseDeck } from './parse.ts';
+import { frontmatterLines, parseDeck } from './parse.ts';
 
 /** 改完讀回來要是這個狀態。 */
 const READ_AS = { 暫停: 'paused', 啟用: 'active' } as const;
@@ -40,12 +40,13 @@ export function setDeckStatus(text: string, value: keyof typeof READ_AS): string
   const lines = linesOf(text);
   const eol = lines.find(line => line.eol)?.eol ?? '\n';
   let result: string;
-  if (lines[0]?.raw.trim() !== '---') {
+  const bounds = frontmatterLines(lines);
+  if (bounds === null) {
     const bom = text.startsWith('\uFEFF') ? '\uFEFF' : '';
     result = bom + ['---', `狀態: ${value}`, '---', ''].join(eol) + text.slice(bom.length);
   } else {
-    const close = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw));
-    if (close < 0) return null;
+    if (bounds === 'unclosed') return null;
+    const { close } = bounds;
     const whole = (from: number, to: number): string => lines.slice(from, to).map(line => line.raw + line.eol).join('');
     const head = editHead(whole(1, close), value, eol);
     if (head === null) return null;
