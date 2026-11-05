@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
-import { clearTrial, makeTrial, newTrial, noteFolder, noteScope } from '../src/obsidian/dev-exam-files.ts';
+import { clearTrial, makeTrial, newTrial, noteFolder, noteScope, provenScopePath, scopeFiles } from '../src/obsidian/dev-exam-files.ts';
 
 // 開發命令只清有建立證據的檔（Codex L2 的 R1）：共用的測試 vault 裡別人的檔，拒跑、建到一半失敗、清理時都不能少。
 
@@ -132,4 +132,14 @@ void test('流程改過的檔：記號還在就是同一份，照刪；讀不到
   d.refuse.add('T/乙.md');
   assert.deepEqual(await clearTrial(d.app, trial, 0), ['T/乙.md', 'T']);
   assert.deepEqual([...d.files.keys()], ['T/乙.md']);
+});
+
+void test('開發命令認範圍檔的兩處和外掛相同：考試範圍/小考/ 與屬性有小考日期的不算；讀不到的當成範圍檔（D-189）', async () => {
+  const folder = 'Essence Cards/考試範圍/';
+  const d = disk({ [folder + 'a.md']: '', [folder + '舊的/b.md']: '', [folder + '小考備份/c.md']: '', [folder + '小考/d.md']: '', [folder + '小考/2026/e.md']: '', [folder + '附件.png']: '', 'T/甲.md': '', [folder + '搬出來的小考.md']: '---\n小考日期: 2026-11-05\n---\n', [folder + '讀不到.md']: '' });
+  d.refuse.add(folder + '讀不到.md');
+  assert.deepEqual((await scopeFiles(d.app)).map(file => file.path), [folder + 'a.md', folder + '舊的/b.md', folder + '小考備份/c.md', folder + '讀不到.md']);
+  const trial = { files: [{ path: 'T/甲.md', mark: MARK }, { path: folder + '小考/d.md', mark: MARK }, { path: folder + 'a.md', mark: MARK }], folders: [] };
+  assert.equal(provenScopePath(trial), folder + 'a.md');
+  assert.equal(provenScopePath({ files: [{ path: folder + '小考/d.md', mark: MARK }], folders: [] }), undefined);
 });

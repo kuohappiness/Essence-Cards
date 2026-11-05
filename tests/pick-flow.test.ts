@@ -116,6 +116,24 @@ void test('全對：到結果階段，能按記住了、太簡單；0.3 秒內�
   assert.deepEqual(Object.keys(lines[1]).filter(key => key === 'retry'), []);
 });
 
+void test('全部卡的「這輪第一次就答對」（D-189）：比較卡一張寫好幾行也算得出來，一個字一個分母；回看改評分照新的那幾行', async t => {
+  const h = await setup(t);
+  const s = await h.open({ deck: DECK, since: h.clock.now });
+  fill(h, s, (answer, index) => index === 0 ? WRONG(answer, keysOf(s)) : answer);
+  check(h, s);
+  tap(h, s, answers(s)[0]);
+  h.clock.now += RATE_DELAY;
+  assert.equal(s.commit(), true);
+  // 剛才再選才對的那個字（near）這一輪再出一次，答對才算完成，第一次就答對不算它。
+  while (s.view().kind === 'card') {
+    rights(h, s);
+    h.clock.now += RATE_DELAY;
+    assert.equal(s.rate('good'), true);
+  }
+  const done = s.view();
+  assert.equal(done.kind === 'done' ? done.done.score : null, '這輪第一次就答對 3／4');
+});
+
 void test('全對按太簡單：每一行（含 also）都是 easy', async t => {
   const h = await setup(t);
   const s = await h.open({ subject: '國語' });

@@ -2,7 +2,7 @@ import { MarkdownView, type App } from 'obsidian';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { Files } from '../core/files.ts';
-import { createLogWriter, encodeEntry, logPath } from '../core/study/index.ts';
+import { createLogWriter, logPath } from '../core/study/index.ts';
 import type { LogWriter, NewEntry } from '../core/study/index.ts';
 import { scopedFiles } from '../dev/wrap-files.ts';
 import { createState, type State } from '../state/index.ts';
@@ -114,7 +114,7 @@ export async function cloudWrite(app: App, params: Params): Promise<unknown> {
     const n = current.lines.length + 1;
     // 中英混合、有 emoji：比對位元組時能看出編碼或截斷。
     const entry: NewEntry = { lt: 'k3m9x2', r: 'good', v: `第${n}行 line ${n} 🙂` };
-    current.lines.push(encodeEntry(current.writer.write(entry), entry));
+    current.lines.push(current.writer.write(entry).line);
   };
   if (step === 'seed') { add(); add(); }
   else if (step === 'append') add();

@@ -1,8 +1,9 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeEntry } from '../src/core/study/index.ts';
+import { encodeEntry, mergeHistory } from '../src/core/study/index.ts';
 import type { Rating } from '../src/core/study/index.ts';
+import { firstTry } from '../src/review/done.ts';
 import { createSession, RATE_DELAY } from '../src/review/index.ts';
 import type { Session, View } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
@@ -303,4 +304,345 @@ void test('§9 記憶顏色：灰未複習、橙到期或剛答錯、綠還沒�
   assert.equal(after.low, 'good');
   assert.equal(after.high.shared, 'good');
   assert.ok(!(h.texts.get(OWN) ?? '').includes('"lt":"low"'));
+});
+
+// ── 英文的兩個方向隔開（D-189 第 1 點、tasks/quiz-practice.md §2）──
+
+/** n 個字的兩個方向，都是新卡：筆記裡同一個字的兩張相鄰，英翻中 e1、e2…，中翻英 z1、z2…。 */
+const words = (n: number): string => Array.from({ length: n }, (_, i) => {
+  const at = String(i + 1);
+  return `- w${at} 中翻英 ^z${at}\n    - 字 ${at} :: w${at}\n- w${at} 英翻中 ^e${at}\n    - w${at} :: 字 ${at}\n`;
+}).join('');
+const ids = (letter: string, from: number, to: number): string[] => Array.from({ length: to - from + 1 }, (_, i) => letter + String(from + i));
+/** 直接答（打字卡的步驟在 review-session 測過）：每張都走 practiceNext，一張 1 秒。回傳出卡順序與每張是不是提早出的。 */
+function drill(h: Harness, pick: StudyPick, rating: (lt: string, order: readonly string[]) => Rating = () => 'good', limit = Infinity): { order: string[]; early: string[] } {
+  const order: string[] = [], early: string[] = [];
+  while (order.length < limit) {
+    const next = h.state.next(pick);
+    if (next.kind !== 'card') { assert.equal(next.kind, 'done'); break; }
+    if (next.card.early) early.push(next.card.lt);
+    h.state.answer({ lt: next.card.lt, r: rating(next.card.lt, order), v: '12345678' });
+    order.push(next.card.lt);
+    h.clock.now += 1000;
+  }
+  return { order, early };
+}
+/** 這一輪裡 a 的最後一次和 b 的下一次之間，答過幾個不同的其他目標。 */
+const between = (order: readonly string[], a: string, b: string): number => {
+  const from = order.lastIndexOf(a);
+  const to = order.indexOf(b, from);
+  assert.ok(from >= 0 && to > from, `${a} 要在 ${b} 前面：${order.join(' ')}`);
+  return new Set(order.slice(from + 1, to).filter(lt => lt !== a && lt !== b)).size;
+};
+
+void test('§2 40 個字、兩個方向都是新卡：同一個字的兩張之間至少隔 10 個不同的目標，連最後幾個字也是', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(40) });
+  const { order, early } = drill(h, h.round());
+  assert.equal(order.length, 80);
+  assert.equal(new Set(order).size, 80, '每張出一次');
+  assert.deepEqual(early, []);
+  for (const at of ids('', 1, 40)) assert.ok(between(order, 'e' + at, 'z' + at) >= 10, `第 ${at} 個字：${order.join(' ')}`);
+});
+
+void test('§2 英翻中答錯、1 分鐘後到期：到期時對方還不夠隔，先出別張；夠了才出', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(13) });
+  const round = h.round();
+  const first = drill(h, round, lt => lt === 'e1' ? 'miss' : 'good', 14).order;
+  assert.deepEqual(first, [...ids('e', 1, 13), 'z1'], '答錯的還沒到期；z1 和 e1 隔了 12 個');
+  h.clock.now += 120_000;
+  const rest = drill(h, round).order;
+  assert.deepEqual(rest, [...ids('z', 2, 11), 'e1', 'z12', 'z13'], 'e1 到期了，但 z1 之後要再答過 10 個不同的目標');
+  assert.equal(between([...first, ...rest], 'z1', 'e1'), 10);
+});
+
+void test('§2 只有 3 個字（6 張）：照隔最多的先穿插，不會有一張等著不出；全部答對就結束', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(3) });
+  const { order, early } = drill(h, h.round());
+  assert.deepEqual(order, ['e1', 'e2', 'e3', 'z1', 'z2', 'z3']);
+  assert.deepEqual(early, []);
+});
+
+void test('§2 只有一個字的兩個方向：直接出，不卡住', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) });
+  const { order, early } = drill(h, h.round());
+  assert.deepEqual(order, ['e1', 'z1']);
+  assert.deepEqual(early, [], '另一張是新卡，不是提早出的重學');
+});
+
+void test('§2 到期的都不夠隔、也沒有新卡：在到期的裡挑隔最多的，不讓學生等', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(2) });
+  const round = h.round();
+  const first = drill(h, round, lt => lt.startsWith('e') ? 'miss' : 'good', 4).order;
+  assert.deepEqual(first, ['e1', 'e2', 'z1', 'z2'], '新卡也不夠隔：z1 隔 1 個，z2 隔 0 個');
+  h.clock.now += 120_000;
+  const rest = drill(h, round);
+  assert.deepEqual(rest.order, ['e1', 'e2'], 'z1 之後答過 z2，z2 之後沒有');
+  assert.deepEqual(rest.early, []);
+});
+
+void test('§2 不為了湊間隔改出還沒到時間的：新卡不夠隔也照出；沒有別張才提早出', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('w') + words(1) });
+  const { order, early } = drill(h, h.round(), (lt, seen) => lt === 'w' && !seen.includes('w') ? 'miss' : 'good');
+  assert.deepEqual(order, ['w', 'e1', 'z1', 'w']);
+  assert.deepEqual(early, ['w'], 'early 只表示提早出的重學');
+});
+
+void test('§2 中途關掉再開（新的 since）：從頭算，不沿用上一輪的間隔', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets('a') });
+  assert.deepEqual(drill(h, h.round()).order, ['e1', 'a', 'z1'], '只剩同一對時直接出');
+  h.clock.now += 1000;
+  assert.deepEqual(drill(h, h.round()).order, ['e1', 'a', 'z1'], 'e1 排最前面：z1 剛答過，但那是上一輪');
+});
+
+void test('§2 別的篇裡同樣的字不算一對', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + '- w1 英翻中 ^e1\n    - w1 :: 字\n', [OTHER]: HEAD('2-1') + '- w1 中翻英 ^z1\n    - 字 :: w1\n' + targets('a') });
+  assert.deepEqual(drill(h, h.round()).order, ['e1', 'z1', 'a'], '筆記順序，沒有隔開');
+});
+
+/** 不經過選卡，直接照這個順序答。 */
+const answerAll = (h: Harness, lts: readonly string[], r: Rating = 'good'): void => {
+  for (const lt of lts) { h.state.answer({ lt, r, v: '12345678' }); h.clock.now += 1000; }
+};
+const nextOf = (h: Harness, pick: StudyPick): string | false => { const next = h.state.next(pick); return next.kind === 'card' && next.card.lt; };
+
+void test('§2 錯題補強的作答不算間隔', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(2) + targets(...ids('m', 1, 10)) });
+  const round = h.round();
+  answerAll(h, ['e2', ...ids('m', 1, 10), 'e1']);
+  for (const lt of ids('x', 1, 10)) { h.state.answer({ lt, r: 'miss', src: 'mistake' }); h.clock.now += 1000; }
+  assert.equal(nextOf(h, round), 'z2', 'z1 排在前面，但 e1 之後只有錯題補強，還不夠隔');
+});
+
+void test('§2 「其他」不含自己：對方之後自己又答過一次不算一個', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets(...ids('m', 1, 8), 'w') });
+  const round = h.round();
+  answerAll(h, ['z1', ...ids('m', 1, 8)]);
+  answerAll(h, ['e1', 'w'], 'miss');
+  h.clock.now += 120_000;
+  assert.equal(nextOf(h, round), 'w', 'e1 比較早到期，但 z1 之後只答過 9 個其他的目標');
+  answerAll(h, ['w']);
+  assert.equal(nextOf(h, round), 'e1', '沒有別張了，不讓學生等');
+});
+
+void test('§2 到時間的先於新卡；一樣多就照原本的順序', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b', 'c') });
+  const round = h.round();
+  answerAll(h, ['c'], 'miss');
+  h.clock.now += 120_000;
+  assert.equal(nextOf(h, round), 'c', 'a、b 是新卡，排在前面也要等');
+});
+
+void test('§2 都不夠隔、隔得一樣多：照原本的順序', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + '- w 英翻中 ^e\n    - w :: 字\n- w 中翻英 ^z1\n    - 字一 :: w\n- w 中翻英 ^z2\n    - 字二 :: w\n' });
+  assert.deepEqual(drill(h, h.round()).order, ['e', 'z1', 'z2']);
+});
+
+void test('§2 回看取消一筆：取消的那一筆不算作答，間隔跟著變', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets(...ids('m', 1, 11)) });
+  const round = h.round();
+  const answered = drill(h, round, () => 'good', 11).order;
+  assert.deepEqual(answered, ['e1', ...ids('m', 1, 10)]);
+  const next = h.state.next(round);
+  assert.equal(next.kind === 'card' && next.card.lt, 'm11', '新卡裡對方還沒答過的先');
+  const t1 = h.state.answer({ lt: 'm11', r: 'good', v: '12345678' });
+  h.clock.now += 1000;
+  const last = h.state.next(round);
+  assert.equal(last.kind === 'card' && last.card.lt, 'z1');
+  assert.ok(t1);
+  h.state.answer({ undo: t1 });
+  const again = h.state.next(round);
+  assert.equal(again.kind === 'card' && again.card.lt, 'm11');
+});
+
+// ── 完成畫面的「這輪第一次就答對」（D-189 第 2 點、tasks/quiz-practice.md §3）──
+
+const doneOf = (view: View): Extract<View, { kind: 'done' }>['done'] => {
+  assert.equal(view.kind, 'done');
+  if (view.kind !== 'done') throw Error();
+  return view.done;
+};
+
+void test('§3 40 個目標裡 32 個第一次就記住、8 個先答錯後答對：32／40；原本那一行留著', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets(...ids('a', 1, 40)) });
+  const s = await h.open(h.round());
+  const missed = new Set(ids('a', 1, 8)), seen = new Set<string>();
+  while (s.view().kind === 'card') {
+    const lt = card(s.view());
+    h.rate(s, missed.has(lt) && !seen.has(lt) ? 'miss' : 'good');
+    seen.add(lt);
+  }
+  const done = doneOf(s.view());
+  assert.equal(done.score, '這輪第一次就答對 32／40');
+  assert.match(done.detail, /^今天複習了 48 張/);
+});
+
+void test('§3 太簡單也算；單篇的全部卡一樣；新卡照算', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round({ deck: DECK }));
+  h.rate(s, 'easy');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+});
+
+void test('§3 第一次答差一點、回看改成記住了：算第一次就答對', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'near');
+  s.back();
+  assert.ok(s.rate('good'));
+  s.toCurrent();
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+});
+
+for (const [changed, score] of [['near', '0／1'], ['miss', '0／1'], ['good', '1／1']] as const) void test(`§3 答錯重出之後才回看第一筆、改成 ${changed}：第一筆還是第一筆（${score}）`, async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a') });
+  const s = await h.open(h.round());
+  h.rate(s, 'miss');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 0／1');
+  s.back();
+  s.back();
+  if (changed !== 'miss') assert.ok(s.rate(changed));
+  else { assert.ok(s.rate('near')); assert.ok(s.rate('miss')); }
+  s.toCurrent();
+  while (s.view().kind === 'card') h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 ' + score);
+});
+
+void test('§3 重答的那一筆後來改評分：第一筆沒動，分數不變', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'miss');
+  h.rate(s, 'good');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+  s.back();
+  assert.ok(s.rate('easy'));
+  s.toCurrent();
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+});
+
+void test('§3 第一次記住了、回看改成沒印象，再答對：不算；英文的兩個方向各算一個', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + '- w 英翻中 ^e\n    - w :: 字\n- w 中翻英 ^z\n    - 字 :: word\n' });
+  const s = await h.open(h.round());
+  assert.equal(card(s.view()), 'e');
+  h.rate(s, 'good');
+  s.back();
+  assert.ok(s.rate('miss'));
+  s.toCurrent();
+  assert.equal(card(s.view()), 'z');
+  s.input('word');
+  s.submit();
+  h.rate(s, 'good');
+  assert.equal(card(s.view()), 'e');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+});
+
+void test('§3 打字卡第 1 步拼錯、第 2 步拼對：不算；第 1 步拼對算', async t => {
+  const typed = (at: string): string => `- w${at} 中翻英 ^z${at}\n    - 字 ${at} :: word${at}\n`;
+  const h = await setup(t, { [DECK]: HEAD('2-1') + typed('1') + typed('2') });
+  const s = await h.open(h.round());
+  assert.equal(card(s.view()), 'z1');
+  s.input('wrod');
+  s.submit();
+  s.input('word1');
+  s.submit();
+  h.rate(s, 'near');
+  assert.equal(card(s.view()), 'z2');
+  s.input('word2');
+  s.submit();
+  h.rate(s, 'good');
+  assert.equal(card(s.view()), 'z1', '答錯的提早出');
+  s.input('word1');
+  s.submit();
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+});
+
+void test('§3 打字卡要 typed 是 right：評分是記住了但第 1 步不是拼對的不算（畫面不會寫出這種紀錄，手改或舊紀錄才有）', () => {
+  const entry = (lt: string, typed?: 'right' | 'wrong' | 'skip'): string => encodeEntry('2026-10-24T19:00:00.000+08:00', { lt, r: 'good', v: '12345678', ...(typed ? { typed } : {}) });
+  const { reviews } = mergeHistory([{ path: OWN, text: [entry('a'), entry('b', 'right'), entry('c', 'wrong'), entry('d', 'skip')].join('\n') + '\n' }]);
+  assert.deepEqual(firstTry(reviews, START - 1000, reviews), { right: 2, total: 4 });
+});
+
+void test('§3 這一輪有一筆別台裝置的作答：不顯示；這一輪之前的、錯題補強的不影響', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b'), [PHONE]: line('2026-10-24T08:00:00.000', 'a', 'good') + '\n' });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  h.state.answer({ lt: 'x', r: 'miss', src: 'mistake' });
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+  const later = encodeEntry(new Date(h.clock.now - 500).toISOString().replace('Z', '+00:00'), { lt: 'z', r: 'good', v: '12345678' });
+  h.write(PHONE, line('2026-10-24T08:00:00.000', 'a', 'good') + '\n' + later + '\n');
+  await h.settle();
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+for (const [name, lt, r] of [['別的目標', 'b', 'miss'], ['同一個目標、別的評分', 'a', 'miss'], ['別的目標、一樣的評分', 'b', 'good']] as const) void test(`§3 別台裝置同一個毫秒的作答（${name}）：時間一樣也認得出不是這次寫的，不顯示`, async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／1');
+  h.write(PHONE, encodeEntry(s.history()[0].written[0].t, { lt, r, v: '12345678' }) + '\n');
+  await h.settle();
+  assert.equal(h.state.history().reviews.length, 2);
+  // 那個目標被算成答錯時會再出一次。
+  while (s.view().kind === 'card') h.rate(s, 'good');
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 這次寫的少了一筆（被別處取消）：算不準，不顯示；同一筆讀到兩次不算多一筆', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  h.rate(s, 'good');
+  const [first, second] = s.history();
+  h.write(PHONE, encodeEntry(first.written[0].t, { lt: 'a', r: 'good', v: first.card.prompt.fingerprint }) + '\n');
+  await h.settle();
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+  h.write(PHONE, encodeEntry(new Date(h.clock.now).toISOString().replace('Z', '+00:00'), { undo: second.written[0].t }) + '\n');
+  await h.settle();
+  assert.equal(h.state.history().reviews.length, 1);
+  // 被取消的那個目標算沒答過，再出一次。
+  assert.equal(card(s.view()), 'b');
+  h.rate(s, 'good');
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 筆數一樣也要逐筆對上：這次寫的一筆被取消、別台多一筆別的目標，不顯示', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  h.rate(s, 'good');
+  const later = new Date(h.clock.now).toISOString().replace('Z', '+00:00');
+  h.write(PHONE, encodeEntry(later, { undo: s.history()[1].written[0].t }) + '\n' + encodeEntry(later, { lt: 'x', r: 'good', v: '12345678' }) + '\n');
+  await h.settle();
+  assert.equal(card(s.view()), 'b');
+  h.rate(s, 'good');
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 筆數一樣也要逐筆對上：這次寫的被取消、別台答了同一個目標，時間對不上，不顯示', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  const later = new Date(h.clock.now).toISOString().replace('Z', '+00:00');
+  h.write(PHONE, encodeEntry(later, { undo: s.history()[0].written[0].t }) + '\n' + encodeEntry(later, { lt: 'a', r: 'good', v: '12345678' }) + '\n');
+  await h.settle();
+  assert.deepEqual(h.state.history().reviews.map(each => each.t), [later]);
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 當日卡、今天的份、再複習一些的完成畫面沒有這一行；這一輪沒有作答也沒有', async t => {
+  const decks = { [DECK]: HEAD('2-1') + targets('a'), [OTHER]: HEAD('2-2') + targets('b') };
+  const h = await setup(t, decks);
+  for (const pick of [{ unit: UNIT }, { deck: DECK }, { subject: '自然' }, { more: true as const }]) {
+    const s = await h.open(pick);
+    while (s.view().kind === 'card') h.rate(s, 'good');
+    assert.equal('score' in doneOf(s.view()), false, JSON.stringify(pick));
+  }
+  const empty = await h.open(h.round({ unit: '["國二上","自然","9-9"]' }));
+  assert.equal('score' in doneOf(empty.view()), false);
 });

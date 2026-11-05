@@ -1,6 +1,6 @@
 # 小考前的密集複習：練習任務（D-189，給 Claude，本機執行）
 
-狀態：使用者 2026-11-05 同意（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；程式與 Windows 實機做完（分支 `claude/quiz-practice`，見〈結果〉）；[Codex L2](quiz-practice-review.md) 第一輪的四項修好，待第二輪，還沒合併；iPhone 還沒測
+狀態：已合併（2026-11-05，使用者同意；[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；程式與 Windows 實機做完，見〈結果〉；[Codex L2](quiz-practice-review.md) 第二輪四項修正通過，R5 的舊技術債使用者選另開任務；iPhone 與 §1 的發布驗收還沒做
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（設計已在 D-189 與[討論稿](<../Claude Codex Discussion/2026-11-04-quiz-review.md>)兩輪做完）。動到選卡順序、讀考試範圍的檔、寫回使用者的筆記與紀錄，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。這份任務不改任何檔案格式（`set: status` 已在 [syntax §5](../docs/syntax.md#5-複習紀錄)），不用格式查核。
 
@@ -112,7 +112,9 @@ D-183 第 6 點、D-189 第 3 點。分開驗收：§2～§4 可以先過，這�
 
 ## 結果
 
-分支 `claude/quiz-practice`，程式到 `78a84c4`（2026-11-05）；還沒合併。[L2 請求](quiz-practice-review.md)第一輪的四項修好，第二輪待 Codex。
+分支 `claude/quiz-practice`，程式到 `78a84c4`，併 `main` 到 `3ab6f9f`，使用者同意後合併進 `main`（2026-11-05）。[L2](quiz-practice-review.md) 第二輪四項修正通過；R5（紀錄只缺換行的舊技術債）[使用者選另開任務](<../Claude Codex Discussion/2026-11-05-quiz-practice-review.md#claude-回應第二輪2026-11-05>)，不擋合併。
+
+**最後的 commit（`3ab6f9f`）**：pre-commit 的 `npm run check` 通過。Windows 實機：Obsidian 1.15.0、建置 `0.3.0+3ab6f9f`、開發命令 `quiz-practice`；結果檔 `Essence W6/結果/quiz-practice Windows-c50c 2026-11-05 173408.json`，截圖在 `Essence W6/結果/練習 2026-11-05 173348/`（測試 vault）。檢查沒有 false，結果和下面 `7bf6313` 那一次相同：同一個字的兩張都隔 5 個、`這輪第一次就答對 11／12`、暫停後單元的全部卡只剩 12、紀錄多 `暫停`、`啟用` 兩行、編輯器有沒存的字時跳提示、磁碟不動。L2 第一輪修正動到的完成畫面數字、暫停的核對與寫紀錄，這次都在 Obsidian 裡跑過。之後只有文件的 commit。
 
 **L2 第一輪之後**（[報告與回應](<../Claude Codex Discussion/2026-11-05-quiz-practice-review.md>)）：`78a84c4` 1485 項全部通過（188 秒）；型別、ESLint、knip、文件檢查通過；Codex 的三個重現都回到預期；新增的判斷條件改壞 25 項全部抓到。Windows 實機還停在 `7bf6313`，見下面的〈§6〉與〈還沒做〉。
 
@@ -149,4 +151,4 @@ D-183 第 6 點、D-189 第 3 點。分開驗收：§2～§4 可以先過，這�
 
 **實機留下的**：作答與 `set: status` 留在測試 vault 的紀錄檔（ID 每次都是新的，不影響別的卡組）。第二次試跑時 iCloud 正在同步的檔刪不掉，已經加上重試；刪掉的資料夾 iCloud 會放回空的，收尾時手動拿掉了。
 
-**還沒做**：iPhone 實機（寫進 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」）；Codex L2 第二輪；Windows 實機在最後要合併的 commit 重跑（L2 第一輪的修正動到完成畫面的數字、暫停的核對與寫紀錄，都還沒在 Obsidian 裡跑過；這次沒跑是因為另一個對話正在開發，測試 vault 各分支共用）；合併。
+**還沒做**：iPhone 實機（寫進 [backlog](../docs/backlog.md#v1-需要做的任務)「下一次 iPhone 實機測試」）；§1 的發布驗收（升版時確認裝出去的建置與執行的升版工具都含這一節）。

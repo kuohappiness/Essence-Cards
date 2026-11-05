@@ -1,7 +1,7 @@
 import type { Files } from '../files.ts';
-import { encodeEntry } from './entries.ts';
+import { encodeNew } from './entries.ts';
 import { formatTime } from './time.ts';
-import type { LogWriter, NewEntry } from './types.ts';
+import type { LogWriter, NewEntry, QueuedLine } from './types.ts';
 
 export const LOG_FOLDER = 'Essence Cards/紀錄';
 
@@ -57,18 +57,18 @@ export function createLogWriter(files: Files, options: {
   }
 
   return {
-    write(entry: NewEntry): string {
+    write(entry: NewEntry): QueuedLine {
       const at = Math.max(Math.trunc(now()), last + 1);
       const offset = offsetOf(at);
       const t = formatTime(at, offset);
-      const line = encodeEntry(t, entry);
+      const line = encodeNew(t, entry);
       const path = logPath(options.device, at, offset);
       last = at;
       pending.push({ path, line });
       writeVersion++;
       // 失敗已經交給 onError（呼叫端記下），那一行留在佇列，下一次 write／flush 重試。
       void start().catch(() => {});
-      return t;
+      return { t, line, path };
     },
     async flush(): Promise<void> {
       if (running) {

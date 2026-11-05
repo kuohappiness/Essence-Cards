@@ -584,3 +584,19 @@ void test('§8 R1 選單開著時：上方列、卡片、底部按鈕都是 iner
   plain.ui.click(flag(plain.ui)[0]);
   assert.equal(plain.ui.find('ec-actions')[0].props.inert, true);
 });
+
+void test('§3 全部卡的完成畫面：標題下面是「這輪第一次就答對」，再來是原本那一行；當日卡沒有（D-189）', async t => {
+  const round = { deck: NATURAL, since: START };
+  const o = await open(t, round);
+  revealAndRate(o, '3');
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-done-score').map(o.ui.text), ['這輪第一次就答對 2／2']);
+  assert.match(o.ui.find('ec-done-sub').map(o.ui.text)[0], /^今天複習了 2 張/);
+  const daily = await open(t, { deck: NATURAL });
+  revealAndRate(daily, '3');
+  revealAndRate(daily, '3');
+  await daily.ui.settle();
+  assert.equal(daily.session.view().kind, 'done');
+  assert.deepEqual(daily.ui.find('ec-done-score'), []);
+});

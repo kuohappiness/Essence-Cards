@@ -173,8 +173,8 @@ export function createWrites(options: WritesOptions) {
     if (life.closed) return output === null ? fallback : { kind: 'saved' };
     return new Promise(settle => { checks.set(path, { output, prepared, fallback, settle }); });
   }
-  /** 離開筆記（沒開著的檔）：在 modify 的回呼裡對最新的原文準備（W5 §8-2 第 4 點）。 */
-  async function fillFile(path: string): Promise<WriteResult> {
+  /** 沒開著的檔（離開筆記補 ID、目錄的暫停／恢復）：在 modify 的回呼裡對最新的原文準備（W5 §8-2 第 4 點）；plan 回傳 null 是沒有要改的。 */
+  async function fillFile(path: string, plan: (text: string) => Prepared | null = text => prepare(path, text)): Promise<WriteResult> {
     const rounds = { count: 0 };
     for (;;) {
       const stop = await admit(path, rounds);
@@ -193,10 +193,10 @@ export function createWrites(options: WritesOptions) {
           gate = writable(path, text);
           if (gate) return text;
           if (waiting(path)) { again = true; return text; }
-          prepared = prepare(path, text);
+          prepared = plan(text);
           // 準備時監聽者可能 close()（見 edit）：不寫。
           if (life.closed) throw new Stopped();
-          return prepared.text;
+          return prepared ? prepared.text : text;
         }));
         outcome = gate ?? (again ? null : verify(path, original, prepared, { kind: 'unchanged' }));
       } catch (error) {

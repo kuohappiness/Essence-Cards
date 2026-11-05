@@ -149,3 +149,43 @@ void test('更新命令（測試 vault 演練）：--check 備份、比較、記
   assert.deepEqual(missing.baseline, { missing: '這個 vault 還沒裝過外掛' });
   assert.match(await readFile(missing.report, 'utf8'), /基線缺失：這個 vault 還沒裝過外掛/);
 });
+
+void test('更新命令：考試範圍/小考/ 留給小考（D-189）：裡面壞掉的、就要考的檔都不提醒，不要求 --exam-ok；放在外面才算', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const main = `/*! Essence Cards build=0.0.1+${short} dev=false */`;
+  const broken = '---\n考試開始: [\n---\n';
+  const vault = await makeVault(t, {
+    'Essence Cards/A.md': goal('aaa111'),
+    'Essence Cards/考試範圍/小考/壞.md': broken,
+    'Essence Cards/考試範圍/小考/2026/就要考.md': scope('2026-10-29', '2026-10-30'),
+    '.obsidian/plugins/essence-cards/main.js': main,
+  });
+  await registerTestVault(vault, local);
+  const options: UpdateOptions = { vault, local, to: await tempFolder(t, 'essence-backup-'), now: () => at('2026-10-29', '20:00'), offset: () => 480, seams: {
+    check: async () => {},
+    compare: async ({ backup, old, new: next }) => {
+      const report = join(backup, '..', '報告.md');
+      await writeFile(report, '');
+      return { report, zip: '', old: { commit: old, build: '', result: { ok: false, reason: '' } }, new: { commit: next, build: '', result: { ok: false, reason: '' } }, comparable: true, differences: [] };
+    },
+    install: ({ vault: target }) => Promise.resolve({ kind: 'test' as const, version: '0.0.1', build: '0.0.1+' + short, vault: target }),
+  } };
+  const checked = await checkUpdate(options);
+  assert.deepEqual(checked.exam, { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.deepEqual(await installUpdate(options), { build: '0.0.1+' + short, kind: 'test' }, '不用 --exam-ok');
+
+  await put(vault, 'Essence Cards/考試範圍/壞.md', broken);
+  const outside = await checkUpdate(options);
+  assert.deepEqual([outside.exam.kind, outside.exam.needsOk], ['unreadable', true], '同一份在外面就要問');
+});
+
+void test('考前提醒：搬出 小考/ 的小考檔（小考日期合法、空的、寫錯）不出「日期未定」；對照的段考檔照常', () => {
+  const now = at('2026-10-21', '20:00');
+  const quiz = (date: string): string => `---\n識別碼: q4m8t2\n小考日期: ${date}\n---\n- 國二上 英文 L3\n`;
+  const quizzes = { a: quiz('2026-11-05'), b: quiz(''), c: quiz('明天') };
+  assert.deepEqual(remind(quizzes, now), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.deepEqual(remind({ ...quizzes, d: scope() }, now), { kind: 'undated', needsOk: false, message: '考試範圍「d」還沒填考試日期，日期未定' });
+  assert.equal(remind({ ...quizzes, d: scope('2026-10-25') }, now).kind, 'soon');
+  // 屬性區壞到讀不出鍵：不猜，照段考的處理。
+  assert.deepEqual(remind({ a: '---\n小考日期: [\n---\n' }, now).kind, 'unreadable');
+});
