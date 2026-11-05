@@ -45,7 +45,7 @@ const blocked = (reason: QuizBlocked['reason']): QuizBlocked => ({ kind: 'blocke
 const failure = (error: unknown): QuizResult => error instanceof QuizStop ? error.result : { kind: 'failed', error };
 
 export function createQuizFiles(options: QuizFilesOptions) {
-  const { files, context } = options;
+  const { context } = options;
   const folder = createFolderFiles<QuizFile>({ ...options, folder: QUIZ_FOLDER, isFile: isQuizFile, parse: parseQuiz });
   const freshId = (): string => newId(options.random ?? Math.random, new Set(folder.entries().flatMap(each => each.file.id ?? [])), { letterFirst: true });
   const rows = (): QuizRow[] => quizRows(folder.entries(), context());
@@ -84,10 +84,9 @@ export function createQuizFiles(options: QuizFilesOptions) {
     try {
       for (let suffix = 1; ; suffix++) {
         const path = (suffix === 1 ? name : `${name} ${String(suffix)}`) + '.md';
-        // modify 的回呼分不出「不存在」與「零位元組的檔」（兩種都交 ''）：先讀。回呼裡再比一次，擋掉這中間才到的非空檔。
-        if (await folder.timed(files.read(path)) !== null) continue;
+        // 已經有這個檔（含零位元組的空檔）就換下一個後綴。在回呼裡判斷：讀與寫之間才出現的檔也算（L2 R2）。
         let taken = false;
-        await folder.modify(path, latest => { taken = latest !== ''; return taken ? latest : text; }, () => { /* 沒有紀錄行要補：之後重讀就看得到。 */ });
+        await folder.modify(path, (latest, exists) => { taken = exists; return exists ? latest : text; }, () => { /* 沒有紀錄行要補：之後重讀就看得到。 */ });
         if (taken) continue;
         folder.adopt(path, text);
         return { kind: 'done' };

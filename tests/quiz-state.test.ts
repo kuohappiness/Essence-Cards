@@ -140,13 +140,28 @@ void test('§1 零位元組的檔和不存在分得出來：Obsidian 的 modify 
   assert.deepEqual([...h.memory.texts.keys()].filter(path => path.startsWith(FOLDER)).sort(), [FOLDER + '2026-11-07 小考 2.md', FOLDER + '2026-11-07 小考.md']);
 });
 
+void test('L2 R2 寫之前才出現的空檔（別台裝置、別的編輯器）也不蓋掉，換下一個後綴', async t => {
+  const memory = createMemoryFiles({ ...DECKS });
+  const target = FOLDER + '2026-11-07 小考.md';
+  // 外掛決定寫哪裡之後、真的寫之前，那個路徑多了一個零位元組的檔（不送通知：state 還不知道）。
+  const files = { ...memory.files, modify(path: string, edit: (text: string, exists: boolean) => string) { if (path === target && !memory.texts.has(path)) memory.texts.set(path, ''); return memory.files.modify(path, edit); } };
+  const state = createState({ files, device: 'PC-test', delay: 1, fillIds: false, now: () => NOON, offset: () => 480, onError() {}, random: () => 0 });
+  t.after(() => state.close());
+  await state.ready();
+  assert.deepEqual(await state.setQuiz(L3, '2026-11-07', null), { kind: 'done' });
+  assert.equal(memory.texts.get(target), '', '空檔不動');
+  assert.match(memory.texts.get(FOLDER + '2026-11-07 小考 2.md') ?? '', /小考日期: 2026-11-07/);
+});
+
 void test('§1 撞名的檔讀不到（iCloud 佔位檔）：不知道是什麼，不蓋掉', async t => {
   const h = await make(t, {});
   h.memory.failing.add(FOLDER + '2026-11-07 小考.md');
   h.memory.texts.set(FOLDER + '2026-11-07 小考.md', '別人的');
+  // 建檔不先讀，在不在交給 modify 判斷（L2 R2）：記憶體的 modify 讀得到內容，所以換下一個後綴；真的 Obsidian 讀不到時 modify 失敗，一樣不蓋掉。
   const result = await h.state.setQuiz(L3, '2026-11-07', null);
-  assert.equal(result.kind, 'failed');
+  assert.equal(result.kind, 'done');
   assert.equal(h.memory.texts.get(FOLDER + '2026-11-07 小考.md'), '別人的');
+  assert.match(h.memory.texts.get(FOLDER + '2026-11-07 小考 2.md') ?? '', /小考日期: 2026-11-07/);
 });
 
 void test('§1 取消後再設：建新檔、新的識別碼；舊檔留著', async t => {
@@ -362,13 +377,19 @@ void test('§1 那一篇被暫停：入口那一列還在，全部卡是 0', asy
   assert.equal(row.count, 0);
 });
 
-void test('§1 設定時讀檔卡住：逾時回失敗，原因寫得出來，不寫檔', async t => {
-  const h = await make(t, {}, { writeTimeout: 20 });
-  const stuck = h.memory.holdRead(FOLDER + '2026-11-06 小考.md');
-  const result = await h.state.setQuiz(L3, '2026-11-06', null);
+void test('§1 設定時寫檔卡住：逾時回失敗，原因寫得出來，不寫檔', async t => {
+  const memory = createMemoryFiles({ ...DECKS });
+  let release = (): void => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  // 小考資料夾的寫入在進入回呼之前卡住（iCloud 的檔還在下載、磁碟忙）。
+  const files = { ...memory.files, modify: (path: string, edit: (text: string, exists: boolean) => string) => path.startsWith(FOLDER) ? gate.then(() => memory.files.modify(path, edit)) : memory.files.modify(path, edit) };
+  const state = createState({ files, device: 'PC-test', delay: 1, fillIds: false, writeTimeout: 20, now: () => NOON, offset: () => 480, onError() {}, random: () => 0 });
+  t.after(() => state.close());
+  await state.ready();
+  const result = await state.setQuiz(L3, '2026-11-06', null);
   assert.equal(result.kind, 'failed');
   assert.match(result.kind === 'failed' ? String(result.error) : '', /逾時/);
-  stuck.release(null);
+  release();
   await settled();
-  assert.equal(h.memory.texts.has(FOLDER + '2026-11-06 小考.md'), false);
+  assert.equal(memory.texts.has(FOLDER + '2026-11-06 小考.md'), false, '逾時之後才進入回呼的不寫');
 });

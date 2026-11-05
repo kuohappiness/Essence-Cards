@@ -77,8 +77,8 @@ export function createObsidianFiles(app: App): Files {
       return serial(path, async () => {
         const found = file(path);
         // vault.process 一次讀、改、寫（D-110）；edit 回傳原文時不寫入（契約 C6 在 Obsidian 驗）。
-        if (found) await vault.process(found, edit);
-        else await create(path, edit(''));
+        if (found) await vault.process(found, text => edit(text, true));
+        else await create(path, edit('', false));
       });
     },
     append(path, line) {

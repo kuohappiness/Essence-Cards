@@ -340,9 +340,9 @@ void test('等寫入逾時，之後才發現寫不進去：不記，範圍照舊
   let refuse = (): void => {};
   const files = {
     ...memory.files,
-    modify(path: string, edit: (text: string) => string) {
+    modify(path: string, edit: (text: string, exists: boolean) => string) {
       return new Promise<void>((_, reject) => {
-        edit(memory.texts.get(path) ?? '');
+        edit(memory.texts.get(path) ?? '', memory.texts.has(path));
         refuse = () => { reject(Error('寫不進去')); };
       });
     },

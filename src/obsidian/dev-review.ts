@@ -150,7 +150,7 @@ function blankHistory(files: Files): Files {
     modify: async (path, edit) => {
       if (!isLogPath(path)) return files.modify(path, edit);
       const before = logs.get(path) ?? '';
-      const after = edit(before);
+      const after = edit(before, logs.has(path));
       if (after !== before) logs.set(path, after);
     },
     append: async (path, line) => {

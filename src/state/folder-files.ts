@@ -151,13 +151,13 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
    * 一次寫一個路徑：讀取不跨過這次 I/O（reads 的 hold），寫完立刻重讀一次。回傳寫下去的文字。
    * 逾時取消不了底層（Codex L2 的 R5）：回呼還沒進入的，之後進入時丟錯，不會寫；已經進入的可能等一下才寫成，真的寫成了才交給 late，關閉之後不交。
    */
-  async function modify(path: string, edit: (text: string) => string, late: (text: string) => void): Promise<string> {
+  async function modify(path: string, edit: (text: string, exists: boolean) => string, late: (text: string) => void): Promise<string> {
     let written = '', entered = false, gaveUp = false;
     reads.hold(path);
-    const work = files.modify(path, text => {
+    const work = files.modify(path, (text, exists) => {
       if (gaveUp) throw Error('等這次寫入已經逾時，不寫了');
       entered = true;
-      written = edit(text);
+      written = edit(text, exists);
       return written;
     });
     try {
@@ -192,7 +192,6 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
     start,
     settle,
     drain,
-    timed,
     modify,
     adopt,
     closed: (): boolean => life.closed,
