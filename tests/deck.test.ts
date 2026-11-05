@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDeck as parse, assignIds as assign, setTargetId as setId, baseForm, blockIds } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
@@ -985,6 +985,13 @@ after(() => {
     assert.deepEqual(twice.assigned, [], context + '：第二次重新配 ID');
     assert.equal(after.targets.length, before.targets.length, context + '：目標數改變');
     assert.deepEqual(fingerprints(once.text), fingerprints(text), context + '：題目指紋多重集合改變');
+    // 標記（§3）：加得上就讀得到、第二次一字不改、題目不變；加不上是 null。
+    const marked = markNeed(text, '99.0.0');
+    if (marked !== null) {
+      assert.equal(markNeed(marked, '99.0.0'), marked, context + '：標記第二次改字');
+      assert.equal(parse(marked).props.need, '99.0.0', context + '：讀不到標記');
+      assert.deepEqual(fingerprints(marked), fingerprints(text), context + '：標記改了題目');
+    }
     // 新配的 ID 彼此不重複、也不和原本的重複；原本就重複的不動（D-157）。
     const known = new Set(before.targets.flatMap(t => t.id ?? []));
     const added = after.targets.map(t => t.id).filter(id => id !== null && !known.has(id));
