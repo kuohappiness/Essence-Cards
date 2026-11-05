@@ -139,6 +139,8 @@ export interface State {
    * 找不到那一筆的取消照舊寫，ID 重複時的取消也照寫（D-157）。卡組的狀態變更，那一篇需要新版時也不寫。
    */
   answer(entry: NewEntry): string | null;
+  /** answer 現在會不會寫這一行（回看改比較卡的評分時先問過每一行，tasks/question-type-seam.md §8）。 */
+  permits(entry: NewEntry): boolean;
   /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的、重複的（conflicts()）ID 都不能。 */
   canAnswer(lt: string): boolean;
   /**
@@ -654,6 +656,7 @@ export function createState(options: StateOptions): State {
       const { today, input: value } = fresh();
       return progress(today, value);
     },
+    permits,
     answer(entry) {
       if (!life.loaded) throw Error('state 還沒 ready');
       if (!permits(entry)) return null;

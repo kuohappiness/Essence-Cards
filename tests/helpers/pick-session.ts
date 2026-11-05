@@ -13,7 +13,7 @@ export const START = Date.parse('2026-10-24T19:00:00.000+08:00');
 export const DECK = 'Essence Cards/國語/相似字.md';
 export const PC = 'Essence Cards/紀錄/2026-10 PC-test.jsonl';
 export const PHONE = 'Essence Cards/紀錄/2026-10 iPhone-test.jsonl';
-const CHARS = `---
+export const CHARS = `---
 科目: 國語
 ---
 - 寨（寨、塞、寒、賽） 相似字 ^zhai00

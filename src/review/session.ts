@@ -274,11 +274,14 @@ export function createSession(options: SessionOptions): Session {
    * 在完成畫面時重新問 next，改成沒印象或差一點的那張回到目前時就出（Codex L2 F2）。
    */
   function change(entry: DoneCard, rating: Rating): boolean {
-    // 取消與新的評分一起寫或一起不寫：那張後來被停掉（需要新版）就不能改，先問；取消涵蓋同一個 t 的所有作答，別台裝置同一刻的
-    // 作答被停時取消會被拒（Codex L2 的 F1），這時新的評分也不寫。
+    // 取消與新的評分一起寫或一起不寫：那張後來被停掉（需要新版）就不能改，先問每一行；取消涵蓋同一個 t 的所有作答，別台裝置同一刻的
+    // 作答被停時取消會被拒（Codex L2 的 F1），這時新的評分也不寫。只動當時實際寫進去的行，沒寫進去的目標不補（§8）。
     if (entry.rating === rating || !entry.changeable.includes(rating) || !canAnswer(entry.card)) return false;
-    for (const { t } of entry.written) if (state.answer({ undo: t }) === null) return false;
-    entry.written = writeLines(entry.look.lines(rating));
+    const wrote = new Set(entry.written.map(each => each.lt));
+    const lines = entry.look.lines(rating).filter(line => wrote.has(line.lt));
+    if (!entry.written.every(each => state.permits({ undo: each.t })) || !lines.every(line => state.permits(line))) return false;
+    for (const { t } of entry.written) state.answer({ undo: t });
+    entry.written = writeLines(lines);
     entry.rating = rating;
     if (!current) load();
     notify();
