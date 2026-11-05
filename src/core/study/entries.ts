@@ -27,11 +27,8 @@ function changeProblem(entry: Extract<NewEntry, { set: string }>): string | null
       return typeof val === 'string' ? null : entry.set + ' 不是字串';
     case 'filter':
       return wordList(val) ? null : 'filter 不是字串清單';
-    case 'status': {
-      const onDeck = 'deck' in entry;
-      if (blank(onDeck ? entry.deck : entry.lt)) return '狀態的對象是空白';
-      return (onDeck ? ['草稿', '啟用', '暫停'] : ['啟用', '暫停']).includes(entry.val) ? null : '狀態的值認不得';
-    }
+    case 'status':
+      return ('deck' in entry ? ['草稿', '啟用', '暫停'] : ['啟用', '暫停']).includes(entry.val) ? null : '狀態的值認不得';
     case 'exam': {
       const log = val as Partial<ExamLog> | null;
       // id 可以是空的：手寫的範圍檔可能還沒有識別碼。
@@ -40,7 +37,7 @@ function changeProblem(entry: Extract<NewEntry, { set: string }>): string | null
   }
 }
 
-/** 新寫入的值不符合那一種的契約的原因；符合是 null。評分與指紋由編碼後的讀回檢查。 */
+/** 新寫入的值不符合那一種的契約的原因；符合是 null。評分、指紋與狀態的對象，parseLine 本來就看，由編碼後的讀回檢查。 */
 function entryProblem(entry: NewEntry): string | null {
   if ('undo' in entry) return blank(entry.undo) ? 'undo 是空白' : null;
   if ('set' in entry) return changeProblem(entry);
