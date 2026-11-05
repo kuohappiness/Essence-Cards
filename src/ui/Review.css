@@ -1,5 +1,7 @@
 /* 複習畫面（W6 §3）：版面、字級、間距照樣式稿 entry-and-reveal.html 與試作外掛的 Review.css；顏色與節奏用 tokens.css 的變數。 */
 .ec-fullscreen { position: fixed; inset: 0; z-index: 1000000; box-sizing: border-box; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); background: #FAFAF9; outline: none; }
+/* Obsidian 的通知（層級 60 上下）平常被全螢幕蓋住：按鈕被擋下時的提示要看得到。 */
+body:has(.ec-fullscreen) .notice-container { z-index: 1000001; }
 body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: var(--ec-size-base)/1.5 var(--ec-font-ui); -webkit-tap-highlight-color: transparent; outline: none; }
 .ec-app * { box-sizing: border-box; }
