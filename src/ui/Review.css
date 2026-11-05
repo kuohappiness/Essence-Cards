@@ -125,6 +125,7 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-done-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); color: var(--ec-done); }
 .ec-done-mark svg { width: 30px; height: 30px; }
 .ec-done h2 { margin: 14px 0 0; font-size: var(--ec-size-title); font-weight: 600; text-wrap: balance; }
+.ec-done-score { margin: 0; font-variant-numeric: tabular-nums; }
 .ec-done-sub { margin: 0; color: var(--ec-muted); font-variant-numeric: tabular-nums; }
 .ec-app .ec-start { display: inline-flex; align-items: center; justify-content: center; min-width: 200px; height: 50px; margin-top: 22px; padding: 0 20px; border: 1px solid var(--ec-ink); border-radius: 16px; background: var(--ec-ink); color: var(--ec-page); font-size: var(--ec-size-button); font-weight: 600; letter-spacing: .04em; }
 .ec-app .ec-start:active { opacity: .86; }

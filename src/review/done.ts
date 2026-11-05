@@ -1,10 +1,12 @@
 import { dayStart } from '../core/study/index.ts';
-import type { History, Pick, Progress, Today } from '../core/study/index.ts';
+import type { History, Pick, Progress, ReviewEntry, Today } from '../core/study/index.ts';
 import type { StudyPick } from '../state/index.ts';
 
 /** 完成畫面（W6 §2-6、D-070、D-120）。 */
 export interface DoneView {
   title: string;
+  /** 全部卡的「這輪第一次就答對」（D-189 第 2 點）；其他範圍與不顯示時沒有這一欄。 */
+  score?: string;
   detail: string;
   /** more：再複習一些（{ more: true }）；next：接著做那一科；close：結束複習。 */
   buttons: { kind: 'more' | 'next' | 'close'; label: string; pick?: Pick }[];
@@ -22,6 +24,22 @@ export function todayStats(history: History, today: Today): { count: number; min
   return { count: times.length, minutes: Math.round(total / 60_000) };
 }
 
+/**
+ * 這一輪第一次就答對幾個（D-189 第 2 點）：分母是 since 之後答過的目標（不含錯題補強），分子是其中第一筆作答就是記住了、太簡單，打字卡還要第 1 步拼對。
+ * 回看改評分會取消舊的那一筆，所以看到的就是改過的。own 是這次複習寫的那幾筆的 t：這一輪有別的作答（同步進來的）就算不準，回傳 null；分母是 0 也是 null。
+ */
+export function firstTry(reviews: readonly ReviewEntry[], since: number, own: ReadonlySet<string>): { right: number; total: number } | null {
+  const first = new Map<string, ReviewEntry>();
+  for (const entry of reviews) {
+    if (entry.at < since || entry.src === 'mistake') continue;
+    if (!own.has(entry.t)) return null;
+    if (!first.has(entry.lt)) first.set(entry.lt, entry);
+  }
+  if (!first.size) return null;
+  const right = [...first.values()].filter(({ r, typed }) => (r === 'good' || r === 'easy') && (typed === null || typed === 'right')).length;
+  return { right, total: first.size };
+}
+
 export const subjectName = (subject: string | null): string => subject ?? '其他';
 
 const statsText = ({ count, minutes }: { count: number; minutes: number }): string =>
@@ -34,10 +52,10 @@ function scopeTitle(pick: StudyPick): string | null {
   return 'targets' in pick ? '這一輪完成了！' : null;
 }
 
-export function doneView(pick: StudyPick, progress: Progress, stats: { count: number; minutes: number }): DoneView {
+export function doneView(pick: StudyPick, progress: Progress, stats: { count: number; minutes: number }, tried: { right: number; total: number } | null = null): DoneView {
   if ('more' in pick) return { title: '又多複習了一些', detail: statsText(stats), buttons: [{ kind: 'close', label: '結束複習' }] };
   const scoped = scopeTitle(pick);
-  if (scoped) return { title: scoped, detail: statsText(stats), buttons: [{ kind: 'close', label: '結束複習' }] };
+  if (scoped) return { title: scoped, ...(tried ? { score: `這輪第一次就答對 ${String(tried.right)}／${String(tried.total)}` } : {}), detail: statsText(stats), buttons: [{ kind: 'close', label: '結束複習' }] };
   const unfinished = progress.subjects.find(row => row.done < row.total);
   if (!unfinished) {
     return { title: '今天的份完成了！', detail: statsText(stats), buttons: [{ kind: 'more', label: '再複習一些', pick: { more: true } }, { kind: 'close', label: '結束複習' }] };

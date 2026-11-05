@@ -1,8 +1,9 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeEntry } from '../src/core/study/index.ts';
+import { encodeEntry, mergeHistory } from '../src/core/study/index.ts';
 import type { Rating } from '../src/core/study/index.ts';
+import { firstTry } from '../src/review/done.ts';
 import { createSession, RATE_DELAY } from '../src/review/index.ts';
 import type { Session, View } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
@@ -422,4 +423,114 @@ void test('§2 回看取消一筆：取消的那一筆不算作答，間隔跟�
   h.state.answer({ undo: t1 });
   const again = h.state.next(round);
   assert.equal(again.kind === 'card' && again.card.lt, 'm11');
+});
+
+// ── 完成畫面的「這輪第一次就答對」（D-189 第 2 點、tasks/quiz-practice.md §3）──
+
+const doneOf = (view: View): Extract<View, { kind: 'done' }>['done'] => {
+  assert.equal(view.kind, 'done');
+  if (view.kind !== 'done') throw Error();
+  return view.done;
+};
+
+void test('§3 40 個目標裡 32 個第一次就記住、8 個先答錯後答對：32／40；原本那一行留著', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets(...ids('a', 1, 40)) });
+  const s = await h.open(h.round());
+  const missed = new Set(ids('a', 1, 8)), seen = new Set<string>();
+  while (s.view().kind === 'card') {
+    const lt = card(s.view());
+    h.rate(s, missed.has(lt) && !seen.has(lt) ? 'miss' : 'good');
+    seen.add(lt);
+  }
+  const done = doneOf(s.view());
+  assert.equal(done.score, '這輪第一次就答對 32／40');
+  assert.match(done.detail, /^今天複習了 48 張/);
+});
+
+void test('§3 太簡單也算；單篇的全部卡一樣；新卡照算', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round({ deck: DECK }));
+  h.rate(s, 'easy');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+});
+
+void test('§3 第一次答差一點、回看改成記住了：算第一次就答對', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'near');
+  s.back();
+  assert.ok(s.rate('good'));
+  s.toCurrent();
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+});
+
+void test('§3 第一次記住了、回看改成沒印象，再答對：不算；英文的兩個方向各算一個', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + '- w 英翻中 ^e\n    - w :: 字\n- w 中翻英 ^z\n    - 字 :: word\n' });
+  const s = await h.open(h.round());
+  assert.equal(card(s.view()), 'e');
+  h.rate(s, 'good');
+  s.back();
+  assert.ok(s.rate('miss'));
+  s.toCurrent();
+  assert.equal(card(s.view()), 'z');
+  s.input('word');
+  s.submit();
+  h.rate(s, 'good');
+  assert.equal(card(s.view()), 'e');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+});
+
+void test('§3 打字卡第 1 步拼錯、第 2 步拼對：不算；第 1 步拼對算', async t => {
+  const typed = (at: string): string => `- w${at} 中翻英 ^z${at}\n    - 字 ${at} :: word${at}\n`;
+  const h = await setup(t, { [DECK]: HEAD('2-1') + typed('1') + typed('2') });
+  const s = await h.open(h.round());
+  assert.equal(card(s.view()), 'z1');
+  s.input('wrod');
+  s.submit();
+  s.input('word1');
+  s.submit();
+  h.rate(s, 'near');
+  assert.equal(card(s.view()), 'z2');
+  s.input('word2');
+  s.submit();
+  h.rate(s, 'good');
+  assert.equal(card(s.view()), 'z1', '答錯的提早出');
+  s.input('word1');
+  s.submit();
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+});
+
+void test('§3 打字卡要 typed 是 right：評分是記住了但第 1 步不是拼對的不算（畫面不會寫出這種紀錄，手改或舊紀錄才有）', () => {
+  const entry = (lt: string, typed?: 'right' | 'wrong' | 'skip'): string => encodeEntry('2026-10-24T19:00:00.000+08:00', { lt, r: 'good', v: '12345678', ...(typed ? { typed } : {}) });
+  const { reviews } = mergeHistory([{ path: OWN, text: [entry('a'), entry('b', 'right'), entry('c', 'wrong'), entry('d', 'skip')].join('\n') + '\n' }]);
+  assert.deepEqual(firstTry(reviews, START - 1000, new Set(reviews.map(each => each.t))), { right: 2, total: 4 });
+});
+
+void test('§3 這一輪有一筆別台裝置的作答：不顯示；這一輪之前的、錯題補強的不影響', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b'), [PHONE]: line('2026-10-24T08:00:00.000', 'a', 'good') + '\n' });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  h.state.answer({ lt: 'x', r: 'miss', src: 'mistake' });
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
+  const later = encodeEntry(new Date(h.clock.now - 500).toISOString().replace('Z', '+00:00'), { lt: 'z', r: 'good', v: '12345678' });
+  h.write(PHONE, line('2026-10-24T08:00:00.000', 'a', 'good') + '\n' + later + '\n');
+  await h.settle();
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 當日卡、今天的份、再複習一些的完成畫面沒有這一行；這一輪沒有作答也沒有', async t => {
+  const decks = { [DECK]: HEAD('2-1') + targets('a'), [OTHER]: HEAD('2-2') + targets('b') };
+  const h = await setup(t, decks);
+  for (const pick of [{ unit: UNIT }, { deck: DECK }, { subject: '自然' }, { more: true as const }]) {
+    const s = await h.open(pick);
+    while (s.view().kind === 'card') h.rate(s, 'good');
+    assert.equal('score' in doneOf(s.view()), false, JSON.stringify(pick));
+  }
+  const empty = await h.open(h.round({ unit: '["國二上","自然","9-9"]' }));
+  assert.equal('score' in doneOf(empty.view()), false);
 });
