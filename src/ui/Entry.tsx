@@ -219,8 +219,16 @@ function ExamSubject({ state, term, subject }: EntryProps & { term: string; subj
 const TAG = { draft: '草稿', paused: '暫停' } as const;
 const PROBLEM = { target: '學習目標寫法有問題', property: '屬性寫法有問題' } as const;
 
-function UnitRow({ unit, openUnits, toggle, start, openNote }: TreeProps & { unit: UnitView }): React.JSX.Element {
+/** 篇名：檔名；同一個單元裡有同名的，附資料夾名（D-189 第 3 點）。 */
+function deckLabel(deck: UnitView['decks'][number], decks: UnitView['decks']): string {
+  if (decks.filter(other => other.name === deck.name).length < 2) return deck.name;
+  return `${deck.name}（${deck.path.split('/').at(-2) ?? ''}）`;
+}
+
+function UnitRow({ unit, openUnits, toggle, start, openNote, state }: TreeProps & { unit: UnitView }): React.JSX.Element {
   const active = unit.status === 'active';
+  // 兩篇以上啟用才列出來（D-189 第 3 點）：只有一篇時，單元的全部卡就是那一篇。
+  const practiced = unit.decks.filter(deck => deck.status === 'active');
   // 全部是草稿或暫停：點了打開筆記（§3）；好幾篇時展開箭頭列出全部。
   const expandable = active || unit.decks.length > 1 || unit.problems.length > 0;
   const open = openUnits.has(unit.key) && expandable;
@@ -240,14 +248,21 @@ function UnitRow({ unit, openUnits, toggle, start, openNote }: TreeProps & { uni
       </span>}
     </div>
     {open && <div className="ec-tr-open">
-      {unit.problems.map(problem => <button key={problem.kind} type="button" className="ec-tr-problem" onClick={() => { openNote(problem.path, problem.line); }}>{problem.count} 個{PROBLEM[problem.kind]}</button>)}
+      {practiced.length > 1 && practiced.map(deck => {
+        const count = state()?.deckTargets(deck.path).length ?? 0;
+        return <div key={deck.path} className="ec-tr-pc">
+          <button type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span></button>
+          <button type="button" className="ec-u-btn" disabled={count === 0} onClick={() => { start({ deck: deck.path, since: Date.now() }); }}><Icon type="play" size={12} />全部卡 {count}</button>
+        </div>;
+      })}
+      {unit.problems.map(problem =><button key={problem.kind} type="button" className="ec-tr-problem" onClick={() => { openNote(problem.path, problem.line); }}>{problem.count} 個{PROBLEM[problem.kind]}</button>)}
       {unit.targets.length > 0 && <ul className="ec-tr-ts">
         {unit.targets.map(target => <li key={target.id} className="ec-tr-t">
           <i className="ec-tr-dot" data-m={target.color} />
           <span>{target.name}{target.from && <small className="ec-tr-from">來自{target.from}</small>}</span>
         </li>)}
       </ul>}
-      {rest.map(deck => <button key={deck.path} type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deck.name}</span>{deck.status !== 'active' && <span className="ec-tr-tag">{TAG[deck.status]}</span>}</button>)}
+      {rest.map(deck => <button key={deck.path} type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span>{deck.status !== 'active' &&<span className="ec-tr-tag">{TAG[deck.status]}</span>}</button>)}
     </div>}
   </>;
 }

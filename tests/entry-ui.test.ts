@@ -348,3 +348,54 @@ void test('§11 入口開著時讀到別台裝置的紀錄，數字更新；改�
   assert.deepEqual(s.all('.ec-sb .ec-en-n').map(each => each.textContent), [today.done + '/' + today.total]);
   assert.equal(today.done, 0, '昨天做的不算今天的');
 });
+
+// ── 目錄的單篇入口（D-189 第 3 點、tasks/quiz-practice.md §4）──
+
+const WORDS = 'Essence Cards/英文/L3 單字.md', REST = 'Essence Cards/英文/L3 其他.md';
+const L3 = { [WORDS]: head('國二上', '英文', 'L3') + targets('a', 'b', 'c'), [REST]: head('國二上', '英文', 'L3') + targets('d') };
+const rows = (s: Screen): (string | null)[] => s.all('.ec-tr-pc').map(each => each.textContent);
+
+void test('§4 單元有兩篇啟用：單元的全部卡底下每篇一列，數字和那篇筆記的全部卡相同；按下去只練那一篇，不跳提醒', async t => {
+  const s = await open(t, L3, { screen: 'catalog' });
+  assert.deepEqual(rows(s), [], '還沒展開');
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(s.all('.ec-tr-ub .ec-u-btn').map(each => each.textContent), ['當日卡 4', '全部卡 4'], '單元的按鈕不變');
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1', 'L3 單字全部卡 3']);
+  assert.equal(s.state.deckTargets(WORDS).length, 3);
+  assert.equal(s.all('.ec-tr-open')[0].firstElementChild?.className, 'ec-tr-pc', '緊接在單元的全部卡底下');
+  await s.click(s.button('全部卡 3'));
+  assert.equal(s.starts.length, 1, '直接開始，沒有多一步');
+  const pick = s.starts[0] as { deck: string; since: number };
+  assert.deepEqual(Object.keys(pick).sort(), ['deck', 'since']);
+  assert.equal(pick.deck, WORDS);
+  assert.equal(typeof pick.since, 'number');
+  assert.deepEqual(s.state.scope({ deck: WORDS, since: START }), { done: 0, total: 3 });
+  const next = s.state.next({ deck: WORDS, since: START });
+  assert.equal(next.kind === 'card' && next.card.deck, WORDS);
+  await s.click(s.all('.ec-tr-pc .ec-tr-deck')[0]);
+  assert.deepEqual(s.notes, [[REST, undefined]], '篇名點了打開那篇筆記');
+});
+
+void test('§4 只有一篇啟用：沒有這幾列，單元的全部卡就是那一篇；草稿與暫停的篇照舊是筆記連結', async t => {
+  const s = await open(t, { [WORDS]: L3[WORDS], [REST]: head('國二上', '英文', 'L3', '狀態: 暫停\n') + targets('d'), 'Essence Cards/英文/L3 草稿.md': head('國二上', '英文', 'L3', '狀態: 草稿\n') + targets('e') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(s.all('.ec-u-btn').map(each => each.textContent), ['當日卡 3', '全部卡 3']);
+  assert.deepEqual(rows(s), []);
+  assert.deepEqual(s.all('.ec-tr-deck').map(each => each.textContent), ['L3 其他暫停', 'L3 草稿草稿']);
+});
+
+void test('§4 兩篇啟用、一篇草稿：草稿不佔一列全部卡；沒有目標的篇 0 不能按', async t => {
+  const s = await open(t, { ...L3, 'Essence Cards/英文/L3 草稿.md': head('國二上', '英文', 'L3', '狀態: 草稿\n') + targets('e'), 'Essence Cards/英文/L3 空的.md': head('國二上', '英文', 'L3') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1', 'L3 單字全部卡 3', 'L3 空的全部卡 0']);
+  assert.equal(s.button('全部卡 0').disabled, true);
+  assert.equal(s.button('全部卡 1').disabled, false);
+  assert.deepEqual(s.all('.ec-tr-open > .ec-tr-deck').map(each => each.textContent), ['L3 草稿草稿']);
+});
+
+void test('§4 兩篇同名、不同資料夾：篇名附資料夾名；不同名的不附', async t => {
+  const deck = (id: string): string => head('國二上', '英文', 'L3') + targets(id);
+  const s = await open(t, { 'Essence Cards/甲/單字.md': deck('a'), 'Essence Cards/乙/單字.md': deck('b'), 'Essence Cards/丙/其他.md': deck('c') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(rows(s).map(each => each?.replace(/全部卡 \d+$/, '')).sort(), ['其他', '單字（乙）', '單字（甲）'].sort());
+});

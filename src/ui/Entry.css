@@ -90,6 +90,11 @@
 .ec-app .ec-u-btn:not(:disabled):active { background: color-mix(in srgb, var(--ec-press) 45%, transparent); }
 .ec-app .ec-u-btn:disabled { color: var(--ec-muted); font-weight: 500; opacity: .6; }
 .ec-tr-open { padding: 0 0 10px 24px; }
+/* 單篇一列（D-189 第 3 點）：篇名太長時截斷，按鈕不換行 */
+.ec-tr-pc { display: flex; align-items: center; gap: 8px; }
+.ec-app .ec-tr-pc .ec-tr-deck { flex: 1; width: auto; min-width: 0; }
+.ec-tr-pc .ec-tr-deck span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-app .ec-tr-pc .ec-u-btn { flex: none; }
 .ec-tr-ts { margin: 0; padding: 0; list-style: none; }
 .ec-tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
 .ec-tr-from { display: block; color: var(--ec-muted); font-size: var(--ec-size-meta); }
