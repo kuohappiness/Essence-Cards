@@ -3,7 +3,7 @@ import { checkTyped, typedKey } from '../core/study/index.ts';
 import type { Card, Rating } from '../core/study/index.ts';
 import { answerSpeech, canSpeak, openingSpeech } from './english.ts';
 import type { Flow, PreviewFlow, ReviewLine } from './flow.ts';
-import { RATINGS } from './ratings.ts';
+import { chosen, RATINGS } from './ratings.ts';
 import { closest, copying, spelling, type Spelling } from './spelling.ts';
 
 type StepResult = 'right' | 'wrong' | 'skip';
@@ -164,7 +164,7 @@ export function createTyped(card: Card, options: { now: () => number }): Flow {
     view() {
       // 第 3 步就看得到答案與背面；能自評要等三步走完。
       const revealed = typed.finished || typed.step === 3;
-      return { revealed, allowed: typed.finished ? allowedFor(typed.first) : [], speakable: canSpeak(card, revealed), typed };
+      return { revealed, allowed: typed.finished ? allowedFor(typed.first) : [], speakable: canSpeak(card, revealed), typed, pick: null };
     },
     act(action) {
       if (typed.finished) return false;
@@ -179,11 +179,12 @@ export function createTyped(card: Card, options: { now: () => number }): Flow {
       // 回看時要顯示第 1 步打的字與比對：拼對的就是答案本身；拼錯或按「沒印象」的是 attempt（對最接近答案的比對）。
       const firstCompare = typed.firstAttempt ?? spelling(typed.answer, typed.answer);
       return {
-        lines: [line(rating)],
+        lines: [line(chosen(rating))],
         look: {
           typed: {
             step: 3, first, second, notice: false, hint: null, answer: typed.answer, attempt: firstCompare, copy: null, live: null, firstAttempt: firstCompare, input: firstCompare.typed.map(l => l.char).join(''), finished: true, canSkip: false,
           },
+          pick: null,
           changeable: first === 'skip' ? [] : allowedFor(first),
           lines: changed => [line(changed)],
         },
@@ -207,7 +208,7 @@ export function createPreviewTyped(card: Card, reveal: boolean): PreviewFlow {
   }
   const flow: PreviewFlow = {
     autoRead: openingSpeech(card),
-    view: () => ({ revealed: typed.finished, allowed: typed.finished ? RATINGS : [], speakable: canSpeak(card, typed.finished), typed }),
+    view: () => ({ revealed: typed.finished, allowed: typed.finished ? RATINGS : [], speakable: canSpeak(card, typed.finished), typed, pick: null }),
     act(action) {
       if (typed.finished) return false;
       if (action.kind === 'input') { flow.autoRead = null; typed = { ...typed, input: action.text }; return true; }

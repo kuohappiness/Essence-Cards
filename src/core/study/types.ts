@@ -59,7 +59,7 @@ export type NewEntry =
   | { set: 'exam'; val: ExamLog };
 
 /** 比較卡同一個目標的另一格：意思和那一行最上層的同名欄位相同。 */
-interface PickCell { v: string; r: Rating; pick: string | null; retry?: 'right' | 'wrong' | 'skip' }
+export interface PickCell { v: string; r: Rating; pick: string | null; retry?: 'right' | 'wrong' | 'skip' }
 
 export interface ExamLog {
   id: string;

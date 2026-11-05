@@ -2,7 +2,8 @@ import type { Card, Pick, Rating } from '../core/study/index.ts';
 import type { State, StudyPick } from '../state/index.ts';
 import { crumb } from './crumb.ts';
 import { doneView, todayStats, type DoneView } from './done.ts';
-import { createFlow, type Flow, type FlowAction, type LookBack } from './flow.ts';
+import { createFlow, type Flow, type FlowAction, type LookBack, type ReviewLine } from './flow.ts';
+import type { PickView } from './pick.ts';
 import type { TypedView } from './typed.ts';
 
 // 一次複習的狀態（W6 §2）：純程式，不碰 React 與 Obsidian。React 元件只把這裡的狀態畫出來、把按鍵與手勢轉成動作。
@@ -17,9 +18,10 @@ export const AWAY_LIMIT = 60_000;
 interface DoneCard {
   card: Card;
   crumb: string;
-  rating: Rating;
-  /** 這張卡寫下的每一行的 t；改評分後是新的那幾行。 */
-  written: readonly string[];
+  /** 當時按的評分；比較卡有錯時按的是「下一張」，是 null。 */
+  rating: Rating | null;
+  /** 這張卡實際寫下的每一行的目標與 t；改評分後是新的那幾行。 */
+  written: readonly { lt: string; t: string }[];
   look: LookBack;
   /** 回看時能改成的評分：照 look；ID 變成重複之後是空的（D-157）。 */
   changeable: readonly Rating[];
@@ -32,6 +34,7 @@ export interface CardView {
   /** 背面已經顯示（一般卡翻面了；打字卡走完三步）。 */
   revealed: boolean;
   typed: TypedView | null;
+  pick: PickView | null;
   /** 現在能按的自評；翻面前是空的。 */
   allowed: readonly Rating[];
   /** 回看時：當時按的評分（那一顆有底色）；目前這張是 null。 */
@@ -81,8 +84,12 @@ export interface Session {
   submit(): void;
   /** 「沒印象」按鈕（打字卡第 1、2 步）；第 3 步照打錯過一次之後是「跳過」：這張走完，照平常自評，不另寫紀錄（D-158）。 */
   skip(): void;
+  /** 一個作答動作（比較卡的字鍵、點句子、對答案）；回看時不算。 */
+  act(action: FlowAction): void;
   /** 自評；回看時是改評分。回傳有沒有真的算數（0.3 秒內、不能按的評分不算）。 */
   rate(rating: Rating): boolean;
+  /** 「下一張」（比較卡有錯時）：照程式判的寫下來、換下一張。回傳有沒有真的算數。 */
+  commit(): boolean;
   back(): void;
   forward(): void;
   toCurrent(): void;
@@ -185,15 +192,15 @@ export function createSession(options: SessionOptions): Session {
       const entry = done[viewing];
       // 回看的那張後來被停掉（需要新版，任務說明 2-2）：不能改評分。
       return {
-        kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: entry.look.typed, allowed: canAnswer(entry.card) ? entry.changeable : [], pressed: entry.rating,
+        kind: 'card', card: entry.card, crumb: entry.crumb, revealed: true, typed: entry.look.typed, pick: entry.look.pick, allowed: canAnswer(entry.card) ? entry.changeable : [], pressed: entry.rating,
         english: entry.card.target.direction !== null, speakable: entry.card.target.direction !== null, autoRead: null, viewing: { index: viewing, total: done.length }, shown: 0,
       };
     }
     if (!current) return null;
     const { card, flow } = current;
-    const { revealed, allowed, speakable, typed } = flow.view();
+    const { revealed, allowed, speakable, typed, pick: picked } = flow.view();
     return {
-      kind: 'card', card, crumb: current.crumb, revealed, typed, allowed,
+      kind: 'card', card, crumb: current.crumb, revealed, typed, pick: picked, allowed,
       pressed: null, english: card.target.direction !== null, speakable, autoRead: flow.autoRead, viewing: null, shown: current.shown,
     };
   }
@@ -223,20 +230,40 @@ export function createSession(options: SessionOptions): Session {
     if (!loaded) return false;
     if (viewing !== null) return change(done[viewing], rating);
     if (!current) return false;
-    const { card, flow } = current;
+    const { flow } = current;
     if (!flow.view().allowed.includes(rating)) return false;
+    return settle(current, rating);
+  }
+
+  function commit(): boolean {
+    if (!loaded || viewing !== null || !current || !current.flow.view().pick?.committable) return false;
+    return settle(current, null);
+  }
+
+  /** 逐行寫（寫紀錄只經過 state.answer，W6 限制第 4 點）；第二行起帶第一行的 t，第一行被拒時下一行就是第一行（tasks/question-type-seam.md §4）。 */
+  function writeLines(lines: readonly ReviewLine[]): { lt: string; t: string }[] {
+    const written: { lt: string; t: string }[] = [];
+    for (const line of lines) {
+      const t = state.answer(written.length ? { ...line, with: written[0].t } : line);
+      if (t !== null) written.push({ lt: line.lt, t });
+    }
+    return written;
+  }
+
+  /** 記下這一張、換下一張。 */
+  function settle({ card, crumb: path, flow }: Current, rating: Rating | null): boolean {
     if (flow.revealedAt !== null && now() - flow.revealedAt < RATE_DELAY) return false;
     spoken();
     const { lines, look } = flow.settle(rating);
-    // 寫紀錄只經過 state.answer（W6 限制第 4 點）；寫不進去由 W5 的提示處理，畫面照常換下一張。
-    const written = lines.flatMap(line => state.answer(line) ?? []);
+    // 寫不進去由 W5 的提示處理，畫面照常換下一張。
+    const written = writeLines(lines);
     // 這張在作答前被停掉（需要新版，任務說明 2-2）：沒有寫紀錄，不算做過、不進回看，換下一張。
     if (!written.length) {
       load();
       notify();
       return true;
     }
-    done.push({ card, crumb: current.crumb, rating, written, look, changeable: look.changeable });
+    done.push({ card, crumb: path, rating, written, look, changeable: look.changeable });
     load();
     notify();
     return true;
@@ -250,15 +277,8 @@ export function createSession(options: SessionOptions): Session {
     // 取消與新的評分一起寫或一起不寫：那張後來被停掉（需要新版）就不能改，先問；取消涵蓋同一個 t 的所有作答，別台裝置同一刻的
     // 作答被停時取消會被拒（Codex L2 的 F1），這時新的評分也不寫。
     if (entry.rating === rating || !entry.changeable.includes(rating) || !canAnswer(entry.card)) return false;
-    for (const t of entry.written) if (state.answer({ undo: t }) === null) return false;
-    const written: string[] = [];
-    for (const line of entry.look.lines(rating)) {
-      const t = state.answer(line);
-      // 同一個目標剛問過可以寫、取消也寫了，不會是 null；型別上仍要處理。
-      if (t === null) return false;
-      written.push(t);
-    }
-    entry.written = written;
+    for (const { t } of entry.written) if (state.answer({ undo: t }) === null) return false;
+    entry.written = writeLines(entry.look.lines(rating));
     entry.rating = rating;
     if (!current) load();
     notify();
@@ -325,7 +345,7 @@ export function createSession(options: SessionOptions): Session {
     input(text) { act({ kind: 'input', text }); },
     submit() { act({ kind: 'submit' }); },
     skip() { act({ kind: 'skip' }); },
-    rate, back, forward, toCurrent, continueWith, pause, resume,
+    act, rate, commit, back, forward, toCurrent, continueWith, pause, resume,
     close() { closed = true; unsubscribe(); done.length = 0; current = null; listeners.clear(); },
     history: () => done,
     pick: () => pick,

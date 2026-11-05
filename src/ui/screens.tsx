@@ -266,4 +266,4 @@ const typedScreen: Screen = {
   stage: view => typingOf(view) ? ' is-typing' : '',
 };
 
-export const SCREENS: Record<QuestionType, Screen> = { flip, typed: typedScreen };
+export const SCREENS: Record<QuestionType, Screen> = { flip, typed: typedScreen, pick: flip };

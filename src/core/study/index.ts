@@ -10,6 +10,6 @@ export { nextCard, progress, scopeCount, todayLeft, checkTyped, typedKey, typedU
 export { memoryColors } from './practice.ts';
 export { cardOf, questionType } from './compose.ts';
 export type { QuestionType } from './compose.ts';
-export type { Rating, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, ExamLog, LogWriter, History, Memory } from './types.ts';
+export type { Rating, PickCell, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, ExamLog, LogWriter, History, Memory } from './types.ts';
 export type { TypedUnit } from './session.ts';
 export type { DeckEntry, Settings, ExamScope, TodayInput, Lane, QueueItem, Today, Pick, ScopeCount, MemoryColor, Card, Next, SubjectRow, Progress } from './types.ts';

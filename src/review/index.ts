@@ -4,6 +4,7 @@ export type { Session, View, CardView } from './session.ts';
 export { RATINGS, RATING_LABELS } from './ratings.ts';
 export { allowedFor } from './typed.ts';
 export type { TypedView } from './typed.ts';
+export type { PickView } from './pick.ts';
 export type { DoneView } from './done.ts';
 export { todayStats, doneView } from './done.ts';
 export { spelling, closest, copying } from './spelling.ts';

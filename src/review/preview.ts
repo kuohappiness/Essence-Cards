@@ -55,9 +55,9 @@ export function createPreview(options: PreviewOptions): Session | null {
     if (!card) {
       return { kind: 'done', top: { ...top, center: LABEL }, done: { title: '預覽完了', detail: `共 ${String(cards.length)} 張`, buttons: [{ kind: 'close', label: '結束預覽' }] } };
     }
-    const { revealed, allowed, speakable, typed } = flow.view();
+    const { revealed, allowed, speakable, typed, pick } = flow.view();
     const view: CardView = {
-      kind: 'card', card, crumb: crumbText, revealed, typed, allowed, pressed: null, english: card.target.direction !== null,
+      kind: 'card', card, crumb: crumbText, revealed, typed, pick, allowed, pressed: null, english: card.target.direction !== null,
       speakable, autoRead: flow.autoRead, viewing: null, shown: index, nextLabel: '下一張',
     };
     return { kind: 'card', top, card: view };
@@ -71,9 +71,15 @@ export function createPreview(options: PreviewOptions): Session | null {
     input(text) { if (flow.act({ kind: 'input', text })) notify(); },
     submit() { if (index < cards.length && flow.act({ kind: 'submit' })) notify(); },
     skip() { if (index < cards.length && flow.act({ kind: 'skip' })) notify(); },
-    // 自評按鈕只換下一張，不寫任何東西。
+    act(action) { if (index < cards.length && flow.act(action)) notify(); },
+    // 自評按鈕與「下一張」只換下一張，不寫任何東西。
     rate() {
       if (index >= cards.length || !flow.view().revealed) return false;
+      go(index + 1);
+      return true;
+    },
+    commit() {
+      if (index >= cards.length || !flow.view().pick?.committable) return false;
       go(index + 1);
       return true;
     },
