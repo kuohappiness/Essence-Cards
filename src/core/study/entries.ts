@@ -58,7 +58,7 @@ export function encodeNew(t: string, entry: NewEntry): string {
   return line;
 }
 
-/** 從完整 JSON 解析；壞 JSON 的尾段救回由 mergeHistory 處理並留下 problem。 */
+/** 從完整 JSON 解析；JSON 讀不出來的行由 mergeHistory 救回讀得出來的部分並留下 problem。 */
 export function parseLine(line: string): LogEntry | null {
   let value: unknown;
   try { value = JSON.parse(line.trim()); } catch { return null; }
