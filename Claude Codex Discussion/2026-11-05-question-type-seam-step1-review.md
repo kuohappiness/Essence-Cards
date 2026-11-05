@@ -1,6 +1,6 @@
 # 題型接點第一步的行為查核
 
-狀態：F1 已修（`743601a`），等複查（[第二輪的請求](../tasks/question-type-seam-step1-review.md#複查-f1第二輪)）
+狀態：第二輪複查通過（F1，`743601a`）
 
 舊版 `283f4c689029522b6d6922aceccdf863bd7afe35` 是共同祖先。新版為分支 `claude/question-type-seam-927507` 的 `8bd9feb6f14b8ed2eb899d7854f5c7f886071f34`，查核時指定工作樹的 HEAD 相符，且沒有未提交的變更。依該分支的 `tasks/question-type-seam.md`（`8bd9feb`）§2，只查畫面行為與紀錄內容。發現一項鍵盤焦點退化，受測的複習紀錄逐檔比對沒有差異。
 
@@ -46,3 +46,25 @@
 - `dev-review.ts:205–213` 的結果摘要讀 `View` 欄位，`dev-errors.ts:59` 讀 `view.card.typed?.input`，兩者沒有讀改形狀的 `DoneCard`。預覽入口仍解析編輯器當下的文字並傳入設定，`deck-actions.test.ts:141,158` 驗了開關、未存的文字與空卡組，F1 另沿該入口查到實際可觸發。
 
 未跑 Obsidian 開發命令、實際 Markdown renderer、原生 IME、iPhone 或實機版面。隔離探針替換了 Obsidian host 與 Motion，能驗 React 的節點身分、事件和 DOM 焦點，實機輸入法與版面仍需由對應 host 驗證。
+
+## 第二輪
+
+**F1 複查通過。** 預覽與複習回看都能用方向鍵在已展開的翻面卡、打字卡之間來回。兩個方向都保留同一顆評分按鈕及焦點。預覽回到翻面卡後，Enter 沒有被 `Review` 攔截，探針接著模擬預設按鈕點擊，成功前進到打字卡。沒有發現新的行為差異。
+
+- 差分用 `git archive <commit> src tsconfig.json` 分別取出 `283f4c689029522b6d6922aceccdf863bd7afe35`、修正前 `8bd9feb`、修正後 `743601a891b8f487cf0a0e72709d0f9d54b208dd`，共用指定工作樹的相依套件。工作樹 HEAD `a32d5c71ad34418bab5ffa76f4aeb07a55703024` 已併入 `main`，只用於整合後的完整檢查。
+- `tests/review-focus.test.ts` 的兩個真 React 測試在舊版和 `743601a` 各通過兩項，在 `8bd9feb` 都因評分按鈕節點被換掉而失敗。修正位置在 `src/ui/Review.tsx:283,312` 與分支 `claude/question-type-seam-927507` 的 `src/ui/screens.tsx:175,258`（`743601a`）。兩種題型都把同一種 `Rates` 放在固定的底列位置，因此仍可沿用 rating 相同的按鈕。
+- 另用真 React 對照回報選單、打字與完成畫面。選單開啟時，存在的底列有 `inert`、快捷鍵不翻面或評分，關閉後解除 `inert`。打字時底列不存在，關閉選單後焦點回輸入框。評完最後一張時，兩版都保留底列容器、顯示「結束複習」、把焦點移回複習畫面根元素。
+
+| 驗證 | 第二輪結果 |
+|---|---|
+| 鎖定的四個測試檔 | `git diff --exit-code 283f4c6 743601a -- tests/review-session.test.ts tests/review-ui.test.ts tests/review.test.ts tests/preview.test.ts` 為空，對隔離取出的 `743601a` 單獨執行 93 項全過。 |
+| `npm run check` | 指定工作樹 `a32d5c7`，Windows、Node v24.13.0，沙箱外執行。型別、ESLint、knip、secretlint、skill 副本、文件檢查及 1,375 項測試全數通過，0 失敗、0 跳過。 |
+| `diff.mjs` | 種子 `391527`，複習、預覽各 2000 串 × 80 步，0 差異，受測檔案全文相同。注入寫入失敗的測試共記到 788 次未處理的 rejection，腳本沒有按版本或錯誤種類拆計。 |
+| `ui-diff.ts` | 種子起點 `391527`，500 串 × 60 步，0 差異。暫存副本沿用第一輪的 `fileURLToPath` 路徑修正。 |
+| `parse-diff.mjs` | 種子 `391527`，19,842 份完整 JSON，0 差異。 |
+| `mutate.mjs` | 20 處全數抓到。沿用第一輪的判定，要求正數差異摘要，畫面變異在第一個差異時收尾。 |
+| 真 React DOM 軌跡 | 種子 `391527`，120 串 × 50 步，含初始畫面共 6,120 筆。舊版對 `743601a` 0 串不同，兩版各有 39 次在換題型時保留評分焦點。舊版對 `8bd9feb` 有 59 串出現 DOM 或焦點差異，第一串按 → 就抓到焦點落回 `.ec-app`。 |
+
+軌跡比較保留元素身分編號、元素焦點、文字、選定的屬性、事件、朗讀及這台裝置的作答檔內容。原本的 `ATTRS` 沒有列入 `aria-modal`、`aria-haspopup`、`aria-hidden` 和 SVG 屬性等。我在暫存副本改比所有 DOM attributes，用同種子再跑前 40 串，含初始畫面共 2,040 筆，仍為 0 差異。全量軌跡有 51 筆回報選單、34 筆帶 `inert` 的底列、1,580 筆打字畫面及 823 筆完成畫面。
+
+未驗 Obsidian 與 iPhone 實機、實際版面、原生輸入法和觸控手勢。軌跡使用替身 Markdown renderer 與 Motion，直接移焦並以腳本模擬按鈕的預設啟動，因此可比 React 的 DOM 身分與焦點，沒有驗瀏覽器原生的 Tab 次序或 `inert` 行為。

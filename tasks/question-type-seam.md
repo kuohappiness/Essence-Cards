@@ -1,6 +1,6 @@
 # 題型接點與比較點選（D-181、D-178、D-182，給 Claude，本機執行）
 
-狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），等複查（[請求](question-type-seam-step1-review.md)）；§3 照 D-182 定稿，等格式查核（[請求](question-type-seam-format-review.md)）；兩個都過才動第二步；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-188 的文件）
+狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），第二輪複查通過（[請求](question-type-seam-step1-review.md)）；§3 照 D-182 定稿，等格式查核（[請求](question-type-seam-format-review.md)）；格式查核過了才動第二步；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-188 的文件）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫這份用 **Opus、xhigh**，實作用 **Opus、高**（[quality.md](../docs/agents/quality.md)）。改解析、紀錄、排程、複習流程，跨模組，合併前要 L2。必讀 code-quality 的〈測試〉。
 
