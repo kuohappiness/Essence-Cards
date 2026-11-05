@@ -163,24 +163,57 @@ export function planToday(input: TodayInput): Today {
     }
   }
 
-  const ordered = [...candidates.values()].filter(c => shows(c) && !dropped.has(c.id));
-  ordered.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane) || compareInLane(a, b) || compareText(a.id, b.id));
+  const sorted = [...candidates.values()].filter(c => shows(c) && !dropped.has(c.id));
+  sorted.sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane) || compareInLane(a, b) || compareText(a.id, b.id));
+  const ordered = newGroupsTogether(sorted);
 
   const seconds = secondsBySubject(reviews, dayStart(day - 30, offset), start, subjectOf);
   const budget = settings.capMinutes * 60;
   const share: QueueItem[] = [], more: QueueItem[] = [];
   const slots = new Map<string, Slot>();
   let used = 0;
+  // 同一組的比較卡是一張（tasks/question-type-seam.md §5-4）：第一個決定放哪裡、占時間；後面同組的跟著它，不占時間。放好之後秒數平均分。
+  const cards = new Map<string, { list: QueueItem[]; items: QueueItem[] }>();
   for (const c of ordered) {
     const subject = c.entry.deck.props.subject;
     const item: QueueItem = { lt: c.id, deck: c.entry.path, subject, lane: c.lane, seconds: seconds.get(subject) ?? DEFAULT_SECONDS };
+    const key = groupKey(c);
+    const card = key === null ? undefined : cards.get(key);
     // 第一個放不下的和它後面的全部進 more，不跳過去找小的。
-    if (more.length === 0 && used + item.seconds <= budget) { used += item.seconds; share.push(item); }
-    else more.push(item);
+    const list = card?.list ?? (more.length === 0 && used + item.seconds <= budget ? share : more);
+    if (!card && list === share) used += item.seconds;
+    list.push(item);
+    if (card) card.items.push(item);
+    else if (key !== null) cards.set(key, { list, items: [item] });
     slots.set(c.id, { target: c.target, pair: pairOf.get(c.id) ?? null, memory: c.memory, retention: c.retention, inExam: c.inExam,
       correct: correct.has(c.id), seen: seen.get(c.id) ?? new Map() as Shown });
   }
+  for (const { items } of cards.values()) for (const item of items) item.seconds /= items.length;
   return { day, offset, share, more, slots };
+}
+
+/** 比較卡的組的身分（§3）：同一篇、key 相同。 */
+const groupKey = (c: Candidate): string | null => c.target.group ? c.entry.path + '\0' + c.target.group.key : null;
+
+/** 排好順序後，新的目標碰到同組的第一個時，同組其他新的目標緊接在它後面（§5-4）。 */
+function newGroupsTogether(sorted: readonly Candidate[]): Candidate[] {
+  const isNew = (c: Candidate): boolean => c.lane === 'new' || c.lane === 'exam-new';
+  const groups = new Map<string, Candidate[]>();
+  for (const c of sorted) {
+    const key = isNew(c) ? groupKey(c) : null;
+    if (key === null) continue;
+    const list = groups.get(key);
+    if (list) list.push(c);
+    else groups.set(key, [c]);
+  }
+  const placed = new Set<Candidate>();
+  const result: Candidate[] = [];
+  for (const c of sorted) {
+    if (placed.has(c)) continue;
+    const key = isNew(c) ? groupKey(c) : null;
+    for (const each of key === null ? [c] : groups.get(key) ?? [c]) { placed.add(each); result.push(each); }
+  }
+  return result;
 }
 
 function compareInLane(a: Candidate, b: Candidate): number {
