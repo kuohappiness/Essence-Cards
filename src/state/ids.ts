@@ -61,16 +61,18 @@ export interface Expected { id: string; name: string }
 /**
  * 一份寫入的準備：要寫回的文字、預期的變更、這次新配的 ID（還原、當成新的是空的），以及延後到採用時才做的記錄（還原、當成新的）。
  * 準備只預留 ID（配出的立刻記進 seen）：不採用輸出、不解除待處理、不記 removed（§4 第 1 點）。
+ * status 是這次要改成的卡組狀態（目錄的暫停／恢復）：這種寫入沒有 ID 可以比，核對時看它。
  */
-export interface Prepared { text: string; expect: Expected[]; fresh: readonly string[]; record: (() => void) | null }
+export interface Prepared { text: string; expect: Expected[]; fresh: readonly string[]; record: (() => void) | null; status?: Deck['props']['status'] }
 
 /**
- * 核對讀取（§4 第 3 點）：預期的變更都在這份文字裡（每個 ID 都在某個目標的行尾，而且那個目標的名稱和預期相同）時，回傳這次新配的 ID 裡
+ * 核對讀取（§4 第 3 點）：預期的變更都在這份文字裡（每個 ID 都在某個目標的行尾，而且那個目標的名稱和預期相同；要改的狀態還是那個狀態）時，回傳這次新配的 ID 裡
  * 在這份文字中寫法沒有問題（ok）的目標數；不成立是 null。數照核對採用的這份文字算，不照準備時的：寫進磁碟之前家長又改了答案也一樣
  * （技術債 D1：寫錯的不算加入複習；Codex L2 的 F1）。
  */
 export function confirmed(text: string, prepared: Prepared): number | null {
-  const targets = parseDeck(text).targets;
+  const { targets, props } = parseDeck(text);
+  if (prepared.status !== undefined && props.status !== prepared.status) return null;
   if (!prepared.expect.every(({ id, name }) => targets.some(t => t.id === id && t.name === name))) return null;
   return prepared.fresh.filter(id => targets.some(t => t.id === id && t.ok)).length;
 }

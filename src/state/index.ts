@@ -1,5 +1,5 @@
 import type { Files } from '../core/files.ts';
-import { isDeckPath, parseDeck } from '../core/deck/index.ts';
+import { isDeckPath, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
 import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
 import type { Catalog, CatalogIndex, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
@@ -16,8 +16,8 @@ import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, memoryColors, mergeHistory, nextCard, parseLine, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
-import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
+import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, QueuedLine, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
 import type { VersionReport } from '../core/backup/index.ts';
@@ -63,6 +63,8 @@ export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
  * 沒有 since 是單元的當日卡，有 since 是單元的全部卡；deck 加 since 是卡組筆記的全部卡（D-146）。目標集合每次都照 state 現在讀到的內容算。
  */
 export type StudyPick = Pick | { unit: string } | { unit: string; since: number } | { deck: string; since: number };
+/** 目錄的暫停／恢復寫進卡組屬性 `狀態` 的值。 */
+export type DeckStatusValue = '啟用' | '暫停';
 /** 考試範圍現在的樣子（tasks/exam-scope.md §3、§4）：入口、目錄與設定畫面都看這一份。 */
 /** 畫面打開時選定的是哪一份。 */
 interface ExamTarget { path: string | null; id: string | null }
@@ -136,8 +138,11 @@ export interface State {
    * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
    * 牽涉的學習目標不能作答（canAnswer）時什麼都不寫、回傳 null（任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；
    * 找不到那一筆的取消照舊寫，ID 重複時的取消也照寫（D-157）。卡組的狀態變更，那一篇需要新版時也不寫。
+   * 值不合那一種的契約（空白的 lt、不是有限的數字……）是程式的錯：丟錯，不寫、不併進 history。
    */
   answer(entry: NewEntry): string | null;
+  /** 和 answer 相同，回傳排進寫入的那一行與路徑：開發命令要和檔案比對時用它，不各自重新編碼。 */
+  answerLine(entry: NewEntry): QueuedLine | null;
   /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的、重複的（conflicts()）ID 都不能。 */
   canAnswer(lt: string): boolean;
   /**
@@ -191,6 +196,11 @@ export interface State {
    * 回傳 true；沒有要改、門檻沒過、途中變了（stale）回傳 false；寫不進去或逾時 reject（已配出的 ID 保留、不重用）。
    */
   fillIds(path: string): Promise<boolean>;
+  /**
+   * 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只改屬性區的 `狀態`，和補 ID 走同一條寫入（同一列、同樣的門檻，手機回 blocked phone）；editor 是開著那篇的編輯器，沒開著是 null。
+   * 改了字（done、saved）才記一行 `set: status`；已經是這個值、草稿、檔不見了是 unchanged；屬性區讀不懂、只改一行讀不回來是 unwritable，都不寫。寫不進去回 failed，不丟錯。
+   */
+  setDeckStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
   /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
@@ -275,16 +285,11 @@ export function createState(options: StateOptions): State {
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck) });
 
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
-  function record(entry: NewEntry): string {
-    const t = writer.write(entry);
-    const line = encodeEntry(t, entry);
-    const stamp = parseLine(line);
-    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
-    // 和 writer 寫檔的路徑相同：t 已經帶著寫入當下的時間與時區。
-    const path = logPath(device, stamp.at, stamp.offset);
-    sources.set(path, (sources.get(path) ?? '') + line + '\n');
-    history = appendLine(history, line);
-    return t;
+  function record(entry: NewEntry): QueuedLine {
+    const queued = writer.write(entry);
+    sources.set(queued.path, (sources.get(queued.path) ?? '') + queued.line + '\n');
+    history = appendLine(history, queued.line);
+    return queued;
   }
   /** 這台的版本行（version().own）。 */
   let appState: 'waiting' | 'same' | 'queued' | 'written' | null = options.build === undefined ? null : 'waiting';
@@ -576,6 +581,13 @@ export function createState(options: StateOptions): State {
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
   const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending });
+  function answerLine(entry: NewEntry): QueuedLine | null {
+    if (!life.loaded) throw Error('state 還沒 ready');
+    if (!permits(entry)) return null;
+    const queued = record(entry);
+    if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
+    return queued;
+  }
 
   return {
     ready() {
@@ -599,6 +611,21 @@ export function createState(options: StateOptions): State {
       if (result.kind === 'failed') throw result.error;
       // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
       return result.kind === 'done' || result.kind === 'saved';
+    },
+    async setDeckStatus(path, value, editor) {
+      let unwritable = false;
+      const plan = (text: string): Prepared | null => {
+        // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
+        track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
+        if (parseDeck(text).props.status === 'draft') return null;
+        const next = setStatusLine(text, value);
+        if (next === null) unwritable = true;
+        return next === null ? null : { text: next, expect: [], fresh: [], record: null, status: parseDeck(next).props.status };
+      };
+      const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
+      if (unwritable) return { kind: 'unwritable' };
+      if (result.kind === 'done' || result.kind === 'saved') record({ set: 'status', deck: path, val: value });
+      return result;
     },
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
@@ -642,13 +669,8 @@ export function createState(options: StateOptions): State {
       const { today, input: value } = fresh();
       return progress(today, value);
     },
-    answer(entry) {
-      if (!life.loaded) throw Error('state 還沒 ready');
-      if (!permits(entry)) return null;
-      const t = record(entry);
-      if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
-      return t;
-    },
+    answer: entry => answerLine(entry)?.t ?? null,
+    answerLine,
     exam() {
       const at = now(), day = dayOf(at, offsetOf(at));
       const { chosen, usable, others } = selection(day);

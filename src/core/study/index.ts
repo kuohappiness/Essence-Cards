@@ -8,6 +8,6 @@ export { findDuplicateIds } from './duplicates.ts';
 export type { DuplicateId, DuplicateTarget } from './duplicates.ts';
 export { nextCard, progress, scopeCount, todayLeft, checkTyped, typedKey, typedUnits } from './session.ts';
 export { memoryColors } from './practice.ts';
-export type { Rating, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, ExamLog, LogWriter, History, Memory } from './types.ts';
+export type { Rating, LogEntry, ReviewEntry, UndoEntry, ChangeEntry, NewEntry, ExamLog, LogWriter, QueuedLine, History, Memory } from './types.ts';
 export type { TypedUnit } from './session.ts';
 export type { DeckEntry, Settings, ExamScope, TodayInput, Lane, QueueItem, Today, Pick, ScopeCount, MemoryColor, Card, Next, SubjectRow, Progress } from './types.ts';

@@ -1,6 +1,6 @@
 # 小考標記（D-189 第 4、5 點，給 Claude，本機執行）
 
-狀態：使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)；還沒開工
+狀態：使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)；練習任務已合併（2026-11-05），可以開工，還沒開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。多一種外掛會寫的檔、入口與目錄的畫面，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1 是新的檔案格式，開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 

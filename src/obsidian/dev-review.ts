@@ -1,7 +1,7 @@
 import { MarkdownView, Notice, Platform, type App, type Plugin } from 'obsidian';
 import { isDeckPath } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
-import { encodeEntry, isLogPath, type NewEntry, type Pick } from '../core/study/index.ts';
+import { isLogPath, type NewEntry, type Pick } from '../core/study/index.ts';
 import { createSession, RATE_DELAY, type View } from '../review/index.ts';
 import { createState, type State } from '../state/index.ts';
 import { openReview, type ReviewEvent, type ReviewHandle } from '../ui/index.ts';
@@ -104,7 +104,7 @@ function recording(state: State): { state: State; written: { t: string; line: st
   const written: { t: string; line: string; entry: NewEntry }[] = [];
   return {
     written,
-    state: { ...state, answer(entry) { const t = state.answer(entry); if (t !== null) written.push({ t, line: encodeEntry(t, entry), entry }); return t; } },
+    state: { ...state, answer(entry) { const queued = state.answerLine(entry); if (queued) written.push({ t: queued.t, line: queued.line, entry }); return queued?.t ?? null; } },
   };
 }
 
@@ -115,9 +115,9 @@ async function undoAll(state: State, written: { t: string; entry: NewEntry }[]):
   for (const w of [...written]) {
     if ('undo' in w.entry || undone.has(w.t)) continue;
     const entry = { undo: w.t };
-    const t = state.answer(entry);
-    if (t === null) throw Error('那一筆的學習目標需要新版才讀得懂，取消不能寫：' + w.t);
-    lines.push(encodeEntry(t, entry));
+    const queued = state.answerLine(entry);
+    if (queued === null) throw Error('那一筆的學習目標需要新版才讀得懂，取消不能寫：' + w.t);
+    lines.push(queued.line);
     undone.add(w.t);
   }
   await state.flush();

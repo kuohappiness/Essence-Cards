@@ -1,8 +1,6 @@
-import { chooseScope, notEnded, parseScope, scopeDay, scopePeriod } from '../src/core/catalog/index.ts';
+import { chooseScope, notEnded, parseExamFile, scopeDay, scopePeriod } from '../src/core/catalog/index.ts';
 import type { ScopeFile } from '../src/core/catalog/index.ts';
 import { dayOf } from '../src/core/study/index.ts';
-
-export const SCOPE_FOLDER = 'Essence Cards/考試範圍';
 
 /**
  * 考前提醒（D-149 第 6 點）：soon 考試開始前 7 天內；during 考試期間；undated 生效的考試範圍沒填日期；
@@ -18,7 +16,7 @@ export interface Reminder {
 const LATER = '這一版可以考後再裝，由家長決定';
 
 /**
- * 從 `Essence Cards/考試範圍/` 的每一份算提醒（text 是 null 表示那一份讀不到），讀法與選哪一份都和外掛同一份（tasks/exam-scope.md §2-3）。生效：沒填期間，或結束日還沒過（清晨 4 點換日，
+ * 從 `Essence Cards/考試範圍/` 的每一份段考範圍算提醒（路徑由 `isExamPath` 在讀之前篩掉，內容由 `parseExamFile` 略過搬出 `小考/` 的小考檔；text 是 null 表示那一份讀不到），讀法與選哪一份都和外掛同一份（tasks/exam-scope.md §2-3）。生效：沒填期間，或結束日還沒過（清晨 4 點換日，
  * 只寫開始就是一天）；好幾份生效時用開始日最早的那一份（syntax §4）。
  * 刻意比外掛保守：外掛當成沒有範圍的（只有看不懂的行、只有分類、空的）只要日期算得到照樣提醒，日期有問題也提醒；多問一次的代價比考前裝壞小。
  * 整組已經結束的不算（舊副本的壞日期不用多問）。
@@ -28,7 +26,8 @@ export function examReminder(scopes: readonly { path: string; text: string | nul
   const entries: { path: string; file: ScopeFile }[] = [];
   for (const { path, text } of scopes) {
     if (text === null) return { kind: 'unreadable', needsOk: true, message: `讀不到考試範圍「${path}」，不當成沒有考試；${LATER}` };
-    entries.push({ path, file: parseScope(text) });
+    const file = parseExamFile(text);
+    if (file) entries.push({ path, file });
   }
   const bad = notEnded(entries).find(each => scopePeriod(each.file).kind === 'bad');
   if (bad) return { kind: 'unreadable', needsOk: true, message: `考試範圍「${bad.path}」${bad.file.broken ? '屬性區讀不出來' : '的日期有問題'}，不當成沒有考試；${LATER}` };

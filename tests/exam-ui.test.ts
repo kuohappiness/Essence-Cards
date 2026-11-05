@@ -544,6 +544,22 @@ void test('§7 日期未定、日期有問題：列照常、不倒數；有問�
   assert.ok(!b.all('.ec-sb .ec-en-name').some(each => each.textContent === '理化'));
 });
 
+void test('考試範圍/小考/ 裡壞掉的檔（D-189）：入口、目錄、設定畫面都和沒有這份一樣；放在外面才算', async t => {
+  const broken = '---\n考試開始: 2026-13-01\n---\n老師說的\n';
+  const outside = await open(t, { ...DECKS, [FOLDER + '壞.md']: broken }, 'entry');
+  assert.equal(outside.all('.ec-sc-per')[0].textContent, '考試日期有問題', '同一份在外面就有問題');
+  for (const screen of ['entry', 'catalog'] as const) {
+    const s = await open(t, { ...DECKS, [FOLDER + '小考/壞.md']: broken }, screen);
+    assert.ok(s.text().includes('還沒設定'), screen);
+    assert.ok(!s.text().includes('考試日期有問題'), screen);
+    assert.ok(!s.text().includes('看不懂'), screen);
+  }
+  const form = await open(t, { ...DECKS, [FOLDER + '小考/壞.md']: broken }, 'scope');
+  assert.ok(!form.text().includes('考試日期有問題'));
+  assert.ok(!form.text().includes('看不懂'));
+  assert.equal(form.field('考試開始').value, '', '當成新的一份');
+});
+
 void test('§7 別台裝置改了範圍，開著的入口自己更新', async t => {
   const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1') }, 'entry');
   assert.ok(s.text().includes('距離考試：12 天'));
@@ -609,4 +625,17 @@ void test('§8 超過 20 列：寫另有幾個，總數是實際的數字', asyn
   await s.click(s.button('這次範圍裡有 25 個目標來自別的單元'));
   assert.equal(s.all('.ec-sc-item').length, 20);
   assert.ok(s.text().includes('另有 5 個'));
+});
+
+void test('搬出 小考/ 的小考檔（D-189）：入口與目錄都沒有提示；對照的段考檔照樣寫日期未定', async t => {
+  const quizzes = Object.fromEntries(['2026-11-05', '', '明天'].map((date, index) => [`${FOLDER}小考${String(index)}.md`, `---\n識別碼: q4m8t2\n小考日期: ${date}\n---\n- 國二上 英文 L1\n`]));
+  for (const screen of ['entry', 'catalog'] as const) {
+    const only = await open(t, { ...DECKS, ...quizzes }, screen);
+    assert.ok(only.text().includes('還沒設定'), screen);
+    assert.ok(!only.text().includes('日期未定'), screen);
+    assert.ok(!only.text().includes('考試日期有問題'), screen);
+    const mixed = await open(t, { ...DECKS, ...quizzes, [FOLDER + 'a.md']: scopeText('', '', '- 國二上 自然 2-1') }, screen);
+    assert.equal(mixed.all('.ec-sc-per')[0].textContent, '日期未定', screen);
+    assert.deepEqual(mixed.all('.ec-sc-line').map(each => each.textContent), ['自然2-1'], screen);
+  }
 });

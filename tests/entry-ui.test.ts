@@ -27,6 +27,7 @@ interface Screen extends MemoryFiles {
   handle: EntryHandle;
   starts: StudyPick[];
   notes: [string, number | undefined][];
+  notices: string[];
   settings: () => number;
   covered: { value: boolean };
   storage: Map<string, unknown>;
@@ -41,16 +42,16 @@ interface Screen extends MemoryFiles {
   click: (element: Element) => Promise<void>;
   settle: () => Promise<void>;
 }
-interface Setup { screen?: 'entry' | 'catalog'; reminders?: boolean; ready?: boolean; hold?: string; state?: () => State | null; storage?: Record<string, unknown> }
+interface Setup { screen?: 'entry' | 'catalog'; reminders?: boolean; ready?: boolean; hold?: string; state?: () => State | null; storage?: Record<string, unknown>; desktop?: boolean }
 
 async function open(t: TestContext, texts: Record<string, string>, setup: Setup = {}): Promise<Screen> {
   const memory = createMemoryFiles(texts);
   const held = setup.hold ? memory.holdRead(setup.hold) : null;
   const clock = { now: START };
-  const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: false, stuckAfter: 20, now: () => clock.now, offset: () => 480, onError() {} });
+  const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: setup.desktop === true, stuckAfter: 20, now: () => clock.now, offset: () => 480, onError() {} });
   t.after(() => { held?.release(); return state.close(); });
   if (setup.ready !== false) await state.ready();
-  const starts: StudyPick[] = [], notes: [string, number | undefined][] = [];
+  const starts: StudyPick[] = [], notes: [string, number | undefined][] = [], notices: string[] = [];
   let settings = 0, closed = false;
   const covered = { value: false };
   const storage = new Map<string, unknown>(Object.entries(setup.storage ?? {}));
@@ -59,7 +60,9 @@ async function open(t: TestContext, texts: Record<string, string>, setup: Setup 
   await act(async () => {
     handle = openEntry({
       app, state: setup.state ?? (() => state), screen: setup.screen, reminders: setup.reminders ?? false, covered: () => covered.value,
-      start: pick => { starts.push(pick); }, openNote: (path, line) => { notes.push([path, line]); }, openSettings: () => { settings++; }, notify() {},
+      start: pick => { starts.push(pick); }, openNote: (path, line) => { notes.push([path, line]); }, openSettings: () => { settings++; }, notify: message => { notices.push(message); },
+      // 只有電腦傳（main.ts 看 Platform.isDesktopApp）；提示的字在 deck-status-wiring 測。
+      setDeckStatus: setup.desktop ? (path, value) => state.setDeckStatus(path, value, null).then(result => result.kind === 'done' ? null : '受阻：' + result.kind) : undefined,
       onClose: () => { closed = true; },
     });
     await Promise.resolve();
@@ -73,7 +76,7 @@ async function open(t: TestContext, texts: Record<string, string>, setup: Setup 
   const all = (selector: string): HTMLElement[] => Array.from(root().querySelectorAll<HTMLElement>(selector));
   const settle = async (): Promise<void> => { await act(async () => { await wait(10); }); };
   return {
-    ...memory, state, clock, handle, release: () => { held?.release(); }, starts, notes, settings: () => settings, covered, storage, closed: () => closed, all, settle,
+    ...memory, state, clock, handle, release: () => { held?.release(); }, starts, notes, notices, settings: () => settings, covered, storage, closed: () => closed, all, settle,
     text: () => root().textContent ?? '',
     button(name) {
       const found = all('button').find(button => button.textContent === name || button.getAttribute('aria-label') === name);
@@ -347,4 +350,115 @@ void test('§11 入口開著時讀到別台裝置的紀錄，數字更新；改�
   const today = s.state.progress();
   assert.deepEqual(s.all('.ec-sb .ec-en-n').map(each => each.textContent), [today.done + '/' + today.total]);
   assert.equal(today.done, 0, '昨天做的不算今天的');
+});
+
+// ── 目錄的單篇入口（D-189 第 3 點、tasks/quiz-practice.md §4）──
+
+const WORDS = 'Essence Cards/英文/L3 單字.md', REST = 'Essence Cards/英文/L3 其他.md';
+const L3 = { [WORDS]: head('國二上', '英文', 'L3') + targets('a', 'b', 'c'), [REST]: head('國二上', '英文', 'L3') + targets('d') };
+const rows = (s: Screen): (string | null)[] => s.all('.ec-tr-pc').map(each => each.textContent);
+
+void test('§4 單元有兩篇啟用：單元的全部卡底下每篇一列，數字和那篇筆記的全部卡相同；按下去只練那一篇，不跳提醒', async t => {
+  const s = await open(t, L3, { screen: 'catalog' });
+  assert.deepEqual(rows(s), [], '還沒展開');
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(s.all('.ec-tr-ub .ec-u-btn').map(each => each.textContent), ['當日卡 4', '全部卡 4'], '單元的按鈕不變');
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1', 'L3 單字全部卡 3']);
+  assert.equal(s.state.deckTargets(WORDS).length, 3);
+  assert.equal(s.all('.ec-tr-open')[0].firstElementChild?.className, 'ec-tr-pc', '緊接在單元的全部卡底下');
+  await s.click(s.button('全部卡 3'));
+  assert.equal(s.starts.length, 1, '直接開始，沒有多一步');
+  const pick = s.starts[0] as { deck: string; since: number };
+  assert.deepEqual(Object.keys(pick).sort(), ['deck', 'since']);
+  assert.equal(pick.deck, WORDS);
+  assert.equal(typeof pick.since, 'number');
+  assert.deepEqual(s.state.scope({ deck: WORDS, since: START }), { done: 0, total: 3 });
+  const next = s.state.next({ deck: WORDS, since: START });
+  assert.equal(next.kind === 'card' && next.card.deck, WORDS);
+  await s.click(s.all('.ec-tr-pc .ec-tr-deck')[0]);
+  assert.deepEqual(s.notes, [[REST, undefined]], '篇名點了打開那篇筆記');
+});
+
+void test('§4 只有一篇啟用：沒有這幾列，單元的全部卡就是那一篇；草稿與暫停的篇照舊是筆記連結', async t => {
+  const s = await open(t, { [WORDS]: L3[WORDS], [REST]: head('國二上', '英文', 'L3', '狀態: 暫停\n') + targets('d'), 'Essence Cards/英文/L3 草稿.md': head('國二上', '英文', 'L3', '狀態: 草稿\n') + targets('e') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(s.all('.ec-u-btn').map(each => each.textContent), ['當日卡 3', '全部卡 3']);
+  assert.deepEqual(rows(s), []);
+  assert.deepEqual(s.all('.ec-tr-deck').map(each => each.textContent), ['L3 其他暫停', 'L3 草稿草稿']);
+});
+
+void test('§4 兩篇啟用、一篇草稿：草稿不佔一列全部卡；沒有目標的篇 0 不能按', async t => {
+  const s = await open(t, { ...L3, 'Essence Cards/英文/L3 草稿.md': head('國二上', '英文', 'L3', '狀態: 草稿\n') + targets('e'), 'Essence Cards/英文/L3 空的.md': head('國二上', '英文', 'L3') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1', 'L3 單字全部卡 3', 'L3 空的全部卡 0']);
+  assert.equal(s.button('全部卡 0').disabled, true);
+  assert.equal(s.button('全部卡 1').disabled, false);
+  assert.deepEqual(s.all('.ec-tr-open > .ec-tr-deck').map(each => each.textContent), ['L3 草稿草稿']);
+});
+
+void test('§4 兩篇同名、不同資料夾：篇名附資料夾名；不同名的不附', async t => {
+  const deck = (id: string): string => head('國二上', '英文', 'L3') + targets(id);
+  const s = await open(t, { 'Essence Cards/甲/單字.md': deck('a'), 'Essence Cards/乙/單字.md': deck('b'), 'Essence Cards/丙/其他.md': deck('c') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(rows(s).map(each => each?.replace(/全部卡 \d+$/, '')).sort(), ['其他', '單字（乙）', '單字（甲）'].sort());
+});
+
+// ── 暫停／恢復（D-183 第 6 點、D-189 第 3 點、tasks/quiz-practice.md §5）──
+
+const PAUSED = head('國二上', '英文', 'L3', '狀態: 暫停\n') + targets('d');
+const DRAFT = head('國二上', '英文', 'L3', '狀態: 草稿\n') + targets('e');
+const reread = async (s: Screen): Promise<void> => { await act(async () => { await wait(30); }); await s.settle(); };
+
+void test('§5 電腦上按暫停：那一篇變成暫停、單元的全部卡少了那一篇；按恢復回來；筆記只改一行', async t => {
+  const s = await open(t, L3, { screen: 'catalog', desktop: true });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1暫停', 'L3 單字全部卡 3暫停']);
+  await s.click(s.all('.ec-tr-pc')[1].querySelectorAll('button')[2]);
+  await reread(s);
+  assert.equal(s.texts.get(WORDS), head('國二上', '英文', 'L3', '狀態: 暫停\n') + targets('a', 'b', 'c'));
+  assert.deepEqual(s.notices, []);
+  assert.deepEqual(s.all('.ec-tr-ub .ec-u-btn').map(each => each.textContent), ['當日卡 1', '全部卡 1'], '單元的數字少了那一篇');
+  assert.deepEqual(rows(s), ['L3 其他暫停', 'L3 單字暫停恢復'], '只剩一篇啟用：沒有單篇的全部卡，暫停與恢復都找得到');
+  await s.click(s.button('恢復'));
+  await reread(s);
+  assert.equal(s.texts.get(WORDS), head('國二上', '英文', 'L3', '狀態: 啟用\n') + targets('a', 'b', 'c'));
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1暫停', 'L3 單字全部卡 3暫停']);
+});
+
+void test('§5 兩篇都暫停：單元可以展開，看得到兩個恢復；按單元名稱照舊打開筆記', async t => {
+  const s = await open(t, { [WORDS]: PAUSED.replace('^d', '^a'), [REST]: PAUSED }, { screen: 'catalog', desktop: true });
+  assert.equal((s.all('.ec-tr-exp')[0] as HTMLButtonElement).disabled, false);
+  await s.click(s.all('.ec-tr-exp')[0]);
+  assert.deepEqual(rows(s), ['L3 其他暫停恢復', 'L3 單字暫停恢復']);
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(s.notes, [[REST, undefined]]);
+});
+
+void test('§5 草稿沒有按鈕；只有一篇的單元沒有按鈕', async t => {
+  const s = await open(t, { [WORDS]: L3[WORDS], 'Essence Cards/英文/L3 草稿.md': DRAFT, 'Essence Cards/自然 2-1.md': head('國二上', '自然', '2-1') + targets('n') }, { screen: 'catalog', desktop: true });
+  const named = (name: string): HTMLElement => { const found = s.all('.ec-tr-name').find(each => each.textContent === name); assert.ok(found, name); return found; };
+  await s.click(named('L3'));
+  assert.deepEqual(rows(s), ['L3 單字暫停']);
+  assert.deepEqual(s.all('.ec-tr-open > .ec-tr-deck').map(each => each.textContent), ['L3 草稿草稿'], '草稿照舊是筆記連結');
+  await s.click(named('2-1'));
+  assert.deepEqual(rows(s), ['L3 單字暫停'], '自然 2-1 只有一篇');
+});
+
+void test('§5 手機的畫面沒有這兩個按鈕：同樣的卡組，只有單篇的全部卡', async t => {
+  const s = await open(t, { ...L3, 'Essence Cards/英文/L3 暫停的.md': PAUSED.replace('^d', '^p') }, { screen: 'catalog' });
+  await s.click(s.all('.ec-tr-name')[0]);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1', 'L3 單字全部卡 3']);
+  assert.deepEqual(s.all('.ec-tr-open > .ec-tr-deck').map(each => each.textContent), ['L3 暫停的暫停']);
+  assert.deepEqual(s.all('button').map(each => each.textContent).filter(each => each === '暫停' || each === '恢復'), []);
+});
+
+void test('§5 寫不進去：照受阻的提示，畫面不變', async t => {
+  const s = await open(t, L3, { screen: 'catalog', desktop: true });
+  await s.click(s.all('.ec-tr-name')[0]);
+  s.control.failModify = true;
+  await s.click(s.all('.ec-tr-pc')[1].querySelectorAll('button')[2]);
+  await reread(s);
+  assert.deepEqual(s.notices, ['受阻：failed']);
+  assert.equal(s.texts.get(WORDS), L3[WORDS]);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1暫停', 'L3 單字全部卡 3暫停']);
 });

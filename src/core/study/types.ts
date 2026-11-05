@@ -86,9 +86,12 @@ export interface History {
   incomplete: boolean;
 }
 
+/** 排進寫入的一行與它的檔案。不是寫成的憑據（flush 才是）；失敗重試沿用同一行。 */
+export interface QueuedLine { t: string; line: string; path: string }
+
 export interface LogWriter {
-  /** 排進背景佇列即回傳，不等待寫檔。 */
-  write(entry: NewEntry): string;
+  /** 排進背景佇列即回傳，不等待寫檔。要那一行或路徑時用回傳的，不重新編碼。值不合那一種的契約就丟錯，不排進去。 */
+  write(entry: NewEntry): QueuedLine;
   /** 等到目前排隊的都寫完，並重試先前失敗的；仍失敗就 reject。 */
   flush(): Promise<void>;
 }

@@ -1,7 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDeck as parse, assignIds as assign, setTargetId as setId, baseForm, blockIds } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
@@ -9,6 +9,7 @@ const deckCases = new Set<string>();
 function parseDeck(text: string) { deckCases.add(text); return parse(text); }
 function assignIds(text: string, options: AssignOptions) { deckCases.add(text); return assign(text, options); }
 function setTargetId(text: string, line: number, id: string | null) { deckCases.add(text); return setId(text, line, id); }
+function setDeckStatus(text: string, value: '啟用' | '暫停') { deckCases.add(text); return setStatus(text, value); }
 
 const syntax = readFileSync(new URL('../docs/syntax.md', import.meta.url), 'utf8');
 const examples = [...syntax.slice(syntax.indexOf('### 2-2'), syntax.indexOf('### 2-3')).matchAll(/```markdown\r?\n([\s\S]*?)\r?\n```/g)].map(m => m[1]);
@@ -959,6 +960,69 @@ void test('§9-2 單元讀成數字、材料沒加引號：給提示，不默默
   }
 });
 
+// ── 暫停／恢復一篇（D-183 第 6 點、tasks/quiz-practice.md §5）──
+
+const BODY = '- 目標 ^abc123\n    - 問 :: 答\n';
+
+void test('setDeckStatus：只改狀態的值，其他字元都不動', () => {
+  const cases: [string, string][] = [
+    ['狀態: 啟用', '狀態: 暫停'],
+    ['狀態: "啟用"', '狀態: "暫停"'],
+    ["狀態: '啟用'", "狀態: '暫停'"],
+    ['狀態: 啟用 # 家長註記', '狀態: 暫停 # 家長註記'],
+    ['狀態 : 啟用', '狀態 : 暫停'],
+    ['狀態:   啟用', '狀態:   暫停'],
+    ['狀態: 啟用   ', '狀態: 暫停   '],
+    ['狀態:', '狀態: 暫停'],
+    ['狀態: 亂寫的', '狀態: 暫停'],
+    ['狀態: ~', '狀態: 暫停'],
+  ];
+  for (const [before, after] of cases) {
+    const text = `---\n年級學期: 國二上\n${before}\n單元: "2-1" # 不動\n---\n${BODY}`;
+    assert.equal(setDeckStatus(text, '暫停'), `---\n年級學期: 國二上\n${after}\n單元: "2-1" # 不動\n---\n${BODY}`, before);
+  }
+  assert.equal(setDeckStatus(`---\n狀態: 暫停\n---\n${BODY}`, '啟用'), `---\n狀態: 啟用\n---\n${BODY}`);
+  assert.equal(setDeckStatus(`---\n{狀態: 啟用, 科目: 自然}\n---\n${BODY}`, '暫停'), `---\n{狀態: 暫停, 科目: 自然}\n---\n${BODY}`, '寫成一行的屬性');
+});
+
+void test('setDeckStatus：沒有狀態那一行多一行、放在屬性區最後；沒有屬性區就建一個；換行與 BOM 照原本的', () => {
+  assert.equal(setDeckStatus(`---\n科目: 自然\n---\n${BODY}`, '暫停'), `---\n科目: 自然\n狀態: 暫停\n---\n${BODY}`);
+  assert.equal(setDeckStatus(`---\n---\n${BODY}`, '暫停'), `---\n狀態: 暫停\n---\n${BODY}`, '空的屬性區');
+  assert.equal(setDeckStatus(`---\n# 只有註解\n---\n${BODY}`, '暫停'), `---\n# 只有註解\n狀態: 暫停\n---\n${BODY}`);
+  assert.equal(setDeckStatus(BODY, '暫停'), `---\n狀態: 暫停\n---\n${BODY}`);
+  const crlf = (text: string): string => text.replaceAll('\n', '\r\n');
+  assert.equal(setDeckStatus(crlf(`---\n科目: 自然\n---\n${BODY}`), '暫停'), crlf(`---\n科目: 自然\n狀態: 暫停\n---\n${BODY}`));
+  assert.equal(setDeckStatus(crlf(`---\n狀態: 啟用\n---\n${BODY}`), '暫停'), crlf(`---\n狀態: 暫停\n---\n${BODY}`));
+  assert.equal(setDeckStatus(crlf(BODY), '暫停'), crlf(`---\n狀態: 暫停\n---\n${BODY}`));
+  assert.equal(setDeckStatus(`﻿---\n狀態: 啟用\n---\n${BODY}`, '暫停'), `﻿---\n狀態: 暫停\n---\n${BODY}`);
+  assert.equal(setDeckStatus(`---\n狀態: 啟用\n---\n- 目標\n    - 狀態：暫停\n    - 問 :: 答\n`, '暫停'), `---\n狀態: 暫停\n---\n- 目標\n    - 狀態：暫停\n    - 問 :: 答\n`, '目標自己的狀態不動');
+});
+
+void test('setDeckStatus：已經是這個值就是原文；改過再改回來回到原文', () => {
+  for (const text of [`---\n狀態: 暫停\n---\n${BODY}`, `---\n狀態: "暫停" # 註\n---\n${BODY}`]) assert.equal(setDeckStatus(text, '暫停'), text);
+  const original = `---\n狀態: "啟用" # 註\n科目: 自然\n---\n${BODY}`;
+  const paused = setDeckStatus(original, '暫停');
+  assert.ok(paused);
+  assert.equal(setDeckStatus(paused, '暫停'), paused);
+  assert.equal(setDeckStatus(paused, '啟用'), original);
+});
+
+void test('setDeckStatus：屬性區讀不懂、改了讀不回來的都不寫（回傳 null）', () => {
+  const broken = [
+    `---\n狀態: 啟用\n${BODY}`,
+    `---\n科目: [\n---\n${BODY}`,
+    `---\n狀態: 啟用\n狀態: 暫停\n---\n${BODY}`,
+    `---\n- 清單\n---\n${BODY}`,
+    `---\n只有一句話\n---\n${BODY}`,
+    `---\n基準: &a 啟用\n狀態: *a\n---\n${BODY}`,
+    `---\n狀態: |\n  啟用\n---\n${BODY}`,
+    `---\n{科目: 自然}\n---\n${BODY}`,
+    // BOM 讓第一行的目標解析不到；加了屬性區會多出一個目標，不是只改狀態。
+    `﻿${BODY}`,
+  ];
+  for (const text of broken) assert.equal(setDeckStatus(text, '暫停'), null, text);
+});
+
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 after(() => {
   // tools/export-compare.ts 用：全部範例寫成一個 JSON，拿到 Obsidian 和 metadataCache 對照（W5 §0-3）。
@@ -989,6 +1053,24 @@ after(() => {
       if (original.id) assert.equal(after.targets[i].id, original.id, context + '：既有 ID 改變');
       const promptContent = (prompts: Prompt[]) => prompts.map(({ line, fingerprint, ...content }) => content);
       assert.deepEqual(promptContent(after.targets[i].prompts), promptContent(before.targets[i].prompts), context + '：題目內容改變');
+    }
+  }
+  // 暫停／恢復（§5）：每份範例都要改得正確、冪等、只動屬性區，學習目標與題目完全不變；寫不了的是 null，不是寫壞。
+  const content = (text: string) => parse(text).targets.map(({ id, name, prompts }) => [id, name, prompts.map(p => p.fingerprint)]);
+  const status = { 暫停: 'paused', 啟用: 'active' } as const;
+  for (const text of deckCases) {
+    for (const value of ['暫停', '啟用'] as const) {
+      const context = `暫停範例（${value}）：` + text.slice(0, 160);
+      const once = setStatus(text, value);
+      if (once === null) continue;
+      assert.equal(parse(once).props.status, status[value], context + '：讀回來不是這個值');
+      assert.equal(setStatus(once, value), once, context + '：第二次改字');
+      assert.deepEqual(content(once), content(text), context + '：學習目標或題目改變');
+      const { status: _before, issues: _beforeIssues, ...others } = parse(text).props;
+      const { status: _after, issues: _afterIssues, ...kept } = parse(once).props;
+      assert.deepEqual(kept, others, context + '：別的屬性改變');
+      const back = setStatus(once, value === '暫停' ? '啟用' : '暫停');
+      assert.ok(back !== null, context + '：改得過去卻改不回來');
     }
   }
   console.log('往返驗證：' + deckCases.size + ' 份卡組範例全部通過');

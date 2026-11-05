@@ -11,8 +11,30 @@ import type { DeckEntry, Memory, MemoryColor, Next, ReviewEntry, Slot, TodayInpu
 const IMPORTANCE = { high: 0, medium: 1, low: 2 } as const;
 /** 間隔超過這麼多天算很熟（D-062）。 */
 const WELL_KNOWN_DAYS = 21;
+/** 成對的兩張之間至少答過幾個不同的其他目標（D-189 第 1 點）。試作值，用 L3 的雙向單字、短卡組與一首絕句試過再定。 */
+const PAIR_SPACING = 10;
 
 interface Item { id: string; path: string; entry: DeckEntry; target: Target }
+type Partner = (item: Item) => Item | undefined;
+
+/**
+ * 給一張卡，找這一輪裡它的對方。現在只認英文的兩個方向：同一篇、pairKey 相同、方向相反，各方向取前面的。
+ * 之後接句（D-185 第 8 點）在這裡加一個認法，選卡不用改。
+ */
+function partners(items: readonly Item[]): Partner {
+  const keyOf = (item: Item, direction: string): string => JSON.stringify([item.path, item.target.pairKey, direction]);
+  const sides = new Map<string, Item>();
+  for (const item of items) {
+    const { pairKey, direction } = item.target;
+    if (pairKey === null || direction === null) continue;
+    const key = keyOf(item, direction);
+    if (!sides.has(key)) sides.set(key, item);
+  }
+  return item => {
+    const { direction } = item.target;
+    return direction === null ? undefined : sides.get(keyOf(item, direction === 'en-zh' ? 'zh-en' : 'en-zh'));
+  };
+}
 
 /** 目標集合在卡組裡的樣子，照輸入的順序；不在卡組裡的（改掉了、刪掉了）不算。 */
 function itemsOf(input: TodayInput, ids: readonly string[]): Item[] {
@@ -40,6 +62,35 @@ function roundAnswers(reviews: readonly ReviewEntry[], since: number): { valid: 
   return { valid, any };
 }
 
+/** 這一輪每個目標最後一次作答之後，又答過幾個不同的目標；算的作答和 roundAnswers 的 valid 相同。 */
+function answeredAfter(reviews: readonly ReviewEntry[], since: number): Map<string, number> {
+  const after = new Map<string, number>();
+  const first = firstAtOrAfter(reviews, since);
+  for (let i = reviews.length - 1; i >= first; i--) {
+    const { lt, src } = reviews[i];
+    if (src !== 'mistake' && !after.has(lt)) after.set(lt, after.size);
+  }
+  return after;
+}
+
+/**
+ * 成對的卡隔開（D-189 第 1 點）。ready 照到期時間、fresh 照這一輪的順序。apart 是對方最後一次作答之後答過幾個不同的其他目標，對方這一輪還沒答過是 null（沒有限制）。
+ * 到時間的先、再來是新的，各自只看夠隔的。新的裡面先出對方這一輪還沒答過的，一對的第二張排在每一對的第一張之後：
+ * 照筆記順序一夠隔就出的話，最後幾個字沒有別張可以隔開（tasks/quiz-practice.md §2 的 40 個字）。
+ * 都不夠隔時，在本來會選的那一群裡挑隔最多的，一樣多照原順序；只剩同一對也直接出，不讓學生等。
+ */
+function chooseSpaced(ready: readonly Item[], fresh: readonly Item[], apart: (item: Item) => number | null): Item | undefined {
+  const enough = (item: Item): boolean => (apart(item) ?? PAIR_SPACING) >= PAIR_SPACING;
+  const found = ready.find(enough) ?? fresh.find(item => apart(item) === null) ?? fresh.find(enough);
+  if (found) return found;
+  let farthest: Item | undefined, most = -1;
+  for (const item of ready.length ? ready : fresh) {
+    const gap = apart(item) ?? 0;
+    if (gap > most) { farthest = item; most = gap; }
+  }
+  return farthest;
+}
+
 /** 一輪的總數與完成數；答錯再出不增加總數，答對才算完成。 */
 export function practiceProgress(input: TodayInput, ids: readonly string[], since: number): { done: number; total: number } {
   const { valid } = roundAnswers(input.history.reviews, since);
@@ -52,7 +103,7 @@ export function practiceProgress(input: TodayInput, ids: readonly string[], sinc
  * 今天答過、還沒到期的（現在最容易忘的先；D-097 的補充，中途關掉再開時不會先把剛答過的再答一遍）；
  * 雙向配對的兩個方向都出，英翻中排在中翻英前面。記憶看 since 之前的紀錄，所以這一輪答過之後順序不會變。
  */
-function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory>, input: TodayInput, since: number): Item[] {
+function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory>, input: TodayInput, since: number, partner: Partner): Item[] {
   const day = dayOf(since, input.offset);
   const start = dayStart(day, input.offset), end = dayStart(day + 1, input.offset);
   const dueOf = (item: Item, memory: Memory): number => dueAt(memory, retentionOf(input, item.entry, item.target));
@@ -74,8 +125,8 @@ function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory
   };
   const ordered = [...items].sort(compare);
   // 同一篇裡 pairKey 相同的兩個方向：英翻中排到中翻英前面。
-  for (const zh of ordered.filter(item => item.target.direction === 'zh-en' && item.target.pairKey !== null)) {
-    const en = ordered.find(item => item.path === zh.path && item.target.pairKey === zh.target.pairKey && item.target.direction === 'en-zh');
+  for (const zh of ordered.filter(item => item.target.direction === 'zh-en')) {
+    const en = partner(zh);
     if (!en || ordered.indexOf(en) < ordered.indexOf(zh)) continue;
     ordered.splice(ordered.indexOf(en), 1);
     ordered.splice(ordered.indexOf(zh), 0, en);
@@ -83,7 +134,7 @@ function roundOrder(items: readonly Item[], memories: ReadonlyMap<string, Memory
   return ordered;
 }
 
-/** 這一輪下一張：規則和今天的份一樣：到時間的先，再來是新的，沒有別張時提早出（early）。全部答對是 done。 */
+/** 這一輪下一張：規則和今天的份一樣：到時間的先，再來是新的，沒有別張時提早出（early）；成對的卡隔開（chooseSpaced）。全部答對是 done。 */
 export function practiceNext(input: TodayInput, ids: readonly string[], since: number): Next {
   const reviews = input.history.reviews;
   const items = itemsOf(input, ids);
@@ -93,19 +144,29 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   const { valid, any } = roundAnswers(reviews, since);
   // 再出的時間看到現在為止全部的作答（含這一輪），和今天的份相同。
   const latest = replay(reviews.filter(entry => wanted.has(entry.lt)));
-  let ready: { item: Item; at: number } | null = null;
+  const partner = partners(items);
+  const ready: { item: Item; at: number }[] = [];
   let waiting: { item: Item; at: number } | null = null;
-  let fresh: Item | null = null;
-  for (const item of roundOrder(items, memories, input, since)) {
+  const fresh: Item[] = [];
+  for (const item of roundOrder(items, memories, input, since, partner)) {
     const entries = valid.get(item.id);
-    if (!entries) { fresh ??= item; continue; }
+    if (!entries) { fresh.push(item); continue; }
     if (!wrong(entries.at(-1))) continue;
     const memory = latest.get(item.id);
     const at = memory ? dueAt(memory, retentionOf(input, item.entry, item.target)) : input.now;
-    if (at <= input.now) { if (!ready || at < ready.at) ready = { item, at }; }
+    if (at <= input.now) ready.push({ item, at });
     else if (!waiting || at < waiting.at) waiting = { item, at };
   }
-  const item = ready?.item ?? fresh ?? waiting?.item;
+  const after = answeredAfter(reviews, since);
+  const apart = (item: Item): number | null => {
+    const other = partner(item);
+    const gap = other && after.get(other.id);
+    if (gap === undefined) return null;
+    // 自己不算「其他」：對方之後又答過這一張時少算一個。
+    const own = after.get(item.id);
+    return own !== undefined && own < gap ? gap - 1 : gap;
+  };
+  const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(each => each.item), fresh, apart) ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const prior = before.filter(entry => entry.lt === item.id && entry.src !== 'mistake');
   const seen = new Map<string, number>();
@@ -119,7 +180,7 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
     lt: item.id, deck: item.path, target: item.target, prompt,
     isNew: slot.memory === null && !any.has(item.id),
     typed: prompt.kind === 'qa' && prompt.typed !== null,
-    early: !ready && !fresh,
+    early: !ready.length && !fresh.length,
   } };
 }
 
