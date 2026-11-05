@@ -611,6 +611,30 @@ void test('§3 這次寫的少了一筆（被別處取消）：算不準，不�
   assert.equal('score' in doneOf(s.view()), false);
 });
 
+void test('§3 筆數一樣也要逐筆對上：這次寫的一筆被取消、別台多一筆別的目標，不顯示', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  h.rate(s, 'good');
+  const later = new Date(h.clock.now).toISOString().replace('Z', '+00:00');
+  h.write(PHONE, encodeEntry(later, { undo: s.history()[1].t }) + '\n' + encodeEntry(later, { lt: 'x', r: 'good', v: '12345678' }) + '\n');
+  await h.settle();
+  assert.equal(card(s.view()), 'b');
+  h.rate(s, 'good');
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
+void test('§3 筆數一樣也要逐筆對上：這次寫的被取消、別台答了同一個目標，時間對不上，不顯示', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a') });
+  const s = await h.open(h.round());
+  h.rate(s, 'good');
+  const later = new Date(h.clock.now).toISOString().replace('Z', '+00:00');
+  h.write(PHONE, encodeEntry(later, { undo: s.history()[0].t }) + '\n' + encodeEntry(later, { lt: 'a', r: 'good', v: '12345678' }) + '\n');
+  await h.settle();
+  assert.deepEqual(h.state.history().reviews.map(each => each.t), [later]);
+  assert.equal('score' in doneOf(s.view()), false);
+});
+
 void test('§3 當日卡、今天的份、再複習一些的完成畫面沒有這一行；這一輪沒有作答也沒有', async t => {
   const decks = { [DECK]: HEAD('2-1') + targets('a'), [OTHER]: HEAD('2-2') + targets('b') };
   const h = await setup(t, decks);

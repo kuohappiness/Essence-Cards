@@ -1,5 +1,5 @@
 import { dayStart } from '../core/study/index.ts';
-import type { History, Pick, Progress, Rating, ReviewEntry, Today } from '../core/study/index.ts';
+import type { History, Pick, Progress, ReviewEntry, Today } from '../core/study/index.ts';
 import type { StudyPick } from '../state/index.ts';
 
 /** 完成畫面（W6 §2-6、D-070、D-120）。 */
@@ -29,12 +29,12 @@ export function todayStats(history: History, today: Today): { count: number; min
  * own 是這次複習寫的作答，照作答的順序；回看改評分換掉那一筆的 t、位置不變，所以「第一筆」不看紀錄的時間（重答之後才改第一筆，改過的那一筆時間比重答晚）。
  * 這一輪的作答要和 own 逐筆對上，多一筆、少一筆都算不準，回傳 null：時間一樣不夠，別台裝置可能同一個毫秒作答（同步進來的不算這一輪）。分母是 0 也是 null。
  */
-export function firstTry(reviews: readonly ReviewEntry[], since: number, own: readonly { t: string; lt: string; r: Rating }[]): { right: number; total: number } | null {
+export function firstTry(reviews: readonly ReviewEntry[], since: number, own: readonly { t: string; lt: string }[]): { right: number; total: number } | null {
   const round = reviews.filter(entry => entry.at >= since && entry.src !== 'mistake');
   if (round.length !== own.length) return null;
   const first = new Map<string, ReviewEntry>();
-  for (const { t, lt, r } of own) {
-    const entry = round.find(each => each.t === t && each.lt === lt && each.r === r);
+  for (const { t, lt } of own) {
+    const entry = round.find(each => each.t === t && each.lt === lt);
     if (!entry) return null;
     if (!first.has(lt)) first.set(lt, entry);
   }
