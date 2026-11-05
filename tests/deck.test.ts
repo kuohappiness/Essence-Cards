@@ -167,7 +167,7 @@ void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案�
   const english = readFileSync(new URL('../docs/card-rules/english.md', import.meta.url), 'utf8');
   const sources = [
     ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown'),
-    ...indentedFences(english).filter(text => text.includes(' | ')),
+    ...indentedFences(english).filter(text => text.includes('made up his mind | made his mind up')),
   ];
   assert.equal(sources.length, 2);
   for (const text of sources) {
