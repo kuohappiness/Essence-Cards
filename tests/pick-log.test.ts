@@ -123,3 +123,34 @@ void test('第一行已落盤、第二行暫時失敗：跨到下個月才重試
   assert.deepEqual(grown.reviews, merged.reviews, 'mergeHistory 與 appendLine 相同');
   assert.deepEqual(merged.reviews.map(entry => entry.t), lines.map(line => line.t));
 });
+
+// main 的黏行救回（syntax §5-2）碰上比較卡的欄位：一批通常是一秒內連續寫的幾行，最可能接在同一行。
+const LOG = 'Essence Cards/紀錄/2026-11 A.jsonl';
+const merged = (text: string) => mergeHistory([{ path: LOG, text }], null);
+const ROW1 = `{"t":"${T}","lt":"a","r":"near","v":"v1","pick":"塞","retry":"right"}`;
+const ROW2 = `{"t":"${T2}","lt":"b","r":"good","v":"v2","pick":"塞","also":[{"v":"v3","r":"good","pick":"寒"}],"with":"${T}"}`;
+
+void test('一批黏在同一行：每一筆都讀回來，with 與 also 都在，巢狀的 also 不算一筆', () => {
+  const history = merged(`${ROW1}${ROW2}\n`);
+  assert.deepEqual(history.reviews, [review(ROW1), review(ROW2)]);
+  assert.equal(history.reviews[1].with, T);
+  assert.deepEqual(history.reviews[1].also, ['v3']);
+  assert.deepEqual(history.problems.map(problem => problem.line), [0]);
+});
+
+void test('前一筆寫到一半、後一筆接在後面：救回的是完整的那一筆，with 指到的第一筆不在也照讀', () => {
+  const history = merged(`${ROW1.slice(0, 30)}${ROW2}\n`);
+  assert.deepEqual(history.reviews, [review(ROW2)]);
+  assert.deepEqual(history.seen, ['b']);
+});
+
+void test('字鍵的字長得像紀錄的開頭：不會被當成一筆', () => {
+  const row = `{"t":"${T2}","lt":"b","r":"good","v":"v2","pick":${JSON.stringify('{"t":"x"}')},"with":"${T}"}`;
+  assert.deepEqual(merged(`${ROW1}${row}\n`).reviews, [review(ROW1), review(row)]);
+});
+
+void test('回看改評分的取消黏在同一行：兩筆都取消', () => {
+  const undo = (t: string, of: string): string => `{"t":"${t}","undo":"${of}"}`;
+  const later = '2026-11-05T20:15:04.000+08:00', later2 = '2026-11-05T20:15:04.001+08:00';
+  assert.deepEqual(merged(`${ROW1}\n${ROW2}\n${undo(later, T)}${undo(later2, T2)}\n`).reviews, []);
+});
