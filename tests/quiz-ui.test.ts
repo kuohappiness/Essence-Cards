@@ -404,6 +404,23 @@ void test('§4 N 是 0 不能按', async t => {
   assert.equal(s.button('全部卡 0').disabled, true);
 });
 
+void test('§4 那一篇之後暫停了：全部卡 0 不能按；目錄沒有它的按鈕，入口可以取消', async t => {
+  const s = await open(t, {
+    [PAUSED]: head('國二上', '英文', 'L3 Vocabulary', '狀態: 暫停\n') + targets('p1'),
+    [FOLDER + 'a.md']: quizText('2026-11-06', link(PAUSED)),
+  }, { screen: 'entry' });
+  assert.match(s.rows()[0], /國二上英文 L3 暫停.*明天考.*全部卡 0/);
+  assert.equal(s.button('全部卡 0').disabled, true);
+  await s.click(s.button('取消'));
+  assert.deepEqual(s.rows(), []);
+  assert.match(text(s, FOLDER + 'a.md'), /取消: 2026-11-05/);
+});
+
+void test('§4 正常的列、有卡可以練：沒有取消，要到目錄取消', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-06') }, { screen: 'entry' });
+  assert.equal(s.has('取消', s.all('.ec-qz')[0]), false);
+});
+
 void test('§4 考試日隔天清晨 4 點起消失，檔案留著；到了今天又沒有卡時，沒有卡的字在小考底下', async t => {
   const original = quizText('2026-11-05');
   const s = await open(t, { [FOLDER + 'a.md']: original }, { screen: 'entry', now: at('2026-11-06T03:59:59.999') });

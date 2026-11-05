@@ -47,6 +47,12 @@ void test('§1 檔名重複：Obsidian 只回一個，這裡不靠它挑，算�
   assert.deepEqual(resolve('Essence Cards/舊的/國二上英文 L3 單字', FROM), { kind: 'file', path: COPY });
 });
 
+void test('§1 完整路徑剛好也是別的資料夾的尾巴（備份了一整包）：還是只有一個答案', () => {
+  const copy = '備份/' + WORDS;
+  const { resolve } = resolver([WORDS, copy], { 'Essence Cards/學業/國二上英文 L3 單字': WORDS });
+  assert.deepEqual(resolve('Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'file', path: WORDS });
+});
+
 void test('§1 大小寫不同還是同一篇：Windows、iPhone 的檔名不分大小寫，Obsidian 也當成同一篇', () => {
   const lower = 'Essence Cards/english l3.md', upper = 'Essence Cards/舊的/English L3.md';
   assert.deepEqual(resolver([lower], { 'ESSENCE CARDS/ENGLISH L3': lower }).resolve('ESSENCE CARDS/ENGLISH L3', FROM), { kind: 'file', path: lower });

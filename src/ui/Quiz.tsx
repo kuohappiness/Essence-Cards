@@ -24,19 +24,20 @@ export function QuizEntryRow({ row, state, start, openNote, notify }: Actions & 
   const title = row.subject ? `${row.subject} ${row.name}` : row.name;
   const practice = <button type="button" className="ec-sb-btn" disabled={row.problem !== null || row.count === 0} onClick={() => { const ref = row.refs[0]; start({ ...ref, since: Date.now() }); }}><Icon type="play" size={14} /><span>全部卡 {row.count}</span></button>;
   const line = <i className="ec-sb-bar" aria-hidden="true" />;
+  const cancel = (): void => {
+    // 擋下來的原因交給通知：這一列沒有放字的地方，也不用留著。
+    void state()?.cancelQuiz(row).then(result => { if (result.kind !== 'done') notify(quizFailure(result)); });
+  };
+  const quiet = row.cancellable && <button type="button" className="ec-qz-quiet" onClick={cancel}>取消</button>;
   if (row.problem === null) return <div className="ec-sb ec-qz">
     <span className="ec-sb-left">
       <span className="ec-en-name">{title}</span>
       <span className="ec-sb-ex">{row.when}</span>
     </span>
-    {practice}
+    {row.cancellable ? <span className="ec-qz-side">{practice}{quiet}</span> : practice}
     {line}
   </div>;
   const copies = row.problem === 'copies';
-  const cancel = (): void => {
-    // 擋下來的原因交給通知：這一列沒有放字的地方，也不用留著。
-    void state()?.cancelQuiz(row).then(result => { if (result.kind !== 'done') notify(quizFailure(result)); });
-  };
   return <div className="ec-sb ec-qz">
     <button type="button" className="ec-qz-fix" aria-expanded={copies ? open : undefined} onClick={() => { if (copies) setOpen(!open); else openNote(row.paths[0]); }}>
       <span className="ec-en-name">{title}</span>
@@ -46,7 +47,7 @@ export function QuizEntryRow({ row, state, start, openNote, notify }: Actions & 
     </button>
     {(row.problem === 'unmatched' || row.cancellable) && <span className="ec-qz-side">
       {row.problem === 'unmatched' && practice}
-      {row.cancellable && <button type="button" className="ec-qz-quiet" onClick={cancel}>取消</button>}
+      {quiet}
     </span>}
     {open && <QuizCopies row={row} openNote={openNote} />}
     {line}

@@ -22,7 +22,7 @@ export interface QuizRowView extends QuizRow {
   /** 待修正的字；正常的是 null。 */
   word: string | null;
   repair: string | null;
-  /** 目錄找不到這一列（單元對不到、連結壞掉），要在這裡給一個取消的地方。 */
+  /** 目錄沒有按鈕可以取消（單元對不到、連結壞掉、那一篇或整個單元都暫停了），要在這裡給一個取消的地方。 */
   cancellable: boolean;
 }
 
@@ -41,7 +41,7 @@ export function quizViews(state: State | null): QuizRowView[] {
     when: row.date === null ? null : when(row.date, day),
     word: row.problem === null ? null : WORDS[row.problem],
     repair: row.problem === 'missing' || row.problem === 'several' ? LINK_REPAIR : null,
-    cancellable: row.problem === 'missing' || row.problem === 'several' || row.problem === 'unmatched',
+    cancellable: row.problem === 'missing' || row.problem === 'several' || row.problem === 'unmatched' || (row.problem === null && row.count === 0),
   }));
 }
 
