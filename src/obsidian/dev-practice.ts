@@ -155,10 +155,9 @@ export async function practiceDev(host: EntryDevHost, folder: string): Promise<u
       view.editor.replaceRange('- 還沒存的字\n', { line: view.editor.lastLine(), ch: 0 });
       buttonIn(rowOf('L3 單字'), '暫停')?.click();
       check('有沒存的修改：提示', await until(() => NOTICE().some(each => each.includes('還沒存進去'))));
-      // 全螢幕蓋滿視窗：提示要真的在最上面，只在 DOM 裡不算。
-      const notice = Array.from(document.querySelectorAll<HTMLElement>('.notice')).find(each => text(each).includes('還沒存進去'));
-      const box = notice?.getBoundingClientRect();
-      check('有沒存的修改：提示看得到', !!box && !!document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('.notice'));
+      // 全螢幕蓋滿視窗：通知那一層要在它上面，只在 DOM 裡不算。通知層不接收滑鼠事件，elementFromPoint 量不到它；看得到看截圖。
+      const layer = (selector: string): number => { const found = document.querySelector(selector); return found ? Number(getComputedStyle(found).zIndex) : NaN; };
+      check('有沒存的修改：提示在全螢幕上面', layer('.notice-container') > layer('.ec-fullscreen'));
       check('有沒存的修改：磁碟沒動', await app.vault.read(file(WORDS)) === saved);
       check('有沒存的修改：編輯器的字還在', view.editor.getValue().includes('還沒存的字'));
       await capture('有沒存的修改');
@@ -170,7 +169,7 @@ export async function practiceDev(host: EntryDevHost, folder: string): Promise<u
       check('存好了：磁碟也改了', (await app.vault.read(file(WORDS))).includes('狀態: 暫停'));
       check('存好了：其他字元不動', view.editor.getValue() === saved.replace('單元: "L3 練習"\n', '單元: "L3 練習"\n狀態: 暫停\n'));
       await press(buttonIn(rowOf('L3 單字'), '恢復'), () => view.editor.getValue().includes('狀態: 啟用'));
-      await until(() => inEntry('.ec-tr-pc').length === 2);
+      await until(() => inEntry('.ec-tr-pc').length === 2 && inEntry('.ec-tr-pc').every(each => text(each).includes('全部卡')));
       check('兩列都回來', inEntry('.ec-tr-pc').map(text));
       host.entry?.close();
       await until(() => screens().length === 0);
@@ -222,7 +221,10 @@ export async function practiceDev(host: EntryDevHost, folder: string): Promise<u
   } finally {
     host.review?.close();
     host.entry?.close();
-    check('沒有留下暫時的檔與資料夾', await clearTrial(app, trial));
+    // iCloud 正在同步剛改過的檔時刪不掉（2026-11-05 遇過）：等一下再清一次。
+    let left = await clearTrial(app, trial);
+    if (left !== true) { await sleep(5000); left = await clearTrial(app, trial); }
+    check('沒有留下暫時的檔與資料夾', left);
     rendering.restore();
   }
 }
