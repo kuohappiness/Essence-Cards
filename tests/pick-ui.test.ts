@@ -88,6 +88,16 @@ void test('字鍵：照打散的順序，6 個以內一排、7 個以上兩排�
   assert.equal(four.find('ec-pick-keys')[0].props.className, 'ec-pick-keys');
   const words = await show(t, preview(PROPS + group(['make up', 'affect', '質量'])));
   assert.equal(words.find('ec-pick-keys')[0].props.className, 'ec-pick-keys is-words');
+  // 詞比字長（375 寬實測：6 個一排一格 52px，give up 超出字鍵）：一排最多 4 個，5、6 個排成兩排各 3 個。
+  const columnsOf = async (members: string[]): Promise<string> => ((await show(t, preview(PROPS + group(members)))).find('ec-pick-keys')[0].props.style as Record<string, string>)['--ec-pick-columns'];
+  const WORDS = ['affect', 'effect', 'make up', 'give up', 'carry on', 'take off', 'put on', 'turn on', 'look up'];
+  assert.equal(await columnsOf(WORDS.slice(0, 3)), '3');
+  assert.equal(await columnsOf(WORDS.slice(0, 4)), '4');
+  assert.equal(await columnsOf(WORDS.slice(0, 5)), '3');
+  assert.equal(await columnsOf(WORDS.slice(0, 6)), '3');
+  assert.equal(await columnsOf(WORDS.slice(0, 7)), '4');
+  assert.equal(await columnsOf(WORDS.slice(0, 8)), '4');
+  assert.equal(await columnsOf(WORDS), '4', '9 個詞：還是一排 4 個');
 });
 
 void test('每一句一行：句子照 Markdown 的 pick 模式，空格是按鈕放進 slotNode；待答的那一行有 is-on', async t => {

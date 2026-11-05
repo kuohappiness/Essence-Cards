@@ -24,11 +24,11 @@
 .ec-pick-slot s { color: var(--ec-miss); }
 .ec-pick-fly { position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; font-size: 30px; line-height: 1; color: var(--ec-ink); }
 
-/* 字鍵（D-182 第 6 點）：6 個以內一排，7 個以上兩排；句子放不下就捲動，字鍵固定在下面 */
+/* 字鍵（D-182 第 6 點）：幾個一排由 keyColumns 決定；句子放不下就捲動，字鍵固定在下面 */
 .ec-pick-tray { display: grid; gap: 10px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
 .ec-pick-keys { display: grid; grid-template-columns: repeat(var(--ec-pick-columns), minmax(0, 1fr)); gap: 8px; }
 .ec-app .ec-pick-key, .ec-app .ec-pick-key:hover, .ec-app .ec-pick-key:focus { appearance: none; width: 100%; height: 60px; min-width: 0; padding: 0 2px; border: 1px solid var(--ec-line); border-radius: var(--ec-radius); background: none; box-shadow: none; color: var(--ec-ink); font-family: var(--ec-font-ui); font-size: 31px; line-height: 1.1; cursor: pointer; touch-action: manipulation; transition: transform .06s ease, background-color .06s ease; }
-.ec-app .ec-pick-keys.is-words .ec-pick-key { font-size: 17px; overflow-wrap: anywhere; }
+.ec-app .ec-pick-keys.is-words .ec-pick-key { font-size: 17px; white-space: normal; overflow-wrap: anywhere; }
 .ec-app .ec-pick-key:not(:disabled):active { background: color-mix(in srgb, var(--ec-ink) 6%, transparent); transform: scale(.96); }
 .ec-app .ec-pick-key:disabled { opacity: .28; cursor: default; }
 .ec-pick-acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }

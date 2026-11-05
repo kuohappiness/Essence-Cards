@@ -71,6 +71,16 @@ function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.E
   </article>;
 }
 
+/**
+ * 字鍵幾個一排（D-182 第 6 點）：一個字的 6 個以內一排、7 個以上兩排。
+ * 詞比字長（375 寬實測：6 個一排一格 52px，give up 超出字鍵）：一排最多 4 個，5、6 個排成兩排各 3 個。
+ */
+function keyColumns(count: number, words: boolean): number {
+  if (!words) return count <= 6 ? count : Math.ceil(count / 2);
+  if (count <= 4) return count;
+  return count <= 6 ? 3 : 4;
+}
+
 /** 字鍵與兩個動作（§7）：手指最常停的地方，字鍵在上，動作在下，中間留空，連點才不會誤按「對答案」。 */
 function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Element {
   const { pick, group } = partsOf(view);
@@ -78,9 +88,9 @@ function Tray({ view, animating, act, focusApp }: BottomProps): React.JSX.Elemen
   const cursor = pick.cursor;
   // 用滑鼠或手指點完，焦點回到畫面：Space、Enter 才是「對答案」，不是再按一次這個字鍵。Tab 過來用鍵盤按的（detail 是 0）留在原處。
   const after = (event: React.MouseEvent): void => { if (event.detail > 0) focusApp(); };
-  const columns = group.keys.length <= 6 ? group.keys.length : Math.ceil(group.keys.length / 2);
+  const words = group.keys.some(key => [...key].length > 1);
   return <div className="ec-pick-tray">
-    <div className={'ec-pick-keys' + (group.keys.some(key => [...key].length > 1) ? ' is-words' : '')} style={{ '--ec-pick-columns': String(columns) } as React.CSSProperties}>
+    <div className={'ec-pick-keys' + (words ? ' is-words' : '')} style={{ '--ec-pick-columns': String(keyColumns(group.keys.length, words)) } as React.CSSProperties}>
       {group.keys.map(key => <button key={key} type="button" className="ec-pick-key" disabled={animating || key === pick.spent} onClick={event => {
         const target = cursor;
         act({ kind: 'key', key });
