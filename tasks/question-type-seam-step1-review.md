@@ -55,7 +55,7 @@
 
 ## 複查 F1（第二輪）
 
-新版改成同一分支的 `743601a`（`fix: keep the rating buttons and focus when the card type changes`）。舊版不變。分支之後合併了 `main`（`cf432af`，含考試範圍的程式），第一步的差分與軌跡請以 `743601a` 的 `src`、`tests` 為準。
+新版改成同一分支的 `743601a`（`fix: keep the rating buttons and focus when the card type changes`）。舊版不變。**工作目錄已經合併了 `main`，帶進考試範圍和其他程式的改動，不能直接當新版比。** 請用 `git archive 743601a src tsconfig.json` 解到暫存資料夾，`README.txt` 指令裡的 `$R` 指向那裡；鎖定的測試檔用 `git diff 283f4c6 743601a -- …` 看。`npm run check` 另外在工作目錄跑一次，確認合併後也過。
 
 **修法**：底部那一排由元件（`screen.Bottom`）改成普通函式（`screen.bottom()`），`Review` 直接呼叫、放進同一個 `.ec-actions`，所以換題型時 React 看到的是同一棵樹。新測試 `tests/review-focus.test.ts` 在修正前兩個都失敗。
 

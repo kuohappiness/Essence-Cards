@@ -1,10 +1,10 @@
 # 題型接點與比較點選（D-181、D-178、D-182，給 Claude，本機執行）
 
-狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），等複查（[請求](question-type-seam-step1-review.md)）；§3 照 D-182 定稿，等格式查核（[請求](question-type-seam-format-review.md)）；兩個都過才動第二步；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍）
+狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），等複查（[請求](question-type-seam-step1-review.md)）；§3 照 D-182 定稿，等格式查核（[請求](question-type-seam-format-review.md)）；兩個都過才動第二步；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-188 的文件）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫這份用 **Opus、xhigh**，實作用 **Opus、高**（[quality.md](../docs/agents/quality.md)）。改解析、紀錄、排程、複習流程，跨模組，合併前要 L2。必讀 code-quality 的〈測試〉。
 
-依據：[D-181](../docs/decisions.md#d-181-題型是可以接上的模組開題型專區) 第 5 點（先搬舊的兩種，再接比較點選）、[D-178](../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標) 、[D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選) 與[相似字比較卡的規畫](../docs/plans/similar-chars.md)（規格，這份不重抄）、[D-179](../docs/decisions.md#d-179-介面的每一項都要有必要性非必要不出現)、[題型專區](../docs/question-types.md)的〈定案一個題型要回答什麼〉。示意頁原始檔 `experiments/mockups/similar-chars-card.html`。
+依據：[D-181](../docs/decisions.md#d-181-題型是可以接上的模組開題型專區) 第 5 點（先搬舊的兩種，再接比較點選）、[D-178](../docs/decisions.md#d-178-相似字用點字比較卡一格一個學習目標) 、[D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選) 與[相似字比較卡的規畫](../docs/plans/similar-chars.md)（規格，這份不重抄）、[D-179](../docs/decisions.md#d-179-介面的每一項都要有必要性非必要不出現)、[D-187](../docs/decisions.md#d-187-全詩順序卡一首一張放在這首最後)（這次不做，形狀要容得下，§1-1）、[題型專區](../docs/question-types.md)的〈定案一個題型要回答什麼〉。示意頁原始檔 `experiments/mockups/similar-chars-card.html`。
 
 ## 和「不做」比較（D-153）
 
@@ -50,6 +50,8 @@ interface Card {
 
 `questionType(card)` 是唯一判斷題型的地方（`group` 有值是比較點選，`typed` 是打字，其他是翻面）；`Card` 不再多存一份題型。`nextCard`、`practiceNext` 與預覽各自重複的 `typed: prompt.kind === 'qa' && …` 併成一個 `cardOf`。
 
+**全詩順序卡（D-187）這次不做，形狀要容得下**：它是比較點選的一種（第 8 點），不是第四種題型，多的是三條規則：空格全部一起出、字鍵用過就淡掉、好幾格一個目標取最差的一格。它用填空語法、沒有括號，§3 不會認成比較卡；接上時從名稱最後兩個字「排序」認，`Blank` 多一個「這一題的第幾格」，`CardGroup` 多一個旗標，字鍵放整句。`Card` 不落地，到時改形狀不用遷移；紀錄照 §4，不用改格式。
+
 ### 1-2 作答流程（`Flow`，`src/review/flow.ts`）
 
 一張卡從題目走到有結果的整段狀態，一個物件。Session 與預覽都只透過它：
@@ -71,7 +73,7 @@ type FlowAction = { kind: 'reveal' } | { kind: 'input'; text: string } | { kind:
 
 `createFlow(card, { now })` 照 `questionType(card)` 查表。預覽的打字走另一個流程（`createPreviewTyped`：不走三步，D-161），翻面走同一個（多一個 `revealed` 的起點）。預覽什麼都不寫，自評也不等 0.3 秒，所以它的流程（`createPreviewFlow`）沒有 `settle`、`revealedAt`。第一步的 `settle` 只收評分；第二步要 `settle(null)` 時才放寬。按下的評分留在 Session，第一步不放進 `Settled`。
 
-**四種邊界都試過**（D-181 要求接點試過這些）：孩子自評（翻面：`allowed` 全部）；一張卡走好幾步（打字：`act` 走三步，`allowed` 由第 1 步決定）；一張卡好幾格好幾個目標（比較點選：`lines` 好幾行，`settle(null)` 不用選評分）；程式判一部分、孩子自評一部分（找錯題，還沒定案：`act` 判位置、`allowed` 限制評分、`lines` 帶證據，不用改 Session）。
+**四種邊界都試過**（D-181 要求接點試過這些）：孩子自評（翻面：`allowed` 全部）；一張卡走好幾步（打字：`act` 走三步，`allowed` 由第 1 步決定）；一張卡好幾格好幾個目標（比較點選：`lines` 好幾行，`settle(null)` 不用選評分）；程式判一部分、孩子自評一部分（找錯題，還沒定案：`act` 判位置、`allowed` 限制評分、`lines` 帶證據，不用改 Session）。D-187 多一種：好幾格一個目標（全詩順序卡：`lines` 一行，取最差的一格），和 §4 同一個目標兩格是同一條規則，第二步用兩個選項的組就走得到。
 
 Session 留下：取卡、`top`、回看清單、切走重來、衝突與停用、0.3 秒、寫紀錄。`Session` 的方法與 `CardView` 的欄位都不變，`reveal`、`input`、`submit`、`skip` 轉成 `act`；第二步新增 `act(action)`（字鍵、句子、對答案）與 `commit()`（有錯時的「下一張」），新題型不用再加方法。
 
@@ -100,7 +102,7 @@ const SCREENS: Record<QuestionType, Screen> = { flip, typed, pick };
 **不可破壞**：孩子看到的行為與紀錄的每一個字都不變。
 
 **驗收**：
-- `git diff 283f4c6 -- tests/review-session.test.ts tests/review-ui.test.ts tests/review.test.ts tests/preview.test.ts` 是空的，且四個檔全部通過（基準當時 42、23、20、8 個）。`tests/helpers/` 最多調引用路徑。
+- `git diff 283f4c6 -- tests/review-session.test.ts tests/review-ui.test.ts tests/review.test.ts tests/preview.test.ts` 是空的，且四個檔全部通過（基準當時 42、23、20、8 個）。這條查 `743601a`：之後合併 `main` 帶進 `extraLabel` 的兩條斷言（D-185），`tests/review.test.ts` 在 HEAD 不再是空的，不是接點改的。`tests/helpers/` 最多調引用路徑。
 - `npm run check` 通過；`src/review/session.ts` 裡不再有 `checkTyped`、`spelling`、`hintOf`（`grep` 不到），`src/ui/Review.tsx` 裡不再有 `typed.step`。
 - 差分跑 2000 串、每串 60 步以上，沒有差異（差異要逐項說明，不能略過）。
 - 這一步不改 `docs/syntax.md`，也不改 `tests/` 以外的格式。
@@ -138,7 +140,7 @@ interface Target { …; group?: PickGroup }   // 選填：沒有就是一般目�
 
 **題目不符第 3 條為什麼不算寫錯**（💡 實作者的選擇，這裡和前一版相反）：程式改認括號之後，一般的卡也可能走到這裡（`台北（台北、高雄） 首都` 底下 `台灣的首都？ :: 台北`），算寫錯的話那個目標就不出題，照一般問答卡出反而是對的。真的想寫比較卡卻寫壞的，交給 `check-syntax`（§10）：只有它看結尾的詞。
 
-組的身分：同一篇卡組、`key` 相同。不跨卡組（和 §2-3 英文的兩個方向同一個範圍）；不看是否有重疊，添（添、漆）和添（添、舔）是兩組（預設〈相似字〉）。組裡的字沒有自己的目標時，字鍵照樣有，對照那一行只有字（`check-syntax` 提醒）。
+組的身分：同一篇卡組、`key` 相同。不跨卡組（和 §2-3 英文的兩個方向同一個範圍）；不看是否有重疊，添（添、漆）和添（添、舔）是兩組（預設〈相似字〉）。組裡的字沒有自己的目標時，字鍵照樣有，對照那一行只有字（`check-syntax` 提醒）。一課分成幾篇（D-183）時相似字都在字詞篇，不受影響。
 
 指紋照 §2-8，不變；`typed` 是 null。記憶錨點照舊是 `shared`。
 
@@ -158,7 +160,7 @@ interface Target { …; group?: PickGroup }   // 選填：沒有就是一般目�
 | `r` | 第一次對 `good`；全對又按太簡單時每一行都是 `easy`；第一次錯、再選對 `near`；再選也錯、按「沒印象」`miss` |
 | `v` | 這一句的指紋 |
 
-- 同一張卡同一個字有兩格：一行，取比較差的那格的 `r`、`v`、`pick`、`retry`；一樣差取畫面上前面那一格。
+- 同一張卡同一個目標有好幾格（兩個選項的組、多放的一句；之後的全詩順序卡）：一行，取最差的那格的 `r`、`v`、`pick`、`retry`；一樣差取畫面上前面那一格。
 - 不寫 `typed`、`need`、`src`。舊版讀到 `pick` 忽略（`src/core/study/entries.ts:40` 只取認得的欄位），讀到 `retry` 也忽略（現在就這樣），每一行都是合法的作答：不用 `need`（§0-1）。
 - `parseLine`、`ReviewEntry`、`sameReview`（`src/core/study/history.ts:19`）都不讀 `pick`：它只是證據（D-115），和 `retry` 相同。
 - 一行寫不進去（那個目標被停掉，`state.answer` 回 null）：其他行照寫，每一行本來就獨立；全部寫不進去照現有的做法換下一張。
@@ -229,6 +231,7 @@ interface Target { …; group?: PickGroup }   // 選填：沒有就是一般目�
 照示意頁與規畫〈畫面與防點錯〉，CSS 用 `tokens.css` 的變數。拿掉的五樣都維持拿掉（D-179 第 5 點）。要點：
 
 - 每張卡都有的那一行（路徑、「新」）照舊在最上面；標題接在下面：`title`、全形冒號、括號順序的組（「相似字：寨、塞、寒、賽」、「比較：borrow、lend」）；沒有結尾時只列組。同一張卡的幾個字結尾不同時，用選中的那一格。
+- 顏色（D-182 第 8 點，示意頁已改）：空格灰色底線，待答的那一格紫色粗線，這一句很淡的底；填進去的字是一般文字的顏色，大小和句子相同，底線回到灰色；對答案後字變色，第一次對綠色、差一點橙色、沒印象紅色，底線照舊灰色；字鍵同樣的框線，剛才選的字變淡。紫色只用在待填空格的底線和翻面對照裡的部件。樣式只寫一份，全詩順序卡之後多一條「填完清除底線」。
 - 字鍵：6 個以內排一排，7 個以上排兩排；句子放不下就捲動，字鍵固定在下面（D-182 第 6 點）。要放得下詞（`affect`、`質量`、`make up`）：大小與排法還沒量過，實作時在 375 寬量，結果記回[規畫〈待決〉](../docs/plans/similar-chars.md#待決)。
 - 句子用 `Markdown`（粗體、圖照樣，D-089 第 7 條），`mode: 'typed'`、一條線；`Markdown` 新增 `slotNode`，和 `tail` 一樣用 `createPortal` 放進空格，按鈕就是空格本身。
 - 對照：每個字一行。第一行是記憶錨點去掉「記憶錨點：」、去掉最後一個全形冒號之後的部分（`Markdown`，粗體是紫色），第二行是常用詞（冒號後面；沒有冒號就沒有這行）；右邊是這張卡的結果，這次沒出句子的字沒有。
@@ -291,6 +294,7 @@ ID 變成重複（D-157）：目前這張牽涉的任何一個目標衝突，整
 - 家長出題時勾選要不要用這個題型：跟著 AI 製卡模組做（D-182 第 2 點，[backlog](../docs/backlog.md#v1-需要做的任務)）。程式本身不分科（§3）。
 - 組的身分放寬（舊目標括號沒改、新字括號多一個字時，現在是兩組）：預設〈相似字〉標 💡，要用 L8 測，測了再決定改預設還是改程式。
 - 製卡規則改成只寫用哪個題型（題型專區第 3 段，跟重整製卡規則一起）。
+- 小燈泡（D-184）、接句卡的畫面（D-185）、全詩順序卡（D-187）、朗讀的喇叭圖示（D-188）：都等這個分支合併後才動 `Review.tsx`，在 [backlog](../docs/backlog.md#v1-需要做的任務)。
 - 中文朗讀（[D-172](../docs/decisions.md#d-172-國小國語放進-v1) 之後另開一串）：比較卡沒有喇叭。
 
 ## 實作者自己選的做法（L2 請先看）
@@ -309,3 +313,4 @@ ID 變成重複（D-157）：目前這張牽涉的任何一個目標衝突，整
 10. ` 中翻英`、` 英翻中` 優先於括號（§3）。
 11. 同一個字兩格只記一個 `v`，不加欄位（§5-2）。
 12. 兩個選項的組，字鍵順序不強制和括號不同（§5-3）；再選只剩一個字時照舊記 `near`（§6）。
+13. 翻面對照不放小燈泡（§7）：D-184 說的是一般卡的背面，對照的每一行都是記憶錨點，沒有要分開的東西。
