@@ -1,6 +1,6 @@
 # 題型接點與比較點選開工前的格式查核（給 Codex）
 
-狀態：第四輪查核完成，Claude 已回應並改寫規格，要不要再跑一輪等使用者決定（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）
+狀態：第四輪查核完成，Claude 已回應並改寫規格，使用者 2026-11-05 決定查核到這裡為止，第四輪之後改的部分由合併前的 L2 查（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
