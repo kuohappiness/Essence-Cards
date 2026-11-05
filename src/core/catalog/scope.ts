@@ -5,7 +5,7 @@ import { chapterAlias, codeKey, readTerm, termKey, termRank, tidy } from '../dec
 
 export const EXAM_FOLDER = 'Essence Cards/考試範圍';
 /** 留給小考（D-189 第 5 點）：只有 `考試範圍/` 直接底下、名稱剛好是 `小考` 的那一層與它底下；`小考備份/`、`舊的/小考/` 照舊是段考範圍。 */
-const QUIZ_FOLDER = EXAM_FOLDER + '/小考';
+export const QUIZ_FOLDER = EXAM_FOLDER + '/小考';
 const isQuizPath = (path: string): boolean => path.startsWith(QUIZ_FOLDER + '/');
 export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md') && !isQuizPath(path);
 
@@ -14,7 +14,7 @@ export type ScopeLine =
   | { kind: 'unit'; line: number; raw: string; term: string; subject: string; code: string }
   | { kind: 'category' | 'unreadable'; line: number; raw: string };
 /** 日期：none 是沒寫；bad 的 why 分看不懂（format）與不存在（nonexistent），畫面寫的字不同。 */
-type ScopeDate = { kind: 'none' } | { kind: 'ok'; date: string } | { kind: 'bad'; raw: string; why: 'format' | 'nonexistent' };
+export type ScopeDate = { kind: 'none' } | { kind: 'ok'; date: string } | { kind: 'bad'; raw: string; why: 'format' | 'nonexistent' };
 export interface ScopeFile {
   /** 識別碼；沒有或空白是 null。 */
   id: string | null;
@@ -70,8 +70,8 @@ export function scopePeriod(file: ScopeFile): ScopePeriod {
 
 // ── 一行 ──
 
-const LIST_MARK = /^(?:[-*+]|\d+[.)])(?: |(?=[^\d])) ?(?:\[[ xX]\] )?/;
-const LINE_END = /[,/;、。.\s]+$/;
+export const LIST_MARK = /^(?:[-*+]|\d+[.)])(?: |(?=[^\d])) ?(?:\[[ xX]\] )?/;
+export const LINE_END = /[,/;、。.\s]+$/;
 /** 行中的這些字是一行好幾項或區間：不拆不猜（D-176 第 7 點）。要在吃名稱之前擋。 */
 const SEVERAL = /[,、;/~]|\d ?[到至] ?\d/;
 const NUMERIC = /^\d+(?:-\d+)*$/;
@@ -100,7 +100,7 @@ function readRest(rest: string): { subject: string; code: string } | null {
   return { subject: words.slice(0, at).join(' '), code };
 }
 
-function readLine(raw: string, line: number): ScopeLine | null {
+export function readLine(raw: string, line: number): ScopeLine | null {
   const text = tidy(raw).trim();
   if (!text || /^#{1,6}(?: |$)/.test(text)) return null;
   const body = text.replace(LIST_MARK, '').replace(LINE_END, '').trim();
@@ -118,7 +118,7 @@ function readLine(raw: string, line: number): ScopeLine | null {
 // ── 一份檔 ──
 
 /** 屬性區的值。讀不出來（YAML 有錯、alias 接不上或繞圈、最上層不是對照表）是 null；沒有字是空的對照表。 */
-function headValues(raw: string): Record<string, unknown> | null {
+export function headValues(raw: string): Record<string, unknown> | null {
   try {
     const doc = parseDocument(raw);
     if (doc.errors.length) return null;
@@ -135,7 +135,7 @@ function headValues(raw: string): Record<string, unknown> | null {
   } catch { return null; }
 }
 /** 屬性區壞了還是要認得是哪一次考試（§2-2）：這一行還在就照用，有 `提前結束` 的壞檔才擋得住同一個識別碼的舊副本。 */
-function looseId(raw: string): string | null {
+export function looseId(raw: string): string | null {
   // 每一行自己照正常的讀法讀，鍵與值的引號、註解、像數字的字才會和沒壞的副本一樣（R15、R18）。別名要看另一行，這裡不跟。
   // 開了多行的值的行（值空著、`|`、`>`，或引號、括號沒收），底下縮排更深的行屬於它，不是這份檔的識別碼（R22）。其他多打的空白照認。
   let owner: number | null = null;
@@ -151,14 +151,14 @@ function looseId(raw: string): string | null {
   }
   return null;
 }
-function idOf(values: Record<string, unknown> | null): string | null {
+export function idOf(values: Record<string, unknown> | null): string | null {
   const id = values?.['識別碼'];
   return (typeof id === 'string' || typeof id === 'number') && String(id).trim() ? String(id).trim() : null;
 }
 
-const piecesOf = (text: string): string[] => text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
+export const piecesOf = (text: string): string[] => text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
 /** 屬性區的字與結束的 `---` 在第幾段（沒有結束是 -1）；沒有屬性區是 null。 */
-function headOf(pieces: readonly string[]): { raw: string; close: number } | null {
+export function headOf(pieces: readonly string[]): { raw: string; close: number } | null {
   if (pieces[0].trim() !== '---') return null;
   const close = pieces.findIndex((piece, index) => index > 0 && /^---\s*$/.test(piece));
   return { raw: pieces.slice(1, close < 0 ? pieces.length : close).join('\n'), close };
@@ -226,7 +226,7 @@ export function unitInScope(file: Pick<ScopeFile, 'lines'>, unit: ScopeUnit): bo
 // ── 選哪一份（§2-3）──
 
 const hasUnit = (file: ScopeFile): boolean => file.lines.some(line => line.kind === 'unit');
-const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
+export const compareText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 const groupOf = (each: { path: string; file: ScopeFile }): string => each.file.id === null ? 'path:' + each.path : 'id:' + each.file.id;
 
 /** 整組還沒結束的（§2-3 第 1 步）：同一個識別碼任一份結束，整組都結束。 */
@@ -285,7 +285,7 @@ export interface ScopeChange {
 type ScopeEdit = { kind: 'ok'; text: string } | { kind: 'blocked'; reason: 'changed' | 'broken' | 'dates' } | { kind: 'blocked'; reason: 'special'; lost: string[] };
 interface RawLine { raw: string; eol: string }
 
-function linesWithEnds(text: string): RawLine[] {
+export function linesWithEnds(text: string): RawLine[] {
   const lines: RawLine[] = [];
   for (const match of text.matchAll(/([^\r\n]*)(\r\n|\n|\r|$)/g)) {
     if (match[0] === '') break;
@@ -293,14 +293,15 @@ function linesWithEnds(text: string): RawLine[] {
   }
   return lines;
 }
-const unitLine = (unit: ScopeUnit): string => `- ${unit.term} ${unit.subject} ${unit.code}`;
+export const unitLine = (unit: ScopeUnit): string => `- ${unit.term} ${unit.subject} ${unit.code}`;
 const sameBook = (a: ScopeUnit, b: ScopeUnit): boolean => termOf(a.term) === termOf(b.term) && subjectOf(a.subject) === subjectOf(b.subject);
 const unitAt = (line: RawLine): ScopeUnit | null => { const read = readLine(line.raw, 0); return read?.kind === 'unit' ? read : null; };
 
 /**
- * 屬性區的字：每個值照 YAML 的位置換，註解、別的屬性與引號不動。raw 是每一行連同自己的換行，所以沒改到的字連換行都不動（§2-4，Codex L2 的 R16、R20）；新的一行用 eol。
+ * 改屬性區的字：每個值照 YAML 的位置換，註解、別的屬性與引號不動。raw 是每一行連同自己的換行，所以沒改到的字連換行都不動（§2-4，Codex L2 的 R16、R20）；新的一行用 eol。
+ * 範圍檔與小考檔共用（tasks/quiz-mark.md §1）。
  */
-function editHead(raw: string, change: ScopeChange, before: ScopeFile, eol: string): string {
+export function headEditor(raw: string, eol: string) {
   // 單獨的 \r 算換行（piecesOf 也這樣讀），YAML 不認得。長度相同，位置兩邊通用。
   const source = raw.replace(/\r(?!\n)/g, '\n');
   const doc = parseDocument(source);
@@ -313,50 +314,61 @@ function editHead(raw: string, change: ScopeChange, before: ScopeFile, eol: stri
     return range ? [range[0], source.slice(0, range[1]).trimEnd().length] : null;
   };
   const lineStart = (at: number): number => at === 0 ? 0 : source.lastIndexOf('\n', at - 1) + 1;
-  function setValue(key: string, text: string): boolean {
-    const pair = pairOf(key);
-    const keyRange = rangeOf(pair?.key);
-    if (!pair || !keyRange) return false;
-    const value = rangeOf(pair.value);
-    if (value && value[1] > value[0]) {
-      // 引號留著（§2-4）：只換裡面的字。
-      const style = isScalar(pair.value) ? pair.value.type : null;
-      const quote = style === 'QUOTE_DOUBLE' ? '"' : style === 'QUOTE_SINGLE' ? "'" : '';
-      const written = quote + text + quote;
-      if (source.slice(value[0], value[1]) !== written) edits.push({ from: value[0], to: value[1], text: written });
-    } else {
-      const colon = source.indexOf(':', keyRange[1]) + 1;
-      edits.push({ from: colon, to: colon, text: ' ' + text });
-    }
-    return true;
-  }
-  function removeKey(key: string): void {
-    const pair = pairOf(key);
-    const keyRange = rangeOf(pair?.key);
-    if (!pair || !keyRange) return;
-    const last = rangeOf(pair.value)?.[1] ?? keyRange[1];
-    edits.push({ from: lineStart(keyRange[0]), to: source.indexOf('\n', last) + 1, text: '' });
-  }
-  /** 新的一行：at 是它要放的位置（一行的開頭）；沒給就放最後。 */
-  const insert = (at: number | null, text: string): void => { const where = at ?? source.length; edits.push({ from: where, to: where, text: text + eol }); };
+  return {
+    /** 換這個鍵的值；沒有這個鍵回傳 false。 */
+    setValue(key: string, text: string): boolean {
+      const pair = pairOf(key);
+      const keyRange = rangeOf(pair?.key);
+      if (!pair || !keyRange) return false;
+      const value = rangeOf(pair.value);
+      if (value && value[1] > value[0]) {
+        // 引號留著（§2-4）：只換裡面的字。
+        const style = isScalar(pair.value) ? pair.value.type : null;
+        const quote = style === 'QUOTE_DOUBLE' ? '"' : style === 'QUOTE_SINGLE' ? "'" : '';
+        const written = quote + text + quote;
+        if (source.slice(value[0], value[1]) !== written) edits.push({ from: value[0], to: value[1], text: written });
+      } else {
+        const colon = source.indexOf(':', keyRange[1]) + 1;
+        edits.push({ from: colon, to: colon, text: ' ' + text });
+      }
+      return true;
+    },
+    removeKey(key: string): void {
+      const pair = pairOf(key);
+      const keyRange = rangeOf(pair?.key);
+      if (!pair || !keyRange) return;
+      const last = rangeOf(pair.value)?.[1] ?? keyRange[1];
+      edits.push({ from: lineStart(keyRange[0]), to: source.indexOf('\n', last) + 1, text: '' });
+    },
+    /** 新的一行：at 是它要放的位置（一行的開頭）；沒給就放最後。 */
+    insert(at: number | null, text: string): void { const where = at ?? source.length; edits.push({ from: where, to: where, text: text + eol }); },
+    /** 這個鍵那一行的開頭；沒有這個鍵是 null。 */
+    lineOf(key: string): number | null { const keyRange = rangeOf(pairOf(key)?.key); return keyRange ? lineStart(keyRange[0]) : null; },
+    /** 改好的字。同一個位置的插入照加入的順序接起來；removeKey 與 setValue 的位置不會重疊。 */
+    result(): string {
+      let result = raw;
+      const order = edits.map((each, index) => ({ each, index })).sort((a, b) => b.each.from - a.each.from || b.index - a.index);
+      for (const { each } of order) result = result.slice(0, each.from) + each.text + result.slice(each.to);
+      return result;
+    },
+  };
+}
+
+function editHead(raw: string, change: ScopeChange, before: ScopeFile, eol: string): string {
+  const head = headEditor(raw, eol);
   function date(key: string, read: ScopeDate, wanted: string | null | undefined, after: number | null): void {
-    if (wanted === null) { removeKey(key); return; }
+    if (wanted === null) { head.removeKey(key); return; }
     const text = wanted ?? (read.kind === 'ok' ? read.date : null);
-    if (text !== null && !setValue(key, text)) insert(after, `${key}: ${text}`);
+    if (text !== null && !head.setValue(key, text)) head.insert(after, `${key}: ${text}`);
   }
-  if (before.id === null && change.id !== undefined && !setValue('識別碼', change.id)) insert(0, '識別碼: ' + change.id);
+  if (before.id === null && change.id !== undefined && !head.setValue('識別碼', change.id)) head.insert(0, '識別碼: ' + change.id);
   // 提前結束只多一行，原本的日期連寫法都不動（§2-2）；標準化只在按「確定」時（§2-4）。
-  if (change.ended !== undefined) insert(null, '提前結束: ' + change.ended);
+  if (change.ended !== undefined) head.insert(null, '提前結束: ' + change.ended);
   else {
-    const endKey = rangeOf(pairOf('考試結束')?.key);
-    date('考試開始', before.start, change.start, endKey ? lineStart(endKey[0]) : null);
+    date('考試開始', before.start, change.start, head.lineOf('考試結束'));
     date('考試結束', before.end, change.end, null);
   }
-  // 同一個位置的插入照加入的順序接起來；removeKey 與 setValue 的位置不會重疊。
-  let result = raw;
-  const order = edits.map((each, index) => ({ each, index })).sort((a, b) => b.each.from - a.each.from || b.index - a.index);
-  for (const { each } of order) result = result.slice(0, each.from) + each.text + result.slice(each.to);
-  return result;
+  return head.result();
 }
 
 /** 範圍行：先取消再新勾。units 是目前有卡組的單元，整章裡取消一個時用。 */
