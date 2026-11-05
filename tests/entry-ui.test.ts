@@ -412,8 +412,8 @@ const reread = async (s: Screen): Promise<void> => { await act(async () => { awa
 void test('§5 電腦上按暫停：那一篇變成暫停、單元的全部卡少了那一篇；按恢復回來；筆記只改一行', async t => {
   const s = await open(t, L3, { screen: 'catalog', desktop: true });
   await s.click(s.all('.ec-tr-name')[0]);
-  assert.deepEqual(rows(s), ['L3 其他暫停全部卡 1', 'L3 單字暫停全部卡 3']);
-  await s.click(s.all('.ec-tr-pc')[1].querySelectorAll('button')[1]);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1暫停', 'L3 單字全部卡 3暫停']);
+  await s.click(s.all('.ec-tr-pc')[1].querySelectorAll('button')[2]);
   await reread(s);
   assert.equal(s.texts.get(WORDS), head('國二上', '英文', 'L3', '狀態: 暫停\n') + targets('a', 'b', 'c'));
   assert.deepEqual(s.notices, []);
@@ -422,7 +422,7 @@ void test('§5 電腦上按暫停：那一篇變成暫停、單元的全部卡�
   await s.click(s.button('恢復'));
   await reread(s);
   assert.equal(s.texts.get(WORDS), head('國二上', '英文', 'L3', '狀態: 啟用\n') + targets('a', 'b', 'c'));
-  assert.deepEqual(rows(s), ['L3 其他暫停全部卡 1', 'L3 單字暫停全部卡 3']);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1暫停', 'L3 單字全部卡 3暫停']);
 });
 
 void test('§5 兩篇都暫停：單元可以展開，看得到兩個恢復；按單元名稱照舊打開筆記', async t => {
@@ -456,9 +456,9 @@ void test('§5 寫不進去：照受阻的提示，畫面不變', async t => {
   const s = await open(t, L3, { screen: 'catalog', desktop: true });
   await s.click(s.all('.ec-tr-name')[0]);
   s.control.failModify = true;
-  await s.click(s.all('.ec-tr-pc')[1].querySelectorAll('button')[1]);
+  await s.click(s.all('.ec-tr-pc')[1].querySelectorAll('button')[2]);
   await reread(s);
   assert.deepEqual(s.notices, ['受阻：failed']);
   assert.equal(s.texts.get(WORDS), L3[WORDS]);
-  assert.deepEqual(rows(s), ['L3 其他暫停全部卡 1', 'L3 單字暫停全部卡 3']);
+  assert.deepEqual(rows(s), ['L3 其他全部卡 1暫停', 'L3 單字全部卡 3暫停']);
 });

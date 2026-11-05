@@ -262,8 +262,8 @@ function UnitRow({ unit, openUnits, toggle, start, openNote, state, notify, setD
         const count = state()?.deckTargets(deck.path).length ?? 0;
         return <div key={deck.path} className="ec-tr-pc">
           <button type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span></button>
-          {statusButton(deck)}
           {several && <button type="button" className="ec-u-btn" disabled={count === 0} onClick={() => { start({ deck: deck.path, since: Date.now() }); }}><Icon type="play" size={12} />全部卡 {count}</button>}
+          {statusButton(deck)}
         </div>;
       })}
       {unit.problems.map(problem =><button key={problem.kind} type="button" className="ec-tr-problem" onClick={() => { openNote(problem.path, problem.line); }}>{problem.count} 個{PROBLEM[problem.kind]}</button>)}
