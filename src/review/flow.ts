@@ -6,8 +6,8 @@ import type { PickView } from './pick.ts';
 import { createPreviewTyped, createTyped } from './typed.ts';
 import type { TypedView } from './typed.ts';
 
-// 題型接點的第三張表（D-181）：一張卡從題目走到有結果的整段狀態。Session 與預覽都只透過 Flow，不判斷是哪一種題型。
-// 其他三張表在 core/deck/question-types.ts、core/study/compose.ts、ui/screens.tsx。
+// 題型接點的第三個（D-181）：一張卡從題目走到有結果的整段狀態。Session 與預覽都只透過 Flow，不判斷是哪一種題型。
+// 其他三個在 core/deck/question-types.ts、core/study/compose.ts、ui/screens.tsx。
 
 /** 一行作答紀錄（syntax.md §5）；一個目標一行。 */
 export interface ReviewLine {

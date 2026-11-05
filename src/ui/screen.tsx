@@ -5,7 +5,7 @@ import type { CardView, FlowAction, SourceOwner } from '../review/index.ts';
 import type { MaterialDeck } from './sources.ts';
 import type { Speech } from './speech.ts';
 
-// 題型接點第四張表的形狀（screens.tsx 的 SCREENS）與各題型共用的評分那一排。
+// 題型接點第四個的形狀（screens.tsx 的 SCREENS）與各題型共用的評分那一排。
 
 export interface BodyProps {
   view: CardView; app: App; speech: Speech;

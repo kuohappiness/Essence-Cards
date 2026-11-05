@@ -9,7 +9,7 @@ import { Rates, type BodyProps, type Screen } from './screen.tsx';
 import { firstMaterial, resolveSource } from './sources.ts';
 import type { Speech } from './speech.ts';
 
-// 題型接點的第四張表（D-181）：題目區、底部那一排、點卡片做什麼。其他三張表在 core/deck/question-types.ts、core/study/compose.ts、review/flow.ts。
+// 題型接點的第四個（D-181）：題目區、底部那一排、點卡片做什麼。其他三個在 core/deck/question-types.ts、core/study/compose.ts、review/flow.ts。
 // 這裡都沒有 hook，狀態都在 review 的 Flow；hook 留在 Review 的根元件（tests/helpers/review-ui.ts 的替身也只讓根元件有 hook）。
 
 /** 字母的比對：拼錯的畫刪除線（你拼的、照著打一次）或紫色（正確拼字）。 */

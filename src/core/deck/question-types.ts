@@ -1,7 +1,7 @@
 import { maskInline } from './markdown.ts';
 import type { PickGroup, ProblemCode, Prompt, Target } from './types.ts';
 
-// 題型接點的第一張表（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三張表在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
+// 題型接點的第一個（D-181）：一種題型的名稱與題目怎麼認、哪些算寫錯。其他三個在 core/study/compose.ts、review/flow.ts、ui/screens.tsx。
 
 interface TypedAnswer {
   /** 比對用的答案；不能當打字答案、不拆開時是 null。 */
