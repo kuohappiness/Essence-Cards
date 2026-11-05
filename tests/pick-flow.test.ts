@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry, questionType } from '../src/core/study/index.ts';
 import { AWAY_LIMIT, RATE_DELAY } from '../src/review/index.ts';
-import { answers, check, DECK, fill, heldLine, keysOf, ltsOnScreen, PC, PHONE, pick, printOf, QUESTION, rights, setup, skip, stage, START, tap, texts, TWO, view, WRONG } from './helpers/pick-session.ts';
+import { answers, CHARS, check, DECK, fill, heldLine, keysOf, ltsOnScreen, PC, PHONE, pick, printOf, QUESTION, rights, setup, skip, stage, START, tap, texts, TWO, view, WRONG } from './helpers/pick-session.ts';
 
 // 比較卡的作答流程（tasks/question-type-seam.md §6）：createSession 接真的 createState。預期值來自 §4、§6 的表。
 void test('帶 group 的卡是比較卡：題型的唯一判斷；翻面與打字的 pick 是 null', async t => {
@@ -346,4 +346,31 @@ void test('紀錄從檔案讀回來結果相同：下一張換句子（also 算�
   const reopened = await again.open({ targets: ['borrow'] });
   const next = printOf(reopened, 'borrow');
   assert.equal(next.filter(print => !shown.includes(print)).length, 1, '三句裡沒出過的那一句先出');
+});
+
+void test('allowed 與評分：作答、再選、有錯的結果都是空的，rate 不算；下一張只在有錯的結果算數（§6）', async t => {
+  const h = await setup(t);
+  const s = await h.open({ subject: '國語' });
+  const tryAll = (): [boolean, boolean, boolean] => {
+    h.clock.now += RATE_DELAY;
+    return [s.rate('good'), s.rate('easy'), s.commit()];
+  };
+  assert.deepEqual([stage(s), view(s).allowed], ['answer', []]);
+  assert.deepEqual(tryAll(), [false, false, false], '作答中');
+  fill(h, s, (answer, index) => index === 0 ? WRONG(answer, keysOf(s)) : answer);
+  check(h, s);
+  assert.deepEqual([stage(s), view(s).allowed], ['retry', []]);
+  assert.deepEqual(tryAll(), [false, false, false], '再選中');
+  tap(h, s, answers(s)[0]);
+  assert.deepEqual([stage(s), view(s).allowed], ['result', []]);
+  h.clock.now += RATE_DELAY;
+  assert.deepEqual([s.rate('good'), s.rate('easy')], [false, false], '有錯的結果不能評分');
+  assert.equal(s.commit(), true, '有錯的結果按下一張');
+});
+
+void test('單元的範圍也併成一張：{unit} 和今天的份一樣 5 格 4 個字鍵（§11）', async t => {
+  const h = await setup(t, { [DECK]: CHARS.replace('科目: 國語', '年級學期: 國二上\n科目: 國語\n單元: "2-1"') });
+  const s = await h.open({ unit: '["國二上","國語","2-1"]' });
+  assert.equal(view(s).card.blanks.length, 5);
+  assert.deepEqual([...keysOf(s)].sort(), ['塞', '寒', '寨', '賽']);
 });

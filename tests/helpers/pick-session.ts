@@ -1,10 +1,9 @@
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Pick } from '../../src/core/study/index.ts';
 import { createSession } from '../../src/review/index.ts';
 import type { CardView, PickView, Session } from '../../src/review/index.ts';
 import { createState } from '../../src/state/index.ts';
-import type { State } from '../../src/state/index.ts';
+import type { State, StudyPick } from '../../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './memory-files.ts';
 
 // 比較卡的 session 測試共用（tests/pick-*.test.ts）：createSession 接真的 createState。
@@ -55,7 +54,7 @@ export interface Harness extends MemoryFiles {
   clock: { now: number };
   settle: () => Promise<void>;
   log: () => Record<string, unknown>[];
-  open: (pick: Pick) => Promise<Session>;
+  open: (pick: StudyPick) => Promise<Session>;
 }
 const timed = new WeakSet<TestContext>();
 export async function setup(t: TestContext, texts: Record<string, string> = { [DECK]: CHARS }): Promise<Harness> {

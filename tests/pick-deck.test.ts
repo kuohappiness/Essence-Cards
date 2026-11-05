@@ -158,6 +158,15 @@ void test('判斷的順序：中翻英、英翻中優先，前面的空白半形
   assert.equal(english.pairKey, 'borrow');
 });
 
+void test('全形空白的中翻英、英翻中互相配得上，也配得上半形的', () => {
+  const pairs = (first: string, second: string): [string | null, string | null][] =>
+    parseDeck(`- borrow${first}中翻英\n    - 借 :: borrow\n- borrow${second}英翻中\n    - borrow :: 借\n`).targets.map(target => [target.direction, target.pairKey]);
+  const paired = [['zh-en', 'borrow'], ['en-zh', 'borrow']];
+  assert.deepEqual(pairs('　', '　'), paired);
+  assert.deepEqual(pairs('　', ' '), paired);
+  assert.deepEqual(pairs(' ', '　'), paired);
+});
+
 void test('pairKey 不留尾端空白，兩個空白也配得上', () => {
   const targets = parseDeck('- borrow  中翻英\n    - 借 :: borrow\n- borrow 英翻中\n    - borrow :: 借\n').targets;
   assert.equal(targets[0].pairKey, 'borrow');
@@ -184,6 +193,13 @@ void test('判斷的順序：每一題都是填空不是比較卡', () => {
   const mixed = '- 寨（寨、塞） 比較\n    - 山==寨==\n    - 山＿＿ :: 寨\n';
   assert.equal(groupOf(mixed), undefined);
   assert.deepEqual(parseDeck(mixed).problems.map(problem => [problem.line, problem.code]), [[1, 'pick-mixed']]);
+});
+
+void test('表：空題目也照原來的錯誤，不往下判', () => {
+  const { targets, problems } = parseDeck('- 寨（寨、塞） 比較\n    - :: 寨\n    - 水＿＿ :: 塞\n');
+  assert.deepEqual(problems.map(problem => [problem.line, problem.code]), [[1, 'empty-question']]);
+  assert.equal(targets[0].ok, false);
+  assert.equal(targets[0].group, undefined);
 });
 
 void test('表：有一般語法錯誤時照原來的錯誤，不往下判', () => {

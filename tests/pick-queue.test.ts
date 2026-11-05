@@ -126,7 +126,10 @@ void test('寨 near、塞 miss：1 分鐘後只出塞，10 分鐘後寨，各換
   const zhai = next(today, input([chars], after, when(130)));
   assert.equal(zhai.early, true);
   assert.deepEqual(cells(zhai), { zhai00: 1 });
-  assert.equal(next(today, input([chars], after, when(1200))).early, false);
+  const late = next(today, input([chars], after, when(1200)));
+  assert.equal(late.early, false);
+  assert.deepEqual(cells(late), { zhai00: 1 });
+  assert.deepEqual(prints(late, 'zhai00'), [v(chars, 'zhai00', 1)]);
   assert.equal(nextCard(today, input([chars], [...after, good(when(1201), 'zhai00', v(chars, 'zhai00', 1))], when(1300)), SUBJECT).kind, 'done');
 });
 
@@ -286,4 +289,14 @@ void test('全部卡的一輪也併：新的整組一張；這一輪答對的不
   const early = next(today, wrong, { targets: ['sai000'], since });
   assert.equal(early.early, true);
   assert.deepEqual(prints(early, 'sai000'), [v(chars, 'sai000', 1)]);
+});
+
+void test('全部卡的一輪也照出題歷史換句：also 裡出過的句子也算（§5、R2-3）', () => {
+  const round = (lines: readonly string[], now: string): string => {
+    const { today, data } = plan([FOUR], lines, now);
+    const card = next(today, data, { targets: ['borrow'], since: Date.parse(now) });
+    return card.blanks.map(blank => (blank.prompt.kind === 'qa' ? blank.prompt.question : '')[0]).join('');
+  };
+  assert.equal(round([pair(FOUR, DAY(0), 'A', 'B')], DAY(1)), 'CD', 'B 只出現在 also，也算出過');
+  assert.equal(round([pair(FOUR, DAY(0), 'A', 'B'), pair(FOUR, DAY(1), 'C', 'D')], DAY(2)), 'AB', '都出過：最久沒出的');
 });

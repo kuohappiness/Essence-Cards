@@ -6,6 +6,7 @@ import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitEnv } from '../tools/git.ts';
+import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry } from '../src/core/study/index.ts';
 import { PICK_NEEDS } from '../src/core/version/index.ts';
 import { createState } from '../src/state/index.ts';
@@ -37,11 +38,15 @@ console.log(JSON.stringify({ today, decks, blocked, fill, save, text: memory.tex
 await state.close();
 `;
 interface OldRun { today: string[]; decks: string[]; blocked: { decks: string[]; targets: string[]; all: boolean }; fill: boolean; save: { kind: string; reason?: string }; text: string }
-async function oldVersion(t: TestContext, vault: Record<string, string>, path: string): Promise<OldRun> {
+async function oldClone(t: TestContext): Promise<string> {
   const dir = await tempFolder(t, 'essence-v030-');
   git(root, 'clone', '-q', '--no-checkout', root, dir);
   git(dir, 'checkout', '-q', 'v0.3.0');
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
+  return dir;
+}
+async function oldVersion(t: TestContext, vault: Record<string, string>, path: string): Promise<OldRun> {
+  const dir = await oldClone(t);
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', SCRIPT, JSON.stringify([vault, path])], { cwd: dir, env, encoding: 'utf8' });
   return JSON.parse(out) as OldRun;
 }
@@ -65,11 +70,38 @@ void test('v0.3.0 讀沒有標記、目標沒有 ID 的比較卡組：也不出�
   assert.deepEqual(old.blocked.decks, []);
 });
 
+void test('v0.3.0 的 parseDeck 讀比較卡組當問答卡：每一題的指紋相同、題型是翻面', async t => {
+  const text = [
+    '---', '科目: 國語', '---',
+    '- 寨（寨、塞） 相似字 ^abc222', '    - 盜匪躲在山＿＿裡。 :: 寨', '    - 山＿＿的路 **很難** 走。 :: 寨', '    - 記憶錨點：下面是**木**',
+    '- 塞（寨、塞） 相似字 ^def333', '    - 水管＿＿住了。 :: 塞', '    - 大＿＿車。 :: 塞', '',
+  ].join('\n');
+  const dir = await oldClone(t);
+  const script = "import { parseDeck } from './src/core/deck/index.ts'; console.log(JSON.stringify(parseDeck(JSON.parse(process.argv[1])).targets.map(target => [target.id, target.prompts.map(prompt => [prompt.kind, prompt.kind === 'qa' ? prompt.typed : null, prompt.fingerprint])])));";
+  const old = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script, JSON.stringify(text)], { cwd: dir, env, encoding: 'utf8' })) as unknown;
+  const now = parseDeck(text).targets;
+  assert.ok(now.every(target => target.group), '這個版本讀到的是比較卡');
+  const expected = now.map(target => [target.id, target.prompts.map(prompt => ['qa', null, prompt.fingerprint])]);
+  assert.deepEqual(old, expected);
+  assert.equal(now.flatMap(target => target.prompts).length, 4);
+});
+
+void test('v0.3.0 讀加不上標記的那一篇：文字沒變，佇列前後相同，新目標沒有 ID 不出題', async t => {
+  const text = '---\n{科目: 國語}\n---\n- 寨（寨、塞） 比較 ^aaa111\n    - 山＿＿ :: 寨\n- 塞（寨、塞） 比較\n    - 水＿＿ :: 塞\n' + PLAIN;
+  const before = await oldVersion(t, { [P]: text }, OTHER);
+  assert.deepEqual([...before.today].sort(), ['aaa111', 'bbb222']);
+  const memory = createMemoryFiles({ [P]: text });
+  const writer = createState({ files: memory.files, device: 'Windows-2c9e', build: `${PICK_NEEDS}+1a2b3c4`, delay: 1, fillIds: true, random: () => 0 });
+  t.after(() => writer.close());
+  await writer.ready();
+  assert.equal(await writer.fillIds(P), false);
+  // 還原、當成新的在 tests/state-need.test.ts 驗一字不改：同樣的文字，舊版讀到的佇列就同樣。
+  assert.equal(memory.texts.get(P), text);
+  assert.deepEqual((await oldVersion(t, { [P]: memory.texts.get(P) as string }, OTHER)).today, before.today);
+});
+
 void test('v0.3.0 的 parseLine 讀比較卡的行：每一行都是合法的作答，新欄位都忽略（不用 need）', async t => {
-  const dir = await tempFolder(t, 'essence-v030-');
-  git(root, 'clone', '-q', '--no-checkout', root, dir);
-  git(dir, 'checkout', '-q', 'v0.3.0');
-  await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
+  const dir = await oldClone(t);
   const T = '2026-11-05T20:15:03.250+08:00';
   const lines = [
     encodeEntry(T, { lt: 'a', r: 'near', v: 'v1', pick: '塞', retry: 'right' }),

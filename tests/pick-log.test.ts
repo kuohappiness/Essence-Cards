@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendLine, encodeEntry, mergeHistory, parseLine } from '../src/core/study/index.ts';
 import type { ReviewEntry } from '../src/core/study/index.ts';
+import { createState } from '../src/state/index.ts';
+import type { Harness } from './helpers/pick-session.ts';
+import { DECK, CHARS, PC, rights, setup } from './helpers/pick-session.ts';
 
 // 比較卡的紀錄（tasks/question-type-seam.md §4）。預期值是任務說明的例子，字面比較。
 const T = '2026-11-05T20:15:03.250+08:00';
@@ -74,4 +77,49 @@ void test('有效的集合不看讀檔順序：mergeHistory 兩種順序、appen
   for (const each of [A, B, C, A]) grown = appendLine(grown, each);
   assert.deepEqual(key(grown.reviews), key(one.reviews));
   assert.equal(review(A).with, T2);
+});
+
+// 第一行已落盤、後面的行暫時寫不進去（§11）：對照組是同樣的時間、沒有失敗。
+const LAST_OF_MONTH = Date.parse('2026-10-31T23:59:50.000+08:00');
+const NEXT_MONTH = Date.parse('2026-11-01T00:00:05.000+08:00');
+async function answerAll(h: Harness): Promise<void> {
+  h.clock.now = LAST_OF_MONTH;
+  const s = await h.open({ subject: '國語' });
+  rights(h, s);
+  h.clock.now += 1000;
+  assert.equal(s.rate('good'), true);
+}
+void test('第一行已落盤、第二行暫時失敗：跨到下個月才重試，路徑還是原本的 t；重開重併的行與結果固定', async t => {
+  const steady = await setup(t, { [DECK]: CHARS });
+  await answerAll(steady);
+  await steady.state.flush();
+  const expected = steady.texts.get(PC) ?? '';
+  assert.equal(expected.split('\n').filter(Boolean).length, 4, '對照組：一個字一行');
+
+  const h = await setup(t, { [DECK]: CHARS });
+  const original = h.files.append.bind(h.files);
+  let calls = 0;
+  h.files.append = (file, line) => ++calls === 2 ? Promise.reject(Error('暫時失敗')) : original(file, line);
+  await answerAll(h);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal((h.texts.get(PC) ?? '').split('\n').filter(Boolean).length, 1, '只有第一行落盤');
+
+  h.clock.now = NEXT_MONTH;
+  await h.state.flush();
+  assert.equal(h.texts.get(PC), expected, '和沒有失敗時逐字相同：順序、t、with 都沒變');
+  assert.equal(h.texts.has('Essence Cards/紀錄/2026-11 PC-test.jsonl'), false, '後面的行不跟著現在的時間跑到下個月的檔');
+
+  const lines = expected.split('\n').filter(Boolean).map(line => JSON.parse(line) as { t: string; with?: string });
+  assert.deepEqual(lines.map(line => line.with), [undefined, lines[0].t, lines[0].t, lines[0].t], '第一行還是第一行');
+
+  const reopened = createState({ files: h.files, device: 'PC-test', delay: 30, fillIds: false, now: () => h.clock.now, offset: () => 480 });
+  t.after(() => reopened.close());
+  await reopened.ready();
+  assert.equal(h.texts.get(PC), expected, '重開不多寫');
+  assert.deepEqual(reopened.progress(), h.state.progress(), '重開重併的結果相同');
+  const merged = mergeHistory([{ path: PC, text: expected }], null);
+  let grown = mergeHistory([], null);
+  for (const line of expected.split('\n').filter(Boolean)) grown = appendLine(grown, line);
+  assert.deepEqual(grown.reviews, merged.reviews, 'mergeHistory 與 appendLine 相同');
+  assert.deepEqual(merged.reviews.map(entry => entry.t), lines.map(line => line.t));
 });

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
+import { NEED_FORMS } from './helpers/need-forms.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -1035,6 +1036,14 @@ void test('setDeckStatus：屬性區讀不懂、改了讀不回來的都不寫�
     `﻿${BODY}`,
   ];
   for (const text of broken) assert.equal(setDeckStatus(text, '暫停'), null, text);
+});
+
+void test('標記的 20 種寫法（寫之前、寫之後）都受下面往返與冪等的保護（§3）', () => {
+  assert.equal(Object.keys(NEED_FORMS).length, 20);
+  for (const [text, want] of Object.values(NEED_FORMS)) {
+    parseDeck(text);
+    if (want !== null) parseDeck(want);
+  }
 });
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。

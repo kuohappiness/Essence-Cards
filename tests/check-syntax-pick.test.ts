@@ -89,8 +89,9 @@ void test('有組但沒有比較句，沒有結尾或結尾是別的詞：沒有
 void test('最上層題目或名稱有 ==、＿：結尾是相似字、比較才是錯誤，定位在目標那一行；解析沒有比較卡的代碼', t => {
   for (const line of ['- ==寨==（寨、塞） 相似字', '- 山＿＿（寨、塞） 比較\n    - 這是＿＿。 :: 寨', '- 寨（寨、塞） 山＿＿ 相似字 :: 寨']) {
     const draft = `## 相似字\n\n${line}`;
-    const { exit, pick } = run(t, draft);
+    const { exit, pick, output } = run(t, draft);
     assert.deepEqual(pick, [['錯誤', 3, 'pick-name-cloze']], line);
+    assert.ok(output.split('\n').some(each => each.includes('pick-name-cloze') && each.includes('名稱不能有 == 或 ＿')), output);
     assert.equal(exit, 1, line);
     assert.deepEqual(parseDeck(draft).problems.filter(problem => problem.code.startsWith('pick-')), [], line);
   }
