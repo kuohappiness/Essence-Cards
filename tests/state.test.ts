@@ -108,6 +108,21 @@ void test('T6 讀取：只讀卡組與紀錄資料夾正下方的紀錄，today 
   for (const item of [...today.share, ...today.more]) assert.ok(!item.lt.startsWith('zzzzz'), item.lt);
 });
 
+void test('不合契約的紀錄：answer 丟錯，不寫進檔、不併進 history、之後 flush 不多寫；下一筆照常（技術債「紀錄的時間跨啟動會撞」的 (a)）', async t => {
+  const { state, texts } = await setup(t, { vault: { [NATURAL]: naturalText } });
+  await state.ready();
+  const before = state.history();
+  const invalid = [{ lt: '', r: 'good', v: '12345678' }, { undo: '' }, { set: 'cap', val: NaN }, { set: 'status', deck: ' ', val: '暫停' }];
+  for (const entry of invalid) assert.throws(() => state.answer(entry as NewEntry), /這筆紀錄不能寫/, JSON.stringify(entry));
+  assert.equal(state.history(), before);
+  await state.flush();
+  assert.equal(texts.has(PC), false);
+  assert.equal(state.answer({ lt: 'a', r: 'good', v: '12345678' }), '2026-10-24T19:00:00.000+08:00');
+  await state.flush();
+  assert.equal(texts.get(PC), '{"t":"2026-10-24T19:00:00.000+08:00","lt":"a","r":"good","v":"12345678"}\n');
+  assert.deepEqual(state.history().reviews.map(item => item.lt), ['a']);
+});
+
 void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔、不重排；取消與跨月', async t => {
   const { state, texts, reads, changed, clock, settle } = await setup(t, { vault: { [NATURAL]: naturalText } });
   await state.ready();

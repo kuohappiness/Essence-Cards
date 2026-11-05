@@ -1,5 +1,5 @@
 import type { Files } from '../files.ts';
-import { encodeEntry } from './entries.ts';
+import { encodeNew } from './entries.ts';
 import { formatTime } from './time.ts';
 import type { LogWriter, NewEntry } from './types.ts';
 
@@ -61,7 +61,7 @@ export function createLogWriter(files: Files, options: {
       const at = Math.max(Math.trunc(now()), last + 1);
       const offset = offsetOf(at);
       const t = formatTime(at, offset);
-      const line = encodeEntry(t, entry);
+      const line = encodeNew(t, entry);
       const path = logPath(options.device, at, offset);
       last = at;
       pending.push({ path, line });

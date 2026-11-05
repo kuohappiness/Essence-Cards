@@ -125,6 +125,66 @@ void test('前一輪 drain 完成與背景 Promise 收尾之間 write，仍會�
   assert.deepEqual(saved.map(e => (JSON.parse(e) as { t: string }).t), [first, second]);
 });
 
+// 技術債「紀錄的時間跨啟動會撞」的 (a)：新寫入的值先符合那一種的契約，編碼後讀得回來；不合就丟錯、不排進寫入。舊紀錄的讀法不因此收窄（study.test.ts 的 L2-5）。
+const INVALID: [string, unknown][] = [
+  ['lt 是空字串', { lt: '', r: 'good', v: '12345678' }],
+  ['lt 是空白', { lt: '  ', r: 'good', v: '12345678' }],
+  ['評分認不得', { lt: 'a', r: 'ok', v: '12345678' }],
+  ['作答沒有指紋', { lt: 'a', r: 'good' }],
+  ['undo 是空字串', { undo: '' }],
+  ['undo 是空白', { undo: '  ' }],
+  ['錯題補強不是 miss', { lt: 'a', r: 'good', src: 'mistake' }],
+  ['錯題補強的 lt 是空白', { lt: ' ', r: 'miss', src: 'mistake' }],
+  ['cap 是 NaN', { set: 'cap', val: NaN }],
+  ['cap 是無限大', { set: 'cap', val: Infinity }],
+  ['retention 不是數字', { set: 'retention', val: '0.9' }],
+  ['semester 不是字串', { set: 'semester', val: 1 }],
+  ['app 不是字串', { set: 'app', val: 1 }],
+  ['filter 不是清單', { set: 'filter', val: '攝影' }],
+  ['filter 裡有別的', { set: 'filter', val: ['攝影', 1] }],
+  ['卡組的狀態對象是空白', { set: 'status', deck: ' ', val: '暫停' }],
+  ['目標的狀態對象是空字串', { set: 'status', lt: '', val: '暫停' }],
+  ['狀態沒有對象', { set: 'status', val: '暫停' }],
+  ['狀態的值認不得', { set: 'status', deck: 'a.md', val: '停用' }],
+  ['目標的狀態不能是草稿', { set: 'status', lt: 'a', val: '草稿' }],
+  ['考試的紀錄是 null', { set: 'exam', val: null }],
+  ['考試的動作認不得', { set: 'exam', val: { id: 'a', do: '刪掉', units: [] } }],
+  ['考試的單元不是字串清單', { set: 'exam', val: { id: 'a', do: '改', units: 'L1' } }],
+];
+for (const [name, entry] of INVALID) void test('不合契約的新紀錄：' + name + '：丟錯、不排進寫入，之後 flush 不多寫，也不占時間', async () => {
+  const saved: string[] = [];
+  const writer = createLogWriter(fake((_path, line) => { saved.push(line); return Promise.resolve(); }), { device: 'PC-abcd', now: () => at, offset: () => 480 });
+  assert.throws(() => writer.write(entry as NewEntry), /這筆紀錄不能寫/);
+  await writer.flush();
+  assert.deepEqual(saved, []);
+  writer.write(answer);
+  await writer.flush();
+  assert.deepEqual(saved, ['{"t":"2026-10-31T23:59:59.999+08:00","lt":"target","r":"good","v":"12345678"}']);
+});
+
+void test('合法的每一種都寫得出去，寫出來的字不變', async () => {
+  const saved: string[] = [];
+  const writer = createLogWriter(fake((_path, line) => { saved.push(line); return Promise.resolve(); }), { device: 'PC-abcd', now: () => at, offset: () => 480 });
+  const body = (line: string): string => line.replace(/^\{"t":"[^"]+",?/, '{');
+  const cases: [NewEntry, string][] = [
+    [{ lt: 'a', r: 'miss', v: '', typed: 'wrong', retry: 'not-needed', src: 'check' }, '{"lt":"a","r":"miss","v":"","typed":"wrong","retry":"not-needed","src":"check"}'],
+    [{ lt: 'a', r: 'miss', src: 'mistake' }, '{"lt":"a","r":"miss","src":"mistake"}'],
+    [{ undo: '2026-10-24T19:00:00.000+08:00' }, '{"undo":"2026-10-24T19:00:00.000+08:00"}'],
+    [{ set: 'cap', val: 0 }, '{"set":"cap","val":0}'],
+    [{ set: 'retention', val: 0.9 }, '{"set":"retention","val":0.9}'],
+    [{ set: 'semester', val: '' }, '{"set":"semester","val":""}'],
+    [{ set: 'filter', val: [] }, '{"set":"filter","val":[]}'],
+    [{ set: 'app', val: '' }, '{"set":"app","val":""}'],
+    [{ set: 'status', deck: 'a.md', val: '草稿' }, '{"set":"status","deck":"a.md","val":"草稿"}'],
+    [{ set: 'status', lt: 'a', val: '啟用' }, '{"set":"status","lt":"a","val":"啟用"}'],
+    // 手寫的範圍檔可能還沒有識別碼：這一種的 id 可以是空的（exam.ts 的 logOf）。
+    [{ set: 'exam', val: { id: '', do: '提前結束', units: [], ended: '2026-10-24' } }, '{"set":"exam","val":{"id":"","do":"提前結束","units":[],"ended":"2026-10-24"}}'],
+  ];
+  for (const [entry] of cases) writer.write(entry);
+  await writer.flush();
+  assert.deepEqual(saved.map(body), cases.map(([, line]) => line));
+});
+
 void test('寫檔後 readHistory 讀回；不存在回空，子資料夾與非 jsonl 都不讀', async () => {
   const memory = createMemoryFiles();
   const { files } = memory;
