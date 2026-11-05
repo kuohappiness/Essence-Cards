@@ -26,14 +26,16 @@ export function todayStats(history: History, today: Today): { count: number; min
 
 /**
  * 這一輪第一次就答對幾個（D-189 第 2 點）：分母是 since 之後答過的目標（不含錯題補強），分子是其中第一筆作答就是記住了、太簡單，打字卡還要第 1 步拼對。
- * 回看改評分會取消舊的那一筆，所以看到的就是改過的。own 是這次複習寫的那幾筆的 t：這一輪有別的作答（同步進來的）就算不準，回傳 null；分母是 0 也是 null。
+ * own 是這次複習寫的作答，照作答的順序；回看改評分換掉那一筆的 t、位置不變，所以「第一筆」不看紀錄的時間（重答之後才改第一筆，改過的那一筆時間比重答晚）。
+ * 這一輪有別的作答（同步進來的）就算不準，回傳 null；分母是 0 也是 null。
  */
-export function firstTry(reviews: readonly ReviewEntry[], since: number, own: ReadonlySet<string>): { right: number; total: number } | null {
+export function firstTry(reviews: readonly ReviewEntry[], since: number, own: readonly { t: string; lt: string }[]): { right: number; total: number } | null {
+  const round = reviews.filter(entry => entry.at >= since && entry.src !== 'mistake');
+  if (round.some(entry => !own.some(each => each.t === entry.t))) return null;
   const first = new Map<string, ReviewEntry>();
-  for (const entry of reviews) {
-    if (entry.at < since || entry.src === 'mistake') continue;
-    if (!own.has(entry.t)) return null;
-    if (!first.has(entry.lt)) first.set(entry.lt, entry);
+  for (const { t, lt } of own) {
+    const entry = round.find(each => each.t === t && each.lt === lt);
+    if (entry && !first.has(lt)) first.set(lt, entry);
   }
   if (!first.size) return null;
   const right = [...first.values()].filter(({ r, typed }) => (r === 'good' || r === 'easy') && (typed === null || typed === 'right')).length;

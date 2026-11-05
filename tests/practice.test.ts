@@ -495,6 +495,34 @@ void test('§3 第一次答差一點、回看改成記住了：算第一次就�
   assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
 });
 
+for (const [changed, score] of [['near', '0／1'], ['miss', '0／1'], ['good', '1／1']] as const) void test(`§3 答錯重出之後才回看第一筆、改成 ${changed}：第一筆還是第一筆（${score}）`, async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a') });
+  const s = await h.open(h.round());
+  h.rate(s, 'miss');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 0／1');
+  s.back();
+  s.back();
+  if (changed !== 'miss') assert.ok(s.rate(changed));
+  else { assert.ok(s.rate('near')); assert.ok(s.rate('miss')); }
+  s.toCurrent();
+  while (s.view().kind === 'card') h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 ' + score);
+});
+
+void test('§3 重答的那一筆後來改評分：第一筆沒動，分數不變', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('a', 'b') });
+  const s = await h.open(h.round());
+  h.rate(s, 'miss');
+  h.rate(s, 'good');
+  h.rate(s, 'good');
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+  s.back();
+  assert.ok(s.rate('easy'));
+  s.toCurrent();
+  assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／2');
+});
+
 void test('§3 第一次記住了、回看改成沒印象，再答對：不算；英文的兩個方向各算一個', async t => {
   const h = await setup(t, { [DECK]: HEAD('2-1') + '- w 英翻中 ^e\n    - w :: 字\n- w 中翻英 ^z\n    - 字 :: word\n' });
   const s = await h.open(h.round());
@@ -536,7 +564,7 @@ void test('§3 打字卡第 1 步拼錯、第 2 步拼對：不算；第 1 步�
 void test('§3 打字卡要 typed 是 right：評分是記住了但第 1 步不是拼對的不算（畫面不會寫出這種紀錄，手改或舊紀錄才有）', () => {
   const entry = (lt: string, typed?: 'right' | 'wrong' | 'skip'): string => encodeEntry('2026-10-24T19:00:00.000+08:00', { lt, r: 'good', v: '12345678', ...(typed ? { typed } : {}) });
   const { reviews } = mergeHistory([{ path: OWN, text: [entry('a'), entry('b', 'right'), entry('c', 'wrong'), entry('d', 'skip')].join('\n') + '\n' }]);
-  assert.deepEqual(firstTry(reviews, START - 1000, new Set(reviews.map(each => each.t))), { right: 2, total: 4 });
+  assert.deepEqual(firstTry(reviews, START - 1000, reviews), { right: 2, total: 4 });
 });
 
 void test('§3 這一輪有一筆別台裝置的作答：不顯示；這一輪之前的、錯題補強的不影響', async t => {
