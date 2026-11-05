@@ -1,4 +1,4 @@
-import { BLANK, closingRun, englishBreak, glueArticles, openingRun, tailStart } from '../review/index.ts';
+import { BLANK, closingRun, englishBeside, englishBreak, glueArticles, openingRun, tailStart } from '../review/index.ts';
 
 // Obsidian 渲染出來的卡片內容的後處理（D-145）：打字卡的空格、中文後面的英文換行、冠詞連著下一個字、空格後面的標點不換到下一行、喇叭接在最後一個字後面。
 // 只改一般的 HTML 文字；圖、SVG、公式、嵌入、程式碼與填空、空格自己的內容一律不動（Codex 審查 F3）。
@@ -111,10 +111,16 @@ function insertPickSlot(container: HTMLElement): HTMLElement | null {
     const after = node.splitText(match.index);
     after.textContent = text.slice(match.index + match[0].length);
     node.parentNode?.insertBefore(slot, after);
-    breakBeforeEnglish(container, node);
+    const inBlock = textNodes(blockOf(node, container));
+    const at = inBlock.indexOf(after);
+    if (englishBeside(joined(inBlock.slice(0, at)), joined(inBlock.slice(at)))) breakBeforeEnglish(container, node);
     return slot;
   }
   return null;
+}
+
+function joined(nodes: Text[]): string {
+  return nodes.map(node => node.textContent ?? '').join('');
 }
 
 /** 找不到空格時放在句尾：最後一個內容所在區塊的最後面。 */

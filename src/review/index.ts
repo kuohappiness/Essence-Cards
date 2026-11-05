@@ -13,7 +13,7 @@ export type { Spelling } from './spelling.ts';
 export { lockAxis, gesture } from './gesture.ts';
 export { keyboardFit } from './keyboard.ts';
 export type { Axis, Gesture } from './gesture.ts';
-export { englishParts, lineSpeech, otherAnswers, englishBreak, glueArticles, tailStart, closingRun, openingRun, fillBlank, blankCount, questionOf, BLANK } from './english.ts';
+export { englishParts, lineSpeech, otherAnswers, englishBeside, englishBreak, glueArticles, tailStart, closingRun, openingRun, fillBlank, blankCount, questionOf, BLANK } from './english.ts';
 export { crumb } from './crumb.ts';
 export { anchorParts, extraLabel, splitTranslation } from './extras.ts';
 export { headingKey, sourceLabel, sourceLinks } from './sources.ts';

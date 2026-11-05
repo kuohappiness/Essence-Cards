@@ -89,6 +89,16 @@ export function englishBreak(text: string): number | null {
   return end;
 }
 
+/**
+ * 比較句的空格旁邊是不是英文：空格前後緊接的、不隔著中文的那一段有英文字母（數字不算）。
+ * 打字卡的答案一定是英文，比較句不一定：「水管＿＿住了。」填中文，不在空格前換行。
+ */
+export function englishBeside(before: string, after: string): boolean {
+  const cut = after.search(CJK);
+  const beside = before.slice(englishBreak(before) ?? 0) + (cut < 0 ? after : after.slice(0, cut));
+  return /\p{Script=Latin}/u.test(beside);
+}
+
 /** 冠詞（a、an、the）和後面的字用不斷行空白連起來，換行時冠詞不會留在行尾（D-145：the 和 park 不拆開）。 */
 export function glueArticles(text: string): string {
   return text.replace(/\b(a|an|the) +(?=\S)/giu, '$1 ');
