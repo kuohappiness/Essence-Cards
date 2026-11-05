@@ -78,3 +78,4 @@
 - **`lastVersions` 維持不改**：回報確認影響只有版本列表與一次啟動最多多一行版本行，不影響排程，也不是這個分支帶來的退步。好處很小，不另記技術債（D-177）。
 - **作答後到下一次合併之前的 `problems`**：維持，理由照回報。
 - **機械檢查**：回報的型別檢查與 ESLint 因這台電腦當時記憶體不足沒有跑完，全套測試第一次有 3 項失敗、重跑通過，所以不算全過。Claude 在要合併的 commit 重跑一次完整的 `npm run check`，結果記在下面。
+- **結果**：`2375989` 的 `npm run check` exit 0，測試 1416 個全過（Windows、Node 24.13.0）。之後 `claude/quiz-practice` 合併進 `main`，再併一次：只有 `parseLine` 那行註解和 backlog 有衝突，讀法沒變；合併 commit `15f79f0` 的 pre-commit 跑完整的 `npm run check`，exit 0。Linux 的 CI 要 push 後才有結果。
