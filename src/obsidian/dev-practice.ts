@@ -13,19 +13,19 @@ const COUNT = 6;
 const NOTICE = (): string[] => Array.from(document.querySelectorAll('.notice'), text);
 
 /** 複習畫面（蓋在最上面的那一層）裡的元素。 */
-const inReview = (selector: string): HTMLElement[] => {
+export const inReview = (selector: string): HTMLElement[] => {
   const top = [...screens()].reverse().find(each => !each.querySelector('.ec-entry'));
   return Array.from(top?.querySelectorAll<HTMLElement>(selector) ?? []);
 };
-const enabled = (selector: string): HTMLElement | undefined => inReview(selector).find(each => !(each as HTMLButtonElement).disabled);
+export const enabled = (selector: string): HTMLElement | undefined => inReview(selector).find(each => !(each as HTMLButtonElement).disabled);
 /** React 看得到的打字。 */
-function typeInto(input: HTMLInputElement, value: string): void {
+export function typeInto(input: HTMLInputElement, value: string): void {
   Reflect.set(Object.getPrototypeOf(input) as object, 'value', value, input);
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 /** 這一列的按鈕；列用篇名認。 */
 const rowOf = (name: string): HTMLElement | undefined => inEntry('.ec-tr-pc').find(each => text(each).startsWith(name));
-const buttonIn = (row: HTMLElement | undefined, name: string): HTMLButtonElement | undefined =>
+export const buttonIn = (row: HTMLElement | undefined, name: string): HTMLButtonElement | undefined =>
   Array.from(row?.querySelectorAll('button') ?? []).find(each => text(each) === name || text(each).startsWith(name));
 
 export async function practiceDev(host: EntryDevHost, folder: string): Promise<unknown> {
