@@ -109,12 +109,12 @@
 .ec-app .ec-qz .ec-sb-btn { width: auto; min-width: 108px; padding: 0 12px; }
 .ec-app .ec-qz-quiet { height: 32px; padding: 0 6px; border: 0; background: none; color: var(--ec-muted); font-size: var(--ec-size-small); }
 .ec-app .ec-qz-quiet:hover, .ec-app .ec-qz-quiet:focus { background: none; }
-.ec-qz-copies { flex-basis: 100%; margin: 0; font-size: var(--ec-size-small); color: var(--ec-muted); }
+.ec-qz-copies { order: 1; flex-basis: 100%; margin: 0; font-size: var(--ec-size-small); color: var(--ec-muted); }
 .ec-qz-copies ul { margin: 6px 0 0; padding: 0; list-style: none; }
 .ec-app .ec-qz-copies button { display: block; width: 100%; height: auto; min-height: 32px; padding: 4px 0; border: 0; background: none; color: var(--ec-ink); font-size: var(--ec-size-small); text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .ec-app .ec-qz-copies button:hover, .ec-app .ec-qz-copies button:focus { background: none; }
 .ec-app .ec-u-btn.is-warn { border-color: var(--ec-near); color: var(--ec-near); }
-.ec-qz-menu { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; padding: 2px 0 6px; }
+.ec-qz-menu { order: 1; flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; padding: 2px 0 6px; }
 .ec-qz-days { display: flex; flex-wrap: wrap; gap: 8px; }
 .ec-qz-other { display: flex; flex-direction: column; gap: 4px; margin: 0; }
 .ec-app .ec-qz-ok { align-self: flex-start; height: 32px; padding: 0 14px; border: 1px solid var(--ec-line); border-radius: 16px; background: none; font-size: var(--ec-size-small); font-weight: 600; }
