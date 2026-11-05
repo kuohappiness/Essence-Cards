@@ -332,6 +332,11 @@ void test('範圍檔的路徑：考試範圍資料夾裡的 md，子資料夾也
   assert.equal(isExamPath('Essence Cards/自然/2-1.md'), false);
 });
 
+void test('範圍檔的路徑：考試範圍/小考/ 留給小考（D-189），只排除直接底下叫「小考」的那一層', () => {
+  for (const path of ['a.md', '2026/a.md', '小考備份/a.md', '舊的/小考/a.md', '小考.md']) assert.equal(isExamPath('Essence Cards/考試範圍/' + path), true, path);
+  for (const path of ['小考/a.md', '小考/2026/b.md']) assert.equal(isExamPath('Essence Cards/考試範圍/' + path), false, path);
+});
+
 // ── 選哪一份（§2-3、Codex F4）──
 
 const entry = (path: string, head: string, body = '- 國二上 自然 2\n') => ({ path, file: parseScope(`---\n${head}\n---\n${body}`) });

@@ -149,3 +149,32 @@ void test('更新命令（測試 vault 演練）：--check 備份、比較、記
   assert.deepEqual(missing.baseline, { missing: '這個 vault 還沒裝過外掛' });
   assert.match(await readFile(missing.report, 'utf8'), /基線缺失：這個 vault 還沒裝過外掛/);
 });
+
+void test('更新命令：考試範圍/小考/ 留給小考（D-189）：裡面壞掉的、就要考的檔都不提醒，不要求 --exam-ok；放在外面才算', async t => {
+  const local = await tempFolder(t, 'essence-local-');
+  const main = `/*! Essence Cards build=0.0.1+${short} dev=false */`;
+  const broken = '---\n考試開始: [\n---\n';
+  const vault = await makeVault(t, {
+    'Essence Cards/A.md': goal('aaa111'),
+    'Essence Cards/考試範圍/小考/壞.md': broken,
+    'Essence Cards/考試範圍/小考/2026/就要考.md': scope('2026-10-29', '2026-10-30'),
+    '.obsidian/plugins/essence-cards/main.js': main,
+  });
+  await registerTestVault(vault, local);
+  const options: UpdateOptions = { vault, local, to: await tempFolder(t, 'essence-backup-'), now: () => at('2026-10-29', '20:00'), offset: () => 480, seams: {
+    check: async () => {},
+    compare: async ({ backup, old, new: next }) => {
+      const report = join(backup, '..', '報告.md');
+      await writeFile(report, '');
+      return { report, zip: '', old: { commit: old, build: '', result: { ok: false, reason: '' } }, new: { commit: next, build: '', result: { ok: false, reason: '' } }, comparable: true, differences: [] };
+    },
+    install: ({ vault: target }) => Promise.resolve({ kind: 'test' as const, version: '0.0.1', build: '0.0.1+' + short, vault: target }),
+  } };
+  const checked = await checkUpdate(options);
+  assert.deepEqual(checked.exam, { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.deepEqual(await installUpdate(options), { build: '0.0.1+' + short, kind: 'test' }, '不用 --exam-ok');
+
+  await put(vault, 'Essence Cards/考試範圍/壞.md', broken);
+  const outside = await checkUpdate(options);
+  assert.deepEqual([outside.exam.kind, outside.exam.needsOk], ['unreadable', true], '同一份在外面就要問');
+});

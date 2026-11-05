@@ -1,8 +1,8 @@
-import { MarkdownView, type App, type TFile } from 'obsidian';
+import { MarkdownView, type TFile } from 'obsidian';
 import { EXAM_FOLDER, scopeDate } from '../core/catalog/index.ts';
 import { capturePng, keepRendering } from './dev-review.ts';
 import { buttonOf, focusOk, inEntry, screens, sleep, text, until, type EntryDevHost } from './dev-entry.ts';
-import { clearTrial, makeTrial, newTrial, noteFolder, noteScope, type Trial } from './dev-exam-files.ts';
+import { clearTrial, makeTrial, newTrial, noteFolder, noteScope, provenScopePath, scopeFiles, type Trial } from './dev-exam-files.ts';
 
 // 考試範圍的 Windows 實機（tasks/exam-scope.md §10）：只在電腦。在測試 vault 建暫時的卡組，走完設定、倒數、目錄標籤、外部修改、§8 的點開與結束，截圖對照樣式稿，結束時只清掉有建立證據的檔（dev-exam-files.ts）。
 // do=run 一次走完。獨占鎖要 PowerShell 配合，分段跑：do=prep → run=reload → do=reopen → （鎖住）do=lock-on → （放開）do=lock-off → do=clean。
@@ -47,7 +47,6 @@ function typeInto(input: HTMLInputElement | null, value: string): void {
 }
 const notices = (): string[] => Array.from(document.querySelectorAll('.notice'), text);
 const scopeRow = (): HTMLElement | undefined => inEntry('.ec-sc-row')[0];
-const scopeFiles = (app: App): TFile[] => app.vault.getFiles().filter(file => file.path.startsWith(EXAM_FOLDER + '/'));
 
 
 export async function examDev(host: EntryDevHost, action: string | undefined, folder: string): Promise<unknown> {
@@ -106,7 +105,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
   /** 分段跑的後面幾步：建立紀錄裡的那一份範圍檔，不是資料夾的第一份（R19）。 */
   const provenScope = async (): Promise<TFile> => {
     const saved = JSON.parse(await adapter.read(proof)) as Trial;
-    const path = saved.files.find(each => each.path.startsWith(EXAM_FOLDER + '/'))?.path;
+    const path = provenScopePath(saved);
     const file = path ? app.vault.getFileByPath(path) : null;
     if (!file) throw Error('建立的紀錄裡沒有範圍檔');
     return file;

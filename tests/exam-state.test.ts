@@ -675,6 +675,59 @@ void test('範圍檔讀不到（reject）：同批的卡組照常、ready() 不�
   assert.equal(h.state.exam().missing, 0);
 });
 
+// ── 考試範圍/小考/ 留給小考（D-189 第 5 點、tasks/quiz-practice.md §1）──
+
+const QUIZ = FOLDER + '小考/';
+
+void test('生效中的段考檔搬進 小考/：和刪檔一樣清掉；搬回來重新讀到', async t => {
+  const h = make(t, { ...DECKS, [SCOPE]: scopeText() });
+  await ready(t, h);
+  assert.deepEqual([h.state.exam().path, h.lane('a')], [SCOPE, 'exam-new']);
+  h.memory.rename(SCOPE, QUIZ + 'x.md');
+  await tick(t);
+  assert.deepEqual([h.state.exam().path, h.state.exam().file, h.lane('a')], [null, null, 'new']);
+  h.memory.rename(QUIZ + 'x.md', SCOPE);
+  await tick(t);
+  assert.deepEqual([h.state.exam().path, h.lane('a')], [SCOPE, 'exam-new']);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('子資料夾改名成 小考：裡面的段考檔都清掉；改回來重新讀到', async t => {
+  const inside = FOLDER + '舊的/a.md';
+  const h = make(t, { ...DECKS, [inside]: scopeText() });
+  await ready(t, h);
+  assert.equal(h.state.exam().path, inside);
+  h.memory.rename(FOLDER + '舊的', FOLDER + '小考');
+  await tick(t);
+  assert.equal(h.state.exam().path, null);
+  h.memory.rename(FOLDER + '小考', FOLDER + '舊的');
+  await tick(t);
+  assert.equal(h.state.exam().path, inside);
+});
+
+void test('小考/ 裡內容壞掉、日期更早、讀不到的檔：不讀，段考的選定、待讀與錯誤都不受影響；之後改它也一樣', async t => {
+  const broken = QUIZ + '壞.md', early = QUIZ + '2026/早.md', stuck = QUIZ + '讀不到.md';
+  const h = make(t, { ...DECKS, [SCOPE]: scopeText(), [broken]: '---\n考試開始: [\n---\n', [early]: scopeText('2026-10-21', '2026-10-21', '- 國二上 英文 L1'), [stuck]: scopeText() });
+  h.memory.failing.add(stuck);
+  await ready(t, h);
+  const exam = h.state.exam();
+  assert.deepEqual([exam.path, exam.others, exam.missing, exam.period, h.state.unread(), h.errors], [SCOPE, [], 0, { kind: 'ok', start: '2026-10-28', end: '2026-10-29' }, [], []]);
+  assert.equal(h.lane('c'), 'new', '小考檔寫到的單元不算段考範圍');
+  h.memory.write(broken, '---\n考試開始: [\n---\n- 國二上 英文 L1\n');
+  await tick(t);
+  assert.deepEqual(h.memory.reads.filter(path => path.startsWith(QUIZ)), [], '連讀都不讀');
+});
+
+void test('只有 小考/ 有檔：當成沒有範圍，新建的段考檔放在 考試範圍/ 底下', async t => {
+  const quiz = QUIZ + '2026-10-28 國二上.md';
+  const h = make(t, { ...DECKS, [quiz]: scopeText() });
+  await ready(t, h);
+  assert.deepEqual([h.state.exam().path, h.state.exam().settled, h.lane('a')], [null, true, 'new']);
+  assert.deepEqual(await save(h.state, { add: [{ term: '國二上', subject: '自然', code: '2' }], start: '2026-10-28', end: '2026-10-29' }), { kind: 'done' });
+  assert.equal(h.state.exam().path, SCOPE);
+  assert.equal(h.memory.texts.get(quiz), scopeText(), '小考檔不動');
+});
+
 void test('手寫的識別碼像數字（2e2345）：寫回讀到、紀錄都是原本的六個字', async t => {
   const h = make(t, { ...DECKS, [SCOPE]: '---\n識別碼: 2e2345\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n' });
   await ready(t, h);

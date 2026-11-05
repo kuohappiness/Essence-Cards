@@ -1,5 +1,5 @@
 import type { App, TFile } from 'obsidian';
-import { parseScope } from '../core/catalog/index.ts';
+import { isExamPath, parseScope } from '../core/catalog/index.ts';
 
 // 開發命令 exam 在測試 vault 建的暫時檔（tasks/exam-scope.md §10）：只清有建立證據的。共用的測試 vault 可能有別的分支留下、同步才到的檔，不能看到就刪（Codex L2 的 R1）。
 
@@ -9,6 +9,11 @@ import { parseScope } from '../core/catalog/index.ts';
  */
 export interface Trial { files: { path: string; mark: string }[]; folders: string[] }
 export const newTrial = (): Trial => ({ files: [], folders: [] });
+
+/** 這個 vault 的段考範圍檔，和外掛同一個判定（`考試範圍/小考/` 不算，D-189）。 */
+export const scopeFiles = (app: App): TFile[] => app.vault.getFiles().filter(file => isExamPath(file.path));
+/** 建立紀錄裡的那一份範圍檔。 */
+export const provenScopePath = (trial: Trial): string | undefined => trial.files.find(each => isExamPath(each.path))?.path;
 
 /** 資料夾現在沒有，就記下來（之後由這次的流程建立）。看硬碟不看清單：刪掉的資料夾 iCloud 可能又放回硬碟，Obsidian 的清單卻還沒有。 */
 export async function noteFolder(app: App, trial: Trial, folder: string): Promise<boolean> {

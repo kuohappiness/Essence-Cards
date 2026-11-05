@@ -544,6 +544,22 @@ void test('§7 日期未定、日期有問題：列照常、不倒數；有問�
   assert.ok(!b.all('.ec-sb .ec-en-name').some(each => each.textContent === '理化'));
 });
 
+void test('考試範圍/小考/ 裡壞掉的檔（D-189）：入口、目錄、設定畫面都和沒有這份一樣；放在外面才算', async t => {
+  const broken = '---\n考試開始: 2026-13-01\n---\n老師說的\n';
+  const outside = await open(t, { ...DECKS, [FOLDER + '壞.md']: broken }, 'entry');
+  assert.equal(outside.all('.ec-sc-per')[0].textContent, '考試日期有問題', '同一份在外面就有問題');
+  for (const screen of ['entry', 'catalog'] as const) {
+    const s = await open(t, { ...DECKS, [FOLDER + '小考/壞.md']: broken }, screen);
+    assert.ok(s.text().includes('還沒設定'), screen);
+    assert.ok(!s.text().includes('考試日期有問題'), screen);
+    assert.ok(!s.text().includes('看不懂'), screen);
+  }
+  const form = await open(t, { ...DECKS, [FOLDER + '小考/壞.md']: broken }, 'scope');
+  assert.ok(!form.text().includes('考試日期有問題'));
+  assert.ok(!form.text().includes('看不懂'));
+  assert.equal(form.field('考試開始').value, '', '當成新的一份');
+});
+
 void test('§7 別台裝置改了範圍，開著的入口自己更新', async t => {
   const s = await open(t, { ...DECKS, [FOLDER + 'a.md']: scopeText('2026-10-28', '', '- 國二上 自然 2-1') }, 'entry');
   assert.ok(s.text().includes('距離考試：12 天'));

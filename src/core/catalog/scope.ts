@@ -4,7 +4,10 @@ import { chapterAlias, codeKey, readTerm, termKey, termRank, tidy } from '../dec
 // 考試範圍檔（tasks/exam-scope.md §2、syntax.md §4、D-176）：只看字面，不看卡組。讀懂的、對不到卡組的、看不懂的分開，都留著讓畫面寫出來。
 
 export const EXAM_FOLDER = 'Essence Cards/考試範圍';
-export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md');
+/** 留給小考（D-189 第 5 點）：只有 `考試範圍/` 直接底下、名稱剛好是 `小考` 的那一層與它底下；`小考備份/`、`舊的/小考/` 照舊是段考範圍。 */
+const QUIZ_FOLDER = EXAM_FOLDER + '/小考';
+const isQuizPath = (path: string): boolean => path.startsWith(QUIZ_FOLDER + '/');
+export const isExamPath = (path: string): boolean => path.startsWith(EXAM_FOLDER + '/') && path.endsWith('.md') && !isQuizPath(path);
 
 /** 一行範圍。line 從 0 算，raw 是原字；unit 的三欄是讀到的標準寫法。 */
 export type ScopeLine =
