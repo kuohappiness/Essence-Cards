@@ -1,6 +1,6 @@
 # 題型接點與點選填空（D-181、D-178、D-182、D-192，給 Claude，本機執行）
 
-狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），第二輪複查通過（[請求](question-type-seam-step1-review.md)）；§3、§4、§5-4、§8、§10、§11 已依格式查核第四輪（R4-1～R4-5）改寫，Claude 已回應（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）；使用者 2026-11-05 同意「離開筆記時自動加標記」與「讀寫同一版發布」（D-191 第 4、5 點）；使用者 2026-11-05 決定格式查核到第四輪為止，接著實作第二步，第四輪之後改的部分由合併前的 L2 查；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-191 的文件）；§3～§10 已實作並合併 `main` 到分支 `claude/compare-pick-34bcaf`，Windows 實機通過（§10 的結果）；L2 第一輪的 R1～R3 已修（`572bb1b`、`8b6d6be`、`4d6c518`），等第二輪（[請求](question-type-seam-review.md)）
+狀態：§2 第一步已實作，Codex 查出的 F1 已修（`743601a`），第二輪複查通過（[請求](question-type-seam-step1-review.md)）；§3、§4、§5-4、§8、§10、§11 已依格式查核第四輪（R4-1～R4-5）改寫，Claude 已回應（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)）；使用者 2026-11-05 同意「離開筆記時自動加標記」與「讀寫同一版發布」（D-191 第 4、5 點）；使用者 2026-11-05 決定格式查核到第四輪為止，接著實作第二步，第四輪之後改的部分由合併前的 L2 查；分支 `claude/question-type-seam-927507`，基準 `283f4c6`，已合併 `main`（含考試範圍與 D-182～D-191 的文件）；§3～§10 已實作並合併 `main` 到分支 `claude/compare-pick-34bcaf`，Windows 實機通過（§10 的結果）；L2 第二輪通過（`2faf7e3`，[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-l2.md>)），第 4 步等使用者
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：寫這份用 **Opus、xhigh**，實作用 **Opus、高**（[quality.md](../docs/agents/quality.md)）。改解析、紀錄、排程、複習流程，跨模組，合併前要 L2。必讀 code-quality 的〈測試〉。
 

@@ -1,6 +1,6 @@
 # 題型接點與點選填空的 L2（給 Codex）
 
-狀態：第一輪待修，R1～R3 已修；第二輪待審
+狀態：第二輪通過（`2faf7e3`），R1～R3 結案；第 4 步等使用者（[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-l2.md>)）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查、不改產品程式；要重現時用隔離的暫存資料，不碰測試 vault 與正式使用的 vault。
 
