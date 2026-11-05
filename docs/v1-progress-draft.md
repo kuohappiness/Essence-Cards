@@ -7,7 +7,7 @@
 ## 一眼看完
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"pie1": "#e0e0e0", "pie2": "#fff176", "pie3": "#81c784", "pieStrokeColor": "#ffffff", "pieOuterStrokeColor": "#ffffff", "pieSectionTextColor": "#333333", "pieTitleTextSize": "20px"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"pie1": "#eceff1", "pie2": "#fbecb5", "pie3": "#cfe8d5", "pieStrokeColor": "#ffffff", "pieStrokeWidth": "3px", "pieOuterStrokeWidth": "0px", "pieOpacity": "1", "pieSectionTextColor": "#455a64", "pieSectionTextSize": "15px", "pieTitleTextSize": "18px", "pieTitleTextColor": "#37474f", "pieLegendTextColor": "#455a64"}}}%%
 pie showData
   title v1 的 32 項功能
   "⚪ 還沒開工" : 14
@@ -29,16 +29,18 @@ pie showData
 ## v1 的閉環走到哪裡
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryTextColor": "#37474f", "lineColor": "#c9d1d9"}, "flowchart": {"curve": "basis", "padding": 14}}}%%
 flowchart LR
-  A1["📄 教材轉錄<br/>Capture"]:::todo --> B2
-  A2["📝 自己寫的筆記"]:::done --> B1
-  B1["✍️ 手寫卡組"]:::done --> D
-  B2["🤖 AI 製卡"]:::todo --> C["👀 家長審核"]:::todo --> D
-  D["📱 iPhone 複習"]:::done --> E["🤔 自評"]:::done --> F["📅 排程"]:::done
-  D --> G["↩️ 跳回出處"]:::part
-  classDef done fill:#c8e6c9,stroke:#2e7d32,color:#000
-  classDef part fill:#fff59d,stroke:#f9a825,color:#000
-  classDef todo fill:#eeeeee,stroke:#9e9e9e,color:#555
+  A1("📄 教材轉錄<br/>Capture"):::todo --> B2
+  A2("📝 自己寫的筆記"):::done --> B1
+  B1("✍️ 手寫卡組"):::done --> D
+  B2("🤖 AI 製卡"):::todo --> C("👀 家長審核"):::todo --> D
+  D("📱 iPhone 複習"):::done --> E("🤔 自評"):::done --> F("📅 排程"):::done
+  D --> G("↩️ 跳回出處"):::part
+  classDef done fill:#dff0e3,stroke:#dff0e3,color:#2e5d3a
+  classDef part fill:#fbf0c4,stroke:#fbf0c4,color:#6b5a1e
+  classDef todo fill:#f1f3f5,stroke:#f1f3f5,color:#8a939b
+  linkStyle default stroke:#c9d1d9,stroke-width:1.5px
 ```
 
 下面那條（手寫卡組 → 複習 → 排程）已經天天能用，正式版是 `0.3.0`。上面那條（教材 → AI 製卡 → 審核）還沒開工。
@@ -104,16 +106,18 @@ flowchart LR
 ## v1 之後
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "14px", "primaryTextColor": "#37474f", "lineColor": "#c9d1d9"}, "flowchart": {"curve": "basis", "padding": 14}}}%%
 flowchart LR
-  A["✅ v1 完工"]:::now --> B["🧪 真實使用驗證<br/>一位學生 × 一次考試"]
-  B --> C["🌱 第二階段<br/>依驗證結果排順序"]
-  C --> D["🧠 Essence Mindboard"]
-  C --> E["☁️ 不用 iCloud 的同步<br/>先做最小驗證"]
-  C --> F["🗺️ 各科的學習地圖規範<br/>（指定必做）"]
-  C --> G["…其他約 15 項"]
-  classDef now fill:#ffd54f,stroke:#f57f17,color:#000
-  classDef later fill:#e3f2fd,stroke:#64b5f6,color:#000
+  A("✅ v1 完工"):::now --> B("🧪 真實使用驗證<br/>一位學生 × 一次考試")
+  B --> C("🌱 第二階段<br/>依驗證結果排順序")
+  C --> D("🧠 Essence Mindboard")
+  C --> E("☁️ 不用 iCloud 的同步<br/>先做最小驗證")
+  C --> F("🗺️ 各科的學習地圖規範<br/>（指定必做）")
+  C --> G("…其他約 15 項")
+  classDef now fill:#fdebc0,stroke:#fdebc0,color:#6b4e12
+  classDef later fill:#e9f1fb,stroke:#e9f1fb,color:#34506e
   class B,C,D,E,F,G later
+  linkStyle default stroke:#c9d1d9,stroke-width:1.5px
 ```
 
 第二階段的[清單](https://github.com/kuohappiness/Essence-Cards/blob/main/docs/backlog.md#第二階段想做的事)有 17 項，例如學習儀表板、題庫與模擬考、找錯題、FSRS 個人化、發音檢查。這些還沒排順序，等真實使用驗證的結果再排，所以現在算不出還剩多少。
