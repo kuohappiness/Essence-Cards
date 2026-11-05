@@ -123,6 +123,18 @@ void test('不合契約的紀錄：answer 丟錯，不寫進檔、不併進 hist
   assert.deepEqual(state.history().reviews.map(item => item.lt), ['a']);
 });
 
+void test('answerLine 回傳排進寫入的那一行與路徑，和檔案、history 同一行；不能寫時是 null（技術債「紀錄的時間跨啟動會撞」的 (b)）', async t => {
+  const { state, texts } = await setup(t, { vault: { [NATURAL]: naturalText, [PHONE]: '{"t":"2026-10-24T08:00:00.000+08:00","need":"99.0.0","lt":"b","r":"good","v":"12345678"}\n' } });
+  await state.ready();
+  const line = '{"t":"2026-10-24T19:00:00.000+08:00","lt":"a","r":"good","v":"12345678"}';
+  assert.deepEqual(state.answerLine({ lt: 'a', r: 'good', v: '12345678' }), { t: '2026-10-24T19:00:00.000+08:00', line, path: PC });
+  assert.deepEqual(state.history().reviews.map(item => [item.t, item.lt]), [['2026-10-24T19:00:00.000+08:00', 'a']]);
+  assert.equal(state.answerLine({ lt: 'b', r: 'good', v: '12345678' }), null, 'b 被讀不懂的紀錄停掉，不寫');
+  await state.flush();
+  assert.equal(texts.get(PC), line + '\n');
+  assert.equal(state.answer({ lt: 'b', r: 'good', v: '12345678' }), null);
+});
+
 void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔、不重排；取消與跨月', async t => {
   const { state, texts, reads, changed, clock, settle } = await setup(t, { vault: { [NATURAL]: naturalText } });
   await state.ready();

@@ -3,7 +3,6 @@ import { examDev } from './dev-exam.ts';
 import { practiceDev } from './dev-practice.ts';
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
-import { encodeEntry, logPath, parseLine } from '../core/study/index.ts';
 import type { NewEntry } from '../core/study/index.ts';
 import { compareAssigned, compareLists, type ListItem, type Mismatch } from '../dev/compare.ts';
 import { runFilesContract } from '../dev/files-contract.ts';
@@ -231,15 +230,12 @@ async function answer(host: Host): Promise<unknown> {
   };
   const todayBefore = snapshot();
   const before = { reviews: state.history().reviews.length, progress: state.progress() };
-  // 寫一筆、等寫完，回傳 encodeEntry 的結果與它的檔案（和 state 寫檔的路徑相同）。
+  // 寫一筆、等寫完，回傳排進寫入的那一行與它的檔案。
   async function write(entry: NewEntry) {
-    const t = state.answer(entry);
-    if (t === null) throw Error('這個學習目標需要新版才讀得懂，不能寫：' + JSON.stringify(entry));
-    const line = encodeEntry(t, entry);
-    const stamp = parseLine(line);
-    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
+    const queued = state.answerLine(entry);
+    if (queued === null) throw Error('這個學習目標需要新版才讀得懂，不能寫：' + JSON.stringify(entry));
     await state.flush();
-    return { t, line, path: logPath(host.device, stamp.at, stamp.offset) };
+    return queued;
   }
   const good = await write({ lt: target.id, r: 'good', v: target.prompts[0].fingerprint });
   const afterGood = { reviews: state.history().reviews.length, progress: state.progress() };

@@ -41,10 +41,10 @@ void test('write 同步回傳、時間嚴格遞增、路徑當下決定，flush 
     return gates[calls++].promise;
   });
   const writer = createLogWriter(files, { device: 'Phone-abcd', now: () => clock, offset: () => 480 });
-  const t1 = writer.write(answer);
-  const t2 = writer.write(answer); // 同毫秒
+  const t1 = writer.write(answer).t;
+  const t2 = writer.write(answer).t; // 同毫秒
   clock -= 5000;
-  const t3 = writer.write(answer); // 時鐘倒退
+  const t3 = writer.write(answer).t; // 時鐘倒退
   assert.deepEqual([t1, t2, t3], ['2026-10-31T23:59:59.999+08:00', '2026-11-01T00:00:00.000+08:00', '2026-11-01T00:00:00.001+08:00']);
   await Promise.resolve();
   assert.equal(started.length, 1);
@@ -73,13 +73,13 @@ for (const trigger of ['write', 'flush'] as const) void test('append 失敗後�
     return Promise.resolve();
   });
   const writer = createLogWriter(files, { device: 'PC-abcd', now: () => at, offset: () => 480, onError: error => errors.push(error) });
-  const t1 = writer.write(answer);
-  const t2 = writer.write({ set: 'cap', val: 20 });
+  const t1 = writer.write(answer).t;
+  const t2 = writer.write({ set: 'cap', val: 20 }).t;
   await tick();
   assert.deepEqual(errors, [error]);
   assert.equal(saved.length, 0);
   fail = false;
-  const t3 = trigger === 'write' ? writer.write(answer) : null;
+  const t3 = trigger === 'write' ? writer.write(answer).t : null;
   await writer.flush();
   assert.deepEqual(saved.map(e => (JSON.parse(e) as { t: string }).t), [t1, t2, ...(t3 ? [t3] : [])]);
   assert.equal(attempts[0], attempts[1]);
@@ -117,12 +117,27 @@ void test('序列化在 write 當下完成，呼叫端後續修改 val 不影響
 void test('前一輪 drain 完成與背景 Promise 收尾之間 write，仍會自動寫入', async () => {
   const saved: string[] = [];
   const writer = createLogWriter(fake((_path, line) => { saved.push(line); return Promise.resolve(); }), { device: 'PC-abcd', now: () => at, offset: () => 480 });
-  const first = writer.write(answer);
+  const first = writer.write(answer).t;
   await Promise.resolve();
   await Promise.resolve();
-  const second = writer.write(answer);
+  const second = writer.write(answer).t;
   await tick();
   assert.deepEqual(saved.map(e => (JSON.parse(e) as { t: string }).t), [first, second]);
+});
+
+void test('write 回傳排進寫入的那一行與路徑：寫檔的就是這一行，失敗重試沿用同一行（技術債「紀錄的時間跨啟動會撞」的 (b)）', async () => {
+  const attempts: { path: string; line: string }[] = [];
+  let fail = true;
+  const writer = createLogWriter(fake((path, line) => {
+    attempts.push({ path, line });
+    if (!fail) return Promise.resolve();
+    fail = false;
+    return Promise.reject(Error('只失敗一次'));
+  }), { device: 'PC-abcd', now: () => at, offset: () => 480 });
+  const line = '{"t":"2026-10-31T23:59:59.999+08:00","lt":"target","r":"good","v":"12345678"}', path = 'Essence Cards/紀錄/2026-10 PC-abcd.jsonl';
+  assert.deepEqual(writer.write(answer), { t: '2026-10-31T23:59:59.999+08:00', line, path });
+  await writer.flush();
+  assert.deepEqual(attempts, [{ path, line }, { path, line }]);
 });
 
 // 技術債「紀錄的時間跨啟動會撞」的 (a)：新寫入的值先符合那一種的契約，編碼後讀得回來；不合就丟錯、不排進寫入。舊紀錄的讀法不因此收窄（study.test.ts 的 L2-5）。
@@ -190,8 +205,8 @@ void test('寫檔後 readHistory 讀回；不存在回空，子資料夾與非 j
   const { files } = memory;
   assert.deepEqual(await readHistory(files), { reviews: [], changes: [], problems: [], cancelled: [], seen: [], held: [], incomplete: false });
   const writer = createLogWriter(files, { device: 'Phone-abcd', now: () => at, offset: () => 480 });
-  const t1 = writer.write(answer);
-  const t2 = writer.write(answer);
+  const t1 = writer.write(answer).t;
+  const t2 = writer.write(answer).t;
   await writer.flush();
   memory.write(LOG_FOLDER + '/AI 輸出/nested.jsonl', '壞資料');
   memory.write(LOG_FOLDER + '/notes.md', '壞資料');
@@ -224,12 +239,12 @@ for (const when of ['同步', '收尾前的微任務'] as const) void test('L2-1
   }), {
     device: 'PC-abcd', now: () => at, offset: () => 480,
     onError: () => {
-      const writeNext = () => { second = writer.write({ ...answer, lt: 'second' }); };
+      const writeNext = () => { second = writer.write({ ...answer, lt: 'second' }).t; };
       if (when === '同步') writeNext();
       else queueMicrotask(writeNext);
     },
   });
-  const first = writer.write(answer);
+  const first = writer.write(answer).t;
   await tick();
   assert.deepEqual(saved.map(line => (JSON.parse(line) as { t: string }).t), [first, second]);
   assert.equal(attempts.length, 3);
@@ -271,10 +286,10 @@ void test('L2-1 append 已 reject 但 catch 尚未執行前的 write 也會重�
     saved.push(line);
     return Promise.resolve();
   }), { device: 'PC-abcd', now: () => at, offset: () => 480 });
-  const first = writer.write(answer);
+  const first = writer.write(answer).t;
   await Promise.resolve();
   rejectFirst(Error('append 已失敗'));
-  const second = writer.write({ ...answer, lt: 'second' });
+  const second = writer.write({ ...answer, lt: 'second' }).t;
   await tick();
   assert.deepEqual(saved.map(line => (JSON.parse(line) as { t: string }).t), [first, second]);
   assert.equal(attempts, 3);

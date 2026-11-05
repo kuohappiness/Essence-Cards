@@ -16,8 +16,8 @@ import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, memoryColors, mergeHistory, nextCard, parseLine, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
-import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
+import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, QueuedLine, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
 import type { VersionReport } from '../core/backup/index.ts';
@@ -138,8 +138,11 @@ export interface State {
    * 今天的份是用那一筆算的，下一次 today()、next()、progress() 重排（tasks/state-writes.md §6）；取消今天的作答不重排。
    * 牽涉的學習目標不能作答（canAnswer）時什麼都不寫、回傳 null（任務說明 2-2）：作答與學習目標的狀態看它的 lt，取消看它指的作答；
    * 找不到那一筆的取消照舊寫，ID 重複時的取消也照寫（D-157）。卡組的狀態變更，那一篇需要新版時也不寫。
+   * 值不合那一種的契約（空白的 lt、不是有限的數字……）是程式的錯：丟錯，不寫、不併進 history。
    */
   answer(entry: NewEntry): string | null;
+  /** 和 answer 相同，回傳排進寫入的那一行與路徑：開發命令要和檔案比對時用它，不各自重新編碼。 */
+  answerLine(entry: NewEntry): QueuedLine | null;
   /** 這個學習目標現在能不能寫紀錄：讀不懂的紀錄行停掉的（或整份紀錄不完整）、需要新版的卡組裡的、重複的（conflicts()）ID 都不能。 */
   canAnswer(lt: string): boolean;
   /**
@@ -282,16 +285,11 @@ export function createState(options: StateOptions): State {
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck) });
 
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
-  function record(entry: NewEntry): string {
-    const t = writer.write(entry);
-    const line = encodeEntry(t, entry);
-    const stamp = parseLine(line);
-    if (!stamp) throw Error('寫出的紀錄無法解析：' + line);
-    // 和 writer 寫檔的路徑相同：t 已經帶著寫入當下的時間與時區。
-    const path = logPath(device, stamp.at, stamp.offset);
-    sources.set(path, (sources.get(path) ?? '') + line + '\n');
-    history = appendLine(history, line);
-    return t;
+  function record(entry: NewEntry): QueuedLine {
+    const queued = writer.write(entry);
+    sources.set(queued.path, (sources.get(queued.path) ?? '') + queued.line + '\n');
+    history = appendLine(history, queued.line);
+    return queued;
   }
   /** 這台的版本行（version().own）。 */
   let appState: 'waiting' | 'same' | 'queued' | 'written' | null = options.build === undefined ? null : 'waiting';
@@ -583,6 +581,13 @@ export function createState(options: StateOptions): State {
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
   const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending });
+  function answerLine(entry: NewEntry): QueuedLine | null {
+    if (!life.loaded) throw Error('state 還沒 ready');
+    if (!permits(entry)) return null;
+    const queued = record(entry);
+    if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
+    return queued;
+  }
 
   return {
     ready() {
@@ -664,13 +669,8 @@ export function createState(options: StateOptions): State {
       const { today, input: value } = fresh();
       return progress(today, value);
     },
-    answer(entry) {
-      if (!life.loaded) throw Error('state 還沒 ready');
-      if (!permits(entry)) return null;
-      const t = record(entry);
-      if ('undo' in entry && current && Date.parse(entry.undo) < dayStart(current.day, current.offset)) current = null;
-      return t;
-    },
+    answer: entry => answerLine(entry)?.t ?? null,
+    answerLine,
     exam() {
       const at = now(), day = dayOf(at, offsetOf(at));
       const { chosen, usable, others } = selection(day);
