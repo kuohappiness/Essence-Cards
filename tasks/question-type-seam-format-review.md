@@ -72,7 +72,7 @@
 
 請**新開一個 session**。這一輪只查第三輪之後改過的部分，範圍很窄，通過就直接寫通過。只讀：本節；[報告](<../Claude Codex Discussion/2026-11-05-question-type-seam-format-review.md>)的〈Claude 回應（第三輪）〉；[任務說明](question-type-seam.md) §3 的〈組怎麼讀〉與〈舊版讀到比較卡〉、§4 的 `with`、§5-4 第 2 點、§8 的改評分、§10 的表、§11 的〈卡組的標記〉〈紀錄〉〈秒數〉。
 
-基準：分支 `claude/question-type-seam-927507` 這一節所在之後的 commit，hash 由使用者告訴你，寫進報告；工作目錄 `.claude/worktrees/seam-step2`。試算腳本在主資料夾的 `.local/seam-format-probes/`（`probe-r3.mjs <checkout>`）。比較點選的程式還沒動。
+基準：分支 `claude/question-type-seam-927507` 最新的 commit，hash 寫進報告；工作目錄 `.claude/worktrees/seam-step2`。試算腳本在主資料夾的 `.local/seam-format-probes/`（`probe-r3.mjs <checkout>`）。比較點選的程式還沒動。
 
 查什麼：
 
@@ -82,4 +82,4 @@
 4. **窗口與版號**：§3 列的四種窗口有沒有漏；「正式版只從 `main` 發布」這個前提和 `tools/` 實際的擋法對不對得上。
 5. **§10、§11**：表和驗收對不對得上，有沒有寫不成測試的條件。
 
-不同意的提出數字；使用者已經決定的（D-191）不用再討論是否該做。回報：接在報告後面，標題 `## 第四輪`，更新標題下的狀態行；只回報，不改產品程式與其他文件。
+不同意的提出數字；使用者已經決定的（[D-191](../docs/decisions.md#d-191-比較卡舊裝置整篇擋住每個字鍵一格就多放一句) 第 1、2、4、5 點，包括離開筆記時自動加、讀寫同一版發布）不用再討論是否該做，只查做法接不接得上。回報：接在報告後面，標題 `## 第四輪`，更新標題下的狀態行；只回報，不改產品程式與其他文件。
