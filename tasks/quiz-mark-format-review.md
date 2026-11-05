@@ -1,6 +1,6 @@
 # 小考檔的格式（格式查核，給 Codex）
 
-狀態：等 Codex 查核
+狀態：已完成：Codex 的[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)六項都採用，寫進[小考任務 §1、§6](quiz-mark.md#1-小考檔要格式查核)；第 3 點的 `小考日期` 防線放進[練習任務 §1](quiz-practice.md#1-段考讀法跳過-考試範圍小考)，跟段考讀法一起在考試範圍第二批發布前做
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
