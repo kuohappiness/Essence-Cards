@@ -1,5 +1,5 @@
 import type { App, TFile } from 'obsidian';
-import { isExamPath, parseScope } from '../core/catalog/index.ts';
+import { isExamPath, parseExamFile, parseScope } from '../core/catalog/index.ts';
 
 // 開發命令 exam 在測試 vault 建的暫時檔（tasks/exam-scope.md §10）：只清有建立證據的。共用的測試 vault 可能有別的分支留下、同步才到的檔，不能看到就刪（Codex L2 的 R1）。
 
@@ -10,8 +10,16 @@ import { isExamPath, parseScope } from '../core/catalog/index.ts';
 export interface Trial { files: { path: string; mark: string }[]; folders: string[] }
 export const newTrial = (): Trial => ({ files: [], folders: [] });
 
-/** 這個 vault 的段考範圍檔，和外掛同一個判定（`考試範圍/小考/` 不算，D-189）。 */
-export const scopeFiles = (app: App): TFile[] => app.vault.getFiles().filter(file => isExamPath(file.path));
+/** 這個 vault 的段考範圍檔，和外掛同兩步判定（`考試範圍/小考/` 與屬性有 `小考日期` 的都不算，D-189）。讀不到的不知道是什麼，當成範圍檔：拒跑比動到別人的檔好。 */
+export async function scopeFiles(app: App): Promise<TFile[]> {
+  const found: TFile[] = [];
+  for (const file of app.vault.getFiles()) {
+    if (!isExamPath(file.path)) continue;
+    const text = await app.vault.read(file).catch(() => null);
+    if (text === null || parseExamFile(text)) found.push(file);
+  }
+  return found;
+}
 /** 建立紀錄裡的那一份範圍檔。 */
 export const provenScopePath = (trial: Trial): string | undefined => trial.files.find(each => isExamPath(each.path))?.path;
 

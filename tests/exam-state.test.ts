@@ -1159,3 +1159,49 @@ void test('紀錄的行舊版也讀得懂：進 changes，不算作答，不帶 
   assert.equal(history.incomplete, false);
   assert.equal(history.changes.filter(change => change.set === 'exam').length, 1);
 });
+
+// ── 搬出 小考/ 的小考檔：看屬性 小考日期（格式查核第 3 點）──
+
+const moved = (date: string): string => `---\n識別碼: q4m8t2\n小考日期:${date}\n---\n- 國二上 英文 L1\n`;
+const MOVED = { [FOLDER + '2026-11-05 小考.md']: moved(' 2026-11-05'), [FOLDER + '空的.md']: moved(''), [FOLDER + '寫錯.md']: moved(' 明天') };
+const UNDATED = '---\n識別碼: x7f3k2\n---\n- 國二上 自然 2-1\n';
+
+void test('搬出 小考/ 的小考檔（小考日期合法、空的、寫錯）：段考都不讀，不進今天的份、沒有提示', async t => {
+  const h = make(t, { ...DECKS, ...MOVED });
+  await ready(t, h);
+  const exam = h.state.exam();
+  assert.deepEqual([exam.path, exam.file, exam.others, exam.missing, exam.settled], [null, null, [], 0, true]);
+  assert.deepEqual([h.lane('c'), h.state.unread(), h.errors], ['new', [], []]);
+});
+
+void test('對照：同時有一份合法、沒有日期的段考檔，它照樣生效；小考檔寫到的單元不算', async t => {
+  const h = make(t, { ...DECKS, ...MOVED, [SCOPE]: UNDATED });
+  await ready(t, h);
+  const exam = h.state.exam();
+  assert.deepEqual([exam.path, exam.others, exam.period], [SCOPE, [], { kind: 'none' }]);
+  assert.deepEqual([h.lane('a'), h.lane('c')], ['exam-new', 'new']);
+});
+
+void test('段考檔多了 小考日期 那一行：和刪檔一樣清掉；拿掉重新讀到', async t => {
+  const h = make(t, { ...DECKS, [SCOPE]: scopeText() });
+  await ready(t, h);
+  assert.equal(h.lane('a'), 'exam-new');
+  h.memory.write(SCOPE, scopeText().replace('---\n', '---\n小考日期: 2026-11-05\n'));
+  await tick(t);
+  assert.deepEqual([h.state.exam().path, h.lane('a')], [null, 'new']);
+  h.memory.write(SCOPE, scopeText());
+  await tick(t);
+  assert.deepEqual([h.state.exam().path, h.lane('a')], [SCOPE, 'exam-new']);
+});
+
+void test('同一個路徑換成小考檔，state 還沒讀到：不寫、不記，小考檔一個字都不動', async t => {
+  const h = make(t, { ...DECKS, [SCOPE]: scopeText() });
+  await ready(t, h);
+  const target = opened(h.state);
+  const quiz = scopeText().replace('---\n', '---\n小考日期: 2026-11-05\n');
+  h.memory.texts.set(SCOPE, quiz);
+  assert.deepEqual(await h.state.setExam({ add: [{ term: '國二上', subject: '英文', code: 'L1' }] }, target), { kind: 'blocked', reason: 'changed' });
+  assert.equal(h.memory.texts.get(SCOPE), quiz);
+  await flushLog(t, h.state);
+  assert.deepEqual(h.logged().filter(each => each.set === 'exam'), []);
+});

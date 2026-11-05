@@ -626,3 +626,16 @@ void test('§8 超過 20 列：寫另有幾個，總數是實際的數字', asyn
   assert.equal(s.all('.ec-sc-item').length, 20);
   assert.ok(s.text().includes('另有 5 個'));
 });
+
+void test('搬出 小考/ 的小考檔（D-189）：入口與目錄都沒有提示；對照的段考檔照樣寫日期未定', async t => {
+  const quizzes = Object.fromEntries(['2026-11-05', '', '明天'].map((date, index) => [`${FOLDER}小考${String(index)}.md`, `---\n識別碼: q4m8t2\n小考日期: ${date}\n---\n- 國二上 英文 L1\n`]));
+  for (const screen of ['entry', 'catalog'] as const) {
+    const only = await open(t, { ...DECKS, ...quizzes }, screen);
+    assert.ok(only.text().includes('還沒設定'), screen);
+    assert.ok(!only.text().includes('日期未定'), screen);
+    assert.ok(!only.text().includes('考試日期有問題'), screen);
+    const mixed = await open(t, { ...DECKS, ...quizzes, [FOLDER + 'a.md']: scopeText('', '', '- 國二上 自然 2-1') }, screen);
+    assert.equal(mixed.all('.ec-sc-per')[0].textContent, '日期未定', screen);
+    assert.deepEqual(mixed.all('.ec-sc-line').map(each => each.textContent), ['自然2-1'], screen);
+  }
+});

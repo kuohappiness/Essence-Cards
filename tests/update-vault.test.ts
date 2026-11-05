@@ -178,3 +178,14 @@ void test('更新命令：考試範圍/小考/ 留給小考（D-189）：裡面�
   const outside = await checkUpdate(options);
   assert.deepEqual([outside.exam.kind, outside.exam.needsOk], ['unreadable', true], '同一份在外面就要問');
 });
+
+void test('考前提醒：搬出 小考/ 的小考檔（小考日期合法、空的、寫錯）不出「日期未定」；對照的段考檔照常', () => {
+  const now = at('2026-10-21', '20:00');
+  const quiz = (date: string): string => `---\n識別碼: q4m8t2\n小考日期: ${date}\n---\n- 國二上 英文 L3\n`;
+  const quizzes = { a: quiz('2026-11-05'), b: quiz(''), c: quiz('明天') };
+  assert.deepEqual(remind(quizzes, now), { kind: 'none', needsOk: false, message: '沒有生效的考試範圍' });
+  assert.deepEqual(remind({ ...quizzes, d: scope() }, now), { kind: 'undated', needsOk: false, message: '考試範圍「d」還沒填考試日期，日期未定' });
+  assert.equal(remind({ ...quizzes, d: scope('2026-10-25') }, now).kind, 'soon');
+  // 屬性區壞到讀不出鍵：不猜，照段考的處理。
+  assert.deepEqual(remind({ a: '---\n小考日期: [\n---\n' }, now).kind, 'unreadable');
+});

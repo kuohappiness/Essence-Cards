@@ -92,7 +92,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
   const soon = scopeDate(day + 12), later = scopeDate(day + 13);
   const shortOf = (date: string): string => { const [, month, each] = date.split('-'); return `${String(Number(month))}/${String(Number(each))}`; };
   /** 開始時已經有的範圍檔：不是這次建的，拒跑也不動它（R1）。 */
-  const already = new Set(scopeFiles(app).map(file => file.path));
+  const already = new Set((await scopeFiles(app)).map(file => file.path));
   const refused = { error: '測試 vault 已經有範圍檔，不動它', files: [...already] };
   const trial = newTrial();
   /** 這次建的卡組都寫上這個記號，清的時候核對（R12）；科目也是這次才有的，存下的範圍檔靠它認（R19）。 */
@@ -132,7 +132,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
       check('紅字', inEntry('.ec-sc-word.is-bad').map(text));
       check('通知', notices());
       host.entry?.close();
-      return { checks, scope: scopeFiles(app).map(file => file.path), day, soon, trial };
+      return { checks, scope: (await scopeFiles(app)).map(file => file.path), day, soon, trial };
     }
     if (action === 'reopen') {
       host.openEntry();
@@ -258,7 +258,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     const first = await app.vault.read(scope);
     check('檔名', path);
     check('檔案內容', first);
-    check('一份範圍檔', scopeFiles(app).length === 1);
+    check('一份範圍檔', (await scopeFiles(app)).length === 1);
 
     // ── 目錄 ──
     buttonOf(inEntry('button'), '目錄')?.click();
@@ -275,7 +275,7 @@ export async function examDev(host: EntryDevHost, action: string | undefined, fo
     await sleep(100);
     await confirm();
     check('回到目錄', inEntry('.ec-seg').length === 1);
-    check('檔名不變', scopeFiles(app).map(file => file.path));
+    check('檔名不變', (await scopeFiles(app)).map(file => file.path));
     check('改過的內容', await app.vault.read(scope));
 
     // ── 外部修改：入口自己更新；看不懂的行留著 ──

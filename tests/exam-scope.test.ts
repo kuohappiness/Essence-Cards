@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseScope, editScope, isExamPath, newScopeText, parseScope as parse, readDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from '../src/core/catalog/index.ts';
+import { chooseScope, editScope, isExamPath, newScopeText, parseExamFile, parseScope as parse, readDate, scopeDay, scopeFileName, scopePeriod, scopeWritable, unitInScope } from '../src/core/catalog/index.ts';
 import type { ScopeFile } from '../src/core/catalog/index.ts';
 import { newId } from '../src/core/deck/index.ts';
 import { dayOf } from '../src/core/study/index.ts';
@@ -681,5 +681,32 @@ void test('往返與冪等：沒有要改的再按一次不變，只動屬性區
     assert.equal(after.id, before.id ?? 'abc123');
     assert.equal(after.ended, before.ended);
     assert.deepEqual(scopePeriod(after), scopePeriod(before), '期間不變：' + JSON.stringify(text));
+  }
+});
+
+// ── 搬出 小考/ 的小考檔（D-189 第 5 點、tasks/quiz-practice.md §1）──
+
+void test('段考讀的內容：屬性區有頂層 小考日期 就略過，值合法、空的、寫錯都一樣；鍵在別的地方不算', () => {
+  const quiz = (date: string): string => `---\n識別碼: q4m8t2\n小考日期:${date}\n---\n- 國二上 英文 L3\n`;
+  for (const text of [quiz(' 2026-11-05'), quiz(''), quiz(' 明天'), quiz(' 2026-13-01'), quiz(' ~'), '---\n"小考日期": 2026-11-05\n---\n- 國二上 英文 L3\n', quiz(' 2026-11-05').replaceAll('\n', '\r\n'), '\uFEFF' + quiz(' 2026-11-05')]) {
+    assert.equal(parseExamFile(text), null, JSON.stringify(text));
+  }
+  const exam = (text: string): void => {
+    const file = parseExamFile(text);
+    assert.ok(file, JSON.stringify(text));
+    assert.deepEqual(file, parseScope(text), '不是小考檔就和原本讀的一樣');
+  };
+  exam('---\n識別碼: x7f3k2\n考試開始: 2026-10-28\n---\n- 國二上 自然 2\n');
+  exam('- 國二上 自然 2\n');
+  exam('---\n說明:\n  小考日期: 2026-11-05\n---\n- 國二上 自然 2\n');
+  exam('---\n考試開始: 2026-10-28\n---\n小考日期: 2026-11-05\n- 國二上 自然 2\n');
+  exam('');
+});
+
+void test('段考讀的內容：屬性區壞到讀不出鍵，照段考的處理（日期有問題），不猜成小考檔', () => {
+  for (const text of ['---\n小考日期: [\n---\n- 國二上 英文 L3\n', '---\n小考日期: 2026-11-05\n- 國二上 英文 L3\n', '---\n小考日期：2026-11-05\n---\n- 國二上 英文 L3\n']) {
+    const file = parseExamFile(text);
+    assert.ok(file, text);
+    assert.equal(scopePeriod(file).kind, 'bad', text);
   }
 });
