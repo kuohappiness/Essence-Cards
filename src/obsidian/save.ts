@@ -13,6 +13,10 @@ export const TIPS = {
   done: '筆記已自動儲存；沒有發現需要處理的地方',
   missing: (n: number) => `筆記已自動儲存；有 ${n} 個學習目標尚未加入複習`,
   issues: (n: number) => `有 ${n} 個學習目標的進度連結需要處理`,
+  /** 這篇有比較卡（tasks/question-type-seam.md §3）：標記還沒寫，存檔或離開筆記時加。 */
+  markMissing: '筆記已自動儲存；這篇有比較卡，存檔時會加上版本標記，舊版的外掛才不會讀錯',
+  /** 屬性區加不上標記：這次整篇都不寫，新目標不會加入複習，家長要改屬性區。 */
+  markRefused: '這篇有比較卡，但屬性區加不上版本標記，改好才會加入複習。請讓屬性區每行一個「名稱: 值」，上下各一行 ---，不用大括號和 & 別名',
   /** 寫錯的不算（技術債 D1）。 */
   added: (n: number) => `${n} 個學習目標已加入複習`,
   /** 寫法有問題、暫時不會出題的目標（技術債 D1）；按鈕說明與存檔後的通知都用。 */
@@ -147,15 +151,18 @@ const NO_HINTS: DeckHints = { properties: [], sources: [] };
 const KINDS = ['needs-update', 'done', 'missing', 'issues', 'malformed', 'properties', 'sources'] as const;
 /**
  * 一篇卡組按鈕的樣子：需要新版、有待處理的問題、有目標寫法有問題（技術債 D1：按下去補 ID 並在通知列出問題，所以排在沒有 ID 前面）、
- * 屬性寫法有問題、看不懂的出處（§9-5：排在 malformed 後面、沒有 ID 前面）、有目標還沒有 ID、沒有要做的。
+ * 屬性寫法有問題、看不懂的出處（§9-5：排在 malformed 後面、沒有 ID 前面）、有目標還沒有 ID、只缺版本標記、沒有要做的。
+ * 比較卡的標記加不上時整篇都不寫（tasks/question-type-seam.md §3），排在需要新版後面，用屬性有問題的樣子。
  */
-function buttonLook(status: { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true }, hints: DeckHints): { kind: (typeof KINDS)[number]; icon: string; tip: string } {
+function buttonLook(status: ReturnType<State['deckStatus']>, hints: DeckHints): { kind: (typeof KINDS)[number]; icon: string; tip: string } {
   if (status.needsUpdate) return { kind: 'needs-update', icon: 'alert-circle', tip: TIPS.needsUpdate };
+  if (status.mark === 'refused') return { kind: 'properties', icon: 'alert-triangle', tip: TIPS.markRefused };
   if (status.issues.length) return { kind: 'issues', icon: 'alert-triangle', tip: TIPS.issues(status.issues.length) };
   if (status.malformed.length) return { kind: 'malformed', icon: 'alert-triangle', tip: TIPS.malformed(status.malformed.length) };
   if (hints.properties.length) return { kind: 'properties', icon: 'alert-triangle', tip: TIPS.properties(hints.properties.length) };
   if (hints.sources.length) return { kind: 'sources', icon: 'alert-triangle', tip: TIPS.sources(hints.sources.length) };
   if (status.missing) return { kind: 'missing', icon: 'save', tip: TIPS.missing(status.missing) };
+  if (status.mark === 'missing') return { kind: 'missing', icon: 'save', tip: TIPS.markMissing };
   return { kind: 'done', icon: 'check-circle', tip: TIPS.done };
 }
 
@@ -233,7 +240,9 @@ class IssuesModal extends Modal {
       if (result.kind === 'done' || result.kind === 'saved') { this.render(); return; }
       // 受阻時問題保留，一律說「讀取完成後再按」（不看文字：目標本身有 ID 的問題也一樣），不說「剛剛改過」。寫不進去、需要新版
       // 和存檔用同一份對應（Codex L2 的 R1）；其他沒寫成的都請家長再按一次。
-      this.host.notify(blockedTip(result) ?? saveTip(result, this.view.editor.getValue(), []) ?? TIPS.stale);
+      // 比較卡的標記加不上：這次一字沒改，「再按一次」沒有用，說怎麼改（tasks/question-type-seam.md §3）。
+      const refused = result.kind === 'stale' && state.deckStatus(path).mark === 'refused';
+      this.host.notify(refused ? TIPS.markRefused : blockedTip(result) ?? saveTip(result, this.view.editor.getValue(), []) ?? TIPS.stale);
       this.close();
     }, (error: unknown) => { this.waiting = false; this.host.onError(error); if (this.life.alive()) this.close(); });
   }
@@ -301,7 +310,8 @@ export function wireSave(host: SaveHost): Saver {
     const job = state.save(editorOf(view, path)).then(result => {
       // 卸載之後才回來：不提示、不加回按鈕、不開小視窗（技術債 W2）。
       if (!alive) return;
-      const tip = saveTip(result, text, state.deckStatus(path).malformed, hintsOf(state, path));
+      const status = state.deckStatus(path);
+      const tip = result.kind === 'unchanged' && status.mark === 'refused' ? TIPS.markRefused : saveTip(result, text, status.malformed, hintsOf(state, path));
       if (tip) host.notify(tip);
       refresh();
       if (state.deckStatus(path).issues.length) new IssuesModal(app, host, view, life).open();

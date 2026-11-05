@@ -15,6 +15,7 @@ import { createWrites } from './writes.ts';
 import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
+import { markOf, withNeed } from './need.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, encodeEntry, isLogPath, LOG_FOLDER, logPath, memoryColors, mergeHistory, nextCard, parseLine, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
 import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
@@ -178,7 +179,7 @@ export interface State {
    * 存檔按鈕用。malformed 只涵蓋寫法的問題，不代表其餘的目標都會出題（還沒到期、別篇需要新版、草稿、暫停等）。
    * 需要新版的卡組只回 needsUpdate（沒有要補的、沒有可以處理的問題：Cards 不寫它）。
    */
-  deckStatus(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true };
+  deckStatus(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[]; needsUpdate?: true; /** 這篇有比較卡（tasks/question-type-seam.md §3）：標記還沒寫（missing，按鈕不是「沒有要做的」），或屬性區加不上（refused，要家長改）。 */ mark?: 'missing' | 'refused' };
   /** 存檔（開著的筆記）：排進寫入的那一列，補 ID、歸位、改縮排，寫進磁碟並核對後才採用。 */
   save(editor: EditorHandle): Promise<WriteResult>;
   /**
@@ -572,10 +573,10 @@ export function createState(options: StateOptions): State {
    * 存檔的準備（§4 第 1 點）：補 ID、歸位、改縮排（待處理的跳過）。輸入的文字是這一篇最新的內容，觀察到的原文照常採用；
    * 只預留 ID，寫回的文字要等核對讀取確認寫成了才採用。
    */
-  const prepare = (path: string, text: string): Prepared => track(path, () => tracker.fill(path, text));
+  const prepare = (path: string, text: string): Prepared => withNeed(track(path, () => tracker.fill(path, text)), text, version);
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
-  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending });
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version });
 
   return {
     ready() {
@@ -589,10 +590,21 @@ export function createState(options: StateOptions): State {
       return loading;
     },
     unread: () => [...new Set([...unread, ...exam.unread])].sort(),
-    deckStatus: path => !life.loaded ? { missing: 0, issues: [], malformed: [] } : gated.includes(path) ? { missing: 0, issues: [], malformed: [], needsUpdate: true } : tracker.status(path),
+    deckStatus(path) {
+      if (!life.loaded) return { missing: 0, issues: [], malformed: [] };
+      if (gated.includes(path)) return { missing: 0, issues: [], malformed: [], needsUpdate: true };
+      const status = tracker.status(path);
+      // 手機不寫卡組（D-134），不用算。
+      const mark = options.fillIds ? markOf(tracker.text(path), version) : null;
+      return mark ? { ...status, mark } : status;
+    },
     save: editor => writes.enqueue(() => writes.edit(editor, text => prepare(editor.path, text), { kind: 'unchanged' })),
     // 問題已經跟著改名搬到別的路徑：不是這個編輯器的那一篇，不準備（stale）。
-    resolve: (issue, choice, editor) => writes.enqueue(() => writes.edit(editor, text => issue.path === editor.path ? track(editor.path, () => tracker.resolve(issue, choice, text)) : null, { kind: 'stale' })),
+    resolve: (issue, choice, editor) => writes.enqueue(() => writes.edit(editor, text => {
+      if (issue.path !== editor.path) return null;
+      const prepared = track(editor.path, () => tracker.resolve(issue, choice, text));
+      return prepared && withNeed(prepared, text, version);
+    }, { kind: 'stale' })),
     async fillIds(path) {
       const result = await writes.enqueue(() => writes.fillFile(path));
       // 寫不進去時照舊 reject（呼叫端交給 onError）；已配出的 ID 留在 seen、不重用。
