@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { DeckStatusValue, State, StudyPick } from '../state/index.ts';
 import { Entry, type EntryScreen } from './Entry.tsx';
 import { openFullscreen } from './fullscreen.ts';
-import { loadTerms, saveTerms } from './prefs.ts';
+import { loadTerms, quizMark, saveTerms } from './prefs.ts';
 
 // 入口與目錄的全螢幕（D-163 第 2 點）。資料的刷新（任務說明 §11）：以「變成看得到時重新取」為起點，開著的時候再訂 state.onChange 與 onUnread；
 // state 不為了這件事多通知，存檔按鈕等既有監聽者不受影響。
@@ -105,6 +105,7 @@ export function openEntry(options: EntryOptions): EntryHandle {
     state={options.state} start={options.start} openNote={options.openNote} openSettings={options.openSettings}
     close={() => { handle.close(); }} reminders={options.reminders} covered={options.covered} notify={options.notify} setDeckStatus={options.setDeckStatus}
     terms={{ get: () => loadTerms(options.app), set: terms => { saveTerms(options.app, terms); } }}
+    quizMark={() => quizMark.get(options.app)}
   />);
   shell.element.focus({ preventScroll: true });
   return handle;

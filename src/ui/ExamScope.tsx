@@ -119,9 +119,9 @@ function Editor(props: EditorProps): React.JSX.Element {
       {current && <Checks check={current.examCheck(change)} openNote={props.openNote} />}
     </div>
     <div className="ec-sc-dock">
-      <DateField label="開始" value={from} set={props.setFrom} bad={dates.start !== null || dates.order} />
+      <DateField label="開始" name="考試開始" value={from} set={props.setFrom} bad={dates.start !== null || dates.order} />
       {dates.start !== null && <p className="ec-sc-word is-bad">{dates.start}</p>}
-      <DateField label="結束" value={to} set={props.setTo} bad={dates.end !== null || dates.order} />
+      <DateField label="結束" name="考試結束" value={to} set={props.setTo} bad={dates.end !== null || dates.order} />
       {dates.end !== null && <p className="ec-sc-word is-bad">{dates.end}</p>}
       {dates.order && <p className="ec-sc-word is-bad">{ORDER_WORD}</p>}
       {dates.past && <p className="ec-sc-word">這個日期已經過了，不會排進今天的複習</p>}
@@ -147,15 +147,16 @@ function Row({ row, on, set }: { row: ScopeRow; on: boolean; set: (on: boolean) 
   </label>;
 }
 
-function DateField({ label, value, set, bad }: { label: string; value: string; set: (value: string) => void; bad: boolean }): React.JSX.Element {
+/** 日期欄：打字或用日曆選。name 是給輔助工具念的名稱；考試範圍與小考的其他日期共用。 */
+export function DateField({ label, name, value, set, bad, hint = '選填，例如 2026-10-28' }: { label: string; name: string; value: string; set: (value: string) => void; bad: boolean; hint?: string }): React.JSX.Element {
   const normal = normalDate(value);
   return <div className="ec-sc-date">
     <label>{label}</label>
-    <input type="text" aria-label={'考試' + label} className={bad ? 'is-bad' : ''} placeholder="選填，例如 2026-10-28" value={value}
+    <input type="text" aria-label={name} className={bad ? 'is-bad' : ''} placeholder={hint} value={value}
       onChange={event => { set(event.currentTarget.value); }} onBlur={() => { if (normal !== value) set(normal); }} />
     <span className="ec-sc-pick">
       <Icon type="calendar" />
-      <input type="date" tabIndex={-1} aria-label={'用日曆選' + label + '日'} value={/^\d{4}-\d{2}-\d{2}$/.test(normal) ? normal : ''} onChange={event => { set(event.currentTarget.value); }} />
+      <input type="date" tabIndex={-1} aria-label={'用日曆選' + name} value={/^\d{4}-\d{2}-\d{2}$/.test(normal) ? normal : ''} onChange={event => { set(event.currentTarget.value); }} />
     </span>
   </div>;
 }

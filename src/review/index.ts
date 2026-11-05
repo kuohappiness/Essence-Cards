@@ -16,4 +16,6 @@ export type { SourceLink, SourceOwner } from './sources.ts';
 export { catalogView, entryView, examRow, examSubject, reminderView } from './entry.ts';
 export { checkDates, examFailure, examForm, formChange, normalDate, ORDER_WORD, toggleRow } from './exam-form.ts';
 export type { ExamForm, ScopeRow } from './exam-form.ts';
+export { checkQuizDate, COPIES_NOTE, quizButton, quizChoices, quizFailure, quizViews } from './quiz.ts';
+export type { QuizButtonView, QuizRowView } from './quiz.ts';
 export { createPreview } from './preview.ts';

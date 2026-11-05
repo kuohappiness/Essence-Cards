@@ -84,18 +84,42 @@
 .ec-tr-tag { padding: 0 6px; border: 1px solid var(--ec-line); border-radius: 6px; color: var(--ec-muted); font-size: 11px; line-height: 18px; white-space: nowrap; }
 .ec-tr-tag.is-exam { border-color: var(--ec-muted); color: var(--ec-ink); }
 .ec-tr-due { flex: none; min-width: 2em; text-align: right; color: var(--k, var(--ec-muted)); font-size: var(--ec-size-base); font-weight: 600; font-variant-numeric: tabular-nums; }
-.ec-tr-ub { display: flex; gap: 8px; flex-basis: 100%; padding: 0 0 12px 24px; }
+.ec-tr-ub { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; padding: 0 0 12px 24px; }
 .ec-app .ec-u-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border: 1px solid var(--ec-line); border-radius: 16px; background: none; font-size: var(--ec-size-small); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ec-app .ec-u-btn:hover, .ec-app .ec-u-btn:focus { background: none; }
 .ec-app .ec-u-btn:not(:disabled):active { background: color-mix(in srgb, var(--ec-press) 45%, transparent); }
 .ec-app .ec-u-btn:disabled { color: var(--ec-muted); font-weight: 500; opacity: .6; }
 .ec-tr-open { padding: 0 0 10px 24px; }
 /* 單篇一列（D-189 第 3 點）：篇名太長時截斷，按鈕不換行 */
-.ec-tr-pc { display: flex; align-items: center; gap: 8px; }
+.ec-tr-pc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ec-app .ec-tr-pc .ec-tr-deck { flex: 1; width: auto; min-width: 0; }
 .ec-tr-pc .ec-tr-deck span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ec-app .ec-tr-pc .ec-u-btn { flex: none; }
 .ec-app .ec-tr-pc .ec-u-btn.is-quiet { padding: 0 6px; border-color: transparent; color: var(--ec-muted); font-weight: 500; }
+/* 小考（tasks/quiz-mark.md §3、§4）：入口科目列最上面的一列、目錄的按鈕與選日期 */
+.ec-qz { flex-wrap: wrap; }
+.ec-qz .ec-sb-left { flex: 1 1 0; }
+.ec-qz .ec-en-name { overflow-wrap: anywhere; }
+.ec-sb-ex.is-warn { color: var(--ec-near); }
+.ec-qz-hint { font-size: var(--ec-size-meta); color: var(--ec-muted); line-height: 1.5; }
+.ec-app .ec-qz-fix { flex: 1 1 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: inherit; text-align: left; white-space: normal; }
+.ec-app .ec-qz-fix:hover, .ec-app .ec-qz-fix:focus { background: none; }
+.ec-qz-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.ec-app .ec-qz-side .ec-sb-btn { width: auto; min-width: 108px; padding: 0 12px; }
+.ec-app .ec-qz .ec-sb-btn { width: auto; min-width: 108px; padding: 0 12px; }
+.ec-app .ec-qz-quiet { height: 32px; padding: 0 6px; border: 0; background: none; color: var(--ec-muted); font-size: var(--ec-size-small); }
+.ec-app .ec-qz-quiet:hover, .ec-app .ec-qz-quiet:focus { background: none; }
+.ec-qz-copies { flex-basis: 100%; margin: 0; font-size: var(--ec-size-small); color: var(--ec-muted); }
+.ec-qz-copies ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.ec-app .ec-qz-copies button { display: block; width: 100%; height: auto; min-height: 32px; padding: 4px 0; border: 0; background: none; color: var(--ec-ink); font-size: var(--ec-size-small); text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.ec-app .ec-qz-copies button:hover, .ec-app .ec-qz-copies button:focus { background: none; }
+.ec-app .ec-u-btn.is-warn { border-color: var(--ec-near); color: var(--ec-near); }
+.ec-qz-menu { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; padding: 2px 0 6px; }
+.ec-qz-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.ec-qz-other { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.ec-app .ec-qz-ok { align-self: flex-start; height: 32px; padding: 0 14px; border: 1px solid var(--ec-line); border-radius: 16px; background: none; font-size: var(--ec-size-small); font-weight: 600; }
+.ec-app .ec-qz-ok:hover, .ec-app .ec-qz-ok:focus { background: none; }
+.ec-app .ec-qz-ok:disabled { color: var(--ec-muted); font-weight: 500; opacity: .6; }
 .ec-tr-ts { margin: 0; padding: 0; list-style: none; }
 .ec-tr-t { display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 14px; }
 .ec-tr-from { display: block; color: var(--ec-muted); font-size: var(--ec-size-meta); }

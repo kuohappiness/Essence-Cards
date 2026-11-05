@@ -1,7 +1,7 @@
 import { Platform, PluginSettingTab, Setting, setIcon } from 'obsidian';
 import type { App, ButtonComponent, Plugin } from 'obsidian';
 import type { BackupStatus, PluginBy } from '../core/backup/index.ts';
-import { previewButton, previewReveal } from '../ui/prefs.ts';
+import { previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
@@ -13,6 +13,8 @@ const REVIEW = {
   buttonNote: '卡組筆記的標題列多一顆「預覽」，看卡片在複習畫面上的樣子，不記錄、不動排程。只影響這台裝置。',
   reveal: '預覽時自動展開答案',
   revealNote: '一進卡片就是背面。只影響這台裝置。',
+  quiz: '小考標記',
+  quizNote: '在目錄替單元或某一篇設小考日期，入口最上面會多一列。不改複習的排程。只影響這台裝置的目錄按鈕。',
 };
 const TEXTS = {
   section: '備份',
@@ -104,6 +106,9 @@ class EssenceSettingTab extends PluginSettingTab {
     }));
     new Setting(containerEl).setName(REVIEW.reveal).setDesc(REVIEW.revealNote).addToggle(toggle => toggle.setValue(previewReveal.get(this.app)).onChange(on => {
       previewReveal.set(this.app, on);
+    }));
+    new Setting(containerEl).setName(REVIEW.quiz).setDesc(REVIEW.quizNote).addToggle(toggle => toggle.setValue(quizMark.get(this.app)).onChange(on => {
+      quizMark.set(this.app, on);
     }));
   }
 
