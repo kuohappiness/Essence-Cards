@@ -1,11 +1,12 @@
 import type { Prompt } from '../deck/index.ts';
-import { cardOf } from './compose.ts';
+import { cardOf, pickCardOf } from './compose.ts';
 import { dueAt, review } from './fsrs.ts';
 import { compareText, firstAtOrAfter } from './plan.ts';
 import { shownWith } from './shown.ts';
 import { dayOf, dayStart } from './time.ts';
 import { practiceNext, practiceProgress } from './practice.ts';
-import type { Next, Pick, Progress, QueueItem, ReviewEntry, ScopeCount, Slot, SubjectRow, Today, TodayInput } from './types.ts';
+import type { PickMate } from './compose.ts';
+import type { Card, Next, Pick, Progress, QueueItem, ReviewEntry, ScopeCount, Slot, SubjectRow, Today, TodayInput } from './types.ts';
 
 interface Answers {
   /** 今天的作答，不含錯題補強，依時間排。 */
@@ -63,10 +64,35 @@ export function choosePrompt(slot: Slot, entries: readonly ReviewEntry[]): Promp
   return best;
 }
 
+/**
+ * 範圍裡同一組的另一個目標併不併進這張比較卡（tasks/question-type-seam.md §5-1）：還沒答的併；答錯的，到時間了才併，選中的是提早出時也併；答對的不併。
+ * entries 是它這次的作答；dueBy 只在答錯時才問。
+ */
+export function joins(entries: readonly ReviewEntry[] | undefined, early: boolean, dueBy: () => boolean): boolean {
+  if (!entries) return true;
+  return wrong(entries.at(-1)) && (early || dueBy());
+}
+
+/** 選中的目標有 group 時的卡：範圍裡該併的目標併成一張（§5-1）。 */
+function pickCard(item: QueueItem, slot: Slot, scope: readonly QueueItem[], today: Today, input: TodayInput, answers: Answers, early: boolean): Card {
+  const { valid, any } = answers;
+  const mateOf = (lt: string): PickMate => { const each = slotOf(today, lt); return { lt, target: each.target, shown: shownWith(each.seen, valid.get(lt) ?? []) }; };
+  const others = scope.filter(other => {
+    if (other.lt === item.lt || other.deck !== item.deck) return false;
+    const each = slotOf(today, other.lt);
+    if (each.target.group?.key !== slot.target.group?.key) return false;
+    const entries = valid.get(other.lt);
+    return joins(entries, early, () => againAt(each, entries ?? []) <= input.now);
+  });
+  const deckTargets = input.decks.find(entry => entry.path === item.deck)?.deck.targets ?? [slot.target];
+  return pickCardOf({ deck: item.deck, isNew: slot.memory === null && !any.has(item.lt), early }, [mateOf(item.lt), ...others.map(other => mateOf(other.lt))], deckTargets);
+}
+
 export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   if (input.offset !== today.offset || dayOf(input.now, input.offset) !== today.day) return { kind: 'stale' };
   if ('targets' in pick && 'since' in pick) return practiceNext(input, pick.targets, pick.since);
-  const { valid, any } = answersOf(today, input);
+  const answers = answersOf(today, input);
+  const { valid, any } = answers;
   let scope: QueueItem[];
   if ('more' in pick) scope = today.more.filter(item => { const pair = slotOf(today, item.lt).pair; return pair === null || !valid.has(pair); });
   else scope = shareOf(today, pick);
@@ -85,6 +111,7 @@ export function nextCard(today: Today, input: TodayInput, pick: Pick): Next {
   const item = ready?.item ?? fresh ?? waiting?.item;
   if (!item) return { kind: 'done' };
   const slot = slotOf(today, item.lt);
+  if (slot.target.group) return { kind: 'card', card: pickCard(item, slot, scope, today, input, answers, !ready && !fresh) };
   const prompt = choosePrompt(slot, valid.get(item.lt) ?? []);
   return { kind: 'card', card: cardOf({
     lt: item.lt, deck: item.deck, target: slot.target, prompt,

@@ -38,8 +38,11 @@ export interface Target {
   /** 只有點選填空的目標才有（D-182、tasks/question-type-seam.md §3）。 */
   group?: PickGroup;
 }
-/** 點選填空的組：名稱的字或詞、字鍵（照括號裡寫的）、組的身分（正規化後排序的陣列的 JSON）、結尾（卡片的標題）。 */
-export interface PickGroup { word: string; members: readonly string[]; key: string; title: string }
+/**
+ * 點選填空的組：名稱的字或詞、字鍵（照括號裡寫的）、組的身分（正規化後排序的陣列的 JSON）、結尾（卡片的標題）。
+ * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。
+ */
+export interface PickGroup { word: string; members: readonly string[]; key: string; title: string; wordKey: string; memberKeys: readonly string[] }
 export interface Fields {
   sources: string[];
   type: string | null;

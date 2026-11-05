@@ -205,10 +205,20 @@ export interface ScopeCount { done: number; total: number }
 export type MemoryColor = 'new' | 'near' | 'good' | 'easy';
 
 /** 一張卡的一格：只對一個學習目標（D-114）。 */
-interface Blank {
+export interface Blank {
   lt: string;
   target: Target;
   prompt: Prompt;
+  /** 比較卡才有：這一格對的字鍵，照 CardGroup.members 的寫法。 */
+  answer?: string;
+}
+
+/** 比較卡的組（tasks/question-type-seam.md §5、§7）：標題、括號的順序、打散的字鍵、每個字一行的對照。對照裡的 lt 是這篇卡組裡這個字的目標，不一定在這次的範圍裡。 */
+export interface CardGroup {
+  title: string;
+  members: readonly string[];
+  keys: readonly string[];
+  rows: readonly { member: string; lt: string | null; anchor: string | null }[];
 }
 
 export interface Card {
@@ -223,8 +233,10 @@ export interface Card {
   typed: boolean;
   /** 剛答錯、還沒到時間就提早出。 */
   early: boolean;
-  /** 這張卡的每一格，至少一格；翻面與打字就是自己那一格（D-181）。 */
+  /** 這張卡的每一格，至少一格，照畫面的順序；翻面與打字就是自己那一格（D-181）。 */
   blanks: readonly Blank[];
+  /** 比較卡才有；這時 lt、target、prompt 是選中的目標在畫面上的第一格。 */
+  group?: CardGroup;
 }
 
 export type Next =

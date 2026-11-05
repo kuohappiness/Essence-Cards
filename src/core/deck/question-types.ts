@@ -87,7 +87,7 @@ function readGroup(name: string): PickGroup | null {
     const keys = members.map(pickKey);
     if (!keys.includes(pickKey(split.word))) continue;
     if (members.length < 2 || members.some(member => /[`$[\]<>]/.test(foldWidth(member)))) return null;
-    return { word: split.word, members, key: JSON.stringify([...keys].sort()), title: split.rest };
+    return { word: split.word, members, key: JSON.stringify([...keys].sort()), title: split.rest, wordKey: pickKey(split.word), memberKeys: keys };
   }
   return null;
 }

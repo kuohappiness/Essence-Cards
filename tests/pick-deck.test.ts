@@ -12,7 +12,7 @@ const groupOf = (text: string) => parseDeck(text).targets[0]?.group;
 const codes = (text: string): ProblemCode[] => parseDeck(text).problems.map(problem => problem.code).filter(code => code.startsWith('pick-'));
 
 void test('比較卡：正式的寫法', () => {
-  assert.deepEqual(groupOf(deck('寨（寨、塞、寒、賽） 相似字', '寨')), { word: '寨', members: ['寨', '塞', '寒', '賽'], key: '["塞","寒","寨","賽"]', title: '相似字' });
+  assert.deepEqual(groupOf(deck('寨（寨、塞、寒、賽） 相似字', '寨')), { word: '寨', members: ['寨', '塞', '寒', '賽'], key: '["塞","寒","寨","賽"]', title: '相似字', wordKey: '寨', memberKeys: ['寨', '塞', '寒', '賽'] });
 });
 
 void test('比較卡：字和詞都可以；有頓號或逗號時，空白是項目的一部分', () => {

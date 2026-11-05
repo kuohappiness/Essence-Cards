@@ -97,6 +97,15 @@ void test('秒數：一張比較卡三行算一次卡片事件，中位數不被
   assert.equal(seconds(lines.slice(0, 29 * 3)), 15);
 });
 
+void test('秒數：作答 40 筆，其中一張比較卡三行（後兩行帶 with）：38 張卡，37 個間隔', () => {
+  const lines: string[] = [];
+  for (let i = 0; i < 37; i++) lines.push(line(T0 + i * 8000));
+  const start = T0 + 37 * 8000;
+  lines.push(line(start), line(start + 1, { with: ms(start) }), line(start + 2, { with: ms(start) }));
+  assert.equal(lines.length, 40);
+  assert.equal(seconds(lines), 8);
+});
+
 void test('秒數：第一行還沒同步、只剩後面的行，也是一次事件（31 張每張 8 秒：8 秒，30 個間隔）', () => {
   const lines: string[] = [];
   for (let i = 0; i < 31; i++) {
