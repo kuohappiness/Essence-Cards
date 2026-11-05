@@ -2,7 +2,7 @@ import type { Files } from '../files.ts';
 import { canRead } from '../version/index.ts';
 import { parseLine } from './entries.ts';
 import { LOG_FOLDER } from './log.ts';
-import type { ChangeEntry, History, ReviewEntry } from './types.ts';
+import type { ChangeEntry, History, LogEntry, ReviewEntry } from './types.ts';
 
 // 設定值可能是物件；欄位順序不同仍然是相同的值，陣列順序則保留。
 function canonical(value: unknown): unknown {
@@ -24,16 +24,57 @@ export function isLogPath(path: string): boolean {
   return name.endsWith('.jsonl') && !name.includes('/');
 }
 
+/** start 開始的物件在哪裡結束：照字串跳脫與 {}、[] 的巢狀深度找；start 不是 `{` 或沒有關上時是 -1。括號配錯由呼叫的一方 JSON.parse 擋。 */
+function objectEnd(text: string, start: number): number {
+  if (text[start] !== '{') return -1;
+  let depth = 0, inString = false;
+  for (let at = start; at < text.length; at++) {
+    const char = text[at];
+    if (inString) {
+      if (char === '\\') at++;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === '{' || char === '[') depth++;
+    else if ((char === '}' || char === ']') && --depth === 0) return at + 1;
+  }
+  return -1;
+}
+
+/**
+ * JSON 讀不出來的一行要讀哪幾段（syntax.md §5-2）：行首開始、一個接一個的完整物件，加上認不出來的餘段裡最後一個
+ * `{"t":` 的尾段。括號對得上但不是 JSON 的不算完整，從那裡起都是餘段。不把每個字面的 `{"t":` 都當成一筆的開頭：
+ * 物件裡巢狀的也長這樣。
+ */
+function readablePieces(line: string): string[] {
+  const pieces: string[] = [];
+  let at = 0;
+  for (;;) {
+    const end = objectEnd(line, at);
+    if (end < 0) break;
+    const piece = line.slice(at, end);
+    try { JSON.parse(piece); } catch { break; } // 不是 JSON：從這裡起是餘段
+    pieces.push(piece);
+    at = end;
+    while (line[at] === ' ' || line[at] === '\t' || line[at] === '\r') at++;
+  }
+  const tail = line.lastIndexOf('{"t":');
+  if (tail >= at) pieces.push(line.slice(tail));
+  return pieces;
+}
+
 const ltOf = (value: unknown): string | null =>
   value && typeof value === 'object' && typeof (value as { lt?: unknown }).lt === 'string' ? (value as { lt: string }).lt : null;
 /**
- * 壞掉的行裡寬鬆找到的 lt（History.seen）：整行照 JSON 讀（空白、跳脫的鍵名都算）、每一段 `{"t":` 開頭的尾段
- * 照 JSON 讀（救回的就是最後一段）、再用 `"lt": "…"` 找字串。
+ * 壞掉的行裡寬鬆找到的 lt（History.seen）：整行照 JSON 讀（空白、跳脫的鍵名都算）、救回時讀的每一段照 JSON 讀、
+ * 每一段 `{"t":` 開頭的尾段照 JSON 讀、再用 `"lt": "…"` 找字串。
  */
 function looseLts(line: string): string[] {
   const ids: string[] = [];
   const add = (id: string | null): void => { if (id !== null) ids.push(id); };
   try { add(ltOf(JSON.parse(line))); } catch { /* 寫入中斷的行：下面一段一段找 */ }
+  for (const piece of readablePieces(line)) {
+    try { add(ltOf(JSON.parse(piece))); } catch { /* 餘段的尾段可能也壞了 */ }
+  }
   for (let at = line.indexOf('{"t":', 1); at > 0; at = line.indexOf('{"t":', at + 1)) {
     try { add(ltOf(JSON.parse(line.slice(at)))); } catch { /* 這一段也壞了 */ }
   }
@@ -69,6 +110,8 @@ function needed(raw: string): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'need') ? value as Record<string, unknown> : null;
 }
 
+const UNPARSED = '無法解析紀錄或缺少有效的必要欄位';
+
 /**
  * 合併所有紀錄檔（syntax.md §5）。version 是這台的正式版號（§0-1），用來判斷 need 讀不讀得懂；null 是版本不明，
  * 任何 need 都讀不懂。讀不懂的行（§5-2）先於其他欄位檢查：不取消、不排程、不算變更，只停掉它影響的學習目標（held），
@@ -101,6 +144,38 @@ export function mergeHistory(sources: readonly { path: string; text: string }[],
     const data = needed(raw);
     return data && !canRead(data.need, version) ? data : null;
   };
+  /** 讀得懂的一筆併進結果；text 是它自己的原文（取消行多帶的 lt 要從原文讀）。 */
+  function take(entry: LogEntry, text: string): void {
+    const lt = entry.kind === 'undo' ? undoLt(text) : entry.lt;
+    if (lt !== null) seen.add(lt);
+    if (entry.kind === 'undo') { cancelled.add(entry.undo); return; }
+    if (entry.kind === 'change') {
+      const key = changeKey(entry);
+      if (!seenChanges.has(key)) { seenChanges.add(key); history.changes.push(entry); }
+      return;
+    }
+    const previous = seenReviews.get(entry.t);
+    if (previous) {
+      if (sameReview(previous, entry)) return;
+      const others = collisions.get(entry.t);
+      if (others?.some(other => sameReview(other, entry))) return;
+      if (others) others.push(entry);
+      else collisions.set(entry.t, [entry]);
+    } else seenReviews.set(entry.t, entry);
+    history.reviews.push(entry);
+  }
+  /** JSON 讀不出來的一行照順序讀它的每一段（§5-2），回傳記進 problems 的說明；原檔沒有改，下次讀到還是這一行。 */
+  function salvage(raw: string): string {
+    let taken = false, later = false;
+    for (const piece of readablePieces(raw)) {
+      const data = unreadable(piece);
+      if (data) { hold(data); later = true; continue; }
+      const entry = parseLine(piece);
+      if (entry) { take(entry, piece); taken = true; }
+    }
+    if (!taken && !later) return UNPARSED;
+    return `寫入中斷或幾筆接在同一行；${taken ? '已救回讀得出來的紀錄，' : ''}${later ? '有的需要新版才讀得懂，' : ''}原檔沒有改`;
+  }
   // 先按路徑、行號、trim 原文處理，再穩定排序時間，保留全部 tie-break。
   const ordered = [...sources].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   for (let source = 0; source < ordered.length;) {
@@ -123,38 +198,13 @@ export function mergeHistory(sources: readonly { path: string; text: string }[],
           hold(later);
           continue;
         }
-        let entry = parseLine(raw);
-        if (!entry) {
-          for (const id of looseLts(raw)) seen.add(id);
-          let message = '無法解析紀錄或缺少有效的必要欄位';
-          try { JSON.parse(raw); } catch {
-            const start = raw.lastIndexOf('{"t":');
-            // 從行尾救回的那一段也先看 need（§5-2）。
-            const tail = start > 0 ? raw.slice(start) : null, late = tail === null ? null : unreadable(tail);
-            if (late) { hold(late); message = '寫入中斷；行尾救回的那一筆需要新版才讀得懂'; }
-            else if (tail !== null) entry = parseLine(tail);
-            if (entry) message = '寫入中斷；已從行尾救回一筆紀錄';
-          }
-          history.problems.push({ path, line, message });
-        }
-        if (!entry) continue;
-        const lt = entry.kind === 'undo' ? undoLt(raw) : entry.lt;
-        if (lt !== null) seen.add(lt);
-        if (entry.kind === 'undo') { cancelled.add(entry.undo); continue; }
-        if (entry.kind === 'change') {
-          const key = changeKey(entry);
-          if (!seenChanges.has(key)) { seenChanges.add(key); history.changes.push(entry); }
-          continue;
-        }
-        const previous = seenReviews.get(entry.t);
-        if (previous) {
-          if (sameReview(previous, entry)) continue;
-          const others = collisions.get(entry.t);
-          if (others?.some(other => sameReview(other, entry))) continue;
-          if (others) others.push(entry);
-          else collisions.set(entry.t, [entry]);
-        } else seenReviews.set(entry.t, entry);
-        history.reviews.push(entry);
+        const entry = parseLine(raw);
+        if (entry) { take(entry, raw); continue; }
+        for (const id of looseLts(raw)) seen.add(id);
+        let message = UNPARSED;
+        // 整行是合法 JSON、只是缺必要欄位時不往裡面挖。
+        try { JSON.parse(raw); } catch { message = salvage(raw); }
+        history.problems.push({ path, line, message });
       }
     }
   }

@@ -120,10 +120,10 @@ void test('§5-2 寫壞的行：從行尾救回的那一段也先看 need', () =
   assert.deepEqual(held(history), { held: ['abc123'], incomplete: false });
   assert.deepEqual(history.reviews.map(r => r.lt), ['def456']);
   assert.deepEqual(history.seen, ['abc123', 'def456', 'old123']);
-  assert.deepEqual(history.problems.map(p => [p.line, p.message]), [[0, '寫入中斷；行尾救回的那一筆需要新版才讀得懂']]);
+  assert.deepEqual(history.problems.map(p => [p.line, p.message]), [[0, '寫入中斷或幾筆接在同一行；有的需要新版才讀得懂，原檔沒有改']]);
   // 行尾救回的那一段讀得懂：照舊救回。
   const readable = merge(['{"t":"2026-10-28T10:00:00.000+08:00","lt":"old123"' + tail], '9.0.0');
-  assert.deepEqual([held(readable), readable.reviews.map(r => r.lt), readable.problems.map(p => p.message)], [{ held: [], incomplete: false }, ['abc123'], ['寫入中斷；已從行尾救回一筆紀錄']]);
+  assert.deepEqual([held(readable), readable.reviews.map(r => r.lt), readable.problems.map(p => p.message)], [{ held: [], incomplete: false }, ['abc123'], ['寫入中斷或幾筆接在同一行；已救回讀得出來的紀錄，原檔沒有改']]);
 });
 
 void test('readHistory 把這台的版本傳給合併；不傳就是版本不明', async () => {
