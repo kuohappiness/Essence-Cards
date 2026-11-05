@@ -304,3 +304,122 @@ void test('§9 記憶顏色：灰未複習、橙到期或剛答錯、綠還沒�
   assert.equal(after.high.shared, 'good');
   assert.ok(!(h.texts.get(OWN) ?? '').includes('"lt":"low"'));
 });
+
+// ── 英文的兩個方向隔開（D-189 第 1 點、tasks/quiz-practice.md §2）──
+
+/** n 個字的兩個方向，都是新卡：筆記裡同一個字的兩張相鄰，英翻中 e1、e2…，中翻英 z1、z2…。 */
+const words = (n: number): string => Array.from({ length: n }, (_, i) => {
+  const at = String(i + 1);
+  return `- w${at} 中翻英 ^z${at}\n    - 字 ${at} :: w${at}\n- w${at} 英翻中 ^e${at}\n    - w${at} :: 字 ${at}\n`;
+}).join('');
+const ids = (letter: string, from: number, to: number): string[] => Array.from({ length: to - from + 1 }, (_, i) => letter + String(from + i));
+/** 直接答（打字卡的步驟在 review-session 測過）：每張都走 practiceNext，一張 1 秒。回傳出卡順序與每張是不是提早出的。 */
+function drill(h: Harness, pick: StudyPick, rating: (lt: string, order: readonly string[]) => Rating = () => 'good', limit = Infinity): { order: string[]; early: string[] } {
+  const order: string[] = [], early: string[] = [];
+  while (order.length < limit) {
+    const next = h.state.next(pick);
+    if (next.kind !== 'card') { assert.equal(next.kind, 'done'); break; }
+    if (next.card.early) early.push(next.card.lt);
+    h.state.answer({ lt: next.card.lt, r: rating(next.card.lt, order), v: '12345678' });
+    order.push(next.card.lt);
+    h.clock.now += 1000;
+  }
+  return { order, early };
+}
+/** 這一輪裡 a 的最後一次和 b 的下一次之間，答過幾個不同的其他目標。 */
+const between = (order: readonly string[], a: string, b: string): number => {
+  const from = order.lastIndexOf(a);
+  const to = order.indexOf(b, from);
+  assert.ok(from >= 0 && to > from, `${a} 要在 ${b} 前面：${order.join(' ')}`);
+  return new Set(order.slice(from + 1, to).filter(lt => lt !== a && lt !== b)).size;
+};
+
+void test('§2 40 個字、兩個方向都是新卡：同一個字的兩張之間至少隔 10 個不同的目標，連最後幾個字也是', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(40) });
+  const { order, early } = drill(h, h.round());
+  assert.equal(order.length, 80);
+  assert.equal(new Set(order).size, 80, '每張出一次');
+  assert.deepEqual(early, []);
+  for (const at of ids('', 1, 40)) assert.ok(between(order, 'e' + at, 'z' + at) >= 10, `第 ${at} 個字：${order.join(' ')}`);
+});
+
+void test('§2 英翻中答錯、1 分鐘後到期：到期時對方還不夠隔，先出別張；夠了才出', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(13) });
+  const round = h.round();
+  const first = drill(h, round, lt => lt === 'e1' ? 'miss' : 'good', 14).order;
+  assert.deepEqual(first, [...ids('e', 1, 13), 'z1'], '答錯的還沒到期；z1 和 e1 隔了 12 個');
+  h.clock.now += 120_000;
+  const rest = drill(h, round).order;
+  assert.deepEqual(rest, [...ids('z', 2, 11), 'e1', 'z12', 'z13'], 'e1 到期了，但 z1 之後要再答過 10 個不同的目標');
+  assert.equal(between([...first, ...rest], 'z1', 'e1'), 10);
+});
+
+void test('§2 只有 3 個字（6 張）：照隔最多的先穿插，不會有一張等著不出；全部答對就結束', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(3) });
+  const { order, early } = drill(h, h.round());
+  assert.deepEqual(order, ['e1', 'e2', 'e3', 'z1', 'z2', 'z3']);
+  assert.deepEqual(early, []);
+});
+
+void test('§2 只有一個字的兩個方向：直接出，不卡住', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) });
+  const { order, early } = drill(h, h.round());
+  assert.deepEqual(order, ['e1', 'z1']);
+  assert.deepEqual(early, [], '另一張是新卡，不是提早出的重學');
+});
+
+void test('§2 到期的都不夠隔、也沒有新卡：在到期的裡挑隔最多的，不讓學生等', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(2) });
+  const round = h.round();
+  const first = drill(h, round, lt => lt.startsWith('e') ? 'miss' : 'good', 4).order;
+  assert.deepEqual(first, ['e1', 'e2', 'z1', 'z2'], '新卡也不夠隔：z1 隔 1 個，z2 隔 0 個');
+  h.clock.now += 120_000;
+  const rest = drill(h, round);
+  assert.deepEqual(rest.order, ['e1', 'e2'], 'z1 之後答過 z2，z2 之後沒有');
+  assert.deepEqual(rest.early, []);
+});
+
+void test('§2 不為了湊間隔改出還沒到時間的：新卡不夠隔也照出；沒有別張才提早出', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + targets('w') + words(1) });
+  const { order, early } = drill(h, h.round(), (lt, seen) => lt === 'w' && !seen.includes('w') ? 'miss' : 'good');
+  assert.deepEqual(order, ['w', 'e1', 'z1', 'w']);
+  assert.deepEqual(early, ['w'], 'early 只表示提早出的重學');
+});
+
+void test('§2 中途關掉再開（新的 since）：從頭算，不沿用上一輪的間隔', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets('a') });
+  assert.deepEqual(drill(h, h.round()).order, ['e1', 'a', 'z1'], '只剩同一對時直接出');
+  h.clock.now += 1000;
+  assert.deepEqual(drill(h, h.round()).order, ['e1', 'a', 'z1'], 'e1 排最前面：z1 剛答過，但那是上一輪');
+});
+
+void test('§2 別的篇裡同樣的字不算一對', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + '- w1 英翻中 ^e1\n    - w1 :: 字\n', [OTHER]: HEAD('2-1') + '- w1 中翻英 ^z1\n    - 字 :: w1\n' + targets('a') });
+  assert.deepEqual(drill(h, h.round()).order, ['e1', 'z1', 'a'], '筆記順序，沒有隔開');
+});
+
+void test('§2 錯題補強的作答不算間隔', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets(...ids('m', 1, 10)) });
+  const round = h.round();
+  assert.deepEqual(drill(h, round, () => 'good', 1).order, ['e1']);
+  for (const lt of ids('m', 1, 10)) { h.state.answer({ lt, r: 'miss', src: 'mistake' }); h.clock.now += 1000; }
+  const next = h.state.next(round);
+  assert.equal(next.kind === 'card' && next.card.lt, 'm1', 'z1 之後答過的 10 張都是錯題補強，還不夠隔');
+});
+
+void test('§2 回看取消一筆：取消的那一筆不算作答，間隔跟著變', async t => {
+  const h = await setup(t, { [DECK]: HEAD('2-1') + words(1) + targets(...ids('m', 1, 11)) });
+  const round = h.round();
+  const answered = drill(h, round, () => 'good', 11).order;
+  assert.deepEqual(answered, ['e1', ...ids('m', 1, 10)]);
+  const next = h.state.next(round);
+  assert.equal(next.kind === 'card' && next.card.lt, 'm11', '新卡裡對方還沒答過的先');
+  const t1 = h.state.answer({ lt: 'm11', r: 'good', v: '12345678' });
+  h.clock.now += 1000;
+  const last = h.state.next(round);
+  assert.equal(last.kind === 'card' && last.card.lt, 'z1');
+  assert.ok(t1);
+  h.state.answer({ undo: t1 });
+  const again = h.state.next(round);
+  assert.equal(again.kind === 'card' && again.card.lt, 'm11');
+});
