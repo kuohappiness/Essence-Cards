@@ -80,6 +80,7 @@ export async function registerTestVault(vault: string, local = localFolder()): P
 
 /**
  * 正式版的條件（D-149 第 4 點）：工作樹乾淨（含未追蹤的檔，.gitignore 的除外）、HEAD 正好是 tag v<manifest 的版號>、
+ * 那個 commit 在 main 上（detached HEAD 可以；比 PICK_NEEDS 高的正式版才都含讀取端，tasks/question-type-seam.md §3）、
  * package.json 的版號相同。不符就丟錯，列出全部原因。
  */
 export async function releaseProblems(root = defaultRoot): Promise<{ version: string; commit: string; problems: string[] }> {
@@ -94,6 +95,7 @@ export async function releaseProblems(root = defaultRoot): Promise<{ version: st
     let tagged = '';
     try { tagged = git(root, ['rev-parse', '--verify', '--quiet', `refs/tags/v${manifest.version}^{commit}`]); } catch { /* 沒有這個 tag */ }
     if (tagged !== commit) problems.push(`HEAD 不是 tag v${manifest.version}` + (tagged ? `（那個 tag 在 ${tagged.slice(0, 7)}）` : '（沒有這個 tag）'));
+    try { git(root, ['merge-base', '--is-ancestor', 'HEAD', 'refs/heads/main']); } catch { problems.push('HEAD 不在 main 上：正式版只從 main 發布'); }
   } catch { problems.push('不在 git 裡，確定不了建置的輸入'); }
   if (pkg.version !== manifest.version) problems.push(`package.json 的版號 ${pkg.version} 和 manifest.json 的 ${manifest.version} 不同`);
   return { version: manifest.version, commit, problems };
