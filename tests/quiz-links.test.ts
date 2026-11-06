@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
+import { parseQuiz } from '../src/core/catalog/index.ts';
 import { quizLinkResolver } from '../src/obsidian/quiz-links.ts';
 
 // 小考檔的連結怎麼認（tasks/quiz-mark.md §1）：只在確定指向一篇時接受；重名、認不出來走待修正。真的 Obsidian 解析在實機跑（§6）。
@@ -62,13 +63,19 @@ void test('§1 大小寫不同還是同一篇：Windows、iPhone 的檔名不分
 /**
  * Obsidian 1.15.0 的 getLinkpathDest（從 app.js 唯讀抽出，L2 R1）：先找檔名一樣的檔，確切的位置對上就是它；
  * 對不上時退回路徑尾巴相同的檔（和小考檔同一個資料夾開頭的排前面）。`/` 開頭的不退回。
+ * 檔名先照寫的轉小寫找（檔名裡有點才試），找不到再加 `.md`：所以 `.MD`、`.Md` 結尾的照寫的就找得到（L2 R7）。
  */
 function obsidianFirst(paths: string[]) {
   const base = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
   const folder = (path: string): string => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
   return (link: string, from: string): string | null => {
-    let wanted = (link + '.md').toLowerCase();
-    const named = paths.filter(path => base(path.toLowerCase()) === base(wanted));
+    let wanted = link.toLowerCase();
+    const sameName = (): string[] => paths.filter(path => base(path.toLowerCase()) === base(wanted));
+    let named = base(wanted).includes('.') ? sameName() : [];
+    if (!named.length) {
+      wanted = (link + '.md').toLowerCase();
+      named = sameName();
+    }
     if (!named.length) return null;
     if (base(wanted) === wanted && named.length === 1) return named[0];
     let near = folder(from).toLowerCase();
@@ -119,6 +126,29 @@ void test('L2 R1 照 Obsidian 的讀法：自動更新後的短連結、一段�
   assert.deepEqual(resolve('國二上英文 L3 單字', FROM), { kind: 'several' });
   assert.deepEqual(resolve('備份/Essence Cards/學業/國二上英文 L3 單字', FROM), { kind: 'file', path: backup }, 'Obsidian 最短的寫法');
   assert.deepEqual(realResolver([WORDS])('學業/國二上英文 L3 單字', FROM), { kind: 'file', path: WORDS });
+});
+
+void test('L2 R7 副檔名的大小寫不影響：.md、.MD、.Md 的完整路徑、/ 開頭、相對路徑、檔名都認得；別名與標題經過讀檔照舊', () => {
+  const resolve = realResolver([WORDS]);
+  const name = '國二上英文 L3 單字';
+  for (const ext of ['.md', '.MD', '.Md']) {
+    for (const [written, from] of [
+      ['Essence Cards/學業/' + name + ext, FROM],
+      ['/Essence Cards/學業/' + name + ext, FROM],
+      ['./' + name + ext, 'Essence Cards/學業/x.md'],
+      ['../../學業/' + name + ext, FROM],
+      [name + ext, FROM],
+    ]) assert.deepEqual(resolve(written, from), { kind: 'file', path: WORDS }, written);
+  }
+  for (const line of [`- [[Essence Cards/學業/${name}.MD|單字]]`, `- [[Essence Cards/學業/${name}.Md#第一段]]`]) {
+    const { target } = parseQuiz(`---\n識別碼: aaaaaa\n小考日期: 2026-11-07\n---\n${line}\n`);
+    assert.ok(target.kind === 'link', line);
+    assert.deepEqual(resolve(target.link, FROM), { kind: 'file', path: WORDS }, line);
+  }
+  // R1 的反例照舊：原篇不在、只剩尾巴相同的備份時，大寫的副檔名也不退回備份。
+  const nested = 'Essence Cards/備份/' + WORDS;
+  assert.deepEqual(realResolver([nested])('Essence Cards/學業/' + name + '.MD', FROM), { kind: 'none' });
+  assert.deepEqual(realResolver([nested])('../../學業/' + name + '.Md', FROM), { kind: 'none' });
 });
 
 void test('§1 尾巴剛好一樣但資料夾名不同的不算重名：比的是整段路徑', () => {

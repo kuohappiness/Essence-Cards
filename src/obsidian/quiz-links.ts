@@ -6,7 +6,8 @@ import type { QuizResolved } from '../state/index.ts';
 
 const ROOT = ESSENCE_ROOT.toLowerCase() + '/';
 const folderOf = (path: string): string => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-const withMd = (link: string): string => (link.endsWith('.md') ? link : link + '.md').toLowerCase();
+/** 小寫、以 `.md` 結尾。先轉小寫再看副檔名：`.MD`、`.Md` 結尾的 Obsidian 也照寫的找（L2 R7）。 */
+const withMd = (link: string): string => { const lower = link.toLowerCase(); return lower.endsWith('.md') ? lower : lower + '.md'; };
 
 /**
  * 連結寫的是一個確切的位置時回那個位置（小寫）：外掛寫的完整路徑（卡組都在 Essence Cards/ 底下）、`/` 開頭、`./` 與 `../`。
