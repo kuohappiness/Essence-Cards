@@ -13,8 +13,8 @@ export interface MarkdownProps {
   app: App;
   text: string;
   sourcePath: string;
-  /** cloze：<mark> 變空格；typed：＿＿ 變幾條線。 */
-  mode?: 'plain' | 'cloze' | 'typed';
+  /** cloze：<mark> 變空格；typed：＿＿ 變幾條線；pick：＿＿ 變一格，放 slotNode。 */
+  mode?: 'plain' | 'cloze' | 'typed' | 'pick';
   /** 翻面後：填空的答案出現；打字卡的字寫在線上。 */
   revealed?: boolean;
   /** 打字卡：線的條數與寫在線上的字（照空白切）。 */
@@ -27,6 +27,8 @@ export interface MarkdownProps {
   className?: string;
   /** 打字卡渲染好：空格（.ec-slot）交給複習畫面放輸入框；題目裡找不到 ＿＿ 時是 null。 */
   onSlot?: (slot: HTMLElement | null) => void;
+  /** 比較卡的空格裡的東西（和 tail 一樣用 createPortal）。 */
+  slotNode?: React.ReactNode;
   /** 接在最後一個字後面的東西（喇叭，D-145）：和最後一個字包在一起，換行時不會單獨掉到下一行。 */
   tail?: React.ReactNode;
   /** 英文卡的題目：冠詞和後面的字連在一起換行（glueArticles）。 */
@@ -52,6 +54,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
   const latest = useRef(props);
   latest.current = props;
   const [tailEl, setTailEl] = useState<HTMLElement | null>(null);
+  const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
   const { app, text, sourcePath, mode = 'plain', lines = 0 } = props;
   useEffect(() => {
     const element = host.current;
@@ -66,8 +69,11 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       try {
         await MarkdownRenderer.render(app, text, container, sourcePath, component);
         if (!active) return;
-        const { slot, tail } = postProcess(container, { mode, lines, english: !!latest.current.english });
+        const { slot, tail, slotMissing } = postProcess(container, { mode, lines, english: !!latest.current.english });
         applyState(container, latest.current);
+        if (mode === 'pick') setSlotEl(slot);
+        // 比較句解析判定有一個空格，畫面卻找不到（渲染器的特例）：空格放在句尾，這張照常能答，記一行（D-155，§3）。
+        if (slotMissing) latest.current.onFail?.(Error('比較句的畫面找不到空格：' + text), sourcePath);
         // 一律先包好最後一個字：英翻中的喇叭在翻面前就有，中翻英的在答案出現後才有，不用為此重新渲染。
         setTailEl(tail);
         if (mode === 'typed') latest.current.onSlot?.(slot);
@@ -89,6 +95,7 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
       for (const audio of Array.from(container.querySelectorAll('audio'))) audio.pause();
       container.remove();
       setTailEl(null);
+      setSlotEl(null);
     };
   }, [app, text, sourcePath, mode, lines]);
   // 翻面：不重新渲染，只切換空格與線上的字。
@@ -99,5 +106,6 @@ export function Markdown(props: MarkdownProps): React.JSX.Element {
   return <>
     <div className={'ec-markdown-host' + (props.className ? ' ' + props.className : '')} ref={host} />
     {tailEl && props.tail ? createPortal(props.tail, tailEl) : null}
+    {slotEl && props.slotNode ? createPortal(props.slotNode, slotEl) : null}
   </>;
 }

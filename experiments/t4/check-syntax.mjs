@@ -8,7 +8,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { languageStats } from './report.mjs';
+import { parseDeck } from '../../src/core/deck/index.ts';
+import { languageStats } from './language.mjs';
 
 const FIELDS = ['出處', '類型', '重要性', '狀態', '備註', '錯題補強'];
 const TYPES = { 自然: ['定義', '因果', '比較', '順序', '實驗', '公式與單位', '圖表'], 一般知識: ['定義', '因果', '比較', '步驟', '判斷與應用', '數值與標準'] };
@@ -69,6 +70,58 @@ function treeOf(blocks) {
   return roots;
 }
 
+// ── 比較卡（點選填空，tasks/question-type-seam.md §10）──
+// 認不認得出是 parseDeck 的結果（解析與檢查共用一份，產品照它出題）；這裡決定等級，再加上製卡規則量得到的幾條。
+const PICK_ENDING = /[\s）)](相似字|比較)$/; // 結尾整段是這兩個詞才算（§3〈結尾〉）：「質量比較」「這兩個字的比較」不算
+const PICK_ANCHOR = /^記憶錨點\s*[：:]/;
+const foldPick = s => s.replace(/\*\*|==/g, '').replace(/[\uFF01-\uFF5E]/g, c => String.fromCodePoint(c.codePointAt(0) - 0xFEE0)).replace(/[\s\u3000]+/g, ' ').trim().toLowerCase();
+/** 整個答案出現在題目裡：英文看詞界（lend 在 blend 不算），片語要整段；中文要整個詞，單一漢字照預設〈相似字〉出現就算（喵喵叫）。 */
+function answerShown(question, answer) {
+  const a = foldPick(answer);
+  if (!a) return false;
+  const pattern = a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{Script=Latin}\\d])${pattern}(?![\\p{Script=Latin}\\d])`, 'u').test(foldPick(question.replace(/＿+/g, ' ')));
+}
+/** 有頓號或逗號的括號裡，項目中間有漢字夾空白：可能少打一個頓號（`寒 賽` 會變成一個字鍵）。 */
+const spacedItem = name => [...name.matchAll(/[（(]([^（）()]*)[）)]/g)].map(m => m[1]).find(inner => /[、,，]/.test(inner) && inner.split(/[、,，]/).some(item => /\p{Script=Han}\s+\p{Script=Han}/u.test(item.trim())));
+
+function checkPick(text, deck, issue) {
+  const lines = text.split(/\r?\n/);
+  const targetAt = line => deck.targets.find(t => t.line === line || t.prompts.some(p => p.line === line));
+  const unrecognized = new Set();
+  for (const p of deck.problems) {
+    const line = p.line + 1;
+    if (p.code === 'pick-answer-invalid') issue(line, '錯誤', p.code, p.message);
+    else if (p.code === 'pick-not-recognized') { issue(line, '錯誤', p.code, p.message); unrecognized.add(targetAt(p.line)); }
+    else if (p.code === 'pick-mixed') issue(line, PICK_ENDING.test(targetAt(p.line)?.name ?? '') ? '錯誤' : '提醒', p.code, p.message);
+  }
+  const groups = new Map();
+  for (const t of deck.targets) {
+    const line = t.line + 1;
+    // 最上層的題目或名稱有 ==、＿：解析照原題型（隱式題、補 ID 留下來的），結尾又寫了相似字、比較，八成是想做比較卡（§3 判斷順序第 1 點）。
+    if (PICK_ENDING.test(t.name) && /==|＿/.test(lines[t.line].split('::')[0])) issue(line, '錯誤', 'pick-name-cloze', '比較卡的名稱不能有 == 或 ＿，這一行不會變成比較卡；名稱寫成「寨（寨、塞） 相似字」，句子放在底下');
+    if ((t.group || unrecognized.has(t)) && spacedItem(t.name)) issue(line, '提醒', 'pick-member-space', `括號裡的項目中間有空白，可能少打一個頓號：${spacedItem(t.name)}`);
+    if (!t.group) continue;
+    groups.set(t.group.key, [...(groups.get(t.group.key) ?? []), t]);
+    if (t.group.title !== '相似字' && t.group.title !== '比較') issue(line, '提醒', 'pick-title', `比較卡的結尾寫「相似字」或「比較」（現在是「${t.group.title}」），孩子才看得懂標題`);
+    const least = t.group.members.length === 2 ? 3 : 2;
+    if (t.prompts.length < least) issue(line, '不符', 'pick-few-sentences', `每個字至少兩句，只有兩個選項的組至少三句：這裡 ${t.prompts.length} 句（D-182）`);
+    for (const p of t.prompts) if (p.kind === 'qa' && answerShown(p.question, p.answer)) issue(p.line + 1, '不符', 'pick-answer-in-question', `答案「${p.answer}」出現在題目裡，不用想就答得出來`);
+    const anchor = t.shared.find(s => PICK_ANCHOR.test(s));
+    if (anchor === undefined) { issue(line, '不符', 'pick-no-anchor', '沒有記憶錨點：對答案後的對照這個字只有字（預設〈相似字〉）'); continue; }
+    const body = anchor.replace(PICK_ANCHOR, '').trim();
+    if (!/\*\*[^*]+\*\*/.test(body)) issue(line, '不符', 'pick-anchor-no-bold', '記憶錨點沒有粗體：差別在哪個部件要寫粗體（預設〈相似字〉）');
+    const at = body.lastIndexOf('：');
+    const why = (at < 0 ? body : body.slice(0, at)).replaceAll('**', '');
+    if ([...why].length > 15) issue(line, '提醒', 'pick-anchor-long', `記憶錨點冒號前面 ${[...why].length} 字，約 15 字以內手機上才一行讀完`);
+  }
+  for (const members of groups.values()) {
+    const { group, line } = members[0];
+    const words = new Set(members.map(t => t.group.wordKey));
+    group.members.forEach((member, i) => { if (!words.has(group.memberKeys[i])) issue(line + 1, '不符', 'pick-member-no-target', `組裡的「${member}」沒有自己的目標：字鍵還在，但不會出這個字的句子，對照也只有字`); });
+  }
+}
+
 export function check(text, options = {}) {
   const subject = options.subject ?? '自然', unit = options.unit ?? null, transcript = options.transcript ?? null;
   const issues = [], issue = (line, level, code, msg) => issues.push({ line, level, code, msg });
@@ -81,6 +134,9 @@ export function check(text, options = {}) {
     pages: [...transcript.matchAll(/^p\.\d+ \^p\d+\s*$/gm)].length
   } : null;
   const result = { targets: [], candidates: [], existing: [], notes: [], headings: [] };
+  const deck = parseDeck(text);
+  // 比較卡的名稱是「寨（寨、塞） 相似字」，不是「能……」；結尾寫了這兩個詞的、認不得的也一樣，它們另外有比較卡的診斷。
+  const pickNames = new Set(deck.targets.filter(t => t.group || PICK_ENDING.test(t.name)).map(t => t.line + 1));
 
   let start = 0;
   if (all[0]?.raw.trim() === '---') {
@@ -197,7 +253,7 @@ export function check(text, options = {}) {
       else { target.id = m[1]; target.name = m[2]; }
     } else if (/\s\^[A-Za-z0-9-]+\s*$/.test(node.text)) issue(node.line, '不符', 'target-id', 'AI 不寫學習目標 ID（§2-9）');
     if (isQuestion(node.text)) issue(node.line, '不符', 'top-question', '最上層直接寫了題目，程式會自己補一個學習目標；AI 要先寫名稱（§2-3）');
-    else if (where !== 'existing' && !target.name.startsWith('能')) issue(node.line, '不符', 'target-name', '學業的學習目標名稱寫成「能……」（§2-3）');
+    else if (where !== 'existing' && !target.name.startsWith('能') && !pickNames.has(node.line)) issue(node.line, '不符', 'target-name', '學業的學習目標名稱寫成「能……」（§2-3）');
     for (const c of node.cont) issue(c.line, '提醒', 'continuation', '這一行沒有清單符號，會接在上一項的文字後面');
     let dataLines = 0;
     children.forEach((child, index) => {
@@ -290,6 +346,7 @@ export function check(text, options = {}) {
   const n = result.targets.length;
   const understanding = result.targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${understanding}/${n}，少於三分之一（自然預設規則 1）`);
+  checkPick(text, deck, issue);
   const language = languageStats(text);
   if (language.simplified) issue(1, '不符', 'simplified', `有 ${language.simplified} 個常見簡體字形`);
   for (const [term, count] of Object.entries(language.terms)) if (count) issue(1, '不符', 'mainland-term', `大陸用語「${term}」${count} 次`);
@@ -396,7 +453,29 @@ async function selftest() {
     'colon-space', 'no-bold', 'no-answer', 'yes-no', 'too-many-questions', 'image-missing', 'caption', 'top-question', 'type-unknown', 'no-front', 'note-position', 'note-kind', 'note-image', 'source-unresolved', 'leak-pattern', 'two-questions'];
   const missed = expected.filter(c => !codes.has(c));
   if (missed.length) failures.push('沒抓到：' + missed.join('、'));
-  console.log(failures.length ? 'FAIL\n' + failures.join('\n') : `selftest：範例 0 個不符；錯誤範例抓到 ${expected.length}/${expected.length} 種`);
+  // 比較卡（§10）：照預設寫的稿什麼都沒有；另一份稿每一種都抓到，等級固定。
+  const pickCard = (name, ...lines) => [`- ${name}`, '    - 出處：p.90', ...lines].join('\n');
+  const pickAnchor = '    - 記憶錨點：下面是**木**，木頭圍成的：山寨';
+  const pickGood = [
+    pickCard('寨（寨、塞） 相似字', '    - 一句＿＿。 :: 寨', '    - 二句＿＿。 :: 寨', '    - 三句＿＿。 :: 寨', pickAnchor),
+    pickCard('塞（寨、塞） 比較', '    - 一句＿＿。 :: 塞', '    - 二句＿＿。 :: 塞', '    - 三句＿＿。 :: 塞', pickAnchor),
+  ].join('\n');
+  const pickNoise = check('## 相似字\n\n' + pickGood, { subject: '國語' }).issues;
+  if (pickNoise.length) failures.push('比較卡範例被誤判：' + pickNoise.map(i => `${i.line} ${i.code}`).join('、'));
+  const pickBad = [
+    pickCard('甲（甲、乙） 相似字', '    - 一句＿＿。 :: 乙'),
+    pickCard('丙（丁、戊） 相似字', '    - 一句＿＿。 :: 丙'),
+    pickCard('己（己、庚） 比較', '    - 一句＿＿。 :: 己', '    - 沒有空格 :: 己'),
+    pickCard('辛（辛、壬） 字形', '    - 一句＿＿。 :: 辛', '    - 沒有空格 :: 辛'),
+    '- ==癸==（癸、子） 相似字',
+    pickCard('丑（丑、寅，卯 辰）', '    - 丑句＿＿。 :: 丑', '    - 記憶錨點：沒有粗體，而且冒號前面超過了十五個字：丑時'),
+    pickCard('巳（巳、午、未） 比較', '    - 一句＿＿。 :: 巳'),
+  ].join('\n');
+  const pickLevels = { 'pick-answer-invalid': '錯誤', 'pick-not-recognized': '錯誤', 'pick-name-cloze': '錯誤', 'pick-few-sentences': '不符', 'pick-answer-in-question': '不符', 'pick-no-anchor': '不符', 'pick-anchor-no-bold': '不符', 'pick-member-no-target': '不符', 'pick-title': '提醒', 'pick-member-space': '提醒', 'pick-anchor-long': '提醒' };
+  const pickFound = check(pickBad, { subject: '國語' }).issues;
+  for (const [code, level] of Object.entries(pickLevels)) if (!pickFound.some(i => i.code === code && i.level === level)) failures.push(`比較卡沒抓到：${code}（${level}）`);
+  if (!pickFound.some(i => i.code === 'pick-mixed' && i.level === '錯誤') || !pickFound.some(i => i.code === 'pick-mixed' && i.level === '提醒')) failures.push('比較卡沒抓到：pick-mixed 的兩種等級');
+  console.log(failures.length ? 'FAIL\n' + failures.join('\n') : `selftest：範例 0 個不符；錯誤範例抓到 ${expected.length}/${expected.length} 種；比較卡 ${Object.keys(pickLevels).length + 1}/${Object.keys(pickLevels).length + 1} 種`);
   if (failures.length) process.exitCode = 1;
 }
 

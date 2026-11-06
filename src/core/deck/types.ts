@@ -35,7 +35,14 @@ export interface Target {
   ok: boolean;
   /** 只有 ambiguous-id 的目標才有：那一行出現的 ID 寫法，照出現的順序、不重複（W5 §8-3）。 */
   idCandidates?: string[];
+  /** 只有點選填空的目標才有（D-182、tasks/question-type-seam.md §3）。 */
+  group?: PickGroup;
 }
+/**
+ * 點選填空的組：名稱的字或詞、字鍵（照括號裡寫的）、組的身分（正規化後排序的陣列的 JSON）、結尾（卡片的標題）。
+ * wordKey、memberKeys 是 word、members 正規化後的寫法（memberKeys 和 members 對齊）：出題端從 deck 只拿型別，比對同一個字用它們。
+ */
+export interface PickGroup { word: string; members: readonly string[]; key: string; title: string; wordKey: string; memberKeys: readonly string[] }
 export interface Fields {
   sources: string[];
   type: string | null;
@@ -64,7 +71,9 @@ export type ProblemCode =
   // misplaced-id：hint，目標的 ID 不在行尾，照樣認得、存檔時移回行尾；ambiguous-id：error，目標那一行有兩個以上的 ID（D-134）。
   | 'misplaced-id' | 'ambiguous-id'
   // field-children：hint，分行的資料裡忽略的子項目（§9-4）。
-  | 'field-children';
+  | 'field-children'
+  // 點選填空（tasks/question-type-seam.md §3）：pick-answer-invalid 是 error，答案是組裡別的字；另外兩個是 hint，照原題型。一個目標最多一種。
+  | 'pick-answer-invalid' | 'pick-mixed' | 'pick-not-recognized';
 export interface AssignOptions {
   taken: ReadonlySet<string>;
   random?: () => number;
