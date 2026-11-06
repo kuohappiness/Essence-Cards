@@ -34,7 +34,7 @@ const englishText = [
   '',
 ].join('\n');
 
-interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void> }
+interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; saved: boolean[]; flush: () => Promise<void> }
 async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; props?: Partial<ReviewProps> } = {}): Promise<Opened> {
   const memory = createMemoryFiles(options.texts ?? { [NATURAL]: naturalText, [ENGLISH]: englishText });
   const clock = { now: START };
@@ -45,15 +45,16 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   await session.ready();
   const speech: string[] = [];
   let autoOn = options.autoRead ?? false;
+  const saved: boolean[] = [];
   const ui = await renderReview({
     app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], owner: () => NO_OWNER, units: () => [],
     speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); } },
-    autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
+    autoRead: { get: () => autoOn, set: on => { autoOn = on; saved.push(on); } },
     pickedAt: performance.now(),
     ...options.props,
   });
   t.after(() => { ui.unmount(); session.close(); });
-  return { ui, session, clock, speech, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
+  return { ui, session, clock, speech, saved, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
 }
 const lt = (session: Session): string | null => { const view = session.view(); return view.kind === 'card' ? view.card.card.lt : null; };
 /** 翻面（Space），過 0.3 秒按數字鍵自評。 */
@@ -160,11 +161,50 @@ void test('F3 自動朗讀：英翻中的題目一出現就念，沒有被換卡
   o.ui.key('ArrowRight');
   await o.ui.settle();
   assert.equal(o.speech.at(-1), 'stop', '回到目前這張不補播');
-  const toggle = o.ui.find('ec-auto')[0].children.find(child => typeof child !== 'string' && child.type === 'input');
-  assert.ok(toggle && typeof toggle !== 'string');
-  (toggle.props.onChange as (e: unknown) => void)({ currentTarget: { checked: false } });
+  o.ui.click(o.ui.find('ec-auto')[0]);
   await o.ui.settle();
   assert.equal(o.speech.at(-1), 'stop', '關掉開關時停');
+});
+
+/** 上方列的自動朗讀喇叭（D-188）：沒有時是 null，有時是 aria-checked。 */
+const autoSwitch = (o: Opened): unknown => {
+  const [button] = o.ui.find('ec-auto');
+  if (!button) return null;
+  assert.deepEqual([button.type, button.props.role, button.props['aria-label']], ['button', 'switch', '自動朗讀']);
+  return button.props['aria-checked'];
+};
+
+void test('D-188 上方的喇叭：點一下立刻停、之後每張都不念；再點打開，這張不補念，下一張才念', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: true, texts: { [ENGLISH]: englishText } });
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), true);
+  assert.equal(o.speech.at(-1)?.startsWith('say '), true, '開著：英翻中的題目一出現就念');
+  o.ui.click(o.ui.find('ec-auto')[0]);
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), false);
+  assert.equal(o.speech.at(-1), 'stop', '關掉時正在念的立刻停');
+  assert.deepEqual(o.saved, [false], '這台裝置記住關');
+  const said = o.speech.length;
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.ok(o.speech.slice(said).every(item => item === 'stop'), '關著：下一張不念：' + o.speech.slice(said).join(' | '));
+  o.ui.click(o.ui.find('ec-auto')[0]);
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), true);
+  assert.deepEqual(o.saved, [false, true]);
+  assert.ok(o.speech.slice(said).every(item => item === 'stop'), '再打開：這張不補念：' + o.speech.slice(said).join(' | '));
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.equal(o.speech.at(-1)?.startsWith('say '), true, '下一張該念時才念：' + o.speech.join(' | '));
+});
+
+void test('D-188 關著打開複習：喇叭是關的樣子，第一張不念；自然卡沒有喇叭', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: false, texts: { [ENGLISH]: englishText } });
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), false);
+  assert.ok(o.speech.every(item => item === 'stop'), o.speech.join(' | '));
+  const natural = await open(t, { subject: '自然' });
+  assert.equal(autoSwitch(natural), null);
 });
 
 void test('F7 第 2 步拼對：打勾與答案（寫在線上的那一個）；回看時照舊顯示第 1 步打的字與比對', async t => {
