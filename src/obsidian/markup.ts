@@ -43,9 +43,9 @@ function marksOf(doc: Text, deck: Deck = parseDeck(doc.toString())): Mark[] {
   const problems = new Map<string, Mark>();
   for (const problem of deck.problems) {
     if (skipped(problem)) continue;
-    const at = line(problem.line);
+    const at = line(problem.columns?.line ?? problem.line);
     if (!at) continue;
-    // 有欄位的位置時只畫那一段（§1-2）；沒有時畫那一行的內容，不含清單符號與行尾的 ID。
+    // 有欄位的位置時只畫那一段（§1-2）；沒有時畫那一項第一行的內容，不含清單符號與行尾的 ID。
     const start = MARKER.exec(at.text)?.[0].length ?? at.text.length - at.text.trimStart().length;
     const trail = TRAILING_ID.exec(at.text);
     const from = at.from + (problem.columns?.from ?? start);

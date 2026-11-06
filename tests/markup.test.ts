@@ -107,6 +107,11 @@ void test('§1-2 重要性：很高 只標「很高」', () => {
   assert.deepEqual(kinds(e.marks, 'hint').map(mark => [mark.from, mark.to, e.state.sliceDoc(mark.from, mark.to), mark.tip]), [[pos(e.state, 2, 18), pos(e.state, 2, 20), '很高', '重要性的值認不得，先當作中']]);
 });
 
+void test('§1-2 回報 R6：接續行的 ｜重要性：很高 標在接續行', () => {
+  const e = editor('- 目標 ^k3m9x2\n    - 出處：p.44\n      ｜重要性：很高\n    - Q :: A\n');
+  assert.deepEqual(kinds(e.marks, 'hint').map(mark => [mark.from, mark.to]), [[pos(e.state, 3, 11), pos(e.state, 3, 13)]]);
+});
+
 void test('§1-5 改字之後標示跟著平移；重新解析之後和打開時一樣', () => {
   const e = editor(NATURAL);
   const before = e.marks;

@@ -62,10 +62,10 @@ export interface Problem {
   message: string;
   targetLine: number | null;
   /**
-   * 資料欄位那一行的其中一段（tasks/edit-markup.md §1-2）：那一行原文的位置，從 0 算。只有 unknown-field-value、duplicate-field
-   * （那一段的值）與 unknown-field（整段）會填，而且只在那一段寫在欄位的第一行時；沒填的是整行。
+   * 資料欄位那一項的其中一段（tasks/edit-markup.md §1-2，座標照 §3-2）：line 是那一段所在的行（接續行照實），from、to 是那一行原文的位置。
+   * 只有 unknown-field-value、duplicate-field（那一段的值）與 unknown-field（整段）會填；跨了兩行的不填，畫 line 那一行。
    */
-  columns?: { from: number; to: number };
+  columns?: { line: number; from: number; to: number };
 }
 export type ProblemCode =
   | 'empty-question' | 'missing-answer' | 'typed-answer-invalid'

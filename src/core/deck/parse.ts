@@ -157,10 +157,17 @@ export function parseDeck(text: string): Deck {
       if (fieldStart.test(node.text)) {
         // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-170 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
         const segments = splitOutsideLinks(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
-        // 每一段在那一行原文的位置（§1-2）：分隔符號都是一個字；清單符號之後才是 node.text。寫到接續行的不填。
-        const raw = lines[node.line].raw;
-        const offset = raw.length - raw.replace(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]*/, '').length;
-        const firstLine = node.text.split('\n')[0];
+        // 每一段在原文的位置（§1-2、§3-2 的約定）：分隔符號都是一個字；text 的每一行照 starts 對回原文那一行。跨了兩行的不填。
+        const textLines = node.text.split('\n');
+        const lineStarts = textLines.map((_, k) => textLines.slice(0, k).reduce((sum, each) => sum + each.length + 1, 0));
+        /** text 裡 [from, to) 在原文的位置；不在同一行是 undefined。 */
+        const place = (from: number, to: number): Problem['columns'] => {
+          let k = lineStarts.length - 1;
+          while (k > 0 && lineStarts[k] > from) k--;
+          const start = node.starts[k];
+          if (!start || to > lineStarts[k] + textLines[k].length) return undefined;
+          return { line: start.line, from: start.column + from - lineStarts[k], to: start.column + to - lineStarts[k] };
+        };
         let start = 0;
         for (const segment of segments) {
           const at = start;
@@ -168,8 +175,7 @@ export function parseDeck(text: string): Deck {
           const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/d.exec(segment);
           const key = match?.[1] ?? '', value = match?.[2] ?? '';
           const inText = node.text.slice(at, at + segment.length) === segment;
-          const span = (from: number, to: number): Problem['columns'] =>
-            inText && from < to && at + to <= firstLine.length ? { from: offset + at + from, to: offset + at + to } : undefined;
+          const span = (from: number, to: number): Problem['columns'] => inText && from < to ? place(at + from, at + to) : undefined;
           const valueSpan = (): Problem['columns'] => match?.indices?.[2] ? span(match.indices[2][0], match.indices[2][1]) : undefined;
           if (!['出處', '類型', '重要性', '狀態', '備註', '錯題補強'].includes(key)) {
             addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段', 'hint', span(segment.length - segment.trimStart().length, segment.trimEnd().length));

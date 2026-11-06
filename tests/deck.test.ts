@@ -155,18 +155,30 @@ void test('D-089 #11 欄位不認得使用預設值但照常排程', () => {
   assert.equal(t.ok, true); assert.equal(t.fields.importance, 'medium'); assert.equal(t.fields.paused, false);
   assert.deepEqual(codes('  - 重要性：很高｜狀態：不明\n  - Q :: A'), ['unknown-field-value', 'unknown-field-value']);
 });
-void test('§1-2 欄位那一段的問題記原文位置：值、重複欄位的值、不認得的欄位整段；寫到接續行的不記', () => {
+void test('§1-2 欄位那一段的問題記原文位置：值、重複欄位的值、不認得的欄位整段；接續行照實填那一行', () => {
   const text = '- 目標\n    - 重要性：很高｜狀態：不明｜陌生：X｜重要性：低\n\t- 備註：A｜狀態：亂\n    - Q :: A\n    - 類型：定義\n      接續｜重要性：怪\n';
   const lines = text.split('\n');
   const parsed = parseDeck(text);
-  assert.deepEqual(parsed.problems.map(p => [p.code, p.columns && lines[p.line].slice(p.columns.from, p.columns.to)]), [
-    ['unknown-field-value', '很高'], ['unknown-field-value', '不明'], ['unknown-field', '陌生：X'], ['duplicate-field', '低'],
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.line, p.columns && [p.columns.line, lines[p.columns.line].slice(p.columns.from, p.columns.to)]]), [
+    ['unknown-field-value', 1, [1, '很高']], ['unknown-field-value', 1, [1, '不明']], ['unknown-field', 1, [1, '陌生：X']], ['duplicate-field', 1, [1, '低']],
     // 狀態、重要性前面已經寫過：重複的那一段標值。
-    ['duplicate-field', '亂'],
-    ['duplicate-field', undefined],
+    ['duplicate-field', 2, [2, '亂']],
+    // 寫在接續行：問題的行是那一項的第一行，位置在接續行。
+    ['duplicate-field', 4, [5, '怪']],
   ]);
-  // 位置寫死：第二行 `    - ` 之後。
-  assert.deepEqual(parsed.problems[0].columns, { from: 10, to: 12 });
+  // 位置寫死：第二行 `    - ` 之後；接續行去掉前面 6 格之後。
+  assert.deepEqual(parsed.problems[0].columns, { line: 1, from: 10, to: 12 });
+  assert.deepEqual(parsed.problems[5].columns, { line: 5, from: 13, to: 14 });
+});
+void test('§1-2 回報 R6：出處底下接續行的 ｜重要性：很高 標在接續行；前一段的值跨行也不影響', () => {
+  const text = '- 目標\n    - 出處：p.44\n      ｜重要性：很高\n    - 類型：定\n      義｜重要性：怪\n    - Q :: A\n';
+  const parsed = parseDeck(text);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.line, p.columns]), [
+    ['unknown-field-value', 1, { line: 2, from: 11, to: 13 }],
+    ['duplicate-field', 3, { line: 4, from: 12, to: 13 }],
+  ]);
+  // 值本身跨了兩行：不填，畫那一項的第一行。
+  assert.deepEqual(parseDeck('- 目標\n    - 狀態：暫\n      停\n    - Q :: A\n').problems.map(p => [p.code, p.columns]), [['unknown-field-value', undefined]]);
 });
 void test('D-089 #12 沒題目的一般筆記不產生目標或問題', () => {
   assert.deepEqual(parseDeck('- 一般筆記\n  - 重要性：錯字').targets, []);
