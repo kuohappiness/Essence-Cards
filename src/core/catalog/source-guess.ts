@@ -1,4 +1,4 @@
-import { codeKey, sourceLinks, sourceParts, termKey, termRank } from '../deck/index.ts';
+import { codeKey, sourceLinks, splitSource, termKey, termRank } from '../deck/index.ts';
 import type { SourceItem, SourceLink, SourceOwner } from '../deck/index.ts';
 
 // 填出處的小表單（D-169 第 4、5 點、D-170 第 2、9、10 點，tasks/edit-markup.md §4-1、§4-2）：先填好的內容與會寫成的字。
@@ -49,7 +49,7 @@ export function guessSource(item: SourceItem | null, own: SourceOwner, units: re
   if (!item) return blank;
   const teach = (): SourceForm => ({ ...blank, note: TEACH });
   if (item.problem === 'negative') return teach();
-  const parts = sourceParts(item.text, own);
+  const parts = splitSource(item.text, own);
   const ownTerm = own.term === null ? null : termKey(own.term);
   const isOwn = (unit: CatalogUnit): boolean => ownTerm !== null && own.unit !== null && sameUnit(unit, ownTerm, own.unit.code);
   const choice = (term: string, code: string): UnitChoice => {

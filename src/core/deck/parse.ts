@@ -1,11 +1,12 @@
 import { isMap, isScalar, parseDocument } from 'yaml';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { splitOutsideLinks, splitUnit } from './sources.ts';
+import { readSourceParts, splitOutsideLinks, splitUnit, tracedSplit } from './sources.ts';
+import type { TracedPiece } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
 import { readPick, typedAnswer } from './question-types.ts';
-import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
+import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
 const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
 const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
@@ -108,11 +109,28 @@ function fingerprint(question: string, answer: string): string {
   return bytesToHex(sha256(new TextEncoder().encode(normalized))).slice(0, 8);
 }
 
-export function parseDeck(text: string): Deck {
+/** node.text 的 [from, to) 在原文的位置（§3-2）；跨了兩行或是空的是 null。 */
+function textSpan(node: Item, from: number, to: number): Span | null {
+  if (from >= to) return null;
+  const textLines = node.text.split('\n');
+  let k = 0, base = 0;
+  while (k < textLines.length - 1 && from > base + textLines[k].length) { base += textLines[k].length + 1; k++; }
+  const start = node.starts[k];
+  if (!start || to > base + textLines[k].length) return null;
+  return { line: start.line, from: start.column + from - base, to: start.column + to - base };
+}
+
+/** 讀卡組。給 `{ layout: true }` 時另外回傳每個目標的出處原文位置（tasks/edit-markup.md §3-1），讀法完全一樣。 */
+export function parseDeck(text: string, options: { layout: true }): Deck & { layout: Map<number, TargetLayout> };
+// 沒給選項的寫在最後：ReturnType<typeof parseDeck> 取最後一個。
+export function parseDeck(text: string): Deck;
+export function parseDeck(text: string, options?: { layout?: boolean }): Deck & { layout?: Map<number, TargetLayout> } {
   const lines = linesOf(text);
   const { props, start, problems } = readProperties(lines);
   const targets: Target[] = [];
-  if (props.isTranscript) return { props, targets, problems };
+  const layouts = options?.layout ? new Map<number, TargetLayout>() : null;
+  const result = (): Deck & { layout?: Map<number, TargetLayout> } => layouts ? { props, targets, problems, layout: layouts } : { props, targets, problems };
+  if (props.isTranscript) return result();
   const seenIds = new Set<string>();
   for (const root of listTree(lines, start)) {
     const head = stripId(root.text);
@@ -152,37 +170,60 @@ export function parseDeck(text: string): Deck {
     if (idProblem === 'misplaced-id') addProblem(root, idProblem, '學習目標 ID 跑到名稱中間；照樣認得，存檔時移回行尾');
     if (idProblem === 'ambiguous-id') addProblem(root, idProblem, '學習目標那一行有兩個以上的 ID，先不出題，等家長選要用哪一個', 'error');
     const seenFields = new Set<string>();
+    // 出處的原文位置（§3-3）：和讀欄位同一次遞迴收集，順序和 fields.sources 一致。
+    const sourceFields: SourceFieldLayout[] = [], entries: (Span | null)[] = [], fieldColons: FieldColon[] = [];
+    /** piece 遮罩後的 [from, to) 照頓號切，每一項照順序加進出處，記原文位置；切不出連續的原文（私用區字元）是 null。 */
+    function addSources(node: Item, piece: TracedPiece, from: number, to: number): void {
+      let begin = from;
+      for (let at = from; at <= to; at++) {
+        if (at < to && piece.masked[at] !== '、') continue;
+        let a = begin, b = at;
+        begin = at + 1;
+        while (a < b && /\s/.test(piece.masked[a])) a++;
+        while (b > a && /\s/.test(piece.masked[b - 1])) b--;
+        const range = piece.range(a, b);
+        if (!range) continue;
+        fields.sources.push(range.text);
+        entries.push(node.text.slice(range.from, range.to) === range.text ? textSpan(node, range.from, range.to) : null);
+      }
+    }
     function collectFields(node: Item): void {
       let values: string[] | null = null;
+      let field: SourceFieldLayout | null = null;
       if (fieldStart.test(node.text)) {
         // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-170 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
-        const segments = splitOutsideLinks(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
-        // 每一段在原文的位置（§1-2、§3-2 的約定）：分隔符號都是一個字；text 的每一行照 starts 對回原文那一行。跨了兩行的不填。
-        const textLines = node.text.split('\n');
-        const lineStarts = textLines.map((_, k) => textLines.slice(0, k).reduce((sum, each) => sum + each.length + 1, 0));
-        /** text 裡 [from, to) 在原文的位置；不在同一行是 undefined。 */
-        const place = (from: number, to: number): Problem['columns'] => {
-          let k = lineStarts.length - 1;
-          while (k > 0 && lineStarts[k] > from) k--;
-          const start = node.starts[k];
-          if (!start || to > lineStarts[k] + textLines[k].length) return undefined;
-          return { line: start.line, from: start.column + from - lineStarts[k], to: start.column + to - lineStarts[k] };
-        };
-        let start = 0;
-        for (const segment of segments) {
-          const at = start;
-          start += segment.length + 1;
-          const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/d.exec(segment);
+        const pieces = tracedSplit(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
+        for (const piece of pieces) {
+          const segment = piece.text;
+          const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
           const key = match?.[1] ?? '', value = match?.[2] ?? '';
-          const inText = node.text.slice(at, at + segment.length) === segment;
-          const span = (from: number, to: number): Problem['columns'] => inText && from < to ? place(at + from, at + to) : undefined;
-          const valueSpan = (): Problem['columns'] => match?.indices?.[2] ? span(match.indices[2][0], match.indices[2][1]) : undefined;
+          // 位置看遮罩後的字（§1-2、§3-2）：連結藏成短字，分隔符號與私用區字元都對得回原文。名稱一定在連結前面，所以和 key 相同。
+          const masked = /^\s*([^：:]+?)\s*([：:])\s*([\s\S]*?)\s*$/d.exec(piece.masked);
+          const at = (from: number, to: number): Span | null => { const range = piece.range(from, to); return range && textSpan(node, range.from, range.to); };
+          const group = (index: number): Span | null => { const found = masked?.indices?.[index]; return found ? at(found[0], found[1]) : null; };
           if (!['出處', '類型', '重要性', '狀態', '備註', '錯題補強'].includes(key)) {
-            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段', 'hint', span(segment.length - segment.trimStart().length, segment.trimEnd().length));
+            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段', 'hint', at(piece.masked.length - piece.masked.trimStart().length, piece.masked.trimEnd().length) ?? undefined);
             continue;
           }
-          if (key === '出處' || key === '備註' || key === '錯題補強') {
-            addValues(key === '出處' ? fields.sources : key === '備註' ? fields.remarks : fields.mistakes, value);
+          const name = masked?.[1] === key ? group(1) : null, colon = masked?.[1] === key ? group(2) : null;
+          if (name && colon) fieldColons.push({ field: key as FieldName, name, colon });
+          const valueSpan = (): Problem['columns'] => group(3) ?? undefined;
+          if (key === '出處') {
+            const indices = masked?.indices?.[3];
+            if (indices) addSources(node, piece, indices[0], indices[1]);
+            if (name && colon) {
+              // 值是冒號後面同一行的字，到這一段或這一行結束；那一行沒有字是 null（值寫在子項目，或沒有值）。
+              const after = masked?.indices?.[2]?.[1] ?? piece.masked.length;
+              let a = after;
+              while (a < piece.masked.length && /[^\S\n]/.test(piece.masked[a])) a++;
+              let b = piece.masked.indexOf('\n', a);
+              if (b < 0) b = piece.masked.length;
+              while (b > a && /\s/.test(piece.masked[b - 1])) b--;
+              field = { line: node.line, name, colon, value: at(a, b), joined: pieces.length > 1, continued: node.starts.length > 1, children: [] };
+              sourceFields.push(field);
+            }
+          } else if (key === '備註' || key === '錯題補強') {
+            addValues(key === '備註' ? fields.remarks : fields.mistakes, value);
           } else {
             if (seenFields.has(key)) { addProblem(node, 'duplicate-field', '「' + key + '」寫了兩次，使用第一個', 'hint', valueSpan()); continue; }
             seenFields.add(key);
@@ -198,17 +239,24 @@ export function parseDeck(text: string): Deck {
             }
           }
         }
-        values = fieldChildren(node, segments.length > 1);
+        values = fieldChildren(node, pieces.length > 1);
       }
       // 一項一項走，普通的子項目和帶欄位名稱的子項目混著寫時，順序照筆記（D-164 第 5 點）。
       for (const child of node.children) {
-        if (values && !fieldStart.test(child.text)) addValues(values, child.text);
+        if (values && !fieldStart.test(child.text)) {
+          if (values === fields.sources) {
+            // 出處的子項目：整項是一段，照頓號切；欄位那一項沒有 ｜，所以只有一個出處欄位（fieldChildren）。
+            const [whole] = tracedSplit(child.text, /(?!)/);
+            addSources(child, whole, 0, whole.masked.length);
+            field?.children.push(child.line);
+          } else addValues(values, child.text);
+        }
         collectFields(child);
       }
     }
-    /** 頓號分隔的值，照順序加進去，重複的只留第一個。出處例外：`本篇` 這種字會影響後面的意思，讀完才去重（D-170 第 6 點）。 */
+    /** 頓號分隔的值，照順序加進去，重複的只留第一個（備註、錯題補強；出處用 addSources，讀完才去重，D-170 第 6 點）。 */
     function addValues(destination: string[], text: string): void {
-      for (const entry of splitOutsideLinks(text, /、/).map(v => v.trim()).filter(Boolean)) if (destination === fields.sources || !destination.includes(entry)) destination.push(entry);
+      for (const entry of splitOutsideLinks(text, /、/).map(v => v.trim()).filter(Boolean)) if (!destination.includes(entry)) destination.push(entry);
     }
     /**
      * 資料欄位分行（§9-4、D-164 第 4 點）：出處、備註、錯題補強底下的子項目和寫在同一行相同，回傳要加到哪裡；開頭是欄位名稱的子項目是別的欄位（collectFields 的遞迴）。
@@ -281,7 +329,12 @@ export function parseDeck(text: string): Deck {
       seenIds.add(target.id);
     }
     targets.push(target);
+    if (layouts) {
+      // 段的位置是在那一項原文裡的位置：那一項切不出原文時，它的段也沒有位置。
+      const parts = readSourceParts(fields.sources, props).map(part => entries[part.entry] ? part : { ...part, from: null, to: null });
+      layouts.set(root.line, { fields: sourceFields, entries, parts, fieldColons });
+    }
   }
   problems.sort((a, b) => a.line - b.line);
-  return { props, targets, problems };
+  return result();
 }
