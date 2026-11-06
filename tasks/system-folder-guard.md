@@ -93,7 +93,7 @@ Windows 檔案總管、iPhone 的「檔案」App 搬的，或同步過來的，O
 - **R8｜Obsidian 以外改名，兩台都是 `create`＋`delete`**：用檔案總管同一套的 Shell API（`FolderItem.Name`）把 `紀錄` 改成 `紀錄X`：A、B 都只收到 `create`×4，約 0.4 秒後 `delete`×4，防呆都沒動作；和 T3 一致。
 - **R9｜另一台不搬**：所有情境裡 B 也裝著同一個防呆，收到 88 個以上事件、0 個 `rename`，一次都沒動作，也沒有和 A 搶著搬。
 - **沒測到的**：iCloud 同步到另一台裝置的行為（B 只經由本機檔案系統）；iPhone；真的滑鼠拖動；Mac。
-- 實測用的 `Essence 防呆測試/` 留在測試 vault 裡（有 README 說可以整個刪掉），Claude 沒有刪：這個環境刪 repo 外的資料夾會被擋。
+- 實測用的 `Essence 防呆測試/` 測完已經從測試 vault 刪掉（使用者 2026-11-07 同意清理）。中途兩個獨立的 Obsidian 被使用者關掉一次，重開後補做剩下的情境，不影響結果。
 
 ### 要 iPhone 才能測的（列進 backlog「下一次 iPhone 實機測試」，程式做完才測）
 
