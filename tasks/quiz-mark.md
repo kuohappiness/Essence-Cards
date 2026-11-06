@@ -1,6 +1,6 @@
 # 小考標記（D-189 第 4、5 點，給 Claude，本機執行）
 
-狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`be14a85`），等 Codex L2（[請求](quiz-mark-review.md)），還沒合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
+狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`c513cee`）；Codex L2 第一輪的 R1～R5 都修了，等第二輪（[請求](quiz-mark-review.md#再審第二輪第一輪發現的修正)），還沒合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。多一種外掛會寫的檔、入口與目錄的畫面，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1 是新的檔案格式，開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -108,7 +108,7 @@
 
 ## 結果
 
-分支 `claude/quiz-mark-354478`，基準 `1c4cb43`，待審 `be14a85`（併 `main`，只帶進文件）。還沒合併，[L2 請求](quiz-mark-review.md)等 Codex。
+分支 `claude/quiz-mark-354478`，基準 `1c4cb43`。第一輪待審 `be14a85`（併 `main`，只帶進文件）；L2 第一輪的修正到 `c513cee`，見下面〈L2 第一輪之後〉。還沒合併。
 
 | commit | 內容 |
 |---|---|
@@ -156,4 +156,12 @@
 
 **沒跑**：iPhone（已列進 backlog「下一次 iPhone 實機測試」）。
 
-**還沒做**：L2、L2 之後的修正與最後的 commit 重跑實機、使用者同意合併、roadmap 的最近完成。
+### L2 第一輪之後
+
+Codex 第一輪（[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md>)）4 項建議合併前修、1 項非阻擋，都成立，一項一個 commit：`d36327f`（R1 完整路徑的原篇不在時不接受尾巴相同的別篇）、`b0c1847`（R2 `Files.modify` 分得出不存在與空檔，契約 C19）、`9a47649`（R3 選單記住打開時的那一次小考）、`0619624`（R4 焦點在按鈕上按 Esc 先收起選單）、`c513cee`（R5 另一份照它自己的原因寫）。細節與真實值見討論稿〈Claude 回應：第一輪〉。
+
+**完整檢查**：`c513cee` 的 `npm run check` 通過（測試 1642 項全部通過，230 秒）。`tests/quiz-ui.test.ts` 42 項、`tests/quiz-state.test.ts` 31 項、`tests/quiz-links.test.ts` 9 項。
+
+**Windows 實機**：建置 `0.3.0+c513cee`、Obsidian 1.15.0。`quiz-mark`（`Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 080816.json`）和 `be14a85` 那一次逐欄比對，只有隨機名稱、日期與截圖資料夾不同，目錄截圖的排版相同；`files` 19／19 通過，含新的 C19（`Essence W5/結果/files Windows-c50c 2026-11-06 080909.json`）。
+
+**還沒做**：L2 第二輪、使用者同意合併、roadmap 的最近完成。

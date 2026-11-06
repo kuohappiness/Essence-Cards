@@ -1,10 +1,50 @@
 # 小考標記：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第一輪）
+狀態：待再審（第二輪）：第一輪 R1～R5 都修了（見討論稿〈Claude 回應：第一輪〉）
 
-遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報寫在這個 worktree 的 `Claude Codex Discussion/2026-11-06-quiz-mark-review.md`（新檔，不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
+遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-06-quiz-mark-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
 
-## 審查對象
+## 再審（第二輪）：第一輪發現的修正
+
+**這一輪只讀**：本節、討論稿的 R1～R5 與〈[Claude 回應：第一輪](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md#claude-回應第一輪2026-11-06>)〉。後面第一輪的內容需要時才查。
+
+**範圍**：基準 `be14a85ca667bd723de82bc4d75bb141b9f2ec19`（第一輪待審），待審 `c513cee483cdccd340a6c5f875a8fde0a32619dd`。之後只有文件的 commit（這一節、討論稿的回應、任務說明的〈結果〉）。
+
+```bash
+git diff be14a85ca667bd723de82bc4d75bb141b9f2ec19 c513cee483cdccd340a6c5f875a8fde0a32619dd -- src tests tools docs/syntax.md docs/architecture.md
+```
+
+中間的 `e852eea`、`a80438c` 只有文件（第一輪的請求、〈結果〉、roadmap、backlog）。
+
+| 發現 | commit | 修法 |
+|---|---|---|
+| R1 | `d36327f` | `quizLinkResolver`：連結寫了確切位置（`Essence Cards/` 開頭、`/` 開頭、`./`、`../`）時，找到的檔要正好在那裡；短連結照舊只在尾巴唯一時接受 |
+| R2 | `b0c1847` | `Files.modify(path, edit(text, exists))`，契約 C19；建小考檔在回呼裡看 `exists`，不再先讀 |
+| R3 | `9a47649` | 選單記住打開時的那一次小考；畫面上的換成另一份時只寫原因、不給按鈕 |
+| R4 | `0619624` | 按鈕與選單包在 `.ec-qz-ctl`（`display: contents`），開著時這一層收 Esc，焦點回到按鈕 |
+| R5 | `c513cee` | `quizOtherLabel` 照另一份自己的原因寫；兩份不一樣的列出全部路徑 |
+
+**請特別找**：
+
+- **R1 的「確切位置」**：`Essence Cards/` 開頭才算完整路徑，因為外掛只讀這個資料夾底下的卡組；別的資料夾開頭的連結（例如 `學校/English`）走短連結的路，只看尾巴是否唯一。請找這樣會接受錯的那一篇的組合：大小寫、`.md` 結尾、`|別名`、`#標題`、`..` 走出 vault 根目錄、Obsidian 自動更新連結寫成的形式（完整路徑、相對路徑、短的）。
+- **R2 的契約改動**：`modify` 的四種實作（Obsidian、Node、MemoryFiles、開發命令 `blank-history` 的包裝）與 `folder-files` 的轉交；其他呼叫 `modify` 的地方（卡組、紀錄、段考、設定）不看第二個參數，行為應該不變。不存在時建檔丟錯（Obsidian `vault.create` 遇到磁碟上已有的檔）要回 `failed`、不覆寫。
+- **R3**：自己按的還在寫時（`busy`）不算別處改的；寫完 `done` 收起、失敗留著選單。選單開著時同一份小考只改了日期（同一個識別碼）仍可以操作，這時靠 state 的識別碼防線。
+- **R4**：Esc 在輸入法組字時不收；✕ 與 Esc 的順序；入口那一列的兩份清單。
+- **R5**：`others` 只在 `set` 時顯示；`problem` 那一種（只有待修正的）仍只處理第一份，其餘的要等第一份修好才看得到。
+
+**實作者這一輪自己選的做法（請先看）**：
+
+1. **R1 用外掛的資料夾判斷完整路徑**：不看「有沒有斜線」，因為 `L3/English` 這種部分路徑 Obsidian 本來就靠尾巴找，第一輪的測試也接受它。
+2. **R2 改 `Files.modify`，不加 `create`**：報告建議「具存在判斷的建立契約」。放在 `modify` 的回呼裡，所有寫入仍走同一條排隊與 `vault.process`。Obsidian 剩下 `adapter.exists` 與 `adapter.write` 之間的一瞬，沒有「不存在才建」的 API，不再往下做。
+3. **R3 不自動收起選單**：資料一變就收起，使用者正在看的東西會突然不見、不知道為什麼；改成留著選單、只寫原因，收起再打開才照新的資料。
+4. **R4 包一層，不搬焦點**：打開選單時把焦點搬進去，鍵盤使用者要多按 Tab 才回得到按鈕；包一層不改焦點順序。
+5. **R5 不處理正常的另一份**：同一個目標兩份正常的小考只留早的（§1、`quizRows`），所以 `others` 只會是日期有問題或兩份不一樣；正常的那種只寫「另一份小考」，沒有專門的字。
+
+**驗證方式**：`npm run check`，要在沙箱外跑；測試加時間上限（見後面第一輪的〈驗證方式〉）。實作者跑過的見〈Claude 回應：第一輪〉的〈驗證〉，包括 `c513cee` 的 Windows 實機。開發命令 `quiz-mark` 與 `files` 仍請不要在 L2 裡跑。
+
+**真實路徑**：每項發現照舊標真實路徑會不會發生；沒有擋合併的發現就直接寫「通過」。
+
+## 審查對象（第一輪）
 
 - **位置**：worktree `.claude/worktrees/musing-kowalevski-696591`（主資料夾底下），分支 `claude/quiz-mark-354478`，沒有未提交的程式修改。
 - **待審**：`be14a85ca667bd723de82bc4d75bb141b9f2ec19`。它之後只有文件的 commit（這份請求、任務說明的〈結果〉）。
