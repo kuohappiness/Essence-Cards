@@ -372,6 +372,16 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     const SHORT = `${QUIZ_FOLDER}/手寫短連結 ${run}.md`;
     await makeTrial(app, trial, QUIZ_FOLDER, { [SHORT]: `---\n${mark}\n識別碼: ${prefix}sh1\n小考日期: ${tomorrow}\n---\n- [[${baseName.replace(/\.md$/, '')}]]\n` }, mark);
     check('重名：認不出是哪一篇', await until(() => mine().some(row => row.problem === 'several')));
+    // L2 R8：檔名本身以 .MD 結尾（X.MD.md），外掛替它寫的連結是 [[…/X.MD]]。Obsidian 先找 x.md，沒有才加 .md。
+    {
+      const dotted = `${OTHER}/點 ${run}.MD.md`, bare = dotted.replace(/\.md$/, ''), from = QUIZ_FOLDER + '/x.md';
+      await makeTrial(app, trial, OTHER, { [dotted]: `---\n${mark}\n---\n只是檔名有點\n` }, mark);
+      await until(() => app.metadataCache.getFirstLinkpathDest(bare, from) !== null);
+      const resolve = quizLinkResolver(app);
+      const forms = [bare, '/' + bare, '../../' + bare.slice('Essence Cards/'.length), bare.slice(bare.lastIndexOf('/') + 1), dotted];
+      check('檔名以 .MD 結尾：Obsidian 找到那一篇', forms.map(link => app.metadataCache.getFirstLinkpathDest(link, from)?.path === dotted));
+      check('檔名以 .MD 結尾：外掛認得那一篇', forms.map(link => { const got = resolve(link, from); return got.kind === 'file' && got.path === dotted; }));
+    }
     await state.cancelQuiz(mine()[0]);
     await until(() => mine().length === 0);
 
