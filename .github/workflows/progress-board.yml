@@ -1,0 +1,41 @@
+# 開發進度畫板：docs/progress-map.md 改了就產生網頁、發布到 GitHub Pages（https://kuohappiness.github.io/Essence-Cards/）。
+# 網頁只在這裡產生、直接發布，不 commit 進 repo。第一次要在 repo 的 Settings → Pages 把 Source 設成 GitHub Actions。
+name: Progress board
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/progress-map.md
+      - tools/progress-board.ts
+      - .github/workflows/progress-board.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run progress-board
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
