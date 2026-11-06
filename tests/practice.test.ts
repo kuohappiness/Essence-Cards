@@ -585,7 +585,7 @@ for (const [name, lt, r] of [['別的目標', 'b', 'miss'], ['同一個目標、
   const s = await h.open(h.round());
   h.rate(s, 'good');
   assert.equal(doneOf(s.view()).score, '這輪第一次就答對 1／1');
-  h.write(PHONE, encodeEntry(s.history()[0].t, { lt, r, v: '12345678' }) + '\n');
+  h.write(PHONE, encodeEntry(s.history()[0].written[0].t, { lt, r, v: '12345678' }) + '\n');
   await h.settle();
   assert.equal(h.state.history().reviews.length, 2);
   // 那個目標被算成答錯時會再出一次。
@@ -599,10 +599,10 @@ void test('§3 這次寫的少了一筆（被別處取消）：算不準，不�
   h.rate(s, 'good');
   h.rate(s, 'good');
   const [first, second] = s.history();
-  h.write(PHONE, encodeEntry(first.t, { lt: 'a', r: 'good', v: first.card.prompt.fingerprint }) + '\n');
+  h.write(PHONE, encodeEntry(first.written[0].t, { lt: 'a', r: 'good', v: first.card.prompt.fingerprint }) + '\n');
   await h.settle();
   assert.equal(doneOf(s.view()).score, '這輪第一次就答對 2／2');
-  h.write(PHONE, encodeEntry(new Date(h.clock.now).toISOString().replace('Z', '+00:00'), { undo: second.t }) + '\n');
+  h.write(PHONE, encodeEntry(new Date(h.clock.now).toISOString().replace('Z', '+00:00'), { undo: second.written[0].t }) + '\n');
   await h.settle();
   assert.equal(h.state.history().reviews.length, 1);
   // 被取消的那個目標算沒答過，再出一次。
@@ -617,7 +617,7 @@ void test('§3 筆數一樣也要逐筆對上：這次寫的一筆被取消、�
   h.rate(s, 'good');
   h.rate(s, 'good');
   const later = new Date(h.clock.now).toISOString().replace('Z', '+00:00');
-  h.write(PHONE, encodeEntry(later, { undo: s.history()[1].t }) + '\n' + encodeEntry(later, { lt: 'x', r: 'good', v: '12345678' }) + '\n');
+  h.write(PHONE, encodeEntry(later, { undo: s.history()[1].written[0].t }) + '\n' + encodeEntry(later, { lt: 'x', r: 'good', v: '12345678' }) + '\n');
   await h.settle();
   assert.equal(card(s.view()), 'b');
   h.rate(s, 'good');
@@ -629,7 +629,7 @@ void test('§3 筆數一樣也要逐筆對上：這次寫的被取消、別台�
   const s = await h.open(h.round());
   h.rate(s, 'good');
   const later = new Date(h.clock.now).toISOString().replace('Z', '+00:00');
-  h.write(PHONE, encodeEntry(later, { undo: s.history()[0].t }) + '\n' + encodeEntry(later, { lt: 'a', r: 'good', v: '12345678' }) + '\n');
+  h.write(PHONE, encodeEntry(later, { undo: s.history()[0].written[0].t }) + '\n' + encodeEntry(later, { lt: 'a', r: 'good', v: '12345678' }) + '\n');
   await h.settle();
   assert.deepEqual(h.state.history().reviews.map(each => each.t), [later]);
   assert.equal('score' in doneOf(s.view()), false);

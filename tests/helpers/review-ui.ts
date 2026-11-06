@@ -36,7 +36,7 @@ function bundle(): Promise<string> {
         builder.onResolve({ filter: /\/Markdown\.tsx$/ }, () => ({ path: 'markdown', namespace: 'stub' }));
         // 打字卡的空格（onSlot）當作已經渲染好：交回同一個假的元素，輸入框就畫進空格（createPortal 的替身原地畫成 'portal'）。
         builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-          contents: "import { jsx } from 'react/jsx-runtime'; const slot = { slot: true }; export function Markdown(props) { props.onSlot?.(slot); return jsx('markdown', { ...props, children: props.tail }); }", loader: 'js',
+          contents: "import { jsx } from 'react/jsx-runtime'; const slot = { slot: true }; export function Markdown(props) { props.onSlot?.(slot); return jsx('markdown', { ...props, children: [props.tail, props.slotNode] }); }", loader: 'js',
         }));
       },
     }],
@@ -190,7 +190,7 @@ export async function renderReview(props: ReviewProps): Promise<ReviewUi> {
     },
     click(host) {
       // target 是點到的空白處（不是按鈕裡面的字）：卡片空白處的點擊才會翻面。
-      (host.props.onClick as (e: unknown) => void)({ target: { closest: () => null } });
+      (host.props.onClick as (e: unknown) => void)({ target: { closest: () => null }, currentTarget: {}, detail: 0 });
       flush();
     },
     async settle() {

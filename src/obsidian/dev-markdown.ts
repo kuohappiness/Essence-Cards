@@ -10,7 +10,7 @@ import { capturePng, keepRendering, W6_ROOT } from './dev-review.ts';
  * 寫進 Markdown 的 .internal-embed 會讓渲染器去載入那份筆記，沒有 src 時出錯）。
  */
 interface Case {
-  name: string; text: string; rendered?: string; mode?: 'plain' | 'cloze' | 'typed'; lines?: number; english?: boolean; width?: number;
+  name: string; text: string; rendered?: string; mode?: 'plain' | 'cloze' | 'typed' | 'pick'; lines?: number; english?: boolean; width?: number;
   /** 翻面後（同 Markdown.tsx 的 applyState）：填空的答案出現，打字卡的線寫上 words。 */
   revealed?: boolean; words?: string[];
   /** false：沒有喇叭（中翻英的正面，答案出現前沒有）。 */
@@ -28,6 +28,14 @@ const stuck = (chars = '') => (r: Row): boolean => r.beside.length > 0 && !r.ove
   && r.beside.every(b => b.same || (b.side === 'before' && !chars.includes(b.char)));
 /** 同上，喇叭也沒有單獨掉到下一行。 */
 const stuckWithSpeaker = (chars = '') => (r: Row): boolean => stuck(chars)(r) && r.sameLine === true;
+/** 比較句的空格在第一處 ＿＿（tasks/question-type-seam.md §3、§10）：前後緊接這些字，在連結或粗體裡時是那個標籤，其他 ＿＿ 留著。 */
+const pickIn = (before: string, after: string, inside: string | null = null) => (r: Row): boolean =>
+  !r.slotMissing && r.beforeSlot.endsWith(before) && r.afterSlot.startsWith(after) && r.slotIn === inside;
+/** 一句中文：空格在這裡，也不在空格前換行（比較句的空格可能填中文）。 */
+const pickAt = (before: string, after: string, inside: string | null = null) => (r: Row): boolean =>
+  pickIn(before, after, inside)(r) && r.breaks === 0;
+/** 畫面找不到空格：放在句尾，記得出錯。 */
+const pickAtEnd = (r: Row): boolean => r.slotMissing && r.afterSlot === '';
 /** 空格後面沒有標點：喇叭沒有單獨掉到下一行，也不超出。 */
 const speakerStays = (r: Row): boolean => r.sameLine === true && !r.overflow;
 
@@ -85,6 +93,26 @@ const CASES: Case[] = [
   { name: '英文結尾 150px', text: 'He has already made up his mind to study abroad.', width: 150, english: true, expect: r => r.sameLine === true && !r.overflow },
   { name: '中文結尾 150px', text: '光合作用需要陽光、水和二氧化碳。', width: 150, expect: r => r.sameLine === true && !r.overflow },
   ...BESIDE.flatMap(([name, item, widths]) => widths.map(width => ({ ...item, name: `${name} ${String(width)}px`, width }))),
+  // 比較句的空格（§10）：和解析一致的情況都在第一處；只有畫面才知道的（渲染器拿掉的）在句尾，Markdown 會記一行錯誤。
+  { name: '比較句 句中', text: '盜匪躲在山＿＿裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡') },
+  { name: '比較句 句首', text: '＿＿假快到了。', mode: 'pick', speaker: false, expect: pickAt('', '假') },
+  { name: '比較句 句尾', text: '他昨天弄丟了＿＿', mode: 'pick', speaker: false, expect: pickAt('了', '') },
+  { name: '比較句 一個底線', text: '盜匪躲在山＿裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡') },
+  { name: '比較句 畫面有兩處在第一處', text: '山＿＿和＿＿裡。', mode: 'pick', speaker: false, expect: r => pickAt('山', '和＿＿')(r) },
+  { name: '比較句 連結文字', text: '請看[山＿＿](https://example.com)的說明。', mode: 'pick', speaker: false, expect: pickAt('山', '的', 'A') },
+  { name: '比較句 粗體裡', text: '盜匪躲在**山＿＿**裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡', 'STRONG') },
+  { name: '比較句 字元參照', text: '山&#65343;&#65343;裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡') },
+  { name: '比較句 十六進位字元參照', text: '山&#xFF3F;裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡') },
+  { name: '比較句 圖片替代文字不算', text: `![底線＿](${IMAGE})山＿＿裡。`, mode: 'pick', speaker: false, expect: r => pickAt('山', '裡')(r) && r.protectedSame },
+  { name: '比較句 嵌入不算', text: '![[不存在的筆記＿]]山＿＿裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡') },
+  { name: '比較句 註解不算', text: '%%註解＿＿%%山＿＿裡。', mode: 'pick', speaker: false, expect: pickAt('山', '裡') },
+  { name: '比較句 程式碼不算', text: '`＿＿`山＿＿裡。', mode: 'pick', speaker: false, expect: r => pickAt('山', '裡')(r) && r.protectedSame },
+  { name: '比較句 中文後面的英文換行', text: '我可以借你的筆嗎？Can I ＿＿ your pen?', mode: 'pick', speaker: false, expect: r => pickIn('I ', ' your')(r) && r.breaks === 1 },
+  { name: '比較句 空格是英文的第一個字', text: '我可以跟你借筆嗎？＿＿ me your pen?', mode: 'pick', speaker: false, expect: r => pickIn('？', ' me')(r) && r.breaks === 1 },
+  { name: '比較句 零處在句尾', text: '這一句沒有空格。', mode: 'pick', speaker: false, expect: pickAtEnd },
+  { name: '比較句 只有替代文字在句尾', text: `![底線＿](${IMAGE})這一句。`, mode: 'pick', speaker: false, expect: pickAtEnd },
+  { name: '比較句 渲染器拿掉的在句尾', text: '<script>＿＿</script>這一句。', mode: 'pick', speaker: false, expect: pickAtEnd },
+  ...sweep(150, 330, 6).map(width => ({ name: `比較句 接句號 ${String(width)}px`, text: '盜匪躲在高高的山上那座古老的＿＿。', mode: 'pick' as const, speaker: false, width, expect: stuck() })),
 ];
 
 /** 和 Review.tsx 的 Speaker 一樣大小的喇叭（只量版面，不接朗讀）。 */
@@ -140,13 +168,23 @@ function besideBlanks(container: HTMLElement): { side: 'before' | 'after'; char:
     return rect ? [{ side, char, same: middle(rect) > box.top && middle(rect) < box.bottom }] : [];
   };
   return Array.from(container.querySelectorAll<HTMLElement>('.ec-blank, .ec-slot')).flatMap(blank => {
-    const lines = blank.matches('.ec-slot') ? Array.from(blank.querySelectorAll('.ec-line')) : [blank];
+    // 比較句的 .ec-slot 裡沒有線，整格就是空格。
+    const lines = blank.querySelector('.ec-line') ? Array.from(blank.querySelectorAll('.ec-line')) : [blank];
     const first = lines[0];
     const last = lines[lines.length - 1];
     const before = texts.filter(node => (first.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).at(-1);
     const after = texts.find(node => (last.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
     return [...charBeside(before, 'before', first), ...charBeside(after, 'after', last)];
   });
+}
+
+/** slot 前面或後面所有的文字。 */
+function textBeside(container: HTMLElement, slot: HTMLElement, side: 'before' | 'after'): string {
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  if (side === 'before') range.setEndBefore(slot);
+  else range.setStartAfter(slot);
+  return range.toString();
 }
 
 async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) {
@@ -171,7 +209,9 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
     await frames();
     if (item.rendered) container.insertAdjacentHTML('beforeend', item.rendered);
     const before =Array.from(container.querySelectorAll(PROTECTED)).map(el => el.outerHTML);
-    const { tail } = postProcess(container, { mode: item.mode ?? 'plain', lines: item.lines ?? 0, english: !!item.english });
+    const { tail, slot, slotMissing } = postProcess(container, { mode: item.mode ?? 'plain', lines: item.lines ?? 0, english: !!item.english });
+    // 比較句的按鈕和畫面一樣大（PickCard 放進來的那顆）。
+    if (item.mode === 'pick') slot?.append(Object.assign(document.createElement('button'), { type: 'button', className: 'ec-pick-slot', textContent: '　' }));
     if (item.revealed) reveal(container, item.words ?? []);
     if (item.speaker !== false) tail.append(speaker());
     const after = Array.from(container.querySelectorAll(PROTECTED)).map(el => el.outerHTML);
@@ -207,6 +247,10 @@ async function runCase(app: App, root: HTMLElement, item: Omit<Case, 'expect'>) 
       glued: (container.textContent ?? '').includes('a '),
       beside: besideBlanks(container),
       lineRows: new Set(Array.from(container.querySelectorAll('.ec-line')).map(line => Math.round(line.getBoundingClientRect().top))).size,
+      slotMissing,
+      slotIn: slot?.parentElement?.closest('a, strong, em')?.tagName ?? null,
+      beforeSlot: slot ? textBeside(container, slot, 'before') : '',
+      afterSlot: slot ? textBeside(container, slot, 'after') : '',
       html: container.innerHTML.slice(0, 800),
     };
   } finally {
@@ -224,6 +268,8 @@ const SHOWN: (Omit<Case, 'name' | 'width' | 'expect'> & { label: string })[] = [
   { label: '打字卡 四個字接句點 正面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, speaker: false },
   { label: '打字卡 四個字接句點 背面', text: '他終於下定決心了。He finally ＿＿.', mode: 'typed', lines: 4, english: true, revealed: true, words: ['made', 'up', 'his', 'mind'] },
   { label: '打字卡 六個字接句點', text: '他已經下定決心要出國讀書。He has already ＿＿.', mode: 'typed', lines: 6, english: true, speaker: false },
+  { label: '比較句 句中', text: '盜匪躲在山＿＿裡。', mode: 'pick', speaker: false },
+  { label: '比較句 粗體與連結', text: '盜匪躲在**山＿＿**裡，請看[說明](https://example.com)。', mode: 'pick', speaker: false },
 ];
 
 /** 手機一行的寬度（iPhone 390px 扣掉左右留白）把 SHOWN 排在一起，整個視窗截一張圖；回傳路徑（拿不到 webContents 時是 null）。 */

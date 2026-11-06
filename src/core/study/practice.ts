@@ -1,8 +1,11 @@
 import type { Target } from '../deck/index.ts';
+import { cardOf, pickCardOf } from './compose.ts';
 import { dueAt, recall, replay } from './fsrs.ts';
 import { compareText, firstAtOrAfter, retentionOf } from './plan.ts';
-import { choosePrompt, wrong } from './session.ts';
+import { choosePrompt, joins, wrong } from './session.ts';
+import { shownWith } from './shown.ts';
 import { dayOf, dayStart } from './time.ts';
+import type { PickMate } from './compose.ts';
 import type { DeckEntry, Memory, MemoryColor, Next, ReviewEntry, Slot, TodayInput } from './types.ts';
 
 // 全部卡的一輪（D-097、D-146、D-163 第 4 點）：依目標集合選卡（D-142 原則 5）。Today.slots 只有今天會出的目標，所以不能借 more。
@@ -168,20 +171,31 @@ export function practiceNext(input: TodayInput, ids: readonly string[], since: n
   };
   const item = chooseSpaced(ready.sort((a, b) => a.at - b.at).map(each => each.item), fresh, apart) ?? waiting?.item;
   if (!item) return { kind: 'done' };
-  const prior = before.filter(entry => entry.lt === item.id && entry.src !== 'mistake');
-  const seen = new Map<string, number>();
-  for (const entry of prior) if (entry.v !== null) seen.set(entry.v, entry.at);
+  const priorOf = (id: string): ReviewEntry[] => before.filter(entry => entry.lt === id && entry.src !== 'mistake');
+  if (item.target.group) {
+    // 同一組的目標照今天的份的規則併（tasks/question-type-seam.md §5-1）；出題歷史是本輪以前加上這一輪。
+    const mateOf = (each: Item): PickMate => ({ lt: each.id, target: each.target, shown: shownWith(shownWith(new Map(), priorOf(each.id)), valid.get(each.id) ?? []) });
+    const dueBy = (each: Item): boolean => {
+      const memory = latest.get(each.id);
+      return !memory || dueAt(memory, retentionOf(input, each.entry, each.target)) <= input.now;
+    };
+    const early = !ready.length && !fresh.length;
+    const others = items.filter(other => other !== item && other.path === item.path && other.target.group?.key === item.target.group?.key
+      && joins(valid.get(other.id), early, () => dueBy(other)));
+    return { kind: 'card', card: pickCardOf({ deck: item.path, isNew: !memories.has(item.id) && !any.has(item.id), early }, [mateOf(item), ...others.map(mateOf)], item.entry.whole ?? item.entry.deck.targets) };
+  }
+  const prior = priorOf(item.id);
+  const seen = shownWith(new Map(), prior);
   const slot: Slot = {
     target: item.target, pair: null, memory: memories.get(item.id) ?? null, retention: retentionOf(input, item.entry, item.target), inExam: input.exam?.contains(item.entry, item.target) ?? false,
     correct: prior.some(entry => entry.r === 'good' || entry.r === 'easy'), seen,
   };
   const prompt = choosePrompt(slot, valid.get(item.id) ?? []);
-  return { kind: 'card', card: {
+  return { kind: 'card', card: cardOf({
     lt: item.id, deck: item.path, target: item.target, prompt,
     isNew: slot.memory === null && !any.has(item.id),
-    typed: prompt.kind === 'qa' && prompt.typed !== null,
     early: !ready.length && !fresh.length,
-  } };
+  }) };
 }
 
 /** 卡組裡這些目標現在的記憶顏色（D-062）：灰未複習、橙到期或剛答錯、綠還沒到期、藍間隔超過 21 天。 */

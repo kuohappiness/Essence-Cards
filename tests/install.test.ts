@@ -45,7 +45,7 @@ async function repo(t: T, { tag = true }: { tag?: boolean } = {}): Promise<{ dir
   }
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
   await writeFile(join(dir, '.gitignore'), 'node_modules\n/main.js\n/styles.css\n.local/\n');
-  git(dir, 'init', '-q');
+  git(dir, 'init', '-q', '-b', 'main');
   git(dir, 'add', '-A');
   git(dir, 'commit', '-q', '-m', 'release');
   if (tag) git(dir, 'tag', '-a', 'v0.0.1', '-m', '第一個正式版');
@@ -77,6 +77,20 @@ void test('安裝：開發版裝到沒登錄的 vault 被拒，什麼都不寫�
   const saved = JSON.parse(await readFile(join(local, 'test-vaults.json'), 'utf8')) as { vaults: string[] };
   assert.deepEqual(saved.vaults.length, 2);
   assert.ok(!saved.vaults.some(path => path.includes('essence-links-')));
+});
+
+void test('正式版的條件：tag 不在 main 上有 problem，detached 在 main 的 tag 上沒有（§3）', async t => {
+  const onMain = await repo(t);
+  assert.deepEqual((await releaseProblems(onMain.dir)).problems, []);
+  git(onMain.dir, 'checkout', '-q', '--detach', 'v0.0.1');
+  assert.deepEqual((await releaseProblems(onMain.dir)).problems, []);
+  const side = await repo(t, { tag: false });
+  git(side.dir, 'checkout', '-q', '-b', 'side');
+  git(side.dir, 'commit', '-q', '--allow-empty', '-m', 'side');
+  git(side.dir, 'tag', '-a', 'v0.0.1', '-m', '不在 main 上');
+  assert.deepEqual((await releaseProblems(side.dir)).problems, ['HEAD 不在 main 上：正式版只從 main 發布']);
+  git(side.dir, 'checkout', '-q', '--detach', 'v0.0.1');
+  assert.deepEqual((await releaseProblems(side.dir)).problems, ['HEAD 不在 main 上：正式版只從 main 發布']);
 });
 
 void test('安裝：正式使用的 vault 要工作樹乾淨、HEAD 是 tag、package.json 版號相同、DEV 是 false，不符就拒絕', async t => {

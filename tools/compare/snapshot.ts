@@ -29,6 +29,8 @@ export interface TodaySnap {
   deck: string;
   lane: string;
   retention: number;
+  /** 這張估的秒數（今天的份放得下幾張看它）：全放得下時順序不變，只比順序看不出來估得不一樣。 */
+  seconds: number;
   /** 這次出的那一題的指紋（還沒作答時的第一題）。 */
   prompt: string | null;
   direction: string | null;
@@ -154,7 +156,7 @@ export function diffSnapshots(before: Snapshot, after: Snapshot, time: (ms: numb
   for (const item of after.today) {
     const old = todayA.get(item.lt);
     if (!old) continue;
-    for (const field of ['list', 'deck', 'lane', 'retention', 'prompt', 'direction'] as const) {
+    for (const field of ['list', 'deck', 'lane', 'retention', 'seconds', 'prompt', 'direction'] as const) {
       if (!same(old[field], item[field])) out.push(`今天的份裡 ${item.lt} 的 ${field}：${JSON.stringify(old[field])} → ${JSON.stringify(item[field])}`);
     }
   }

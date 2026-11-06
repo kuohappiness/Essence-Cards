@@ -1,4 +1,4 @@
-import { BLANK, closingRun, englishBreak, glueArticles, openingRun, tailStart } from '../review/index.ts';
+import { BLANK, closingRun, englishBeside, englishBreak, glueArticles, openingRun, tailStart } from '../review/index.ts';
 
 // Obsidian 渲染出來的卡片內容的後處理（D-145）：打字卡的空格、中文後面的英文換行、冠詞連著下一個字、空格後面的標點不換到下一行、喇叭接在最後一個字後面。
 // 只改一般的 HTML 文字；圖、SVG、公式、嵌入、程式碼與填空、空格自己的內容一律不動（Codex 審查 F3）。
@@ -34,7 +34,7 @@ const blockOf = (node: Node, container: HTMLElement): Element => node.parentElem
  * Markdown.tsx 渲染完的全部處理（md-cases 也用它）：填空題的 <mark> 換成空格、打字卡第一處 ＿＿ 換成線、英文卡的冠詞、空格連著後面的標點、
  * 喇叭那一格。回傳放線的那一格（找不到 ＿＿ 或不是打字卡時是 null）與喇叭那一格。
  */
-export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed'; lines: number; english: boolean }): { slot: HTMLElement | null; tail: HTMLElement } {
+export function postProcess(container: HTMLElement, options: { mode: 'plain' | 'cloze' | 'typed' | 'pick'; lines: number; english: boolean }): { slot: HTMLElement | null; tail: HTMLElement; slotMissing: boolean } {
   const blanks: HTMLElement[] = [];
   if (options.mode === 'cloze') {
     for (const mark of Array.from(container.querySelectorAll('mark'))) {
@@ -49,11 +49,15 @@ export function postProcess(container: HTMLElement, options: { mode: 'plain' | '
       blanks.push(blank);
     }
   }
-  const slot = options.mode === 'typed' ? insertLines(container, options.lines) : null;
+  const typedSlot = options.mode === 'typed' ? insertLines(container, options.lines) : null;
+  const pickSlot = options.mode === 'pick' ? insertPickSlot(container) : null;
+  const slotMissing = options.mode === 'pick' && !pickSlot;
+  // 比較卡一定要有空格（§3）：找不到時放在句尾。
+  const slot = typedSlot ?? pickSlot ?? (slotMissing ? endSlot(container) : null);
   if (slot) blanks.push(slot);
   if (options.english) glueText(container);
   blanks.forEach(gluePunctuation);
-  return { slot, tail: attachTail(container) };
+  return { slot, tail: attachTail(container), slotMissing };
 }
 
 /** 在 element 前面放一個空的 .ec-glue（裡面不換行），由呼叫的地方把內容照順序放進去。 */
@@ -86,6 +90,45 @@ function gluePunctuation(blank: HTMLElement): void {
     after.splitText(closing);
     glue.append(after);
   }
+}
+
+const emptySlot = (): HTMLElement => {
+  const slot = document.createElement('span');
+  slot.className = 'ec-slot';
+  return slot;
+};
+
+/**
+ * 比較卡（tasks/question-type-seam.md §7）：第一處 ＿＿ 換成一格空的 .ec-slot，按鈕由 Markdown 的 slotNode 放進去。不用打字卡的線：
+ * 線那一格（closeLastLine）把後面的標點包進去，和按鈕疊在同一格會蓋住；標點交給 gluePunctuation。
+ */
+function insertPickSlot(container: HTMLElement): HTMLElement | null {
+  for (const node of textNodes(container)) {
+    const text = node.textContent ?? '';
+    const match = BLANK.exec(text);
+    if (!match) continue;
+    const slot = emptySlot();
+    const after = node.splitText(match.index);
+    after.textContent = text.slice(match.index + match[0].length);
+    node.parentNode?.insertBefore(slot, after);
+    const inBlock = textNodes(blockOf(node, container));
+    const at = inBlock.indexOf(after);
+    if (englishBeside(joined(inBlock.slice(0, at)), joined(inBlock.slice(at)))) breakBeforeEnglish(container, node);
+    return slot;
+  }
+  return null;
+}
+
+function joined(nodes: Text[]): string {
+  return nodes.map(node => node.textContent ?? '').join('');
+}
+
+/** 找不到空格時放在句尾：最後一個內容所在區塊的最後面。 */
+function endSlot(container: HTMLElement): HTMLElement {
+  const slot = emptySlot();
+  const last = lastContent(container);
+  (last ? blockOf(last, container) : container).append(slot);
+  return slot;
 }
 
 /** 把第一處 ＿＿ 所在的文字節點拆開，中間放幾條線；回傳放線的那一格，找不到 ＿＿ 時是 null。 */

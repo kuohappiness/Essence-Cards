@@ -15,8 +15,9 @@ function canonical(value: unknown): unknown {
 }
 
 const changeKey = (entry: ChangeEntry): string => JSON.stringify({ ...entry, val: canonical(entry.val) });
-// t 相同時，這幾欄也相同才算同一筆（iCloud 衝突副本）；不同就兩筆都留。
-const sameReview = (a: ReviewEntry, b: ReviewEntry): boolean => a.lt === b.lt && a.r === b.r && a.v === b.v && a.typed === b.typed && a.src === b.src;
+// t 相同時，這幾欄也相同才算同一筆（iCloud 衝突副本）；不同就兩筆都留。also 當集合比；比較卡的 pick、retry 只是證據，不比。
+const alsoKey = (entry: ReviewEntry): string => JSON.stringify([...entry.also ?? []].sort());
+const sameReview = (a: ReviewEntry, b: ReviewEntry): boolean => a.lt === b.lt && a.r === b.r && a.v === b.v && a.typed === b.typed && a.src === b.src && a.with === b.with && alsoKey(a) === alsoKey(b);
 
 export function isLogPath(path: string): boolean {
   const name = path.startsWith(LOG_FOLDER + '/') ? path.slice(LOG_FOLDER.length + 1) : '';

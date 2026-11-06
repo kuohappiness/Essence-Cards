@@ -4,6 +4,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { splitOutsideLinks, splitUnit } from './sources.ts';
 import { linesOf, listTree, nameIds, questionSyntax, removeMiddle, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
+import { readPick, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, Fields, Problem, ProblemCode, Prompt, Target } from './types.ts';
 
 const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
@@ -33,22 +34,32 @@ function unescapeYaml(text: string): string {
  */
 const mentionsNeed = (raw: string): boolean => raw.includes('需要版本') || unescapeYaml(raw).includes('需要版本');
 
+/**
+ * 屬性區在哪幾行，讀、標記、狀態都看這裡（L2 的 R1：判斷不同時，寫的一方會在屬性區上面再建一個）：
+ * 第一行去掉 BOM 與前後空白是 `---`；Obsidian 只認 `---` 當結尾，YAML 的 `...` 不算（W5 對照，2026-10-25）。
+ * 沒有屬性區是 null，有開頭沒結束是 'unclosed'。
+ */
+export function frontmatterLines(lines: readonly Line[]): { close: number } | 'unclosed' | null {
+  if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return null;
+  const close = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw));
+  return close < 0 ? 'unclosed' : { close };
+}
+
 export function readProperties(lines: Line[]): { props: DeckProps; start: number; problems: Problem[] } {
   const props = defaultProps();
   const problems: Problem[] = [];
-  if (lines[0]?.raw.replace(/^\uFEFF/, '').trim() !== '---') return { props, start: 0, problems };
-  // Obsidian 只認 `---` 當結尾；YAML 的 `...` 不算（W5 對照，2026-10-25）。
-  const end = lines.findIndex((line, index) => index > 0 && /^---\s*$/.test(line.raw));
+  const bounds = frontmatterLines(lines);
+  if (bounds === null) return { props, start: 0, problems };
   const hint = (line: number, message: string): void => { problems.push({ line, level: 'hint', code: 'unknown-property-value', message, targetLine: null }); };
   // 沒有結束的屬性區，Obsidian 當成一般文字，底下的清單照樣顯示（W5 對照）。
-  if (end < 0) {
+  if (bounds === 'unclosed') {
     hint(0, '屬性區塊沒有結束，Obsidian 把它當成一般文字；先使用預設值');
     // 沒有結束就看到檔尾（syntax.md §2-1）。
     if (mentionsNeed(lines.slice(1).map(line => line.raw).join('\n'))) props.need = false;
     return { props, start: 0, problems };
   }
-  const start = end + 1;
-  const raw = lines.slice(1, end).map(line => line.raw).join('\n');
+  const start = bounds.close + 1;
+  const raw = lines.slice(1, bounds.close).map(line => line.raw).join('\n');
   try {
     const doc = parseDocument(raw);
     if (doc.errors.length) throw Error('無法解析屬性');
@@ -128,7 +139,8 @@ export function parseDeck(text: string): Deck {
         if (distinct.length === 1) { id = distinct[0]; idProblem = 'misplaced-id'; } else { id = null; idProblem = 'ambiguous-id'; idCandidates = distinct; }
       }
     }
-    const directionMatch = / (英翻中|中翻英)$/.exec(name);
+    // 方向前面的空白半形全形都算，pairKey 不留尾端空白（tasks/question-type-seam.md §3 第 2 點）。
+    const directionMatch = /[ 　]+(英翻中|中翻英)$/.exec(name);
     const fields: Fields = { sources: [], type: null, importance: 'medium', paused: false, remarks: [], mistakes: [] };
     const target: Target = { id, name, line: root.line, implicit, section: root.section,
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
@@ -220,19 +232,9 @@ export function parseDeck(text: string): Deck {
         if (!answer.trim()) addProblem(node, 'missing-answer', '這一題 :: 的底下沒有答案', 'error');
         let typed: readonly string[] | null = null;
         if (target.direction === 'zh-en') {
-          // 好幾個正確答案用 | 分開（D-122）：每一段各自去掉格式與前後空白；`a|b` 也認得。指紋仍用整個答案格。
-          // 先看整格（W6 §0-1、syntax.md §2-3）：換行、跳脫的管線、行內程式碼、公式；ASCII 的 [ ] < >（Obsidian 與 Markdown
-          // 的連結或嵌入、角括號與參照式連結，字面的括號也一起不收）；任何位置不分大小寫的 http(s)://；全形的｜。
-          // 都不能當打字答案，不拆開、typed 是 null（換行要在 trim 之前看；Codex 格式查核 F1、F2，L2 的 S1 與它的格式查核）。
-          const invalid = (): void => { addProblem(node, 'typed-answer-invalid', '中翻英的答案只能是單行英文單字或片語，好幾個答案用 | 分開；不能有換行、連結、程式碼或公式', 'error'); };
-          if (/[\r\n`$[\]<>｜]|\\\||https?:\/\//i.test(answer)) invalid();
-          else {
-            typed = answer.split('|').map(part => part.replace(/\*\*|\*|_|==/g, '').trim());
-            if (typed.some(part => !part || /\p{Script=Han}/u.test(part))) invalid();
-            else if (new Set(typed.map(part => part.split(/\s+/).length)).size > 1) {
-              addProblem(node, 'typed-answer-words', '好幾個答案的字數不一樣，畫線照第一個');
-            }
-          }
+          const read = typedAnswer(answer);
+          typed = read.typed;
+          if (read.problem) addProblem(node, read.problem.code, read.problem.message, read.problem.level);
         }
         return { kind: 'qa', line: node.line, question, answer, extras, typed, fingerprint: fingerprint(question, answer) };
       }
@@ -250,6 +252,12 @@ export function parseDeck(text: string): Deck {
       // 一般筆記不是目標，不回報它的欄位提示。
       for (let i = problems.length - 1; i >= 0 && problems[i].targetLine === root.line; i--) problems.pop();
       continue;
+    }
+    const pick = readPick(target);
+    if (pick.group) target.group = pick.group;
+    for (const { line, level, code, message } of pick.problems) {
+      problems.push({ line, targetLine: root.line, level, code, message });
+      if (level === 'error') target.ok = false;
     }
     if (target.id) {
       if (seenIds.has(target.id)) addProblem(root, 'duplicate-id', '這個學習目標 ID 和同一篇前面的重複；用了同一個 ID 的目標先都不出題，等家長選哪一個是新加的');
