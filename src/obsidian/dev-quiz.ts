@@ -140,6 +140,14 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     trial.folders.unshift(MOVED, OTHER);
     check('卡組讀進來了', await until(() => state.deckTargets(WORDS).length === 3 && state.deckTargets(GRAMMAR).length === 2));
     await sleep(300);
+    // L2 R7：連結的副檔名大小寫。先看 Obsidian 自己找不找得到，再看外掛認不認得（完整路徑、/ 開頭、相對路徑）。
+    {
+      const resolve = quizLinkResolver(app), from = QUIZ_FOLDER + '/x.md';
+      const bare = WORDS.replace(/\.md$/, ''), relative = '../../' + bare.slice('Essence Cards/'.length);
+      const written = ['', '.md', '.MD', '.Md'].flatMap(ext => [bare + ext, '/' + bare + ext, relative + ext]);
+      check('副檔名大小寫：Obsidian 找到那一篇', written.map(link => app.metadataCache.getFirstLinkpathDest(link, from)?.path === WORDS));
+      check('副檔名大小寫：外掛認得那一篇', written.map(link => { const got = resolve(link, from); return got.kind === 'file' && got.path === WORDS; }));
+    }
     const { day } = state.exam();
     const tomorrow = scopeDate(day + 1), yesterday = scopeDate(day - 1), today = scopeDate(day);
     const later = scopeDate(day + 9);
