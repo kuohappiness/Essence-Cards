@@ -145,8 +145,8 @@ export function parseDeck(text: string): Deck {
     const target: Target = { id, name, line: root.line, implicit, section: root.section,
       fields, prompts: [], shared: [], direction: directionMatch ? directionMatch[1] === '英翻中' ? 'en-zh' : 'zh-en' : null,
       pairKey: directionMatch ? name.slice(0, directionMatch.index) : null, ok: true, ...(idCandidates ? { idCandidates } : {}) };
-    const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint'): void => {
-      problems.push({ line: node.line, targetLine: root.line, level, code, message });
+    const addProblem = (node: Item, code: ProblemCode, message: string, level: 'error' | 'hint' = 'hint', columns?: Problem['columns']): void => {
+      problems.push({ line: node.line, targetLine: root.line, level, code, message, ...(columns ? { columns } : {}) });
       if (level === 'error') target.ok = false;
     };
     if (idProblem === 'misplaced-id') addProblem(root, idProblem, '學習目標 ID 跑到名稱中間；照樣認得，存檔時移回行尾');
@@ -157,27 +157,38 @@ export function parseDeck(text: string): Deck {
       if (fieldStart.test(node.text)) {
         // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-170 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
         const segments = splitOutsideLinks(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
+        // 每一段在那一行原文的位置（§1-2）：分隔符號都是一個字；清單符號之後才是 node.text。寫到接續行的不填。
+        const raw = lines[node.line].raw;
+        const offset = raw.length - raw.replace(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]*/, '').length;
+        const firstLine = node.text.split('\n')[0];
+        let start = 0;
         for (const segment of segments) {
-          const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);
+          const at = start;
+          start += segment.length + 1;
+          const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/d.exec(segment);
           const key = match?.[1] ?? '', value = match?.[2] ?? '';
+          const inText = node.text.slice(at, at + segment.length) === segment;
+          const span = (from: number, to: number): Problem['columns'] =>
+            inText && from < to && at + to <= firstLine.length ? { from: offset + at + from, to: offset + at + to } : undefined;
+          const valueSpan = (): Problem['columns'] => match?.indices?.[2] ? span(match.indices[2][0], match.indices[2][1]) : undefined;
           if (!['出處', '類型', '重要性', '狀態', '備註', '錯題補強'].includes(key)) {
-            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段');
+            addProblem(node, 'unknown-field', '資料中有不認得的欄位，已忽略這一段', 'hint', span(segment.length - segment.trimStart().length, segment.trimEnd().length));
             continue;
           }
           if (key === '出處' || key === '備註' || key === '錯題補強') {
             addValues(key === '出處' ? fields.sources : key === '備註' ? fields.remarks : fields.mistakes, value);
           } else {
-            if (seenFields.has(key)) { addProblem(node, 'duplicate-field', '「' + key + '」寫了兩次，使用第一個'); continue; }
+            if (seenFields.has(key)) { addProblem(node, 'duplicate-field', '「' + key + '」寫了兩次，使用第一個', 'hint', valueSpan()); continue; }
             seenFields.add(key);
             if (key === '類型') fields.type = value || null;
             if (key === '重要性') {
               const importance = ({ 高: 'high', 中: 'medium', 低: 'low' } as const)[value as '高' | '中' | '低'];
               if (importance) fields.importance = importance;
-              else addProblem(node, 'unknown-field-value', '重要性的值認不得，先當作中');
+              else addProblem(node, 'unknown-field-value', '重要性的值認不得，先當作中', 'hint', valueSpan());
             }
             if (key === '狀態') {
               if (value === '暫停') fields.paused = true;
-              else if (value !== '啟用') addProblem(node, 'unknown-field-value', '狀態的值認不得，先當作啟用');
+              else if (value !== '啟用') addProblem(node, 'unknown-field-value', '狀態的值認不得，先當作啟用', 'hint', valueSpan());
             }
           }
         }

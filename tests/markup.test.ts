@@ -100,6 +100,12 @@ void test('§1-1 hint 畫橘色、範圍不含清單符號與行尾的 ID；misp
   ]);
 });
 
+void test('§1-2 重要性：很高 只標「很高」', () => {
+  const doc = '- 目標 ^k3m9x2\n    - 出處：p.43｜重要性：很高\n    - Q :: A\n';
+  const e = editor(doc);
+  assert.deepEqual(kinds(e.marks, 'hint').map(mark => [mark.from, mark.to, e.state.sliceDoc(mark.from, mark.to), mark.tip]), [[pos(e.state, 2, 18), pos(e.state, 2, 20), '很高', '重要性的值認不得，先當作中']]);
+});
+
 void test('§1-5 改字之後標示跟著平移；重新解析之後和打開時一樣', () => {
   const e = editor(NATURAL);
   const before = e.marks;

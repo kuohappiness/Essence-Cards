@@ -155,6 +155,19 @@ void test('D-089 #11 欄位不認得使用預設值但照常排程', () => {
   assert.equal(t.ok, true); assert.equal(t.fields.importance, 'medium'); assert.equal(t.fields.paused, false);
   assert.deepEqual(codes('  - 重要性：很高｜狀態：不明\n  - Q :: A'), ['unknown-field-value', 'unknown-field-value']);
 });
+void test('§1-2 欄位那一段的問題記原文位置：值、重複欄位的值、不認得的欄位整段；寫到接續行的不記', () => {
+  const text = '- 目標\n    - 重要性：很高｜狀態：不明｜陌生：X｜重要性：低\n\t- 備註：A｜狀態：亂\n    - Q :: A\n    - 類型：定義\n      接續｜重要性：怪\n';
+  const lines = text.split('\n');
+  const parsed = parseDeck(text);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.columns && lines[p.line].slice(p.columns.from, p.columns.to)]), [
+    ['unknown-field-value', '很高'], ['unknown-field-value', '不明'], ['unknown-field', '陌生：X'], ['duplicate-field', '低'],
+    // 狀態、重要性前面已經寫過：重複的那一段標值。
+    ['duplicate-field', '亂'],
+    ['duplicate-field', undefined],
+  ]);
+  // 位置寫死：第二行 `    - ` 之後。
+  assert.deepEqual(parsed.problems[0].columns, { from: 10, to: 12 });
+});
 void test('D-089 #12 沒題目的一般筆記不產生目標或問題', () => {
   assert.deepEqual(parseDeck('- 一般筆記\n  - 重要性：錯字').targets, []);
   assert.deepEqual(parseDeck('- 一般筆記\n  - 重要性：錯字').problems, []);

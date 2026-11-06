@@ -61,6 +61,11 @@ export interface Problem {
   code: ProblemCode;
   message: string;
   targetLine: number | null;
+  /**
+   * 資料欄位那一行的其中一段（tasks/edit-markup.md §1-2）：那一行原文的位置，從 0 算。只有 unknown-field-value、duplicate-field
+   * （那一段的值）與 unknown-field（整段）會填，而且只在那一段寫在欄位的第一行時；沒填的是整行。
+   */
+  columns?: { from: number; to: number };
 }
 export type ProblemCode =
   | 'empty-question' | 'missing-answer' | 'typed-answer-invalid'
