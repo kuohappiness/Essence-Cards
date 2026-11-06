@@ -159,7 +159,8 @@ export function targetAt(doc: Text, deck: Deck, line: number): Deck['targets'][n
  * 編輯器的標示：extension 用 registerEditorExtension 裝上（只在電腦）；marks 是目前畫的標示，refresh 是馬上重新解析的 effect，
  * icon 是「填出處」圖示所在的那一行（從 1 算，沒有是 null）：測試與開發命令用。
  */
-export function markup(options: MarkupOptions): { extension: Extension; marks: (state: EditorState) => Mark[]; refresh: StateEffect<null>; icon: (state: EditorState) => number | null } {
+export interface Markup { extension: Extension; marks: (state: EditorState) => Mark[]; refresh: StateEffect<null>; icon: (state: EditorState) => number | null }
+export function markup(options: MarkupOptions): Markup {
   const reparse = StateEffect.define<null>();
   const build = (state: EditorState): DecorationSet => options.isDeck(state) ? decorate(marksOf(state.doc)) : Decoration.none;
   const field = StateField.define<DecorationSet>({

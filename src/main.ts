@@ -14,7 +14,7 @@ import { changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
-import { markup, targetAt } from './obsidian/markup.ts';
+import { markup, targetAt, type Markup } from './obsidian/markup.ts';
 import { openBlankSourceForm } from './obsidian/source-entry.ts';
 import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
@@ -71,8 +71,8 @@ export interface PluginEvents {
 }
 export type PluginEvent = keyof PluginEvents;
 
-/** 電腦上補 ID 與鎖定接好之後交回的：鎖住的 ID（開發命令看）、存檔按鈕與離開筆記的備援。 */
-export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver }
+/** 電腦上補 ID、鎖定與標示接好之後交回的：鎖住的 ID 與畫的標示（開發命令看）、存檔按鈕與離開筆記的備援。 */
+export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver; markup: Pick<Markup, 'marks' | 'refresh' | 'icon'> }
 
 export default class EssenceCardsPlugin extends Plugin {
   /** 這台裝置的碼（W5 說明 §4-2）；紀錄的檔名用它。 */
@@ -272,11 +272,12 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     this.registerEditorExtension(lock.extension);
     // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。游標在出處那一行時的「填出處」圖示、改到筆記時關掉表單（§2）。
-    this.registerEditorExtension(markup({
+    const marks = markup({
       isDeck: state => lockable(pathOf(state)),
       onAdd: (view, line) => { openBlankSourceForm(view, view.state.doc.line(line).to, this.state); },
       onEdit: closeSourceForm,
-    }).extension);
+    });
+    this.registerEditorExtension(marks.extension);
     // 命令「填出處」（§2 第 3 點）：游標在某個目標裡才可用，打開空白的表單。
     this.addCommand({
       id: 'fill-source',
@@ -301,7 +302,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開完馬上關時，Obsidian 只在關之後送一次 layout-change（技術債 A3，a3check 的 C1、C3）。
     this.registerEditorExtension(ViewPlugin.define(view => { saver.opened(pathOf(view.state)); return {}; }));
-    return { tokens: lock.tokens, saver };
+    return { tokens: lock.tokens, saver, markup: marks };
   }
 
   /** 這個外掛自己的錯：照舊印在 console，再交給錯誤紀錄（where 照 syntax.md §9）。 */
