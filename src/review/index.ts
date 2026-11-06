@@ -15,7 +15,7 @@ export { keyboardFit } from './keyboard.ts';
 export type { Axis, Gesture } from './gesture.ts';
 export { englishParts, lineSpeech, otherAnswers, englishBeside, englishBreak, glueArticles, tailStart, closingRun, openingRun, fillBlank, blankCount, questionOf, BLANK } from './english.ts';
 export { crumb } from './crumb.ts';
-export { anchorParts, extraLabel, splitTranslation } from './extras.ts';
+export { anchorBreak, anchorParts, extraLabel, splitTranslation } from './extras.ts';
 export { headingKey, sourceLabel, sourceLinks } from './sources.ts';
 export type { SourceLink, SourceOwner } from './sources.ts';
 export { catalogView, entryView, examRow, examSubject, reminderView } from './entry.ts';

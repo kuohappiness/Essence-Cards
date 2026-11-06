@@ -42,6 +42,31 @@ const LEFTOVER = /[*_`~]|==/;
 function closed(text: string): boolean {
   return !LEFTOVER.test(text.replace(SIMPLE, '')) && text.split('(').length === text.split(')').length;
 }
+/** 括號、引號的開頭與結尾：裡面的冒號不算分行的地方。 */
+const OPENERS = '（(「『【〔[';
+const CLOSERS = '）)」』】〕]';
+
+/**
+ * 記憶錨點在冒號後面換行（D-184 補充，使用者 2026-11-06）：「go 的過去式不規則：」一行、「go → went → gone」一行。
+ * 只認括號與引號外面恰好一個冒號（全形，或不在兩個數字中間的半形），冒號兩邊都有字；好幾個冒號、好幾行、
+ * 有連結這類結構、切開會把格式拆成兩半的，都是 null（照原文一行，一行不會壞）。
+ */
+export function anchorBreak(text: string): { head: string; rest: string } | null {
+  if (text.includes('\n') || STRUCTURE.test(text)) return null;
+  const colons: number[] = [];
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (OPENERS.includes(ch)) depth++;
+    else if (CLOSERS.includes(ch)) depth = Math.max(0, depth - 1);
+    else if (depth === 0 && (ch === '：' || (ch === ':' && !(/\d/.test(text[i - 1] ?? '') && /\d/.test(text[i + 1] ?? ''))))) colons.push(i);
+  }
+  if (colons.length !== 1) return null;
+  const head = text.slice(0, colons[0] + 1).trim();
+  const rest = text.slice(colons[0] + 1).trim();
+  return head.length > 1 && rest && closed(head) && closed(rest) ? { head, rest } : null;
+}
+
 export function splitTranslation(text: string): { line: string; translation: string | null } {
   const match = STRUCTURE.test(text) ? null : TRANSLATED.exec(text);
   return match && closed(match[1]) && closed(match[2]) ? { line: match[1], translation: match[2] } : { line: text, translation: null };

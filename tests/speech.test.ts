@@ -58,15 +58,21 @@ void test('沒有 speechSynthesis：say 與 stop 都不拋錯', () => {
   speech.stop();
 });
 
+// 替身照 Obsidian 1.15.0 的 App.saveLocalStorage／loadLocalStorage（2026-11-07 在 Windows 版讀 app 的原始碼）：
+// 值是 false、0、空字串時不存，而是刪掉那一筆；讀的時候沒有那一筆是 null。原本的替身照存 false，測不出關了記不住。
 void test('D-186 自動朗讀：沒動過開關的預設開，關過的留在關，再打開也記得', () => {
-  const stored = new Map<string, unknown>();
+  const stored = new Map<string, string>();
   const app = {
-    loadLocalStorage: (key: string) => stored.get(key) ?? null,
-    saveLocalStorage: (key: string, value: unknown) => { stored.set(key, value); },
+    loadLocalStorage: (key: string) => { const text = stored.get(key); return text ? JSON.parse(text) as unknown : null; },
+    saveLocalStorage: (key: string, value: unknown) => { if (value) stored.set(key, JSON.stringify(value)); else stored.delete(key); },
   } as unknown as App;
   assert.equal(loadAutoRead(app), true, '沒動過：開');
   saveAutoRead(app, false);
   assert.equal(loadAutoRead(app), false, '關過：留在關');
   saveAutoRead(app, true);
   assert.equal(loadAutoRead(app), true, '再打開：開');
+  saveAutoRead(app, false);
+  assert.equal(loadAutoRead(app), false, '再關一次：留在關');
+  stored.set('essence-cards-auto-read', 'true');
+  assert.equal(loadAutoRead(app), true, '舊版存的 true：開');
 });
