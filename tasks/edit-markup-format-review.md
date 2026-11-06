@@ -1,6 +1,6 @@
 # 出處的原文位置與寫回（格式查核，給 Codex）
 
-狀態：💬 等 Codex 查核
+狀態：💬 兩輪做完（[回報](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)，R1～R10 都採用）；第三輪的請求在回報的〈第三輪請求〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
