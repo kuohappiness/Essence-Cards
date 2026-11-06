@@ -25,7 +25,8 @@
     "preprepare": "node -e \"const fs=require('node:fs'),p='.githooks/pre-commit';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll('\\r\\n','\\n'));\"",
     "prepare": "git config core.hooksPath .githooks",
     "bench": "node tools/bench-study.ts",
-    "export-compare": "node tools/export-compare.ts"
+    "export-compare": "node tools/export-compare.ts",
+    "progress-board": "node tools/progress-board.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
