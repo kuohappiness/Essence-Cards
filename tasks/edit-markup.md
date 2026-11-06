@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（入口與目錄第四批，給 Claude，本機執行）
 
-狀態：💬 任務說明定稿，可以開工；§7 第 1～3 個 commit 已在分支 `claude/edit-markup`（見〈結果〉）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
+狀態：💬 任務說明定稿，可以開工；§7 第 1～4 個 commit 已在分支 `claude/edit-markup`（見〈結果〉）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。要改寫使用者的筆記，也動到解析的結果，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。§3（解析多記原文位置）、§4-3、§4-4（寫回）開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），§1、§2 不用等。
 
@@ -319,6 +319,16 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
   - 套用的讀回核對先只讀這一項本身；寫進去的位置前面那幾項（`preceding`）等 §4-3 給。
   - 目標還沒有出處欄位時加一行（§2 第 3 點）屬於寫回，等 §4-3。
 - **§1-2 改成帶 `line`**（`49b1c77`，合併格式查核第一、二輪之後）：`Problem.columns` 是 `{ line; from; to }`，寫在接續行的那一段標在接續行（回報 R6）；`listTree` 的 `Item` 先多了 §3-2 的 `starts`。
+
+### §7 第 4 個 commit（2026-11-07，`9a228fa`）
+
+- **§3 原文位置**：`parseDeck(text, { layout: true })` 另外回傳 `layout: Map<目標那一行, TargetLayout>`（`fields`、`entries`、`parts`、`fieldColons`），沒給選項時結果和原本完全一樣（測試用 `'layout' in` 確認沒有這個鍵）。型別在 `src/core/deck/types.ts`。
+- **讀法沒有另寫一套**：`sourceLinks` 的遮罩、`p，44` 的修正、切段、去頭尾改成每個字記得自己在原文的位置，`sourceLinks` 變成 `readSourceParts` 攤平再去重；按鈕是段裡項目的複本，去重不改 `parts`（回報 R5）。欄位的切法（`collectFields`）也改用同一套位置，§1-2 的問題位置跟著用它，私用區字元前後也對得回原文。
+- **改名**：第 3 個 commit 給表單用的 `sourceParts`（拆一項出處）改名 `splitSource`，免得和 `SourcePart` 搞混。
+- **段超過 RAW_CUT_LIMIT**：量的是那一段的原文（去掉尾端分隔符號與空白之後），2000 個字有位置、2001 個字是 `null`；同一欄其他段照常有位置。
+- **測試**：§3-4 的固定例子（`tests/sources.test.ts` 最後一段、`tests/deck.test.ts` 的〈§3 出處的原文位置〉），其中名稱與冒號跨行照第三輪寫死 `name` 第 1 行 `[6, 8)`、`colon` 第 2 行 `[8, 9)`、`value` 第 2 行 `[9, 13)`；共用範例清單的每個例子，原文與每一種打字雜訊（`INSIDE`、`AROUND` 各一種）都過 `checkParts` 的性質：攤平去重等於按鈕、段照原文順序不重疊、沒算進段的只有分隔符號與空白、段的原文去雜訊後就是讀的那一段。`deckCases`（518 篇）補 ID 前後多比 `shared` 與全部欄位，並比對 layout 切出來的字；切不出原文的出處只有兩項：私用區字元的 `p.44` 與跨行的 `p.44\np.45`。
+- `npm run check`、`npm run build` 通過。
+- **留到第 5 個 commit**：圖示判斷出處欄位那一行還是 `markup.ts` 的 `sourceFieldAt`；改用 layout 要把解析結果留在編輯器的 state，和看不懂的出處的標示一起做。
 
 ### Windows 版 Obsidian（2026-11-07，Obsidian 1.15.0，開發命令 `markup`，`9def93c` 加修正）
 
