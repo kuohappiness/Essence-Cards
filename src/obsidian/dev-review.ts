@@ -425,7 +425,7 @@ function screen(): Record<string, unknown> {
   const focus = !active || active === document.body ? 'body' : root.contains(active) ? (active.className || active.tagName) : '畫面外：' + (active.className || active.tagName);
   return {
     top: text(root.querySelector('.ec-count')) || text(root.querySelector('.ec-return')),
-    auto: root.querySelector('.ec-auto') ? (root.querySelector<HTMLInputElement>('.ec-auto input')?.checked ? '開' : '關') : null,
+    auto: root.querySelector('.ec-auto') ? (root.querySelector('.ec-auto')?.getAttribute('aria-checked') === 'true' ? '開' : '關') : null,
     meta: text(root.querySelector('.ec-meta')), q: text(root.querySelector('.ec-q')).slice(0, 120),
     lines: inOverlay('.ec-line').length, linesFilled: inOverlay('.ec-line.ec-filled').map(text),
     blanks: inOverlay('.ec-blank').length, blanksFilled: inOverlay('.ec-blank.ec-filled').map(text),

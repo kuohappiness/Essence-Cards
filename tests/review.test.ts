@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBeside, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, splitTranslation, tailStart, todayStats } from '../src/review/index.ts';
+import { allowedFor, anchorBreak, blankCount, closest, closingRun, copying, crumb, doneView, englishBeside, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, splitTranslation, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -117,6 +117,27 @@ void test('D-145 一行一個喇叭：依序念這一行的英文，重複的只
   assert.deepEqual(otherAnswers(['turn off', 'switch off', 'shut off'], 'switch off'), ['turn off', 'shut off'], '照答案格的順序');
   assert.deepEqual(otherAnswers(['borrow'], 'borrow'), []);
   assert.deepEqual(otherAnswers(TWO, 'made up his mnd'), TWO, '結果那一行不是任何一個答案（不會發生）時全列');
+});
+
+// D-184 補充（使用者 2026-11-06）：記憶錨點在冒號後面換行，「go 的過去式不規則：」一行、「go → went → gone」一行。
+void test('D-184 記憶錨點：括號外恰好一個冒號、兩邊都有字才換行；其他照原文一行', () => {
+  const two = (head: string, rest: string) => ({ head, rest });
+  assert.deepEqual(anchorBreak('go 的過去式不規則：go → went → gone'), two('go 的過去式不規則：', 'go → went → gone'));
+  assert.deepEqual(anchorBreak('go 的過去式不規則： go → went → gone'), two('go 的過去式不規則：', 'go → went → gone'), '冒號後面多按的空格');
+  assert.deepEqual(anchorBreak('go 的過去式不規則:go → went'), two('go 的過去式不規則:', 'go → went'), '半形冒號（打字雜訊）');
+  assert.deepEqual(anchorBreak('下面是**木**，木頭圍成的：山寨、寨子'), two('下面是**木**，木頭圍成的：', '山寨、寨子'), '格式在冒號前收尾');
+  assert.deepEqual(anchorBreak('易混淆 lend（借出：把東西借給別人）：borrow 是借入'), two('易混淆 lend（借出：把東西借給別人）：', 'borrow 是借入'), '括號裡的冒號不算');
+  const one = (text: string): void => { assert.equal(anchorBreak(text), null, text); };
+  one('聯想');
+  one('易混淆 lend（借出：把東西借給別人）');
+  one('「注意：不規則」的動詞');
+  one('口訣：');
+  one('：只有後面');
+  one('過去式：went；過去分詞：gone');
+  one('三點 3:00 上課');
+  one('**go：went**');
+  one('看 [說明](https://example.com)：go');
+  one('第一行：a\n  + 第二行');
 });
 
 void test('D-174 英文句子後面緊接中文翻譯：分成兩行；其他照原文一行', () => {

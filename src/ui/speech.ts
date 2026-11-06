@@ -41,7 +41,11 @@ export function createSpeech(onMissing: () => void): Speech {
   };
 }
 
-/** 自動朗讀開關（D-116）：每台裝置各自記住，存在 Obsidian 的本機儲存（不隨 vault 同步）；沒動過開關的預設開，關過的留在關（D-186）。 */
+/**
+ * 自動朗讀開關（D-116、D-188）：每台裝置各自記住，存在 Obsidian 的本機儲存（不隨 vault 同步）；沒動過開關的預設開，關過的留在關（D-186）。
+ * 存成 'on'／'off' 字串：Obsidian 的 saveLocalStorage 遇到 false 會刪掉那一筆（1.15.0），讀回來和沒動過一樣是開。
+ * 舊版存的 true 照樣是開；舊版的 false 本來就沒存下來。
+ */
 const AUTO_READ_KEY = 'essence-cards-auto-read';
-export function loadAutoRead(app: App): boolean { return app.loadLocalStorage(AUTO_READ_KEY) !== false; }
-export function saveAutoRead(app: App, on: boolean): void { app.saveLocalStorage(AUTO_READ_KEY, on); }
+export function loadAutoRead(app: App): boolean { return app.loadLocalStorage(AUTO_READ_KEY) !== 'off'; }
+export function saveAutoRead(app: App, on: boolean): void { app.saveLocalStorage(AUTO_READ_KEY, on ? 'on' : 'off'); }

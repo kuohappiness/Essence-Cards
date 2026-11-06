@@ -300,8 +300,10 @@ export function Review(props: ReviewProps): React.JSX.Element {
       {top.viewing
         ? <button type="button" className="ec-return" disabled={animating} onClick={toCurrent}>回到目前 <Icon type="forward" /></button>
         : <span className="ec-count" aria-live="polite">{view.kind === 'done' && !top.pinned ? '' : top.center}</span>}
-      {/* 沒有開關時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
-      {english ? <label className="ec-auto"><span>自動朗讀</span><input type="checkbox" role="switch" checked={autoOn} onChange={event => { const on = event.currentTarget.checked; setAutoOn(on); props.autoRead.set(on); }} /><i aria-hidden="true" /></label> : <span aria-hidden="true" />}
+      {/* 自動朗讀的喇叭（D-188）：會自動朗讀的卡才有，點一下關掉或打開，這台裝置記住。沒有時留一格空的，✕ 才會和英文卡一樣貼在右邊 */}
+      {english
+        ? <button type="button" className="ec-ico ec-auto" role="switch" aria-checked={autoOn} aria-label="自動朗讀" onClick={() => { setAutoOn(!autoOn); props.autoRead.set(!autoOn); }}><Icon type={autoOn ? 'speaker' : 'muted'} /></button>
+        : <span aria-hidden="true" />}
       {/* 回報（D-160）：畫面上有卡才有，在 ✕ 左邊；沒有時也留一格空的 */}
       {props.onReport && view.kind === 'card'
         ? <button type="button" className="ec-ico ec-flag" aria-label="回報問題" aria-haspopup="dialog" disabled={animating} onClick={openMenu}><Icon type="flag" /></button>

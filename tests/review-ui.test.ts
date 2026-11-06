@@ -34,7 +34,7 @@ const englishText = [
   '',
 ].join('\n');
 
-interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; flush: () => Promise<void> }
+interface Opened { ui: ReviewUi; session: Session; clock: { now: number }; log: () => string[]; speech: string[]; saved: boolean[]; flush: () => Promise<void> }
 async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; texts?: Record<string, string>; props?: Partial<ReviewProps> } = {}): Promise<Opened> {
   const memory = createMemoryFiles(options.texts ?? { [NATURAL]: naturalText, [ENGLISH]: englishText });
   const clock = { now: START };
@@ -45,15 +45,16 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
   await session.ready();
   const speech: string[] = [];
   let autoOn = options.autoRead ?? false;
+  const saved: boolean[] = [];
   const ui = await renderReview({
     app: {} as App, session, close: () => {}, openLink: () => {}, materials: () => [], owner: () => NO_OWNER, units: () => [],
     speech: { say: texts => { speech.push('say ' + texts.join(' / ')); }, stop: () => { speech.push('stop'); } },
-    autoRead: { get: () => autoOn, set: on => { autoOn = on; } },
+    autoRead: { get: () => autoOn, set: on => { autoOn = on; saved.push(on); } },
     pickedAt: performance.now(),
     ...options.props,
   });
   t.after(() => { ui.unmount(); session.close(); });
-  return { ui, session, clock, speech, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
+  return { ui, session, clock, speech, saved, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
 }
 const lt = (session: Session): string | null => { const view = session.view(); return view.kind === 'card' ? view.card.card.lt : null; };
 /** 翻面（Space），過 0.3 秒按數字鍵自評。 */
@@ -160,11 +161,50 @@ void test('F3 自動朗讀：英翻中的題目一出現就念，沒有被換卡
   o.ui.key('ArrowRight');
   await o.ui.settle();
   assert.equal(o.speech.at(-1), 'stop', '回到目前這張不補播');
-  const toggle = o.ui.find('ec-auto')[0].children.find(child => typeof child !== 'string' && child.type === 'input');
-  assert.ok(toggle && typeof toggle !== 'string');
-  (toggle.props.onChange as (e: unknown) => void)({ currentTarget: { checked: false } });
+  o.ui.click(o.ui.find('ec-auto')[0]);
   await o.ui.settle();
   assert.equal(o.speech.at(-1), 'stop', '關掉開關時停');
+});
+
+/** 上方列的自動朗讀喇叭（D-188）：沒有時是 null，有時是 aria-checked。 */
+const autoSwitch = (o: Opened): unknown => {
+  const [button] = o.ui.find('ec-auto');
+  if (!button) return null;
+  assert.deepEqual([button.type, button.props.role, button.props['aria-label']], ['button', 'switch', '自動朗讀']);
+  return button.props['aria-checked'];
+};
+
+void test('D-188 上方的喇叭：點一下立刻停、之後每張都不念；再點打開，這張不補念，下一張才念', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: true, texts: { [ENGLISH]: englishText } });
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), true);
+  assert.equal(o.speech.at(-1)?.startsWith('say '), true, '開著：英翻中的題目一出現就念');
+  o.ui.click(o.ui.find('ec-auto')[0]);
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), false);
+  assert.equal(o.speech.at(-1), 'stop', '關掉時正在念的立刻停');
+  assert.deepEqual(o.saved, [false], '這台裝置記住關');
+  const said = o.speech.length;
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.ok(o.speech.slice(said).every(item => item === 'stop'), '關著：下一張不念：' + o.speech.slice(said).join(' | '));
+  o.ui.click(o.ui.find('ec-auto')[0]);
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), true);
+  assert.deepEqual(o.saved, [false, true]);
+  assert.ok(o.speech.slice(said).every(item => item === 'stop'), '再打開：這張不補念：' + o.speech.slice(said).join(' | '));
+  revealAndRate(o, '3');
+  await o.ui.settle();
+  assert.equal(o.speech.at(-1)?.startsWith('say '), true, '下一張該念時才念：' + o.speech.join(' | '));
+});
+
+void test('D-188 關著打開複習：喇叭是關的樣子，第一張不念；自然卡沒有喇叭', async t => {
+  const o = await open(t, { subject: '英文' }, { autoRead: false, texts: { [ENGLISH]: englishText } });
+  await o.ui.settle();
+  assert.equal(autoSwitch(o), false);
+  assert.ok(o.speech.every(item => item === 'stop'), o.speech.join(' | '));
+  const natural = await open(t, { subject: '自然' });
+  assert.equal(autoSwitch(natural), null);
 });
 
 void test('F7 第 2 步拼對：打勾與答案（寫在線上的那一個）；回看時照舊顯示第 1 步打的字與比對', async t => {
@@ -331,14 +371,27 @@ void test('D-158 照打送出一次還是不對之後，「確認」旁邊出現
 
 const twoCards = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off', ''].join('\n');
 
-void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文（重複的只念一次）', async t => {
+// D-184：不寫「記憶錨點」四個字，內容前面一個燈泡（螢幕閱讀器念「記憶提示」）；補充（使用者 2026-11-06）：冒號後面換行，喇叭在第二行最後。
+void test('D-184 記憶錨點：燈泡加內容，冒號後面換行，喇叭念整項的英文（重複的只念一次）', async t => {
   const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 記憶錨點：go 的過去式不規則：go → went → gone', ''].join('\n');
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
   o.session.input('went'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['記憶錨點']);
-  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).at(-1), 'go 的過去式不規則：go → went → gone');
-  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone']);
+  assert.deepEqual(o.ui.find('ec-ex-label'), [], '不寫「記憶錨點」');
+  assert.deepEqual(o.ui.find('ec-bulb').map(bulb => [bulb.props.role, bulb.props['aria-label']]), [['img', '記憶提示']]);
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-2), ['go 的過去式不規則：', 'go → went → gone']);
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone'], '第一行沒有喇叭，第二行念整項');
+});
+
+void test('D-184 記憶錨點沒有可以換行的冒號：燈泡加一行；例句照舊有名稱、沒有燈泡', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 記憶錨點：易混淆 come（來）', '    - 例句：She went home. 她回家了。', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句：']);
+  assert.equal(o.ui.find('ec-bulb').length, 1);
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-3), ['易混淆 come（來）', 'She went home.', '她回家了。']);
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 come', '朗讀 She went home.']);
 });
 
 void test('D-174 例句的英文和中文翻譯各一行，喇叭在英文那一行', async t => {
@@ -346,7 +399,7 @@ void test('D-174 例句的英文和中文翻譯各一行，喇叭在英文那一
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
   o.session.input('went'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句']);
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句：']);
   assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-2), ['She went home.', '她回家了。']);
   assert.deepEqual(o.ui.find('ec-ex-row').length, 2);
   assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 She went home.']);

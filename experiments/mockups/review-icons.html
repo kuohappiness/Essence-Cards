@@ -1,0 +1,129 @@
+<title>複習畫面的燈泡與喇叭</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 版面：說明在上，四個 375 寬的 iPhone 畫面並排（窄時一欄）。顏色照 src/ui/tokens.css；畫面本身固定淺色或深色，不跟頁面主題 */
+:root {
+  --bg: #F1F1EE; --fg: #1D1F23; --sub: #5E636B; --frame: #D8D8D3;
+  --ui: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1A1B1D; --fg: #E6E7E9; --sub: #A0A5AD; --frame: #34363A; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #1A1B1D; --fg: #E6E7E9; --sub: #A0A5AD; --frame: #34363A; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--ui); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 48px; }
+.intro { max-width: 68ch; }
+.intro h1 { font-size: 22px; margin: 0 0 8px; text-wrap: balance; }
+.intro p, .intro li { color: var(--sub); }
+.intro ul { padding-left: 1.2em; margin: 6px 0 0; }
+.grid { display: flex; flex-wrap: wrap; gap: 28px 24px; margin-top: 28px; }
+figure { margin: 0; width: 375px; max-width: 100%; }
+figcaption { font-size: 14px; color: var(--sub); margin-bottom: 8px; min-height: 2.8em; }
+figcaption b { color: var(--fg); }
+
+/* 一個 iPhone 畫面：照 Review.css 的 .ec-app */
+.ec-app { --ec-page: #FAFAF9; --ec-ink: #1D1F23; --ec-muted: #6A6F77; --ec-line: #E5E5E2; --ec-press: #ECEFF4; --ec-key: #7A5BC7; --ec-good: #17693A;
+  height: 640px; border: 1px solid var(--frame); border-radius: 28px; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: 15px/1.5 var(--ui); display: flex; flex-direction: column; }
+.ec-app.dark { --ec-page: #121314; --ec-ink: #E6E7E9; --ec-muted: #959AA2; --ec-line: #2A2C30; --ec-press: #263043; --ec-key: #B69CF5; --ec-good: #68D398; }
+.ec-app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
+.ico { width: 44px; height: 44px; display: inline-grid; place-items: center; color: var(--ec-muted); border-radius: 12px; }
+.ec-top { display: grid; grid-template-columns: 44px 1fr auto auto 44px; align-items: center; padding: 30px 10px 0; }
+.ec-count { text-align: center; font-size: 14px; color: var(--ec-muted); }
+/* 自動朗讀：開著是一般文字的顏色，關著變灰 */
+.ec-auto { cursor: pointer; }
+.ec-auto[aria-checked="true"] { color: var(--ec-ink); }
+.ec-auto[aria-checked="false"] { color: var(--ec-muted); opacity: .75; }
+.ec-prog { height: 2px; margin-top: 6px; background: var(--ec-line); }
+.ec-prog i { display: block; height: 100%; width: 38%; background: var(--ec-muted); }
+.ec-stage { flex: 1; padding: 30px 26px 16px; overflow: hidden; }
+.ec-meta { font-size: 13px; color: var(--ec-muted); }
+.ec-q { margin-top: 18px; font-size: 24px; line-height: 1.8; font-weight: 500; }
+.ec-line { border-bottom: 2px solid var(--ec-ink); padding: 0 4px; color: var(--ec-key); }
+.say { display: inline-grid; place-items: center; width: 38px; height: 38px; vertical-align: middle; margin: -10px 0 -8px 2px; color: var(--ec-muted); }
+.ec-answer { margin-top: 48px; font-size: 19px; }
+.ec-spell { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.ok { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--ec-press); }
+.word { font-weight: 500; letter-spacing: .03em; }
+.ec-a { line-height: 1.75; }
+.ec-ex { margin-top: 20px; font-size: 16px; line-height: 1.6; color: var(--ec-muted); }
+.ec-ex-item + .ec-ex-item { margin-top: 10px; }
+.ec-ex-label { font-size: inherit; }
+/* 記憶錨點：燈泡接在內容前面，其他行和內容對齊 */
+.ec-ex-item.is-anchor { display: flex; gap: 6px; }
+.ec-bulb { flex: none; height: 1.6em; display: grid; place-items: center; color: var(--ec-muted); }
+.ec-ex-body { min-width: 0; }
+.note { font-size: 12px; color: var(--sub); margin-top: 8px; }
+</style>
+
+<section class="intro">
+  <h1>複習畫面：記憶錨點的燈泡、自動朗讀的喇叭</h1>
+  <p>D-184 與 D-188 的樣子，寬 375（iPhone）。顏色照外掛現在的設計規範。</p>
+  <ul>
+    <li><b>燈泡</b>：取代「記憶錨點」那一行，和旁邊的灰字一樣深、比字大一點，內容接在後面；有冒號時在冒號後面換行，喇叭在第二行最後（使用者 2026-11-06）。例句、詳解照舊。</li>
+    <li><b>上方的喇叭</b>：取代「自動朗讀」文字加開關。開著有聲波、一般文字的顏色；關掉時聲波換成 ×、變灰。</li>
+    <li>句子後面的小喇叭不變。</li>
+  </ul>
+</section>
+
+<div class="grid">
+  <figure>
+    <figcaption><b>A. 英文卡，自動朗讀開著</b>：上方是喇叭加聲波；記憶錨點前面是燈泡。</figcaption>
+    <div class="ec-app"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="true" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">英文 › 國二上 › L2</div>
+    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    <div class="ec-answer">
+      <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>go 的過去式不規則：</div><div>go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
+        <div class="ec-ex-item"><div class="ec-ex-label">例句：</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
+      </div>
+    </div></div></div>
+  </figure>
+  <figure>
+    <figcaption><b>B. 同一張，點一下關掉</b>：聲波換成 ×、變灰；句子後面的小喇叭照舊能按。</figcaption>
+    <div class="ec-app"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="false" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">英文 › 國二上 › L2</div>
+    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    <div class="ec-answer">
+      <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>go 的過去式不規則：</div><div>go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
+        <div class="ec-ex-item"><div class="ec-ex-label">例句：</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
+      </div>
+    </div></div></div>
+  </figure>
+  <figure>
+    <figcaption><b>C. 深色模式</b>，自動朗讀開著。</figcaption>
+    <div class="ec-app dark"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="true" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">英文 › 國二上 › L2</div>
+    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    <div class="ec-answer">
+      <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>go 的過去式不規則：</div><div>go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
+        <div class="ec-ex-item"><div class="ec-ex-label">例句：</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
+      </div>
+    </div></div></div>
+  </figure>
+  <figure>
+    <figcaption><b>D. 解釋分成兩行</b>（之後的接句卡，D-185 第 4 點）：燈泡只在第一行，第二行和內容對齊。</figcaption>
+    <div class="ec-app"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="true" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">國語 › 五上 › 第 7 課 › 靜夜思</div>
+    <div class="ec-q">床前明月光，<br><span class="ec-line">疑是地上霜</span>。</div>
+    <div class="ec-answer">
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>月光照在床前，白白一片。</div><div>看起來像地上結了一層霜。</div></div></div>
+      </div>
+    </div></div></div>
+  </figure>
+</div>
+
