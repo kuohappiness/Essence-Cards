@@ -5,7 +5,7 @@
 - **怎麼維護**：功能做完、做了一部分，或 [roadmap](roadmap.md#已完成) 的「已完成」加一列時，把這裡對應那一列的符號改掉；有新功能就在對應的模組加一列。數字、進度條和圖都由程式算，不手寫。
 - **符號**：🟢 做完　🟡 做了一部分　⚪ 還沒開工（以上是 v1）　🔵 v1 之後。
 - **格式**：`##` 是流程的一段，下一行一句話說這段做什麼；`###` 是模組；功能寫在模組底下的表格，一列一項：符號、功能、現況（一句話，可以加連結）。功能的說明不在這裡重寫，留在 [product.md](product.md#5-範圍-第-7-步) 與 [backlog](backlog.md)。
-- **網頁**：`main` 上這份有變動時，GitHub Actions 用 `tools/progress-board.ts` 產生網頁、發布到 GitHub Pages（<https://kuohappiness.github.io/Essence-Cards/>）。網頁不進 repo，AI 不用讀。本機預覽：`npm run progress-board`，輸出在 `_site/index.html`。
+- **網頁**：`main` 上這份有變動時，GitHub Actions 用 `tools/progress-board.ts` 產生網頁、發布到 GitHub Pages：[清單](https://kuohappiness.github.io/Essence-Cards/progress-map-list.html)、[畫布](https://kuohappiness.github.io/Essence-Cards/progress-map-board.html)（可拖、可縮放，越放大越細），兩頁同一份資料。網頁不進 repo，AI 不用讀。本機預覽：`npm run progress-board`，輸出在 `_site/`。
 
 ## 教材
 

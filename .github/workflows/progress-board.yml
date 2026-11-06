@@ -1,4 +1,4 @@
-# 開發進度畫板：docs/progress-map.md 改了就產生網頁、發布到 GitHub Pages（https://kuohappiness.github.io/Essence-Cards/）。
+# 開發進度畫板：docs/progress-map.md 改了就產生網頁、發布到 GitHub Pages（清單 progress-map-list.html、畫布 progress-map-board.html，在 https://kuohappiness.github.io/Essence-Cards/ 底下）。
 # 網頁只在這裡產生、直接發布，不 commit 進 repo。第一次要在 repo 的 Settings → Pages 把 Source 設成 GitHub Actions。
 name: Progress board
 on:
@@ -6,7 +6,7 @@ on:
     branches: [main]
     paths:
       - docs/progress-map.md
-      - tools/progress-board.ts
+      - tools/progress-board*.ts
       - .github/workflows/progress-board.yml
   workflow_dispatch:
 

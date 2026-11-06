@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { MAP, MapError, count, parseMap, percent, renderBoard } from '../tools/progress-board.ts';
+import { REDIRECT } from '../tools/progress-board.ts';
+import { renderCanvas } from '../tools/progress-board-canvas.ts';
+import { BOARD_PAGE, LIST_PAGE, MAP, MapError, count, parseMap, percent } from '../tools/progress-board-data.ts';
+import { renderList } from '../tools/progress-board-list.ts';
 
 const SAMPLE = `# 標題
 
@@ -65,9 +68,23 @@ void test('完成度：做完算 1、一部分算一半、v1 之後不算', () =
   assert.deepEqual(count(parseMap(SAMPLE)[0].modules[0].items), { done: 1, part: 1, todo: 1, later: 1 });
 });
 
-void test('網頁帶出總完成度與段名，段名會跳脫', () => {
-  const html = renderBoard(parseMap(SAMPLE.replace('## 製卡', '## 製卡<b>')), { updated: '2026/11/6 13:00', commit: '0123456789abcdef' });
+void test('清單頁帶出總完成度與段名，段名會跳脫，並連到畫布頁', () => {
+  const html = renderList(parseMap(SAMPLE.replace('## 製卡', '## 製卡<b>')), { updated: '2026/11/6 13:00', commit: '0123456789abcdef' });
   assert.match(html, /<span class="big">50<small>%<\/small><\/span>/);
   assert.match(html, /製卡&#60;b&#62;/);
   assert.match(html, /commit\/0123456789abcdef">0123456/);
+  assert.ok(html.includes(`href="${BOARD_PAGE}"`));
+});
+
+void test('畫布頁每項一張便利貼，項目資料裡的 </script> 不會提早結束 script', () => {
+  const source = SAMPLE.replace('| 🟡 | 標示結構 | `第四批` |', '| 🟡 | 標示結構 | 寫了 &lt;/script&gt; 也沒事 |').replace('## 製卡', '## 製卡</script>');
+  const html = renderCanvas(parseMap(source), { updated: '2026/11/6 13:00' });
+  assert.equal(html.match(/<button class="pin /g)?.length, 4);
+  assert.equal(html.match(/<\/script>/g)?.length, 1);
+  assert.ok(html.includes(`href="${LIST_PAGE}"`));
+});
+
+void test('根網址轉到清單頁', () => {
+  assert.ok(REDIRECT.includes(`url=${LIST_PAGE}`));
+  assert.ok(REDIRECT.includes(`location.replace('${LIST_PAGE}'`));
 });
