@@ -1,6 +1,6 @@
 # 小考標記（D-189 第 4、5 點，給 Claude，本機執行）
 
-狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`f37b6ce`）；Codex L2 第四輪通過（R1～R9 都修了，[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md#codex-再審第四輪2026-11-06>)），等使用者同意合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
+狀態：已合併進 `main`（2026-11-06，使用者同意）；Codex L2 四輪後通過（R1～R9 都修了，[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md#codex-再審第四輪2026-11-06>)）；Windows 實機通過，iPhone 併入下一次實機測試。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。多一種外掛會寫的檔、入口與目錄的畫面，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1 是新的檔案格式，開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -108,7 +108,7 @@
 
 ## 結果
 
-分支 `claude/quiz-mark-354478`，基準 `1c4cb43`。第一輪待審 `be14a85`（併 `main`，只帶進文件）；L2 第一輪的修正到 `c513cee`，見下面〈L2 第一輪之後〉。還沒合併。
+分支 `claude/quiz-mark-354478`，基準 `1c4cb43`。第一輪待審 `be14a85`（併 `main`，只帶進文件）；L2 第一輪的修正到 `c513cee`，見下面〈L2 第一輪之後〉。2026-11-06 合併進 `main`，見最後的〈合併〉。
 
 | commit | 內容 |
 |---|---|
@@ -184,4 +184,12 @@ Codex 第一輪（[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-r
 
 通過，沒有新的發現。Codex 在沙箱外跑 `f37b6ce` 的 `npm run check` 通過（1652 項），另用 Obsidian 1.15.0 的 `getLinkpathDest` 隔離核對 R8（附件、NFC／NFD、索引還沒就緒），用真的 React 核對 R9 的三種情況。沒親測的：真實同步時的索引時序、iPhone。
 
-**還沒做**：使用者同意合併、roadmap 的最近完成。
+### 合併
+
+使用者 2026-11-06 同意合併。先把 `main`（題型接點與點選填空）併進分支（`a2a11f3`）：`src/state/index.ts` 的 `unread` 加小考檔、`deckStatus` 帶版本標記，兩邊都留；backlog、roadmap 的狀態列兩邊合起來。
+
+**完整檢查**：`a2a11f3` 的 `npm run check` 通過（測試 1855 項全部通過，242 秒）。
+
+**Windows 實機**：建置 `0.4.0+a2a11f3`。`quiz-mark`（`Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 132554.json`）和 `f37b6ce` 那一次（110619）只差隨機的值（試跑記號、小考識別碼、截圖資料夾的時間）。
+
+**還沒做**：iPhone（併入下一次實機測試）。
