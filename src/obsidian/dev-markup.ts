@@ -137,14 +137,19 @@ export async function markupCheck(app: App, wiring: IdsWiring | null, folder: st
     await sleep(300);
     out.commandOpens = !!form();
     // 改到筆記時表單關掉（打字照常進編輯器）。
-    cm.dispatch({ changes: { from: cm.state.selection.main.head, insert: 'X' }, userEvent: 'input.type' });
+    // 只送 changes 時游標留在插入的字前面：刪掉的是剛插入的那一個字，不是游標前一個（第一次實測刪錯了字）。
+    const typedAt = cm.state.selection.main.head;
+    cm.dispatch({ changes: { from: typedAt, insert: 'X' }, userEvent: 'input.type' });
     await sleep(200);
     out.editCloses = !form();
-    cm.dispatch({ changes: { from: cm.state.selection.main.head - 1, to: cm.state.selection.main.head }, userEvent: 'delete.backward' });
+    cm.dispatch({ changes: { from: typedAt, to: typedAt + 1 }, userEvent: 'delete.backward' });
+    out.restored = cm.state.doc.toString() === DECK;
     const noteLine = cm.state.doc.toString().split('\n').findIndex(text => text.startsWith('- 老師說')) + 1;
     cm.dispatch({ selection: { anchor: cm.state.doc.line(noteLine).from + 3 }, userEvent: 'select' });
-    out.commandOnNote = commands.executeCommandById('essence-cards:fill-source');
+    // executeCommandById 的回傳值不代表可用（第一次實測在一般筆記也是 true）：看表單有沒有打開。
+    commands.executeCommandById('essence-cards:fill-source');
     await sleep(200);
+    out.commandOnNoteOpens = !!form();
     document.querySelector('.essence-cards-source-form')?.remove();
     // 原始碼模式。
     const state = leaf.getViewState();

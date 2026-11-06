@@ -77,7 +77,7 @@
 .essence-cards-place input { width: 96px; }
 .essence-cards-place input.is-invalid { border-color: var(--text-error); }
 .essence-cards-wide { width: 100%; }
-.essence-cards-more { height: auto; padding: 2px 0; background: none; box-shadow: none; color: var(--text-muted); }
+.essence-cards-more { height: auto; padding: 2px 0; border: 0; background: none; box-shadow: none; color: var(--text-muted); }
 .essence-cards-more:hover { color: var(--text-accent); background: none; }
 .essence-cards-source-form-out { display: grid; gap: 2px; padding-top: var(--size-4-2); border-top: 1px solid var(--background-modifier-border); }
 .essence-cards-source-form-key { margin-inline-end: 6px; color: var(--text-muted); }
