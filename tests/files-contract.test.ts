@@ -33,8 +33,10 @@ void test('Files 契約抓得到壞掉的實作', async t => {
   const broken: Record<string, Files> = {
     C1: { ...good, list: async folder => (await good.list('')).filter(path => path.startsWith(folder)) },
     // 內容沒變也照寫。
-    C6: { ...good, modify: async (path, edit) => { await writeFile(join(root, path), edit(await good.read(path) ?? '')); } },
+    C6: { ...good, modify: async (path, edit) => { const old = await good.read(path); await writeFile(join(root, path), edit(old ?? '', old !== null)); } },
     C9: { ...good, append: (path, line) => good.modify(path, text => text + line) },
+    // 用內容猜在不在：零位元組的檔被當成不存在。
+    C19: { ...good, modify: (path, edit) => good.modify(path, text => edit(text, text !== '')) },
     // 讀和寫分開，同時呼叫時互相蓋掉。
     C11: { ...good, append: (path, line) => good.read(path).then(text => good.modify(path, () => (text ?? '') + line + '\n')) },
     C12: { ...good, watch: () => () => {} },

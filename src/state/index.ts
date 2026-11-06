@@ -2,12 +2,15 @@ import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
 import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
-import type { Catalog, CatalogIndex, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
-export type { Catalog, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
+import type { Catalog, CatalogIndex, QuizInput, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
+export type { Catalog, QuizInput, QuizProblem, QuizRef, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
 import { createExamFiles } from './exam.ts';
 import type { ExamBlocked, ExamChange, ExamResult } from './exam.ts';
 export type { ExamChange, ExamResult } from './exam.ts';
+import { createQuizFiles } from './quiz.ts';
+import type { QuizOpened, QuizResult } from './quiz.ts';
+export type { QuizOpened, QuizResult } from './quiz.ts';
 import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
@@ -57,6 +60,11 @@ export interface StateOptions {
   random?: () => number;
   /** 等一次寫進磁碟（編輯器的 persist、modify）最多多久（毫秒），預設 10_000；超過就當成失敗、放行後面的寫入。 */
   writeTimeout?: number;
+  /**
+   * 小考檔的連結指向哪一篇（tasks/quiz-mark.md §1）：真的解析在 Obsidian，由外層傳進來，state 不碰 Obsidian。沒傳時只認完整路徑。
+   * from 是那份小考檔的路徑（相對路徑要用）。
+   */
+  resolveLink?: (link: string, from: string) => QuizResolved;
 }
 export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
 /**
@@ -105,9 +113,9 @@ export interface State {
    */
   ready(): Promise<LoadTimings>;
   /**
-   * 列出來或通知過、但最近一次讀不到的路徑（卡組、紀錄與範圍檔），以及讀取一直沒回來（stuckAfter）的路徑，照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
+   * 列出來或通知過、但最近一次讀不到的路徑（卡組、紀錄、範圍檔與小考檔），以及讀取一直沒回來（stuckAfter）的路徑，照字串排序；自己隔一段時間重試，讀到或不存在了就拿掉。
    * 卡組與紀錄有讀不到的時候占用資訊不完整，補 ID、還原、當成新的都暫停（save、resolve 回 blocked unread，fillIds 回傳 false；
-   * D-134 不能把「不知道」當成「沒用過」）；只有範圍檔讀不到不擋（tasks/exam-scope.md §4）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
+   * D-134 不能把「不知道」當成「沒用過」）；只有範圍檔與小考檔讀不到不擋（tasks/exam-scope.md §4）。代價：家長在一篇卡組還沒下載好時存檔或離開筆記，這次不補 ID，
    * 要再存一次或再離開一次（和 D-134 已列的「一直開著、忘記存檔」同一類）。
    */
   unread(): readonly string[];
@@ -173,6 +181,12 @@ export interface State {
   setExam(change: ExamChange, opened: ExamTarget): Promise<ExamResult>;
   /** 結束這次考試（§2-2）：選定的那一份多一行 `提前結束`，立刻失效；還有另一份生效就換它接手。擋下來的原因同 setExam。 */
   endExam(opened: ExamTarget): Promise<ExamResult>;
+  /** 現在要顯示的小考（tasks/quiz-mark.md §1、§4），照日期、科目、名稱排；還沒 ready 是空的。不改排程：今天的份不看這裡。 */
+  quizzes(): readonly QuizRow[];
+  /** 設定小考或改日期（§1）：opened 是 null 時建新檔，否則改那一次小考每一份的 `小考日期`。擋下來的原因：closed、loading；小考檔還不知道或有讀不到的是 unread；檔不見、已經取消、換成另一次小考是 changed；屬性區壞了是 broken；special 是寫不出來的目標。 */
+  setQuiz(input: QuizInput, date: string, opened: QuizOpened | null): Promise<QuizResult>;
+  /** 取消這次小考（§1）：多一行 `取消`，檔案留著。擋下來的原因同 setQuiz。 */
+  cancelQuiz(opened: QuizOpened): Promise<QuizResult>;
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫；考試範圍只改了看不懂的行數這類只影響畫面的，也會呼叫但不重排。 */
   onChange(listener: () => void): () => void;
   /** unread() 的內容變了（多了或少了）；另外一條，不經 onChange，所以存檔按鈕不多更新一次（任務說明 §8、§11）。 */
@@ -277,6 +291,25 @@ export function createState(options: StateOptions): State {
     changed: examChanged,
     unreadChanged,
     logged: val => { record({ set: 'exam', val }); },
+  });
+  const quiz = createQuizFiles({
+    files, delay, stuckAfter, writeTimeout, random: options.random, wait: EXAM_WAIT,
+    onError: error => { report(error, 'read'); },
+    changed: () => { if (life.loaded) notifyChange(); },
+    unreadChanged,
+    loaded: () => life.loaded,
+    context() {
+      const at = now();
+      return {
+        day: dayOf(at, offsetOf(at)),
+        index: catalogIndex(),
+        known(path) {
+          const deck = deckMap.get(path);
+          return deck && !deck.props.isTranscript ? { subject: deck.props.subject } : null;
+        },
+        resolve: options.resolveLink ?? (link => deckMap.has(link + '.md') ? { kind: 'file', path: link + '.md' } : { kind: 'none' }),
+      };
+    },
   });
 
   // 原始紀錄每一行的 lt 由紀錄模組算（history.seen，技術債 A1）；tracker 要 Set，照 history 物件的身分快取一個。
@@ -551,7 +584,7 @@ export function createState(options: StateOptions): State {
   const loadQueue = (paths: string[]): Promise<void> => reads.queue(() => reads.read(paths)).catch((error: unknown) => { queueFailed = true; throw error; });
   async function load(begin: number, deckPaths: string[], logPaths: string[]): Promise<LoadTimings> {
     // 範圍檔同時開始讀，正常情況第一次就排對；一直沒回來也不卡住 ready()（§4）。
-    const examRead = exam.settle(EXAM_WAIT);
+    const examRead = Promise.all([exam.settle(EXAM_WAIT), quiz.settle(EXAM_WAIT)]);
     // 卡組一批、紀錄一批（自己的紀錄也讀），和之後的檔案變動走同一個 read。
     await loadQueue(deckPaths);
     const afterDecks = performance.now();
@@ -603,7 +636,7 @@ export function createState(options: StateOptions): State {
       });
       return loading;
     },
-    unread: () => [...new Set([...unread, ...exam.unread])].sort(),
+    unread: () => [...new Set([...unread, ...exam.unread, ...quiz.unread])].sort(),
     deckStatus(path) {
       if (!life.loaded) return { missing: 0, issues: [], malformed: [] };
       if (gated.includes(path)) return { missing: 0, issues: [], malformed: [], needsUpdate: true };
@@ -706,6 +739,9 @@ export function createState(options: StateOptions): State {
     endExam(opened) {
       return examWrite(opened, (chosen, day, admit) => chosen ? exam.update(chosen.path, opened.id, { ended: scopeDate(day) }, [], admit) : Promise.resolve({ kind: 'blocked', reason: 'changed' }));
     },
+    quizzes: () => life.loaded ? quiz.rows() : [],
+    setQuiz: (input, date, opened) => quiz.set(input, date, opened),
+    cancelQuiz: opened => quiz.cancel(opened),
     onChange(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
@@ -725,11 +761,13 @@ export function createState(options: StateOptions): State {
       life.closed = true;
       reads.stop();
       exam.stop();
+      quiz.stop();
       // 寫成、等核對的工作回 saved（已寫進磁碟的內容下次載入照實讀回）；在寫的那一份等結果明確，最多 writeTimeout（§5）。
       writes.stop();
       await writes.idle();
       // 範圍檔也一樣（Codex L2 的 R14）：寫成了紀錄要跟著寫進去；每次寫最多 writeTimeout，之後才寫成的不記。
       await examWrites;
+      await quiz.idle();
       await reads.idle();
       await writer.flush();
     },

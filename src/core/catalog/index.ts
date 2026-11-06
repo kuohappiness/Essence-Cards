@@ -10,6 +10,9 @@ import type { ScopeFile } from './scope.ts';
 
 export { chooseScope, editScope, EXAM_FOLDER, isExamPath, lastEnded, newScopeText, notEnded, parseExamFile, parseScope, readDate, scopeDate, scopeDay, scopeFileName, scopePeriod, scopeUnitKeys, scopeWritable, unitInScope } from './scope.ts';
 export type { ScopeChange, ScopeFile, ScopePeriod, ScopeUnit } from './scope.ts';
+export { QUIZ_FOLDER } from './scope.ts';
+export { editQuiz, isQuizFile, newQuizText, parseQuiz, quizFileName, quizInputSame, quizLine, quizLink, quizRows } from './quiz.ts';
+export type { QuizContext, QuizFile, QuizInput, QuizProblem, QuizRef, QuizResolved, QuizRow } from './quiz.ts';
 export { scopeAfter, scopeCheck, scopeCountdown, scopeDates, scopeHasSubject, scopeLabels, scopeNotes, scopeRows, scopeStartDate, targetsInScope } from './scope-view.ts';
 export type { ScopeCheck, ScopeRow, ScopeRowTerm } from './scope-view.ts';
 

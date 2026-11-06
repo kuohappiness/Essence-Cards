@@ -150,7 +150,7 @@ function blankHistory(files: Files): Files {
     modify: async (path, edit) => {
       if (!isLogPath(path)) return files.modify(path, edit);
       const before = logs.get(path) ?? '';
-      const after = edit(before);
+      const after = edit(before, logs.has(path));
       if (after !== before) logs.set(path, after);
     },
     append: async (path, line) => {
@@ -385,9 +385,10 @@ export async function openTimes(host: ReviewHost): Promise<unknown> {
 interface Contents {
   capturePage(): Promise<{ toPNG(): Uint8Array }>;
   setBackgroundThrottling?(allowed: boolean): void;
-  sendInputEvent?(event: { type: 'keyDown' | 'keyUp'; keyCode: string; modifiers?: string[] }): void;
+  sendInputEvent?(event: { type: 'keyDown' | 'keyUp' | 'char'; keyCode: string; modifiers?: string[] }): void;
+  focus?(): void;
 }
-function webContents(): Contents | null {
+export function webContents(): Contents | null {
   if (!Platform.isDesktopApp) return null;
   const load = (window as unknown as { require?: (name: string) => unknown }).require;
   const electron = load?.('electron') as { remote?: { getCurrentWebContents(): Contents } } | undefined;

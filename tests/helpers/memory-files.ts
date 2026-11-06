@@ -96,7 +96,7 @@ export function createMemoryFiles(initial: Record<string, string> = {}): MemoryF
       location(path);
       return serial(path, () => {
         const old = texts.get(path) ?? '';
-        const next = edit(old);
+        const next = edit(old, texts.has(path));
         if (control.failModify) throw Error('寫不進去');
         if (!(texts.has(path) && old === next)) set(path, next);
         const held = heldModifies.get(path);

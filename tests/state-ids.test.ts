@@ -40,7 +40,7 @@ async function setup(t: TestContext, vault: Record<string, string>, options: Par
   const memory = createMemoryFiles(vault);
   for (const path of unread) memory.failing.add(path);
   const modifies: string[] = [];
-  const files = { ...memory.files, modify: (path: string, edit: (text: string) => string) => { modifies.push(path); return memory.files.modify(path, edit); } };
+  const files = { ...memory.files, modify: (path: string, edit: (text: string, exists: boolean) => string) => { modifies.push(path); return memory.files.modify(path, edit); } };
   const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: true, random: () => 0,
     now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480, ...options });
   t.after(() => state.close());

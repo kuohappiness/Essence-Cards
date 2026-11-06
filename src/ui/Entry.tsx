@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { catalogView, entryView, examRow, examSubject, reminderView } from '../review/index.ts';
-import type { Catalog, DeckStatusValue, State, StudyPick, UnitView } from '../state/index.ts';
+import { catalogView, entryView, examRow, examSubject, quizButton, quizViews, reminderView } from '../review/index.ts';
+import type { Catalog, DeckStatusValue, QuizRef, State, StudyPick, UnitView } from '../state/index.ts';
 import { Icon } from './entry-icon.tsx';
 import { ExamScope } from './ExamScope.tsx';
+import { QuizButton, QuizEntryRow } from './Quiz.tsx';
 import type { TermOpen } from './prefs.ts';
 
 // 入口與目錄（D-095、D-097、D-163）：同一個全螢幕裡切換，不開第二層；資料都來自 review 與 state，畫面不自己算。
@@ -36,6 +37,8 @@ export interface EntryProps {
   notify: (message: string) => void;
   /** 暫停或恢復一篇，回傳要提示的字（D-183 第 6 點）：只有電腦有，手機不寫卡組（D-142 第 4 點）。 */
   setDeckStatus?: (path: string, value: DeckStatusValue) => Promise<string | null>;
+  /** 設定頁的「小考標記」（tasks/quiz-mark.md §2）：只管目錄的小考按鈕，入口那一列不看它。 */
+  quizMark: () => boolean;
 }
 
 const NOTHING_TODAY = '今天沒有要複習的卡';
@@ -65,6 +68,7 @@ function Home(props: EntryProps): React.JSX.Element {
   const state = props.state();
   const view = entryView(state);
   const ready = view.kind === 'ready';
+  const quizzes = ready ? quizViews(state) : [];
   return <>
     <div className="ec-en-top">
       <p className={'ec-en-today' + (ready && view.finished ? ' is-done' : '')}>
@@ -78,8 +82,8 @@ function Home(props: EntryProps): React.JSX.Element {
     </div>
     <div className="ec-en-scroll">
       {view.kind === 'loading' && <p className="ec-en-none">正在讀取卡組…</p>}
-      {ready && !view.rows.length && <p className="ec-en-none">{NOTHING_TODAY}</p>}
-      {ready && view.rows.length > 0 && <div className="ec-sb-list">
+      {ready && (quizzes.length > 0 || view.rows.length > 0) && <div className="ec-sb-list">
+        {quizzes.map(row => <QuizEntryRow key={row.key} row={row} {...props} />)}
         {view.rows.map(row => <div key={row.name} className={'ec-sb' + (row.finished ? ' is-done' : '')}>
           <span className="ec-sb-left">
             <span className="ec-en-l1"><span className="ec-en-name">{row.name}</span><span className="ec-en-n">{row.done}/{row.total}</span></span>
@@ -92,6 +96,7 @@ function Home(props: EntryProps): React.JSX.Element {
           <i className="ec-sb-bar" aria-hidden="true"><i style={{ width: String(row.total ? row.done / row.total * 100 : 0) + '%' }} /></i>
         </div>)}
       </div>}
+      {ready && !view.rows.length && <p className="ec-en-none">{NOTHING_TODAY}</p>}
       {ready && view.more && <button type="button" className="ec-en-more" onClick={() => { props.start({ more: true }); }}>再複習一些</button>}
       <ExamRow {...props} />
       <button type="button" className="ec-en-row" onClick={() => { props.store.go('catalog'); }}><span>目錄</span><Icon type="next" size={18} /></button>
@@ -227,7 +232,8 @@ function deckLabel(deck: UnitView['decks'][number], decks: UnitView['decks']): s
   return `${deck.name}（${deck.path.split('/').at(-2) ?? ''}）`;
 }
 
-function UnitRow({ unit, openUnits, toggle, start, openNote, state, notify, setDeckStatus }: TreeProps & { unit: UnitView }): React.JSX.Element {
+function UnitRow(props: TreeProps & { unit: UnitView }): React.JSX.Element {
+  const { unit, openUnits, toggle, start, openNote, state, notify, setDeckStatus, quizMark } = props;
   const active = unit.status === 'active';
   const practiced = unit.decks.filter(deck => deck.status === 'active');
   // 兩篇以上啟用才有單篇的全部卡（D-189 第 3 點）：只有一篇時，單元的全部卡就是那一篇。
@@ -238,7 +244,11 @@ function UnitRow({ unit, openUnits, toggle, start, openNote, state, notify, setD
     const value = deck.status === 'paused' ? '啟用' : '暫停';
     return <button type="button" className="ec-u-btn is-quiet" onClick={() => { void setDeckStatus(deck.path, value).then(tip => { if (tip) notify(tip); }); }}>{value === '啟用' ? '恢復' : '暫停'}</button>;
   };
-  const listed = several ? practiced : practiced.filter(deck => statusButton(deck));
+  const marks = quizMark();
+  /** 這一篇的小考按鈕（§3）：兩篇以上啟用才有；只剩一篇時，手寫或之前設的小考還是找得到。草稿、暫停的篇沒有。 */
+  const deckRef = (deck: UnitView['decks'][number]): QuizRef => ({ deck: deck.path });
+  const deckQuiz = (deck: UnitView['decks'][number]): boolean => marks && (several || quizButton(state(), deckRef(deck)).kind !== 'none');
+  const listed = several ? practiced : practiced.filter(deck => statusButton(deck) || deckQuiz(deck));
   // 全部是草稿或暫停：點了打開筆記（§3）；好幾篇時展開箭頭列出全部。
   const expandable = active || unit.decks.length > 1 || unit.problems.length > 0;
   const open = openUnits.has(unit.key) && expandable;
@@ -255,6 +265,9 @@ function UnitRow({ unit, openUnits, toggle, start, openNote, state, notify, setD
       {open && active && <span className="ec-tr-ub">
         <button type="button" className="ec-u-btn" disabled={unit.today === 0} onClick={() => { start({ unit: unit.key }); }}><Icon type="play" size={12} />當日卡 {unit.today}</button>
         <button type="button" className="ec-u-btn" disabled={unit.targets.length === 0} onClick={() => { start({ unit: unit.key, since: Date.now() }); }}><Icon type="play" size={12} />全部卡 {unit.targets.length}</button>
+        {marks && (unit.code === null
+          ? <QuizButton {...props} input={{ deck: unit.decks[0].path }} at={{ deck: unit.decks[0].path }} />
+          : <QuizButton {...props} input={{ unit: { term: unit.term ?? '', subject: unit.subject ?? '', code: unit.code } }} at={{ unit: unit.key }} />)}
       </span>}
     </div>
     {open && <div className="ec-tr-open">
@@ -263,6 +276,7 @@ function UnitRow({ unit, openUnits, toggle, start, openNote, state, notify, setD
         return <div key={deck.path} className="ec-tr-pc">
           <button type="button" className="ec-tr-deck" onClick={() => { openNote(deck.path); }}><span>{deckLabel(deck, unit.decks)}</span></button>
           {several && <button type="button" className="ec-u-btn" disabled={count === 0} onClick={() => { start({ deck: deck.path, since: Date.now() }); }}><Icon type="play" size={12} />全部卡 {count}</button>}
+          {deckQuiz(deck) && <QuizButton {...props} input={{ deck: deck.path }} at={deckRef(deck)} />}
           {statusButton(deck)}
         </div>;
       })}

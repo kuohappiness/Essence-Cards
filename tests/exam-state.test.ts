@@ -340,9 +340,9 @@ void test('等寫入逾時，之後才發現寫不進去：不記，範圍照舊
   let refuse = (): void => {};
   const files = {
     ...memory.files,
-    modify(path: string, edit: (text: string) => string) {
+    modify(path: string, edit: (text: string, exists: boolean) => string) {
       return new Promise<void>((_, reject) => {
-        edit(memory.texts.get(path) ?? '');
+        edit(memory.texts.get(path) ?? '', memory.texts.has(path));
         refuse = () => { reject(Error('寫不進去')); };
       });
     },
@@ -705,17 +705,22 @@ void test('子資料夾改名成 小考：裡面的段考檔都清掉；改回�
   assert.equal(h.state.exam().path, inside);
 });
 
-void test('小考/ 裡內容壞掉、日期更早、讀不到的檔：不讀，段考的選定、待讀與錯誤都不受影響；之後改它也一樣', async t => {
+void test('小考/ 裡內容壞掉、日期更早、讀不到的檔：段考不讀，選定與範圍都不受影響；讀不到只算小考的（tasks/quiz-mark.md §1）；之後改它也一樣', async t => {
   const broken = QUIZ + '壞.md', early = QUIZ + '2026/早.md', stuck = QUIZ + '讀不到.md';
   const h = make(t, { ...DECKS, [SCOPE]: scopeText(), [broken]: '---\n考試開始: [\n---\n', [early]: scopeText('2026-10-21', '2026-10-21', '- 國二上 英文 L1'), [stuck]: scopeText() });
   h.memory.failing.add(stuck);
   await ready(t, h);
   const exam = h.state.exam();
-  assert.deepEqual([exam.path, exam.others, exam.missing, exam.period, h.state.unread(), h.errors], [SCOPE, [], 0, { kind: 'ok', start: '2026-10-28', end: '2026-10-29' }, [], []]);
+  assert.deepEqual([exam.path, exam.others, exam.missing, exam.period], [SCOPE, [], 0, { kind: 'ok', start: '2026-10-28', end: '2026-10-29' }]);
+  assert.deepEqual(h.state.unread(), [stuck], '讀不到的小考檔是小考自己的提醒');
+  assert.deepEqual(h.errors.map(String), ['Error: 讀不到：' + stuck]);
   assert.equal(h.lane('c'), 'new', '小考檔寫到的單元不算段考範圍');
+  const before = h.memory.reads.filter(path => path === SCOPE).length;
   h.memory.write(broken, '---\n考試開始: [\n---\n- 國二上 英文 L1\n');
   await tick(t);
-  assert.deepEqual(h.memory.reads.filter(path => path.startsWith(QUIZ)), [], '連讀都不讀');
+  assert.equal(h.memory.reads.filter(path => path === SCOPE).length, before, '改小考檔不會重讀段考的檔');
+  assert.equal(h.state.exam().path, SCOPE);
+  assert.equal(h.lane('c'), 'new');
 });
 
 void test('只有 小考/ 有檔：當成沒有範圍，新建的段考檔放在 考試範圍/ 底下', async t => {
@@ -1102,7 +1107,7 @@ void test('範圍檔的資料夾列不出來：自己重試，卡組照常', asy
   const errors: unknown[] = [];
   const list = (folder: string): Promise<string[]> => memory.files.list(folder);
   let refused = 2;
-  const files = { ...memory.files, list: (folder: string) => folder.includes('考試範圍') && refused-- > 0 ? Promise.reject(Error('列不出來')) : list(folder) };
+  const files = { ...memory.files, list: (folder: string) => folder.endsWith('考試範圍') && refused-- > 0 ? Promise.reject(Error('列不出來')) : list(folder) };
   const state = createState({ files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => NOON, offset: () => OFFSET, onError: error => { errors.push(error); } });
   t.after(() => state.close());
   const done = state.ready();

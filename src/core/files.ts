@@ -8,8 +8,11 @@ export interface Files {
    * 原本的錯誤照樣丟出，呼叫的一方才寫得出是哪個檔、什麼原因（D-154）。
    */
   readBytes(path: string): Promise<Uint8Array | null>;
-  /** 一次讀、改、寫；不存在時以 edit('') 建立含上層資料夾；內容不變時不寫入。 */
-  modify(path: string, edit: (text: string) => string): Promise<void>;
+  /**
+   * 一次讀、改、寫；不存在時以 edit('', false) 建立含上層資料夾；內容不變時不寫入。exists 是讀的那一刻檔案在不在：
+   * 零位元組的檔是 edit('', true)，建新檔的一方靠它不蓋掉讀與寫之間才出現的空檔（tasks/quiz-mark.md L2 R2）。
+   */
+  modify(path: string, edit: (text: string, exists: boolean) => string): Promise<void>;
   /** 追加 line 與換行；不存在時建立含上層資料夾。 */
   append(path: string, line: string): Promise<void>;
   /** 新增、修改、刪除、改名通知；改名通知舊新路徑；回傳取消監看的函式。 */

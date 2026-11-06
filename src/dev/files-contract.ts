@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 
 /**
- * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4；C18 是 tasks/exam-scope.md §2-4）。Node 的測試與 Obsidian 的開發命令跑同一份；
+ * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4；C18 是 tasks/exam-scope.md §2-4；C19 是 tasks/quiz-mark.md 的 L2 R2）。Node 的測試與 Obsidian 的開發命令跑同一份；
  * 改名與刪除不在 Files 介面裡，由兩邊各自提供（Node 用 node:fs，Obsidian 用 vault.rename、vault.delete）。
  */
 export interface ContractOps {
@@ -124,6 +124,22 @@ export const contractCases: readonly ContractCase[] = [
       same(await files.read(path), null, '丟錯之後');
       await files.modify(path, () => 'after');
       same(await files.read(path), 'after', '下一次 modify');
+    },
+  },
+  {
+    // 建新檔的一方不能把讀與寫之間才出現的空檔當成不存在（tasks/quiz-mark.md L2 R2）。
+    code: 'C19', title: 'modify 的 edit 第二個參數：不存在是 false，零位元組的檔與有內容的檔是 true',
+    async run({ files, dir }) {
+      const missing = `${dir}/c19-missing.md`, empty = `${dir}/c19-empty.md`, full = `${dir}/c19-full.md`;
+      const seen: boolean[] = [];
+      await files.modify(missing, (_, exists) => { seen.push(exists); return 'x'; });
+      await files.modify(empty, () => '');
+      same(await files.read(empty), '', '建了空檔');
+      await files.modify(empty, (text, exists) => { seen.push(exists); return text; });
+      await files.modify(full, () => 'y');
+      await files.modify(full, (text, exists) => { seen.push(exists); return text; });
+      same(seen, [false, true, true], 'exists');
+      same(await files.read(missing), 'x', 'read');
     },
   },
   {

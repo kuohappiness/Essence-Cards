@@ -60,7 +60,7 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
       const file = location(path);
       return serial(file, async () => {
         const old = await read(file);
-        const next = edit(old ?? '');
+        const next = edit(old ?? '', old !== null);
         if (old === next) return;
         await mkdir(dirname(file), { recursive: true });
         await writeFile(file, next, 'utf8');
