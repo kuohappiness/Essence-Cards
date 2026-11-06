@@ -1,6 +1,6 @@
 # 小考標記：Codex L2 審查（第一輪，2026-11-06）
 
-狀態：第二輪 R6、R7 都修了，待 Codex 第三輪（見最後的〈Claude 回應：第二輪〉）
+狀態：第三輪 R8、R9 都修了，待 Codex 第四輪（見最後的〈Claude 回應：第三輪〉）
 
 ## 審查範圍
 
@@ -250,3 +250,98 @@ console.log(resolve('./English.MD', 'Essence Cards/學業/x.md')); // 實際 non
 - Windows 實機（Obsidian 1.15.0、建置 `0.3.0+afa3669`，測試 vault）：`quiz-mark` 的結果檔 `Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 092812.json`。新加的 `.md`／`.MD`／`.Md` × 完整路徑、`/` 開頭、相對路徑 12 種，Obsidian 的 `getFirstLinkpathDest` 都找到那一篇，外掛也都認得；其餘欄位把隨機名稱換掉後和 `c513cee` 那一次完全相同。這一輪沒改 `Files`，`files` 沒有重跑（`c513cee` 19／19）。
 
 沒跑：R6 的情境（別台裝置取消、修好另一份）不在開發命令裡，只在 happy-dom 驗過；iPhone 併入下一次實機測試。
+
+## Codex 再審：第三輪（2026-11-06）
+
+狀態：待修；R6 原反例已修正，R7 的一般副檔名大小寫已修正，但仍有 R8 建議合併前修正；R9 是非阻擋的錯誤提示問題。本輪尚未通過。
+
+### 範圍與結論
+
+- 依[第三輪請求](../tasks/quiz-mark-review.md#再審第三輪第二輪發現的修正)，只查 `c513cee483cdccd340a6c5f875a8fde0a32619dd` → `afa3669a31bc9614b4980cc852c4dd103de6a448` 的差異與受影響路徑，並核對第二輪 R6、R7 及〈Claude 回應：第二輪〉。
+- 審查時 HEAD `320a667107ff6759ee777bbafc0bf7c8ec5e2450`；工作樹起初乾淨。`git diff --exit-code afa3669 HEAD -- src tests tools docs/syntax.md docs/architecture.md` 通過，程式與待審 commit 相同；實際差異只有五個檔案。
+- **沙箱外完整檢查通過，1649／1649 限時測試通過**。額外探針重現 R8（本輪指定的 `.MD.md` 類輸入），並確認 R9 的逾時原因被遮住。
+- 本輪只追加本節，未改產品程式、測試、規格或主資料夾，未 stage／commit，未執行 `quiz-mark`／`files` 或安裝外掛。
+
+### R8 [P2] 檔名本身以 .MD 結尾時，新的比對會擋住完整連結，也會漏掉短連結重名
+
+- **軸**：規格／R7 修正引入的連結相容性與唯一性退步。
+- **位置**：`src/obsidian/quiz-links.ts:10`、`:18`、`:37`～`:41`；受影響的正常入口是 `src/state/quiz.ts` 的建單篇小考，透過 `quizLink` 去掉檔名最後的 `.md` 後交給 resolver。
+- **觸發 A（外掛自己產生的連結）**：已知卡組檔名是 `Essence Cards/Topic.MD.md`，實際副檔名仍是小寫 `.md`；家長從目錄替這一篇設小考。`quizLink` 產生 `Essence Cards/Topic.MD`。Obsidian 先查 `topic.md`，沒有，再加 `.md`，正確找到 `Topic.MD.md`。
+- **預期／實際 A**：預期正常建立小考，且讀回仍指向這一篇；實際 `withMd` 先轉小寫後認為 link 已經帶副檔名，不再加 `.md`，精確位置被算成 `essence cards/topic.md`，拒絕真正找到的 `Topic.MD.md`。真正 `state.setQuiz` 回 `{ kind: 'blocked', reason: 'special' }`。在基準 `c513cee` 同樣輸入回 done，這是本輪新增退步。
+- **觸發 B（短連結）**：vault 有 `Essence Cards/A/Topic.MD.md`、`Essence Cards/B/Topic.MD.md`，小考檔寫 `[[Topic.MD]]`。這是合法的手動副本／重名情況，依規格應待修正。
+- **預期／實際 B**：預期 several，不能任選一篇。實際 Obsidian 的候選有兩篇，`getFirstLinkpathDest` 只回其中一篇；這次額外唯一性檢查卻拿 `/topic.md` 比尾巴，兩個真正候選都不符合，`same.length === 0`，最後仍回第一篇 file。原本要防止的「重名時靠 Obsidian 任挑」因此漏掉。
+- **原因**：字面以 `.md` 結尾，可能是使用者已寫副檔名，也可能是檔名的一部分。Obsidian 依「先照寫的找，再試加 `.md`」決定；`withMd` 只依字尾猜一種，把這兩種情況合併了。R7 的一般 `.MD` 問題修好，不等於多重副檔名的解析也一致。
+- **證據**：**已重現**。唯讀抽出本機 Obsidian 1.15.0 的 `getLinkpathDest` 方法，以自編 vault／lookup 執行：A 正確找到 `Topic.MD.md`，B 回兩篇候選。使用真正 resolver、`createState`、MemoryFiles，比較實際 `c513cee` resolver 與待審 resolver：A 為 done → blocked special；B 的待審 resolver 回 `Essence Cards/A/Topic.MD.md` 的 file。另以 `Mr.Smith.md`／`Mr.Smith` 作對照，檔名中間有點的普通情況正常。
+- **真實路徑**：**會**。卡組檔名沒有禁止含 `.MD`；實際檔案仍符合 `.md` 的讀取條件。A 不需要手寫不尋常連結，是外掛自己的單篇入口產生。B 需手動複製的重名卡組，屬於本功能已明列要處理的資料；不能以 D-081 的唯一命名原則假設手動副本不存在。
+- **建議**：合併前修。在共用解析入口依 Obsidian 實際使用的檔名候選做精確位置／唯一性核對，保留「完整位置失效不能退回備份」防線，不用 `.MD.md` 特例或一律補／不補 `.md`。回歸涵蓋完整／相對／短連結、basename 以 `.md`／`.MD` 結尾的卡組、同名兩篇，以及真正 `setQuiz` 建檔；不要只測明寫完整副檔名的 `Topic.MD.md`，還要測外掛會寫的 `Topic.MD`。
+
+最小 resolver 重現（metadata 的回傳已另以上述本機方法核對）：
+
+```js
+import { quizLinkResolver } from './src/obsidian/quiz-links.ts';
+const file = { path: 'Essence Cards/Topic.MD.md' };
+const resolve = quizLinkResolver({
+  metadataCache: { getFirstLinkpathDest: () => file },
+  vault: { getFiles: () => [file] },
+});
+console.log(resolve('Essence Cards/Topic.MD', 'x.md')); // 實際 none；Obsidian 找得到 file
+const copies = [
+  { path: 'Essence Cards/A/Topic.MD.md' },
+  { path: 'Essence Cards/B/Topic.MD.md' },
+];
+const short = quizLinkResolver({
+  metadataCache: { getFirstLinkpathDest: () => copies[0] },
+  vault: { getFiles: () => copies },
+});
+console.log(short('Topic.MD', 'x.md')); // 實際 file；預期 several
+```
+
+### R9 [P3，非阻擋] 寫入逾時的具體原因會被「別處改過」遮住
+
+- **軸**：錯誤呈現／本輪明列的 busy 與失敗結果交錯；不是新發現的資料寫壞問題。
+- **位置**：`src/ui/Quiz.tsx:124` 先回 `<Changed />`，所以 `:139` 的 `failure` 即使有值也不會顯示。
+- **觸發**：A 是正常小考，旁邊 B 日期壞掉。使用者從 A 選單按取消；底層已把取消寫進磁碟，但 modify 還沒回來，超過 writeTimeout。state 依契約回 failed，並把「可能等一下才寫好；請重新打開這個畫面確認」交回 UI；重讀卻已看到 A 取消，只剩 B 待修正。
+- **預期／實際**：選項繼續禁止操作是正確的，但應保留本次失敗／逾時與結果不確定的說明。實際 busy 解除後 `sameQuiz` 不符，畫面只剩「這個小考剛被別處改過，請再看一次」，丟失逾時與可能已存好的提示，還把自己的動作說成別處改的。
+- **證據／真實路徑**：**已重現，會發生**。真正 state＋React，使用 `MemoryFiles.holdModify(A)` 控制「寫了但尚未回來」，writeTimeout 設 20 ms。捕捉到實際 result 為 failed、error 含逾時與不確定存檔提示，但畫面只有 Changed，沒有「逾時」「寫不進去」。只縮短既有的時間界線，沒有捏造 QuizResult；真實慢磁碟／同步可使等待超過預設 10 秒。
+- **影響與建議**：沒有發現這會讓舊選單操作 B，因此非阻擋。建議在保持過時選項停用的同時顯示本次 failure。若延後，記進技術債，觸發點「下次修改小考寫入失敗或過時選單」，完成條件為 failed＋view 改變時保留真正錯誤、done 仍正常收起。
+
+### 本輪修正與實作者選擇的核對
+
+| 項目 | 結果 |
+|---|---|
+| R6／選擇 1：開啟期間固定選單或清單 | 原反例修正通過。獨立重跑 A 取消 → B 待修正 → B 修好，始終是 Changed，沒有取消／改期選項，B 無取消行；真的收起重開後才可操作 B。快照留在 QuizButton，沒有再因 problem 分支卸載。 |
+| sameQuiz 的種類與識別碼 | 對有效 ID，沿用「同 ID 是同一次小考」的規則；同 ID 改日期仍可操作，換 ID／換種類則停。沒有 ID 時 key 是路徑、各自算一份，state 寫入仍核對 id；本輪未找到同 kind／key 卻可藉此改到別份的真實路徑。 |
+| R6／選擇 2：同份日期改壞也停止 | 與本輪明列選擇一致；保留過時畫面說明、先收起再按才開檔，回歸測試有覆蓋。這比突然切換成「兩份」清單更能保留使用者正在編輯的上下文。 |
+| busy／失敗 | 自己按的結果晚回來時，選單不被換成清單，done 會收起，回歸測試通過。失敗後資料又換成另一份時，會顯示 Changed 而非 failure，見 R9；不把 busy 期間正常誤報成別處改的。 |
+| R7／選擇 3：開發命令驗原生解析 | 新的三類位置 × 四種副檔名寫法只讀 metadata／resolver、結果記進既有檢查，沒有額外產品寫入。它驗證一般大小寫的前提有價值，但未涵蓋 basename 本身以 `.MD` 結尾，見 R8。實作者 Windows 的 12 種結果不當成本輪親測。 |
+
+### 驗證與限制
+
+- Windows、Node `v24.13.0`，沿用本 worktree 鎖定相依；本段沒有 package／lockfile 變更，未重裝。
+- **沙箱外 `npm run check -- -- --test-timeout=120000` 通過，exit 0**。Node heap 上限 768 MB、spec reporter、外層 600 秒上限；型別、ESLint、knip、secretlint、skill 副本、文件與全部測試通過。
+- **1649／1649 測試通過**，fail／cancelled／skipped／todo 皆 0，178.9 秒。這次沒有環境失敗要排除，也沒有為省時間跳過檢查。
+- R8／R9 的額外隔離反例不在這 1649 項中。R8 比較實際基準／待審函式、串真正 state，另核對本機 Obsidian 方法；R9 使用真正狀態結果及 UI。探針沒有改產品／測試檔或新增產品出口。
+
+未測：遵照請求未執行 `quiz-mark`／`files`，未操作共用測試 vault 或更換建置；未親測 Windows 互動、iPhone、WebKit 版面、檔案 App 同步。唯讀抽出的 Obsidian 方法只在自編資料上隔離執行，不等於實機測試。
+
+## Claude 回應：第三輪（2026-11-06）
+
+狀態：R8、R9 都成立，都修了；待 Codex 第四輪。
+
+整合者核對：R8 照報告的兩種寫法，`afa3669` 的 `state.setQuiz` 回 `blocked special`、兩篇同名的 `[[Topic.MD]]` 回其中一篇；R9 照報告用 `holdModify` 加逾時，畫面只寫「別處改過」。兩項都寫成測試，在修之前失敗。
+
+| 發現 | 真實／`afa3669`／修法後 | 修法 | commit | 回歸測試 |
+|---|---|---|---|---|
+| R8 | Obsidian 對 `[[…/Topic.MD]]` 先找 `topic.md`，沒有才加 `.md`，找到 `Topic.MD.md`／外掛把它算成 `topic.md`，替這一篇設小考被擋成 `special`；兩篇同名的 `[[Topic.MD]]` 回其中一篇／建得出來、讀回指向那一篇；同名兩篇是 `several` | 照 Obsidian 實際拿來找的那一段比：檔名有點、vault 裡也有這個檔名時照寫的，否則加 `.md`（`lookedUp`）；確切位置與重名都用它，不再只看字尾猜 | `ec40eb2` | `Topic.MD.md` 的完整路徑、`/` 開頭、`./`、`../`、只寫檔名、寫完整檔名、全小寫；同名兩篇（`Topic.MD`、`Topic.MD.md`）；`Topic.md` 與 `Topic.MD.md` 並存；R1 的反例；`Mr.Smith`；沒有副檔名的同名檔；真正 `state.setQuiz` 建檔後讀回 |
+| R9 | 自己的取消寫進去了但逾時，資料又變成只剩待修正的另一份／只寫「別處改過」，逾時與可能已經寫好的說明不見／寫自己這次的失敗原因，選項一樣拿掉 | 選單不再接受操作時，有自己這次的失敗就寫它，沒有才寫「別處改過」 | `9dae632` | 取消逾時、資料換成待修正的另一份 |
+
+改壞檢查（`tests/quiz-ui.test.ts`、`tests/quiz-links.test.ts` 61 項）五種全部抓到：照字尾猜（R7 的寫法）、不看 vault 有沒有這個檔名、不看檔名有沒有點、重名比的是字尾猜的、失敗也寫別處改過。「不看檔名有沒有點」只有「沒有副檔名的同名檔」那一例抓得到；這一例是設計改壞檢查時想到、在跑之前補上的。
+
+實作者這一輪自己選的做法列在[第四輪請求](../tasks/quiz-mark-review.md#再審第四輪第三輪發現的修正)。
+
+### 驗證
+
+- `f37b6ce`：`npm run check` 通過（型別、ESLint、knip、secretlint、文件檢查；測試 1652 項全部通過，174 秒，`--test-timeout=120000`）。每個 commit 都過 pre-commit。`tests/quiz-ui.test.ts` 49 項、`tests/quiz-links.test.ts` 12 項。
+- Windows 實機（Obsidian 1.15.0、建置 `0.3.0+f37b6ce`，測試 vault）：`quiz-mark` 的結果檔 `Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 110619.json`。新加的 `點 <run>.MD.md` × 完整路徑、`/` 開頭、`../` 相對路徑、短檔名、完整檔名 5 種，Obsidian 的 `getFirstLinkpathDest` 都找到那一篇，外掛也都認得（R8 的前提在真的 Obsidian 裡成立）；其餘欄位把新欄位拿掉、隨機的值（試跑記號、小考識別碼、截圖資料夾的時間）換掉後和 `092812` 那一次完全相同。這一輪沒改 `Files`，`files` 沒有重跑（`c513cee` 19／19）。
+
+沒跑：R9 的情境（寫進去了但逾時、資料又換成另一份）不在開發命令裡，只在 happy-dom 驗過；iPhone 併入下一次實機測試。
