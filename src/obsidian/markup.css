@@ -1,0 +1,31 @@
+/* 編輯畫面標示卡組結構（D-047、tasks/edit-markup.md §1）：顏色用 Obsidian 的變數，跟著使用者的主題。
+   每一樣都要有必要性（D-179）：正常的目標只有一條淡色細線、題目只有 :: 變淡紫；紅色波浪線＝這題不會出，橘色＝照常出、有地方看不懂。 */
+
+/* 學習目標那一行：清單圓點左邊一條細線，不推動文字。.cm-line 本來就是 position: relative。 */
+.essence-cards-target::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -10px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--interactive-accent);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* 題目的 ::：外掛認得這是題目。 */
+.essence-cards-separator { color: var(--text-accent); opacity: 0.6; }
+
+/* 問題：滑過看原因（aria-label）。 */
+.essence-cards-error,
+.essence-cards-hint {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  text-decoration-skip-ink: none;
+}
+.essence-cards-error { text-decoration-color: var(--text-error); }
+.essence-cards-hint { text-decoration-color: var(--text-warning); }

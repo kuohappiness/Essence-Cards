@@ -13,6 +13,7 @@ import { changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
+import { markup } from './obsidian/markup.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { versionText } from './obsidian/version.ts';
@@ -267,6 +268,8 @@ export default class EssenceCardsPlugin extends Plugin {
       },
     });
     this.registerEditorExtension(lock.extension);
+    // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。
+    this.registerEditorExtension(markup({ isDeck: state => lockable(pathOf(state)) }).extension);
     const saver = wireSave({
       plugin: this,
       state: () => this.state,
