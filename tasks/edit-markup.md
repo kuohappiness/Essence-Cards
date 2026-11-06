@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（入口與目錄第四批，給 Claude，本機執行）
 
-狀態：💬 任務說明草稿，§3、§4 的寫回等[格式查核](edit-markup-format-review.md)。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定三件事：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行。
+狀態：💬 任務說明草稿；§7 第 1～3 個 commit 已在分支 `claude/edit-markup`（見〈結果〉），§3、§4 的寫回等[格式查核](edit-markup-format-review.md)。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定三件事：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。要改寫使用者的筆記，也動到解析的結果，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。§3（解析多記原文位置）、§4-3（寫回）開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），§1、§2 不用等。
 
@@ -217,4 +217,15 @@
 
 ## 結果
 
-（實作後填）
+### §7 第 1～3 個 commit（2026-11-06，分支 `claude/edit-markup`）
+
+- `42a84f8`：§1 的標示（目標細線、`::`、`error`／`hint` 的波浪線與 tooltip），不含看不懂的出處；`markup.css`。
+- `b670b9f`：§1-2 `Problem.columns`，`重要性：很高` 只標 `很高`。
+- `b8907f3`：§2 的圖示與命令、§4-1 猜測與 §4-2 會寫成（`core/catalog/source-guess.ts`）、表單畫面；套用還不寫檔（按了只跳通知）。為了用讀法同一套規則拆一項出處，`deck` 多匯出 `sourceParts`。
+- **速度**（§1-5）：自編 300 個目標、每個三題加一個填空的卡組（約 4.2 萬字、900 個標示），在這台電腦用 Node 量解析加產生標示 30 次：中位數 10.3 ms、最慢 19.4 ms，在 30 ms 以內。Obsidian 裡連續打字不卡還沒量（§6-3）。
+- **還沒做、要等的**：
+  - 看不懂的出處的波浪線、§1-3 的說明、點它打開表單、命令在它上面時打開那一項：等 §3（格式查核）。
+  - 圖示判斷「出處欄位那一行」先用游標附近幾行的簡單判斷（`markup.ts` 的 `sourceFieldAt`），§3 的 `sourceFields` 做好後改用它。
+  - 套用的讀回核對先只讀這一項本身；寫進去的位置前面那幾項（`preceding`）等 §4-3 給。
+  - 目標還沒有出處欄位時加一行（§2 第 3 點）屬於寫回，等 §4-3。
+- **沒驗的**：Windows 版 Obsidian（§6-3）一項都還沒做：細線的位置（CSS 先放在行首左邊 10px，從 Obsidian 1.15 的 `app.css` 看 `.cm-line` 是 `position: relative`、`padding: 0`）、`aria-label` 的 tooltip 會不會顯示、圖示與表單的樣子、Esc 與點外面關掉、深色主題。當時另一個 session 正在做第四批的並行任務，沒有換測試 vault 的建置。
