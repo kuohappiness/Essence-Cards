@@ -1,0 +1,52 @@
+import { TFile, TFolder, type Plugin } from 'obsidian';
+import { createFolderGuard, type FolderGuard } from './folder-guard.ts';
+
+// 把系統資料夾的防呆（folder-guard.ts）接上 Obsidian（tasks/system-folder-guard.md §1、§2）。
+
+/** 這台看過原位有檔的系統資料夾（§2-1）：saveLocalStorage，不隨 vault 同步。 */
+const SEEN_KEY = 'essence-cards-system-folders';
+
+/**
+ * 在 onload 裡呼叫：rename 的監聽要比 state 的監看先註冊，同一批的通知才擋得住（§1-8）。layout ready 之後再呼叫 check()：
+ * 之前 vault 的清單還不完整。
+ */
+export function wireFolderGuard(plugin: Plugin, options: { notify: (message: string) => void; fail: (error: unknown) => void }): FolderGuard {
+  const { app } = plugin;
+  const { vault } = app;
+  const guard = createFolderGuard({
+    files: () => vault.getFiles().map(file => file.path),
+    known(path) {
+      const found = vault.getAbstractFileByPath(path);
+      return found instanceof TFolder ? 'folder' : found instanceof TFile ? 'file' : null;
+    },
+    exists: path => vault.adapter.exists(path),
+    empty: async path => { const { files, folders } = await vault.adapter.list(path); return !files.length && !folders.length; },
+    rmdir: path => vault.adapter.rmdir(path, false),
+    async move(from, to) {
+      const folder = vault.getAbstractFileByPath(from);
+      if (!(folder instanceof TFolder)) throw Error('找不到資料夾：' + from);
+      await app.fileManager.renameFile(folder, to);
+    },
+    notify: options.notify,
+    fail: options.fail,
+    load() {
+      const saved: unknown = app.loadLocalStorage(SEEN_KEY);
+      return Array.isArray(saved) ? saved.filter((each): each is string => typeof each === 'string') : [];
+    },
+    save(folders) { app.saveLocalStorage(SEEN_KEY, folders); },
+    sleep: ms => new Promise(resolve => { window.setTimeout(resolve, ms); }),
+    now: () => Date.now(),
+    defer(run) { window.setTimeout(run, 0); },
+  });
+  plugin.register(() => { guard.close(); });
+  // 監看不了時防呆就不作用。不另外記：state 的監看用同一個 vault.on，layout ready 時會失敗、記一行 init（tasks/error-log.md §2-3），同一個原因不記兩次。
+  try {
+    plugin.registerEvent(vault.on('rename', (entry, oldPath) => {
+      guard.renamed(entry.path, oldPath, entry instanceof TFolder);
+      guard.changed();
+    }));
+    plugin.registerEvent(vault.on('create', () => { guard.changed(); }));
+    plugin.registerEvent(vault.on('delete', () => { guard.changed(); }));
+  } catch { /* 見上面 */ }
+  return guard;
+}

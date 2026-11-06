@@ -1,6 +1,6 @@
 # 系統資料夾的防呆（給 Claude，本機執行）
 
-狀態：定稿，§5 兩題使用者照建議決定（2026-11-07），開工；Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
+狀態：§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完（2026-11-07，〈實作〉），等 Windows 實機（§4）與 Codex L2；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。§1 會替家長搬動 vault 裡的資料夾，§2 會改哪些檔算卡組（`core/deck` 與 `state` 都用），屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。不新增、不改任何寫進檔案的格式，所以**不用開工前的格式查核**（[quality.md](../docs/agents/quality.md#開工前的格式查核) 只管格式）。
 
@@ -78,6 +78,20 @@ Windows 檔案總管、iPhone 的「檔案」App 搬的，或同步過來的，O
 
 1. **提醒那一項要不要附「搬回原位」按鈕**（找到位置、原位是空的那一種）。**決定：要**。原本的建議：家長不必學怎麼拖，按一下就好（D-103 每項附一顆按鈕）；按鈕只在電腦、由家長按，和「不自動搬」的理由（兩台同時動手）不衝突；做法和 §1 的搬回同一段程式（含重試與清空資料夾）。不做的話，提醒只寫位置，家長自己拖回去。
 2. **Obsidian 裡的搬動一律搬回，不給「我是故意的」選項**。**決定：一律搬回**。原本的建議：D-048 補充已經規定這些資料夾不能搬、不能改名；外掛只認原位，留一個「故意的」選項等於讓家長選一個一定會壞的狀態。
+
+## 實作（2026-11-07，Opus 5.5）
+
+- **檔案**：名單與判斷是純函式 `src/core/deck/folders.ts`（`SYSTEM_FOLDERS` 搬到這裡，`read.ts` 從這裡拿）；搬回、重試、清空資料夾、記住的名字在 `src/obsidian/folder-guard.ts`（vault 的操作經過一層 `GuardHost`，Node 測得到），接上 Obsidian 的是 `src/obsidian/folder-host.ts`；提醒的文字在 `src/review/entry.ts` 的 `reminderView`。
+- **和上面寫的不同的地方**：
+  - 監聽不在 onload 註冊，改在 layout ready、建立 state 之前：onload 碰 vault 會破壞「layout ready 之前不碰 vault」（T12，`tests/main-wiring.test.ts`）；仍然比 state 的監看早，§1-8 擋得住。監看不了時防呆不作用、不另外記，state 用同一個 `vault.on` 會記一行 `init`。
+  - §1-8 的做法：給 state 的 `Files` 包一層，搬回期間舊、新位置的通知先擋住，搬好了（或放棄了）照順序送，state 只看到內容沒變的重讀。
+  - §2-3 的做法：同一層 `Files` 不列、讀不到搬錯位置的資料夾裡的檔，判定改變時通知那幾個檔讓 state 重讀；寫入另加 `StateOptions.skip`，存檔與離開筆記時不補 ID。`tools/install.ts` 的 `readDecks` 不改：它在 Obsidian 外面跑，沒有這台記住的名字。
+  - 通知不寫「複習進度會看不到」（只對 `紀錄` 成立），改成「`「X」是外掛用的資料夾，不能搬動或改名，已經搬回原位`」；提醒一區照資料夾寫搬回後會怎樣（`紀錄` 是複習進度、`考試範圍` 是範圍與倒數）。
+  - §1-5 的空資料夾每次搬回都看（不只重試過的），只刪完全空的；原位只剩磁碟上的空資料夾時先刪再搬（§1-3「沒有東西」的一種）。
+  - 「搬回原位」按鈕只給找到一個位置的；好幾個時只列位置。
+  - 錯誤紀錄多一個 `where: "folder"`（syntax §9）：搬回失敗。
+- **已知的小空窗**：Obsidian 以外搬動時，新位置的檔比舊位置的刪除早約 1 秒（R8），這段時間裡範圍檔可能被當成卡組讀一次；沒開著就不會補 ID，判定出來之後就拿掉。
+- **測試**：`tests/system-folders.test.ts`（§2-2 的表格、§1-2、提醒文字）、`tests/folder-guard.test.ts`（§1 的搬回、上一層不在、原位有東西、EPERM/EBUSY 重試與 10 秒上限、空資料夾、§1-8 搬回期間 state 不讀不寫、§2-3 範圍檔不當卡組、按鈕與「不用了」）。§1-8 與 §2-3 的測試拿掉擋通知、拿掉排除後會失敗（實跑確認過）。替身不是 Obsidian：rename 的監聽真的比 state 早、iCloud 的鎖與空資料夾，要 §4 的 Windows 實機。
 
 ## 結果
 

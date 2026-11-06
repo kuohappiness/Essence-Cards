@@ -1,14 +1,12 @@
 import type { Files } from '../files.ts';
 import { parseDeck } from './parse.ts';
 import type { Deck } from './types.ts';
-
-const ROOT = 'Essence Cards';
-const SYSTEM_FOLDERS = new Set(['考試範圍', '錯題本', '記憶錨點', '製卡規則', '紀錄']);
+import { DECK_ROOT as ROOT, SYSTEM_FOLDERS } from './folders.ts';
 
 export function isDeckPath(path: string): boolean {
   if (!path.startsWith(ROOT + '/') || !path.endsWith('.md')) return false;
   const parts = path.slice(ROOT.length + 1).split('/');
-  return !(parts.length > 1 && SYSTEM_FOLDERS.has(parts[0]));
+  return !(parts.length > 1 && SYSTEM_FOLDERS.includes(parts[0]));
 }
 
 /** Essence Cards/ 底下的卡組路徑（isDeckPath），照字串排序。readDecks 與 state 都用它。 */

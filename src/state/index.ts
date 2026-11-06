@@ -65,6 +65,8 @@ export interface StateOptions {
    * from 是那份小考檔的路徑（相對路徑要用）。
    */
   resolveLink?: (link: string, from: string) => QuizResolved;
+  /** 這個檔在搬錯位置的系統資料夾裡（tasks/system-folder-guard.md §2-3）：不當卡組，不補 ID、不改狀態。files 那一邊也不列、讀不到它。 */
+  skip?: (path: string) => boolean;
 }
 export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
 /**
@@ -616,7 +618,7 @@ export function createState(options: StateOptions): State {
   const prepare = (path: string, text: string): Prepared => withNeed(track(path, () => tracker.fill(path, text)), text, version);
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
-  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version });
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip });
   function answerLine(entry: NewEntry): QueuedLine | null {
     if (!life.loaded) throw Error('state 還沒 ready');
     if (!permits(entry)) return null;

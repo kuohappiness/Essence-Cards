@@ -12,6 +12,8 @@ import { wireDeckActions } from './obsidian/deck-actions.ts';
 import { changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
+import type { FolderGuard } from './obsidian/folder-guard.ts';
+import { wireFolderGuard } from './obsidian/folder-host.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
@@ -85,6 +87,8 @@ export default class EssenceCardsPlugin extends Plugin {
   entry: EntryHandle | null = null;
   /** 標題列的全部卡與預覽（D-146、D-161）。 */
   private deckActions: { refresh: () => void } | null = null;
+  /** 系統資料夾的防呆（tasks/system-folder-guard.md）。 */
+  private guard: FolderGuard | null = null;
   /** 狀態列的提醒（D-163 第 5 點）：只有電腦。 */
   private statusBar: HTMLElement | null = null;
   /** 電腦上的備份（D-150）；手機、還沒載入或載入失敗是 null。 */
@@ -203,6 +207,12 @@ export default class EssenceCardsPlugin extends Plugin {
       openNote: (path, line) => { this.openNote(path, line); },
       openSettings: () => { this.openSettings(); },
       reminders: Platform.isDesktop,
+      // 入口可能在 layout ready 之前打開，防呆那時還沒建立：每次都問現在的。
+      folders: {
+        issues: () => this.guard?.issues() ?? [],
+        moveBack: issue => this.guard?.moveBack(issue) ?? Promise.resolve(false),
+        dismiss: folder => { this.guard?.dismiss(folder); },
+      },
       covered: () => this.review !== null,
       notify: message => { new Notice(message); },
       setDeckStatus: Platform.isDesktopApp ? (path, value) => this.state ? changeDeckStatus(this.app, this.state, path, value, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
@@ -229,7 +239,7 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 狀態列（D-163 第 5 點）：只有電腦，內容只放在入口，這裡只是提示；沒有提醒時不顯示。 */
   private updateReminders(): void {
     if (!this.statusBar) return;
-    const { count } = reminderView(this.state);
+    const { count } = reminderView(this.state, this.guard?.issues());
     this.statusBar.style.display = count ? '' : 'none';
     this.statusBar.textContent = count ? `Essence Cards：${String(count)} 項提醒` : '';
   }
@@ -355,7 +365,15 @@ export default class EssenceCardsPlugin extends Plugin {
     if (this.unloaded) return;
     // BUILD 由這裡傳進 state，核心不讀全域（任務說明 2-1）：版本行與讀取閘門都照它。
     // 電腦上改寫卡組要先有一份成功的備份（D-150 第 3 點）：閘門一開始關著，備份確認之後才打開。
-    this.state = createState({ files, device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, resolveLink: quizLinkResolver(this.app), onError: (error, source) => { this.report(error, source); } });
+    // 系統資料夾的防呆（tasks/system-folder-guard.md）：rename 的監聽要比 state 的監看先註冊（§1-8），所以在建立 state 之前；
+    // 不在 onload 裡，layout ready 之前不碰 vault（T12）。先判斷一次搬錯位置的：第一次列卡組時就不把它們當卡組（§2-3）。
+    const guard = this.guard = wireFolderGuard(this, {
+      notify: message => { new Notice(message); this.emit('notice', message); },
+      fail: error => { this.fail('folder', error); },
+    });
+    guard.onChange(() => { this.updateReminders(); this.entry?.refresh(); });
+    guard.check();
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, resolveLink: quizLinkResolver(this.app), onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
