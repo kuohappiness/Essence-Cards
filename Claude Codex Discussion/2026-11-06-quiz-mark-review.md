@@ -1,6 +1,6 @@
 # 小考標記：Codex L2 審查（第一輪，2026-11-06）
 
-狀態：第三輪 R8、R9 都修了，待 Codex 第四輪（見最後的〈Claude 回應：第三輪〉）
+狀態：第四輪通過（R1～R9 都修了，最後的程式 `f37b6ce`），待使用者同意合併（見最後的〈Codex 再審：第四輪〉）
 
 ## 審查範圍
 
@@ -345,3 +345,38 @@ console.log(short('Topic.MD', 'x.md')); // 實際 file；預期 several
 - Windows 實機（Obsidian 1.15.0、建置 `0.3.0+f37b6ce`，測試 vault）：`quiz-mark` 的結果檔 `Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 110619.json`。新加的 `點 <run>.MD.md` × 完整路徑、`/` 開頭、`../` 相對路徑、短檔名、完整檔名 5 種，Obsidian 的 `getFirstLinkpathDest` 都找到那一篇，外掛也都認得（R8 的前提在真的 Obsidian 裡成立）；其餘欄位把新欄位拿掉、隨機的值（試跑記號、小考識別碼、截圖資料夾的時間）換掉後和 `092812` 那一次完全相同。這一輪沒改 `Files`，`files` 沒有重跑（`c513cee` 19／19）。
 
 沒跑：R9 的情境（寫進去了但逾時、資料又換成另一份）不在開發命令裡，只在 happy-dom 驗過；iPhone 併入下一次實機測試。
+
+## Codex 再審：第四輪（2026-11-06）
+
+狀態：通過。
+
+### 範圍與結論
+
+- 依[第四輪請求](../tasks/quiz-mark-review.md#再審第四輪第三輪發現的修正)，只查 `afa3669a31bc9614b4980cc852c4dd103de6a448` → `f37b6ce81f61400c271b553c421e56b17409b63e` 的五個變更檔案及受影響路徑，核對第三輪 R8、R9 與〈Claude 回應：第三輪〉；沒有重審之前整包功能。
+- 審查時 HEAD `ef6f3bb458347d8dec4797e9a5bfe2177c54b22c`，工作樹起初乾淨。`git diff --exit-code f37b6ce HEAD -- src tests tools docs/syntax.md docs/architecture.md` 通過，程式與待審 commit 相同。
+- **R8、R9 修正通過，沒有找到新的擋合併問題。** 完整檢查與 1652 項限時測試通過。
+- 本輪只追加本節，未改產品程式、測試、規格或主資料夾，未 stage／commit，也未執行 `quiz-mark`／`files`、安裝或更換測試 vault 建置。
+
+### 修正與本輪選擇的核對
+
+| 項目 | 查核結果 |
+|---|---|
+| R8：依實際候選檔名比對 | 通過。`lookedUp` 不再以 `.md` 字尾猜測；有點且同名檔存在時採原字面，否則補 `.md`，精確位置與短連結重名使用相同候選。第三輪的 `Topic.MD.md` 建檔、讀回與同名兩篇的反例均回到預期。 |
+| R8：附件與資料夾 | 唯讀核對本機 Obsidian 1.15.0：`getFiles` 遞迴只收 TFile；metadata 初始化與一般 create／rename 也以 TFile 的小寫 name 建候選，沒有在加入名稱前排除非 Markdown 附件。資料夾不會誤占候選，附件則應占。隔離測試包含 `.pdf` 附件、附件名稱遮住追加 `.md` 的候選、沒有副檔名的 README 與 README.md 並存，和原生方法相符。附件使原生解析不到該卡組時，外掛沒有擅自改選另一個候選。 |
+| R8：大小寫、NFC／NFD | 小寫處理與原生索引一致；本輪沒有自行加入 Unicode 正規化。用 NFC／NFD 兩種 Café 名稱並存、各自查詢與只存在另一種拼法的對照測過，結果跟原生方法一致。這是字串與索引規則的隔離驗證，不是跨平台檔案系統正規化的實機驗收。 |
+| R8：索引尚未就緒 | metadata 找不到時先回 none，沒有用 vault 清單代替原生解析來猜一篇。本機一般 create 在非同步內容解析前就加入名稱，rename 同步移除舊名稱、加入新名稱；resolver 取得 file 與 getFiles 之間也沒有 await。本輪沒有找到真實路徑可讓這次候選比對因此錯認一篇；沒有把任意不一致的 metadata 替身當成已發生的實機問題。真實同步期間的索引時序仍未親測。 |
+| R9：資料變了時保留自己的失敗 | 通過。重跑「取消已寫入但 modify 未回來、逾時後只剩另一份待修正」：真正 state 回 failed，選單顯示逾時與「請重新打開這個畫面確認」，沒有「別處改過」，也沒有可按的改期／取消選項。 |
+| R9：資料沒變／blocked changed | 獨立對照通過。寫入失敗且資料未變時，原選單保留、底下寫真正錯誤；外部先換掉識別碼、state 回 blocked changed 時，過時選單只顯示 changed 的原因，沒有寫入取消行。`failure ?? CHANGED` 沒有把錯誤文字放回可操作的新小考上。 |
+| 選擇 1：先決定原生會用的那個候選 | 可接受，與核對到的原生查找順序一致，沒有為了修雙副檔名放寬完整位置的防線。原位置不在、只剩整包備份的反例仍回 none；短連結同名仍回 several。 |
+| 選擇 2：只寫自己的失敗 | 可接受。過時後仍禁止操作，保留失敗中「可能已寫好」的必要說明，沒有再把自己的取消歸因於別處；沒有自己失敗的清單分支仍用原本 changed 提示。 |
+| 選擇 3：開發命令驗 R8 | 新增暫時檔有同一個試跑記號、沒有學習目標，建立仍走既有 `makeTrial`，清理沿用建立證據與記號。五種連結只做 metadata／resolver 查詢並記結果，沒有新增產品寫入。實作者的五種 Windows 結果作為其驗收證據，本輪沒有執行該命令。 |
+
+### 驗證
+
+- Windows、Node `v24.13.0`，沿用本 worktree 既有鎖定相依；本段 package／lockfile 沒有變更，未重裝。
+- **沙箱外 `npm run check -- -- --test-timeout=120000` 通過，exit 0**：型別、ESLint、knip、secretlint、skill 副本、文件與完整測試全部通過。Node heap 上限 768 MB、spec reporter、外層 600 秒上限。
+- **1652／1652 測試通過**，fail／cancelled／skipped／todo 都是 0，188.0 秒；沒有排除任何環境失敗。
+- 額外 R8 探針以唯讀抽出的本機 Obsidian 1.15.0 `getLinkpathDest` 方法搭配自編 vault／lookup 執行，14 組連結對照通過，另串真正 `createState`／MemoryFiles 驗證 `setQuiz` 建檔後讀回正確卡組。原生方法只適配 basename／dirname、排序與 Obsidian 的 String.contains，沒有啟動 App。
+- 額外 R9 探針使用真正 React、`openEntry`、state 與 MemoryFiles，分別核對「逾時且資料變了」「失敗且資料沒變」「別處先換識別碼，回 blocked changed」，三種都通過。沒有修改產品／測試檔或新增產品出口。
+
+未測：遵照請求未執行 `quiz-mark`／`files`、未操作共用測試 vault；未親測 Windows 互動、真實同步索引時序、iPhone、WebKit 版面或檔案 App 同步。上面的原生方法與 happy-dom 探針是隔離驗證，不冒稱實機測試。

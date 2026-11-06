@@ -1,6 +1,6 @@
 # 小考標記（D-189 第 4、5 點，給 Claude，本機執行）
 
-狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`f37b6ce`）；Codex L2 第一～三輪的 R1～R9 都修了（`f37b6ce`），等第四輪（[請求](quiz-mark-review.md#再審第四輪第三輪發現的修正)），還沒合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
+狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`f37b6ce`）；Codex L2 第四輪通過（R1～R9 都修了，[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md#codex-再審第四輪2026-11-06>)），等使用者同意合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。多一種外掛會寫的檔、入口與目錄的畫面，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1 是新的檔案格式，開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -180,4 +180,8 @@ Codex 第一輪（[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-r
 
 **Windows 實機**：建置 `0.3.0+f37b6ce`。`quiz-mark`（`Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 110619.json`）新加的 5 種 `X.MD.md` 寫法 Obsidian 都找到、外掛都認得，其餘欄位和 `092812` 那一次相同。
 
-**還沒做**：L2 第四輪、使用者同意合併、roadmap 的最近完成。
+### L2 第四輪
+
+通過，沒有新的發現。Codex 在沙箱外跑 `f37b6ce` 的 `npm run check` 通過（1652 項），另用 Obsidian 1.15.0 的 `getLinkpathDest` 隔離核對 R8（附件、NFC／NFD、索引還沒就緒），用真的 React 核對 R9 的三種情況。沒親測的：真實同步時的索引時序、iPhone。
+
+**還沒做**：使用者同意合併、roadmap 的最近完成。

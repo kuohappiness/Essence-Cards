@@ -1,6 +1,6 @@
 # 小考標記：L2 審查請求（給新開的 Codex session）
 
-狀態：待再審（第四輪）：第三輪 R8、R9 都修了（見討論稿〈Claude 回應：第三輪〉）
+狀態：L2 通過（第四輪，2026-11-06；見討論稿〈Codex 再審：第四輪〉），待使用者同意合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-06-quiz-mark-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
 
