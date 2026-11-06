@@ -1,6 +1,6 @@
 # 小考標記（D-189 第 4、5 點，給 Claude，本機執行）
 
-狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`c513cee`）；Codex L2 第一輪的 R1～R5 都修了，等第二輪（[請求](quiz-mark-review.md#再審第二輪第一輪發現的修正)），還沒合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
+狀態：程式與 Windows 實機做完，在分支 `claude/quiz-mark-354478`（`afa3669`）；Codex L2 第一、二輪的 R1～R7 都修了（`afa3669`），等第三輪（[請求](quiz-mark-review.md#再審第三輪第二輪發現的修正)），還沒合併。使用者 2026-11-05 同意方向（[D-189](../docs/decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)）；§1 的格式查核做完（[格式查核回報](<../Claude Codex Discussion/2026-11-05-quiz-mark-format-review.md>)），照回報改過；§2 的開關使用者 2026-11-05 選 (c)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。多一種外掛會寫的檔、入口與目錄的畫面，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1 是新的檔案格式，開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -164,4 +164,12 @@ Codex 第一輪（[討論稿](<../Claude Codex Discussion/2026-11-06-quiz-mark-r
 
 **Windows 實機**：建置 `0.3.0+c513cee`、Obsidian 1.15.0。`quiz-mark`（`Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 080816.json`）和 `be14a85` 那一次逐欄比對，只有隨機名稱、日期與截圖資料夾不同，目錄截圖的排版相同；`files` 19／19 通過，含新的 C19（`Essence W5/結果/files Windows-c50c 2026-11-06 080909.json`）。
 
-**還沒做**：L2 第二輪、使用者同意合併、roadmap 的最近完成。
+### L2 第二輪之後
+
+第二輪找到兩項，都成立：`fd8670c`（R7 `.MD`／`.Md` 結尾的連結被當成找不到，R1 的修正帶進來的）、`83ca1b9`（R6 選單經過待修正的畫面之後換了記住的小考，可能取消到另一份）。`afa3669` 讓開發命令在真的 Obsidian 裡驗 `.MD` 連結。細節見討論稿〈Claude 回應：第二輪〉。
+
+**完整檢查**：`afa3669` 的 `npm run check` 通過（測試 1649 項全部通過，180 秒）。
+
+**Windows 實機**：建置 `0.3.0+afa3669`。`quiz-mark`（`Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 092812.json`）新加的 12 種副檔名大小寫寫法 Obsidian 都找到、外掛都認得，其餘欄位和 `c513cee` 那一次相同。
+
+**還沒做**：L2 第三輪、使用者同意合併、roadmap 的最近完成。

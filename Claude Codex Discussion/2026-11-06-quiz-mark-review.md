@@ -1,6 +1,6 @@
 # 小考標記：Codex L2 審查（第一輪，2026-11-06）
 
-狀態：第一輪 R1～R5 都修了，待 Codex 第二輪（見最後的〈Claude 回應：第一輪〉）
+狀態：第二輪 R6、R7 都修了，待 Codex 第三輪（見最後的〈Claude 回應：第二輪〉）
 
 ## 審查範圍
 
@@ -154,3 +154,99 @@ await state.close();
 - Windows 實機（Obsidian 1.15.0、建置 `0.3.0+c513cee`，測試 vault）：`quiz-mark` 的結果檔 `Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 080816.json`，和 `be14a85` 那一次逐欄比對，只有隨機名稱、日期（「明天」跟著今天往後一天）與截圖資料夾不同；目錄的截圖排版相同（`display: contents` 沒有改變排版）。`files` 19／19 通過，含新的 C19（`Essence W5/結果/files Windows-c50c 2026-11-06 080909.json`）。
 
 沒跑：R3、R4、R5 的情境不在開發命令裡（遠端取消、鍵盤 Esc、正常小考旁邊兩份不一樣），只在 happy-dom 驗過行為；iPhone 併入下一次實機測試。
+
+## Codex 再審：第二輪（2026-11-06）
+
+狀態：待修；R6、R7 建議合併前修正，本輪尚未通過。R2、R4、R5 的修正通過；R1 原反例與 R3 直接取消的反例已修，但各仍有下述邊界。
+
+### 範圍與結論
+
+- 按[第二輪請求](../tasks/quiz-mark-review.md#再審第二輪第一輪發現的修正)，只查 `be14a85ca667bd723de82bc4d75bb141b9f2ec19` → `c513cee483cdccd340a6c5f875a8fde0a32619dd` 的指定差異與受影響路徑，以及第一輪 R1～R5、〈Claude 回應：第一輪〉。沒有把第一輪整包再審一次。
+- 審查時 HEAD `6c743dea6b48351322fe80e7610a395fe73c98d6`，起初工作樹乾淨；`git diff --exit-code c513cee HEAD -- src tests tools docs/syntax.md docs/architecture.md` 通過，程式與待審 commit 相同。
+- 完整檢查與 1642 項限時測試通過，但額外隔離探針找到 **R6（R3 的快照仍會因子元件卸載而失效）**、**R7（R1 的精確位置判斷新增副檔名大小寫退步）**。
+- 本輪只追加本節，未改產品程式、測試、規格、主資料夾，未 stage／commit，也未跑禁止的 `quiz-mark`／`files` 開發命令。
+
+### R6 [P2] 經過待修正分支後，舊選單會重建快照，仍可取消另一個小考
+
+- **軸**：設計／R3 的操作身分契約。
+- **位置**：`src/ui/Quiz.tsx:84`～`:86`、`:94`、`:116`。`opened` 放在 `QuizMenu` 裡，但父層遇到 `view.kind === 'problem'` 會把整個 `QuizMenu` 換成 `QuizCopies`，卸載並丟掉該快照；之後恢復為 set／none 時又建一個新的 `QuizMenu`。父層的 `open` 卻一直是 true。
+- **觸發**（真正 UI 探針的例子，今天為 2026-11-06）：
+  1. 同一個 L3 有 A：`a.md`、ID `aaaaaa`、11/7，及 B：`b.md`、ID `bbbbbb`、日期 `下週五`（待修正）。
+  2. 在目錄點「小考 11/7」，打開 A 的選單。
+  3. 另一台取消 A，`a.md` 多 `取消: 2026-11-06`；B 成為唯一待修正項。父層卸載選單，改顯示 `QuizCopies`，這時甚至只有 B 一條路徑卻寫「兩份看不出哪一份是改過的」。
+  4. 另一台把 B 修成 11/9。使用者沒有收起、重開選單，畫面卻自動出現新的日期按鈕與「取消小考」。
+  5. 按該「取消小考」，B 被加上 `取消: 2026-11-06`。
+- **預期／實際**：預期整次開啟的選單仍屬於 A，資料換成 B 時依第二輪約定只顯示「剛被別處改過」，不能直接操作 B；收起重開才使用 B。實際新掛載的 `QuizMenu` 把 B 存成 `opened`，key 比較自然相同，防線失效，直接取消 B。
+- **影響**：R3 修正只涵蓋子元件保持掛載的轉換。經過 date／copies 等 problem 狀態，就能再次跨小考身分操作；使用者尚未完成的編輯內容也會隨卸載丟掉。
+- **證據**：**已重現**。使用真正 React、`openEntry`、`createState`、MemoryFiles，外部變更經 `memory.write` 通知並等讀回。最後 A、B 兩檔都有取消行；B 的取消行是舊 A 選單的操作新增的。另測「同一路徑先換成 B 壞日期，再修好」也可取消 B。不是只比較 JSX 字串的推斷。
+- **真實路徑**：**會**。手寫日期壞掉的 B 與正常 A 並存、遠端取消 A、家長再修 B，都是已支援的輸入與同步路徑；不需要壞 JSON、任意私有 API 或兩台同毫秒操作。
+- **建議**：合併前修。把這次開啟時的身分與過時狀態放在整個開啟期間都不卸載的層，或在父層固定使用該上下文；problem 分支也須遵守同一個過時判斷。不要只替 `QuizMenu` 加 key，否則更容易重建快照。回歸至少包含 set(A) → problem(B) → set(B)、set(A) → copies → set(另一 ID)，以及使用者真的收起重開後可操作新小考。
+
+### R7 [P2] 精確位置的合法 .MD／.Md 連結被當成不存在
+
+- **軸**：規格／R1 修正引入的相容性退步。
+- **位置**：`src/obsidian/quiz-links.ts:9`、`:17`、`:36`～`:37`。`withMd` 先以區分大小寫的 `endsWith('.md')` 判斷，再轉小寫。
+- **觸發**：已知卡組是 `Essence Cards/學業/English.md`，連結寫 `[[Essence Cards/學業/English.MD]]`。同樣影響 `/Essence Cards/學業/English.Md`，以及從同資料夾寫 `./English.MD`。
+- **預期／實際**：Obsidian 已正確解析到該卡組，位置與副檔名不分大小寫應該接受；實際 `withMd` 算成 `essence cards/學業/english.md.md`，精確比對失敗，回 none，小考顯示「找不到這一篇」、不能練習。
+- **證據**：**已重現，且已比較基準**。同一個 metadata 回傳下，實際載入 `be14a85` 的 resolver 回 file，`c513cee` 回 none。另唯讀抽出本機 Obsidian 1.15.0 的 `getLinkpathDest` 方法，在自編 vault／lookup 裡執行，以上三個寫法都先解析到 `Essence Cards/學業/English.md`，而這次 resolver 全部拒絕；小寫 `.md` 對照正常。這是本機方法的隔離執行，不是本輪 Electron 互動驗收。
+- **真實路徑**：**會**。合法的手寫 Wikilink 可以用大寫副檔名；實際檔名仍是小寫 `.md`、也在 Essence Cards 內，沒有依賴外掛不讀的大寫檔名。原本可用的資料會在升版後變成待修正。
+- **測試缺口**：新增 `obsidianFirst` 替身一律把 link 接上 `.md`，沒有處理輸入已帶副檔名的真實分支；因此沒有用它驗到 `.MD` 的成功解析。不要讓替身與 `withMd` 同時用錯誤的副檔名假設。
+- **建議**：合併前修。先統一大小寫再判斷是否已有副檔名；加完整路徑、`/`、`./`、`../` 的 `.md`／`.MD`／`.Md`，並至少經 `parseQuiz` 串上 `|別名`、`#標題` 後仍正常。保持原 R1「位置失效不能退回備份」的反例。
+
+最小 resolver 對照（假 metadata 的回傳已另以上述本機 Obsidian 方法核實）：
+
+```js
+import { quizLinkResolver } from './src/obsidian/quiz-links.ts';
+const file = { path: 'Essence Cards/學業/English.md' };
+const resolve = quizLinkResolver({
+  metadataCache: { getFirstLinkpathDest: () => file },
+  vault: { getFiles: () => [file] },
+});
+console.log(resolve('Essence Cards/學業/English.md', 'x.md')); // file
+console.log(resolve('Essence Cards/學業/English.MD', 'x.md')); // 實際 none
+console.log(resolve('./English.MD', 'Essence Cards/學業/x.md')); // 實際 none
+```
+
+### R1～R5 與本輪選擇的核對
+
+| 項目 | 結論與證據 |
+|---|---|
+| R1／選擇 1：用 Essence Cards 根辨認完整路徑 | 原先「失效完整位置退到備份」已擋，合法短連結與部分路徑仍保留。這個分類符合目前只讀 Essence Cards 卡組的邊界。新大小寫退步見 R7；不把原反例已修寫成 R1 全部結案。 |
+| R2／選擇 2：modify 帶 exists | **修正通過**。Obsidian 的 process／create、Node 的 `old !== null`、MemoryFiles 的 `texts.has`、blank-history 的 `logs.has` 與 folder-files 轉交均核對；其他呼叫端只忽略多出的參數，沒有改回傳文字。blank-history 原本就明示不是完整 Files，紀錄的有效使用路徑沒有因此多寫真檔。 |
+| R2 的主機邊界 | 另以真正 `createObsidianFiles`＋自編 vault 測 C19：不存在／空檔／非空檔的參數為 false／true／true；索引不知道但磁碟已有空檔時，模擬 `vault.create` 丟 exists，adapter 拒絕且原文未動。Node／MemoryFiles 的 C19、晚到空檔與逾時後不建檔隨完整測試通過。`adapter.exists` 和 write 之間、Node read 和 write 之間仍非外部程序鎖；依請求已揭露的主機限制處理，不宣稱本次取得了跨同步程序的原子建立。 |
+| R3／選擇 3：留原因、不自動收起 | 這個互動選擇可接受。獨立測直接取消後只留 changed、無日期／取消按鈕；同 ID 只改日期仍可操作；自己設定已進 state、但回傳 promise 尚未結束時不誤報 changed，完成後照常關閉。**仍需 R6** 保證這些規則涵蓋整次開啟，而非只涵蓋一個子元件的存活時間。 |
+| R4／選擇 4：包一層、不搬初始焦點 | **修正通過**。獨立從真實焦點送 Esc，第一下關選單、焦點回按鈕，第二下才返回入口；組字中的 Esc 不關。日期欄、目錄／入口副本清單的回歸測試通過，沒有找到這次包層使既有 ✕ 導覽層級改變的情形。`display: contents` 的實際版面仍未親測。 |
+| R5／選擇 5：不設正常 others 的專門字 | **修正通過**。同目標正常列在 core 已依日期／路徑擇一；正常旁的壞日期與 copies 有回歸，原因與所有路徑不再混成日期錯誤。problem 模式只處理第一份、修好再處理其餘，符合本輪明列範圍；但從 problem 切回操作選單時仍須修 R6。 |
+
+### 驗證
+
+- Windows、Node `v24.13.0`，沿用同一 worktree 前輪依鎖定檔安裝的相依；本次差異沒有 package／lockfile 變更，未重裝相依。
+- **沙箱外完整檢查通過，exit 0**：`npm run check -- -- --test-timeout=120000`。保留 spec reporter，Node heap 上限 768 MB，外層 600 秒上限。實際測試命令為 `node --test --test-concurrency=1 "tests/**/*.test.ts" --test-timeout=120000`，型別、ESLint、knip、secretlint、skill 副本、文件與全部測試均通過。
+- **1642／1642 測試通過**，fail／cancelled／skipped／todo 都為 0，191.4 秒。沒有用前輪的失敗結果充當這輪通過；這輪不需要排除環境失敗。
+- R6、R7 的額外隔離重現不在這 1642 項裡。R6 用真正 React／state／MemoryFiles；R7 比較實際基準函式與待審函式，另核對本機 Obsidian 方法。對照探針確認同 ID 改期、busy 自寫、直接取消與 Esc／組字控制正常。
+- 額外 UI 對照探針最初的 assert 訊息用了未定義的 `name`，尚未執行情境就停止；修正探針後各控制情境通過，沒有改產品或測試檔，也沒有把這次探針錯誤算成產品問題。
+
+未測：遵照請求未執行 `quiz-mark` 或 `files`、未更換測試 vault 建置；未親測 Windows 的 R3／R4／R5 互動、iPhone、WebKit 版面或檔案 App 同步。實作者 `c513cee` 的 Windows 結果是待核對的外部證據，沒有寫成本輪親測。
+
+## Claude 回應：第二輪（2026-11-06）
+
+狀態：R6、R7 都成立，都修了；待 Codex 第三輪。
+
+整合者核對：R6 照報告的步驟寫成畫面測試，在 `c513cee` 失敗在第一步（另一台取消 A 之後，選單被換成「兩份看不出」的清單）；R7 照報告的三種寫法，`c513cee` 回 `none`。另外讀了 `obsidian-1.15.0.asar` 的 `getLinkpathDest`：先把連結轉小寫，檔名裡有點就照寫的找，找不到才加 `.md`，所以 `.MD` 結尾的照寫的就找得到。
+
+| 發現 | 真實／`c513cee`／修法後 | 修法 | commit | 回歸測試 |
+|---|---|---|---|---|
+| R6 | 選單開著時 A 被別處取消、B 被修好／選單重建、記住 B，按「取消小考」取消了 B／一直寫「被別處改過」、B 沒動，收起再打開才操作 B | 打開時的那一次記在按鈕那一層（整次打開都不卸載），打開時是選單就一直是選單、是兩份的清單就一直是清單；比的是種類（還沒設、設好了、待修正）加識別碼，換了就只寫原因。打開時按按鈕一律收起（原本變成待修正後會去開檔） | `83ca1b9` | A 取消→B 待修正→B 修好（R6 原例）；A 取消→兩份不一樣→改成一樣；列出兩份時一份修好、換成另一組；同一份的日期在別處改壞；按鈕變成待修正時按一下是收起；自己按的取消已經讀回、結果還沒回來（不寫別處改過、按不下去、回來才收起） |
+| R7 | Obsidian 找得到 `English.MD`／算成 `english.md.md`，找不到這一篇／認得 | `withMd` 先轉小寫再看副檔名；測試替身照 Obsidian 先照寫的找、找不到再加 `.md` | `fd8670c` | `.md`、`.MD`、`.Md` × 完整路徑、`/` 開頭、`./`、`../`、只寫檔名；經 `parseQuiz` 的 `|別名`、`#標題`；R1 的反例（原篇不在、只剩備份）大寫副檔名也是 `none` |
+
+改壞檢查（`tests/quiz-ui.test.ts`、`tests/quiz-links.test.ts` 58 項）七種全部抓到：不比種類、自己按的也算別處改過、打開時按鈕照舊去開檔、兩份的清單不比是不是同一組、兩份的清單不看還是不是兩份、照現在的資料選選單或清單、先看副檔名再轉小寫。第一次跑「自己按的也算別處改過」與「照現在的資料選選單或清單」沒抓到：第一輪 R3 的「自己按的還在寫時不算」一直沒有測試（第一輪回應已寫），補了讓結果晚一點回來的測試後兩種都抓到；後者在自己取消、旁邊還有待修正的另一份時，選單會被卸載而收不起來。
+
+實作者這一輪自己選的做法列在[第三輪請求](../tasks/quiz-mark-review.md#再審第三輪第二輪發現的修正)。
+
+### 驗證
+
+- `afa3669`：`npm run check` 通過（型別、ESLint、knip、secretlint、文件檢查；測試 1649 項全部通過，180 秒，`--test-timeout=120000`）。每個 commit 都過 pre-commit。`tests/quiz-ui.test.ts` 48 項、`tests/quiz-links.test.ts` 10 項。
+- 回歸測試先寫，在修之前確認失敗（R6 3 項、R7 1 項）。R6 修好之後又補了三項：換成另一組兩份、同一份的日期改壞（修好之後才寫，沒有在修之前跑過），以及改壞檢查沒抓到才補的「自己按的結果還沒回來」。
+- Windows 實機（Obsidian 1.15.0、建置 `0.3.0+afa3669`，測試 vault）：`quiz-mark` 的結果檔 `Essence W6/結果/quiz-mark Windows-c50c 2026-11-06 092812.json`。新加的 `.md`／`.MD`／`.Md` × 完整路徑、`/` 開頭、相對路徑 12 種，Obsidian 的 `getFirstLinkpathDest` 都找到那一篇，外掛也都認得；其餘欄位把隨機名稱換掉後和 `c513cee` 那一次完全相同。這一輪沒改 `Files`，`files` 沒有重跑（`c513cee` 19／19）。
+
+沒跑：R6 的情境（別台裝置取消、修好另一份）不在開發命令裡，只在 happy-dom 驗過；iPhone 併入下一次實機測試。
