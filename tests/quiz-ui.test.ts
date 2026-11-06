@@ -367,6 +367,102 @@ void test('L2 R3 自己按的設定與取消不算「別處改過」：選單照
   assert.equal(s.text().includes('別處改過'), false);
 });
 
+/** 選單還開著，只寫「別處改過」，沒有任何按得下去的選項。 */
+function assertChanged(s: Screen, when: string): void {
+  const menu = s.all('.ec-qz-menu')[0];
+  assert.ok(menu, when + '：選單還在');
+  assert.match(menu.textContent ?? '', /這個小考剛被別處改過，請再看一次/, when);
+  for (const name of ['今天', '明天', '後天', '其他日期', '取消小考']) assert.equal(s.has(name, menu), false, when + '：' + name + ' 按不到');
+  assert.equal(s.text().includes('兩份看不出'), false, when + '：打開的是選單，不換成兩份的清單');
+}
+
+void test('L2 R6 選單開著時這次小考被取消、另一份待修正的又被修好：一直寫別處改過，取消不到另一份；收起再打開才操作那一份', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07', L3, 'aaaaaa'), [FOLDER + 'b.md']: quizText('下週五', L3, 'bbbbbb') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考 11/7'));
+  await act(async () => { s.write(FOLDER + 'a.md', quizText('2026-11-07', L3, 'aaaaaa', '取消: 2026-11-05\n')); await wait(25); });
+  assertChanged(s, '這次被取消、只剩待修正的另一份');
+  await act(async () => { s.write(FOLDER + 'b.md', quizText('2026-11-09', L3, 'bbbbbb')); await wait(25); });
+  assertChanged(s, '另一份修好了');
+  assert.equal(text(s, FOLDER + 'b.md').includes('取消'), false);
+  await s.click(s.button('小考 11/9'));
+  assert.equal(s.all('.ec-qz-menu').length, 0, '按一下收起');
+  await s.click(s.button('小考 11/9'));
+  await s.click(s.button('取消小考'));
+  assert.match(text(s, FOLDER + 'b.md'), /取消: 2026-11-05/, '收起再打開，才是那一份的選單');
+});
+
+void test('L2 R6 選單開著時這次小考被取消、出現兩份不一樣、又修成另一份：一直寫別處改過，改不到另一份', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07', L3, 'aaaaaa') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考 11/7'));
+  await act(async () => {
+    s.write(FOLDER + 'a.md', quizText('2026-11-07', L3, 'aaaaaa', '取消: 2026-11-05\n'));
+    s.write(FOLDER + 'c1.md', quizText('2026-11-08', L3, 'cccccc'));
+    s.write(FOLDER + 'c2.md', quizText('2026-11-09', L3, 'cccccc'));
+    await wait(25);
+  });
+  assertChanged(s, '兩份不一樣');
+  await act(async () => { s.write(FOLDER + 'c2.md', quizText('2026-11-08', L3, 'cccccc')); await wait(25); });
+  assertChanged(s, '兩份改成一樣');
+  assert.deepEqual([text(s, FOLDER + 'c1.md'), text(s, FOLDER + 'c2.md')], [quizText('2026-11-08', L3, 'cccccc'), quizText('2026-11-08', L3, 'cccccc')]);
+});
+
+void test('L2 R6 列出兩份時其中一份被修好、變成正常的小考：寫別處改過，不換成選單', async t => {
+  const s = await open(t, { [FOLDER + 'c1.md']: quizText('2026-11-08', L3, 'cccccc'), [FOLDER + 'c2.md']: quizText('2026-11-09', L3, 'cccccc') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('這個小考有兩份不一樣的檔'));
+  assert.ok(s.has(FOLDER + 'c2.md'));
+  await act(async () => { s.write(FOLDER + 'c2.md', quizText('2026-11-08', L3, 'cccccc')); await wait(25); });
+  assertChanged(s, '兩份改成一樣');
+  assert.equal(s.has(FOLDER + 'c2.md'), false);
+});
+
+void test('L2 R3 R6 自己按的取消已經讀回、結果還沒回來（旁邊有待修正的另一份）：不寫別處改過、按不下去，結果回來之後收起', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07', L3, 'aaaaaa'), [FOLDER + 'b.md']: quizText('下週五', L3, 'bbbbbb') });
+  await s.expand('L3 Vocabulary');
+  const cancel = s.state.cancelQuiz.bind(s.state);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  s.state.cancelQuiz = async opened => { const result = await cancel(opened); await gate; return result; };
+  await s.click(s.button('小考 11/7'));
+  await s.click(s.button('取消小考'));
+  assert.match(text(s, FOLDER + 'a.md'), /取消: 2026-11-05/, '已經寫進去');
+  assert.ok(s.has('小考日期有問題'), '目錄已經讀到：只剩待修正的另一份');
+  const menu = s.all('.ec-qz-menu')[0];
+  assert.ok(menu, '選單還開著，等結果');
+  assert.equal(/別處改過/.test(menu.textContent ?? ''), false);
+  assert.ok(s.button('取消小考', menu).disabled, '寫的時候按不下去');
+  await act(async () => { release(); await wait(25); });
+  assert.equal(s.all('.ec-qz-menu').length, 0, '結果回來之後收起');
+  assert.equal(s.text().includes('別處改過'), false);
+});
+
+void test('L2 R6 列出兩份時換成另一組兩份不一樣：寫別處改過，不列另一組', async t => {
+  const s = await open(t, { [FOLDER + 'c1.md']: quizText('2026-11-08', L3, 'cccccc'), [FOLDER + 'c2.md']: quizText('2026-11-09', L3, 'cccccc') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('這個小考有兩份不一樣的檔'));
+  await act(async () => {
+    s.write(FOLDER + 'c1.md', quizText('2026-11-08', L3, 'dddddd'));
+    s.write(FOLDER + 'c2.md', quizText('2026-11-09', L3, 'dddddd'));
+    await wait(25);
+  });
+  assertChanged(s, '換成另一組');
+});
+
+void test('L2 R6 選單開著時這一份的日期在別處被改壞：寫別處改過；按鈕變成待修正，按一下是收起，不是打開那份檔', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07', L3, 'aaaaaa') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考 11/7'));
+  await act(async () => { s.write(FOLDER + 'a.md', quizText('下週五', L3, 'aaaaaa')); await wait(25); });
+  assertChanged(s, '同一份的日期壞掉');
+  await s.click(s.button('小考日期有問題'));
+  assert.equal(s.all('.ec-qz-menu').length, 0, '收起');
+  assert.deepEqual(s.notes, [], '沒有打開檔');
+  await s.click(s.button('小考日期有問題'));
+  assert.deepEqual(s.notes, [FOLDER + 'a.md'], '收起之後再按才去修');
+});
+
 /** 從現在有焦點的元素按 Esc（真的鍵盤事件從這裡開始冒泡）。 */
 async function escape(): Promise<void> {
   await act(async () => {

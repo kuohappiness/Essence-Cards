@@ -71,29 +71,37 @@ export function QuizEntryRow({ row, state, start, openNote, notify }: Actions & 
 
 /** 目錄的「小考」按鈕（§3）：按下去選日期；設好之後寫日期，再按一次可以改或取消；只有壞掉的檔時寫原因，點了去修。 */
 export function QuizButton({ state, openNote, input, at }: Pick<EntryProps, 'state' | 'openNote'> & { input: QuizInput; at: QuizRef }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const { trigger, onKey } = useEscape(open, () => { setOpen(false); });
+  // 打開時的那一次（L2 R3、R6）：記在整次打開都在的這一層，之後的改日期與取消都對它做。資料中途變成待修正再變回來也不換人；
+  // 別台裝置取消、同一個目標換成另一份時只寫原因，不悄悄改成建新的或改另一份，收起再打開才照新的資料。
+  const [opened, setOpened] = useState<QuizButtonView | null>(null);
+  const close = (): void => { setOpened(null); };
+  const { trigger, onKey } = useEscape(opened !== null, close);
   const view = quizButton(state(), at);
   const warn = view.kind === 'problem' ? ' is-warn' : '';
   const press = (): void => {
-    if (view.kind === 'problem' && view.row.problem !== 'copies') openNote(view.row.paths[0]);
-    else setOpen(!open);
+    if (opened) close();
+    else if (view.kind === 'problem' && view.row.problem !== 'copies') openNote(view.row.paths[0]);
+    else setOpened(view);
   };
   return <span className="ec-qz-ctl" onKeyDown={onKey}>
-    <button ref={trigger} type="button" className={'ec-u-btn' + warn} aria-expanded={open} onClick={press}>{view.label}</button>
-    {open && (view.kind === 'problem'
-      ? <QuizCopies row={view.row} openNote={openNote} />
-      : <QuizMenu state={state} openNote={openNote} view={view} input={input} close={() => { setOpen(false); }} />)}
+    <button ref={trigger} type="button" className={'ec-u-btn' + warn} aria-expanded={opened !== null} onClick={press}>{view.label}</button>
+    {opened && (opened.kind === 'problem'
+      ? (view.kind === 'problem' && view.row.problem === 'copies' && sameQuiz(opened, view) ? <QuizCopies row={view.row} openNote={openNote} /> : <Changed />)
+      : <QuizMenu state={state} openNote={openNote} view={view} opened={opened} input={input} close={close} />)}
   </span>;
 }
 
+/** 是不是打開時的那一次：還沒設、設好了、待修正的種類一樣，識別碼也一樣（同一份小考只改了日期仍算）。 */
+const sameQuiz = (a: QuizButtonView, b: QuizButtonView): boolean => a.kind === b.kind && (a.row?.key ?? null) === (b.row?.key ?? null);
 const CHANGED = quizFailure({ kind: 'blocked', reason: 'changed' });
+function Changed(): React.JSX.Element {
+  return <div className="ec-qz-menu"><p className="ec-sc-word is-bad" role="alert">{CHANGED}</p></div>;
+}
 
-function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'state' | 'openNote'> & { view: Exclude<QuizButtonView, { kind: 'problem' }>; input: QuizInput; close: () => void }): React.JSX.Element | null {
-  // 打開選單時的那一次小考（L2 R3）：之後的改日期與取消都對它做。別台裝置取消、同一個目標換成另一份時，不悄悄改成建新的或改另一份。
-  const [opened] = useState(view.row);
+function QuizMenu({ state, openNote, view, opened, input, close }: Pick<EntryProps, 'state' | 'openNote'> & { view: QuizButtonView; opened: Exclude<QuizButtonView, { kind: 'problem' }>; input: QuizInput; close: () => void }): React.JSX.Element | null {
+  const { row } = opened;
   const [other, setOther] = useState(false);
-  const [typed, setTyped] = useState(view.row?.date ?? '');
+  const [typed, setTyped] = useState(row?.date ?? '');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const alive = useRef(true);
@@ -110,17 +118,15 @@ function QuizMenu({ state, openNote, view, input, close }: Pick<EntryProps, 'sta
     if (result.kind === 'done') close();
     else setFailure(quizFailure(result));
   }
-  const set = (date: string): void => { void run(() => current.setQuiz(input, date, opened)); };
+  const set = (date: string): void => { void run(() => current.setQuiz(input, date, row)); };
   const check = checkQuizDate(typed, day);
   // 自己按的還在寫時，畫面先看到自己的結果，不算別處改的。
-  if (!busy && (view.row?.key ?? null) !== (opened?.key ?? null)) return <div className="ec-qz-menu">
-    <p className="ec-sc-word is-bad" role="alert">{CHANGED}</p>
-  </div>;
+  if (!busy && !sameQuiz(opened, view)) return <Changed />;
   return <div className="ec-qz-menu">
     <div className="ec-qz-days">
       {quizChoices(day).map(choice => <button key={choice.label} type="button" className="ec-u-btn" disabled={busy} onClick={() => { set(choice.date); }}>{choice.label}</button>)}
       <button type="button" className="ec-u-btn" aria-expanded={other} disabled={busy} onClick={() => { setOther(!other); }}>其他日期</button>
-      {opened && <button type="button" className="ec-u-btn is-quiet" disabled={busy} onClick={() => { void run(() => current.cancelQuiz(opened)); }}>取消小考</button>}
+      {row && <button type="button" className="ec-u-btn is-quiet" disabled={busy} onClick={() => { void run(() => current.cancelQuiz(row)); }}>取消小考</button>}
     </div>
     {other && <form className="ec-qz-other" onSubmit={event => { event.preventDefault(); if (check.date !== null && !busy) set(check.date); }}>
       <DateField label="日期" name="小考日期" hint="例如 2026-11-07" value={typed} set={setTyped} bad={check.word !== null} />
