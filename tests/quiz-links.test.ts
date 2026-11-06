@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
 import { parseQuiz } from '../src/core/catalog/index.ts';
 import { quizLinkResolver } from '../src/obsidian/quiz-links.ts';
+import { createState } from '../src/state/index.ts';
+import { createMemoryFiles } from './helpers/memory-files.ts';
 
 // 小考檔的連結怎麼認（tasks/quiz-mark.md §1）：只在確定指向一篇時接受；重名、認不出來走待修正。真的 Obsidian 解析在實機跑（§6）。
 
@@ -149,6 +151,57 @@ void test('L2 R7 副檔名的大小寫不影響：.md、.MD、.Md 的完整路�
   const nested = 'Essence Cards/備份/' + WORDS;
   assert.deepEqual(realResolver([nested])('Essence Cards/學業/' + name + '.MD', FROM), { kind: 'none' });
   assert.deepEqual(realResolver([nested])('../../學業/' + name + '.Md', FROM), { kind: 'none' });
+});
+
+void test('L2 R8 檔名本身以 .MD 結尾（Topic.MD.md）：照 Obsidian 先照寫的找、找不到再加 .md；完整路徑、相對路徑、檔名都認得，重名是 several', () => {
+  const deck = 'Essence Cards/學業/Topic.MD.md';
+  const resolve = realResolver([deck]);
+  for (const [written, from] of [
+    ['Essence Cards/學業/Topic.MD', FROM],
+    ['/Essence Cards/學業/Topic.MD', FROM],
+    ['./Topic.MD', 'Essence Cards/學業/x.md'],
+    ['../../學業/Topic.MD', FROM],
+    ['Topic.MD', FROM],
+    ['Essence Cards/學業/Topic.MD.md', FROM],
+    ['essence cards/學業/topic.md', FROM],
+    ['Topic.MD.md', FROM],
+  ]) assert.deepEqual(resolve(written, from), { kind: 'file', path: deck }, written);
+  const copies = realResolver(['Essence Cards/A/Topic.MD.md', 'Essence Cards/B/Topic.MD.md']);
+  assert.deepEqual(copies('Topic.MD', FROM), { kind: 'several' }, '同名兩篇不靠 Obsidian 挑');
+  assert.deepEqual(copies('Topic.MD.md', FROM), { kind: 'several' });
+  // Topic.md 和 Topic.MD.md 都在：Obsidian 照寫的先找到 Topic.md，寫完整檔名才是另一篇。
+  const both = realResolver(['Essence Cards/學業/Topic.md', deck]);
+  assert.deepEqual(both('Essence Cards/學業/Topic.MD', FROM), { kind: 'file', path: 'Essence Cards/學業/Topic.md' });
+  assert.deepEqual(both('Essence Cards/學業/Topic.MD.md', FROM), { kind: 'file', path: deck });
+  // R1 的反例照舊：原篇不在、只剩尾巴相同的備份。
+  assert.deepEqual(realResolver(['Essence Cards/備份/' + deck])('Essence Cards/學業/Topic.MD', FROM), { kind: 'none' });
+  // 檔名中間有點的一般情況。
+  const smith = 'Essence Cards/學業/Mr.Smith.md';
+  assert.deepEqual(realResolver([smith])('Essence Cards/學業/Mr.Smith', FROM), { kind: 'file', path: smith });
+  assert.deepEqual(realResolver([smith])('Mr.Smith', FROM), { kind: 'file', path: smith });
+  // 檔名沒有點時一定加 .md：旁邊有沒有副檔名的同名檔也一樣。
+  const readme = 'Essence Cards/學業/README.md';
+  assert.deepEqual(realResolver(['Essence Cards/學業/README', readme])('Essence Cards/學業/README', FROM), { kind: 'file', path: readme });
+});
+
+void test('L2 R8 替 Topic.MD.md 這一篇設小考：外掛寫的 [[…/Topic.MD]] 建得出來，讀回指向那一篇', async t => {
+  const deck = 'Essence Cards/學業/Topic.MD.md';
+  const memory = createMemoryFiles({ [deck]: '---\n年級學期: 國二上\n科目: 英文\n單元: "L3"\n---\n- A ^aaa\n    - Q :: A\n' });
+  const state = createState({
+    files: memory.files, device: 'PC-test', delay: 1, fillIds: false,
+    now: () => Date.parse('2026-11-05T12:00:00+08:00'), offset: () => 480,
+    resolveLink: (link, from) => realResolver([...memory.texts.keys()])(link, from),
+  });
+  t.after(() => state.close());
+  await state.ready();
+  assert.deepEqual(await state.setQuiz({ deck }, '2026-11-07', null), { kind: 'done' });
+  const written = [...memory.texts].find(([path]) => path.startsWith('Essence Cards/考試範圍/小考/'));
+  assert.ok(written);
+  assert.match(written[1], /^- \[\[Essence Cards\/學業\/Topic\.MD\]\]$/m);
+  const rows = state.quizzes();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].problem, null);
+  assert.deepEqual(rows[0].refs, [{ deck }]);
 });
 
 void test('§1 尾巴剛好一樣但資料夾名不同的不算重名：比的是整段路徑', () => {

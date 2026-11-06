@@ -6,16 +6,24 @@ import type { QuizResolved } from '../state/index.ts';
 
 const ROOT = ESSENCE_ROOT.toLowerCase() + '/';
 const folderOf = (path: string): string => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-/** 小寫、以 `.md` 結尾。先轉小寫再看副檔名：`.MD`、`.Md` 結尾的 Obsidian 也照寫的找（L2 R7）。 */
-const withMd = (link: string): string => { const lower = link.toLowerCase(); return lower.endsWith('.md') ? lower : lower + '.md'; };
+const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+
+/**
+ * Obsidian 拿來找的那一段（小寫）：檔名有點、vault 裡也有這個檔名時照寫的找，否則加 `.md`（1.15.0 的 getLinkpathDest）。
+ * 所以 `English.MD` 找的是 English.md（L2 R7），`Topic.MD` 在只有 Topic.MD.md 時找的是 Topic.MD.md（L2 R8）：不能只看字尾猜。
+ */
+function lookedUp(link: string, files: readonly { path: string }[]): string {
+  const lower = link.toLowerCase(), name = nameOf(lower);
+  return name.includes('.') && files.some(each => nameOf(each.path.toLowerCase()) === name) ? lower : lower + '.md';
+}
 
 /**
  * 連結寫的是一個確切的位置時回那個位置（小寫）：外掛寫的完整路徑（卡組都在 Essence Cards/ 底下）、`/` 開頭、`./` 與 `../`。
  * 只寫檔名或一段路徑的回 null。Obsidian 在確切的位置沒有檔時會退回路徑尾巴相同的檔（1.15.0 的 getLinkpathDest，L2 R1），
- * 那一篇搬走或刪掉、另一層剛好有整包備份時會指到備份，所以這種連結要自己比。
+ * 那一篇搬走或刪掉、另一層剛好有整包備份時會指到備份，所以這種連結要自己比。looked 是 lookedUp 的結果。
  */
-function exactPath(link: string, from: string): string | null {
-  let written = withMd(link);
+function exactPath(looked: string, from: string): string | null {
+  let written = looked;
   if (written.startsWith('/')) return written.slice(1);
   if (written.startsWith('./') || written.startsWith('../')) {
     let folder = folderOf(from).toLowerCase();
@@ -34,10 +42,12 @@ export function quizLinkResolver(app: App): (link: string, from: string) => Quiz
   return (link, from) => {
     const file = app.metadataCache.getFirstLinkpathDest(link, from);
     if (!file) return { kind: 'none' };
-    const exact = exactPath(link, from);
+    const files = app.vault.getFiles();
+    const looked = lookedUp(link, files);
+    const exact = exactPath(looked, from);
     if (exact !== null) return file.path.toLowerCase() === exact ? { kind: 'file', path: file.path } : { kind: 'none' };
-    const tail = '/' + withMd(link);
-    const same = app.vault.getFiles().filter(each => ('/' + each.path.toLowerCase()).endsWith(tail));
+    const tail = '/' + looked;
+    const same = files.filter(each => ('/' + each.path.toLowerCase()).endsWith(tail));
     return same.length > 1 ? { kind: 'several' } : { kind: 'file', path: file.path };
   };
 }
