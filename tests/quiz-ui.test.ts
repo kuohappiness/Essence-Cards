@@ -438,6 +438,23 @@ void test('L2 R3 R6 自己按的取消已經讀回、結果還沒回來（旁邊
   assert.equal(s.text().includes('別處改過'), false);
 });
 
+void test('L2 R9 自己按的取消寫入逾時、資料又變成別的：寫逾時的原因，不寫別處改過；選項仍按不到', async t => {
+  const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-07', L3, 'aaaaaa'), [FOLDER + 'b.md']: quizText('下週五', L3, 'bbbbbb') });
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考 11/7'));
+  const held = s.holdModify(FOLDER + 'a.md');
+  await s.click(s.button('取消小考'));
+  await act(async () => { await wait(300); });
+  assert.match(text(s, FOLDER + 'a.md'), /取消: 2026-11-05/, '其實已經寫進去，只是沒有回來');
+  const menu = s.all('.ec-qz-menu')[0];
+  assert.ok(menu, '選單還開著');
+  assert.match(menu.textContent ?? '', /寫不進去：.*請重新打開這個畫面確認/);
+  assert.equal(/別處改過/.test(menu.textContent ?? ''), false, '不把自己的動作說成別處改的');
+  for (const name of ['今天', '明天', '後天', '其他日期', '取消小考']) assert.equal(s.has(name, menu), false, name + ' 按不到');
+  held.release();
+  await act(async () => { await wait(25); });
+});
+
 void test('L2 R6 列出兩份時換成另一組兩份不一樣：寫別處改過，不列另一組', async t => {
   const s = await open(t, { [FOLDER + 'c1.md']: quizText('2026-11-08', L3, 'cccccc'), [FOLDER + 'c2.md']: quizText('2026-11-09', L3, 'cccccc') });
   await s.expand('L3 Vocabulary');

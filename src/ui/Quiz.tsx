@@ -86,7 +86,7 @@ export function QuizButton({ state, openNote, input, at }: Pick<EntryProps, 'sta
   return <span className="ec-qz-ctl" onKeyDown={onKey}>
     <button ref={trigger} type="button" className={'ec-u-btn' + warn} aria-expanded={opened !== null} onClick={press}>{view.label}</button>
     {opened && (opened.kind === 'problem'
-      ? (view.kind === 'problem' && view.row.problem === 'copies' && sameQuiz(opened, view) ? <QuizCopies row={view.row} openNote={openNote} /> : <Changed />)
+      ? (view.kind === 'problem' && view.row.problem === 'copies' && sameQuiz(opened, view) ? <QuizCopies row={view.row} openNote={openNote} /> : <Changed word={CHANGED} />)
       : <QuizMenu state={state} openNote={openNote} view={view} opened={opened} input={input} close={close} />)}
   </span>;
 }
@@ -94,8 +94,9 @@ export function QuizButton({ state, openNote, input, at }: Pick<EntryProps, 'sta
 /** 是不是打開時的那一次：還沒設、設好了、待修正的種類一樣，識別碼也一樣（同一份小考只改了日期仍算）。 */
 const sameQuiz = (a: QuizButtonView, b: QuizButtonView): boolean => a.kind === b.kind && (a.row?.key ?? null) === (b.row?.key ?? null);
 const CHANGED = quizFailure({ kind: 'blocked', reason: 'changed' });
-function Changed(): React.JSX.Element {
-  return <div className="ec-qz-menu"><p className="ec-sc-word is-bad" role="alert">{CHANGED}</p></div>;
+/** 不再接受操作的選單：只寫原因。word 是自己這次按的失敗原因（例如逾時、可能已經寫好），有的話寫它，不說成別處改的（L2 R9）。 */
+function Changed({ word }: { word: string }): React.JSX.Element {
+  return <div className="ec-qz-menu"><p className="ec-sc-word is-bad" role="alert">{word}</p></div>;
 }
 
 function QuizMenu({ state, openNote, view, opened, input, close }: Pick<EntryProps, 'state' | 'openNote'> & { view: QuizButtonView; opened: Exclude<QuizButtonView, { kind: 'problem' }>; input: QuizInput; close: () => void }): React.JSX.Element | null {
@@ -120,8 +121,8 @@ function QuizMenu({ state, openNote, view, opened, input, close }: Pick<EntryPro
   }
   const set = (date: string): void => { void run(() => current.setQuiz(input, date, row)); };
   const check = checkQuizDate(typed, day);
-  // 自己按的還在寫時，畫面先看到自己的結果，不算別處改的。
-  if (!busy && !sameQuiz(opened, view)) return <Changed />;
+  // 自己按的還在寫時，畫面先看到自己的結果，不算別處改的。寫完失敗、資料又變成別的：選項一樣拿掉，原因寫自己這次的失敗。
+  if (!busy && !sameQuiz(opened, view)) return <Changed word={failure ?? CHANGED} />;
   return <div className="ec-qz-menu">
     <div className="ec-qz-days">
       {quizChoices(day).map(choice => <button key={choice.label} type="button" className="ec-u-btn" disabled={busy} onClick={() => { set(choice.date); }}>{choice.label}</button>)}
