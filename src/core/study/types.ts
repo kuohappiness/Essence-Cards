@@ -2,6 +2,9 @@ import type { Deck, Prompt, Target } from '../deck/index.ts';
 
 export type Rating = 'easy' | 'good' | 'near' | 'miss';
 
+/** 一個目標每一句（指紋）最後出的時間與次數（tasks/question-type-seam.md §4）；和評分分開。 */
+export type Shown = Map<string, { at: number; count: number }>;
+
 interface Stamp {
   t: string;
   at: number;
@@ -16,6 +19,10 @@ export interface ReviewEntry extends Stamp {
   /** 打字卡的作答方式；沒有這一欄是 null，認不得的字串原樣保留。 */
   typed: string | null;
   src: string | null;
+  /** 比較卡同一張的第一行的 t，第二行起才有（tasks/question-type-seam.md §4）：只用在秒數。 */
+  with?: string;
+  /** 比較卡同一個目標其他格的指紋：只用在出題歷史，評分只看最上層。 */
+  also?: readonly string[];
 }
 
 export interface UndoEntry extends Stamp {
@@ -36,7 +43,8 @@ export type LogEntry = ReviewEntry | UndoEntry | ChangeEntry;
 export type NewEntry =
   // typed：打字卡第 1 步的結果；retry：第 2 步（原形提示）的結果，第 1 步 wrong／skip 時一定寫，跳過第 2 步寫 not-needed
   // （D-121、D-115、syntax.md §5）。評分只看第 1 步；retry 只是證據，parseLine 不讀它。
-  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; src?: 'check' }
+  // pick、also、with：比較卡（tasks/question-type-seam.md §4）。pick 是對答案時那一格的字，第一次按「沒印象」是 null；also 是同一個目標的其他格。
+  | { lt: string; r: Rating; v: string; typed?: 'right' | 'wrong' | 'skip'; pick?: string | null; retry?: 'right' | 'wrong' | 'skip' | 'not-needed'; also?: readonly PickCell[]; with?: string; src?: 'check' }
   | { lt: string; r: 'miss'; src: 'mistake' }
   | { undo: string }
   | { set: 'cap'; val: number }
@@ -49,6 +57,9 @@ export type NewEntry =
   | { set: 'status'; lt: string; val: '啟用' | '暫停' }
   // 考試範圍（syntax.md §5、tasks/exam-scope.md §2-5）：只記外掛自己的寫入。
   | { set: 'exam'; val: ExamLog };
+
+/** 比較卡同一個目標的另一格：意思和那一行最上層的同名欄位相同。 */
+export interface PickCell { v: string; r: Rating; pick: string | null; retry?: 'right' | 'wrong' | 'skip' }
 
 export interface ExamLog {
   id: string;
@@ -109,6 +120,11 @@ export interface DeckEntry {
   /** vault 裡的路徑；同時是排序與「當日卡」的鍵。 */
   path: string;
   deck: Deck;
+  /**
+   * 這篇全部的目標，只有 deck.targets 裁過才有（ID 重複、和需要新版的卡組同一個 ID：不排程、不出題）。
+   * 比較卡的字鍵與對照看這份：不出題的字還是要比較（tasks/question-type-seam.md §5-1、L2 的 R2）。
+   */
+  whole?: readonly Target[];
 }
 
 export interface Settings {
@@ -164,8 +180,8 @@ export interface Slot {
   inExam: boolean;
   /** 今天以前答對過（good、easy）。 */
   correct: boolean;
-  /** 今天以前每個題目指紋最後一次出現的時間。 */
-  seen: Map<string, number>;
+  /** 今天以前每個題目指紋的出題歷史。 */
+  seen: Shown;
 }
 
 export interface Today {
@@ -196,6 +212,23 @@ export interface ScopeCount { done: number; total: number }
 /** 記憶配色（D-062）：灰未複習、橙快忘了、綠記得、藍很熟。 */
 export type MemoryColor = 'new' | 'near' | 'good' | 'easy';
 
+/** 一張卡的一格：只對一個學習目標（D-114）。 */
+export interface Blank {
+  lt: string;
+  target: Target;
+  prompt: Prompt;
+  /** 比較卡才有：這一格對的字鍵，照 CardGroup.members 的寫法。 */
+  answer?: string;
+}
+
+/** 比較卡的組（tasks/question-type-seam.md §5、§7）：標題、括號的順序、打散的字鍵、每個字一行的對照。對照裡的 lt 是這篇卡組裡這個字的目標，不一定在這次的範圍裡。 */
+export interface CardGroup {
+  title: string;
+  members: readonly string[];
+  keys: readonly string[];
+  rows: readonly { member: string; lt: string | null; anchor: string | null }[];
+}
+
 export interface Card {
   lt: string;
   deck: string;
@@ -208,6 +241,10 @@ export interface Card {
   typed: boolean;
   /** 剛答錯、還沒到時間就提早出。 */
   early: boolean;
+  /** 這張卡的每一格，至少一格，照畫面的順序；翻面與打字就是自己那一格（D-181）。 */
+  blanks: readonly Blank[];
+  /** 比較卡才有；這時 lt、target、prompt 是選中的目標在畫面上的第一格。 */
+  group?: CardGroup;
 }
 
 export type Next =

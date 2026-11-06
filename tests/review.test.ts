@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
 import { encodeEntry, mergeHistory, planToday } from '../src/core/study/index.ts';
 import type { Progress } from '../src/core/study/index.ts';
-import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, splitTranslation, tailStart, todayStats } from '../src/review/index.ts';
+import { allowedFor, blankCount, closest, closingRun, copying, crumb, doneView, englishBeside, englishBreak, englishParts, extraLabel, fillBlank, gesture, glueArticles, keyboardFit, lineSpeech, lockAxis, openingRun, otherAnswers, sourceLinks, spelling, splitTranslation, tailStart, todayStats } from '../src/review/index.ts';
 
 // W6 §5 的純函式：R6 畫線、R7 比對、R8 英文的部分、R9 手勢、R11 路徑、R12 出處，以及完成畫面的文字（§2-6）。
 
@@ -256,6 +256,17 @@ void test('D-145 中文句子後面的英文換到下一行：斷在最後一個
   assert.equal(englishBreak('Can I '), null);
   assert.equal(englishBreak('This box is very '), null);
   assert.equal(englishBreak('𠮷。I '), 3, '補充平面的中文字照 UTF-16 長度算');
+});
+
+void test('比較句的空格可能填中文：只有空格旁邊真的是英文才算英文句子開始了', () => {
+  assert.equal(englishBeside('水管', '住了。'), false, '中文句子不在空格前斷行');
+  assert.equal(englishBeside('他昨天弄丟了', ''), false, '句尾的空格也不斷');
+  assert.equal(englishBeside('', '假快到了。'), false);
+  assert.equal(englishBeside('我可以借你的筆嗎？Can I ', ' your pen?'), true);
+  assert.equal(englishBeside('我可以借你的筆嗎？', ' me your pen?'), true, '空格是英文句子的第一個字');
+  assert.equal(englishBeside('Hello 大家好', '住了。'), false, '前面的英文隔著中文，不算');
+  assert.equal(englishBeside('水管', '住了 ok'), false, '後面的英文隔著中文，不算');
+  assert.equal(englishBeside('今年 3 ', ' 月'), false, '數字不算英文');
 });
 
 void test('R9 手勢：先鎖方向，垂直捲動後不改判；短的水平移動彈回；沒有上一張往右彈回；不在回看往左彈回', () => {

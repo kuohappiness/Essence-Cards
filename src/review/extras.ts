@@ -16,6 +16,15 @@ export function extraLabel(text: string): { label: string | null; body: string }
 }
 
 /**
+ * 比較卡對照裡的記憶錨點（tasks/question-type-seam.md §7）：最後一個全形冒號前面是字形的說明，後面是常用詞；沒有冒號就沒有常用詞。
+ * 「記憶錨點：」已經拿掉了（Card.group.rows）。
+ */
+export function anchorParts(anchor: string): { why: string; words: string | null } {
+  const at = anchor.lastIndexOf('：');
+  return at < 0 ? { why: anchor, words: null } : { why: anchor.slice(0, at), words: anchor.slice(at + 1).trim() };
+}
+
+/**
  * 背面補充開頭是英文句子、後面緊接中文翻譯時（D-174），分成兩行顯示：「She bought a book. 她買了一本書。」。
  * 只認整段從英文開始、中文之前以句尾標點結束的：「go 的過去式」「look after 照顧」這類不是句子加翻譯，照舊一行；
  * 句尾標點和中文之間的空格可有可無，中文開頭可以有自己的格式。不是這個樣子時 translation 是 null、line 是原文。

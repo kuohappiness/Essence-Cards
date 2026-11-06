@@ -1,4 +1,5 @@
 export { parseDeck } from './parse.ts';
+export { markNeed } from './need.ts';
 export { baseForm } from './base-form.ts';
 export { assignIds, newId } from './assign.ts';
 export { setTargetId, blockIds } from './ids.ts';
@@ -9,4 +10,4 @@ export type { NameIds } from './markdown.ts';
 export { isDeckPath, listDeckPaths, readDecks } from './read.ts';
 export { chapterAlias, codeKey, headingKey, readTerm, sourceLabel, sourceLinks, splitUnit, termKey, termRank, tidy } from './sources.ts';
 export type { SourceItem, SourceLink, SourceOwner, SourceProblem } from './sources.ts';
-export type { Deck, DeckProps, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult } from './types.ts';
+export type { Deck, DeckProps, PickGroup, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult } from './types.ts';

@@ -102,7 +102,7 @@ interface TargetLike { id: string | null; name: string; line: number; ok: boolea
 interface DeckLike { props: { status: string; isTranscript: boolean; term: string | null; subject: string | null; unit: { code: string; name: string } | null; categories: string[] };
   targets: unknown; problems: unknown }
 interface ProblemLike { line: number; level: string; code: string }
-interface ItemLike { lt: string; deck: string; lane: string }
+interface ItemLike { lt: string; deck: string; lane: string; seconds: number }
 interface SlotLike { retention: number; target: { direction: string | null } }
 interface TodayLike { share: unknown; more: unknown; slots: unknown }
 interface ConflictLike { id: string; targets: unknown }
@@ -176,7 +176,7 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
       // 只放這一張進今天的份，nextCard 就出它，拿到還沒作答時會出的那一題。今天已經答對就是 done；時間是固定的，不會是 stale。
       const next = nextCard({ ...today, share: [item], more: [] }, todayInput, { deck }) as { kind: string; card?: { prompt: { fingerprint: unknown } } };
       if (next.kind !== 'card' && next.kind !== 'done') throw wrongType('nextCard()');
-      items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'),
+      items.push({ list, lt, deck, lane: text(item.lane, 'today() 的 lane'), retention: finite(slot.retention, 'today().slots 的 retention'), seconds: finite(item.seconds, 'today() 的 seconds'),
         prompt: next.kind === 'card' ? text(next.card!.prompt.fingerprint, 'nextCard() 的 fingerprint') : null,
         direction: textOrNull(slot.target.direction, 'today().slots 的 direction') });
     }

@@ -1,6 +1,11 @@
 // 複習畫面的狀態（W6 §2）：純程式，不 import React、Obsidian 與 Node；畫面只透過 state 拿資料。
-export { createSession, allowedFor, RATINGS, RATING_LABELS, RATE_DELAY, AWAY_LIMIT } from './session.ts';
-export type { Session, View, CardView, TypedView } from './session.ts';
+export { createSession, RATE_DELAY, AWAY_LIMIT } from './session.ts';
+export type { Session, View, CardView } from './session.ts';
+export type { FlowAction } from './flow.ts';
+export { RATINGS, RATING_LABELS } from './ratings.ts';
+export { allowedFor } from './typed.ts';
+export type { TypedView } from './typed.ts';
+export type { PickView } from './pick.ts';
 export type { DoneView } from './done.ts';
 export { todayStats, doneView } from './done.ts';
 export { spelling, closest, copying } from './spelling.ts';
@@ -8,9 +13,9 @@ export type { Spelling } from './spelling.ts';
 export { lockAxis, gesture } from './gesture.ts';
 export { keyboardFit } from './keyboard.ts';
 export type { Axis, Gesture } from './gesture.ts';
-export { englishParts, lineSpeech, otherAnswers, englishBreak, glueArticles, tailStart, closingRun, openingRun, fillBlank, blankCount, BLANK } from './english.ts';
+export { englishParts, lineSpeech, otherAnswers, englishBeside, englishBreak, glueArticles, tailStart, closingRun, openingRun, fillBlank, blankCount, questionOf, BLANK } from './english.ts';
 export { crumb } from './crumb.ts';
-export { extraLabel, splitTranslation } from './extras.ts';
+export { anchorParts, extraLabel, splitTranslation } from './extras.ts';
 export { headingKey, sourceLabel, sourceLinks } from './sources.ts';
 export type { SourceLink, SourceOwner } from './sources.ts';
 export { catalogView, entryView, examRow, examSubject, reminderView } from './entry.ts';

@@ -1,8 +1,9 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds } from '../src/core/deck/index.ts';
+import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
+import { NEED_FORMS } from './helpers/need-forms.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -167,8 +168,8 @@ void test('D-089 #13 typed 保留大小寫，僅清格式與頭尾空白', () =>
 void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案、answer 與指紋和拆開之前相同', () => {
   const english = readFileSync(new URL('../docs/card-rules/english.md', import.meta.url), 'utf8');
   const sources = [
-    ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown'),
-    // 只看中翻英這個例子：英文規則裡文法的 ` | ` 例子（D-193）程式還沒認「文法」結尾，接上時另外測。
+    // 只看中翻英這個例子：§2-3 的比較卡另外測；英文規則裡文法的 ` | ` 例子（D-193）程式還沒認「文法」結尾，接上時另外測。
+    ...indentedFences(syntax.slice(syntax.indexOf('### 2-3'), syntax.indexOf('### 2-4')), 'markdown').filter(text => text.includes('made up his mind | made his mind up')),
     ...indentedFences(english).filter(text => text.includes('made up his mind | made his mind up')),
   ];
   assert.equal(sources.length, 2);
@@ -181,6 +182,21 @@ void test('R1 syntax §2-3 與英文規則的 ` | ` 例子：typed 兩個答案�
     assert.deepEqual([both.answer, both.typed, both.fingerprint], ['made up his mind | made his mind up', ['made up his mind', 'made his mind up'], '9938603d']);
     assert.deepEqual(both.extras, ['詳解：made up his mind 和 made his mind up 都對，課本用前者']);
   }
+});
+
+// syntax §2-3 的比較卡範例（任務說明 §11）：經過這裡的 parseDeck，也跟著進 deckCases 的往返與冪等。
+void test('syntax §2-3 的比較卡範例：三個字都是比較卡，沒有問題', () => {
+  const part = syntax.slice(syntax.indexOf('#### 比較卡'), syntax.indexOf('### 2-4'));
+  const [text, ...rest] = indentedFences(part, 'markdown');
+  assert.deepEqual(rest, []);
+  const deck = parseDeck(text);
+  assert.deepEqual(deck.problems, []);
+  const members = ['寨', '塞', '寒'];
+  assert.deepEqual(deck.targets.map(t => [t.group?.word, t.group?.members, t.group?.title, t.prompts.length, t.ok]), [
+    ['寨', members, '相似字', 2, true],
+    ['塞', members, '相似字', 2, true],
+    ['寒', members, '相似字', 2, true],
+  ]);
 });
 for (const [name, answer, typed, fingerprint, problems] of [
   ['`a|b` 前後沒空格也認得', 'a|b', ['a', 'b'], '434fa34e', []],
@@ -409,6 +425,20 @@ void test('開頭 --- 之後用 ... 結尾不算結束：當成一般文字，�
 void test('YAML 未知狀態提示位於狀態行', () => {
   const parsed = parseDeck('---\n科目: 自然\n狀態: 已採用\n---');
   assert.equal(parsed.props.status, 'active'); assert.equal(parsed.problems[0].line, 2); assert.equal(parsed.problems[0].targetLine, null);
+});
+
+// 點選填空（tasks/question-type-seam.md §3）的寫法也受下面往返與冪等的保護；預期值在 tests/pick-deck.test.ts。
+void test('比較卡的卡組登錄進共用的範例', () => {
+  const decks = [
+    '### 相似字\n- 寨（寨、塞、寒、賽） 相似字\n    - 盜匪躲在山＿＿裡。 :: 寨\n    - 這座古老的＿＿子建在山頂上。 :: 寨\n    - 記憶錨點：下面是**木**，木頭圍成的防守地：山寨、寨子\n- 塞（寨、塞、寒、賽） 相似字\n    - 下班時間，高速公路大＿＿車。 :: 塞\n    - 水管＿＿住了。 :: 塞\n',
+    '- 寨 ^abc222（寨、塞） 比較\n    - 山＿＿ :: 寨\n',
+    '---\n科目: 國語\n---\n- light（輕的）（light、lit） 比較\n    - The bag is ＿＿. :: light\n',
+    '- 寨（寨、塞） 比較\r\n    - 下班時間大＿＿車。 :: 塞\r\n',
+    '- 寨（寨、塞） 山＿＿ :: 寨\n',
+    '- borrow（borrow、lend）　中翻英\n    - 借入＿＿ :: borrow\n',
+  ];
+  for (const text of decks) assert.ok(parseDeck(text).targets.length);
+  assert.equal(assignIds(decks[0], { taken: new Set() }).assigned.length, 2);
 });
 
 // 需要版本（syntax.md §0-1、§2-1，D-149 第 3 點）：parseDeck 只照實回報標記，讀不讀得懂由知道這台版本的一方判斷。
@@ -1023,6 +1053,14 @@ void test('setDeckStatus：屬性區讀不懂、改了讀不回來的都不寫�
   for (const text of broken) assert.equal(setDeckStatus(text, '暫停'), null, text);
 });
 
+void test('標記的每一種寫法（寫之前、寫之後）都受下面往返與冪等的保護（§3）', () => {
+  assert.equal(Object.keys(NEED_FORMS).length, 26);
+  for (const [text, want] of Object.values(NEED_FORMS)) {
+    parseDeck(text);
+    if (want !== null) parseDeck(want);
+  }
+});
+
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 after(() => {
   // tools/export-compare.ts 用：全部範例寫成一個 JSON，拿到 Obsidian 和 metadataCache 對照（W5 §0-3）。
@@ -1036,6 +1074,15 @@ after(() => {
     assert.deepEqual(twice.assigned, [], context + '：第二次重新配 ID');
     assert.equal(after.targets.length, before.targets.length, context + '：目標數改變');
     assert.deepEqual(fingerprints(once.text), fingerprints(text), context + '：題目指紋多重集合改變');
+    // 標記（§3）：加得上就讀得到、第二次一字不改、題目不變；加不上是 null。
+    const marked = markNeed(text, '99.0.0');
+    if (marked !== null) {
+      assert.equal(markNeed(marked, '99.0.0'), marked, context + '：標記第二次改字');
+      assert.equal(parse(marked).props.need, '99.0.0', context + '：讀不到標記');
+      assert.deepEqual(fingerprints(marked), fingerprints(text), context + '：標記改了題目');
+      const meaning = (source: string) => ({ ...parse(source).props, need: null, issues: null });
+      assert.deepEqual(meaning(marked), meaning(text), context + '：標記改了別的屬性');
+    }
     // 新配的 ID 彼此不重複、也不和原本的重複；原本就重複的不動（D-157）。
     const known = new Set(before.targets.flatMap(t => t.id ?? []));
     const added = after.targets.map(t => t.id).filter(id => id !== null && !known.has(id));

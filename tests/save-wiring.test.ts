@@ -912,3 +912,33 @@ void test('D1 F1 寫進磁碟之前改了答案：通知照採用的內容，不
     assert.equal(ids(h.view.value).length, 1);
   }
 });
+
+// 比較卡的標記（tasks/question-type-seam.md §3）：只缺標記時按鈕不是沒有要做的；加不上時用屬性有問題的樣子，存檔與小視窗都說怎麼改。
+void test('§3 只缺標記：按鈕是要存的樣子；加不上：按鈕與存檔、小視窗的結果都說怎麼改', async () => {
+  const stub = createObsidianStub();
+  const { plugin } = pluginOf(stub);
+  const { wireSave } = stub.load<{ wireSave: (host: unknown) => { refresh(): void; save(view: unknown): Promise<void> } }>(code);
+  const issue = { path: DECK, line: 0, name: '能說明 C', kind: 'lost', restore: 'k3m9x2' };
+  let status: Record<string, unknown> = { missing: 0, issues: [], malformed: [], mark: 'missing' };
+  const notified: string[] = [];
+  const state = { decks: () => [], deckStatus: () => status, onChange: () => () => {}, ...loadedState,
+    save: () => Promise.resolve({ kind: 'unchanged' }), resolve: () => Promise.resolve({ kind: 'stale' }) };
+  const saver = wireSave({ plugin, state: () => state, notify(message: string) { notified.push(message); }, onError(error: unknown) { throw error; } });
+  const leaf = stub.leaf(DECK);
+  stub.leaves.push(leaf);
+  saver.refresh();
+  const button = (leaf.view as { actions: { icon: string; label: string }[] }).actions[0];
+  assert.deepEqual([button.icon, button.label], ['save', '筆記已自動儲存；這篇有比較卡，存檔時會加上版本標記，舊版的外掛才不會讀錯']);
+  status = { missing: 2, issues: [], malformed: [], mark: 'refused' };
+  saver.refresh();
+  assert.match(button.label, /屬性區加不上版本標記/);
+  await saver.save(leaf.view);
+  assert.equal(notified.length, 1);
+  assert.match(notified[0], /屬性區加不上版本標記/);
+  status = { missing: 0, issues: [issue], malformed: [], mark: 'refused' };
+  await saver.save(leaf.view);
+  stub.modals[0].contentEl.querySelectorAll('button')[0].click();
+  await flush();
+  assert.equal(notified.length, 3);
+  assert.match(notified[2], /屬性區加不上版本標記/);
+});

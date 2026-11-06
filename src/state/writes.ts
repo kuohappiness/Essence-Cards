@@ -69,6 +69,8 @@ export interface WritesOptions {
   blockedText: (path: string, text?: string) => boolean;
   /** 這台電腦還沒有一份成功的備份：Cards 不改寫卡組（D-150 第 3 點）。 */
   backupPending: () => boolean;
+  /** 這台讀得懂的版本（releaseOf）；不明是 null。核對標記用（tasks/question-type-seam.md §3）。 */
+  version: string | null;
 }
 
 export function createWrites(options: WritesOptions) {
@@ -265,7 +267,7 @@ export function createWrites(options: WritesOptions) {
       else if (check.output === null || !check.prepared) check.settle(check.fallback);
       else {
         // 一字不差時預期的變更當然都在；新增的數照讀到的這份算，不照準備時的（技術債 D1，Codex L2 的 F1）。
-        const added = confirmed(text, check.prepared);
+        const added = confirmed(text, check.prepared, options.version);
         if (added === null) { check.settle({ kind: 'stale' }); return; }
         check.prepared.record?.();
         options.wrote(path, check.output);

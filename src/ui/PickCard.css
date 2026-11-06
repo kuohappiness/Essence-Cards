@@ -1,0 +1,60 @@
+/* 點選填空（tasks/question-type-seam.md §7、D-179、D-182）：照示意頁 experiments/mockups/similar-chars-card.html。
+   紫色只用在待填空格的底線和對照裡的部件。字用系統的黑體（D-180）。 */
+.ec-pick { font-family: var(--ec-font-ui); }
+.ec-pick-title { margin: 8px 0 12px; font-size: var(--ec-size-base); line-height: 1.5; color: var(--ec-muted); }
+.ec-pick-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ec-pick-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 46px; padding: 3px 8px; border-radius: 10px; font-size: 20px; line-height: 1.55; cursor: pointer; transition: background-color .12s ease; }
+.ec-pick-row.is-on { background: color-mix(in srgb, var(--ec-ink) 4%, transparent); }
+.ec-pick-row.is-locked { cursor: default; }
+.ec-pick-text { min-width: 0; }
+.ec-pick-text .ec-markdown p { margin: 0; }
+.ec-pick-mark { flex: none; width: 14px; font-size: 14px; font-weight: 700; text-align: center; color: var(--ec-miss); }
+.ec-pick-mark[data-state="right"] { color: var(--ec-good); }
+.ec-pick-mark[data-state="near"] { color: var(--ec-near); }
+
+/* 空格（按鈕就是空格本身）：灰色底線；待答的那一格紫色粗線；填進去的字和句子同色同大；對答案後字變色，底線照舊灰色 */
+.ec-slot:has(> .ec-pick-slot) { margin: 0 3px; }
+.ec-app .ec-pick-slot, .ec-app .ec-pick-slot:hover, .ec-app .ec-pick-slot:focus { appearance: none; display: inline-block; width: auto; height: auto; min-width: 1.9em; padding: 0 .1em; margin: 0; border: 0; border-bottom: 2px solid var(--ec-muted); border-radius: 0; background: none; box-shadow: none; color: var(--ec-ink); font: inherit; line-height: 1.3; text-align: center; vertical-align: baseline; cursor: pointer; }
+.ec-pick-row.is-locked .ec-pick-slot { cursor: default; }
+.ec-app .ec-pick-row.is-on .ec-pick-slot { border-bottom-color: var(--ec-key); box-shadow: 0 1px 0 var(--ec-key); }
+.ec-app .ec-pick-slot[data-state="right"] { color: var(--ec-good); }
+.ec-app .ec-pick-slot[data-state="near"] { color: var(--ec-near); }
+.ec-app .ec-pick-slot[data-state="miss"] { color: var(--ec-miss); }
+.ec-app .ec-pick-slot[data-state="skipped"] { color: var(--ec-muted); }
+.ec-pick-slot s { color: var(--ec-miss); }
+.ec-pick-fly { position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; font-size: 30px; line-height: 1; color: var(--ec-ink); }
+
+/* 字鍵（D-182 第 6 點）：幾個一排由 keyColumns 決定；句子放不下就捲動，字鍵固定在下面 */
+.ec-pick-tray { display: grid; gap: 10px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.ec-pick-keys { display: grid; grid-template-columns: repeat(var(--ec-pick-columns), minmax(0, 1fr)); gap: 8px; }
+.ec-app .ec-pick-key, .ec-app .ec-pick-key:hover, .ec-app .ec-pick-key:focus { appearance: none; width: 100%; height: 60px; min-width: 0; padding: 0 2px; border: 1px solid var(--ec-line); border-radius: var(--ec-radius); background: none; box-shadow: none; color: var(--ec-ink); font-family: var(--ec-font-ui); font-size: 31px; line-height: 1.1; cursor: pointer; touch-action: manipulation; transition: transform .06s ease, background-color .06s ease; }
+.ec-app .ec-pick-keys.is-words .ec-pick-key { font-size: 17px; white-space: normal; overflow-wrap: anywhere; }
+.ec-app .ec-pick-key:not(:disabled):active { background: color-mix(in srgb, var(--ec-ink) 6%, transparent); transform: scale(.96); }
+.ec-app .ec-pick-key:disabled { opacity: .28; cursor: default; }
+.ec-pick-acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
+.ec-app .ec-pick-act, .ec-app .ec-pick-act:hover, .ec-app .ec-pick-act:focus { appearance: none; width: 100%; height: 48px; padding: 0 4px; border: 1px solid var(--ec-line); border-radius: var(--ec-radius); background: none; box-shadow: none; color: var(--ec-ink); font-size: var(--ec-size-base); font-weight: 500; cursor: pointer; touch-action: manipulation; }
+.ec-app .ec-pick-act:not(:disabled):active { background: color-mix(in srgb, var(--ec-ink) 6%, transparent); }
+.ec-app .ec-pick-skip { color: var(--ec-muted); }
+.ec-app .ec-pick-check { opacity: .4; }
+.ec-app .ec-pick-check.is-ready { opacity: 1; }
+.ec-app .ec-pick-check.is-again { opacity: 1; color: var(--ec-muted); cursor: default; }
+
+/* 對答案之後：整組對照，也是每個字的結果 */
+.ec-answer.ec-pick-compare { display: grid; gap: 12px; margin: 14px 8px 10px; font-family: var(--ec-font-ui); }
+.ec-cmp { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; padding: 0 2px; }
+.ec-cmp-ch { font-size: 25px; line-height: 1.2; overflow-wrap: anywhere; }
+.ec-cmp-why { min-width: 0; font-size: 16px; line-height: 1.5; }
+.ec-cmp-why .ec-markdown p { margin: 0; }
+.ec-cmp-why strong { font-weight: 400; color: var(--ec-key); }
+.ec-cmp-words { display: block; font-size: 15px; line-height: 1.5; color: var(--ec-muted); }
+.ec-chip { display: inline-flex; align-items: center; gap: 5px; font-size: var(--ec-size-small); white-space: nowrap; color: var(--k); }
+.ec-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.ec-chip[data-k="miss"] { --k: var(--ec-miss); }
+.ec-chip[data-k="near"] { --k: var(--ec-near); }
+.ec-chip[data-k="good"] { --k: var(--ec-good); }
+.ec-chip[data-k="easy"] { --k: var(--ec-easy); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ec-pick-row, .ec-app .ec-pick-key { transition: none; }
+  .ec-app .ec-pick-key:not(:disabled):active { transform: none; }
+}
