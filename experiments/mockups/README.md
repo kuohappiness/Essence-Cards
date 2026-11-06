@@ -7,6 +7,7 @@
 | 樣式稿 | 內容 | 狀態 |
 |---|---|---|
 | [entry-and-reveal.html](entry-and-reveal.html) | 入口、複習畫面（顯示答案、自評、回看上一張、出處與朗讀圖示）、目錄與管理、考試範圍、考前抽測、電腦版的「給家長」一區 | 第 16 版，使用者 2026-10-19 看過後同意（[D-107](../../docs/decisions.md#d-107-考前抽測放在入口科目列的第一列)）；做 T2 時照這份 |
+| [edit-markup.html](edit-markup.html) | 電腦版的編輯畫面：目標的細線、題目的 `::`、兩種波浪線、出處的圖示與小表單（入口與目錄第四批） | 使用者 2026-11-06 看過後同意；實作照[第四批任務說明](../../tasks/edit-markup.md)，Obsidian 裡的截圖要和這份比 |
 | [review-styles.html](review-styles.html) | T1 的複習畫面，只留安靜樣式 | 已被上面那份接手；只在追溯 T1 時看 |
 
 已確認的介面寫在 [D-070](../../docs/decisions.md#d-070-複習畫面採用安靜樣式)、[D-095](../../docs/decisions.md#d-095-入口畫面)～[D-098](../../docs/decisions.md#d-098-考試範圍只用在大考日期改成考試期間)、[D-103](../../docs/decisions.md#d-103-總覽改成入口的給家長一區)、[D-107](../../docs/decisions.md#d-107-考前抽測放在入口科目列的第一列)。設定頁、總覽不在樣式稿裡（設定頁照 Obsidian 內建，[D-104](../../docs/decisions.md#d-104-設定頁)）。

@@ -1,0 +1,326 @@
+<title>編輯畫面標示</title>
+<style>
+/* 第四批（D-047、D-164 第 7 點、D-169 第 5 點、D-170 第 10 點）的樣式稿：Obsidian 電腦版的編輯畫面（即時預覽）。
+   顏色是 Obsidian 預設主題的近似值；正式程式用 Obsidian 的 CSS 變數，跟著使用者的主題走。
+   每一樣都要有必要性（D-179）：正常的目標只有一條淡色細線、題目只有 :: 變淡紫；問題用兩種波浪線，紅色＝這題不會出，橘色＝照常出、有地方看不懂。 */
+:root{
+  --bg:#ffffff;--bg2:#f6f6f6;--border:#e0e0e0;--ink:#222222;--muted:#5c5c5c;--faint:#ababab;
+  --accent:#8a5cf5;--accent-text:#7c4ee4;--error:#e93147;--warning:#ec7500;--hl:rgba(255,208,0,.4);
+  --guide:rgba(0,0,0,.12);--shadow:0 2px 8px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.08);--page:#ececec;
+  --ui:"Segoe UI",-apple-system,BlinkMacSystemFont,"Microsoft JhengHei UI","Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1e1e1e;--bg2:#262626;--border:#363636;--ink:#dadada;--muted:#b3b3b3;--faint:#666666;
+  --accent:#8f6ff7;--accent-text:#a68af9;--error:#fb464c;--warning:#e9973f;--hl:rgba(255,208,0,.4);
+  --guide:rgba(255,255,255,.12);--shadow:0 2px 8px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);--page:#141414;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#1e1e1e;--bg2:#262626;--border:#363636;--ink:#dadada;--muted:#b3b3b3;--faint:#666666;
+  --accent:#8f6ff7;--accent-text:#a68af9;--error:#fb464c;--warning:#e9973f;--hl:rgba(255,208,0,.4);
+  --guide:rgba(255,255,255,.12);--shadow:0 2px 8px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);--page:#141414;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.5;padding:20px 16px 48px}
+button{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:16px}
+h1{font-size:22px;margin:0}
+.lead{margin:4px 0 0;color:var(--muted);font-size:14px;max-width:70ch}
+.ctl{display:flex;flex-wrap:wrap;gap:8px}
+.ctl button{border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:4px 12px;font-size:14px;cursor:pointer}
+.ctl button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-text)}
+.layout{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:1040px){.layout{grid-template-columns:minmax(0,1fr) 300px}}
+
+/* Obsidian 的分頁與編輯區 */
+.win{background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:6px 10px 0;display:flex}
+.tab{background:var(--bg);border:1px solid var(--border);border-bottom:0;border-radius:6px 6px 0 0;padding:4px 14px;font-size:13px;color:var(--ink);position:relative;top:1px}
+.scroll{overflow-x:auto}
+.editor{position:relative;max-width:700px;margin:0 auto;padding:28px 24px 56px 40px;min-width:560px}
+.title{font-size:28px;font-weight:700;margin:0 0 14px}
+.props{border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px;font-size:14px;display:grid;grid-template-columns:110px 1fr;row-gap:2px}
+.props .k{color:var(--muted)}
+.props .v .lnk{color:var(--accent-text)}
+h2{font-size:22px;margin:18px 0 6px;font-weight:700}
+
+/* 清單：每層 28px；圓點在 x=4，縮排參考線畫在祖先的圓點位置 */
+.ln{position:relative;padding-left:calc((var(--lvl) + var(--shift,0)) * 28px + 18px);min-height:24px;
+  background-image:repeating-linear-gradient(to right,var(--guide) 0 1px,transparent 1px 28px);
+  background-size:calc((var(--lvl) + var(--shift,0)) * 28px) 100%;background-repeat:no-repeat;background-position:4px 0}
+.ln::after{content:"";position:absolute;left:calc((var(--lvl) + var(--shift,0)) * 28px + 2px);top:10px;width:5px;height:5px;border-radius:50%;background:var(--ink);opacity:.55}
+.lnk{color:var(--accent-text);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent-text) 40%,transparent)}
+mark{background:var(--hl);color:inherit;border-radius:2px;padding:0 1px}
+
+/* 學習目標 ID：照 src/obsidian/ids.css */
+.id{margin-left:.4em;padding:0 .3em;border:1px solid var(--border);border-radius:4px;color:var(--faint);font-size:12px;vertical-align:middle;user-select:none}
+.raw-id{color:var(--muted);display:none}
+
+/* ── 第四批的標示 ── */
+/* 1. 學習目標那一行：左邊一條淡色細線（外掛認得是目標）。 */
+.target::before{content:"";position:absolute;left:calc((var(--lvl) + var(--shift,0)) * 28px - 12px);top:4px;bottom:4px;width:2px;border-radius:1px;background:var(--accent);opacity:.45}
+/* 2. 題目的 :: 變淡紫（外掛認得是題目）。 */
+.sep{color:var(--faint)}
+.prompt .sep{color:var(--accent-text);opacity:.6}
+/* 3. 有問題的字：紅色＝這張卡不會出題；橘色＝照常出題，有地方看不懂。 */
+.err{text-decoration:underline wavy var(--error);text-decoration-thickness:1px;text-underline-offset:4px;text-decoration-skip-ink:none}
+.warn{text-decoration:underline wavy var(--warning);text-decoration-thickness:1px;text-underline-offset:4px;text-decoration-skip-ink:none}
+.fixable{cursor:pointer}
+.fixable:hover{background:color-mix(in srgb,var(--warning) 12%,transparent);border-radius:3px}
+/* 4. 游標在出處那一行：行尾出現「填出處」的小圖示。 */
+.add{display:none;vertical-align:-3px;margin-left:6px;width:20px;height:20px;border-radius:5px;border:0;background:none;padding:2px;color:var(--faint);cursor:pointer}
+.add:hover{color:var(--accent-text);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.add svg{display:block;width:16px;height:16px}
+.caret{display:none;width:1.5px;height:1.15em;background:var(--ink);vertical-align:-3px;margin-left:1px;animation:blink 1.06s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.cursor-on .add,.cursor-on .caret{display:inline-block}
+
+/* 按了 Tab 的樣子：第二個目標縮進一層，它和底下的題目都不再出題，標示一起消失。 */
+.tabbed .b2{--shift:1}
+.tabbed .b2.target::before{display:none}
+.tabbed .b2.prompt .sep{color:var(--faint);opacity:1}
+.tabbed .b2 .warn{text-decoration:none;cursor:text}
+.tabbed .b2 .fixable:hover{background:none}
+.tabbed .b2 .id{display:none}
+.tabbed .b2 .raw-id{display:inline}
+
+/* 滑過時的說明（Obsidian 的 tooltip） */
+.tip{position:absolute;z-index:4;background:#1f1f1f;color:#f0f0f0;font-size:12.5px;line-height:1.45;padding:5px 9px;border-radius:5px;max-width:300px;pointer-events:none;box-shadow:var(--shadow)}
+:root[data-theme="dark"] .tip{background:#3a3a3a}
+
+/* 小表單：Obsidian 的浮動面板樣子 */
+.pop{position:absolute;z-index:5;width:380px;background:var(--bg);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);padding:12px 14px 12px;font-size:14px;display:grid;gap:10px}
+.pop[hidden]{display:none}
+.pop .orig{color:var(--muted);font-size:13px}
+.pop .orig b{font-weight:600;color:var(--ink)}
+.row{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:start}
+.row > .lab{color:var(--muted);padding-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--border);background:none;border-radius:14px;padding:2px 10px;font-size:13.5px;cursor:pointer;line-height:1.6}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-checked="true"]{border-color:var(--accent);color:var(--accent-text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.chip.guess[aria-checked="true"]{border-style:dashed}
+.chip .tag{font-size:11.5px;margin-left:4px;color:var(--muted)}
+.note{font-size:12.5px;color:var(--warning);margin-top:4px}
+.pos{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+select,input{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--border);border-radius:4px;height:30px;padding:0 8px}
+input{width:72px}
+input.wide{width:100%}
+.more{border:0;background:none;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 0}
+.more:hover{color:var(--accent-text)}
+.out{border-top:1px solid var(--border);padding-top:9px;display:grid;gap:2px;font-size:13.5px}
+.out .k{color:var(--muted);margin-right:6px}
+.out code{font-family:inherit;font-weight:600}
+.btns{display:flex;justify-content:flex-end;gap:8px}
+.btn{border:1px solid var(--border);background:var(--bg);border-radius:5px;padding:3px 14px;cursor:pointer;font-size:14px}
+.btn.cta{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.cta:disabled{opacity:.4;cursor:default}
+
+/* 右邊的說明 */
+.notes{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;font-size:14px;line-height:1.6}
+.notes h3{font-size:14px;margin:0 0 6px}
+.notes ul{margin:0 0 12px;padding-left:18px}
+.notes li{margin:2px 0}
+.sw{display:inline-block;vertical-align:middle;margin-right:2px}
+.sw.bar{width:2px;height:14px;background:var(--accent);opacity:.45}
+.notes .muted{color:var(--muted)}
+</style>
+
+<div class="wrap">
+  <div>
+    <h1>編輯畫面標示（第四批樣式稿）</h1>
+    <p class="lead">Obsidian 電腦版的即時預覽。點橘色波浪線的出處會打開小表單；滑過紅色、橘色的字看說明。顏色是 Obsidian 預設主題的近似，正式版跟著使用者的主題。</p>
+  </div>
+  <div class="ctl" role="group" aria-label="切換">
+    <button id="tTheme" aria-pressed="false">深色</button>
+    <button id="tCursor" aria-pressed="true">游標在出處那一行</button>
+    <button id="tTab" aria-pressed="false">第二個目標被按了 Tab</button>
+  </div>
+
+  <div class="layout">
+    <div class="win">
+      <div class="tabs"><div class="tab">2-2 水溶液</div></div>
+      <div class="scroll">
+      <div class="editor cursor-on" id="ed">
+        <div class="title">2-2 水溶液</div>
+        <div class="props">
+          <span class="k">年級學期</span><span class="v">國二上</span>
+          <span class="k">科目</span><span class="v">自然</span>
+          <span class="k">單元</span><span class="v">2-2 水溶液</span>
+          <span class="k">材料</span><span class="v"><span class="lnk">國二上自然 2-2 水溶液</span></span>
+          <span class="k">狀態</span><span class="v">啟用</span>
+        </div>
+
+        <h2>1 溶液</h2>
+        <div class="ln target" style="--lvl:0">能說出溶質與溶劑的意思<span class="id">k3m9x2</span></div>
+        <div class="ln" style="--lvl:1">出處：p.43｜類型：定義</div>
+        <div class="ln prompt" style="--lvl:1">糖水裡，哪一個是溶質？哪一個是溶劑？ <span class="sep">::</span> 糖是<b>溶質</b>，水是<b>溶劑</b></div>
+        <div class="ln prompt" style="--lvl:1">碘酒裡的溶劑是什麼？ <span class="sep">::</span> <b>酒精</b></div>
+
+        <div class="ln target b2" style="--lvl:0">能說明溶液的質量組成<span class="id">h2m8qd</span><span class="raw-id"> ^h2m8qd</span></div>
+        <div class="ln b2" style="--lvl:1">出處：p.43、<span class="warn fixable" data-form="f13" data-tip="看不懂這個出處：沒寫年級學期，不知道是哪一個 1-3。點一下幫你改。">1-3 p.20</span>｜類型：因果｜重要性：<span class="warn" data-tip="重要性只認得「高」「中」「低」，這裡當成沒寫（中）。">很高</span></div>
+        <div class="ln prompt b2" style="--lvl:1">溶液的質量怎麼算？ <span class="sep">::</span> <b>溶質</b>的質量加上<b>溶劑</b>的質量</div>
+        <div class="ln prompt b2" style="--lvl:1">糖加太多、杯底有沉澱時，溶液的質量怎麼算？ <span class="sep">::</span> <b>只算已溶解的溶質</b>加上<b>溶劑</b></div>
+
+        <h2>2 擴散現象</h2>
+        <div class="ln target" style="--lvl:0">能用粒子運動說明擴散現象<span class="id">p7q2w8</span></div>
+        <div class="ln" style="--lvl:1">出處：<span id="addLine">p.44、圖 2-14</span><span class="caret"></span><button class="add" id="addBtn" data-tip="填出處" aria-label="填出處"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5"/><path d="M8 5.25v5.5M5.25 8h5.5"/></svg></button></div>
+        <div class="ln prompt" style="--lvl:1">黑糖放進水裡，不攪拌也會慢慢變甜，為什麼？ <span class="sep">::</span> 粒子<b>不停運動</b>，糖從<b>濃度高</b>的地方散到<b>濃度低</b>的地方</div>
+        <div class="ln target" style="--lvl:0">能說出影響溶解快慢的因素<span class="id">w4s8nd</span></div>
+        <div class="ln" style="--lvl:1">出處：<span class="warn fixable" data-form="f21" data-tip="看不懂這個出處：「二上」可能是國二上，也可能是小二上。點一下幫你改。">二上 2-1 p.15</span></div>
+        <div class="ln prompt" style="--lvl:1">水溫越<mark>高</mark>、顆粒越<mark>小</mark>、有<mark>攪拌</mark>，糖溶解得越快</div>
+        <div class="ln" style="--lvl:0">老師說這一段只要看懂，不用背</div>
+        <div class="ln target" style="--lvl:0">能說明溶液靜置後不會分層<span class="id">r5t9vb</span></div>
+        <div class="ln prompt" style="--lvl:1"><span class="err" data-tip="這一題沒有答案，不會出題：在 :: 後面寫答案。">糖水放一整天，杯底會出現糖嗎？ <span class="sep">::</span></span></div>
+
+        <div class="pop" id="pop" hidden role="dialog" aria-label="填出處">
+          <div class="orig" id="pOrig"></div>
+          <div class="row"><span class="lab">單元</span>
+            <div><div class="chips" id="pUnits" role="radiogroup" aria-label="單元"></div><div class="note" id="pNote"></div></div>
+          </div>
+          <div class="row"><span class="lab">位置</span>
+            <div class="pos">
+              <select id="pKind" aria-label="位置的種類"><option>頁</option><option>圖</option><option>表</option><option>例題</option><option>筆記連結</option></select>
+              <input id="pVal" aria-label="位置">
+              <button class="more" type="button">＋ 再加一個位置</button>
+            </div>
+          </div>
+          <div class="row"><span class="lab">說明</span><input class="wide" id="pRest" aria-label="說明（選填）" placeholder="選填"></div>
+          <div class="out">
+            <div><span class="k">會寫成</span><code id="pText">—</code></div>
+            <div><span class="k">會算進</span><span id="pUnit">—</span></div>
+          </div>
+          <div class="btns"><button class="btn" id="pCancel">取消</button><button class="btn cta" id="pApply" disabled>套用</button></div>
+        </div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      </div>
+    </div>
+
+    <aside class="notes">
+      <h3>正常的樣子</h3>
+      <ul>
+        <li><span class="sw bar"></span> 學習目標那一行左邊一條淡色細線</li>
+        <li>題目的 <span style="color:var(--accent-text);opacity:.6">::</span> 變淡紫；填空照 Obsidian 的螢光筆</li>
+        <li class="muted">一般筆記（「老師說……」）沒有任何標示</li>
+      </ul>
+      <h3>有問題時</h3>
+      <ul>
+        <li><span class="err">紅色波浪線</span>：這一題不會出，滑過看原因</li>
+        <li><span class="warn">橘色波浪線</span>：照常出題，有地方看不懂；出處的可以點來改</li>
+      </ul>
+      <h3>縮排錯一層</h3>
+      <ul>
+        <li>按上面「第二個目標被按了 Tab」：細線、淡紫、波浪線一起消失，表示外掛不再把它當成卡片</li>
+      </ul>
+      <h3>小表單</h3>
+      <ul>
+        <li>原文有的直接帶進來；猜的用虛線框加「猜的」</li>
+        <li>沒把握的單元不預先選，選了才能按「套用」</li>
+        <li>「會寫成」就是筆記裡的字；按套用才改，Ctrl+Z 可以復原</li>
+        <li>游標在出處那一行時，行尾的 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="vertical-align:-2px;color:var(--muted)"><rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5"/><path d="M8 5.25v5.5M5.25 8h5.5"/></svg> 開空白的表單，加一項新的出處</li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const root = document.documentElement, ed = $('ed'), pop = $('pop'), tip = $('tip');
+function toggle(btn, on){ btn.setAttribute('aria-pressed', String(on)); }
+$('tTheme').onclick = e => { const dark = root.dataset.theme !== 'dark'; root.dataset.theme = dark ? 'dark' : 'light'; toggle(e.currentTarget, dark); };
+$('tCursor').onclick = e => { const on = !ed.classList.contains('cursor-on'); ed.classList.toggle('cursor-on', on); toggle(e.currentTarget, on); };
+$('tTab').onclick = e => { const on = !ed.classList.contains('tabbed'); ed.classList.toggle('tabbed', on); toggle(e.currentTarget, on); hidePop(); };
+
+// 三種表單：原文 1-3 p.20（沒寫學期，單元不預選）、二上 2-1 p.15（猜國二上，虛線框）、新的一項（預設這一篇）。
+const FORMS = {
+  f13: { orig: '1-3 p.20', note: '原文沒寫年級學期，請選一個', units: [
+    { label: '這一篇', name: '國二上 2-2 水溶液', text: '' },
+    { label: '國二上 1-3', name: '國二上 1-3 物質的分類', text: '國二上 1-3' },
+    { label: '國一下 1-3', name: '國一下 1-3 細胞的構造', text: '國一下 1-3' },
+  ], pick: -1, kind: '頁', val: '20' },
+  f21: { orig: '二上 2-1 p.15', note: '原文寫「二上」，猜是國二上', units: [
+    { label: '這一篇', name: '國二上 2-2 水溶液', text: '' },
+    { label: '國二上 2-1', name: '國二上 2-1 溶解', text: '國二上 2-1', guess: true },
+  ], pick: 1, kind: '頁', val: '15' },
+  add: { orig: '', note: '', units: [
+    { label: '這一篇', name: '國二上 2-2 水溶液', text: '' },
+    { label: '國二上 1-3', name: '國二上 1-3 物質的分類', text: '國二上 1-3' },
+    { label: '國二上 2-1', name: '國二上 2-1 溶解', text: '國二上 2-1' },
+  ], pick: 0, kind: '頁', val: '' },
+};
+const OTHER = { label: '其他單元…', other: true };
+let current = null, anchor = null;
+
+function place(el){
+  const er = ed.getBoundingClientRect(), r = el.getBoundingClientRect();
+  let left = r.left - er.left; const max = ed.clientWidth - pop.offsetWidth - 8;
+  pop.style.left = Math.max(8, Math.min(left, max)) + 'px';
+  // 下面放不下就往上開（Obsidian 的浮動面板也是這樣）。
+  const below = r.bottom - er.top + 6, above = r.top - er.top - pop.offsetHeight - 6;
+  pop.style.top = (below + pop.offsetHeight > ed.clientHeight && above > 0 ? above : below) + 'px';
+}
+function render(){
+  const f = current;
+  $('pOrig').innerHTML = f.orig ? '原文：<b></b>' : '新的一項出處';
+  if (f.orig) $('pOrig').querySelector('b').textContent = f.orig;
+  const box = $('pUnits'); box.textContent = '';
+  [...f.units, OTHER].forEach((u, i) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (u.guess ? ' guess' : ''); b.type = 'button'; b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(i === f.pick));
+    b.textContent = u.label;
+    if (u.guess && i === f.pick) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = '猜的'; b.append(t); }
+    b.onclick = () => { if (u.other) return; f.pick = i; f.units.forEach(x => { if (x !== u) x.guess = false; }); u.guess = false; render(); };
+    box.append(b);
+  });
+  $('pNote').textContent = f.pick === -1 || f.units[f.pick]?.guess ? f.note : '';
+  $('pKind').value = f.kind; $('pVal').value = f.val;
+  output();
+}
+function output(){
+  const f = current, u = f.units[f.pick];
+  const kind = $('pKind').value, val = $('pVal').value.trim(), rest = $('pRest').value.trim();
+  const pos = val ? (kind === '頁' ? 'p.' + val : kind === '筆記連結' ? '[[' + val + ']]' : kind + ' ' + val) : '';
+  const text = u ? [u.text, pos, rest].filter(Boolean).join(' ') : '';
+  $('pText').textContent = text || '—';
+  $('pUnit').textContent = u ? u.name : '—（請先選單元）';
+  $('pApply').disabled = !u || !text;
+  return text;
+}
+function showPop(el, key){
+  current = structuredClone(FORMS[key]); anchor = el; $('pRest').value = '';
+  pop.hidden = false; render(); place(el); hideTip();
+}
+function hidePop(){ pop.hidden = true; current = null; anchor = null; }
+['pKind','pVal','pRest'].forEach(id => $(id).addEventListener('input', output));
+$('pCancel').onclick = hidePop;
+$('pApply').onclick = () => {
+  const text = output();
+  if (anchor.id === 'addBtn') $('addLine').textContent += '、' + text;
+  else { anchor.textContent = text; anchor.className = ''; anchor.removeAttribute('data-tip'); anchor.removeAttribute('data-form'); }
+  hidePop();
+};
+ed.addEventListener('click', e => {
+  const t = e.target.closest('[data-form],#addBtn');
+  if (t && !(ed.classList.contains('tabbed') && t.closest('.b2'))) { showPop(t, t.id === 'addBtn' ? 'add' : t.dataset.form); return; }
+  if (!e.target.closest('#pop')) hidePop();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hidePop(); });
+
+function hideTip(){ tip.hidden = true; }
+ed.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t || !pop.hidden || (ed.classList.contains('tabbed') && t.closest('.b2'))) return hideTip();
+  tip.textContent = t.dataset.tip; tip.hidden = false;
+  const er = ed.getBoundingClientRect(), r = t.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(r.left - er.left, ed.clientWidth - tip.offsetWidth - 8)) + 'px';
+  tip.style.top = (r.top - er.top - tip.offsetHeight - 6) + 'px';
+});
+ed.addEventListener('mouseout', e => { if (!e.relatedTarget || !e.relatedTarget.closest?.('[data-tip]')) hideTip(); });
+
+// 截圖用的網址參數：?theme=dark&tab=1&cursor=0&open=f13|f21|add
+const q = new URLSearchParams(location.search);
+if (q.get('theme')) { root.dataset.theme = q.get('theme'); toggle($('tTheme'), q.get('theme') === 'dark'); }
+if (q.get('cursor') === '0') $('tCursor').click();
+if (q.get('tab') === '1') $('tTab').click();
+const open = q.get('open');
+if (open) requestAnimationFrame(() => showPop(open === 'add' ? $('addBtn') : document.querySelector(`[data-form="${open}"]`), open));
+</script>
