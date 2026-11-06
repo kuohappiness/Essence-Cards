@@ -491,3 +491,33 @@ export function sourceLabel({ text, link }: SourceItem): string {
   const heading = parts.at(-1) ?? '';
   return parts.length > 1 && heading && !heading.startsWith('^') ? heading : parts[0];
 }
+
+// ── 表單用：一項出處拆成年級學期、編號、位置與剩下的字（tasks/edit-markup.md §4-1）──
+
+/**
+ * 一項出處拆開的樣子：用讀法的同一套（readTerm、readCode、scan），只拆、不判斷歸屬（D-170 第 2 點）。
+ * term 是認得的年級學期（`國二上`）；只寫 `二上` 這種要靠學制才知道的放在 short；code 是編號（`1-3`、`L1`）；
+ * places 是認得的位置，照原文順序；bad 是範圍寫反、`p53` 後面接字；left 是沒用到的字（連結已經還原）。
+ */
+export interface SourceParts { term: string | null; short: string | null; code: string | null; places: SourceLink[]; bad: boolean; left: string }
+const SHORT_TERM = /^([一二三四五六1-6]) ?(?:年級)? ?([上下])(?: ?(?:學期|冊))?(?![0-9])/;
+export function sourceParts(text: string, own: SourceOwner): SourceParts {
+  const tokens: string[] = [];
+  const subject = own.subject ? new RegExp(`^${escapeRegExp(tidy(own.subject).trim())} ?`) : null;
+  const dropSubject = (value: string): string => subject ? value.replace(subject, '') : value;
+  let rest = dropSubject(tidy(mask(text, tokens)).replace(END, '').trim());
+  let term: string | null = null, short: string | null = null, code: string | null = null;
+  const read = readTerm(rest);
+  const shortTerm = read ? null : SHORT_TERM.exec(rest);
+  if (read) { term = read.term; rest = rest.slice(read.length); }
+  else if (shortTerm) {
+    short = (/\d/.test(shortTerm[1]) ? ZH_GRADE[Number(shortTerm[1]) - 1] : shortTerm[1]) + shortTerm[2];
+    rest = rest.slice(shortTerm[0].length);
+  }
+  rest = dropSubject(rest.trimStart());
+  // 其他形狀的編號（`Starter`）只在寫了學期之後算；開頭就是一個英文字的多半是教材名稱（`Workbook p.12`）。
+  const found = readCode(rest);
+  if (found && (!found.other || term || short)) { code = found.code; rest = found.rest; }
+  const scanned = scan(rest, tokens);
+  return { term, short, code, places: scanned.found.map(each => each.link), bad: scanned.bad, left: restore(scanned.left, tokens) };
+}

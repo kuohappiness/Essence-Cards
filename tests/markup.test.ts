@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EditorState } from '@codemirror/state';
 import type { TransactionSpec } from '@codemirror/state';
-import { markup, type Mark } from '../src/obsidian/markup.ts';
+import { parseDeck } from '../src/core/deck/index.ts';
+import { markup, targetAt, type Mark } from '../src/obsidian/markup.ts';
 
 // tasks/edit-markup.md §1、§6-1 的標示：用 Obsidian 內建的同一版 CodeMirror（@codemirror/state）跑，位置寫死。
 // 細線的位置、顏色與 tooltip 在 Windows 版 Obsidian 對照（§6-3）。
@@ -125,6 +126,41 @@ void test('§1-5 不是使用者的編輯（打開別的檔、外部改檔後重
   const e = editor(NATURAL);
   e.dispatch({ changes: { from: 0, to: e.state.doc.length, insert: '- A\n    - Q :: A\n' } });
   assert.deepEqual(e.marks.map(mark => [mark.kind, mark.from]), [['target', 0], ['separator', 12]]);
+});
+
+void test('§2 第 2 點 游標在出處那一行或它分行的子項目上：那一欄第一行有圖示；其他行、有選取、目標那一行沒有', () => {
+  const doc = [
+    '- 能說出溶劑 ^k3m9x2', //                 1
+    '    - 類型：定義｜出處：p.43', //          2 用｜接在別的欄位後面
+    '    - Q :: A', //                          3
+    '- 能說明擴散 ^p7q2w8', //                  4
+    '\t- 出處：', //                            5 分行（Tab 縮排）
+    '\t    - p.44', //                          6
+    '\t    - 圖 2-14', //                       7
+    '\t- Q2 :: A2', //                          8
+    '- 出處：p.1 ^h2m8qd', //                   9 頂格的不是目標底下的欄位
+    '    - Q3 :: A3', //                       10
+  ].join('\n');
+  const m = markup({ isDeck: () => true, onAdd: () => {} });
+  const at = (line: number, anchor = 0) => {
+    const state = EditorState.create({ doc, extensions: [m.extension], selection: { anchor: pos(EditorState.create({ doc }), line, anchor) } });
+    return m.icon(state);
+  };
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(line => at(line)), [null, 2, null, null, 5, 5, 5, null, null, null]);
+  // 有選取時不出現。
+  const selected = EditorState.create({ doc, extensions: [m.extension], selection: { anchor: pos(EditorState.create({ doc }), 2, 0), head: pos(EditorState.create({ doc }), 2, 3) } });
+  assert.equal(m.icon(selected), null);
+  // 沒有 onAdd（例如開發命令只要標示）就不畫。
+  const plain = markup({ isDeck: () => true });
+  assert.equal(plain.icon(EditorState.create({ doc, extensions: [plain.extension], selection: { anchor: pos(EditorState.create({ doc }), 2, 0) } })), null);
+});
+
+void test('§2 第 3 點 命令「填出處」：游標在目標那一行到它最後一個子項目才可用', () => {
+  const text = '## 1 溶液\n\n- 能說出溶劑 ^k3m9x2\n    - Q :: A\n\n    - Q2 :: A2\n老師說的一段\n- 能說明擴散 ^p7q2w8\n    - Q3 :: A3\n';
+  const state = EditorState.create({ doc: text });
+  const deck = parseDeck(text);
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(line => targetAt(state.doc, deck, line)?.name ?? null),
+    [null, null, '能說出溶劑', '能說出溶劑', '能說出溶劑', '能說出溶劑', null, '能說明擴散', '能說明擴散']);
 });
 
 void test('§1 不是卡組筆記不標', () => {

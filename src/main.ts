@@ -2,7 +2,8 @@ import { apiVersion, editorInfoField, FileSystemAdapter, Notice, Platform, Plugi
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
-import { isDeckPath } from './core/deck/index.ts';
+import type { EditorView } from '@codemirror/view';
+import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
 import { countFiles } from './dev/wrap-files.ts';
@@ -13,7 +14,9 @@ import { changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
-import { markup } from './obsidian/markup.ts';
+import { markup, targetAt } from './obsidian/markup.ts';
+import { openBlankSourceForm } from './obsidian/source-entry.ts';
+import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { versionText } from './obsidian/version.ts';
@@ -268,8 +271,27 @@ export default class EssenceCardsPlugin extends Plugin {
       },
     });
     this.registerEditorExtension(lock.extension);
-    // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。
-    this.registerEditorExtension(markup({ isDeck: state => lockable(pathOf(state)) }).extension);
+    // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。游標在出處那一行時的「填出處」圖示、改到筆記時關掉表單（§2）。
+    this.registerEditorExtension(markup({
+      isDeck: state => lockable(pathOf(state)),
+      onAdd: (view, line) => { openBlankSourceForm(view, view.state.doc.line(line).to, this.state); },
+      onEdit: closeSourceForm,
+    }).extension);
+    // 命令「填出處」（§2 第 3 點）：游標在某個目標裡才可用，打開空白的表單。
+    this.addCommand({
+      id: 'fill-source',
+      name: '填出處',
+      editorCheckCallback: (checking, editor, context) => {
+        // Obsidian 的 Editor 背後是 CodeMirror 6 的 EditorView（cm），型別檔沒有寫出來。
+        const view = (editor as unknown as { cm?: EditorView }).cm;
+        if (!view || !lockable(context.file?.path)) return false;
+        const head = view.state.selection.main.head;
+        const target = targetAt(view.state.doc, parseDeck(view.state.doc.toString()), view.state.doc.lineAt(head).number);
+        if (!target) return false;
+        if (!checking) openBlankSourceForm(view, head, this.state);
+        return true;
+      },
+    });
     const saver = wireSave({
       plugin: this,
       state: () => this.state,
