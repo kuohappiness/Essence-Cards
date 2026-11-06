@@ -20,7 +20,6 @@ figcaption b { color: var(--fg); }
 
 /* 一個 iPhone 畫面：照 Review.css 的 .ec-app */
 .ec-app { --ec-page: #FAFAF9; --ec-ink: #1D1F23; --ec-muted: #6A6F77; --ec-line: #E5E5E2; --ec-press: #ECEFF4; --ec-key: #7A5BC7; --ec-good: #17693A;
-  --ec-faint: color-mix(in srgb, var(--ec-muted) 62%, var(--ec-page));
   height: 640px; border: 1px solid var(--frame); border-radius: 28px; overflow: hidden; background: var(--ec-page); color: var(--ec-ink); font: 15px/1.5 var(--ui); display: flex; flex-direction: column; }
 .ec-app.dark { --ec-page: #121314; --ec-ink: #E6E7E9; --ec-muted: #959AA2; --ec-line: #2A2C30; --ec-press: #263043; --ec-key: #B69CF5; --ec-good: #68D398; }
 .ec-app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
@@ -48,7 +47,7 @@ figcaption b { color: var(--fg); }
 .ec-ex-label { font-size: 13px; }
 /* 記憶錨點：燈泡接在內容前面，其他行和內容對齊 */
 .ec-ex-item.is-anchor { display: flex; gap: 6px; }
-.ec-bulb { flex: none; height: 1.6em; display: grid; place-items: center; color: var(--ec-faint); }
+.ec-bulb { flex: none; height: 1.6em; display: grid; place-items: center; color: var(--ec-muted); }
 .ec-ex-body { min-width: 0; }
 .note { font-size: 12px; color: var(--sub); margin-top: 8px; }
 </style>
@@ -57,7 +56,7 @@ figcaption b { color: var(--fg); }
   <h1>複習畫面：記憶錨點的燈泡、自動朗讀的喇叭</h1>
   <p>D-184 與 D-188 的樣子，寬 375（iPhone）。顏色照外掛現在的設計規範。</p>
   <ul>
-    <li><b>燈泡</b>：取代「記憶錨點」那一行，淡色、和文字同高，內容接在後面；例句、詳解照舊。</li>
+    <li><b>燈泡</b>：取代「記憶錨點」那一行，和旁邊的灰字一樣深、比字大一點，內容接在後面；有冒號時在冒號後面換行，喇叭在第二行最後（使用者 2026-11-06）。例句、詳解照舊。</li>
     <li><b>上方的喇叭</b>：取代「自動朗讀」文字加開關。開著有聲波、一般文字的顏色；關掉時聲波換成 ×、變灰。</li>
     <li>句子後面的小喇叭不變。</li>
   </ul>
@@ -75,7 +74,7 @@ figcaption b { color: var(--fg); }
     <div class="ec-answer">
       <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
       <div class="ec-ex">
-        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body">go 的過去式不規則：go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>go 的過去式不規則：</div><div>go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
         <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
       </div>
     </div></div></div>
@@ -91,7 +90,7 @@ figcaption b { color: var(--fg); }
     <div class="ec-answer">
       <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
       <div class="ec-ex">
-        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body">go 的過去式不規則：go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>go 的過去式不規則：</div><div>go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
         <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
       </div>
     </div></div></div>
@@ -107,7 +106,7 @@ figcaption b { color: var(--fg); }
     <div class="ec-answer">
       <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
       <div class="ec-ex">
-        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body">go 的過去式不規則：go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>go 的過去式不規則：</div><div>go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div></div>
         <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
       </div>
     </div></div></div>
@@ -122,7 +121,7 @@ figcaption b { color: var(--fg); }
     <div class="ec-q">床前明月光，<br><span class="ec-line">疑是地上霜</span>。</div>
     <div class="ec-answer">
       <div class="ec-ex">
-        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>月光照在床前，白白一片。</div><div>看起來像地上結了一層霜。</div></div></div>
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>月光照在床前，白白一片。</div><div>看起來像地上結了一層霜。</div></div></div>
       </div>
     </div></div></div>
   </figure>

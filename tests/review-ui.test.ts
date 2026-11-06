@@ -371,14 +371,27 @@ void test('D-158 照打送出一次還是不對之後，「確認」旁邊出現
 
 const twoCards = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '- turn off 中翻英 ^t1', '    - 離開時請關燈。Please ＿＿ the lights. :: turn off', ''].join('\n');
 
-void test('D-145 背面補充的名稱自己一行，喇叭念那一行的英文（重複的只念一次）', async t => {
+// D-184：不寫「記憶錨點」四個字，內容前面一個燈泡（螢幕閱讀器念「記憶提示」）；補充（使用者 2026-11-06）：冒號後面換行，喇叭在第二行最後。
+void test('D-184 記憶錨點：燈泡加內容，冒號後面換行，喇叭念整項的英文（重複的只念一次）', async t => {
   const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 記憶錨點：go 的過去式不規則：go → went → gone', ''].join('\n');
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
   o.session.input('went'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['記憶錨點']);
-  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).at(-1), 'go 的過去式不規則：go → went → gone');
-  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone']);
+  assert.deepEqual(o.ui.find('ec-ex-label'), [], '不寫「記憶錨點」');
+  assert.deepEqual(o.ui.find('ec-bulb').map(bulb => [bulb.props.role, bulb.props['aria-label']]), [['img', '記憶提示']]);
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-2), ['go 的過去式不規則：', 'go → went → gone']);
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 go、went、gone'], '第一行沒有喇叭，第二行念整項');
+});
+
+void test('D-184 記憶錨點沒有可以換行的冒號：燈泡加一行；例句照舊有名稱、沒有燈泡', async t => {
+  const deck = ['---', '科目: 英文', '單元: L2', '---', '- go 中翻英 ^g1', '    - 我昨天去了公園。I ＿＿ to the park yesterday. :: went', '    - 記憶錨點：易混淆 come（來）', '    - 例句：She went home. 她回家了。', ''].join('\n');
+  const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
+  o.session.input('went'); o.ui.key('Enter', 'input');
+  await o.ui.settle();
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句']);
+  assert.equal(o.ui.find('ec-bulb').length, 1);
+  assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-3), ['易混淆 come（來）', 'She went home.', '她回家了。']);
+  assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 come', '朗讀 She went home.']);
 });
 
 void test('D-174 例句的英文和中文翻譯各一行，喇叭在英文那一行', async t => {

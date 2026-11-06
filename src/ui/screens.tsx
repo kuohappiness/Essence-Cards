@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import type { QuestionType, Rating } from '../core/study/index.ts';
-import { blankCount, extraLabel, fillBlank, lineSpeech, otherAnswers, questionOf, RATING_LABELS, RATINGS, sourceLabel, sourceLinks, splitTranslation } from '../review/index.ts';
+import { anchorBreak, blankCount, extraLabel, fillBlank, lineSpeech, otherAnswers, questionOf, RATING_LABELS, RATINGS, sourceLabel, sourceLinks, splitTranslation } from '../review/index.ts';
 import type { CardView, Spelling, TypedView } from '../review/index.ts';
 import { Icon } from './Icon.tsx';
 import { Markdown } from './Markdown.tsx';
@@ -31,6 +31,9 @@ function Speaker({ texts, say }: { texts: readonly string[]; say: (texts: readon
 
 /** 拼字比對裡的答案（「正確拼字」那一行寫的字）。 */
 const spelled = (letters: Spelling['expected']): string => letters.map(letter => letter.char).join('');
+
+/** 背面補充裡的記憶錨點（D-184）：不寫這四個字，改成燈泡。 */
+const ANCHOR_LABEL = '記憶錨點';
 
 const sayWith = (speech: Speech) => (texts: readonly string[]): void => { speech.say(texts); };
 const speakWith = (view: CardView) => (text: string): string[] => view.speakable ? lineSpeech(text) : [];
@@ -80,15 +83,27 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
     {parts.middle}
     {revealed && <div className="ec-answer">
       {parts.head}
-      {/* 背面補充開頭的「記憶錨點：」「例句：」這類名稱自己一行，內容從下一行開始（D-145，iPhone 回饋） */}
+      {/* 背面補充開頭的「例句：」這類名稱自己一行，內容從下一行開始（D-145，iPhone 回饋）；記憶錨點不寫名稱，改成燈泡（D-184） */}
       {extras.length > 0 && <div className="ec-ex">{extras.map((extra, index) => {
         const { label, body } = extraLabel(extra);
+        const row = (text: string, spoken: string | null, lang?: string): React.JSX.Element => <div className="ec-ex-row" lang={lang}>
+          <Markdown app={app} text={text} sourcePath={card.deck} revealed tail={spoken === null ? undefined : <Speaker texts={speak(spoken)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} />
+        </div>;
+        // 記憶錨點在冒號後面換行（D-184 補充，使用者 2026-11-06），喇叭在第二行最後、念整項的英文（一項一個喇叭）。
+        const broken = label === ANCHOR_LABEL ? anchorBreak(body) : null;
         // 英文句子和中文翻譯各一行（D-174），喇叭留在英文那一行。
         const { line, translation } = splitTranslation(body);
+        const rows = broken
+          ? <>{row(broken.head, null)}{row(broken.rest, body)}</>
+          : <>{row(line, line)}{translation && row(translation, null, 'zh-Hant')}</>;
+        // 燈泡只在第一行，其他行和內容對齊（D-184 第 2 點）；螢幕閱讀器念「記憶提示」。
+        if (label === ANCHOR_LABEL) return <div key={index} className="ec-ex-item is-anchor">
+          <span className="ec-bulb" role="img" aria-label="記憶提示"><Icon type="bulb" /></span>
+          <div className="ec-ex-body">{rows}</div>
+        </div>;
         return <div key={index} className="ec-ex-item">
           {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
-          <div className="ec-ex-row"><Markdown app={app} text={line} sourcePath={card.deck} revealed tail={<Speaker texts={speak(line)} say={say} />} onFail={(error, path) => { onFail('back', error, path); }} /></div>
-          {translation && <div className="ec-ex-row" lang="zh-Hant"><Markdown app={app} text={translation} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} /></div>}
+          {rows}
         </div>;
       })}</div>}
       {hasSource && <div className="ec-tools">
