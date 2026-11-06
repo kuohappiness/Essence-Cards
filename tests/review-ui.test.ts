@@ -388,7 +388,7 @@ void test('D-184 記憶錨點沒有可以換行的冒號：燈泡加一行；例
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
   o.session.input('went'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句']);
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句：']);
   assert.equal(o.ui.find('ec-bulb').length, 1);
   assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-3), ['易混淆 come（來）', 'She went home.', '她回家了。']);
   assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 come', '朗讀 She went home.']);
@@ -399,7 +399,7 @@ void test('D-174 例句的英文和中文翻譯各一行，喇叭在英文那一
   const o = await open(t, { subject: '英文' }, { texts: { [ENGLISH]: deck } });
   o.session.input('went'); o.ui.key('Enter', 'input');
   await o.ui.settle();
-  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句']);
+  assert.deepEqual(o.ui.find('ec-ex-label').map(o.ui.text), ['例句：']);
   assert.deepEqual(ofType(o.ui, 'markdown').map(node => node.props.text).slice(-2), ['She went home.', '她回家了。']);
   assert.deepEqual(o.ui.find('ec-ex-row').length, 2);
   assert.deepEqual(speakers(o.ui), ['朗讀 I went to the park yesterday.', '朗讀 went', '朗讀 She went home.']);

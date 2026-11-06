@@ -102,7 +102,8 @@ function QaCard({ props, parts }: { props: BodyProps; parts: QaParts }): React.J
           <div className="ec-ex-body">{rows}</div>
         </div>;
         return <div key={index} className="ec-ex-item">
-          {label && <div className="ec-ex-label" lang="zh-Hant">{label}</div>}
+          {/* 名稱後面照卡組的寫法帶全形冒號（使用者 2026-11-07：「例句」改成「例句：」） */}
+          {label && <div className="ec-ex-label" lang="zh-Hant">{label}：</div>}
           {rows}
         </div>;
       })}</div>}
