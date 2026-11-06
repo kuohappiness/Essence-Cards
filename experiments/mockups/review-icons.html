@@ -63,62 +63,68 @@ figcaption b { color: var(--fg); }
   </ul>
 </section>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="spk" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="mute" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5ZM15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="back" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-</svg>
-
 <div class="grid">
   <figure>
     <figcaption><b>A. 英文卡，自動朗讀開著</b>：上方是喇叭加聲波；記憶錨點前面是燈泡。</figcaption>
-    <div class="ec-app" data-card="en"></div>
+    <div class="ec-app"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="true" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">英文 › 國二上 › L2</div>
+    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    <div class="ec-answer">
+      <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body">go 的過去式不規則：go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+        <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
+      </div>
+    </div></div></div>
   </figure>
   <figure>
     <figcaption><b>B. 同一張，點一下關掉</b>：聲波換成 ×、變灰；句子後面的小喇叭照舊能按。</figcaption>
-    <div class="ec-app" data-card="en" data-off></div>
+    <div class="ec-app"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="false" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">英文 › 國二上 › L2</div>
+    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    <div class="ec-answer">
+      <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body">go 的過去式不規則：go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+        <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
+      </div>
+    </div></div></div>
   </figure>
   <figure>
     <figcaption><b>C. 深色模式</b>，自動朗讀開著。</figcaption>
-    <div class="ec-app dark" data-card="en"></div>
+    <div class="ec-app dark"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="true" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
+    <div class="ec-meta">英文 › 國二上 › L2</div>
+    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+    <div class="ec-answer">
+      <div class="ec-spell"><span class="ok"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 12 5 5L20 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="word">went</span><span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="ec-ex">
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body">go 的過去式不規則：go → went → gone<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div></div>
+        <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.<span class="say"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div>她回家了。</div></div>
+      </div>
+    </div></div></div>
   </figure>
   <figure>
     <figcaption><b>D. 解釋分成兩行</b>（之後的接句卡，D-185 第 4 點）：燈泡只在第一行，第二行和內容對齊。</figcaption>
-    <div class="ec-app" data-card="poem"></div>
-  </figure>
-</div>
-
-<script>
-const ico = (id, size = 20) => `<svg width="${size}" height="${size}" aria-hidden="true"><use href="#${id}"/></svg>`;
-const top = off => `<div class="ec-top">
-  <span class="ico">${ico('back')}</span><span class="ec-count">還剩 12 張</span>
-  <button class="ico ec-auto" role="switch" aria-checked="${off ? 'false' : 'true'}" aria-label="自動朗讀">${ico(off ? 'mute' : 'spk')}</button>
-  <span class="ico">${ico('flag')}</span><span class="ico">${ico('close')}</span></div><div class="ec-prog"><i></i></div>`;
-const say = `<span class="say">${ico('spk')}</span>`;
-const bulb = `<span class="ec-bulb" role="img" aria-label="記憶提示">${ico('bulb', 16)}</span>`;
-const cards = {
-  en: off => `${top(off)}<div class="ec-stage">
-    <div class="ec-meta">英文 › 國二上 › L2</div>
-    <div class="ec-q">我昨天去了公園。<br>I <span class="ec-line">went</span> to the park yesterday.${say}</div>
-    <div class="ec-answer">
-      <div class="ec-spell"><span class="ok">${ico('check')}</span><span class="word">went</span>${say}</div>
-      <div class="ec-ex">
-        <div class="ec-ex-item is-anchor">${bulb}<div class="ec-ex-body">go 的過去式不規則：go → went → gone${say}</div></div>
-        <div class="ec-ex-item"><div class="ec-ex-label">例句</div><div>She went home.${say}</div><div>她回家了。</div></div>
-      </div>
-    </div></div>`,
-  poem: () => `${top(false)}<div class="ec-stage">
+    <div class="ec-app"><div class="ec-top">
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ec-count">還剩 12 張</span>
+  <button class="ico ec-auto" role="switch" aria-checked="true" aria-label="自動朗讀"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m11 4-6 5H2v6h3l6 5ZM15 8c2 2 2 6 0 8M18 5c4 4 4 10 0 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div><div class="ec-prog"><i></i></div><div class="ec-stage">
     <div class="ec-meta">國語 › 五上 › 第 7 課 › 靜夜思</div>
     <div class="ec-q">床前明月光，<br><span class="ec-line">疑是地上霜</span>。</div>
     <div class="ec-answer">
       <div class="ec-ex">
-        <div class="ec-ex-item is-anchor">${bulb}<div class="ec-ex-body"><div>月光照在床前，白白一片。</div><div>看起來像地上結了一層霜。</div></div></div>
+        <div class="ec-ex-item is-anchor"><span class="ec-bulb" role="img" aria-label="記憶提示"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2v.2h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div class="ec-ex-body"><div>月光照在床前，白白一片。</div><div>看起來像地上結了一層霜。</div></div></div>
       </div>
-    </div></div>`,
-};
-for (const el of document.querySelectorAll('.ec-app')) el.innerHTML = cards[el.dataset.card](el.hasAttribute('data-off'));
-</script>
+    </div></div></div>
+  </figure>
+</div>
+
