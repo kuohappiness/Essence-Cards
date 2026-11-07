@@ -10,7 +10,8 @@ import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../tools/check-doc
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
 for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith('GIT_')) delete process.env[key];
 
-const git = (root: string, ...args: string[]) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', ...args], { cwd: root, stdio: 'pipe' });
+// CI 的 git 沒有設作者身分：暫存 repo 裡 commit 時自己給一個。
+const git = (root: string, ...args: string[]) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', ...args], { cwd: root, stdio: 'pipe' });
 
 async function repo(t: { after: (fn: () => Promise<void>) => void }) {
   const root = await mkdtemp(join(tmpdir(), 'essence-docs-'));
