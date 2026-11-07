@@ -1,4 +1,4 @@
-import { StateEffect, StateField } from '@codemirror/state';
+import { MapMode, StateEffect, StateField } from '@codemirror/state';
 import type { EditorState, Extension, Range, Text, Transaction } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
@@ -178,6 +178,13 @@ class AddWidget extends WidgetType {
 export function targetAt(deck: LaidOut, line: number): Deck['targets'][number] | null {
   return deck.targets.find(each => each.line <= line - 1 && line - 1 < (deck.layout.get(each.line)?.end ?? each.line + 1)) ?? null;
 }
+/**
+ * 點「填出處」圖示時（§2 第 2 點）：line（從 1 算）現在是哪個目標的出處欄位那一行；不是就是 null。圖示是停止打字 250 ms 後算的，
+ * 之間刪掉那一欄時，平移後的圖示會落在別的行（L2 第二輪 R11），所以點的時候用現在的全文再核對一次。
+ */
+export function sourceFieldTarget(deck: LaidOut, line: number): Deck['targets'][number] | null {
+  return deck.targets.find(each => deck.layout.get(each.line)?.fields.some(field => field.line === line - 1)) ?? null;
+}
 
 /**
  * 編輯器的標示：extension 用 registerEditorExtension 裝上（只在電腦）；marks 是目前畫的標示，refresh 是馬上重新解析的 effect，
@@ -212,8 +219,13 @@ export function markup<H extends SourceHit = SourceHit>(options: MarkupOptions<H
       if (!tr.docChanged) return value;
       if (!isEdit(tr)) return build(tr.state);
       // 停下來才重新解析：標示與出處欄位的行跟著平移（行首往前靠，在行首打字還是那一行）。
-      const map = (pos: number): number => tr.changes.mapPos(pos, -1);
-      return { set: value.set.map(tr.changes), fields: value.fields.map(each => ({ anchor: map(each.anchor), lines: each.lines.map(map) })) };
+      // 行首後面的字被刪掉（整行刪掉）的行不跟著平移，拿掉：不然會落在下一行（L2 第二輪 R11）。
+      const map = (pos: number): number | null => tr.changes.mapPos(pos, -1, MapMode.TrackAfter);
+      const fields = value.fields.flatMap(each => {
+        const anchor = map(each.anchor);
+        return anchor === null ? [] : [{ anchor, lines: each.lines.flatMap(line => map(line) ?? []) }];
+      });
+      return { set: value.set.map(tr.changes), fields };
     },
     provide: f => EditorView.decorations.from(f, value => value.set),
   });

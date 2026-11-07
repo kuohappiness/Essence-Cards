@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EditorState } from '@codemirror/state';
 import type { TransactionSpec } from '@codemirror/state';
 import { parseDeck } from '../src/core/deck/index.ts';
-import { markup, targetAt, type Mark } from '../src/obsidian/markup.ts';
+import { markup, sourceFieldTarget, targetAt, type Mark } from '../src/obsidian/markup.ts';
 
 // tasks/edit-markup.md §1、§6-1 的標示：用 Obsidian 內建的同一版 CodeMirror（@codemirror/state）跑，位置寫死。
 // 細線的位置、顏色與 tooltip 在 Windows 版 Obsidian 對照（§6-3）。
@@ -248,4 +248,21 @@ void test('§1-4 改完之後重新解析，標示消失', () => {
 
 void test('§1 不是卡組筆記不標', () => {
   assert.deepEqual(editor(NATURAL, false).marks, []);
+});
+
+void test('L2 R11：刪掉出處那一行，還沒重新解析時圖示不留在下一行；點圖示時再核對那一行現在是不是出處欄位', () => {
+  const doc = '- 甲 ^abc123\n    - Q :: A\n    - 出處：p.44\n- 乙 ^abc234\n    - Q :: B\n';
+  const m = markup({ isDeck: () => true, onAdd: () => {} });
+  let state = EditorState.create({ doc, extensions: [m.extension], selection: { anchor: pos(EditorState.create({ doc }), 3, 8) } });
+  assert.equal(m.icon(state), 3);
+  const line = state.doc.line(3);
+  state = state.update({ changes: { from: line.from, to: line.to + 1 }, selection: { anchor: line.from }, userEvent: 'delete.selection' }).state;
+  assert.equal(state.doc.line(3).text, '- 乙 ^abc234');
+  assert.equal(m.icon(state), null, '刪掉的出處欄位不再有圖示');
+  // 點圖示的那一行要現在就是出處欄位那一行：乙的標題行不是。
+  assert.equal(sourceFieldTarget(parseDeck(state.doc.toString(), { layout: true }), 3), null);
+  assert.equal(sourceFieldTarget(parseDeck(doc, { layout: true }), 3)?.name, '甲');
+  // 用｜接在別的欄位後面的出處，那一行也算；題目那一行不算。
+  const joined = parseDeck('- 甲 ^abc123\n    - 類型：定義｜出處：p.43\n    - Q :: A\n', { layout: true });
+  assert.deepEqual([1, 2, 3].map(at => sourceFieldTarget(joined, at)?.name ?? null), [null, '甲', null]);
 });

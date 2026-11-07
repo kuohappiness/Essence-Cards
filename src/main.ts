@@ -15,7 +15,7 @@ import { changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
-import { markup, targetAt, type Markup } from './obsidian/markup.ts';
+import { markup, sourceFieldTarget, targetAt, type Markup } from './obsidian/markup.ts';
 import { openBlankSourceForm, openFieldFix, openUnreadableSourceForm, type SourceEntry } from './obsidian/source-entry.ts';
 import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
@@ -284,7 +284,8 @@ export default class EssenceCardsPlugin extends Plugin {
     const marks = markup<UnreadableSource>({
       isDeck: state => lockable(pathOf(state)),
       onAdd: (view, line) => {
-        const target = targetAt(parseDeck(view.state.doc.toString(), { layout: true }), line);
+        // 那一行現在要還是出處欄位（L2 第二輪 R11：刪掉那一欄、還沒重新解析時，圖示可能在別的行）。
+        const target = sourceFieldTarget(parseDeck(view.state.doc.toString(), { layout: true }), line);
         if (target) openBlankSourceForm(view, view.state.doc.line(line).to, target.line, sourceEntry(view));
       },
       onEdit: closeSourceForm,
