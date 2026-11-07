@@ -284,7 +284,7 @@ export default class EssenceCardsPlugin extends Plugin {
     const marks = markup<UnreadableSource>({
       isDeck: state => lockable(pathOf(state)),
       onAdd: (view, line) => {
-        const target = targetAt(view.state.doc, parseDeck(view.state.doc.toString()), line);
+        const target = targetAt(parseDeck(view.state.doc.toString(), { layout: true }), line);
         if (target) openBlankSourceForm(view, view.state.doc.line(line).to, target.line, sourceEntry(view));
       },
       onEdit: closeSourceForm,
@@ -324,7 +324,7 @@ export default class EssenceCardsPlugin extends Plugin {
         const view = (editor as unknown as { cm?: EditorView }).cm;
         if (!view || !lockable(context.file?.path)) return false;
         const head = view.state.selection.main.head;
-        const target = targetAt(view.state.doc, parseDeck(view.state.doc.toString()), view.state.doc.lineAt(head).number);
+        const target = targetAt(parseDeck(view.state.doc.toString(), { layout: true }), view.state.doc.lineAt(head).number);
         if (!target) return false;
         if (checking) return true;
         const found = marks.sourceAt(view.state, head);

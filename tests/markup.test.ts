@@ -162,10 +162,21 @@ void test('§2 第 2 點 游標在出處那一行或它分行的子項目上：�
 
 void test('§2 第 3 點 命令「填出處」：游標在目標那一行到它最後一個子項目才可用', () => {
   const text = '## 1 溶液\n\n- 能說出溶劑 ^k3m9x2\n    - Q :: A\n\n    - Q2 :: A2\n老師說的一段\n- 能說明擴散 ^p7q2w8\n    - Q3 :: A3\n';
-  const state = EditorState.create({ doc: text });
-  const deck = parseDeck(text);
-  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(line => targetAt(state.doc, deck, line)?.name ?? null),
-    [null, null, '能說出溶劑', '能說出溶劑', '能說出溶劑', '能說出溶劑', null, '能說明擴散', '能說明擴散']);
+  const deck = parseDeck(text, { layout: true });
+  // 「老師說的一段」緊接在 Q2 後面，解析把它接進 Q2 的答案（CommonMark 的延續行），所以也算在目標裡（L2 第一輪 R4：和解析用同一個範圍）。
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(line => targetAt(deck, line)?.name ?? null),
+    [null, null, '能說出溶劑', '能說出溶劑', '能說出溶劑', '能說出溶劑', '能說出溶劑', '能說明擴散', '能說明擴散']);
+});
+
+void test('L2 R4：延續行後面同一個目標的題目，命令照樣可用；目標後面隔一行的頂格段落不算', () => {
+  const lazy = parseDeck('- 甲\n    - Q :: A\n自己的筆記\n    - 再問 :: 再答\n', { layout: true });
+  assert.equal(lazy.targets[0].prompts.length, 2, '解析把兩題都歸甲');
+  assert.deepEqual([1, 2, 3, 4].map(line => targetAt(lazy, line)?.name ?? null), ['甲', '甲', '甲', '甲']);
+  const apart = parseDeck('- 甲\n    - Q :: A\n\n自己的筆記\n\n- 乙\n    - Q :: A\n', { layout: true });
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map(line => targetAt(apart, line)?.name ?? null), ['甲', '甲', null, null, null, '乙', '乙']);
+  // 空一行後縮排到甲的內容位置（兩格）的段落：CommonMark 與解析都算甲那一項的內容，所以算甲。
+  const inside = parseDeck('- 甲\n    - Q :: A\n\n  自己的筆記\n\n- 乙\n    - Q :: A\n', { layout: true });
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map(line => targetAt(inside, line)?.name ?? null), ['甲', '甲', '甲', '甲', null, '乙', '乙']);
 });
 
 void test('§1-3 看不懂的出處：畫在那一段，帶說明；切不出原文的畫那一欄出處的第一行；sourceAt 找得到那一段', () => {

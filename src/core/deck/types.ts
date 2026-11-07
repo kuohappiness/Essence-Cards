@@ -88,7 +88,8 @@ export interface FieldColon { field: FieldName; name: Span; colon: Span }
  * 一個目標的出處原文位置（§3-3），只有 parseDeck(text, { layout: true }) 才有；不放進 Target，改縮排與 ID 的保護比的是 targets（回報 R2）。
  * entries 和 fields.sources 一一對應，跨了接續行或原文沒有一段連續的字等於它時是 null；parts 是 sourceLinks 讀的時候切出的每一段，那一項是 null 時它的段也沒有位置。
  */
-export interface TargetLayout { fields: SourceFieldLayout[]; entries: (Span | null)[]; parts: SourcePart[]; fieldColons: FieldColon[] }
+/** end：目標的範圍到哪一行之前（從 0 算，不含），和解析把題目歸給這個目標的範圍相同（L2 第一輪 R4）。 */
+export interface TargetLayout { fields: SourceFieldLayout[]; entries: (Span | null)[]; parts: SourcePart[]; fieldColons: FieldColon[]; end: number }
 export type ProblemCode =
   | 'empty-question' | 'missing-answer' | 'typed-answer-invalid'
   // typed-answer-words：hint，好幾個答案的字數不一樣，畫線照第一個（D-122）。

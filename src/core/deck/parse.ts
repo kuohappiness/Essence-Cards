@@ -335,7 +335,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
     if (layouts) {
       // 段的位置是在那一項原文裡的位置：那一項切不出原文時，它的段也沒有位置。
       const parts = readSourceParts(fields.sources, props).map(part => entries[part.entry] ? part : { ...part, from: null, to: null });
-      layouts.set(root.line, { fields: sourceFields, entries, parts, fieldColons });
+      layouts.set(root.line, { fields: sourceFields, entries, parts, fieldColons, end: root.end });
     }
   }
   problems.sort((a, b) => a.line - b.line);

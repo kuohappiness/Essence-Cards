@@ -171,15 +171,12 @@ class AddWidget extends WidgetType {
   ignoreEvent(): boolean { return true; }
 }
 
-/** 游標所在的目標（§2 第 3 點）：目標那一行到它的最後一個子項目（下一個頂格的非空白行之前）；line 從 1 算。 */
-export function targetAt(doc: Text, deck: Deck, line: number): Deck['targets'][number] | null {
-  const target = [...deck.targets].reverse().find(each => each.line + 1 <= line);
-  if (!target) return null;
-  for (let at = target.line + 2; at <= line; at++) {
-    const text = doc.line(at).text;
-    if (text.trim() && !/^[ \t]/.test(text)) return null;
-  }
-  return target;
+/**
+ * 游標所在的目標（§2 第 3 點）：目標那一行到它的最後一行，範圍和解析把題目歸給這個目標的相同（L2 第一輪 R4：延續行之後的題目也算）；
+ * line 從 1 算。
+ */
+export function targetAt(deck: LaidOut, line: number): Deck['targets'][number] | null {
+  return deck.targets.find(each => each.line <= line - 1 && line - 1 < (deck.layout.get(each.line)?.end ?? each.line + 1)) ?? null;
 }
 
 /**
