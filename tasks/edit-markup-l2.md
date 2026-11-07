@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（Codex L2 審查請求）
 
-狀態：待審（第二輪，見最後〈第二輪〉）。第一輪審 `268b625`，[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。
+狀態：待審（第三輪，見最後〈第三輪〉）。第一輪審 `268b625`、第二輪審 `154d732`，[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -23,7 +23,7 @@
 - **公開介面**（`src/core/deck/index.ts`）：`parseDeck(text, { layout: true })` 的 `layout`（`TargetLayout`：`fields`、`entries`、`parts`、`fieldColons`）；`readSourceParts`；`canEditSource`、`editSource`、`verifySourceEdit`（§4-3）；`fieldFixes`、`fixField`、`fixQuestion`、`NEEDS_NEWER`（§1-4、§4-4）。`Problem.columns`（§1-2）。
 - **呼叫端**：`src/obsidian/markup.ts`（標示、圖示、點擊）、`src/obsidian/source-entry.ts`（表單與面板寫回）、`src/obsidian/source-form.ts`、`src/ui/sources.ts`（`unreadableSources`，存檔按鈕與標示共用）、`src/main.ts` 的接線、`src/core/catalog/source-guess.ts`（§4-1、§4-2）。
 - **不可破壞的性質**：
-  - 沒給 `{ layout: true }` 時 `parseDeck` 的結果和改之前完全一樣；`sourceLinks` 的按鈕不變（`tests/sources.test.ts` 的預期值沒改）。
+  - 帶與不帶 `{ layout: true }` 的 `parseDeck` 結果只差 `layout`（§1-2 的 `Problem.columns` 兩種都有，L2 第二輪 R8 改了這一句）；`sourceLinks` 的按鈕不變（`tests/sources.test.ts` 的預期值沒改）。
   - 寫回與修改只在家長按「套用」「修改」時發生，一個交易、`Ctrl+Z` 一次復原；核對不成立就不寫；CRLF、BOM、檔尾換行照舊。
   - 補 ID 與改縮排（`assign.ts`、`ids.ts`）不受 layout 影響，也不能改壞寫回的結果（`deckCases`）。
   - 舊版外掛（0.3.0）讀寫回之後的筆記，意思相同。
@@ -66,3 +66,14 @@
   4. 修正有沒有帶進新的問題：`relocateSource` 找到別的目標的同一段原文、`targetAt` 用 `layout.end` 後圖示與命令的範圍、`guessSource` 多了 `scope` 之後其他分支（寫了單元、短的學期、只有編號）的預選。
 - **驗證方式**：和第一輪相同（`npm run check`、`npm run build`；自己跑測試加 `--test-timeout`）。實作者在 `14b1123` 跑過 `npm run check`（2031 個測試）、`npm run build` 通過。Windows 版 Obsidian 在 `1be9ef7` 重跑開發命令 `markup`（寫回四步與 `Ctrl+Z`，結果在任務說明〈結果〉）；平移後的標示這種情形沒有在實機做，由 `tests/source-entry.test.ts` 走到 CodeMirror 的交易。判斷需要實機的寫成「待驗證」。
 - **回報**：接在分支上那一份 `Claude Codex Discussion/2026-11-07-edit-markup-l2.md`（worktree `.claude/worktrees/edit-markup` 裡的，已提交、含第一輪與回應）最後，標題「## 第二輪」，格式同第一輪；標題下的狀態行一起更新。主工作目錄那一份未追蹤的是第一輪的原稿，不要改。
+
+## 第三輪（L2 第二輪的修正）
+
+- **審查對象**：分支 `claude/edit-markup` 從 `154d732cf481b6ca9874730a73a5f6450f758ca8`（第二輪審過的）到這份請求所在的 commit。程式的修正是 `7694422`（R12、R13）、`c63ebef`（R11）、`d49b406`（R10）；另有一個只改文件的 commit（第二輪報告與回應、R8 的文字、〈結果〉、這份請求）。沒有未提交的修改。
+- **只查這段差異與受影響的路徑**。每項的修法與回歸測試見報告最後的〈Claude 的回應（第二輪）〉。請核對：
+  1. R10：`relocateSource` 現在回傳的 `follows`、`whole`、`scope` 和寫回的替換範圍是不是同一份解析；後面的位置被刪掉、多了一個、`follows` 從 `place` 變成別的時，表單與寫回是否一致。
+  2. R11：`MapMode.TrackAfter` 會不會讓正常的編輯（在出處那一行行首打字、刪掉行首的清單符號再打回來、從上一行行尾刪到這一行）弄丟圖示到不合理的程度；點擊時的 `sourceFieldTarget` 是否涵蓋 `｜` 接的出處與分行的子項目那幾行的圖示（圖示只畫在欄位第一行）。
+  3. R12：`removeGroups` 合併整行的範圍時，中間夾著附著內容（引言、圍欄）或不連續的行，是否仍各自正確。
+  4. R13：`continued` 現在也包含子項目的接續行；用到 `continued` 的地方（`blocked`、§4-4 併進去、`fieldFixes` 的判斷）是否都符合 §4-3 第 4 點與 §8。
+- **驗證方式**：和前兩輪相同。實作者在 `d49b406` 跑過 `npm run check`（2040 個測試）、`npm run build` 通過；Windows 版 Obsidian 在 `d49b406` 重跑開發命令 `markup`（寫回四步與 `Ctrl+Z`）。標示或圖示平移後點擊的情形沒有在實機做，由 `tests/source-entry.test.ts`（真的 `EditorView`）與 `tests/markup.test.ts` 測。
+- **回報**：接在分支上那一份 `Claude Codex Discussion/2026-11-07-edit-markup-l2.md` 最後，標題「## 第三輪」；標題下的狀態行一起更新。

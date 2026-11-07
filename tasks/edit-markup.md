@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（入口與目錄第四批，給 Claude，本機執行）
 
-狀態：💬 任務說明定稿，可以開工；§7 的 7 個 commit 都已在分支 `claude/edit-markup`，Windows 實機做完（見〈結果〉）；Codex L2 第一輪的發現已修（[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)），合併前等第二輪（[審查請求](edit-markup-l2.md)）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
+狀態：💬 任務說明定稿，可以開工；§7 的 7 個 commit 都已在分支 `claude/edit-markup`，Windows 實機做完（見〈結果〉）；Codex L2 第一、二輪的發現已修（[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)），合併前等第三輪（[審查請求](edit-markup-l2.md)）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。要改寫使用者的筆記，也動到解析的結果，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。§3（解析多記原文位置）、§4-3、§4-4（寫回）開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），§1、§2 不用等。
 
@@ -119,7 +119,7 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
 
 原文位置**不放進 `Target` 或 `Fields`**：改縮排的保護（`src/core/deck/assign.ts:41`）比的是整個 `targets` 的 JSON，`src/state/ids.ts:196` 也比目標的 JSON，座標放進去會讓合法的修正被退回（回報 R2）。做法：
 
-- `parseDeck(text, { layout: true })` 才另外回傳 `layout: Map<number, TargetLayout>`（鍵是目標那一行），沒給選項時結果和不給這個選項時完全一樣（只差 `layout`；§1-2 加的 `Problem.columns` 兩種都有，是 §1-2 本來要的改變，L2 第一輪 R8）。只有編輯器的標示與寫回會要它。
+- `parseDeck(text, { layout: true })` 才另外回傳 `layout: Map<number, TargetLayout>`（鍵是目標那一行），帶與不帶這個選項的結果只差 `layout`（§1-2 加的 `Problem.columns` 兩種都有，是 §1-2 本來要的改變；L2 第一輪、第二輪 R8）。只有編輯器的標示與寫回會要它。
 - 欄位用同一次遞迴（`collectFields`）收集，不另寫一套掃描，順序和 `fields.sources` 一致。
 
 ### 3-2 座標的約定
@@ -137,7 +137,7 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
    - `name: { line; from; to }`：`出處` 這兩個字；`colon: { line; from; to }`：後面那個冒號。兩個各帶自己的行號（回報 R9 與第三輪）：出處從接續行開始時（`類型：定義` 底下接續行的 `｜出處：p.44`）就是接續行；名稱後面換行才打冒號時（`出處` 底下接續行的 `:p.44`，現在的讀法照樣認得，`\s*` 含換行），`name` 在第一行、`colon` 在接續行。冒號前的空白不在兩者裡面。
    - `value: { line; from; to } | null`：從冒號後面第一個不是空白的字，到這一段結束（`｜` 或那一行結束）之前，去掉後面的空白，行號是值實際所在的那一行；冒號後面那一行沒有字（值寫在子項目，或沒有值）是 `null`。
    - `joined: boolean`：這一項有沒有用 `｜` 或半形 `|`（後面接欄位名稱）接別的欄位，包含在接續行接的。
-   - `continued: boolean`：這一項的文字有沒有接續行。
+   - `continued: boolean`：這一項，或當成出處值的子項目，文字有沒有接續行（子項目的部分是 L2 第二輪 R13 補的：寫回不寫進接續行，§8）。
    - `children: number[]`：當成出處值的子項目（不是欄位開頭的那些）的第一行，照順序。子項目底下的欄位照現在的遞迴歸到它自己。
 2. **`entries: ({ line; from; to } | null)[]`**：和 `fields.sources` 一一對應（頓號切開、去掉前後空白之後的每一項）。跨了接續行，或原文裡沒有一段連續的字等於它（例如藏在私用區字元的防呆例子 `p.44`，回報 R6）時是 `null`。
 3. **`parts: SourcePart[]`**：`sourceLinks` 讀的時候實際切出的每一段，**去重之前**，照原文順序：
@@ -322,7 +322,7 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
 
 ### §7 第 4 個 commit（2026-11-07，`9a228fa`）
 
-- **§3 原文位置**：`parseDeck(text, { layout: true })` 另外回傳 `layout: Map<目標那一行, TargetLayout>`（`fields`、`entries`、`parts`、`fieldColons`），沒給選項時結果和原本完全一樣（測試用 `'layout' in` 確認沒有這個鍵）。型別在 `src/core/deck/types.ts`。
+- **§3 原文位置**：`parseDeck(text, { layout: true })` 另外回傳 `layout: Map<目標那一行, TargetLayout>`（`fields`、`entries`、`parts`、`fieldColons`），沒給選項時沒有這個鍵（測試用 `'layout' in` 確認），其他和帶選項時相同（§1-2 的 `Problem.columns` 兩種都有，L2 第二輪 R8）。型別在 `src/core/deck/types.ts`。
 - **讀法沒有另寫一套**：`sourceLinks` 的遮罩、`p，44` 的修正、切段、去頭尾改成每個字記得自己在原文的位置，`sourceLinks` 變成 `readSourceParts` 攤平再去重；按鈕是段裡項目的複本，去重不改 `parts`（回報 R5）。欄位的切法（`collectFields`）也改用同一套位置，§1-2 的問題位置跟著用它，私用區字元前後也對得回原文。
 - **改名**：第 3 個 commit 給表單用的 `sourceParts`（拆一項出處）改名 `splitSource`，免得和 `SourcePart` 搞混。
 - **段超過 RAW_CUT_LIMIT**：量的是那一段的原文（去掉尾端分隔符號與空白之後），2000 個字有位置、2001 個字是 `null`；同一欄其他段照常有位置。
@@ -406,3 +406,14 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
 - §3-1「沒給選項時結果和現在完全一樣」改成「和不給這個選項時完全一樣」（R8）；§4-3 第 3 點子項目的位置照 syntax 的例子與實作改寫（R9）。
 - **Windows 版 Obsidian**（`1be9ef7`，結果檔 `Essence W5/結果/markup Windows-c50c 2026-11-07 162341.json`）：開發命令 `markup` 的寫回四步（看不懂的出處、從圖示加一段、改名、半形冒號）與各自的 `Ctrl+Z` 一次復原和上次相同；重新解析加標示加畫面更新的中位數 29.5 ms（最慢一次 67.3 ms），拆開量是解析本身 23.6 ms、§1-4 0.2 ms；中位數在 30 ms 以內，和上次一樣不改做法。
 - `npm run check`（2031 個測試）、`npm run build` 在 `14b1123` 通過。
+
+### Codex L2 第二輪的修正（2026-11-07，`7694422`、`c63ebef`、`d49b406`）
+
+[報告與逐項回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)的〈第二輪〉。R10～R13 修，R8 的文字同步；每一項先寫失敗的測試。
+
+- `7694422`（R12、R13，寫回）：整行拿掉的子項目連在一起的一次拿，檔尾沒有換行照舊；當成出處值的子項目有接續行時那一欄算 `continued`，寫回不寫、§4-4 就地改名。
+- `c63ebef`（R11，圖示）：出處欄位那一行被刪掉時圖示不平移到下一行；點圖示時用現在的全文核對那一行還是出處欄位（`sourceFieldTarget`）。
+- `d49b406`（R10，表單）：`relocateSource` 連接在後面的位置、原文與跟著的單元都用現在的解析重算，表單用這些，不用標示時的。
+- §3-1、§3 的 `continued`、〈結果〉第 1～3 個 commit 那一段與 L2 請求的不可破壞性質，改成「帶與不帶 layout 的結果只差 `layout`」。
+- **Windows 版 Obsidian**（`d49b406`，結果檔 `Essence W5/結果/markup Windows-c50c 2026-11-07 211415.json`）：寫回四步與各自的 `Ctrl+Z` 一次復原和上次相同；重新解析加標示加畫面更新的中位數 25.5 ms（最慢 30.6 ms）。
+- `npm run check`（2040 個測試）、`npm run build` 在 `d49b406` 通過。
