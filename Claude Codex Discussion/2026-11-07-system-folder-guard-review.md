@@ -103,7 +103,7 @@
 
 - 拿掉遞迴的退路。電腦版改用 `src/desktop/index.ts` 新增的 `removeEmptyFolder(basePath, path)`：Node 的 `fs.promises.rmdir`（非遞迴；有東西時系統回 `ENOTEMPTY`），vault 本身與 vault 以外的位置不刪。`main.ts` 判斷是電腦（`Platform.isDesktopApp` 加 `FileSystemAdapter`）才傳給 `wireFolderGuard`，用到時才動態載入 `src/desktop`（D-148，和備份同一條路）。其他平台照舊用 `adapter.rmdir(path, false)`。
 - 確認是空的與刪除之間進來的內容，現在由系統拒絕刪除：原位的那一次記進錯誤紀錄、通知家長自己拖回；清理的那一次記進錯誤紀錄、空資料夾留著。
-- 驗證：`removeEmptyFolder` 在這台 Windows 的真實檔案系統上測（空的刪掉；有檔、有子資料夾都拒絕而且內容留著；vault 本身與外面不刪）；`wireFolderGuard` 用 esbuild 載入正式的檔，確認電腦版不經 adapter、其他平台只呼叫 `rmdir(path, false)`，回 `EISDIR` 時不改用遞迴的。**還沒在 Obsidian 實機走**：修正後的完整流程（重試後清掉暫時位置的空資料夾）見〈第二輪〉的待驗證。
+- 驗證：`removeEmptyFolder` 在這台 Windows 的真實檔案系統上測（空的刪掉；有檔、有子資料夾都拒絕而且內容留著；vault 本身與外面不刪）；`wireFolderGuard` 用 esbuild 載入正式的檔，確認電腦版不經 adapter、其他平台只呼叫 `rmdir(path, false)`，回 `EISDIR` 時不改用遞迴的。Windows 實機重測（任務說明 W8）：Obsidian 裡清理經過 `removeEmpty`；確認是空的之後才放進的檔，刪除被系統以 `ENOTEMPTY` 拒絕、檔留著、記一行錯誤。
 
 ### F3：同意
 

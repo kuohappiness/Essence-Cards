@@ -22,7 +22,7 @@ git diff f1ba0974b3e99155e973fdcf1c6bbb70f2d4a020 593d836436f0399ba90d02469e71af
   - `list` 的重疊判斷（`onFolder`），以及 `watch` 仍用路徑前綴（`holding`），兩者不一致會不會出問題。
   - F2：`removeEmptyFolder` 的路徑檢查（`resolve` 加 `isInside`；Windows 大小寫、`..`、絕對路徑），以及電腦版判斷（`Platform.isDesktopApp`、`FileSystemAdapter`）沒成立時退回 adapter 的非遞迴版。
   - 〈Claude 回應〉不採用的兩項（外部搬動分兩批的時間窗、大小寫與 Unicode）理由是否成立。
-- **驗證**：實作者跑過 `npm run check`（pre-commit，1914 個測試）、第一輪的探針（`.local/system-folder-review/probes.test.ts`，修好的六個改成失敗、兩個邊界通過），以及 7 種變異（每一項修正拿掉都有測試失敗）。**沒跑**：Obsidian 實機（修正後的刪空資料夾流程，W2 待補）；請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
+- **驗證**：實作者跑過 `npm run check`（pre-commit，1914 個測試）、第一輪的探針（`.local/system-folder-review/probes.test.ts`，修好的六個改成失敗、兩個邊界通過），以及 7 種變異（每一項修正拿掉都有測試失敗）。Windows 實機重測見任務說明〈Windows 實機〉W8（`removeEmpty`、F2 的時間差、F4、F1 都在 Obsidian 裡走過）。請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
 
 ## 審查對象（第一輪）
 
