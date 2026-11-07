@@ -8,7 +8,10 @@ import type { Item, Line } from './markdown.ts';
 import { readPick, typedAnswer } from './question-types.ts';
 import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCode, Prompt, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
-const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
+/** 資料欄位那一項的開頭（syntax §2-4）：名稱加全形或半形冒號，冒號前可以有空白。 */
+export const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
+/** 同一行接別的欄位的分隔：`｜`，或半形的 `|` 後面接欄位名稱加冒號（D-170 第 12 點）；給 tracedSplit 用，連結裡的不算。 */
+export const FIELD_SEPARATOR = /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/;
 const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
 const string = (value: unknown): string | null => typeof value === 'string' ? value : null;
 const strings = (value: unknown): string[] => typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
@@ -192,7 +195,7 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
       let field: SourceFieldLayout | null = null;
       if (fieldStart.test(node.text)) {
         // 半形的 `|` 後面接欄位名稱加冒號也是分隔（D-170 第 12 點）；連結裡的不算（`[[筆記|類型：x]]`）。
-        const pieces = tracedSplit(node.text, /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/);
+        const pieces = tracedSplit(node.text, FIELD_SEPARATOR);
         for (const piece of pieces) {
           const segment = piece.text;
           const match = /^\s*([^：:]+?)\s*[：:]\s*([\s\S]*?)\s*$/.exec(segment);

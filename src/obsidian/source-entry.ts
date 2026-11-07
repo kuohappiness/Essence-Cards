@@ -1,10 +1,10 @@
 import type { EditorView } from '@codemirror/view';
 import { guessSource } from '../core/catalog/index.ts';
 import type { CatalogUnit } from '../core/catalog/index.ts';
-import { canEditSource, editSource, parseDeck } from '../core/deck/index.ts';
-import type { SourceEditAction } from '../core/deck/index.ts';
+import { NEEDS_NEWER, canEditSource, editSource, fieldFixes, fixField, fixQuestion, parseDeck } from '../core/deck/index.ts';
+import type { FieldFix, SourceEditAction } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
-import { closeSourceForm, openSourceForm } from './source-form.ts';
+import { closeSourceForm, openAskPanel, openSourceForm } from './source-form.ts';
 import type { UnreadableSource } from '../ui/sources.ts';
 
 // 填出處的入口（tasks/edit-markup.md §2）：圖示與命令「填出處」打開空白的表單，用來加一項；
@@ -34,6 +34,31 @@ export function openBlankSourceForm(view: EditorView, pos: number, target: numbe
 /** 在看不懂的那一段（從 pos 開始）底下打開它的表單，先填好猜的內容（§4-1）；套用時換掉那一段與接在後面的位置。 */
 export function openUnreadableSourceForm(view: EditorView, pos: number, entry: SourceEntry, hit: UnreadableSource): void {
   open(view, pos, hit.line, entry, hit);
+}
+
+/**
+ * 點了 §1-4 的標示（pos 是那一處的開頭）：問一句，按「修改」寫回（§4-4）。標示是停止打字 250 ms 後算的，用現在的全文重新判斷那一行；
+ * 這篇需要新版時只寫原因、沒有「修改」。核對不成立記進錯誤紀錄。
+ */
+export function openFieldFix(view: EditorView, pos: number, entry: SourceEntry, kind: FieldFix['kind']): void {
+  const opened = view.state.doc, text = opened.toString();
+  const line = opened.lineAt(pos).number - 1;
+  const fixes = fieldFixes(text);
+  const fix = fixes.find(each => each.kind === kind && (kind === 'colon' || each.line === line));
+  const result = fixField({ text, fix: kind === 'colon' ? { kind } : { kind, line }, version: entry.version });
+  if (!result.ok && result.failure !== null) entry.fail(Error(result.failure));
+  const newer = !result.ok && result.reason === NEEDS_NEWER;
+  const at = view.coordsAtPos(pos) ?? view.contentDOM.getBoundingClientRect();
+  openAskPanel({
+    rect: { left: at.left, top: at.top, bottom: at.bottom },
+    question: fix && !newer ? fixQuestion(fix, fixes.filter(each => each.kind === 'colon').length) : null,
+    blocked: result.ok ? null : result.reason,
+    apply: () => {
+      if (!result.ok || view.state.doc !== opened) { closeSourceForm(); return; }
+      view.dispatch({ changes: result.changes, userEvent: 'input.essence-source', scrollIntoView: true });
+      closeSourceForm();
+    },
+  });
 }
 
 function open(view: EditorView, pos: number, target: number, entry: SourceEntry, hit: UnreadableSource | null): void {

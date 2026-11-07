@@ -1,8 +1,8 @@
 import { canRead } from '../version/index.ts';
-import { expandTabs, linesOf, listTree } from './markdown.ts';
+import { expandTabs, linesOf, listTree, maskInline, questionSyntax, stripId } from './markdown.ts';
 import type { Item, Line } from './markdown.ts';
-import { parseDeck, readProperties } from './parse.ts';
-import { readSourceParts, sourceLinks } from './sources.ts';
+import { FIELD_SEPARATOR, fieldStart, parseDeck, readProperties } from './parse.ts';
+import { readSourceParts, sourceLinks, splitOutsideLinks, tracedSplit } from './sources.ts';
 import type { SourceItem, SourceOwner, SourcePart } from './sources.ts';
 import type { Deck, SourceFieldLayout, Span, Target, TargetLayout } from './types.ts';
 
@@ -44,6 +44,8 @@ const REASON = {
   newer: '這篇需要新版的外掛才能改',
   failed: '寫不回去，請直接改字',
 } as const;
+/** 這篇需要新版（syntax §2-1）時的原因：§1-4 的面板只寫這一句、沒有「修改」。 */
+export const NEEDS_NEWER = REASON.newer;
 const changed = (raw: string): string => `改完之後，後面的「${raw}」會跟著改，請直接改字`;
 
 type LaidOut = Deck & { layout: Map<number, TargetLayout> };
@@ -320,22 +322,31 @@ const rawOf = (target: Target, part: SourcePart): string =>
 export function verifySourceEdit(before: string, after: string, plan: SourceEditPlan): { reason: string; failure: string | null } | null {
   return verifyParsed(parseDeck(before, { layout: true }), parseDeck(after, { layout: true }), plan);
 }
-function verifyParsed(old: LaidOut, now: LaidOut, plan: SourceEditPlan): { reason: string; failure: string | null } | null {
-  const fail = (code: string): { reason: string; failure: string } => ({ reason: REASON.failed, failure: 'verify:' + code });
+const fail = (code: string): { reason: string; failure: string } => ({ reason: REASON.failed, failure: 'verify:' + code });
+/**
+ * 出處以外的核對（第 6 點）：屬性、每個目標（出處以外；第 index 個照 expect 比，其他照原本）、別的目標的出處按鈕、問題。
+ * 成立時回傳第 index 個目標的前後；不成立是原因。
+ */
+function verifyOthers(old: LaidOut, now: LaidOut, index: number, expect: (target: Target) => unknown = targetMeaning): { reason: string; failure: string } | null {
   if (!same(old.props, now.props)) return fail('props');
   if (old.targets.length !== now.targets.length) return fail('targets');
-  const index = old.targets.findIndex(target => target.line === plan.target);
   if (index < 0) return fail('target');
   const own = ownerOf(old);
   for (const [at, target] of old.targets.entries()) {
     const next = now.targets[at];
-    if (!same(targetMeaning(target), targetMeaning(next))) return fail('target:' + at);
+    if (!same(at === index ? expect(target) : targetMeaning(target), targetMeaning(next))) return fail('target:' + at);
     if (at !== index && !same(sourceLinks(target.fields.sources, own), sourceLinks(next.fields.sources, own))) return fail('sources:' + at);
   }
   // 問題：行號會因為插行改變，照所屬的目標與內容比。
   const problems = (deck: Deck): unknown[] => deck.problems.map(({ line: _line, columns: _columns, targetLine, ...problem }) => ({ ...problem, target: deck.targets.findIndex(target => target.line === targetLine) }));
   if (!same(problems(old), problems(now))) return fail('problems');
-
+  return null;
+}
+function verifyParsed(old: LaidOut, now: LaidOut, plan: SourceEditPlan): { reason: string; failure: string | null } | null {
+  const index = old.targets.findIndex(target => target.line === plan.target);
+  const others = verifyOthers(old, now, index);
+  if (others) return others;
+  const own = ownerOf(old);
   const target = old.targets[index], next = now.targets[index];
   const oldParts = old.layout.get(target.line)?.parts ?? [], newParts = now.layout.get(next.line)?.parts ?? [];
   const added = newParts.length - plan.untouched.length;
@@ -348,4 +359,168 @@ function verifyParsed(old: LaidOut, now: LaidOut, plan: SourceEditPlan): { reaso
   if (items.some(item => item.problem || item.link.kind === 'heading' || item.link.kind === 'text')) return fail('new');
   if (!same(items.map(meaning), readSourceParts([plan.written], own).flatMap(part => part.items).map(meaning))) return fail('new-context');
   return null;
+}
+
+// ── §1-4 出處的欄位名稱寫錯、半形冒號：問一句就改（§4-4）──
+// 判斷是這裡的純函式，不是新的 ProblemCode：讀法、存檔按鈕與目錄的問題數都不變，只有編輯畫面標示。家長按「修改」才寫。
+
+/**
+ * 一處可以改的寫法。rename：`出處 p.45`、`來源：p.45` 這種本來是一整項背面補充的項目，line 是那一項，replacement 是改完的整項，
+ * sources 是這一項讀出的出處（照頓號切）；colon：資料欄位的半形冒號，line 是欄位名稱那一行。target 是所屬目標那一行；
+ * spans 是底線的範圍，tip 是滑過的說明。
+ */
+export type FieldFix =
+  | { kind: 'rename'; target: number; line: number; spans: Span[]; tip: string; replacement: string; sources: string[] }
+  | { kind: 'colon'; target: number; line: number; spans: Span[]; tip: string };
+/** 按了「修改」：改那一項的名稱，或一次改完整篇的半形冒號。 */
+export type FieldFixAction = { kind: 'rename'; line: number } | { kind: 'colon' };
+type Rename = Extract<FieldFix, { kind: 'rename' }>;
+
+const TIP = { rename: '這一行看起來是出處，點一下改成正確的寫法。', colon: '冒號改成全形，和其他欄位一致。點一下就改。' } as const;
+const STALE = '筆記剛改過，請再點一次';
+/** `出處` 後面接空白，或 `來源` 後面接冒號或空白；後面要有字。 */
+const MISNAMED = /^(?:出處[^\S\n]+|來源(?:[^\S\n]*[：:][^\S\n]*|[^\S\n]+))(?=\S)/;
+/** 全文裡有沒有可能是寫錯的名稱：清單符號後面接 MISNAMED 的開頭。 */
+const MAYBE_MISNAMED = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+(?:出處[^\S\n]|來源)/m;
+/** 讀得懂：每一段都沒有 §1-3 的問題（要看目錄與材料的由編輯器另外判斷），至少一段是位置或單元。 */
+function readable(sources: readonly string[], own: SourceOwner): boolean {
+  const items = readSourceParts(sources, own).flatMap(part => part.items);
+  return items.length > 0 && items.every(item => !item.problem && item.link.kind !== 'text') && items.some(item => item.link.kind !== 'heading');
+}
+/**
+ * 本來是一整項背面補充的項目（回報 R10）：目標底下直接一層、不是題目也不是欄位的（shared 的一項），或題目底下直接一層、不是欄位的
+ * （那一題 extras 的一項；多行答案不算）。和 parseDeck 分題目與補充的判斷相同。
+ */
+function looseItems(root: Item, implicit: boolean): Item[] {
+  const extras = (node: Item): Item[] => {
+    const body = stripId(node.text).text, { colon } = questionSyntax(body);
+    return colon >= 0 && !body.slice(colon + 2).trim() ? [] : node.children.filter(child => !fieldStart.test(child.text));
+  };
+  if (implicit) return extras(root);
+  return root.children.flatMap(child => {
+    if (fieldStart.test(child.text)) return [];
+    const syntax = questionSyntax(stripId(child.text).text);
+    return syntax.colon >= 0 || syntax.blanks.length ? extras(child) : [child];
+  });
+}
+
+/** 這一篇可以改的寫法（§1-4），照位置排。laid 是同一份全文 parseDeck(text, { layout: true }) 的結果（編輯器已經讀過，不再讀一次）。 */
+export function fieldFixes(text: string, laid?: LaidOut): FieldFix[] {
+  const deck = laid ?? parseDeck(text, { layout: true });
+  const lines = linesOf(text), own = ownerOf(deck);
+  // 編輯器每次重新解析都要算（§1-5 的速度）：多數的卡組沒有寫錯的名稱，有可能時才重建清單樹。
+  const tree = MAYBE_MISNAMED.test(text) ? listTree(lines, readProperties(lines).start) : [];
+  const fixes: FieldFix[] = [];
+  for (const target of deck.targets) {
+    const root = findItem(tree, target.line);
+    // 改名之後子項目會變成出處的值、接續行會併進值、行尾的 ID 會變成出處的一部分：意思會變，這些不標。
+    for (const item of root ? looseItems(root, target.implicit) : []) {
+      if (item.children.length || item.starts.length > 1 || stripId(item.text).id) continue;
+      const head = MISNAMED.exec(item.text);
+      if (!head) continue;
+      const value = item.text.slice(head[0].length);
+      // 後面接了別的欄位：改名之後會多出那個欄位。
+      if (tracedSplit(value, FIELD_SEPARATOR).length > 1) continue;
+      const sources = splitOutsideLinks(value, /、/).map(each => each.trim()).filter(Boolean);
+      if (!readable(sources, own)) continue;
+      const column = item.starts[0].column;
+      fixes.push({ kind: 'rename', target: target.line, line: item.line, spans: [{ line: item.line, from: column, to: column + item.text.length }], tip: TIP.rename, replacement: '出處：' + value, sources });
+    }
+    // 半形冒號：照解析記下的名稱與冒號（§3-3 第 4 點），行內程式碼裡的不算（maskInline 把它換成 NUL）。
+    for (const { name, colon } of deck.layout.get(target.line)?.fieldColons ?? []) {
+      const raw = lines[colon.line]?.raw ?? '';
+      if (raw[colon.from] !== ':' || maskInline(raw).charCodeAt(colon.from) === 0) continue;
+      const spans = name.line === colon.line ? [{ line: name.line, from: name.from, to: colon.to }] : [name, colon];
+      fixes.push({ kind: 'colon', target: target.line, line: name.line, spans, tip: TIP.colon });
+    }
+  }
+  return fixes.sort((a, b) => a.spans[0].line - b.spans[0].line || a.spans[0].from - b.spans[0].from);
+}
+
+/** 面板上的那一句（§1-4）：count 是這篇半形冒號的處數。 */
+export function fixQuestion(fix: FieldFix, count: number): string {
+  if (fix.kind === 'colon') return count > 1 ? `冒號改成全形？這篇共 ${count} 處，一起改` : '冒號改成全形？';
+  const shown = fix.replacement.length > 40 ? fix.replacement.slice(0, 40) + '…' : fix.replacement;
+  return `改成「${shown}」？`;
+}
+
+/** 按了「修改」（§4-4）：同一種交易與核對；這篇需要新版、標示之後筆記改過就不改。 */
+export function fixField(input: { text: string; fix: FieldFixAction; version: string | null }): SourceEditResult {
+  const deck = parseDeck(input.text, { layout: true });
+  if (deck.props.need !== null && !canRead(deck.props.need, input.version)) return { ok: false, reason: REASON.newer, failure: null };
+  const fixes = fieldFixes(input.text, deck), doc = docOf(input.text);
+  if (input.fix.kind === 'colon') {
+    const colons = fixes.filter(fix => fix.kind === 'colon');
+    if (!colons.length) return { ok: false, reason: STALE, failure: null };
+    const changes = colons.map(fix => { const colon = fix.spans[fix.spans.length - 1], at = offset(doc, colon.line, colon.to - 1); return { from: at, to: at + 1, insert: '：' }; });
+    const text = applyChanges(input.text, changes);
+    // 核對：全文只有那幾個字不同（長度相同）；重新解析之後和改之前完全一樣。
+    if (!same({ props: deck.props, targets: deck.targets, problems: deck.problems }, parseDeck(text))) return { ok: false, reason: REASON.failed, failure: 'verify:colon action:冒號' };
+    return { ok: true, text, changes: diff(input.text, text), written: '' };
+  }
+  const line = input.fix.line;
+  const fix = fixes.find((each): each is Rename => each.kind === 'rename' && each.line === line);
+  const f = fix && fieldOf(doc, deck, fix.target), item = findItem(doc.tree, line), root = fix && findItem(doc.tree, fix.target);
+  const parent = root && (root.children.some(child => child.line === line) ? root : root.children.find(child => child.children.some(each => each.line === line)));
+  if (!fix || !f || !item || !parent) return { ok: false, reason: STALE, failure: null };
+  // 就地改名：開頭的名稱、冒號與後面的空白換成 `出處：`，後面的字一字不動。
+  const prefix = MISNAMED.exec(item.text)?.[0] ?? '', column = item.starts[0].column;
+  const list: { changes: TextChange[]; label: string; split: boolean }[] = [];
+  // 已經有一個（沒有接續行）：併進那一欄，再刪掉這一項；沒有、已經有兩個以上、那一欄有接續行時就地改名，讀法照舊合併。
+  if (f.layout.fields.length === 1 && !f.field?.continued) list.push({ changes: [...merge(f, fix.sources), removeLine(doc, line)], label: '併', split: true });
+  list.push({ changes: [{ from: offset(doc, line, column), to: offset(doc, line, column + prefix.length), insert: '出處：' }], label: '改名', split: false });
+  let first: { reason: string; failure: string } | null = null;
+  for (const { changes, label, split } of list) {
+    let text = applyChanges(input.text, changes);
+    let now = parseDeck(text, { layout: true });
+    if (split) {
+      const again = fieldOf(docOf(text), now, fix.target);
+      const more = again ? splitField(again) : [];
+      if (more.length) { text = applyChanges(text, more); now = parseDeck(text, { layout: true }); }
+    }
+    const found = verifyRename(deck, now, fix, item, parent.line);
+    if (!found) return { ok: true, text, changes: diff(input.text, text), written: fix.replacement };
+    first ??= { ...found, failure: `${found.failure} action:${label} line:${line}` };
+  }
+  return { ok: false, ...(first ?? fail('none')) };
+}
+/** 併進已有的那一欄（§4-3 第 2 點）：開頭是這一篇的位置時加在第一個跟著別的單元的段前面，其他加在最後；分行的一個頓號項一個子項目。 */
+function merge(f: Field, sources: readonly string[]): TextChange[] {
+  const parts = f.layout.parts, children = childItems(f);
+  const mine = readSourceParts(sources, ownerOf(f.deck))[0]?.scope === 'this';
+  const first = mine ? parts.findIndex(part => part.scope !== 'this') : -1;
+  const written = children.length ? sources.join(f.doc.eol + markerOf(f.doc.lines[children[0].line].raw)) : sources.join('、');
+  return (first >= 0 ? insertBefore(f, first, written) : null) ?? append(f, written);
+}
+/** 刪掉一整行（那一項沒有子項目與接續行）；最後一行沒有換行時連同前一行的換行。 */
+function removeLine(doc: Doc, line: number): TextChange {
+  if (line + 1 < doc.lines.length) return { from: doc.starts[line], to: doc.starts[line + 1], insert: '' };
+  const from = line > 0 && !doc.lines[line].eol ? doc.starts[line] - doc.lines[line - 1].eol.length : doc.starts[line];
+  return { from, to: doc.text.length, insert: '' };
+}
+/**
+ * 改名的核對（§4-4）：shared（或那一題的 extras）剛好少了這一整項（按原本的項目比），出處在原本的段之間多了一串，
+ * 讀起來和單獨讀這一項相同（remark 除外）；其他照 §4-3 第 6 點。
+ */
+function verifyRename(old: LaidOut, now: LaidOut, fix: Rename, item: Item, parent: number): { reason: string; failure: string } | null {
+  const index = old.targets.findIndex(target => target.line === fix.target);
+  const expect = (target: Target): unknown => {
+    const shared = [...target.shared], prompts = target.prompts.map(prompt => ({ ...prompt, extras: [...prompt.extras] }));
+    // 這一項的上一層是題目（含直接寫成題目的目標）時在那一題的 extras，否則在 shared。
+    const list = prompts.find(prompt => prompt.line === parent)?.extras ?? shared;
+    const at = list.indexOf(item.text);
+    if (at >= 0) list.splice(at, 1);
+    return targetMeaning({ ...target, shared, prompts });
+  };
+  const others = verifyOthers(old, now, index, expect);
+  if (others) return others;
+  const own = ownerOf(old), target = old.targets[index], next = now.targets[index];
+  const before = (old.layout.get(target.line)?.parts ?? []).map(part => ({ raw: rawOf(target, part), items: part.items.map(meaning) }));
+  const after = (now.layout.get(next.line)?.parts ?? []).map(part => ({ raw: rawOf(next, part), items: part.items.map(meaning) }));
+  const alone = readSourceParts(fix.sources, own).map(part => part.items.map(meaning));
+  for (let at = 0; at + alone.length <= after.length; at++) {
+    const kept = [...after.slice(0, at), ...after.slice(at + alone.length)];
+    if (same(kept, before) && same(after.slice(at, at + alone.length).map(part => part.items), alone)) return null;
+  }
+  return fail('rename');
 }

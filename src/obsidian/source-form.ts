@@ -36,6 +36,57 @@ const label = (unit: UnitChoice | CatalogUnit): string => `${unit.term} ${unit.c
 let current: FormHandle | null = null;
 export function closeSourceForm(): void { current?.close(); }
 
+/** §1-4 問一句的面板：一句話加「修改」「不用」；改不了時寫原因，question 是 null 時只有原因（這篇需要新版），沒有「修改」。 */
+export interface AskOptions {
+  rect: FormOptions['rect'];
+  question: string | null;
+  /** 改不了的原因；可以改是 null。 */
+  blocked: string | null;
+  apply: () => void;
+}
+export function openAskPanel(options: AskOptions): FormHandle {
+  current?.close();
+  const doc = activeDocument;
+  const box = doc.body.createDiv({ cls: 'essence-cards-source-form essence-cards-ask', attr: { role: 'dialog', 'aria-label': '修改寫法' } });
+  if (options.question !== null) box.createDiv({ text: options.question });
+  if (options.blocked) box.createDiv({ cls: 'essence-cards-source-form-reason', text: options.blocked });
+  const buttons = box.createDiv({ cls: 'essence-cards-source-form-buttons' });
+  const no = buttons.createEl('button', { text: '不用', attr: { type: 'button' } });
+  no.onclick = closeSourceForm;
+  if (options.question !== null) {
+    const yes = buttons.createEl('button', { cls: 'mod-cta', text: '修改', attr: { type: 'button' } });
+    yes.disabled = options.blocked !== null;
+    yes.onclick = () => { if (!options.blocked) options.apply(); };
+  }
+  return show(doc, box, options.rect);
+}
+
+/** 放好位置（下面放不下就往上開），掛上 Esc 與點外面關掉；同時只有一個（面板內容不重畫，表單另外處理）。 */
+function show(doc: Document, box: HTMLElement, rect: FormOptions['rect']): FormHandle {
+  const width = box.offsetWidth, height = box.offsetHeight;
+  const view = doc.documentElement;
+  const below = rect.bottom + 6, above = rect.top - height - 6;
+  box.style.left = Math.max(8, Math.min(rect.left, view.clientWidth - width - 8)) + 'px';
+  box.style.top = (below + height > view.clientHeight && above > 0 ? above : below) + 'px';
+  const onKey = (event: KeyboardEvent): void => { if (event.key === 'Escape') { event.preventDefault(); handle.close(); } };
+  const onDown = (event: MouseEvent): void => { if (!box.contains(event.target as Node)) handle.close(); };
+  const handle: FormHandle = {
+    element: box,
+    close() {
+      if (current !== handle) return;
+      current = null;
+      doc.removeEventListener('keydown', onKey, true);
+      doc.removeEventListener('mousedown', onDown, true);
+      box.remove();
+    },
+  };
+  current = handle;
+  doc.addEventListener('keydown', onKey, true);
+  // 打開的那一下點擊已經結束，之後點外面才關。
+  doc.addEventListener('mousedown', onDown, true);
+  return handle;
+}
+
 export function openSourceForm(options: FormOptions): FormHandle {
   current?.close();
   const doc = activeDocument;

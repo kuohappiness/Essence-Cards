@@ -45,10 +45,125 @@ function bigDeck(): string {
   return parts.join('');
 }
 
+/** 寫回與 §1-4 用（§6-3）：看不懂的出處、可以加一段的出處、欄位名稱寫錯、半形冒號。 */
+const WRITE_DECK = `---
+年級學期: 國二上
+科目: 自然
+單元: 2-2 水溶液
+狀態: 啟用
+---
+
+- 能說出溶質與溶劑的意思 ^k3m9x2
+    - 出處：老師說過 p.44｜類型:定義
+    - 糖水裡，哪一個是溶質？ :: 糖是**溶質**
+- 能說明溶液的質量組成 ^h2m8qd
+    - 出處：p.43
+    - 溶液的質量怎麼算？ :: **溶質**加上**溶劑**
+    - 來源：p.45
+- 能說出影響溶解快慢的因素 ^w4s8nd
+    - 重要性:高
+    - 水溫越==高==，糖溶解得越快
+`;
+
 const rect = (el: Element | null | undefined) => {
   const r = el?.getBoundingClientRect();
   return r ? { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right), bottom: Math.round(r.bottom) } : null;
 };
+
+/**
+ * 寫回與 §1-4 的實機（§6-3）：點看不懂的出處 → 表單 → 套用 → 筆記的字 → Ctrl+Z 一次復原；從圖示加一段；§1-4 的「不用」「修改」與復原。
+ * 每一步記下筆記的字與面板上的字，不只寫「通過」。
+ */
+async function writeBackCheck(app: App, path: string, shoot: (name: string) => Promise<void>): Promise<{ leaf: { detach(): void }; out: Record<string, unknown> }> {
+  const out: Record<string, unknown> = {};
+  const file = await writeFile(app, path, WRITE_DECK);
+  const { leaf, view, cm } = await openTab(app, file);
+  await until(() => view.containerEl.querySelectorAll('.essence-cards-target').length > 0);
+  await sleep(500);
+  const content = view.containerEl;
+  const commands = (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands;
+  const text = (): string => cm.state.doc.toString();
+  const panel = () => document.querySelector<HTMLElement>('.essence-cards-source-form');
+  const button = (label: string) => Array.from(panel()?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(each => each.textContent === label) ?? null;
+  /** 在那個元素的中間點一下（標示的 click 用座標找位置）。 */
+  const clickAt = (el: Element | null | undefined): void => {
+    const r = el?.getBoundingClientRect();
+    if (!el || !r) return;
+    for (const type of ['mousedown', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+  };
+  /** Ctrl+Z 一次：Obsidian 的復原命令。 */
+  const undoOnce = async (): Promise<boolean> => { cm.focus(); commands.executeCommandById('editor:undo'); await sleep(300); return text() === WRITE_DECK; };
+  cm.focus();
+  out.fixMarks = Array.from(content.querySelectorAll<HTMLElement>('.essence-cards-fix')).map(el => ({ text: el.textContent, label: el.getAttribute('aria-label'), decoration: getComputedStyle(el).textDecorationStyle + ' ' + getComputedStyle(el).textDecorationColor, cursor: getComputedStyle(el).cursor }));
+  out.sourceMarks = Array.from(content.querySelectorAll<HTMLElement>('.essence-cards-source')).map(el => ({ text: el.textContent, label: el.getAttribute('aria-label') }));
+  await shoot('寫回前');
+
+  // 1. 看不懂的出處 → 表單（先填好猜的）→ 套用 → Ctrl+Z。
+  clickAt(content.querySelector('.essence-cards-source'));
+  await sleep(400);
+  out.unreadableForm = panel()?.innerText ?? null;
+  await sleep(300);
+  out.unreadableWritten = panel()?.querySelector('code')?.textContent ?? null;
+  await shoot('看不懂的出處的表單');
+  button('套用')?.click();
+  await sleep(300);
+  out.unreadableApplied = { closed: !panel(), line: text().split('\n').find(line => line.includes('出處：') && line.includes('類型')) ?? null };
+  out.unreadableUndo = await undoOnce();
+
+  // 2. 從圖示加一段：游標放在第二個目標的出處那一行。
+  const sourceLine = text().split('\n').findIndex(line => line === '    - 出處：p.43') + 1;
+  cm.dispatch({ selection: { anchor: cm.state.doc.line(sourceLine).to }, userEvent: 'select' });
+  await sleep(300);
+  const add = content.querySelector<HTMLElement>('.essence-cards-add');
+  add?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  add?.click();
+  await sleep(300);
+  const input = panel()?.querySelector<HTMLInputElement>('.essence-cards-place input');
+  if (input) { input.value = '46'; input.dispatchEvent(new Event('input')); }
+  await sleep(500);
+  out.addWritten = { written: panel()?.querySelector('code')?.textContent ?? null, apply: button('套用')?.disabled ?? null };
+  button('套用')?.click();
+  await sleep(300);
+  out.addApplied = text().split('\n')[sourceLine - 1];
+  out.addUndo = await undoOnce();
+
+  // 3. §1-4 欄位名稱寫錯：「不用」只是關掉，標示還在；「修改」寫回，Ctrl+Z 一次回到原文。
+  await sleep(400);
+  const renameMark = () => Array.from(content.querySelectorAll('.essence-cards-fix')).find(el => el.textContent === '來源：p.45');
+  clickAt(renameMark());
+  await sleep(300);
+  out.renamePanel = panel()?.innerText ?? null;
+  await shoot('欄位名稱寫錯的面板');
+  button('不用')?.click();
+  await sleep(200);
+  out.renameNo = { closed: !panel(), markStays: !!renameMark(), same: text() === WRITE_DECK };
+  clickAt(renameMark());
+  await sleep(300);
+  button('修改')?.click();
+  await sleep(600);
+  out.renameApplied = { closed: !panel(), lines: text().split('\n').slice(11, 15), markGone: !renameMark() };
+  out.renameUndo = await undoOnce();
+
+  // 4. 半形冒號：一次改完整篇，Ctrl+Z 一次回到原文。
+  await sleep(400);
+  clickAt(Array.from(content.querySelectorAll('.essence-cards-fix')).find(el => el.textContent === '類型:'));
+  await sleep(300);
+  out.colonPanel = panel()?.innerText ?? null;
+  await shoot('半形冒號的面板');
+  button('修改')?.click();
+  await sleep(600);
+  out.colonApplied = { halfLeft: text().split('\n').filter(line => /(類型|重要性):/.test(line)).length, fixMarks: content.querySelectorAll('.essence-cards-fix').length };
+  out.colonUndo = await undoOnce();
+  // Esc 關掉面板。
+  await sleep(400);
+  clickAt(content.querySelector('.essence-cards-fix'));
+  await sleep(300);
+  const opened = !!panel();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(200);
+  out.escCloses = opened && !panel();
+  return { leaf, out };
+}
 
 export async function markupCheck(app: App, wiring: IdsWiring | null, folder: string): Promise<unknown> {
   if (!wiring) throw Error('沒有編輯器的接線（不是電腦？）');
@@ -57,7 +172,7 @@ export async function markupCheck(app: App, wiring: IdsWiring | null, folder: st
   const shoot = shooter(app, folder, shots);
   const out: Record<string, unknown> = { shots };
   const stamp = Date.now().toString(36);
-  const paths = [`${TRIAL}/標示 ${stamp}（卡片）.md`, `${TRIAL}/標示速度 ${stamp}（卡片）.md`];
+  const paths = [`${TRIAL}/標示 ${stamp}（卡片）.md`, `${TRIAL}/標示速度 ${stamp}（卡片）.md`, `${TRIAL}/寫回 ${stamp}（卡片）.md`];
   const leaves: { detach(): void }[] = [];
   try {
     const file = await writeFile(app, paths[0], DECK);
@@ -158,6 +273,11 @@ export async function markupCheck(app: App, wiring: IdsWiring | null, folder: st
     out.sourceMode = { targets: lines('.cm-line.essence-cards-target').length, separators: lines('.essence-cards-separator').length };
     await shoot('原始碼模式');
     await leaf.setViewState(state);
+
+    // 寫回與 §1-4（§6-3）。
+    const written = await writeBackCheck(app, paths[2], shoot);
+    leaves.push(written.leaf);
+    out.writeBack = written.out;
 
     // 速度（§1-5）：300 個目標的卡組，重新解析加產生標示加畫面更新的時間；連續打字時每一個交易的時間。
     const big = await writeFile(app, paths[1], bigDeck());

@@ -16,7 +16,7 @@ import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { markup, targetAt, type Markup } from './obsidian/markup.ts';
-import { openBlankSourceForm, openUnreadableSourceForm, type SourceEntry } from './obsidian/source-entry.ts';
+import { openBlankSourceForm, openFieldFix, openUnreadableSourceForm, type SourceEntry } from './obsidian/source-entry.ts';
 import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
@@ -293,6 +293,12 @@ export default class EssenceCardsPlugin extends Plugin {
         return path ? unreadableSources(this.app, path, deck, (term, code) => this.state?.unitMaterials(path, term, code) ?? []) : [];
       },
       onSource: (view, hit, from) => { openUnreadableSourceForm(view, from, sourceEntry(view), hit); },
+      // 出處的欄位名稱寫錯、半形冒號（§1-4）：後面的字要每一段都讀得懂，和看不懂的出處同一個判斷；點了問一句。
+      readable: (state, deck, sources) => {
+        const path = pathOf(state);
+        return !path || !unreadableSources(this.app, path, { props: deck.props, targets: [{ line: 0, name: '', fields: { sources } }] }, (term, code) => this.state?.unitMaterials(path, term, code) ?? []).length;
+      },
+      onFix: (view, fix, from) => { openFieldFix(view, from, sourceEntry(view), fix.kind); },
     });
     this.registerEditorExtension(marks.extension);
     // 目錄、別篇卡組或材料變了（§1-5）：開著的卡組重新判斷看不懂的出處。材料存檔很頻繁，停一下再算；卡組自己改字由標示自己重算。

@@ -205,6 +205,36 @@ void test('§2 第 2 點 圖示跟著改字平移：上面多一行，游標在�
   assert.equal(m.icon(state), 4);
 });
 
+void test('§1-4 欄位名稱寫錯、半形冒號：橘色波浪線畫在那幾個字，帶說明；fixAt 找得到那一處；沒給 onFix 不標', () => {
+  const doc = '- 目標 ^k3m9x2\n    - Q :: A\n    - 來源：p.45\n    - 類型:定義｜重要性:高\n    - 出處\n      :p.44\n';
+  const m = markup({ isDeck: () => true, onFix: () => {} });
+  const state = EditorState.create({ doc, extensions: [m.extension] });
+  const fixes = kinds(m.marks(state), 'fix');
+  assert.deepEqual(fixes.map(mark => [state.sliceDoc(mark.from, mark.to), mark.tip]), [
+    ['來源：p.45', '這一行看起來是出處，點一下改成正確的寫法。'],
+    ['類型:', '冒號改成全形，和其他欄位一致。點一下就改。'],
+    ['重要性:', '冒號改成全形，和其他欄位一致。點一下就改。'],
+    ['出處', '冒號改成全形，和其他欄位一致。點一下就改。'],
+    [':', '冒號改成全形，和其他欄位一致。點一下就改。'],
+  ]);
+  assert.deepEqual(m.fixAt(state, fixes[0].from + 1)?.fix.kind, 'rename');
+  assert.deepEqual(m.fixAt(state, fixes[4].from)?.fix.spans.length, 2, '跨行的兩段是同一處');
+  assert.equal(m.fixAt(state, pos(state, 2, 6)), null);
+  assert.deepEqual(kinds(editor(doc).marks, 'fix'), [], '沒給 onFix');
+  // 看不懂的判斷要看目錄與材料（main.ts 給）：讀不懂的不標改名，半形冒號照標。
+  const strict = markup({ isDeck: () => true, onFix: () => {}, readable: () => false });
+  assert.deepEqual(kinds(strict.marks(EditorState.create({ doc, extensions: [strict.extension] })), 'fix').map(mark => mark.tip?.slice(0, 2)), ['冒號', '冒號', '冒號', '冒號']);
+});
+
+void test('§1-4 改完之後重新解析，標示消失', () => {
+  const m = markup({ isDeck: () => true, onFix: () => {} });
+  let state = EditorState.create({ doc: '- 目標 ^k3m9x2\n    - Q :: A\n    - 類型:定義\n', extensions: [m.extension] });
+  assert.equal(kinds(m.marks(state), 'fix').length, 1);
+  state = state.update({ changes: { from: pos(state, 3, 8), to: pos(state, 3, 9), insert: '：' }, userEvent: 'input.essence-source' }).state;
+  state = state.update({ effects: m.refresh }).state;
+  assert.deepEqual(kinds(m.marks(state), 'fix'), []);
+});
+
 void test('§1 不是卡組筆記不標', () => {
   assert.deepEqual(editor(NATURAL, false).marks, []);
 });
