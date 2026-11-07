@@ -13,6 +13,7 @@ const SEEN_KEY = 'essence-cards-system-folders';
 export function wireFolderGuard(plugin: Plugin, options: { notify: (message: string) => void; fail: (error: unknown) => void }): FolderGuard {
   const { app } = plugin;
   const { vault } = app;
+  const empty = async (path: string): Promise<boolean> => { const { files, folders } = await vault.adapter.list(path); return !files.length && !folders.length; };
   const guard = createFolderGuard({
     files: () => vault.getFiles().map(file => file.path),
     known(path) {
@@ -20,8 +21,17 @@ export function wireFolderGuard(plugin: Plugin, options: { notify: (message: str
       return found instanceof TFolder ? 'folder' : found instanceof TFile ? 'file' : null;
     },
     exists: path => vault.adapter.exists(path),
-    empty: async path => { const { files, folders } = await vault.adapter.list(path); return !files.length && !folders.length; },
-    rmdir: path => vault.adapter.rmdir(path, false),
+    empty,
+    async rmdir(path) {
+      // Windows 版的非遞迴 rmdir 對資料夾回 EISDIR（rm 沒有 recursive，2026-11-07 實機），刪不掉空的資料夾：
+      // 失敗時再看一次真的是空的，才用遞迴的那一種；有東西就照原本的錯誤拋出。
+      try {
+        await vault.adapter.rmdir(path, false);
+      } catch (error) {
+        if (!await empty(path)) throw error;
+        await vault.adapter.rmdir(path, true);
+      }
+    },
     async move(from, to) {
       const folder = vault.getAbstractFileByPath(from);
       if (!(folder instanceof TFolder)) throw Error('找不到資料夾：' + from);
