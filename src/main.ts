@@ -367,9 +367,14 @@ export default class EssenceCardsPlugin extends Plugin {
     // 電腦上改寫卡組要先有一份成功的備份（D-150 第 3 點）：閘門一開始關著，備份確認之後才打開。
     // 系統資料夾的防呆（tasks/system-folder-guard.md）：rename 的監聽要比 state 的監看先註冊（§1-8），所以在建立 state 之前；
     // 不在 onload 裡，layout ready 之前不碰 vault（T12）。先判斷一次搬錯位置的：第一次列卡組時就不把它們當卡組（§2-3）。
+    const adapter = this.app.vault.adapter;
     const guard = this.guard = wireFolderGuard(this, {
       notify: message => { new Notice(message); this.emit('notice', message); },
       fail: error => { this.fail('folder', error); },
+      // 電腦版刪空資料夾經過 src/desktop（非遞迴，Codex L2 F2）；用到時才載入（D-148）。
+      removeEmpty: Platform.isDesktopApp && adapter instanceof FileSystemAdapter
+        ? async path => { await (await import('./desktop/index.ts')).removeEmptyFolder(adapter.getBasePath(), path); }
+        : undefined,
     });
     guard.onChange(() => { this.updateReminders(); this.entry?.refresh(); });
     guard.check();

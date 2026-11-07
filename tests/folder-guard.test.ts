@@ -29,8 +29,12 @@ interface Fake {
   failures: unknown[];
   moves: string[];
   removed: string[];
-  /** 磁碟上有、Obsidian 看不到的空資料夾。 */
+  /** 磁碟上有、Obsidian 看不到的資料夾或檔（rmdir 看得到它們：有東西就失敗）。 */
   disk: Set<string>;
+  /** Obsidian 看得到的空資料夾（家長新建的，F4）。 */
+  visible: Set<string>;
+  /** rmdir 真正刪之前（最後一次確認是空的之後）跑：同步程序這時放進東西（F2）。 */
+  beforeRmdir: { run: (path: string) => void };
   /** 接下來幾次 move 依序丟出的錯。 */
   failMoves: Error[];
   /** 搬好之後在舊位置留下空資料夾（R5）。 */
@@ -45,20 +49,26 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
   const memory = createMemoryFiles(initial);
   const notices: string[] = [], failures: unknown[] = [], moves: string[] = [], removed: string[] = [];
   const disk = new Set<string>();
+  const visible = new Set<string>();
+  const beforeRmdir: Fake['beforeRmdir'] = { run: () => {} };
   const failMoves: Error[] = [];
   const residue = { on: false };
   const deferred: (() => void)[] = [];
   let clock = 0;
   let saved = seen ?? [];
   const has = (path: string): boolean => [...memory.texts.keys()].some(p => p.startsWith(path + '/'));
+  const inDisk = (path: string): boolean => [...disk].some(d => d.startsWith(path + '/'));
   const host: GuardHost = {
     files: () => [...memory.texts.keys()],
-    known: path => memory.texts.has(path) ? 'file' : has(path) ? 'folder' : null,
-    exists: path => Promise.resolve(memory.texts.has(path) || has(path) || disk.has(path)),
-    empty: path => Promise.resolve(!has(path) && ![...disk].some(d => d.startsWith(path + '/'))),
+    known: path => memory.texts.has(path) ? 'file' : has(path) || visible.has(path) ? 'folder' : null,
+    exists: path => Promise.resolve(memory.texts.has(path) || has(path) || disk.has(path) || visible.has(path)),
+    empty: path => Promise.resolve(!has(path) && !inDisk(path)),
     rmdir(path) {
-      if (has(path)) return Promise.reject(Error('資料夾不是空的：' + path));
+      beforeRmdir.run(path);
+      // 非遞迴：有東西就失敗（系統的 ENOTEMPTY）。
+      if (has(path) || inDisk(path)) return Promise.reject(Object.assign(Error('ENOTEMPTY: directory not empty, rmdir ' + path), { code: 'ENOTEMPTY' }));
       disk.delete(path);
+      visible.delete(path);
       removed.push(path);
       return Promise.resolve();
     },
@@ -80,7 +90,7 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
     defer: run => { deferred.push(run); },
   };
   const run = async (): Promise<void> => { for (const each of deferred.splice(0)) each(); await drain(); };
-  return { host, memory, notices, failures, moves, removed, disk, failMoves, residue, clock: () => clock, run, saved: () => saved };
+  return { host, memory, notices, failures, moves, removed, disk, visible, beforeRmdir, failMoves, residue, clock: () => clock, run, saved: () => saved };
 }
 
 /** 在 Obsidian 裡拖動：防呆先收到 rename（它比 state 先註冊），檔案才換位置、送通知。 */
@@ -316,4 +326,151 @@ void test('§2-4 按鈕只給找到一個位置的那一種', async () => {
   assert.equal(await guard.moveBack({ kind: 'missing', folder: `${R}/紀錄` }), false);
   assert.equal(await guard.moveBack({ kind: 'moved', folder: `${R}/紀錄`, at: ['a', 'b'] }), false);
   assert.deepEqual(f.moves, []);
+});
+
+// ---- Codex L2 第一輪（Claude Codex Discussion/2026-11-07-system-folder-guard-review.md）的回歸 ----
+
+const settle = (): Promise<void> => new Promise(resolve => { setTimeout(resolve, 20); });
+
+function study(f: Fake, guard: FolderGuard, t: TestContext) {
+  const state = createState({ files: guard.wrap(f.memory.files), skip: path => guard.misplaced(path), device: 'PC-test', delay: 1, fillIds: true, random: () => 0,
+    now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
+  t.after(() => state.close());
+  return state;
+}
+
+const OWN_LOG = `${R}/紀錄/2026-10 PC-test.jsonl`;
+const OUTCOMES = [
+  { name: '搬回成功', fail: [] as Error[] },
+  { name: '重試後成功', fail: [EPERM, EPERM, EPERM] },
+  { name: '放棄', fail: Array<Error>(100).fill(EPERM) },
+];
+
+for (const outcome of OUTCOMES) {
+  void test(`F1 搬回期間作答：先不追加，${outcome.name}之後才寫，作答不丟`, async (t: TestContext) => {
+    const f = fake();
+    const guard = started(f);
+    const state = study(f, guard, t);
+    await state.ready();
+    f.failMoves.push(...outcome.fail);
+    drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
+    assert.ok(state.answer({ lt: 'k3m9x2', r: 'good', v: '12345678' }));
+    const flushing = state.flush();
+    await settle();
+    assert.ok(![...f.memory.texts.keys()].some(path => path.endsWith('2026-10 PC-test.jsonl')), '搬好之前不追加（不在原位建新的紀錄）');
+    await f.run();
+    await flushing;
+    assert.match(f.memory.texts.get(OWN_LOG) ?? '', /"lt":"k3m9x2","r":"good"/);
+    if (outcome.name === '放棄') {
+      // 原有的紀錄留在暫時的位置，新的寫在原位：兩份都在，提醒一區列成兩邊都有，請家長合併（§2）。
+      assert.equal(f.memory.texts.get(`${R}/英文/紀錄/2026-10 iPhone-test.jsonl`), VAULT[LOG]);
+      guard.check();
+      assert.equal(guard.issues()[0]?.kind, 'both');
+    } else {
+      assert.equal(f.memory.texts.get(LOG), VAULT[LOG]);
+      assert.deepEqual(guard.issues(), []);
+      assert.deepEqual(f.notices, ['Essence Cards：「紀錄」是外掛用的資料夾，不能搬動或改名，已經搬回原位']);
+    }
+  });
+}
+
+void test('F1 搬回期間存檔、離開筆記：暫時位置裡的範圍檔不補 ID，搬回後內容不變', async (t: TestContext) => {
+  const content = '- 範圍目標\n    - Q :: A\n';
+  const f = fake({ ...VAULT, [RANGE]: content });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  const at = `${R}/英文/考試範圍/段考.md`;
+  drag(f, guard, `${R}/考試範圍`, `${R}/英文/考試範圍`);
+  assert.equal(guard.misplaced(at), true);
+  let text = content;
+  const editor = { path: at, text: () => text, apply(before: string, after: string) { assert.equal(text, before); text = after; return true; }, persist: () => f.memory.files.modify(at, () => text) };
+  assert.notEqual((await state.save(editor)).kind, 'done');
+  assert.equal(await state.fillIds(at), false);
+  assert.equal(text, content);
+  await f.run();
+  assert.equal(f.memory.texts.get(RANGE), content);
+  assert.equal(guard.misplaced(RANGE), false);
+});
+
+void test('F1 搬動前已排好的重讀：等搬回之後才讀，原有的紀錄不會從進度裡消失', async (t: TestContext) => {
+  const f = fake();
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  const history = JSON.stringify(state.history());
+  f.memory.notify(LOG);
+  drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
+  await settle();
+  assert.equal(JSON.stringify(state.history()), history);
+  await f.run();
+  await settle();
+  assert.equal(JSON.stringify(state.history()), history);
+  assert.ok(f.memory.reads.includes(LOG));
+});
+
+/** Obsidian 以外搬走考試範圍（§2）：提醒一區列出「搬回原位」。 */
+function movedOutside(f: Fake): FolderGuard {
+  const guard = started(f);
+  f.memory.rename(`${R}/考試範圍`, `${R}/英文/考試範圍`);
+  guard.check();
+  assert.deepEqual(guard.issues(), [{ kind: 'moved', folder: `${R}/考試範圍`, at: [`${R}/英文/考試範圍`] }]);
+  return guard;
+}
+
+for (const step of ['exists', 'empty', 'rmdir', 'move'] as const) {
+  void test(`F3 「搬回原位」的 ${step} 失敗：不拒絕，記一次錯誤紀錄、通知家長`, async () => {
+    const f = fake();
+    const guard = movedOutside(f);
+    // empty、rmdir 只在原位剩下磁碟上的空資料夾時才會用到。
+    if (step === 'empty' || step === 'rmdir') f.disk.add(`${R}/考試範圍`);
+    const error = Object.assign(Error(`EACCES: ${step}`), { code: 'EACCES' });
+    if (step === 'move') f.failMoves.push(error);
+    else if (step === 'rmdir') f.host.rmdir = () => Promise.reject(error);
+    else f.host[step] = () => Promise.reject(error);
+    assert.equal(await guard.moveBack(guard.issues()[0]), false);
+    assert.deepEqual(f.failures, [error]);
+    assert.deepEqual(f.notices, [`Essence Cards：「考試範圍」是外掛用的資料夾，沒能搬回原位，請把它拖回「${R}/考試範圍」`]);
+    // 放行了：之後照常判斷。
+    assert.equal(guard.issues()[0]?.kind, 'moved');
+  });
+}
+
+void test('F4 原位有 Obsidian 看得到的空資料夾：當成有東西，不刪；看不到的磁碟殘留才刪', async () => {
+  const f = fake();
+  const guard = movedOutside(f);
+  f.visible.add(`${R}/考試範圍`);
+  assert.equal(await guard.moveBack(guard.issues()[0]), false);
+  assert.deepEqual(f.removed, []);
+  assert.deepEqual(f.moves, []);
+  assert.match(f.notices[0], /原位已經有一個同名的，沒有搬回/);
+
+  const g = fake();
+  const guard2 = movedOutside(g);
+  g.disk.add(`${R}/考試範圍`);
+  assert.equal(await guard2.moveBack(guard2.issues()[0]), true);
+  assert.deepEqual(g.removed, [`${R}/考試範圍`]);
+});
+
+void test('F2 最後一次確認是空的之後才同步進來的內容：刪不掉就留著，記下、請家長自己拖回', async () => {
+  const f = fake();
+  const guard = movedOutside(f);
+  f.disk.add(`${R}/考試範圍`);
+  const arrived = `${R}/考試範圍/同步剛到的.md`;
+  f.beforeRmdir.run = () => { f.disk.add(arrived); };
+  assert.equal(await guard.moveBack(guard.issues()[0]), false);
+  assert.ok(f.disk.has(arrived));
+  assert.deepEqual(f.removed, []);
+  assert.equal(f.failures.length, 1);
+  assert.match(f.notices[0], /沒能搬回原位/);
+
+  // 搬回後的清理也一樣：確認是空的之後才放進來的，不刪。
+  const g = fake();
+  const guard2 = started(g);
+  g.residue.on = true;
+  g.beforeRmdir.run = path => { g.disk.add(path + '/同步剛到的.md'); };
+  drag(g, guard2, `${R}/紀錄`, `${R}/英文/紀錄`);
+  await g.run();
+  assert.ok(g.disk.has(`${R}/英文/紀錄/同步剛到的.md`));
+  assert.deepEqual(g.removed, []);
 });

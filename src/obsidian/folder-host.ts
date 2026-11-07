@@ -10,7 +10,15 @@ const SEEN_KEY = 'essence-cards-system-folders';
  * 在 onload 裡呼叫：rename 的監聽要比 state 的監看先註冊，同一批的通知才擋得住（§1-8）。layout ready 之後再呼叫 check()：
  * 之前 vault 的清單還不完整。
  */
-export function wireFolderGuard(plugin: Plugin, options: { notify: (message: string) => void; fail: (error: unknown) => void }): FolderGuard {
+export function wireFolderGuard(plugin: Plugin, options: {
+  notify: (message: string) => void;
+  fail: (error: unknown) => void;
+  /**
+   * 電腦版刪空資料夾的方法（src/desktop 的 removeEmptyFolder）：Windows 版的 adapter.rmdir(path, false) 對資料夾回 EISDIR
+   * （2026-11-07 實機 W2），遞迴的那一種又會刪到最後一次確認之後才同步進來的內容（Codex L2 F2）。沒給時用 adapter 的非遞迴版。
+   */
+  removeEmpty?: (path: string) => Promise<void>;
+}): FolderGuard {
   const { app } = plugin;
   const { vault } = app;
   const empty = async (path: string): Promise<boolean> => { const { files, folders } = await vault.adapter.list(path); return !files.length && !folders.length; };
@@ -22,16 +30,8 @@ export function wireFolderGuard(plugin: Plugin, options: { notify: (message: str
     },
     exists: path => vault.adapter.exists(path),
     empty,
-    async rmdir(path) {
-      // Windows 版的非遞迴 rmdir 對資料夾回 EISDIR（rm 沒有 recursive，2026-11-07 實機），刪不掉空的資料夾：
-      // 失敗時再看一次真的是空的，才用遞迴的那一種；有東西就照原本的錯誤拋出。
-      try {
-        await vault.adapter.rmdir(path, false);
-      } catch (error) {
-        if (!await empty(path)) throw error;
-        await vault.adapter.rmdir(path, true);
-      }
-    },
+    // 只用非遞迴的刪除：有東西就失敗，不會刪到內容。
+    rmdir: options.removeEmpty ?? (path => vault.adapter.rmdir(path, false)),
     async move(from, to) {
       const folder = vault.getAbstractFileByPath(from);
       if (!(folder instanceof TFolder)) throw Error('找不到資料夾：' + from);

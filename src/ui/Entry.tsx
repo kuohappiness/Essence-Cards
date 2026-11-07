@@ -141,8 +141,8 @@ function Reminders({ state, folders }: { state: State | null; folders: FolderAct
       <p className="ec-rem-text">{item.text}</p>
       {item.action === 'move' && <button type="button" className="ec-rem-act" disabled={moving === item.folder} onClick={() => {
         setMoving(item.folder);
-        // 失敗的原因防呆自己通知、記進錯誤紀錄；這裡只把按鈕恢復。
-        void folders.moveBack(item.issue).catch(() => false).finally(() => { setMoving(null); });
+        // moveBack 不會拒絕：失敗的原因防呆自己通知、記進錯誤紀錄（Codex L2 F3）；這裡只把按鈕恢復。
+        void folders.moveBack(item.issue).finally(() => { setMoving(null); });
       }}>搬回原位</button>}
       {item.action === 'dismiss' && <button type="button" className="ec-rem-act" onClick={() => { folders.dismiss(item.folder); }}>不用了</button>}
     </div>)}
