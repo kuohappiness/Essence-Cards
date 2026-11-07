@@ -252,6 +252,8 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
             const [whole] = tracedSplit(child.text, /(?!)/);
             addSources(child, whole, 0, whole.masked.length);
             field?.children.push(child.line);
+            // 子項目有接續行，和那一欄有接續行一樣（L2 第二輪 R13：寫回不寫進接續行，§8）。
+            if (field && child.starts.length > 1) field.continued = true;
           } else addValues(values, child.text);
         }
         collectFields(child);

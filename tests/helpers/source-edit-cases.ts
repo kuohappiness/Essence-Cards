@@ -79,6 +79,13 @@ export const EDIT_CASES: EditCase[] = [
     want: split('p.20 p.21') + '            ```\n            code\n            ```\n',
   },
   { name: 'L2 R1：接續段在最後一行、檔尾沒有換行', text: split('老師說過 p.20', '21').slice(0, -1), action: replace(0, 'p.20 p.21', true), want: split('p.20 p.21').slice(0, -1) },
+  // L2 第二輪 R12：連續拿掉好幾個接續段的子項目、最後一行沒有換行：檔尾照舊沒有換行（LF、CRLF）。
+  { name: 'L2 R12：拿掉兩個接續段、檔尾沒有換行', text: split('老師說過 p.20', '21', '22').slice(0, -1), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22').slice(0, -1) },
+  { name: 'L2 R12：拿掉兩個接續段、CRLF 檔尾沒有換行', text: split('老師說過 p.20', '21', '22').slice(0, -1).replaceAll('\n', '\r\n'), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22').slice(0, -1).replaceAll('\n', '\r\n') },
+  { name: 'L2 R12：拿掉中間兩個接續段，後面的子項目留著', text: split('老師說過 p.20', '21', '22', 'p.30'), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22', 'p.30') },
+  // L2 第二輪 R13：分行的子項目有接續行，和那一欄有接續行一樣不寫（§4-3 第 4 點、§8）。
+  { name: 'L2 R13：分行的子項目有接續行，加一段不寫', text: split('p.44、') + '          國二上 1-3 p.20\n', action: add('p.50', true), want: SPLIT_LINE },
+  { name: 'L2 R13：分行的子項目有接續行，換一段也不寫', text: split('p.44', '老師說過 p.45') + '          p.46\n', action: replace(0, 'p.43', true), want: SPLIT_LINE },
   // L2 第一輪 R7：已經分行、要加的位置在一個子項目的中間（那一行用頓號寫了好幾項）：從頓號那裡拆開，新的一項自己一行。
   { name: 'L2 R7：分行的子項目中間加一段', text: split('p.44、國二上 1-3 p.20'), action: add('p.50', true), want: split('p.44', 'p.50', '國二上 1-3 p.20') },
 

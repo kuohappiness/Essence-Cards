@@ -79,7 +79,7 @@ export type FieldName = '出處' | '類型' | '重要性' | '狀態' | '備註' 
 /**
  * 一個 `出處` 欄位（§3-3 第 1 點），照遞迴的順序；同一行用 `｜` 寫了兩個算兩個。line 是欄位那一項的第一行；
  * name、colon 各帶自己的行號（出處從接續行開始、名稱後面換行才打冒號時就在接續行）；value 是冒號後面同一行的值，那一行沒有字是 null。
- * joined：這一項用 `｜` 或半形 `|` 接了別的欄位；continued：這一項有接續行；children：當成出處值的子項目的第一行。
+ * joined：這一項用 `｜` 或半形 `|` 接了別的欄位；continued：這一項或當成出處值的子項目有接續行；children：當成出處值的子項目的第一行。
  */
 export interface SourceFieldLayout { line: number; name: Span; colon: Span; value: Span | null; joined: boolean; continued: boolean; children: number[] }
 /** 一個資料欄位的名稱與冒號（§3-3 第 4 點）：六個欄位都算，同一行用 `｜` 接的每一段也算；可以跨行。 */

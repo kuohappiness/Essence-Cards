@@ -156,17 +156,30 @@ function partsOnLine(f: Field, line: number): { index: number; span: Span }[] {
  * 拿掉同一行上連在一起的幾段，連同一個分隔符號；那一行只有它們、是分行的子項目時拿掉那一行（L2 第一輪 R1：只拿那一行，
  * 底下附著的引言、程式碼區塊不是出處，留著；它們不進解析，核對擋不到，所以由改動的範圍保證）。
  */
-function removeGroup(f: Field, group: readonly number[]): TextChange[] {
+function removeGroup(f: Field, group: readonly number[]): TextChange | { line: number } {
   const spans = group.map(index => spanAt(f, index) as Span);
   const line = spans[0].line, onLine = partsOnLine(f, line);
   const first = Math.min(...spans.map(span => span.from)), last = Math.max(...spans.map(span => span.to));
   const next = onLine.find(each => !group.includes(each.index) && each.span.from >= last);
   const prev = [...onLine].reverse().find(each => !group.includes(each.index) && each.span.to <= first);
-  if (next) return [{ from: offset(f.doc, line, first), to: offset(f.doc, line, next.span.from), insert: '' }];
-  if (prev) return [{ from: offset(f.doc, line, prev.span.to), to: offset(f.doc, line, last), insert: '' }];
+  if (next) return { from: offset(f.doc, line, first), to: offset(f.doc, line, next.span.from), insert: '' };
+  if (prev) return { from: offset(f.doc, line, prev.span.to), to: offset(f.doc, line, last), insert: '' };
   const child = childItems(f).find(each => each.line === line);
-  if (child) return [removeLine(f.doc, child.line)];
-  return [{ from: offset(f.doc, line, first), to: offset(f.doc, line, last), insert: '' }];
+  if (child) return { line: child.line };
+  return { from: offset(f.doc, line, first), to: offset(f.doc, line, last), insert: '' };
+}
+/**
+ * 拿掉好幾組（照行分好的）：整行拿掉的子項目，連在一起的幾行一次拿（L2 第二輪 R12：最後一行沒有換行時往前拿一個換行，
+ * 一行一行算會和前一行的範圍重疊，留下多的換行）。
+ */
+function removeGroups(f: Field, groups: readonly (readonly number[])[]): TextChange[] {
+  const removed = groups.map(group => removeGroup(f, group));
+  const runs: [number, number][] = [];
+  for (const line of removed.flatMap(each => 'line' in each ? [each.line] : []).sort((a, b) => a - b)) {
+    const run = runs.at(-1);
+    if (run && run[1] + 1 === line) run[1] = line; else runs.push([line, line]);
+  }
+  return [...removed.flatMap(each => 'line' in each ? [] : [each]), ...runs.map(([first, last]) => removeLines(f.doc, first, last))];
 }
 /** 幾段照所在的行分組（同一行的連在一起）。 */
 function byLine(f: Field, indexes: readonly number[]): number[][] {
@@ -184,7 +197,7 @@ function replaceChain(f: Field, chain: readonly number[], written: string): Text
   const line = spans[0].line;
   return [
     { from: offset(f.doc, line, Math.min(...spans.map(span => span.from))), to: offset(f.doc, line, Math.max(...spans.map(span => span.to))), insert: written },
-    ...rest.flatMap(group => removeGroup(f, group)),
+    ...removeGroups(f, rest),
   ];
 }
 /** 加在第 index 段前面：它是分行的子項目的第一段時多一個子項目，否則寫在同一行（頓號隔開）。 */
@@ -271,7 +284,7 @@ function attempts(f: Field, action: SourceEditAction): Attempt[] | null {
     // 寫在原地之後，後面別的段的讀法會變（例如換成別的單元，後面還有本來跟著這一篇的位置）：搬到這一欄最後（D-164 第 5 點）。
     if (chain[chain.length - 1] < parts.length - 1) {
       const moved = prefixed(action.text, action.own, parts, untouched.at(-1));
-      const removed = byLine(f, chain).flatMap(group => removeGroup(f, group));
+      const removed = removeGroups(f, byLine(f, chain));
       list.push({ changes: [...removed, ...append(f, moved)], plan: { target, untouched, at: untouched.length, written: moved }, label: '搬' });
     }
     return list;
@@ -507,11 +520,13 @@ function merge(f: Field, sources: readonly string[]): TextChange[] {
   return (first >= 0 ? insertBefore(f, first, written) : null) ?? append(f, written);
 }
 /** 刪掉一整行（那一項沒有子項目與接續行）；最後一行沒有換行時連同前一行的換行。 */
-function removeLine(doc: Doc, line: number): TextChange {
-  if (line + 1 < doc.lines.length) return { from: doc.starts[line], to: doc.starts[line + 1], insert: '' };
-  const from = line > 0 && !doc.lines[line].eol ? doc.starts[line] - doc.lines[line - 1].eol.length : doc.starts[line];
+/** 拿掉第 first 到 last 行；拿到檔尾、最後一行沒有換行時連前一行的換行一起拿（檔尾有沒有換行照舊）。 */
+function removeLines(doc: Doc, first: number, last: number): TextChange {
+  if (last + 1 < doc.lines.length) return { from: doc.starts[first], to: doc.starts[last + 1], insert: '' };
+  const from = first > 0 && !doc.lines[last].eol ? doc.starts[first] - doc.lines[first - 1].eol.length : doc.starts[first];
   return { from, to: doc.text.length, insert: '' };
 }
+const removeLine = (doc: Doc, line: number): TextChange => removeLines(doc, line, line);
 /**
  * 改名的核對（§4-4）：shared（或那一題的 extras）剛好少了這一整項（按原本的項目比），出處在原本的段之間多了一串，
  * 讀起來和單獨讀這一項相同（remark 除外）；其他照 §4-3 第 6 點。
