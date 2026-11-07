@@ -65,6 +65,13 @@ async function oneRun(host: EntryDevHost, capture: (name: string) => Promise<voi
   button('接著貼回')?.click();
   await until(() => inModal('textarea').length > 0);
   const prefix = `${term}${subject === 'english' ? '英文' : '自然'} ${unit.split(' ')[0]}`;
+  // 先貼 <<<完>>> 後面多一句話的：擋住，原因寫出行號與那一行的原文（真人重測後加）；再改成正確的回覆。
+  const extra = reply(prefix).replace(/\s*$/, '') + '\n希望這些卡片有幫助';
+  setValue(inModal<HTMLTextAreaElement>('textarea')[0], extra, 'input');
+  button('檢查')?.click();
+  await sleep(300);
+  checks.blocked = text(modal()).includes(`第 ${String(extra.split('\n').length)} 行「希望這些卡片有幫助」：<<<完>>> 後面還有文字`) && !button('存成草稿')?.offsetParent;
+  await capture(`${label} 擋住`);
   setValue(inModal<HTMLTextAreaElement>('textarea')[0], reply(prefix), 'input');
   button('檢查')?.click();
   await sleep(300);
