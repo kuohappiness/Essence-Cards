@@ -1,8 +1,49 @@
 # 系統資料夾的防呆：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第五輪，2026-11-07）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）、第四輪 F1a～F1d 已修
+狀態：待審（第六輪，2026-11-08）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）、第四輪 F1a～F1d、第五輪 F1a（續一、續二）與 F1c（續）已修
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-07-system-folder-guard-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
+
+## 第六輪（2026-11-08）
+
+第五輪的三項使用者決定都修，修完再送一輪，只查這段差異。
+
+請**新開一個 Codex 對話**（推理等級：高；不要沿用第五輪的對話，[quality.md](../docs/agents/quality.md) 的〈Codex 審查時〉），回報接在討論稿最後（〈Codex 第六輪〉）。先讀討論稿的〈Codex 第五輪〉與〈Claude 回應：第五輪〉。
+
+- **待審**：`e40405d447b03e240f01d34a52fc486f3df1e805`（第五輪三項的修正與回歸，加上比對磁碟時名字照 NFC 比）。它之後只有文件的 commit。
+- **基準**：`32d7c1efab1b22f5ea93c735651997b2c525e7d0`（第五輪的待審）。
+
+```bash
+git diff 32d7c1efab1b22f5ea93c735651997b2c525e7d0 e40405d447b03e240f01d34a52fc486f3df1e805 -- src tests
+```
+
+- **改了什麼**：
+  - `src/obsidian/folder-guard.ts`：
+    - `GuardHost.intact`、`renamed` 的第四個參數 `ref`。
+    - `ownRules` 取代 `guarded`。
+    - `restore` 不再照路徑認領，搬之前問 `intact`，搬完確認在原位。
+    - `renamed` 同一個資料夾不另排。
+    - `Stray` 只記有資料夾本身的。
+    - `judged` 記原位，`follow` 回到原位就拿掉。
+  - `src/obsidian/folder-host.ts`：`intact`（`adapter.list` 對 `TFolder.children`，名字照 NFC），rename 事件把 `TFolder` 交給防呆。
+  - `src/core/deck/folders.ts`：`misplacedFolders` 回 `{ from, at }`。
+  - 測試：
+    - `tests/folder-guard.test.ts`：替身加 `swap`；`where` 不改狀態；`shift` 收著通知。新增「第五輪」7 個。
+    - `tests/folder-host.test.ts`：新增 2 個。
+    - `tests/system-folders.test.ts`：配合新的回傳。
+- **請特別找**：
+  - **搬完確認位置的迴圈**：
+    - 防呆自己的搬動與家長的再次移動交錯時，會不會一直搬、搬到別處，或放行時資料夾不在原位。
+    - 和 10 秒上限、12 秒總時限、停用的交錯。
+  - **`intact` 的判斷**：
+    - 清單裡的 `children` 和 `adapter.list` 在 iCloud 佔位檔、剛同步、隱藏檔、大小寫不同時，會不會誤判成對不上，讓正常的搬回放棄。
+    - 反過來，什麼情形會漏掉換過的資料夾。
+  - **根資料夾不算原位例外之後的其他路徑**：判斷、沒搬回、搬回中三處的「回到原位就不算」，以及根資料夾以外的系統資料夾行為有沒有改變。
+  - **不記沒有資料夾本身的沒搬回**：按鈕按下時清單裡已經找不到的那種，之後的提醒與排除是否合理。
+- **驗證**：
+  - 實作者跑過 `npm run check`（pre-commit，1942 個測試）、接上 `intact` 的 R5a～R5j 副本（10 個通過，見回應）與 R4a～R4i（9 個通過）、12 種變異。
+  - Windows 實機見任務說明 W11。
+  - 請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
 
 ## 第五輪（2026-11-07）
 
