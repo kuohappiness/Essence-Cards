@@ -195,7 +195,7 @@ export function wireDeckActions(host: DeckActionsHost): { refresh: () => void } 
       const click = (act: (path: string) => void) => (): void => { const now = view.file?.path; if (now) act(now); };
       sync(view, full, targetsOf(path).length > 0, 'play', FULL, 'essence-cards-full', click(startFull));
       sync(view, previews, canPreview(path), 'eye', PREVIEW, 'essence-cards-preview', click(each => { openPreview(view, each); }));
-      sync(view, activates, canActivate(path), 'check-circle', ACTIVATE, 'essence-cards-activate', click(each => { askActivate(view, each); }));
+      sync(view, activates, canActivate(path), 'toggle-right', ACTIVATE, 'essence-cards-activate', click(each => { askActivate(view, each); }));
     }
     // 換成別的筆記、或分頁關掉了：拿掉按鈕。
     for (const buttons of [full, previews, activates]) for (const [view, button] of buttons) if (!seen.has(view)) { button.remove(); buttons.delete(view); }

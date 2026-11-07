@@ -9,7 +9,9 @@ import { capturePng, keepRendering } from './dev-review.ts';
 // AI 製卡的 Windows 實機（tasks/ai-cards-mvp.md §8 第 1 點）：只在電腦。用自編的內容走完整流程：開視窗 → 填表 → 複製 → 關掉再「接著貼回」→ 貼回準備好的回覆
 // （R3 三段、英文兩篇各一份）→ 檢查 → 存成草稿 → 預覽 → 啟用；核對卡組、快照、原文/ 與紀錄的 set: status，每一步截圖。結束時只刪這次建立的檔，紀錄的行留著。
 
-const modal = (): HTMLElement | null => document.querySelector<HTMLElement>('.essence-cards-ai-modal');
+/** 最上面那一個 AI 製卡的視窗。 */
+const modal = (): HTMLElement | null => Array.from(document.querySelectorAll<HTMLElement>('.essence-cards-ai-modal')).at(-1) ?? null;
+const modals = (): number => document.querySelectorAll('.essence-cards-ai-modal').length;
 const inModal = <T extends HTMLElement>(selector: string): T[] => Array.from(modal()?.querySelectorAll<T>(selector) ?? []);
 const button = (name: string, root: ParentNode | null = modal()): HTMLButtonElement | undefined => Array.from(root?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(each => text(each) === name);
 const lastModal = (): HTMLElement | undefined => Array.from(document.querySelectorAll<HTMLElement>('.modal-container')).at(-1);
@@ -53,9 +55,9 @@ async function oneRun(host: EntryDevHost, capture: (name: string) => Promise<voi
   checks.promptChars = copied?.length ?? null;
   checks.copiedText = text(modal()).slice(0, 200);
   await capture(`${label} 已複製`);
-  // 關掉再開：先問「接著貼回」。
-  modal()?.querySelector<HTMLElement>('.modal-close-button')?.click();
-  await until(() => modal() === null);
+  // 按「取消」關掉再開：先問「接著貼回」。
+  button('取消')?.click();
+  checks.closed = await until(() => modals() === 0);
   command(app, 'essence-cards:ai-cards');
   await until(() => modal() !== null);
   checks.resumeAsked = text(modal());
@@ -74,7 +76,8 @@ async function oneRun(host: EntryDevHost, capture: (name: string) => Promise<voi
   await until(() => modal() === null, 15_000);
   await sleep(800);
   await capture(`${label} 存成草稿`);
-  const created = app.vault.getFiles().map(file => file.path).filter(path => !before.has(path)).sort();
+  // 截圖不算：只算這次在 Essence Cards/ 建立的卡組、快照與原文。
+  const created = app.vault.getFiles().map(file => file.path).filter(path => !before.has(path) && path.startsWith('Essence Cards/')).sort();
   const decks = created.filter(path => path.startsWith('Essence Cards/學業/'));
   checks.created = created;
   checks.decksDraft = await Promise.all(decks.map(async path => parseDeck(await app.vault.adapter.read(path)).props.status));
