@@ -42,6 +42,8 @@ interface Fake {
   clock: () => number;
   /** 跑 defer 排的工作，等非同步做完。 */
   run: () => Promise<void>;
+  /** host.later 排著的（搬回的總時限）：測試自己觸發。 */
+  timers: (() => void)[];
   saved: () => string[];
 }
 
@@ -54,6 +56,7 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
   const failMoves: Error[] = [];
   const residue = { on: false };
   const deferred: (() => void)[] = [];
+  const timers: (() => void)[] = [];
   let clock = 0;
   let saved = seen ?? [];
   const has = (path: string): boolean => [...memory.texts.keys()].some(p => p.startsWith(path + '/'));
@@ -88,9 +91,10 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
     sleep: ms => { clock += ms; return Promise.resolve(); },
     now: () => clock,
     defer: run => { deferred.push(run); },
+    later: (_ms, run) => { timers.push(run); return () => { timers.splice(timers.indexOf(run) >>> 0, timers.includes(run) ? 1 : 0); }; },
   };
   const run = async (): Promise<void> => { for (const each of deferred.splice(0)) each(); await drain(); };
-  return { host, memory, notices, failures, moves, removed, disk, visible, beforeRmdir, failMoves, residue, clock: () => clock, run, saved: () => saved };
+  return { host, memory, notices, failures, moves, removed, disk, visible, beforeRmdir, failMoves, residue, clock: () => clock, run, timers, saved: () => saved };
 }
 
 /** 在 Obsidian 裡拖動：防呆先收到 rename（它比 state 先註冊），檔案才換位置、送通知。 */
@@ -473,4 +477,162 @@ void test('F2 最後一次確認是空的之後才同步進來的內容：刪不
   await g.run();
   assert.ok(g.disk.has(`${R}/英文/紀錄/同步剛到的.md`));
   assert.deepEqual(g.removed, []);
+});
+
+// ---- Codex L2 第二輪 ----
+
+/** syntax §3 的錯題本草稿：補強題有卡片語法，當成卡組時會被補 ID。 */
+const DRAFT = '---\n年級學期: 國二上\n科目: 自然\n考試: 第一次段考\n日期: 2026-10-20\n狀態: 草稿\n---\n\n### 錯題 1：糖水的溶劑是什麼？\n- 學生答案：糖\n- 正確答案：水\n- 錯因：忘記\n- 理由：記反了。\n- 對應：[[L1#^k3m9x2|能說明 A]]\n- 補強：\n    - 糖水的溶劑是什麼？ :: 水\n';
+const WRONG = `${R}/錯題本`;
+const EACCES = Object.assign(Error('EACCES: permission denied, rename'), { code: 'EACCES' });
+
+function editorOn(path: string, initial: string) {
+  let text = initial;
+  return { path, text: () => text, apply(before: string, after: string) { assert.equal(text, before); text = after; return true; }, persist: () => Promise.resolve() };
+}
+
+void test('第二輪 F1 兩筆搬回交錯：先放棄的那一筆，暫時位置立刻不當卡組，不等另一筆搬完', async (t: TestContext) => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  let logBack = (): void => {};
+  const waiting = new Promise<void>(resolve => { logBack = resolve; });
+  const move = f.host.move.bind(f.host);
+  f.host.move = async (from, to) => {
+    if (to === WRONG) throw EACCES;
+    await waiting;
+    return move(from, to);
+  };
+  drag(f, guard, WRONG, `${R}/英文/錯題本`);
+  drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
+  const at = `${R}/英文/錯題本/草稿.md`;
+  const reading = guard.wrap(f.memory.files).read(at);
+  await f.run();
+  // 錯題本放棄了，紀錄還在搬：錯題本的暫時位置已經排除。
+  assert.equal(await reading, null);
+  assert.equal(guard.misplaced(at), true);
+  assert.notEqual((await state.save(editorOn(at, DRAFT))).kind, 'done');
+  assert.equal(await state.fillIds(at), false);
+  assert.equal(f.memory.texts.get(at), DRAFT);
+  logBack();
+  await f.run();
+  assert.equal(guard.misplaced(at), true);
+  assert.deepEqual(guard.issues(), [{ kind: 'moved', folder: WRONG, at: [`${R}/英文/錯題本`] }]);
+  assert.equal(f.memory.texts.get(at), DRAFT);
+});
+
+void test('第二輪 F1 在 Obsidian 裡改成別的名字、搬不回：照 rename 知道的位置不當卡組，搬回去之後恢復', async (t: TestContext) => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  const renamed = `${R}/草稿資料夾`;
+  f.failMoves.push(EACCES);
+  drag(f, guard, WRONG, renamed);
+  await f.run();
+  // §2-2 只找同名，判成找不到；改名後的位置照樣排除。
+  assert.deepEqual(guard.issues(), [{ kind: 'missing', folder: WRONG }]);
+  assert.equal(guard.misplaced(`${renamed}/草稿.md`), true);
+  assert.equal(await state.fillIds(`${renamed}/草稿.md`), false);
+  assert.equal(f.memory.texts.get(`${renamed}/草稿.md`), DRAFT);
+  // 家長自己拖回去：那個位置不在了，不再排除。
+  f.memory.rename(renamed, WRONG);
+  f.memory.write(`${renamed}/自己的.md`, '- 能說明 B\n    - QB :: AB\n');
+  guard.check();
+  assert.deepEqual(guard.issues(), []);
+  assert.equal(guard.misplaced(`${renamed}/自己的.md`), true, '同一個位置還是資料夾時照樣排除（只看位置，不看是誰建的）');
+  f.memory.remove(`${renamed}/自己的.md`);
+  guard.check();
+  f.memory.write(`${renamed}/自己的.md`, '- 能說明 B\n    - QB :: AB\n');
+  assert.equal(guard.misplaced(`${renamed}/自己的.md`), false);
+});
+
+void test('第二輪 F4 等磁碟的時候 Obsidian 才看到的空資料夾：原位當成有東西，清理也不刪', async () => {
+  const f = fake();
+  const guard = movedOutside(f);
+  f.disk.add(`${R}/考試範圍`);
+  const exists = f.host.exists.bind(f.host);
+  f.host.exists = async path => { const found = await exists(path); if (path === `${R}/考試範圍`) f.visible.add(path); return found; };
+  assert.equal(await guard.moveBack(guard.issues()[0]), false);
+  assert.deepEqual(f.removed, []);
+  assert.match(f.notices[0], /原位已經有一個同名的/);
+
+  const g = fake();
+  const guard2 = movedOutside(g);
+  g.disk.add(`${R}/考試範圍`);
+  const empty = g.host.empty.bind(g.host);
+  g.host.empty = async path => { const result = await empty(path); g.visible.add(path); return result; };
+  assert.equal(await guard2.moveBack(guard2.issues()[0]), false);
+  assert.deepEqual(g.removed, []);
+
+  const h = fake();
+  const guard3 = started(h);
+  h.residue.on = true;
+  const empty3 = h.host.empty.bind(h.host);
+  h.host.empty = async path => { const result = await empty3(path); h.visible.add(path); return result; };
+  drag(h, guard3, `${R}/紀錄`, `${R}/英文/紀錄`);
+  await h.run();
+  assert.deepEqual(h.removed, []);
+});
+
+void test('第二輪 F5 停用時正在等重試：不再搬，請家長自己拖回；等著的作答放行，寫出去不丟', async (t: TestContext) => {
+  const f = fake();
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  let wake = (): void => {};
+  f.host.sleep = ms => ms === 200 ? new Promise<void>(resolve => { wake = resolve; }) : Promise.resolve();
+  f.failMoves.push(EPERM);
+  drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
+  assert.ok(state.answer({ lt: 'k3m9x2', r: 'good', v: '12345678' }));
+  const flushing = state.flush();
+  await f.run();
+  assert.equal(f.moves.length, 1);
+  guard.close();
+  await flushing;
+  assert.match(f.memory.texts.get(OWN_LOG) ?? '', /"lt":"k3m9x2"/);
+  wake();
+  await drain();
+  assert.equal(f.moves.length, 1);
+  assert.deepEqual(f.notices, [`Essence Cards：「紀錄」是外掛用的資料夾，沒能搬回原位，請把它拖回「${R}/紀錄」`]);
+  assert.deepEqual(f.failures, []);
+  assert.equal(f.memory.texts.get(`${R}/英文/紀錄/2026-10 iPhone-test.jsonl`), VAULT[LOG]);
+});
+
+void test('第二輪 F5 某一步一直沒回來：到總時限就記下、請家長自己拖回、放行；之後才搬好的補一個通知', async (t: TestContext) => {
+  const f = fake();
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  let finish = (): void => {};
+  f.host.move = (from, to) => new Promise<void>(resolve => { finish = () => { f.memory.rename(from, to); resolve(); }; });
+  drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
+  let read = false;
+  const reading = guard.wrap(f.memory.files).read(LOG).then(text => { read = true; return text; });
+  await f.run();
+  assert.equal(read, false);
+  assert.equal(f.timers.length, 1);
+  f.timers[0]();
+  // 放行：原位還沒有檔，讀到 null（之後 rename 的通知會讓 state 再讀）。
+  assert.equal(await reading, null);
+  assert.equal(f.failures.length, 1);
+  assert.match(String(f.failures[0]), /超過 12 秒沒有結束/);
+  assert.deepEqual(f.notices, [`Essence Cards：「紀錄」是外掛用的資料夾，沒能搬回原位，請把它拖回「${R}/紀錄」`]);
+  assert.equal(guard.misplaced(`${R}/英文/紀錄/2026-10 iPhone-test.jsonl`), true);
+  finish();
+  await drain();
+  assert.equal(f.notices.at(-1), 'Essence Cards：「紀錄」是外掛用的資料夾，不能搬動或改名，已經搬回原位');
+  guard.check();
+  assert.deepEqual(guard.issues(), []);
+  assert.equal(guard.misplaced(LOG), false);
+  assert.equal(f.memory.texts.get(LOG), VAULT[LOG]);
+});
+
+void test('第二輪 F5 正常結束時取消總時限', async () => {
+  const f = fake();
+  const guard = started(f);
+  drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
+  await f.run();
+  assert.deepEqual(f.timers, []);
 });

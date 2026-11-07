@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -36,6 +36,37 @@ void test('removeEmptyFolder：vault 本身、vault 以外的位置不刪', asyn
   assert.ok(existsSync(outside));
 });
 
+void test('removeEmptyFolder：照實際路徑判斷，經過 junction 走到 vault 外、本身是連結、大小寫不同的根都不刪（Codex L2 第二輪 F6）', async t => {
+  const base = await tempFolder(t);
+  const vault = join(base, 'vault'), outside = join(base, 'outside');
+  await mkdir(join(outside, '紀錄'), { recursive: true });
+  await mkdir(join(vault, 'Essence Cards'), { recursive: true });
+  const kind = process.platform === 'win32' ? 'junction' : 'dir';
+  // 上一層是連到 vault 外面的 junction：寫法在 vault 裡，實際在外面。
+  await symlink(outside, join(vault, 'Essence Cards', '英文'), kind);
+  await assert.rejects(removeEmptyFolder(vault, 'Essence Cards/英文/紀錄'), /不是 vault 裡的資料夾/);
+  assert.ok(existsSync(join(outside, '紀錄')));
+  // 要刪的本身是連結（連到 vault 外的空資料夾）：不刪連結，也不碰它連到的地方。
+  await mkdir(join(outside, '空的'));
+  await symlink(join(outside, '空的'), join(vault, 'Essence Cards', '連結'), kind);
+  await assert.rejects(removeEmptyFolder(vault, 'Essence Cards/連結'), /不是 vault 裡的資料夾/);
+  assert.ok(existsSync(join(vault, 'Essence Cards', '連結')));
+  assert.ok(existsSync(join(outside, '空的')));
+  // 絕對路徑、反斜線、空的段落一律不收（大小寫不同的 vault 根也是絕對路徑）。
+  const empty = join(base, 'CaseVault');
+  await mkdir(empty);
+  for (const path of [join(base, 'CASEVAULT'), empty.toUpperCase(), 'Essence Cards\\英文', 'Essence Cards//英文', 'Essence Cards/./英文']) {
+    await assert.rejects(removeEmptyFolder(empty, path), /不是 vault 裡的資料夾/, path);
+  }
+  assert.ok(existsSync(empty));
+  // vault 本身經過連結也一樣：照實際路徑，vault 裡真正的空資料夾照常刪。
+  const linked = join(base, 'linked');
+  await symlink(vault, linked, kind);
+  await mkdir(join(vault, 'Essence Cards', '空的'));
+  await removeEmptyFolder(linked, 'Essence Cards/空的');
+  assert.equal(existsSync(join(vault, 'Essence Cards', '空的')), false);
+});
+
 // folder-host.ts 接 Obsidian：用 esbuild 載入正式的檔，obsidian 換成只有 TFolder／TFile 的替身（不是 Obsidian 實機）。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({ absWorkingDir: root, entryPoints: ['src/obsidian/folder-host.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', external: ['obsidian'], write: false })).outputFiles[0].text;
@@ -49,7 +80,7 @@ const load = (): typeof Wire => {
   run((name: string) => {
     if (name !== 'obsidian') throw Error('folder-host 只該 require obsidian：' + name);
     return { TFolder, TFile };
-  }, mod, mod.exports, { setTimeout });
+  }, mod, mod.exports, { setTimeout, clearTimeout });
   return mod.exports.wireFolderGuard;
 };
 

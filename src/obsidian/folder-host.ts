@@ -47,6 +47,10 @@ export function wireFolderGuard(plugin: Plugin, options: {
     sleep: ms => new Promise(resolve => { window.setTimeout(resolve, ms); }),
     now: () => Date.now(),
     defer(run) { window.setTimeout(run, 0); },
+    later(ms, run) {
+      const id = window.setTimeout(run, ms);
+      return () => { window.clearTimeout(id); };
+    },
   });
   plugin.register(() => { guard.close(); });
   // 監看不了時防呆就不作用。不另外記：state 的監看用同一個 vault.on，layout ready 時會失敗、記一行 init（tasks/error-log.md §2-3），同一個原因不記兩次。

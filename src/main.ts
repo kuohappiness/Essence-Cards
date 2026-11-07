@@ -107,7 +107,8 @@ export default class EssenceCardsPlugin extends Plugin {
     const loadedAt = performance.now();
     // 只註冊命令與事件，不讀任何檔案：layout ready 之前 Obsidian 會對每個檔案發 create（§4-1）。
     this.device = loadDeviceCode(this.app);
-    let files: Files = createObsidianFiles(this.app);
+    // 系統資料夾正在搬回時，碰那兩處的讀寫在真正開始之前等（tasks/system-folder-guard.md §1-8）；防呆在 layout ready 才建立。
+    let files: Files = createObsidianFiles(this.app, { pause: (path, folder) => this.guard?.pause(path, folder) ?? null });
     // 錯誤紀錄等 layout ready 才讀寫：之前 vault 的索引還不完整，數不到當月的行數（D-155 第 3 點）。
     const layoutReady = new Promise<void>(resolve => { this.app.workspace.onLayoutReady(resolve); });
     const nameStacks = Platform.isIosApp;
