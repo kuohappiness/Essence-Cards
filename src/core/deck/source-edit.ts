@@ -152,7 +152,10 @@ function partsOnLine(f: Field, line: number): { index: number; span: Span }[] {
   return f.layout.parts.flatMap((_, index) => { const span = spanAt(f, index); return span?.line === line ? [{ index, span }] : []; }).sort((a, b) => a.span.from - b.span.from);
 }
 
-/** 拿掉同一行上連在一起的幾段，連同一個分隔符號；那一行只有它們、是分行的子項目時整行拿掉。 */
+/**
+ * 拿掉同一行上連在一起的幾段，連同一個分隔符號；那一行只有它們、是分行的子項目時拿掉那一行（L2 第一輪 R1：只拿那一行，
+ * 底下附著的引言、程式碼區塊不是出處，留著；它們不進解析，核對擋不到，所以由改動的範圍保證）。
+ */
 function removeGroup(f: Field, group: readonly number[]): TextChange[] {
   const spans = group.map(index => spanAt(f, index) as Span);
   const line = spans[0].line, onLine = partsOnLine(f, line);
@@ -162,7 +165,7 @@ function removeGroup(f: Field, group: readonly number[]): TextChange[] {
   if (next) return [{ from: offset(f.doc, line, first), to: offset(f.doc, line, next.span.from), insert: '' }];
   if (prev) return [{ from: offset(f.doc, line, prev.span.to), to: offset(f.doc, line, last), insert: '' }];
   const child = childItems(f).find(each => each.line === line);
-  if (child) return [{ from: f.doc.starts[child.line], to: child.end < f.doc.lines.length ? f.doc.starts[child.end] : f.doc.text.length, insert: '' }];
+  if (child) return [removeLine(f.doc, child.line)];
   return [{ from: offset(f.doc, line, first), to: offset(f.doc, line, last), insert: '' }];
 }
 /** 幾段照所在的行分組（同一行的連在一起）。 */
@@ -189,7 +192,14 @@ function insertBefore(f: Field, index: number, written: string): TextChange[] | 
   const span = spanAt(f, index);
   if (!span) return null;
   const child = childItems(f).find(each => each.line === span.line);
-  if (child && partsOnLine(f, span.line)[0]?.index === index) return [insertLine(f.doc, child.line, markerOf(f.doc.lines[child.line].raw) + written)];
+  if (child) {
+    const marker = markerOf(f.doc.lines[child.line].raw), onLine = partsOnLine(f, span.line);
+    const at = onLine.findIndex(each => each.index === index);
+    if (at <= 0) return [insertLine(f.doc, child.line, marker + written)];
+    // 已經分行的一個子項目用頓號寫了好幾段（L2 第一輪 R7）：從前一段的結尾拆開，新的一段自己一個子項目，後面的段接著下一個。
+    const before = onLine[at - 1].span;
+    return [{ from: offset(f.doc, span.line, before.to), to: offset(f.doc, span.line, span.from), insert: f.doc.eol + marker + written + f.doc.eol + marker }];
+  }
   const at = offset(f.doc, span.line, span.from);
   return [{ from: at, to: at, insert: written + '、' }];
 }
@@ -397,11 +407,12 @@ function looseItems(root: Item, implicit: boolean): Item[] {
     return colon >= 0 && !body.slice(colon + 2).trim() ? [] : node.children.filter(child => !fieldStart.test(child.text));
   };
   if (implicit) return extras(root);
-  return root.children.flatMap(child => {
-    if (fieldStart.test(child.text)) return [];
-    const syntax = questionSyntax(stripId(child.text).text);
-    return syntax.colon >= 0 || syntax.blanks.length ? extras(child) : [child];
-  });
+  return root.children.flatMap(child => fieldStart.test(child.text) ? [] : isPrompt(child) ? extras(child) : [child]);
+}
+/** 目標底下的這一項是題目（有 `::` 或填空），和 parseDeck 的判斷相同。 */
+function isPrompt(node: Item): boolean {
+  const syntax = questionSyntax(stripId(node.text).text);
+  return syntax.colon >= 0 || syntax.blanks.length > 0;
 }
 
 /** 這一篇可以改的寫法（§1-4），照位置排。laid 是同一份全文 parseDeck(text, { layout: true }) 的結果（編輯器已經讀過，不再讀一次）。 */
@@ -462,12 +473,15 @@ export function fixField(input: { text: string; fix: FieldFixAction; version: st
   const fix = fixes.find((each): each is Rename => each.kind === 'rename' && each.line === line);
   const f = fix && fieldOf(doc, deck, fix.target), item = findItem(doc.tree, line), root = fix && findItem(doc.tree, fix.target);
   const parent = root && (root.children.some(child => child.line === line) ? root : root.children.find(child => child.children.some(each => each.line === line)));
-  if (!fix || !f || !item || !parent) return { ok: false, reason: STALE, failure: null };
+  if (!fix || !f || !item || !root || !parent) return { ok: false, reason: STALE, failure: null };
+  // 這一項是上一層的第幾個補充（L2 第一輪 R5：同一題底下可以有兩個相同的字，要拿掉點到的那一個）。上一層是題目時是 extras，否則是 shared。
+  const prompt = parent !== root || f.target.implicit;
+  const index = parent.children.filter(child => !fieldStart.test(child.text) && (prompt || !isPrompt(child))).findIndex(child => child.line === line);
   // 就地改名：開頭的名稱、冒號與後面的空白換成 `出處：`，後面的字一字不動。
   const prefix = MISNAMED.exec(item.text)?.[0] ?? '', column = item.starts[0].column;
   const list: { changes: TextChange[]; label: string; split: boolean }[] = [];
   // 已經有一個（沒有接續行）：併進那一欄，再刪掉這一項；沒有、已經有兩個以上、那一欄有接續行時就地改名，讀法照舊合併。
-  if (f.layout.fields.length === 1 && !f.field?.continued) list.push({ changes: [...merge(f, fix.sources), removeLine(doc, line)], label: '併', split: true });
+  if (f.layout.fields.length === 1 && !f.field?.continued && item.end === line + 1) list.push({ changes: [...merge(f, fix.sources), removeLine(doc, line)], label: '併', split: true });
   list.push({ changes: [{ from: offset(doc, line, column), to: offset(doc, line, column + prefix.length), insert: '出處：' }], label: '改名', split: false });
   let first: { reason: string; failure: string } | null = null;
   for (const { changes, label, split } of list) {
@@ -478,7 +492,7 @@ export function fixField(input: { text: string; fix: FieldFixAction; version: st
       const more = again ? splitField(again) : [];
       if (more.length) { text = applyChanges(text, more); now = parseDeck(text, { layout: true }); }
     }
-    const found = verifyRename(deck, now, fix, item, parent.line);
+    const found = verifyRename(deck, now, fix, parent.line, index);
     if (!found) return { ok: true, text, changes: diff(input.text, text), written: fix.replacement };
     first ??= { ...found, failure: `${found.failure} action:${label} line:${line}` };
   }
@@ -502,14 +516,13 @@ function removeLine(doc: Doc, line: number): TextChange {
  * 改名的核對（§4-4）：shared（或那一題的 extras）剛好少了這一整項（按原本的項目比），出處在原本的段之間多了一串，
  * 讀起來和單獨讀這一項相同（remark 除外）；其他照 §4-3 第 6 點。
  */
-function verifyRename(old: LaidOut, now: LaidOut, fix: Rename, item: Item, parent: number): { reason: string; failure: string } | null {
+function verifyRename(old: LaidOut, now: LaidOut, fix: Rename, parent: number, loose: number): { reason: string; failure: string } | null {
   const index = old.targets.findIndex(target => target.line === fix.target);
   const expect = (target: Target): unknown => {
     const shared = [...target.shared], prompts = target.prompts.map(prompt => ({ ...prompt, extras: [...prompt.extras] }));
     // 這一項的上一層是題目（含直接寫成題目的目標）時在那一題的 extras，否則在 shared。
     const list = prompts.find(prompt => prompt.line === parent)?.extras ?? shared;
-    const at = list.indexOf(item.text);
-    if (at >= 0) list.splice(at, 1);
+    list.splice(loose, 1);
     return targetMeaning({ ...target, shared, prompts });
   };
   const others = verifyOthers(old, now, index, expect);

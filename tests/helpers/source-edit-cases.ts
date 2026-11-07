@@ -65,6 +65,22 @@ export const EDIT_CASES: EditCase[] = [
   { name: '已經分行的：加別的單元在最後', text: split('p.44', 'p.45'), action: add('國二上 1-3 p.20', false), want: split('p.44', 'p.45', '國二上 1-3 p.20') },
   { name: '已經分行的：換掉一段', text: split('老師說過 p.44', 'p.45'), action: replace(0, 'p.44 老師說過', true), want: split('p.44 老師說過', 'p.45') },
   { name: '已經分行、接續段在下一行：一起換，按鈕變少不改回', text: split('p.44', '45', 'p.50'), action: replace(0, 'p.46', true), want: split('p.46', 'p.50') },
+  // L2 第一輪 R1：拿掉接續段那一行時，只拿那一行；底下附著的引言、程式碼區塊留著，檔尾沒有換行照舊。
+  {
+    name: 'L2 R1：接續段底下有引言，引言留著',
+    text: split('老師說過 p.20', '21') + '            > 家長備忘\n',
+    action: replace(0, 'p.20 p.21', true),
+    want: split('p.20 p.21') + '            > 家長備忘\n',
+  },
+  {
+    name: 'L2 R1：接續段底下有程式碼區塊，區塊留著',
+    text: split('老師說過 p.20', '21') + '            ```\n            code\n            ```\n',
+    action: replace(0, 'p.20 p.21', true),
+    want: split('p.20 p.21') + '            ```\n            code\n            ```\n',
+  },
+  { name: 'L2 R1：接續段在最後一行、檔尾沒有換行', text: split('老師說過 p.20', '21').slice(0, -1), action: replace(0, 'p.20 p.21', true), want: split('p.20 p.21').slice(0, -1) },
+  // L2 第一輪 R7：已經分行、要加的位置在一個子項目的中間（那一行用頓號寫了好幾項）：從頓號那裡拆開，新的一項自己一行。
+  { name: 'L2 R7：分行的子項目中間加一段', text: split('p.44、國二上 1-3 p.20'), action: add('p.50', true), want: split('p.44', 'p.50', '國二上 1-3 p.20') },
 
   // ── 版面 ──
   { name: '2 格縮排', text: HEAD + '- 目標\n  - Q :: A\n  - 出處：p.44、p.45\n', action: add('p.46', true), want: HEAD + '- 目標\n  - Q :: A\n  - 出處：\n      - p.44\n      - p.45\n      - p.46\n' },

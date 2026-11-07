@@ -78,6 +78,22 @@ for (const each of NOT_COLONS) {
   });
 }
 
+void test('L2 R5：同一題底下有兩個相同的「來源」，點哪一個就拿掉哪一個', () => {
+  const text = HEAD + '- 目標\n    - Q :: A\n        - 來源：p.45\n        - 例句：補充\n        - 來源：p.45\n    - 出處：p.44\n';
+  assert.deepEqual(renames(text).map(fix => fix.line), [7, 9]);
+  const second = fixField({ text, fix: { kind: 'rename', line: 9 }, version: VERSION });
+  assert.ok(second.ok, second.ok ? '' : String(second.failure));
+  assert.equal(second.text, HEAD + '- 目標\n    - Q :: A\n        - 來源：p.45\n        - 例句：補充\n    - 出處：p.44、p.45\n');
+  const first = fixField({ text, fix: { kind: 'rename', line: 7 }, version: VERSION });
+  assert.ok(first.ok, first.ok ? '' : String(first.failure));
+  assert.equal(first.text, HEAD + '- 目標\n    - Q :: A\n        - 例句：補充\n        - 來源：p.45\n    - 出處：p.44、p.45\n');
+  // shared 的兩個相同項也一樣。
+  const shared = HEAD + '- 目標\n    - Q :: A\n    - 來源：p.45\n    - 補充\n    - 來源：p.45\n    - 出處：p.44\n';
+  const later = fixField({ text: shared, fix: { kind: 'rename', line: 9 }, version: VERSION });
+  assert.ok(later.ok, later.ok ? '' : String(later.failure));
+  assert.equal(later.text, HEAD + '- 目標\n    - Q :: A\n    - 來源：p.45\n    - 補充\n    - 出處：p.44、p.45\n');
+});
+
 void test('§1-4 半形冒號的問句：這篇有好幾處時一起改', () => {
   const [one] = colons(COLON_CASES[1].text);
   assert.equal(fixQuestion(one, 1), '冒號改成全形？');
