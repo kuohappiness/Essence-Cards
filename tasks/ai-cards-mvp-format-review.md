@@ -1,6 +1,6 @@
 # AI 製卡最小版的格式（格式查核，給 Codex）
 
-狀態：等 Codex 查核
+狀態：第一輪做完（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），等第二輪：只看改過的寫法，請求在回報最後的〈請 Codex 第二輪〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
