@@ -1,6 +1,6 @@
 # AI 製卡最小版：複製貼上、草稿與啟用（給 Claude，本機執行）
 
-狀態：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
+狀態：實作做完、待 L2（2026-11-07，分支 `claude/ai-cards-mvp` 的 `9ba62d0`，[查核請求](ai-cards-mvp-review.md)）；§8 第 3 點（使用者做一次真的 AI 對話）與第 4 點（iPhone）還沒做，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§4～§6 寫進檔案的格式開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -314,4 +314,46 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 
 ## 結果
 
-（實作後填）
+2026-11-07，Claude（Opus 5.5，high）。分支 `claude/ai-cards-mvp`，從 `main` 的 `9c803ba` 開；開工時 `git diff 9c803ba -- docs/syntax.md docs/decisions.md docs/card-rules/ experiments/t4/arch/ src/state/ src/core/deck/` 沒有變動。
+
+**commit**
+
+| commit | 內容 |
+|---|---|
+| `135832d` | §1 規則組嵌進外掛：`src/core/ai/rules.ts` 的表、`docs/card-rules/` 五份加標記、`tools/build.mjs` 建置時嵌入與雜湊 |
+| `ec3ab25` | §4 的 `check-syntax` 規則搬進 `src/core/ai/check.ts`、`language.ts`；`experiments/t4/check-syntax.mjs` 改成從這裡 import（只留一份） |
+| `6be7164` | §2～§7：提示、待貼回的工作、貼回與檢查、存草稿與快照、ID 的預留、啟用；syntax §6、§9 跟著改 |
+| `c76583f` | §8 第 2 點的修正：英文不提示「沒有出處」（english.md 的出處是選填）；同一種提示合成一行 |
+| `95bc719` | §8 第 1 點的開發命令 `ai-cards` |
+| `9ba62d0` | 「啟用」按鈕改用開關圖示（原本和「全部卡」的圖示一樣）；開發命令的關閉與截圖修正 |
+| `30c6153` | §8 補測試：需要新版的草稿按啟用會擋下（和目錄的暫停同一道門檻） |
+
+**單元測試**：新增 `tests/ai-rules.test.ts`（3）、`ai-cards.test.ts`（14）、`ai-publish.test.ts`（7）、`ai-state.test.ts`（7）、`ai-cards-flow.test.ts`（2），`deck.test.ts` 登錄 AI 草稿的往返範例；`build`、`install`、`main-wiring`、`boundaries` 的測試跟著改。`npm run check` 在 `30c6153` 通過（pre-commit）。
+
+**Windows 實機**（Obsidian 1.15.0，開發版 `0.4.0+95bc719.dirty`；dirty 是當時還沒 commit 的 `9ba62d0` 兩個檔，只有開發命令與圖示）：
+
+1. 開發命令 `ai-cards`（結果檔 `ai-cards Windows-c50c 2026-11-07 154509.json`，截圖 13 張，都在測試 vault 的 `Essence W6/結果/`）：
+   - 自然（R3）：剪貼簿的文字等於存下的各部分接起來（8,467 字）；按「取消」關掉再開，先問「接著貼回上一次的結果（…，剛剛複製）」；檢查列出 AI 自己寫的 ID 會拿掉；存成一篇草稿、快照的欄位齊、`原文/` 的每一部分與存下的逐字相同、工作清掉、打開第一篇；預覽打得開；啟用前的確認是「啟用後，孩子就會開始複習這一篇的 1 個學習目標。還有：候選卡片 1 個還在引言框裡，不會出題。」，啟用後目標 0 → 1、狀態 active、紀錄一行 `set: status`（`啟用`）、按鈕消失。
+   - 英文（common）：28,857 字，一課照篇名拆成兩篇草稿，快照 `對象` 兩項。
+   - 結束時只刪了這次建立的檔。
+2. 真實試用輸出（社會 5 份、國語 2 份、英文 3 份，只在本機讀、沒有進 repo）：沒有誤擋。唯一擋下的是國語 v0.1 輸出第 707 行的比較卡認不出來（`pick-not-recognized`），是那份輸出真的寫錯；英文每一題都提示「沒有出處」上百次，已修（`c76583f`）。
+3. 使用者做一次真的 AI 對話：**還沒做**。
+4. iPhone：併入下一次 iPhone 實機測試，**還沒做**。
+
+**實作者自己選的做法**（規格沒寫或擇一的地方）：
+
+1. **用 Obsidian 的視窗（Modal），不用全螢幕**（§2）：製卡是家長在電腦上的工具，和 React 的入口、複習畫面無關；和錯誤清單的視窗同一種掛法，存完要在新分頁打開卡組，視窗關掉就回到原本的分頁。
+2. **規則在建置時 `JSON.stringify` 兩次再交給 esbuild 的 `define`**：直接給物件時，esbuild 會在輸出裡寫出 `<define:CARD_RULES>` 的註解，被電腦專用 API 的檢查誤判；`main.ts` 再 `JSON.parse` 一次。
+3. **R3 `五步.md` 的 `{{任務資料}}` 那一行拿掉，任務段接在所有規則之後**：§3 寫「規則組的每一份 → 任務段」；試用時任務資料是填進 `五步.md` 第 106 行的位置。換成接在最後，文字的位置差在五步的結尾，內容不變。
+4. **提示多一個「再複製一次」按鈕**：剪貼簿在貼到 AI 之前被別的東西蓋掉時，不用重填；複製的是存下的同一份文字，不重組。
+5. **存到一半的工作不過期，還沒開始存的最多 5 個、14 天**：§3 照寫；壞掉讀不懂的工作數量寫在開頭畫面，不默默丟。
+6. **ID 的預留**：`createState` 的 `reserved` 選項是一個函式，state 建好前就讀，所以預留比任何配號先到（§5〈ID 的預留〉）；「不再配出」清單存在這台電腦的裝置偏好。
+7. **只建立的寫入**（`state.aiCreate`）：走同一個寫入佇列與門檻；已經有檔（含空檔）回 `exists`，不改；寫完讀回比對。
+8. **提示等級**：`check-syntax` 的「提醒」不顯示，只顯示「錯誤」（擋）與「不符」（提示）；同一種提示合成一行，寫出行號清單。
+9. **快照的 `送出`** 用 YAML 函式庫序列化，不一定加引號（§5 的例子有加）；讀出來的值相同。
+10. **啟用按鈕**用 `toggle-right` 圖示。
+
+**規格之間的出入**（沒有自行挑一份，照這份說明做）：
+
+- [elementary-social.md](../docs/card-rules/elementary-social.md) 第 65 行寫收到的已有目標每項是 `名稱｜ID｜出處`；§3 的任務資料是 `ID 名稱｜出處`（照 §3）。社會的 AI 讀到兩種寫法，可能影響它加進已有的學習目標時抄 ID；要改哪一邊請使用者決定。
+- [common.md](../docs/card-rules/common.md) 標題寫 `v0.14`、狀態最新是 `v0.15`：表照狀態記 `通用 v0.15`，標題沒改。
