@@ -1,8 +1,28 @@
 # 系統資料夾的防呆：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第一輪，2026-11-07）
+狀態：待審（第二輪，2026-11-07）；第一輪待修 F1～F4，已修
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-07-system-folder-guard-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
+
+## 第二輪（2026-11-07）
+
+請**新開一個 session**，回報一樣接在討論稿最後（〈Codex 第二輪〉）。先讀討論稿的〈Codex 第一輪〉與〈Claude 回應：第一輪〉。
+
+- **待審**：`593d836436f0399ba90d02469e71af0c977125bb`（F1～F4 的修正與回歸測試）。它之後只有文件的 commit。
+- **基準**：`f1ba0974b3e99155e973fdcf1c6bbb70f2d4a020`（第一輪的待審）。
+
+```bash
+git diff f1ba0974b3e99155e973fdcf1c6bbb70f2d4a020 593d836436f0399ba90d02469e71af0c977125bb -- src tests
+```
+
+- **改了什麼**：`src/obsidian/folder-guard.ts`（搬回期間的讀寫等 `Hold.done`；暫時位置算 `misplaced`；`restore`、`moveBack`、`check` 不拒絕、不拋錯；看得到的原位資料夾不刪）、`src/obsidian/folder-host.ts`（拿掉遞迴的退路，`removeEmpty` 選項）、`src/desktop/index.ts`（`removeEmptyFolder`）、`src/main.ts`（電腦版傳 `removeEmpty`）、`src/ui/Entry.tsx`（拿掉 `.catch`）；測試 `tests/folder-guard.test.ts` 最後一段、新的 `tests/folder-host.test.ts`。
+- **請特別找**：
+  - F1 的等待會不會卡住：`release` 一定會跑嗎（`flush` 的子項、`moveBack`、`close()` 之後）；`settled` 的迴圈有沒有永遠等的情形；state 的寫入佇列、`writeTimeout`、`ready()`、`close()` 和這段等待疊在一起時的行為。
+  - 等完之後的讀寫是否都照最新的判斷：放棄時 `check()` 已經先跑；`modify` 的回呼重看門檻。有沒有在等之前就決定好、等完不再看的地方。
+  - `list` 的重疊判斷（`onFolder`），以及 `watch` 仍用路徑前綴（`holding`），兩者不一致會不會出問題。
+  - F2：`removeEmptyFolder` 的路徑檢查（`resolve` 加 `isInside`；Windows 大小寫、`..`、絕對路徑），以及電腦版判斷（`Platform.isDesktopApp`、`FileSystemAdapter`）沒成立時退回 adapter 的非遞迴版。
+  - 〈Claude 回應〉不採用的兩項（外部搬動分兩批的時間窗、大小寫與 Unicode）理由是否成立。
+- **驗證**：實作者跑過 `npm run check`（pre-commit，1914 個測試）、第一輪的探針（`.local/system-folder-review/probes.test.ts`，修好的六個改成失敗、兩個邊界通過），以及 7 種變異（每一項修正拿掉都有測試失敗）。**沒跑**：Obsidian 實機（修正後的刪空資料夾流程，W2 待補）；請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
 
 ## 審查對象（第一輪）
 

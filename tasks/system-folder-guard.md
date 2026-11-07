@@ -1,6 +1,6 @@
 # 系統資料夾的防呆（給 Claude，本機執行）
 
-狀態：§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完，Windows 實機通過（2026-11-07，〈實作〉、〈Windows 實機〉），等 Codex L2；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
+狀態：§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完，Windows 實機通過（2026-11-07，〈實作〉、〈Windows 實機〉）；Codex L2 第一輪的 F1～F4 已修（`593d836`），等第二輪，修正後的刪空資料夾還沒在實機走；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。§1 會替家長搬動 vault 裡的資料夾，§2 會改哪些檔算卡組（`core/deck` 與 `state` 都用），屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。不新增、不改任何寫進檔案的格式，所以**不用開工前的格式查核**（[quality.md](../docs/agents/quality.md#開工前的格式查核) 只管格式）。
 
@@ -52,7 +52,7 @@ Windows 檔案總管、iPhone 的「檔案」App 搬的，或同步過來的，O
    - 找不到：寫「找不到」，可能是改了名或搬到 `Essence Cards/` 外面。
    - 根資料夾 `Essence Cards/` 本身不見：在整個 vault 找名叫 `Essence Cards`、裡面有記住的系統資料夾的資料夾。
    - **為什麼要先記住**：D-048 補充說更深處同名的資料夾（例如 `學業/國二上/英文/錯題本/`）可以放家長自己的卡組；只看名字，新的 vault 還沒有 `錯題本/` 時就會誤報。要先在這台看過原位有檔、現在沒了，才算。代價：新裝置或重裝後第一次開就已經搬錯的，不會提醒（§1 已經擋掉 Obsidian 裡的那一種）。
-3. **搬錯位置的資料夾不當卡組讀**：§2-2 找到的那幾個資料夾裡的 `.md`，不算卡組（不進目錄、不出題、存檔按鈕與存檔備援不補 ID），否則範圍檔會被當成卡組、被補 ID。這要改 `isDeckPath`／`listDeckPaths` 的呼叫端（`state` 與 `readDecks` 一起），只排除判定出來的那幾個資料夾，不排除名字相同、但沒有被判定的資料夾。
+3. **搬錯位置的資料夾不當卡組讀**：§2-2 找到的那幾個資料夾裡的 `.md`，不算卡組（不進目錄、不出題、存檔按鈕與存檔備援不補 ID），否則範圍檔會被當成卡組、被補 ID。這要改 Obsidian 裡 `state` 的讀與寫（2026-11-07 依 Codex L2 第一輪更正：`tools/install.ts` 的 `readDecks` 只讀 need 做安裝的版本閘門、在 Obsidian 外面跑，沒有這台記住的名字，不排除），只排除判定出來的那幾個資料夾，不排除名字相同、但沒有被判定的資料夾。
 4. **提醒一區**（只有電腦，D-163 第 5 點）一個資料夾一項：
    - 找到位置：`「紀錄」不在原位，現在在「Essence Cards/英文/紀錄」。搬回 Essence Cards 底下，複習進度就會回來`，加 §5 第 1 題的按鈕。
    - 找不到：`找不到「紀錄」。如果改了名或搬到別處，請改回「紀錄」、放回 Essence Cards 底下`，加「不用了」（拿掉這台的記憶，這一項消失）。
@@ -84,20 +84,23 @@ Windows 檔案總管、iPhone 的「檔案」App 搬的，或同步過來的，O
 - **檔案**：名單與判斷是純函式 `src/core/deck/folders.ts`（`SYSTEM_FOLDERS` 搬到這裡，`read.ts` 從這裡拿）；搬回、重試、清空資料夾、記住的名字在 `src/obsidian/folder-guard.ts`（vault 的操作經過一層 `GuardHost`，Node 測得到），接上 Obsidian 的是 `src/obsidian/folder-host.ts`；提醒的文字在 `src/review/entry.ts` 的 `reminderView`。
 - **和上面寫的不同的地方**：
   - 監聽不在 onload 註冊，改在 layout ready、建立 state 之前：onload 碰 vault 會破壞「layout ready 之前不碰 vault」（T12，`tests/main-wiring.test.ts`）；仍然比 state 的監看早，§1-8 擋得住。監看不了時防呆不作用、不另外記，state 用同一個 `vault.on` 會記一行 `init`。
-  - §1-8 的做法：給 state 的 `Files` 包一層，搬回期間舊、新位置的通知先擋住，搬好了（或放棄了）照順序送，state 只看到內容沒變的重讀。
+  - §1-8 的做法：給 state 的 `Files` 包一層，搬回期間舊、新位置的通知先擋住，搬好了（或放棄了）照順序送，state 只看到內容沒變的重讀。這兩處的讀、寫、列也先等搬回結束（含搬動前就排好的重讀、作答的追加、補 ID），暫時位置裡的檔不補 ID（Codex L2 第一輪 F1）。放棄時原有的紀錄留在暫時的位置、新的作答寫在原位，提醒一區列成「兩邊都有」，兩份都在。
   - §2-3 的做法：同一層 `Files` 不列、讀不到搬錯位置的資料夾裡的檔，判定改變時通知那幾個檔讓 state 重讀；寫入另加 `StateOptions.skip`，存檔與離開筆記時不補 ID。`tools/install.ts` 的 `readDecks` 不改：它在 Obsidian 外面跑，沒有這台記住的名字。
   - 通知不寫「複習進度會看不到」（只對 `紀錄` 成立），改成「`「X」是外掛用的資料夾，不能搬動或改名，已經搬回原位`」；提醒一區照資料夾寫搬回後會怎樣（`紀錄` 是複習進度、`考試範圍` 是範圍與倒數）。
-  - §1-5 的空資料夾每次搬回都看（不只重試過的），只刪完全空的；原位只剩磁碟上的空資料夾時先刪再搬（§1-3「沒有東西」的一種）。
+  - §1-5 的空資料夾每次搬回都看（不只重試過的），只刪完全空的；原位只剩 Obsidian 看不到、磁碟上的空資料夾時先刪再搬（§1-3「沒有東西」的一種），看得到的空資料夾當成有東西（F4）。刪除一律非遞迴：電腦版的 `adapter.rmdir(path, false)` 對資料夾回 `EISDIR`（W2），改用 `src/desktop` 的 `removeEmptyFolder`（Node 的 `rmdir`），其他平台用 `adapter.rmdir(path, false)`（F2）。搬回途中任何一步失敗都記錄、通知（F3）。
   - 「搬回原位」按鈕只給找到一個位置的；好幾個時只列位置。
   - 錯誤紀錄多一個 `where: "folder"`（syntax §9）：搬回失敗。
-- **已知的小空窗**：Obsidian 以外搬動時，新位置的檔比舊位置的刪除早約 1 秒（R8），這段時間裡範圍檔可能被當成卡組讀一次；沒開著就不會補 ID，判定出來之後就拿掉。
+- **已知的限制**：
+  - Obsidian 以外搬動時，新位置的檔比舊位置的刪除早約 1 秒（R8），判定又要等約 0.5 秒：這段時間裡範圍檔可能被當成卡組讀一次，判定出來之後就拿掉。這段時間裡那一份新位置的範圍檔如果正開在編輯器裡、被存檔或離開筆記，會被補 ID（內容不會丟，多了 ID 標記）；要家長在檔案出現的 1 秒多內打開它才會發生，不另外處理（Codex L2 第一輪，討論稿〈Claude 回應〉）。
+  - 路徑照字串比，不處理大小寫與 Unicode 正規化：列管的名字沒有組合字元；根資料夾只改大小寫時 Obsidian 送不送 `rename`、Windows 上搬不搬得回，沒有驗證。
+- **Codex L2 第一輪的修正**（`593d836`）：見討論稿〈Claude 回應：第一輪〉；回歸在 `tests/folder-guard.test.ts` 最後一段與 `tests/folder-host.test.ts`。
 - **測試**：`tests/system-folders.test.ts`（§2-2 的表格、§1-2、提醒文字）、`tests/folder-guard.test.ts`（§1 的搬回、上一層不在、原位有東西、EPERM/EBUSY 重試與 10 秒上限、空資料夾、§1-8 搬回期間 state 不讀不寫、§2-3 範圍檔不當卡組、按鈕與「不用了」）。§1-8 與 §2-3 的測試拿掉擋通知、拿掉排除後會失敗（實跑確認過）。替身不是 Obsidian：rename 的監聽真的比 state 早、iCloud 的鎖與空資料夾，要 §4 的 Windows 實機。
 
 ## Windows 實機（2026-11-07，Opus 5.5，正式建置 `0.4.0+edda2b8`，修正後 `+edda2b8.dirty`）
 
 - **環境**：Windows 11、Obsidian 1.15.0。暫存 vault 放在 iCloud Drive 最上層（`iCloudDrive\Essence 防呆測試`，不在任何 vault 裡），兩個獨立的 Obsidian（各自的 user-data-dir 加 CDP）同時開著：A 動手，B 當另一台（B 經由本機檔案系統看到改動，不是經由 iCloud 同步）。拖動用檔案列 DOM 的 `dragstart`→`drop`（Obsidian 自己處理），改名用 `fileManager.renameFile`（F2 同一條路，R3），Obsidian 以外用 PowerShell 的 `Move-Item`、`Rename-Item`。真的滑鼠沒有測。測完暫存 vault 刪掉，備份寫到 scratchpad。
 - **W1｜在檔案列拖動**：`紀錄/` 拖進 `英文/` 9 次、`考試範圍/` 拖進別的資料夾 12 次、`Essence Cards/` 拖進 `其他資料夾/` 5 次，另有 `錯題本/`、`紀錄/錯誤/`、`考試範圍/小考/` 各一兩次：每次都搬回原位、A 跳一次通知；根資料夾整個拖走只搬最上層。兩次遇到 iCloud 的鎖，約 1 秒後重試成功（1006、1015 ms），其餘 10～60 ms 就搬回。
-- **W2｜修正：iCloud 留下的空資料夾刪不掉**：修正前，重試過的那一次在暫時的位置（`錯題本/考試範圍/`）留下空資料夾，錯誤紀錄記了 `where: "folder"`，訊息 `rm returned EISDIR`；之後同一個位置再拖兩次，Obsidian 直接不搬（沒有任何事件）。原因：電腦版的 `adapter.rmdir(path, false)` 對資料夾一律回 `EISDIR`（空的也是），`rmdir(path, true)` 才刪得掉；有檔案時非遞迴照樣失敗。改成非遞迴失敗時再看一次是空的，才用遞迴的（`folder-host.ts`）。修正後 20 次拖動沒有再遇到鎖，所以「重試後刪空資料夾」沒有在實機走過一次完整流程；`rmdir` 的兩種行為在同一個 vault 實際確認過。
+- **W2｜修正：iCloud 留下的空資料夾刪不掉**：修正前，重試過的那一次在暫時的位置（`錯題本/考試範圍/`）留下空資料夾，錯誤紀錄記了 `where: "folder"`，訊息 `rm returned EISDIR`；之後同一個位置再拖兩次，Obsidian 直接不搬（沒有任何事件）。原因：電腦版的 `adapter.rmdir(path, false)` 對資料夾一律回 `EISDIR`（空的也是），`rmdir(path, true)` 才刪得掉；有檔案時非遞迴照樣失敗。改成非遞迴失敗時再看一次是空的，才用遞迴的（`folder-host.ts`）；Codex L2 第一輪 F2 指出確認與刪除之間進來的內容會被刪，已改成電腦版用 Node 的非遞迴 `rmdir`（`593d836`，**還沒在 Obsidian 實機走**）。修正後 20 次拖動沒有再遇到鎖，所以「重試後刪空資料夾」沒有在實機走過一次完整流程；`rmdir` 的兩種行為在同一個 vault 實際確認過。
 - **W3｜改名**：`紀錄` 改成 `紀錄X`：搬回、通知一次。
 - **W4｜另一台不搬**：整個過程 B 收到 0 次 `rename`、0 個通知，只有新增與刪除；提醒的判斷跟著 A 的結果變。
 - **W5｜Obsidian 以外搬動**：`考試範圍/` 搬進 `英文/`：兩台都不自動搬；A 的狀態列「1 項提醒」，入口提醒一區「「考試範圍」不在原位，現在在「Essence Cards/英文/考試範圍」。搬回「Essence Cards」底下，考試範圍與倒數就會回來」加「搬回原位」；`英文/考試範圍/` 裡的範圍檔不在卡組裡。按下按鈕：搬回原位、通知「已經把「考試範圍」搬回原位」、提醒消失，B 的提醒也消失。
