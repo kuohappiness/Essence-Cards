@@ -1,6 +1,6 @@
 # AI 製卡最小版：複製貼上、草稿與啟用（給 Claude，本機執行）
 
-狀態：實作做完、待 L2（2026-11-08，分支 `claude/ai-cards-mvp` 的 `e48c8b7`，[查核請求](ai-cards-mvp-review.md)）；§8 第 3 點做了 ChatGPT 與 Gemini（真人測試後改了兩次，Claude 網頁等額度），第 4 點（iPhone）還沒做，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
+狀態：實作做完、待 L2（2026-11-08，分支 `claude/ai-cards-mvp` 的 `fc1d57f`，[查核請求](ai-cards-mvp-review.md)）；§8 第 3 點做了 ChatGPT 與 Gemini（真人測試後改了兩次，Claude 網頁等額度），第 4 點（iPhone）還沒做，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§4～§6 寫進檔案的格式開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -332,6 +332,8 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 | `30c6153` | §8 補測試：需要新版的草稿按啟用會擋下（和目錄的暫停同一道門檻） |
 | `1ff5092` | 真人測試之後：提示請 AI 把回覆放進一個程式碼區塊（`提示 v2`），清單結構在複製時跑掉的擋下 |
 | `e48c8b7` | Gemini 重測之後：`<<<完>>>` 後面的圍欄與引用標記略過，每一項寫出那一行的原文，比較組的字句、沒有 `<<<完>>>` 的提示 |
+| `99ab639`、`7fe9774`、`fc1d57f` | 開發命令 `ai-cards` 先貼一份會擋下的回覆；只按自己建立那一篇分頁裡的啟用按鈕 |
+| `cffb1c8` | 合併 `main` 的 `eee68d4`（D-195） |
 
 **單元測試**：新增 `tests/ai-rules.test.ts`（3）、`ai-cards.test.ts`（16，含真人測試之後加的 2 個）、`ai-publish.test.ts`（7）、`ai-state.test.ts`（7）、`ai-cards-flow.test.ts`（2），`deck.test.ts` 登錄 AI 草稿的往返範例；`build`、`install`、`main-wiring`、`boundaries` 的測試跟著改。`npm run check` 在 `30c6153` 通過（pre-commit）。
 
@@ -395,3 +397,7 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 4. 沒有 `<<<完>>>` 的提示指到最後一行、寫出它的原文，並請家長回 AI 那邊看寫完了沒。
 
 實作（`e48c8b7`）：`src/core/ai/reply.ts` 的 `normalizeReply`（結尾的圍欄與引用標記）、`quoteLine`、`checkPiece` 的比較組字句；`draft.ts`（每一項的原文、沒有 `<<<完>>>` 的提示）；`src/core/deck/question-types.ts` 的 `pickWord` 與 `pick-mixed` 的字句；`ai-cards-modal.ts`。測試 `tests/ai-cards.test.ts`〈§4 <<<完>>> 後面的圍欄與引用標記〉。用真實資料重跑：存下來的回覆加回結尾的 ````` ````[cite: …] ````` 不擋，兩篇仍是 92／98 與 11／32；再加回 `lent` 那一題，只擋第 375 行，寫出那一行與「答案是 lend」；還沒寫完的那一份，提示指到第 301 行 `- play :: n. 戲劇`；之前 13 份輸出的結果和 `1ff5092` 相同。
+
+Windows 實機（開發版 `0.4.0+fc1d57f.dirty`，dirty 是還沒 commit 的查核請求；結果檔 `ai-cards Windows-c50c 2026-11-08 011152.json`）：開發命令 `ai-cards` 加了一步，先貼一份 `<<<完>>>` 後面多一句話的回覆，兩科都擋下、沒有「存成草稿」，畫面寫「第 22 行「希望這些卡片有幫助」：<<<完>>> 後面還有文字……」；提示也寫出原文（「第 15 行「- 能用粒子運動說明擴散現象 ^aiwrote」：AI 自己寫了 ID……」）。之後的存草稿、預覽、啟用照舊通過。
+
+第一次跑（`99ab639`）時，開發命令按的是整個畫面裡第一個「啟用」按鈕，點到使用者開著的另一個分頁：測試 vault 的 `國二上英文 L5 單字`（第一次 Gemini 的草稿），把它改成啟用，紀錄多一行 `set: status`。和快照比對，內文沒有其他改動（沒有補 ID、沒有作答），已把狀態行改回草稿；紀錄那一行留著。開發命令改成只按自己建立那一篇分頁裡的按鈕，確認視窗寫的不是那一篇就取消（`7fe9774`、`fc1d57f`）。產品的啟用按鈕本來就只在那一篇的分頁裡，不受影響。
