@@ -24,6 +24,8 @@ export const BEFORE_D195 = new Set([
   'objective-architecture-r2-transcription.md', 'objective-architecture.md', 'quiz-mark.md', 'quiz-practice.md', 'review-icons.md',
   'state-load.md', 'state-split.md', 'state-writes.md', 'update-safeguards.md', 'w1-w2-fixes.md', 'w1-w2.md', 'w3.md', 'w4.md',
   'w5.md', 'w6-format-review-fixes.md', 'w6-handoff.md', 'w6-l2-questions.md', 'w6-polish.md', 'w6.md',
+  // 狀態用了別的詞、當時沒命中的已結束任務（Codex 查核 D-195 第 4 節）。
+  'entry-and-catalog.md', 'exam-scope.md', 'question-type-seam.md', 'w6-iphone.md', 'iphone-test-2026-11.md',
 ]);
 
 export interface Exception { file: string; target: string; reason: string }
@@ -215,28 +217,72 @@ function checkStatus(doc: Doc): Problem[] {
   return [{ file: doc.file, line: index !== undefined ? index + 1 : heading.map![0] + 1, target: '狀態：', reason: '標題下第一個非空行沒有狀態' }];
 }
 
-const FINISHED = /狀態：\s*(?:已完成|已合併|已結案|完成)/;
-const DEFERRED_LINE = /^(?:[-*] )?(?:\*\*)?延後的測試(?:\*\*)?：(.*)$/;
+// 狀態值後面要是分隔符號：「已完成第一部分」不算結束（Codex 查核 D-195 第 4 節）。
+const FINISHED = /狀態：\s*(?:已完成|已合併|已結案|完成)(?=$|[\s（(：:，,、；;｜|→—])/;
+const FIELD = /^延後的測試：(.*)$/;
+const ROW_REF = /「((?:補測|補做)：[^」]+)」/g;
 
-// D-195：任務的狀態改成已完成、已合併、已結案時，〈結果〉要有一行「延後的測試：」，寫技術債表的「補測：」列或「無」。
-function checkDeferred(doc: Doc): Problem[] {
+// 標題的層級與純文字。
+const headingAt = (doc: Doc, i: number) => ({ level: Number(doc.tokens[i].tag.slice(1)), title: plainText(doc.tokens[i + 1].children ?? []).trim() });
+
+// 從標題 i 到下一個同層或更高層標題之間的 token 索引。
+function under(doc: Doc, i: number): [number, number] {
+  const { level } = headingAt(doc, i);
+  const end = doc.tokens.findIndex((token, j) => j > i && token.type === 'heading_open' && Number(token.tag.slice(1)) <= level);
+  return [i, end < 0 ? doc.tokens.length : end];
+}
+
+// 段落或清單項目開頭的「延後的測試：」；引用框、表格、程式碼與 HTML 裡的不算。
+function fields(doc: Doc, [from, to]: [number, number]): { line: number; value: string }[] {
+  const found: { line: number; value: string }[] = [];
+  let quote = 0;
+  for (let i = from; i < to; i++) {
+    const token = doc.tokens[i];
+    if (token.type === 'blockquote_open') quote++;
+    else if (token.type === 'blockquote_close') quote--;
+    else if (token.type === 'inline' && quote === 0 && doc.tokens[i - 1]?.type === 'paragraph_open') {
+      const match = FIELD.exec(plainText(token.children ?? []).trim());
+      if (match) found.push({ line: token.map![0] + 1, value: match[1].trim() });
+    }
+  }
+  return found;
+}
+
+// 技術債表每一列第一格的純文字（D-195 的計數與對照共用）。
+export function debtRows(doc: Doc | undefined): string[] {
+  if (!doc) return [];
+  const at = doc.tokens.findIndex((token, i) => token.type === 'heading_open' && headingAt(doc, i).title === '技術債');
+  if (at < 0) return [];
+  const [from, to] = under(doc, at);
+  const rows: string[] = [];
+  for (let i = from; i < to; i++) {
+    if (doc.tokens[i].type !== 'tr_open' || doc.tokens[i + 1]?.type !== 'td_open') continue;
+    rows.push(plainText(doc.tokens[i + 2].children ?? []).trim());
+  }
+  return rows;
+}
+
+const isDeferredRow = (row: string) => /^(?:補測|補做)：/.test(row);
+
+// D-195：任務的狀態改成已完成、已合併、已結案時，以「結果」開頭的二級標題底下（含三級小節）要有恰好一行「延後的測試：」，
+// 寫「無」或技術債表的列名（「補測：…」「補做：…」）。rows 有給時（只對這次改到的檔）列名要對得到。
+function checkDeferred(doc: Doc, rows?: string[]): Problem[] {
   const name = posix.basename(doc.file);
   if (posix.dirname(doc.file) !== 'tasks' || name === 'README.md' || name.endsWith('review.md') || BEFORE_D195.has(name)) return [];
   const { index } = statusLine(doc);
   if (index === undefined || !FINISHED.test(doc.lines[index])) return [];
-  const result = section(doc, '結果');
-  const start = result ? doc.tokens[result.open].map![0] : doc.lines.length;
-  const end = result && result.close < doc.tokens.length ? doc.tokens[result.close].map![0] : doc.lines.length;
-  const at = doc.lines.slice(start, end).findIndex(line => DEFERRED_LINE.test(line.trim()));
-  if (at < 0) return [{ file: doc.file, line: index + 1, target: '延後的測試：', reason: '任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）' }];
-  const value = DEFERRED_LINE.exec(doc.lines[start + at].trim())![1].trim();
-  if (!value || value.includes('實作後填')) return [{ file: doc.file, line: start + at + 1, target: '延後的測試：', reason: '還沒填：寫技術債表的「補測：」列或「無」（D-195）' }];
-  return [];
-}
-
-// 技術債表裡「補測：」「補做：」開頭的列數（D-195），只用來印出，不擋。
-function countDeferred(doc: Doc | undefined): number {
-  return doc ? doc.lines.filter(line => /^\|\s*(?:補測|補做)：/.test(line)).length : 0;
+  const problem = (line: number, reason: string): Problem[] => [{ file: doc.file, line, target: '延後的測試：', reason: `${reason}（D-195）` }];
+  const result = doc.tokens.findIndex((token, i) => token.type === 'heading_open' && token.tag === 'h2' && headingAt(doc, i).title.startsWith('結果'));
+  const found = result < 0 ? [] : fields(doc, under(doc, result));
+  if (!found.length) return problem(index + 1, '任務已結束，〈結果〉沒有「延後的測試：」一行');
+  if (found.length > 1) return problem(found[1].line, `「延後的測試：」有 ${found.length} 行，只能有一行`);
+  const { line, value } = found[0];
+  if (!value || value.includes('實作後填')) return problem(line, '還沒填：寫「無」或技術債表的列名');
+  if (value.startsWith('無')) return [];
+  const refs = [...value.matchAll(ROW_REF)].map(m => m[1].trim());
+  if (!refs.length) return problem(line, '寫「無」，或用「」括住技術債表的列名，例如「補測：……」');
+  if (!rows) return [];
+  return refs.filter(ref => !rows.some(row => row.startsWith(ref))).flatMap(ref => problem(line, `技術債表找不到「${ref}」開頭的列`));
 }
 
 export function checkDocs(root: string, { staged = false, exceptions = EXCEPTIONS }: { staged?: boolean; exceptions?: Exception[] } = {}) {
@@ -245,6 +291,9 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
   const docs = new Map([...texts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([file, text]) => [file, parse(file, text)]));
   const problems: Problem[] = [];
   const used = new Set<Exception>();
+  const rows = debtRows(docs.get(BACKLOG));
+  // 列名只對照這次 commit 改到的任務：補完刪掉的列，不會讓以前結束的任務壞掉。
+  const changed = staged ? new Set(git(root, ['diff', '--cached', '--name-only', '--no-renames', '--diff-filter=ACMR']).toString('utf8').split('\n').filter(Boolean)) : new Set<string>();
   let links = 0;
   for (const doc of docs.values()) {
     for (const { line, href } of linksOf(doc)) {
@@ -258,10 +307,10 @@ export function checkDocs(root: string, { staged = false, exceptions = EXCEPTION
     }
     if (doc.file === ROADMAP) problems.push(...checkRoadmap(doc));
     if (STATUS_DIRS.includes(posix.dirname(doc.file)) && posix.basename(doc.file) !== 'README.md') problems.push(...checkStatus(doc));
-    problems.push(...checkDeferred(doc));
+    problems.push(...checkDeferred(doc, changed.has(doc.file) ? rows : undefined));
   }
   for (const e of exceptions.filter(e => !used.has(e))) problems.push({ file: e.file, line: 0, target: e.target, reason: '例外表的這一項沒有用到，請刪掉' });
-  return { problems, files: docs.size, links, deferred: countDeferred(docs.get(BACKLOG)) };
+  return { problems, files: docs.size, links, deferred: rows.filter(isDeferredRow).length };
 }
 
 export const formatProblem = (p: Problem) => `${p.file}${p.line ? `:${p.line}` : ''}  ${p.target}  ${p.reason}`;

@@ -1,6 +1,6 @@
 # 測試分兩類（D-195）的查核（給 Codex）
 
-狀態：💬 等 Codex 查核（2026-11-07，使用者要求寫這份）
+狀態：已完成：Codex 查核完（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-test-two-kinds-review.md>)），發現都採用
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
