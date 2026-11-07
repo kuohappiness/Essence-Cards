@@ -164,7 +164,7 @@ export async function aiCardsDev(host: EntryDevHost & { device: string }, folder
     await capture('自然 啟用之後');
     checks.targetsAfter = state.deckTargets(deck).length;
     checks.statusAfter = parseDeck(await app.vault.adapter.read(deck)).props.status;
-    checks.activateButtonGone = !document.querySelector('.essence-cards-activate');
+    checks.activateButtonGone = !leaf?.view.containerEl.querySelector('.essence-cards-activate');
     await state.flush();
     const month = new Date().toISOString().slice(0, 7);
     const log = await app.vault.adapter.read(`Essence Cards/紀錄/${month} ${host.device}.jsonl`).catch(() => '');
