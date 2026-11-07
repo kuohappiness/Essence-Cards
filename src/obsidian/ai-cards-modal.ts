@@ -33,6 +33,16 @@ function ago(ms: number, now: number): string {
 }
 const labelOf = (job: CardJob): string => `${job.subject.subject === null ? '' : job.form.term}${job.subject.subject ?? job.subject.label} ${job.form.unit}`.trim();
 const lineText = (line: number): string => line ? `第 ${String(line)} 行：` : '';
+/** 同一句提示合成一列（例如每張圖都提示一次）：寫出共幾處與前幾個行號。 */
+function groupHints(hints: readonly { line: number; message: string }[]): string[] {
+  const groups = new Map<string, number[]>();
+  for (const { line, message } of hints) groups.set(message, [...groups.get(message) ?? [], line]);
+  return [...groups].map(([message, lines]) => {
+    if (lines.length === 1) return lineText(lines[0]) + message;
+    const shown = lines.slice(0, 5).join('、') + (lines.length > 5 ? '……' : '');
+    return `${message}（共 ${String(lines.length)} 處：第 ${shown} 行）`;
+  });
+}
 
 export interface AiCardsModalHost {
   cards: () => AiCards | null;
@@ -233,7 +243,7 @@ class AiCardsModal extends Modal {
     if (inspection.hints.length) {
       el.createEl('p', { text: TEXT.hints, cls: 'essence-cards-issue-note' });
       const hints = el.createEl('ul', { cls: 'essence-cards-issue-note' });
-      for (const each of inspection.hints) hints.createEl('li', { text: lineText(each.line) + each.message });
+      for (const line of groupHints(inspection.hints)) hints.createEl('li', { text: line });
     }
     if (!inspection.ended) {
       const label = el.createEl('label', { cls: 'essence-cards-remind-off' });

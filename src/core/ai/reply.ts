@@ -182,6 +182,8 @@ export function pieceText(normalized: Normalized, piece: Piece): { text: string;
 const HANDLED = new Set(['yaml', 'target-id', 'existing-id']);
 /** 名稱有自己的寫法、不寫「能……」的科目（syntax §2-3 英文、國語預設〈名稱〉）。 */
 const OWN_NAMES = new Set(['英文', '國語']);
+/** 出處可以不寫的科目：英文預設「出處、類型不用寫（出處沒寫就是這一課）」（english.md〈錯題〉前的寫法）。 */
+const SOURCE_OPTIONAL = new Set(['英文']);
 
 /** 一篇的檢查（§4〈檢查〉）：check-syntax 算錯誤的擋住、算不符的提示，提醒不列。 */
 export function checkPiece(text: string, rawLine: (line: number) => number, subject: Pick<RuleSubject, 'subject' | 'r3'>, form: CardForm): { errors: ReplyIssue[]; hints: ReplyIssue[]; result: CheckResult } {
@@ -190,6 +192,7 @@ export function checkPiece(text: string, rawLine: (line: number) => number, subj
   for (const issue of result.issues) {
     if (issue.level === '提醒' || HANDLED.has(issue.code)) continue;
     if (issue.code === 'target-name' && OWN_NAMES.has(subject.subject ?? '')) continue;
+    if (issue.code === 'no-source' && SOURCE_OPTIONAL.has(subject.subject ?? '')) continue;
     (issue.level === '錯誤' ? errors : hints).push({ line: rawLine(issue.line - 1), message: issue.msg });
   }
   const first = text.split('\n').findIndex(line => line.trim() !== '');

@@ -225,6 +225,10 @@ void test('§4 檢查：check-syntax 算錯誤的擋（缺答案、pick-mixed、
   assert.deepEqual(few.errors, []);
   assert.ok(few.hints.some(each => each.message.includes('每個字至少兩句')));
   assert.ok(!inspectEnglish(ENGLISH).hints.some(each => each.message.includes('「能……」')));
+  // 英文預設：出處沒寫就是這一課，不提示（english.md）。自然照樣提示。
+  const noSource = ENGLISH.split('\n').filter(line => !line.includes('出處：')).join('\n');
+  assert.ok(!inspectEnglish(noSource).hints.some(each => each.message.startsWith('沒有出處')));
+  assert.ok(inspectReply(R3_REPLY.replace('出處：p.44｜類型：因果', '類型：因果'), form(), science, [], nobody).hints.some(each => each.message.startsWith('沒有出處')));
 });
 
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {
