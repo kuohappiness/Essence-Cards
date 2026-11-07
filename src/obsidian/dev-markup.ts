@@ -2,6 +2,7 @@ import { displayTooltip } from 'obsidian';
 import type { App } from 'obsidian';
 import type { EditorView } from '@codemirror/view';
 import type { IdsWiring } from '../main.ts';
+import { fieldFixes, parseDeck } from '../core/deck/index.ts';
 import { keepRendering } from './dev-review.ts';
 import { openTab, shooter, sleep, until, writeFile } from './dev-ids.ts';
 
@@ -81,7 +82,6 @@ async function writeBackCheck(app: App, path: string, shoot: (name: string) => P
   await until(() => view.containerEl.querySelectorAll('.essence-cards-target').length > 0);
   await sleep(500);
   const content = view.containerEl;
-  const commands = (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands;
   const text = (): string => cm.state.doc.toString();
   const panel = () => document.querySelector<HTMLElement>('.essence-cards-source-form');
   const button = (label: string) => Array.from(panel()?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(each => each.textContent === label) ?? null;
@@ -91,8 +91,20 @@ async function writeBackCheck(app: App, path: string, shoot: (name: string) => P
     if (!el || !r) return;
     for (const type of ['mousedown', 'mouseup', 'click']) el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
   };
-  /** Ctrl+Z 一次：Obsidian 的復原命令。 */
-  const undoOnce = async (): Promise<boolean> => { cm.focus(); commands.executeCommandById('editor:undo'); await sleep(300); return text() === WRITE_DECK; };
+  /**
+   * Ctrl+Z 一次：按鍵送到編輯器（和真的鍵盤一樣先經過 Obsidian 的快捷鍵與 CodeMirror 的 keymap）。
+   * 第一次實測用 executeCommandById('editor:undo') 沒有作用，改送按鍵；沒回到原文時記下現在的字，後面的步驟先把字放回原文。
+   */
+  const undoOnce = async (): Promise<boolean | string> => {
+    cm.focus();
+    cm.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', keyCode: 90, ctrlKey: true, bubbles: true, cancelable: true }));
+    await sleep(300);
+    if (text() === WRITE_DECK) return true;
+    const now = text();
+    cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: WRITE_DECK } });
+    await sleep(400);
+    return now;
+  };
   cm.focus();
   out.fixMarks = Array.from(content.querySelectorAll<HTMLElement>('.essence-cards-fix')).map(el => ({ text: el.textContent, label: el.getAttribute('aria-label'), decoration: getComputedStyle(el).textDecorationStyle + ' ' + getComputedStyle(el).textDecorationColor, cursor: getComputedStyle(el).cursor }));
   out.sourceMarks = Array.from(content.querySelectorAll<HTMLElement>('.essence-cards-source')).map(el => ({ text: el.textContent, label: el.getAttribute('aria-label') }));
@@ -300,6 +312,17 @@ export async function markupCheck(app: App, wiring: IdsWiring | null, folder: st
     // 打字停下來 250 ms 後重新解析：等一下，標示和重新打開時一樣。
     await sleep(600);
     out.afterTyping = wiring.markup.marks(bigCm.state).length;
+    // 重新解析的時間拆開看：解析（含 layout）與 §1-4 的判斷各量 10 次。
+    const bigText = bigCm.state.doc.toString(), parseMs: number[] = [], fixMs: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      let t = performance.now();
+      const deck = parseDeck(bigText, { layout: true });
+      parseMs.push(performance.now() - t);
+      t = performance.now();
+      fieldFixes(bigText, deck);
+      fixMs.push(performance.now() - t);
+    }
+    out.split = { parseMs: Math.round(sorted(parseMs)[5] * 10) / 10, fixesMs: Math.round(sorted(fixMs)[5] * 10) / 10 };
   } finally {
     for (const leaf of leaves) leaf.detach();
     rendering.restore();
