@@ -1,8 +1,28 @@
 # 系統資料夾的防呆：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第三輪，2026-11-07）；第一輪 F1～F4、第二輪 F1、F4～F6 已修
+狀態：待審（第四輪，2026-11-07）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）已修
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-07-system-folder-guard-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
+
+## 第四輪（2026-11-07）
+
+請**新開一個 Codex 對話**（推理等級：高；不要沿用第三輪的對話，[quality.md](../docs/agents/quality.md) 的〈Codex 審查時〉），回報接在討論稿最後（〈Codex 第四輪〉）。先讀討論稿的〈Codex 第三輪〉與〈Claude 回應：第三輪〉。
+
+- **待審**：`d1c5667ba4f40cfba61d49910fa6ee62d5d27cd8`（第三輪 F1（續）的修正與回歸測試）。它之後只有文件的 commit。
+- **基準**：`48ec6cfae0b6375a52e189f43a65d4cbd80ae676`（第三輪的待審）。
+
+```bash
+git diff 48ec6cfae0b6375a52e189f43a65d4cbd80ae676 d1c5667ba4f40cfba61d49910fa6ee62d5d27cd8 -- src tests
+```
+
+- **改了什麼**：只有 `src/obsidian/folder-guard.ts`（`stranded` 記 `{ from, at }`、`follow`、`Hold.at`、`unite`）與 `tests/folder-guard.test.ts`（第二輪 F1 的改名那一個改寫，新增「第三輪 F1」5 個）。
+- **請特別找**：
+  - `follow` 換位置的規則：子樹前綴、拖回原位才清掉、換到別的系統資料夾原位時 `stranded` 不清（只有 `judged` 清）。有沒有該排除卻沒排除、排除了家長自己的卡組。
+  - 事件順序：Obsidian 對資料夾本身與底下每一項各送一次 rename；`follow` 用 `host.files()` 重算時，替身是搬動之前的清單、實際 Obsidian 是之後的，送出的重讀通知夠不夠。
+  - `Hold.at`：搬回期間又改名、防呆自己的搬回 rename、逾時之後才搬好或才失敗，和 `release` 記的位置。
+  - `judged` 跟著換：下一次判斷之前的結果，以及和 §2-2 同名判斷結果不同時誰為準。
+  - 〈Claude 回應：第三輪〉留著的判斷時過濾（Obsidian 以外搬走後又在舊位置建資料夾）理由是否成立。
+- **驗證**：實作者跑過 `npm run check`（pre-commit，1927 個測試）、第三輪的探針（R3a、R3b 改成失敗，R3c～R3f 通過）、11 種變異。這一輪沒有重跑 Windows 實機（見回應）。請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
 
 ## 第三輪（2026-11-07）
 

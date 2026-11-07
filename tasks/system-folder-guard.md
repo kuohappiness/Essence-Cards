@@ -1,6 +1,6 @@
 # 系統資料夾的防呆（給 Claude，本機執行）
 
-狀態：§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完，Windows 實機通過（2026-11-07，〈實作〉、〈Windows 實機〉）；Codex L2 第一輪的 F1～F4、第二輪的 F1、F4～F6 已修（`593d836`、`48ec6cf`），修正後 Windows 實機重測通過（W8、W9），等第三輪；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
+狀態：§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完，Windows 實機通過（2026-11-07，〈實作〉、〈Windows 實機〉）；Codex L2 第一輪的 F1～F4、第二輪的 F1、F4～F6 已修（`593d836`、`48ec6cf`），修正後 Windows 實機重測通過（W8、W9）；第三輪的 F1（續）已修（`d1c5667`，只改判斷用的記錄，沒有重跑實機），等第四輪；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。§1 會替家長搬動 vault 裡的資料夾，§2 會改哪些檔算卡組（`core/deck` 與 `state` 都用），屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。不新增、不改任何寫進檔案的格式，所以**不用開工前的格式查核**（[quality.md](../docs/agents/quality.md#開工前的格式查核) 只管格式）。
 
@@ -84,7 +84,7 @@ Windows 檔案總管、iPhone 的「檔案」App 搬的，或同步過來的，O
 - **檔案**：名單與判斷是純函式 `src/core/deck/folders.ts`（`SYSTEM_FOLDERS` 搬到這裡，`read.ts` 從這裡拿）；搬回、重試、清空資料夾、記住的名字在 `src/obsidian/folder-guard.ts`（vault 的操作經過一層 `GuardHost`，Node 測得到），接上 Obsidian 的是 `src/obsidian/folder-host.ts`；提醒的文字在 `src/review/entry.ts` 的 `reminderView`。
 - **和上面寫的不同的地方**：
   - 監聽不在 onload 註冊，改在 layout ready、建立 state 之前：onload 碰 vault 會破壞「layout ready 之前不碰 vault」（T12，`tests/main-wiring.test.ts`）；仍然比 state 的監看早，§1-8 擋得住。監看不了時防呆不作用、不另外記，state 用同一個 `vault.on` 會記一行 `init`。
-  - §1-8 的做法：給 state 的 `Files` 包一層，搬回期間舊、新位置的通知先擋住，搬好了（或放棄了）照順序送，state 只看到內容沒變的重讀。這兩處的讀、寫、列也先等搬回結束（含搬動前就排好的重讀、作答的追加、補 ID），暫時位置裡的檔不補 ID（Codex L2 第一輪 F1）。確認沒有在搬回和開始讀寫在同一個同步段落，`obsidian/files.ts` 排隊之後、找檔之前再問一次（第二輪 F1）。放棄時原有的紀錄留在暫時的位置、新的作答寫在原位，提醒一區列成「兩邊都有」，兩份都在；暫時的位置在放行的那一刻就不當卡組（含改成別的名字的），不等其他搬回結束（第二輪 F1）。一次搬回最多擋 12 秒，到時記下、請家長自己拖回、放行；停用外掛時待重試的停下、擋住的讀寫放行（第二輪 F5）。
+  - §1-8 的做法：給 state 的 `Files` 包一層，搬回期間舊、新位置的通知先擋住，搬好了（或放棄了）照順序送，state 只看到內容沒變的重讀。這兩處的讀、寫、列也先等搬回結束（含搬動前就排好的重讀、作答的追加、補 ID），暫時位置裡的檔不補 ID（Codex L2 第一輪 F1）。確認沒有在搬回和開始讀寫在同一個同步段落，`obsidian/files.ts` 排隊之後、找檔之前再問一次（第二輪 F1）。放棄時原有的紀錄留在暫時的位置、新的作答寫在原位，提醒一區列成「兩邊都有」，兩份都在；暫時的位置在放行的那一刻就不當卡組（含改成別的名字的），不等其他搬回結束（第二輪 F1）；之後在 Obsidian 裡再改名、上一層改名都跟著換，拖回原位就不再記，舊位置再建的資料夾是家長自己的（第三輪 F1）。一次搬回最多擋 12 秒，到時記下、請家長自己拖回、放行；停用外掛時待重試的停下、擋住的讀寫放行（第二輪 F5）。
   - §2-3 的做法：同一層 `Files` 不列、讀不到搬錯位置的資料夾裡的檔，判定改變時通知那幾個檔讓 state 重讀；寫入另加 `StateOptions.skip`，存檔與離開筆記時不補 ID。`tools/install.ts` 的 `readDecks` 不改：它在 Obsidian 外面跑，沒有這台記住的名字。
   - 通知不寫「複習進度會看不到」（只對 `紀錄` 成立），改成「`「X」是外掛用的資料夾，不能搬動或改名，已經搬回原位`」；提醒一區照資料夾寫搬回後會怎樣（`紀錄` 是複習進度、`考試範圍` 是範圍與倒數）。
   - §1-5 的空資料夾每次搬回都看（不只重試過的），只刪完全空的；原位只剩 Obsidian 看不到、磁碟上的空資料夾時先刪再搬（§1-3「沒有東西」的一種），看得到的空資料夾當成有東西，等磁碟的時候才看到的也算（F4、第二輪 F4）。電腦版刪除照實際路徑判斷，經過 junction 走到 vault 外、本身是連結的不刪（第二輪 F6）。刪除一律非遞迴：電腦版的 `adapter.rmdir(path, false)` 對資料夾回 `EISDIR`（W2），改用 `src/desktop` 的 `removeEmptyFolder`（Node 的 `rmdir`），其他平台用 `adapter.rmdir(path, false)`（F2）。搬回途中任何一步失敗都記錄、通知（F3）。
