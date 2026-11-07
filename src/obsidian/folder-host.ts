@@ -28,13 +28,19 @@ export function wireFolderGuard(plugin: Plugin, options: {
       const found = vault.getAbstractFileByPath(path);
       return found instanceof TFolder ? 'folder' : found instanceof TFile ? 'file' : null;
     },
+    // Obsidian 在 vault 裡改名、搬動時改的是同一個 TFolder 的 path；Obsidian 以外搬動、刪掉時拿掉舊的、建新的（Codex L2 第四輪）。
+    folder(path) {
+      const found = vault.getAbstractFileByPath(path);
+      return found instanceof TFolder ? found : null;
+    },
+    // 還在清單裡、而且那個位置就是它本身：拿掉之後同一個位置再建的是另一個物件。
+    where: folder => folder instanceof TFolder && vault.getAbstractFileByPath(folder.path) === folder ? folder.path : null,
     exists: path => vault.adapter.exists(path),
     empty,
     // 只用非遞迴的刪除：有東西就失敗，不會刪到內容。
     rmdir: options.removeEmpty ?? (path => vault.adapter.rmdir(path, false)),
-    async move(from, to) {
-      const folder = vault.getAbstractFileByPath(from);
-      if (!(folder instanceof TFolder)) throw Error('找不到資料夾：' + from);
+    async move(folder, to) {
+      if (!(folder instanceof TFolder)) throw Error('不是資料夾：' + to);
       await app.fileManager.renameFile(folder, to);
     },
     notify: options.notify,

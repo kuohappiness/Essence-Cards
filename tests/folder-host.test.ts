@@ -90,9 +90,11 @@ function plugin(rmdir: (path: string, recursive: boolean) => Promise<void>) {
   const from = `${R}/英文/考試範圍`;
   const files = [`${R}/英文/L1.md`, `${from}/段考.md`];
   const renamed: string[] = [];
+  // 同一個位置每次拿到同一個物件（Obsidian 的清單也是）：防呆照物件認資料夾。
+  const folders = new Map([R, `${R}/英文`, from].map(path => [path, new TFolder(path)]));
   const vault = {
     getFiles: () => files.map(path => ({ path })),
-    getAbstractFileByPath: (path: string) => [R, `${R}/英文`, from].includes(path) ? new TFolder(path) : null,
+    getAbstractFileByPath: (path: string) => folders.get(path) ?? null,
     on: () => ({}),
     adapter: { exists: () => Promise.resolve(true), list: () => Promise.resolve({ files: [], folders: [] }), rmdir },
   };

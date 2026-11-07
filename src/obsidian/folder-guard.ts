@@ -5,19 +5,29 @@ import type { Files } from '../core/files.ts';
 // 系統資料夾的防呆（tasks/system-folder-guard.md）：Obsidian 裡搬動或改名就搬回（§1），Obsidian 以外的在提醒一區寫出位置（§2）。
 // 這裡不碰 obsidian 的執行期：vault 的操作經過 GuardHost（folder-host.ts 接上 Obsidian，測試用替身）。
 
+/** 資料夾本身（Obsidian 的 TFolder）：只有 GuardHost 認得，防呆只拿來問位置、搬動。 */
+export type FolderRef = object;
+
 export interface GuardHost {
   /** vault 裡所有檔的路徑。 */
   files(): string[];
   /** Obsidian 的清單裡有這個資料夾或檔（vault.getAbstractFileByPath）。 */
   known(path: string): 'folder' | 'file' | null;
+  /**
+   * 這個位置的資料夾本身；不是資料夾是 null。在 Obsidian 裡改名、搬動（含上一層）時還是同一個，位置跟著換；Obsidian 以外搬動、
+   * 刪掉再建的是另一個（Codex L2 第四輪）。
+   */
+  folder(path: string): FolderRef | null;
+  /** 資料夾現在的位置；已經不在 vault 裡（Obsidian 以外搬走、刪掉）是 null。 */
+  where(folder: FolderRef): string | null;
   /** 磁碟上有沒有（iCloud 留下的空資料夾 Obsidian 看不到，§1-3、R5）。 */
   exists(path: string): Promise<boolean>;
   /** 磁碟上這個資料夾完全是空的（沒有檔、也沒有子資料夾）。 */
   empty(path: string): Promise<boolean>;
   /** 刪掉空的資料夾（非遞迴：有東西就失敗）。 */
   rmdir(path: string): Promise<void>;
-  /** 把資料夾從 from 搬到 to（fileManager.renameFile：和檔案列拖動同一條路，連結跟著改）。 */
-  move(from: string, to: string): Promise<void>;
+  /** 把資料夾本身搬到 to（fileManager.renameFile：和檔案列拖動同一條路，連結跟著改）。不照路徑找：同一個位置換了資料夾也不會搬錯。 */
+  move(folder: FolderRef, to: string): Promise<void>;
   notify(message: string): void;
   /** 交給錯誤紀錄（D-155）。 */
   fail(error: unknown): void;
@@ -35,7 +45,7 @@ export interface GuardHost {
 export interface FolderGuard {
   /**
    * vault 的 rename 事件，要在 state 的監看之前收到（先註冊）：同一批的通知才擋得住。所有資料夾的改名都要送進來：
-   * 記著的暫時位置跟著換（Codex L2 第三輪 F1）。
+   * 判斷出來搬錯位置的跟著換（Codex L2 第三輪 F1）。
    */
   renamed(path: string, oldPath: string, folder: boolean): void;
   /** vault 有新增、刪除、改名：等一下重新判斷（§2-2）。 */
@@ -91,27 +101,29 @@ function locked(error: unknown): boolean {
 
 const inside = (path: string, folder: string): boolean => path === folder || path.startsWith(folder + '/');
 const parentOf = (path: string): string => path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+/** 系統資料夾的原位（名單裡的一個）。 */
+const guarded = (path: string): boolean => guardedMoves([path]).length > 0;
 
 /**
- * 正在搬回的一筆：原位（from）與暫時的位置（to）。搬好了或放棄了 done 才完成，等著的讀寫接著做（§1-8）。at 是資料夾現在的位置：
- * 搬回期間家長又在 Obsidian 裡改名就跟著換（第三輪 F1），放棄時記的是它。
+ * 正在搬回的一筆：原位（from）、收到 rename 時的暫時位置（to）與資料夾本身（ref）。搬好了或放棄了 done 才完成，等著的讀寫接著做
+ * （§1-8）。資料夾現在在哪裡問 ref（Codex L2 第四輪）：搬回期間家長又改名、拖回原位，都照它現在的位置。
  */
-interface Hold { from: string; to: string; at: string; done: Promise<void>; finish: () => void }
+interface Hold { from: string; to: string; ref: FolderRef | null; done: Promise<void>; finish: () => void }
 
-function hold(from: string, to: string): Hold {
+function hold(from: string, to: string, ref: FolderRef | null): Hold {
   let finish = (): void => {};
   const done = new Promise<void>(resolve => { finish = resolve; });
-  return { from, to, at: to, done, finish };
+  return { from, to, ref, done, finish };
 }
 
-/** 這一筆擋住 path 這個檔。 */
-const onPath = (path: string) => (each: Hold): boolean => inside(path, each.from) || inside(path, each.to);
-/** 這一筆擋住列 folder 底下（'' 是整個 vault）：兩邊有一邊在另一邊裡面。 */
-const onFolder = (folder: string) => (each: Hold): boolean =>
-  [each.from, each.to].some(at => folder === '' || inside(at, folder) || inside(folder, at));
+/** 沒搬回的資料夾：原位（from）、放棄時的暫時位置（to）與資料夾本身（ref）。 */
+interface Stray { from: string; to: string; ref: FolderRef | null }
 
-/** 'stopped'：停用或超過總時限，這一筆已經放行，不再往下做。 */
-type Result = 'done' | 'occupied' | 'gone' | 'failed' | 'stopped';
+/**
+ * 'stopped'：停用或超過總時限，這一筆已經放行，不再往下做。'back'：家長已經把它拖回原位（第四輪 F1a），不搬、不通知、不記。
+ * 'gone'：上一層不在，或資料夾已經不在 vault 裡（Obsidian 以外搬走、刪掉），交給 §2-2 的判斷。
+ */
+type Result = 'done' | 'back' | 'occupied' | 'gone' | 'failed' | 'stopped';
 
 export function createFolderGuard(host: GuardHost): FolderGuard {
   /** 正在搬回的。 */
@@ -127,22 +139,42 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
   /** 判斷出來搬錯位置的資料夾（§2-2）。 */
   let judged: string[] = [];
   /**
-   * 沒搬回的資料夾：原位（from）與現在的位置（at）（Codex L2 第二輪 F1）。放行的那一刻就不當卡組，不等其他搬回結束才判斷；
-   * 改成別的名字的（§2-2 只找同名）也照 rename 事件知道的位置。之後在 Obsidian 裡再改名、上一層改名就跟著換，拖回原位就不再記
-   * （第三輪 F1，follow）；判斷時拿掉 Obsidian 已經看不到的（Obsidian 以外搬走、刪掉）。只記在記憶體。
+   * 沒搬回的資料夾（Codex L2 第二輪 F1、第四輪）：放行的那一刻就不當卡組，不等其他搬回結束才判斷；改成別的名字的（§2-2 只找同名）
+   * 也算。位置每次問資料夾本身，所以之後在 Obsidian 裡再改名、上一層改名都跟著走，拖回原位、Obsidian 以外搬走就不再排除，舊位置
+   * 再建的資料夾是另一個，不會被當成它。判斷時拿掉已經不在、或回到原位的。只記在記憶體。
    */
-  let stranded: { from: string; at: string }[] = [];
-  /** 不當卡組的資料夾：judged 加 stranded。 */
+  let stranded: Stray[] = [];
+  /** 上一次算出來不當卡組的資料夾：只用來找出變了的，讓 state 重讀（判斷本身每次重算，hidden）。 */
   let excluded: string[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
   /** layout ready 之後第一次 check() 才開始：之前 vault 的清單還不完整。 */
   let started = false;
 
+  /** 資料夾現在的位置；認不得資料夾本身時（收到 rename 時還找不到）是收到時的位置。 */
+  const placeOf = (move: Hold): string | null => move.ref ? host.where(move.ref) : move.to;
+  /** 這一筆會碰到的位置：原位、收到時的暫時位置、資料夾現在的位置（第四輪 F1b：搬回期間又改名的新位置也等）。 */
+  const spots = (move: Hold): string[] => {
+    const at = placeOf(move);
+    return at === null ? [move.from, move.to] : [move.from, move.to, at];
+  };
+  /** 這一筆擋住 path 這個檔。 */
+  const onPath = (path: string) => (each: Hold): boolean => spots(each).some(at => inside(path, at));
+  /** 這一筆擋住列 folder 底下（'' 是整個 vault）：兩邊有一邊在另一邊裡面。 */
+  const onFolder = (folder: string) => (each: Hold): boolean =>
+    spots(each).some(at => folder === '' || inside(at, folder) || inside(folder, at));
   const holding = (path: string): boolean => holds.some(onPath(path));
-  /** judged 加 stranded。 */
-  const unite = (): string[] => [...new Set([...judged, ...stranded.map(each => each.at)])];
-  const hidden = (path: string): boolean => excluded.some(folder => inside(path, folder));
+  /** 沒搬回的資料夾現在的位置；不在 vault 裡是 null。認不得資料夾本身的，照放棄時的位置還是不是資料夾。 */
+  const strayAt = (each: Stray): string | null => each.ref ? host.where(each.ref) : host.known(each.to) === 'folder' ? each.to : null;
+  /**
+   * 不當卡組的位置：判斷出來的，加上沒搬回、還在 vault 裡的。落在某個系統資料夾原位的不算：那裡的檔照那個資料夾的規則（系統資料夾
+   * 裡的 .md 本來就不是卡組），別台同步來的紀錄照樣讀得到（第四輪 F1c）；它之後再搬出去又會排除。
+   */
+  const unite = (): string[] => [...new Set([...judged, ...stranded.flatMap(each => {
+    const at = strayAt(each);
+    return at === null || guarded(at) ? [] : [at];
+  })])];
+  const hidden = (path: string): boolean => unite().some(folder => inside(path, folder));
   /**
    * 擋住的搬回都結束了才做 run（§1-8）：state 的讀寫不管是搬動前就排好的、作答或存檔才開始的，都在搬好之後照原位做；放棄了就照
    * 搬錯位置的規則（release 先排除才放行）。最後一次確認沒有擋住和 run 在同一個同步段落：中間不會又開始一筆（第二輪 F1）。
@@ -157,8 +189,9 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
     }
   };
 
-  /** 換掉不當卡組的資料夾；變了的那幾個資料夾裡的檔讓 state 重讀一次（讀不到就拿掉，回來了就讀進來）。 */
-  function exclude(next: string[], files: string[]): void {
+  /** 重算不當卡組的資料夾；變了的那幾個資料夾裡的檔讓 state 重讀一次（讀不到就拿掉，回來了就讀進來）。 */
+  function refresh(files: string[] = host.files()): void {
+    const next = unite();
     const flipped = [...excluded.filter(f => !next.includes(f)), ...next.filter(f => !excluded.includes(f))];
     excluded = next;
     for (const path of files) if (flipped.some(folder => inside(path, folder))) emit(path);
@@ -177,8 +210,11 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
     if (added.length) { remembered = [...remembered, ...added]; host.save(remembered); }
     const issues = folderIssues(files, remembered);
     judged = misplacedFolders(issues);
-    stranded = stranded.filter(each => host.known(each.at) === 'folder');
-    exclude(unite(), files);
+    stranded = stranded.filter(each => {
+      const at = strayAt(each);
+      return at !== null && at !== each.from;
+    });
+    refresh(files);
     if (JSON.stringify(issues) === JSON.stringify(current)) return;
     current = issues;
     for (const listener of [...listeners]) {
@@ -187,19 +223,31 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
   }
 
   /**
-   * 搬回 from（現在的位置）→ to（原位）。原位有東西、上一層不在就不搬（§1-3）。不會拒絕：途中任何一步失敗都記進錯誤紀錄、
-   * 通知家長自己拖回去，回 'failed'（Codex L2 F3）。live() 不成立（停用、超過總時限）就不再開始下一步，回 'stopped'。
+   * 搬回一筆：資料夾本身（move.ref）→ 原位（move.from）。原位有東西、上一層不在就不搬（§1-3）。每次搬之前都問資料夾現在在哪裡
+   * （Codex L2 第四輪 F1a）：家長已經拖回原位就不搬，不在 vault 裡就交給判斷；搬的是資料夾本身，舊位置再建的家長資料夾不會被搬走。
+   * 不會拒絕：途中任何一步失敗都記進錯誤紀錄、通知家長自己拖回去，回 'failed'（Codex L2 F3）。live() 不成立（停用、超過總時限）
+   * 就不再開始下一步，回 'stopped'。
    */
-  async function restore(from: string, to: string, live: () => boolean): Promise<Result> {
+  async function restore(move: Hold, live: () => boolean): Promise<Result> {
+    const to = move.from;
+    /** 已經不用搬了：回到原位，或不在 vault 裡。 */
+    const settled = (): 'back' | 'gone' | null => {
+      const at = placeOf(move);
+      return at === to ? 'back' : at === null || !move.ref ? 'gone' : null;
+    };
+    let left = move.to;
     try {
+      move.ref ??= host.folder(move.to);
       const up = parentOf(to);
       if (up && host.known(up) !== 'folder') return 'gone';
       if (host.known(to) || await host.exists(to)) {
         // 原位只剩 Obsidian 看不到、磁碟上完全是空的資料夾（iCloud 留下的，或 Obsidian 以外搬走後剩的）：刪掉再搬。
         // Obsidian 看得到的（家長建的空資料夾也算）和有東西的一樣，不刪、不合併、不覆蓋（F4）；等磁碟的時候 Obsidian
-        // 可能已經看到了，所以刪之前再問一次（第二輪 F4）。
+        // 可能已經看到了，所以刪之前再問一次（第二輪 F4）。等的時候家長可能已經拖回原位：那就不是被占住。
         if (host.known(to) || !await host.empty(to) || host.known(to)) {
-          host.notify(OCCUPIED(to, from));
+          const now = settled();
+          if (now) return now;
+          host.notify(OCCUPIED(to, placeOf(move) ?? move.to));
           return 'occupied';
         }
         if (!live()) return 'stopped';
@@ -208,8 +256,12 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
       const start = host.now();
       for (;;) {
         if (!live()) return 'stopped';
+        const now = settled();
+        if (now) return now;
+        const ref = move.ref;
+        left = placeOf(move) ?? left;
         try {
-          await host.move(from, to);
+          if (ref) await host.move(ref, to);
           break;
         } catch (error) {
           if (!locked(error) || host.now() - start >= RETRY_FOR) throw error;
@@ -218,11 +270,13 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
       }
     } catch (error) {
       if (!live()) return 'stopped';
+      // 搬的時候家長已經拖回原位（第四輪 F1a）：不是失敗，不通知。
+      if (settled() === 'back') return 'back';
       host.fail(error);
       host.notify(GAVE_UP(to));
       return 'failed';
     }
-    void cleanup(from);
+    void cleanup(left);
     return 'done';
   }
 
@@ -246,7 +300,7 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
    */
   function attempt(move: Hold): Promise<Result> {
     let late = false;
-    const work = restore(move.to, move.from, () => !closed && !late);
+    const work = restore(move, () => !closed && !late);
     return new Promise<Result>(resolve => {
       const cancel = host.later(HOLD_LIMIT, () => {
         late = true;
@@ -265,33 +319,6 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
         resolve(result);
       }).catch((error: unknown) => { host.fail(error); resolve('failed'); });
     });
-  }
-
-  /**
-   * 資料夾在 Obsidian 裡從 oldPath 改名成 path（第三輪 F1）：在它裡面（含它自己）的記錄跟著換。沒搬回的拖回原位就不再記：之後在
-   * 舊位置新建的資料夾是家長自己的。判斷出來的（judged）也跟著換，補上下一次判斷之前的空檔；換到某個系統資料夾的原位就拿掉。
-   * 搬回中的那一筆換 at；搬回自己的改名（換回 from）不算。
-   */
-  function follow(oldPath: string, path: string): void {
-    const moved = (at: string): string | null => inside(at, oldPath) ? path + at.slice(oldPath.length) : null;
-    for (const move of holds) {
-      const at = moved(move.at);
-      if (at !== null && at !== move.from) move.at = at;
-    }
-    let changed = false;
-    stranded = stranded.flatMap(each => {
-      const at = moved(each.at);
-      if (at === null) return [each];
-      changed = true;
-      return at === each.from ? [] : [{ from: each.from, at }];
-    });
-    judged = judged.flatMap(folder => {
-      const at = moved(folder);
-      if (at === null) return [folder];
-      changed = true;
-      return guardedMoves([at]).length ? [] : [at];
-    });
-    if (changed) exclude(unite(), host.files());
   }
 
   function flush(): void {
@@ -316,15 +343,29 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
   }
 
   /**
-   * 搬好了或放棄了：沒搬回的暫時位置先排除（第二輪 F1），送出擋住的通知、重新判斷（其他搬回還在進行時不判斷），最後才讓
+   * 判斷出來搬錯位置的資料夾在 Obsidian 裡從 oldPath 改名成 path（第三輪 F1）：在它裡面（含它自己）的跟著換，補上下一次判斷之前
+   * 的空檔；換到某個系統資料夾的原位就拿掉。沒搬回的不用換：位置每次問資料夾本身。
+   */
+  function follow(oldPath: string, path: string): void {
+    judged = judged.flatMap(folder => {
+      if (!inside(folder, oldPath)) return [folder];
+      const at = path + folder.slice(oldPath.length);
+      return guarded(at) ? [] : [at];
+    });
+    refresh();
+  }
+
+  /**
+   * 搬好了或放棄了：沒搬回的資料夾先排除（第二輪 F1），送出擋住的通知、重新判斷（其他搬回還在進行時不判斷），最後才讓
    * 等著的讀寫接著做。可以呼叫兩次（停用時先放行，搬回結束時再一次）。
    */
   function release(move: Hold, result: Result): void {
     const at = holds.indexOf(move);
     if (at >= 0) holds.splice(at, 1);
-    if (result !== 'done' && !closed && !stranded.some(each => each.at === move.at)) {
-      stranded = [...stranded, { from: move.from, at: move.at }];
-      try { exclude(unite(), host.files()); } catch (error) { host.fail(error); }
+    const same = (each: Stray): boolean => each.ref || move.ref ? each.ref === move.ref : each.to === move.to;
+    if (result !== 'done' && result !== 'back' && !closed && !stranded.some(same)) {
+      stranded = [...stranded, { from: move.from, to: move.to, ref: move.ref }];
+      try { refresh(); } catch (error) { host.fail(error); }
     }
     const ready = held.filter(path => !holding(path));
     held.splice(0, held.length, ...held.filter(holding));
@@ -338,7 +379,7 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
       if (closed || !folder) return;
       try { follow(oldPath, path); } catch (error) { host.fail(error); }
       if (!guardedMoves([oldPath]).length || holding(oldPath)) return;
-      const move = hold(oldPath, path);
+      const move = hold(oldPath, path, host.folder(path));
       holds.push(move);
       if (!batch.length) host.defer(flush);
       batch.push(move);
@@ -352,14 +393,14 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
     issues: () => current,
     async moveBack(issue) {
       if (closed || issue.kind !== 'moved' || issue.at.length !== 1) return false;
-      const move = hold(issue.folder, issue.at[0]);
+      const move = hold(issue.folder, issue.at[0], host.folder(issue.at[0]));
       holds.push(move);
       let result: Result = 'failed';
       // 不拒絕（按鈕不必再接）：失敗的原因 restore 自己通知、記進錯誤紀錄；通知本身拋錯也記下。
       try {
         result = await attempt(move);
         if (result === 'done') host.notify(`Essence Cards：已經把「${folderLabel(issue.folder)}」搬回原位`);
-        return result === 'done';
+        return result === 'done' || result === 'back';
       } catch (error) {
         host.fail(error);
         return false;
@@ -373,8 +414,12 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
     pause(path, folder = false) {
       return holds.find(folder ? onFolder(path) : onPath(path))?.done ?? null;
     },
-    // 搬回期間暫時位置裡的檔也不當卡組：開在編輯器裡的範圍檔存檔、離開筆記都不補 ID（F1）。
-    misplaced: path => hidden(path) || holds.some(each => inside(path, each.to) || inside(path, each.at)),
+    // 搬回期間資料夾所在的暫時位置裡的檔也不當卡組：開在編輯器裡的範圍檔存檔、離開筆記都不補 ID（F1）。回到原位、落在系統資料夾
+    // 原位的不算。
+    misplaced: path => hidden(path) || holds.some(each => {
+      const at = placeOf(each);
+      return at !== null && !guarded(at) && inside(path, at);
+    }),
     wrap(files) {
       // 搬回期間原位與暫時位置的讀寫都先等（when），寫入的門檻在 modify 的回呼裡會再看一次（writes.ts）。
       // 這一層之下的 obsidian/files.ts 排隊之後、真正碰檔案之前，再用 pause 問一次。
