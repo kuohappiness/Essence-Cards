@@ -3,7 +3,7 @@ import { parseDeck, splitUnit, TRAILING_ID } from '../deck/index.ts';
 import { PICK_NEEDS } from '../version/index.ts';
 import { sha256Hex, titlePrefix } from './prompt.ts';
 import type { CardForm, ExistingTarget } from './prompt.ts';
-import { checkPiece, nameLineIds, normalizeReply, pieceText, safeFileName, segmentReply, splitReply } from './reply.ts';
+import { checkPiece, nameLineIds, normalizeReply, pieceText, quoteLine, safeFileName, segmentReply, splitReply } from './reply.ts';
 import type { Normalized, Piece, ReplyIssue } from './reply.ts';
 import type { RuleSubject } from './rules.ts';
 
@@ -94,8 +94,16 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
       pieces.push({ ...piece, names, adds, pick: deck.targets.some(t => t.group), targets: deck.targets.length, prompts: deck.targets.reduce((sum, t) => sum + t.prompts.length, 0), candidates: result.candidates.length });
     }
   }
-  if (!segments.ended) hints.push({ line: 0, message: '最後一行沒有 <<<完>>>：回覆可能沒貼完整，或 AI 還沒寫完' });
-  return { normalized, ended: segments.ended, errors: errors.sort(byLine), hints: hints.sort(byLine), pieces, removed };
+  // 寫出最後一行（真人測試 2026-11-08：還沒寫完就按了複製，家長看不出少了 <<<完>>>，就勾了確定）。
+  if (!segments.ended) {
+    const last = normalized.lines.findLastIndex(line => line.trim() !== '');
+    hints.push({ line: last < 0 ? 0 : normalized.raw[last], message: '最後一行不是 <<<完>>>：AI 可能還沒寫完，或沒有整段複製。回 AI 那邊看它寫完了沒，寫完再按程式碼區塊的「複製」重貼一次' });
+  }
+  const quoted = (issue: ReplyIssue): ReplyIssue => {
+    const quote = issue.line ? quoteLine(reply, issue.line) : undefined;
+    return quote === undefined ? issue : { ...issue, quote };
+  };
+  return { normalized, ended: segments.ended, errors: errors.sort(byLine).map(quoted), hints: hints.sort(byLine).map(quoted), pieces, removed };
 }
 
 /** 卡組放在哪（§5，D-040 的預設編排）：學業卡組 `Essence Cards/學業/<年級學期>/<科目>/`，一般知識 `Essence Cards/`。 */

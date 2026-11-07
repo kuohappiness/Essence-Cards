@@ -1,4 +1,5 @@
 export { parseDeck } from './parse.ts';
+export { pickWord } from './question-types.ts';
 export { markNeed } from './need.ts';
 export { baseForm } from './base-form.ts';
 export { assignIds, newId } from './assign.ts';

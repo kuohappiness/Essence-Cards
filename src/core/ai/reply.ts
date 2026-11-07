@@ -1,4 +1,4 @@
-import { codeKey, nameIds, parseDeck, readTerm, termKey } from '../deck/index.ts';
+import { codeKey, nameIds, parseDeck, pickWord, readTerm, termKey } from '../deck/index.ts';
 import { blocksOf, check } from './check.ts';
 import type { CheckResult } from './check.ts';
 import type { RuleSubject } from './rules.ts';
@@ -6,10 +6,10 @@ import { titlePrefix, unitCode } from './prompt.ts';
 import type { CardForm } from './prompt.ts';
 
 // 貼回與檢查（tasks/ai-cards-mvp.md §4）：整理（只改包裝）→ 分段與結束標記 → 拆篇 → 每一篇檢查。
-// 回報的行號一律是貼上的原文的行（從 1 算）：整理不增減中間的行，只拿掉最外層圍欄那兩行與它們外面的空行。
+// 回報的行號一律是貼上的原文的行（從 1 算）：整理不增減中間的行，只拿掉最外層圍欄那兩行與它們外面的空行，以及 `<<<完>>>` 後面的圍欄與引用標記。
 
-/** 擋住（不能存）或提示（可以存）的一項；line 是原文的第幾行（從 1 算），0 是整段。 */
-export interface ReplyIssue { line: number; message: string }
+/** 擋住（不能存）或提示（可以存）的一項；line 是原文的第幾行（從 1 算），0 是整段；quote 是那一行的原文（縮短過，給家長找）。 */
+export interface ReplyIssue { line: number; message: string; quote?: string }
 
 /** 整理後的回覆：lines 是每一行（不含換行），raw[i] 是第 i 行在原文的行號（從 1 算）。 */
 export interface Normalized { lines: string[]; raw: number[] }
@@ -19,22 +19,47 @@ const fenceClose = (line: string, mark: string): boolean => {
   const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
   return !!match && match[1][0] === mark[0] && match[1].length >= mark.length;
 };
+/** Gemini 的引用標記：`[cite_start]`、`[cite: 1, 2]`。 */
+const CITE = /\[cite(?:_start|_end)?(?::[^\]\n]*)?\]/g;
+/** `<<<完>>>` 後面可以略過的一行：空白、引用標記、程式碼區塊的結尾符號，或結尾符號接著引用標記。 */
+const tailJunk = (line: string): boolean => /^(?:`{3,}|~{3,})?$/.test(line.replace(CITE, '').trim());
 
 /**
  * 整理（§4）：拿掉開頭的 BOM、換行統一成 `\n`；整段被最外層的一對圍欄（三個以上的反引號或波浪號，開頭可帶 `markdown`）包起來時拿掉那一對，
  * 裡面較短的圍欄不動。裡面有一樣長、可以當成結束的圍欄時，不算被一對包起來（CommonMark 會在那裡結束），不拿。
+ * `<<<完>>>` 後面只剩程式碼區塊的結尾符號與引用標記時拿掉（真人測試 2026-11-08：Gemini 在框的結尾符號後面接 `[cite: …]`，
+ * 框沒收好，按程式碼區塊的「複製」會連那一行一起複製）；拿掉的結尾符號照樣和開頭的圍欄配成一對。
  */
 export function normalizeReply(text: string): Normalized {
-  const lines = text.replace(/^﻿/, '').split(/\r\n|\n|\r/);
-  const raw = lines.map((_, i) => i + 1);
+  let lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/);
+  let raw = lines.map((_, i) => i + 1);
   const first = lines.findIndex(line => line.trim() !== '');
+  const open = first >= 0 ? FENCE_OPEN.exec(lines[first]) : null;
+  // 結束標記照分段的認法：最外層的圍欄裡面算，裡面另一個程式碼區塊裡的不算。
+  const from = open ? first + 1 : 0;
+  const end = markers(lines.slice(from)).filter(each => each.name === END).at(-1);
+  const tail = end ? lines.slice(from + end.at + 1) : [];
+  let closing: string | null = null;
+  if (end && tail.some(line => line.trim() !== '') && tail.every(tailJunk)) {
+    closing = tail.map(line => line.replace(CITE, '').trim()).find(rest => rest !== '') ?? null;
+    lines = lines.slice(0, from + end.at + 1);
+    raw = raw.slice(0, from + end.at + 1);
+  }
   let last = lines.length - 1;
   while (last >= 0 && lines[last].trim() === '') last--;
-  const open = first >= 0 ? FENCE_OPEN.exec(lines[first]) : null;
-  if (open && last > first && fenceClose(lines[last], open[1]) && !lines.slice(first + 1, last).some(line => fenceClose(line, open[1]))) {
-    return { lines: lines.slice(first + 1, last), raw: raw.slice(first + 1, last) };
-  }
+  if (!open) return { lines, raw };
+  const plain = (to: number): boolean => !lines.slice(first + 1, to).some(line => fenceClose(line, open[1]));
+  if (closing !== null) return fenceClose(closing, open[1]) && plain(lines.length) ? { lines: lines.slice(first + 1), raw: raw.slice(first + 1) } : { lines, raw };
+  if (last > first && fenceClose(lines[last], open[1]) && plain(last)) return { lines: lines.slice(first + 1, last), raw: raw.slice(first + 1, last) };
   return { lines, raw };
+}
+
+/** 原文第 line 行（從 1 算）縮短成給家長找的樣子：去掉頭尾空白、連續空白併成一個，太長的截斷。 */
+export function quoteLine(text: string, line: number): string | undefined {
+  const found = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/)[line - 1]?.replace(/[ \t　]+/g, ' ').trim();
+  if (!found) return undefined;
+  const chars = [...found];
+  return chars.length > 80 ? chars.slice(0, 80).join('') + '…' : found;
 }
 
 const MARKER = /^ {0,3}<<<([^<>\n]*)>>>[ \t]*$/;
@@ -192,6 +217,16 @@ const SOURCE_OPTIONAL = new Set(['英文']);
  */
 const STRUCTURE = new Set(['top-question', 'no-question', 'para']);
 
+/**
+ * 比較組混了別種題目（`pick-mixed`）在 AI 製卡是擋住的，原本的字句說的是存檔時照原題型出，改成直接說怎麼改
+ * （真人測試 2026-11-08：`lend（borrow、lend） 比較` 底下一題答案寫 lent，家長看不出哪裡錯）。
+ */
+function pickMixed(result: CheckResult, issue: CheckResult['issues'][number]): string {
+  const owner = [...result.targets, ...result.candidates].find(target => target.questions.some(question => question.line === issue.line));
+  const word = owner ? pickWord(owner.name) : null;
+  return word === null ? issue.msg : `比較題的每一題都要是「題目裡一個 ＿＿，答案是 ${word}」：這一題不是，請改成這樣的句子，或刪掉這一題`;
+}
+
 /** 一篇的檢查（§4〈檢查〉）：check-syntax 算錯誤的擋住、算不符的提示，提醒不列；清單結構跑掉的合成一個錯誤。 */
 export function checkPiece(text: string, rawLine: (line: number) => number, subject: Pick<RuleSubject, 'subject' | 'r3'>, form: CardForm): { errors: ReplyIssue[]; hints: ReplyIssue[]; result: CheckResult } {
   const errors: ReplyIssue[] = [], hints: ReplyIssue[] = [], broken: number[] = [];
@@ -201,7 +236,7 @@ export function checkPiece(text: string, rawLine: (line: number) => number, subj
     if (issue.code === 'target-name' && OWN_NAMES.has(subject.subject ?? '')) continue;
     if (issue.code === 'no-source' && SOURCE_OPTIONAL.has(subject.subject ?? '')) continue;
     if (STRUCTURE.has(issue.code)) { broken.push(rawLine(issue.line - 1)); continue; }
-    (issue.level === '錯誤' ? errors : hints).push({ line: rawLine(issue.line - 1), message: issue.msg });
+    (issue.level === '錯誤' ? errors : hints).push({ line: rawLine(issue.line - 1), message: issue.code === 'pick-mixed' ? pickMixed(result, issue) : issue.msg });
   }
   // 處數算行：最上層的題目同時是「沒有題目的目標」，同一行不算兩處。
   if (broken.length) errors.push({ line: Math.min(...broken), message: `回覆的縮排或清單符號在複製時跑掉了（這一篇共 ${String(new Set(broken).size)} 處）：請按 AI 回覆裡程式碼區塊右上角的「複製」，再整段貼一次` });

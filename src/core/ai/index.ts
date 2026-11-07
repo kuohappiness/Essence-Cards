@@ -5,6 +5,7 @@ export { check } from './check.ts';
 export { buildPrompt, existingTargets, PURPOSES, sha256Hex, stamp, studentOf, taskSection, unitCode } from './prompt.ts';
 export type { CardForm, ExistingTarget, Purpose } from './prompt.ts';
 export { normalizeReply } from './reply.ts';
+export type { ReplyIssue } from './reply.ts';
 export { freeName, inspectReply, planDraft, rawPath } from './draft.ts';
 export type { ExistingNow, Inspection } from './draft.ts';
 export { isJob, readJobs, reservedIds } from './job.ts';

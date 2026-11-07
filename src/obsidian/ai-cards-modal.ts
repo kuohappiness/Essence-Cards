@@ -1,7 +1,7 @@
 import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
 import { freeName, PURPOSES } from '../core/ai/index.ts';
-import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
+import type { CardForm, CardJob, Inspection, Purpose, ReplyIssue } from '../core/ai/index.ts';
 import { SERVICES } from './ai-cards.ts';
 import type { AiCards, Outcome } from './ai-cards.ts';
 
@@ -32,15 +32,16 @@ function ago(ms: number, now: number): string {
   return hours < 24 ? `${String(hours)} 小時前` : `${String(Math.round(hours / 24))} 天前`;
 }
 const labelOf = (job: CardJob): string => `${job.subject.subject === null ? '' : job.form.term}${job.subject.subject ?? job.subject.label} ${job.form.unit}`.trim();
-const lineText = (line: number): string => line ? `第 ${String(line)} 行：` : '';
+/** 一項擋住或提示：行號與那一行的原文（輸入框沒有行號，家長靠原文找）。 */
+const issueText = (issue: ReplyIssue): string => (issue.line ? `第 ${String(issue.line)} 行${issue.quote === undefined ? '' : `「${issue.quote}」`}：` : '') + issue.message;
 /** 同一句提示合成一列（例如每張圖都提示一次）：寫出共幾處與前幾個行號。 */
-function groupHints(hints: readonly { line: number; message: string }[]): string[] {
-  const groups = new Map<string, number[]>();
-  for (const { line, message } of hints) groups.set(message, [...groups.get(message) ?? [], line]);
-  return [...groups].map(([message, lines]) => {
-    if (lines.length === 1) return lineText(lines[0]) + message;
-    const shown = lines.slice(0, 5).join('、') + (lines.length > 5 ? '……' : '');
-    return `${message}（共 ${String(lines.length)} 處：第 ${shown} 行）`;
+function groupHints(hints: readonly ReplyIssue[]): string[] {
+  const groups = new Map<string, ReplyIssue[]>();
+  for (const hint of hints) groups.set(hint.message, [...groups.get(hint.message) ?? [], hint]);
+  return [...groups].map(([message, same]) => {
+    if (same.length === 1) return issueText(same[0]);
+    const shown = same.slice(0, 5).map(each => String(each.line)).join('、') + (same.length > 5 ? '……' : '');
+    return `${message}（共 ${String(same.length)} 處：第 ${shown} 行）`;
   });
 }
 
@@ -230,7 +231,7 @@ class AiCardsModal extends Modal {
     if (inspection.errors.length) {
       el.createEl('p', { text: TEXT.blocked });
       const list = el.createEl('ul');
-      for (const each of inspection.errors) list.createEl('li', { text: lineText(each.line) + each.message });
+      for (const each of inspection.errors) list.createEl('li', { text: issueText(each) });
       return;
     }
     const taken = new Set(this.app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase()));

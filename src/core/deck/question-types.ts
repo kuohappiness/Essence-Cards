@@ -92,6 +92,9 @@ function readGroup(name: string): PickGroup | null {
   return null;
 }
 
+/** 名稱讀得出組時，比較句的答案該寫的字或詞（AI 製卡的錯誤訊息用）；讀不出是 null。 */
+export const pickWord = (name: string): string | null => readGroup(name)?.word ?? null;
+
 /** 沒有組時的結尾：名稱最後一段，前面要有空白或右括號。 */
 const endingOf = (name: string): string | null => /[\s）)]([^\s）)]+)$/.exec(name)?.[1] ?? null;
 
@@ -135,7 +138,7 @@ export function readPick(target: Target): PickReading {
   const matches = (prompt: Prompt): boolean => isSentence(prompt) && answerOf(prompt) === word;
   if (prompts.every(matches)) return { group, problems: [] };
   if (prompts.some(matches)) {
-    return { group: null, problems: prompts.filter(prompt => !matches(prompt)).map(prompt => ({ line: prompt.line, level: 'hint', code: 'pick-mixed', message: '這一題不是比較句（題幹一個 ＿＿，答案是名稱的字或詞），所以這個目標照原題型出；不同能力請拆成不同目標' })) };
+    return { group: null, problems: prompts.filter(prompt => !matches(prompt)).map(prompt => ({ line: prompt.line, level: 'hint', code: 'pick-mixed', message: `這一題不是比較句（題幹一個 ＿＿，答案是「${group.word}」），所以這個目標照原題型出；不同能力請拆成不同目標` })) };
   }
   const outside = prompts.filter(prompt => isSentence(prompt) && !members.includes(answerOf(prompt)));
   if (outside.length) return notRecognized(outside.map(prompt => prompt.line), '答案不在組裡，所以這個目標不是比較卡');

@@ -140,7 +140,9 @@ void test('§4 分段：R3 三段齊全、少一段、卡組段空白、標記�
   // 尾段少貼：標記與題目都合法，但沒有 <<<完>>>；引言框或程式碼裡的 <<<完>>> 不算。
   const cut = inspectReply(R3_REPLY.replace('<<<完>>>\n', ''), form(), science, [], nobody);
   assert.deepEqual([cut.errors, cut.ended], [[], false]);
-  assert.ok(cut.hints.some(each => each.line === 0 && each.message.startsWith('最後一行沒有 <<<完>>>')));
+  // 指到最後一行、寫出它的原文（真人測試 2026-11-08：還沒寫完就複製，家長看不出少了 <<<完>>>）。
+  const end = cut.hints.find(each => each.message.startsWith('最後一行不是 <<<完>>>'));
+  assert.deepEqual([end?.line, end?.quote], [28, '> - 水溫升高時，糖的溶解度會怎麼變？ :: 變**大**']);
   const quoted = inspectReply(R3_REPLY.replace('<<<完>>>\n', '> <<<完>>>\n'), form(), science, [], nobody);
   assert.equal(quoted.ended, false);
   const english = inspectReply('## 單字\n\n- borrow 英翻中\n    - 出處：p.40\n    - borrow :: 借入\n\n```\n<<<完>>>\n```\n', form({ subject: 'english', unit: 'L3' }), subject('english'), [], nobody);
@@ -217,8 +219,8 @@ void test('§4 檢查：check-syntax 算錯誤的擋（缺答案、pick-mixed、
   const chinese = subject('chinese');
   const pick = '<<<全貌>>>\n無\n<<<架構>>>\n無\n<<<卡組>>>\n## 相似字\n\n- 寨（寨、塞） 相似字\n    - 出處：p.1\n    - 山＿＿。 :: 寨\n    - 寨是什麼？ :: 防守的地方\n<<<完>>>';
   const mixed = inspectReply(pick, form({ subject: 'chinese', term: '小五上', unit: 'L7 詩' }), chinese, [], nobody);
-  // pick-mixed 指在不是比較句的那一題（原文第 11 行）。
-  assert.deepEqual(mixed.errors.map(each => each.line), [11]);
+  // pick-mixed 指在不是比較句的那一題（原文第 11 行），直接說答案該是哪個字（真人測試 2026-11-08）。
+  assert.deepEqual(mixed.errors.map(each => [each.line, each.quote, each.message]), [[11, '- 寨是什麼？ :: 防守的地方', '比較題的每一題都要是「題目裡一個 ＿＿，答案是 寨」：這一題不是，請改成這樣的句子，或刪掉這一題']]);
   const yaml = inspectEnglish('---\n狀態: 啟用\n---\n## 單字\n\n- borrow 英翻中\n    - borrow :: 借入\n<<<完>>>');
   assert.match(yaml.errors.map(each => `${String(each.line)} ${each.message}`).join('\n'), /1 AI 寫了屬性區/);
   // 不符：每個字少於兩句、自然的「能……」以外的名稱照樣提示；英文的名稱不提示。
@@ -248,6 +250,30 @@ void test('§4 複製時清單結構跑掉（真人測試 2026-11-07）：縮排
   const twoData = inspectEnglish(ENGLISH.replace('    - 出處：p.40\n', '    - 出處：p.40\n    - 類型：記憶\n'));
   assert.deepEqual(twoData.errors, []);
   assert.ok(twoData.hints.some(each => each.message.startsWith('AI 把資料寫成一行')));
+});
+
+void test('§4 <<<完>>> 後面的圍欄與引用標記（真人測試 2026-11-08）：Gemini 的框沒收好、接著 [cite: …] 時略過；別的文字照樣擋；每項寫出那一行的原文', () => {
+  // 按程式碼區塊的「複製」：框的結尾符號後面接了引用標記，框沒收好，那一行一起被複製。
+  const cite = inspectEnglish(ENGLISH + '\n````[cite: 1, 2, 36]\n');
+  assert.deepEqual([cite.errors, cite.ended, cite.pieces.length], [[], true, 2]);
+  assert.equal(cite.normalized.lines.at(-1), '<<<完>>>');
+  // 整段連框一起複製：開頭的 ````markdown 和結尾那一行照樣配成一對拿掉；只剩引用標記的行、空行也略過。
+  const whole = inspectEnglish('````markdown\n' + ENGLISH + '\n````[cite: 1]\n[cite_start][cite: 3]\n\n');
+  assert.deepEqual([whole.errors, whole.ended, whole.normalized.lines[0]], [[], true, '國二上英文 L3 單字']);
+  // 結尾符號和開頭配不起來（比較短）：開頭的圍欄留著，照舊擋第一行。
+  assert.match(errorsOf('````markdown\n' + ENGLISH + '\n```[cite: 1]\n')[0], /^1 第一行「````markdown」不是卡組的內容/);
+  // 引用標記以外還有字：照舊擋，寫出那一行。
+  const talk = inspectEnglish(ENGLISH + '\n希望這些卡片有幫助 [cite: 1]\n');
+  assert.deepEqual(talk.errors.map(each => [each.line, each.quote, each.message.split('：')[0]]), [[17, '希望這些卡片有幫助 [cite: 1]', '<<<完>>> 後面還有文字']]);
+  // 太長的一行截到 80 個字，連續空白併成一個。
+  const long = inspectEnglish(ENGLISH.replace('    - borrow :: 借入', '    - borrow :: 借入\n    - 他向我借了一支筆，因為他忘了帶自己的筆來學校上課，所以下課後還給我。下次他再忘記帶筆，我還是會借給他，因為我們是好朋友。He ＿＿ a pen from me. ::'));
+  const quote = long.errors.find(each => each.line === 8)?.quote;
+  assert.equal(quote, '- 他向我借了一支筆，因為他忘了帶自己的筆來學校上課，所以下課後還給我。下次他再忘記帶筆，我還是會借給他，因為我們是好朋友。He ＿＿ a pen from m…');
+  // lend 那一組混了一題過去式（真人測試的原句）：說答案該是 lend，寫出那一題。
+  const lend = ENGLISH.replace('<<<完>>>', ['### 比較', '- lend（borrow、lend） 比較', '    - Could you ＿＿ me your pen? :: lend', '    - My brother will ＿＿ his bike to me. :: lend',
+    '    - The clerk ＿＿ his jacket to the cold man yesterday. :: lent', '    - 記憶錨點：**lend** A **to** B：把東西借出去給別人', '<<<完>>>'].join('\n'));
+  assert.deepEqual(inspectEnglish(lend).errors.map(each => [each.line, each.quote, each.message]),
+    [[20, '- The clerk ＿＿ his jacket to the cold man yesterday. :: lent', '比較題的每一題都要是「題目裡一個 ＿＿，答案是 lend」：這一題不是，請改成這樣的句子，或刪掉這一題']]);
 });
 
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {
