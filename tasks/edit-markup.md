@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（入口與目錄第四批，給 Claude，本機執行）
 
-狀態：💬 任務說明定稿，可以開工；§7 的 7 個 commit 都已在分支 `claude/edit-markup`，Windows 實機做完（見〈結果〉）；Codex L2 第一、二輪的發現已修（[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)），合併前等第三輪（[審查請求](edit-markup-l2.md)）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
+狀態：💬 任務說明定稿，可以開工；§7 的 7 個 commit 都已在分支 `claude/edit-markup`，Windows 實機做完（見〈結果〉）；Codex L2 第一～三輪的發現已修（[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)），合併前等第四輪（[審查請求](edit-markup-l2.md)）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。要改寫使用者的筆記，也動到解析的結果，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。§3（解析多記原文位置）、§4-3、§4-4（寫回）開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），§1、§2 不用等。
 
@@ -417,3 +417,11 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
 - §3-1、§3 的 `continued`、〈結果〉第 1～3 個 commit 那一段與 L2 請求的不可破壞性質，改成「帶與不帶 layout 的結果只差 `layout`」。
 - **Windows 版 Obsidian**（`d49b406`，結果檔 `Essence W5/結果/markup Windows-c50c 2026-11-07 211415.json`）：寫回四步與各自的 `Ctrl+Z` 一次復原和上次相同；重新解析加標示加畫面更新的中位數 25.5 ms（最慢 30.6 ms）。
 - `npm run check`（2040 個測試）、`npm run build` 在 `d49b406` 通過。
+
+### Codex L2 第三輪的修正（2026-11-07，`1b24be4`、`ecf8a6a`）
+
+[報告與逐項回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)的〈第三輪〉。
+
+- `1b24be4`（R15，寫回）：拿到檔尾、檔尾沒有換行時，留在檔尾的空行一起拿（`removeLines`，§4-3 的接續段與 §4-4 併進去拿掉的那一行共用）。
+- `ecf8a6a`（R14，表單）：表單用那一段現在的讀法問題猜，後面加了「不算這個」時照否定的填法。
+- `npm run check`（2046 個測試）、`npm run build` 在 `ecf8a6a` 通過（第一次跑全部時 `tests/backup-desktop.test.ts` 整個檔在 0.5 秒就失敗，單獨跑 8 個都通過，這輪沒有動到它；重跑全部 2046 個通過）。這輪改的是寫回的範圍與表單的預選，畫面與交易的接法沒有變；測試 vault 這時借給 AI 製卡的真人測試，沒有重跑 Windows 實機（上一次是 `d49b406`）。

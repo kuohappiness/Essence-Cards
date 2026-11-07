@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（Codex L2 審查請求）
 
-狀態：待審（第三輪，見最後〈第三輪〉）。第一輪審 `268b625`、第二輪審 `154d732`，[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。
+狀態：待審（第四輪，見最後〈第四輪〉）。第一輪審 `268b625`、第二輪審 `154d732`、第三輪審 `3124f09`，[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -77,3 +77,12 @@
   4. R13：`continued` 現在也包含子項目的接續行；用到 `continued` 的地方（`blocked`、§4-4 併進去、`fieldFixes` 的判斷）是否都符合 §4-3 第 4 點與 §8。
 - **驗證方式**：和前兩輪相同。實作者在 `d49b406` 跑過 `npm run check`（2040 個測試）、`npm run build` 通過；Windows 版 Obsidian 在 `d49b406` 重跑開發命令 `markup`（寫回四步與 `Ctrl+Z`）。標示或圖示平移後點擊的情形沒有在實機做，由 `tests/source-entry.test.ts`（真的 `EditorView`）與 `tests/markup.test.ts` 測。
 - **回報**：接在分支上那一份 `Claude Codex Discussion/2026-11-07-edit-markup-l2.md` 最後，標題「## 第三輪」；標題下的狀態行一起更新。
+
+## 第四輪（L2 第三輪的修正）
+
+- **審查對象**：分支 `claude/edit-markup` 從 `3124f09d779b31ebacf9213b7a82f152a3903f94`（第三輪審過的）到這份請求所在的 commit。程式的修正是 `1b24be4`（R15）、`ecf8a6a`（R14）；另有一個只改文件的 commit。沒有未提交的修改。
+- **只查這段差異與受影響的路徑**。修法與回歸測試見報告最後的〈Claude 的回應（第三輪）〉。請核對：
+  1. R14：`relocateSource` 換掉 `problem` 之後，其他讀法的變化（例如位置前面多了一句話、範圍寫反）是否也照現在的讀法猜；`problem` 從有變沒有時表單是否合理。
+  2. R15：`removeLines` 往前拿空行時，會不會拿到不該拿的（空行前面是別的目標、標題、屬性區），以及檔尾有換行時完全不受影響。
+- **驗證方式**：和前幾輪相同。實作者在 `ecf8a6a` 跑過 `npm run check`（2046 個測試）、`npm run build` 通過。
+- **回報**：接在分支上那一份 `Claude Codex Discussion/2026-11-07-edit-markup-l2.md` 最後，標題「## 第四輪」；標題下的狀態行一起更新。這是第四輪：還有擋合併的發現時，照 review.md 交給使用者決定，請在報告裡分別寫出各項的真實路徑判斷。
