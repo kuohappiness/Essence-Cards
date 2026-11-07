@@ -8,6 +8,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
+import { ruleFiles } from '../tools/build.mjs';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 
 const run = promisify(execFile);
@@ -21,13 +22,21 @@ async function tree(dir: string): Promise<string[]> {
     .sort();
 }
 
-/** 只有 tools/build.mjs 與給定 src 檔案的暫存專案；相依套件用 junction 指回 repo。 */
+/**
+ * 只有 tools/build.mjs、src/core 與給定 src 檔案的暫存專案；相依套件用 junction 指回 repo。建置要讀 AI 製卡的規則表（src/core/ai）
+ * 與規則檔（tasks/ai-cards-mvp.md §1），所以 src/core 與規則檔一起複製。
+ */
 async function project(t: TestContext, files: Record<string, string>): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'essence-build-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   await mkdir(join(dir, 'tools'));
   await copyFile(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
   await copyFile(join(root, 'manifest.json'), join(dir, 'manifest.json'));
+  await cp(join(root, 'src/core'), join(dir, 'src/core'), { recursive: true });
+  for (const path of ruleFiles()) {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await copyFile(join(root, path), join(dir, path));
+  }
   // Windows junction 不需要系統管理員權限，也不複製相依套件。
   await symlink(join(root, 'node_modules'), join(dir, 'node_modules'), 'junction');
   for (const [path, content] of Object.entries(files)) {
