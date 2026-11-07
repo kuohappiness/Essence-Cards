@@ -213,11 +213,12 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       onLayoutReady: (callback: () => void) => { if (ready) callback(); else layout.push(callback); },
       on: (name: string, callback: (...args: unknown[]) => void) => { handlers.set(name, [...handlers.get(name) ?? [], callback]); return name; },
       getLeavesOfType: () => leaves,
+      iterateAllLeaves: (callback: (leaf: Leaf) => void) => { leaves.forEach(callback); },
       getActiveViewOfType: () => null,
       openLinkText: () => Promise.resolve(),
       leftSplit: { collapsed: true }, rightSplit: { collapsed: true },
     },
-    metadataCache: { getFileCache: () => null, getFirstLinkpathDest: () => null },
+    metadataCache: { getFileCache: () => null, getFirstLinkpathDest: () => null, on: (name: string) => name },
     loadLocalStorage: (key: string) => storage.get(key) ?? null,
     saveLocalStorage: (key: string, value: unknown) => { if (value === null) storage.delete(key); else storage.set(key, value); },
   };

@@ -3,14 +3,20 @@ import type { EditorState, Extension, Range, Text, Transaction } from '@codemirr
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import { parseDeck } from '../core/deck/index.ts';
-import type { Deck, Problem } from '../core/deck/index.ts';
+import type { Deck, Problem, Span, TargetLayout } from '../core/deck/index.ts';
 
 // 編輯畫面標示卡組結構（D-047、D-089 第 10、11 條，tasks/edit-markup.md §1）：學習目標那一行左邊一條細線、題目的 `::` 變淡紫、
 // 問題畫波浪線（紅色這題不會出、橘色照常出）。只在電腦版的編輯器、只在卡組筆記；判斷全部來自 parseDeck，不另寫一份規則。
 // 這個檔不 import obsidian，在 Node 用 @codemirror/state 直接測；Obsidian 的接線在 main.ts。
 
-/** 一個標示：target 是那一行（from 是行首、to 等於 from）；separator 是題目的 `::`；error、hint 是問題的波浪線，tip 是滑過的說明。 */
-export interface Mark { kind: 'target' | 'separator' | 'error' | 'hint'; from: number; to: number; tip?: string }
+/**
+ * 一個標示：target 是那一行（from 是行首、to 等於 from）；separator 是題目的 `::`；error、hint 是問題的波浪線，tip 是滑過的說明；
+ * source 是看不懂的出處（§1-3），點了打開表單。
+ */
+export interface Mark { kind: 'target' | 'separator' | 'error' | 'hint' | 'source'; from: number; to: number; tip?: string }
+/** 看不懂的出處的一段（§1-3）：line 是目標那一行；at 是那一段在檔案的位置，切不出原文時是 null（畫那一欄出處的第一行）。 */
+export interface SourceHit { line: number; at: Span | null; tip: string }
+type LaidOut = Deck & { layout: Map<number, TargetLayout> };
 
 const MARKER = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]*/;
 const TRAILING_ID = /[ \t]+\^[A-Za-z0-9-]+[ \t]*$/;
@@ -23,8 +29,8 @@ function separatorAt(body: string, question: string): number {
   return -1;
 }
 
-/** 這一篇要畫的標示，照位置排好。deck 沒給時自己解析。 */
-function marksOf(doc: Text, deck: Deck = parseDeck(doc.toString())): Mark[] {
+/** 這一篇要畫的標示（看不懂的出處另外算），照位置排好。 */
+function marksOf(doc: Text, deck: Deck): Mark[] {
   const marks: Mark[] = [];
   const line = (index: number) => index + 1 <= doc.lines ? doc.line(index + 1) : null;
   for (const target of deck.targets) {
@@ -63,19 +69,35 @@ function marksOf(doc: Text, deck: Deck = parseDeck(doc.toString())): Mark[] {
   return marks.sort((a, b) => a.from - b.from || a.to - b.to);
 }
 
+/** 看不懂的出處的標示（§1-3）：有位置畫那一段；沒有時畫那一欄出處第一行的內容（不含清單符號與行尾的 ID）。 */
+function sourceMarks<H extends SourceHit>(doc: Text, deck: LaidOut, hits: readonly H[]): (Mark & { hit: H })[] {
+  return hits.flatMap(hit => {
+    const span = hit.at ?? fieldLine(doc, deck.layout.get(hit.line)?.fields[0]?.line);
+    if (!span || span.line + 1 > doc.lines) return [];
+    const at = doc.line(span.line + 1);
+    if (span.to > at.length || span.from >= span.to) return [];
+    return [{ kind: 'source' as const, from: at.from + span.from, to: at.from + span.to, tip: hit.tip, hit }];
+  });
+}
+function fieldLine(doc: Text, index: number | undefined): Span | null {
+  if (index === undefined || index + 1 > doc.lines) return null;
+  const text = doc.line(index + 1).text, trail = TRAILING_ID.exec(text);
+  return { line: index, from: MARKER.exec(text)?.[0].length ?? 0, to: trail ? trail.index : text.trimEnd().length };
+}
+
 const CLASSES: Record<Mark['kind'], string> = {
-  target: 'essence-cards-target', separator: 'essence-cards-separator', error: 'essence-cards-error', hint: 'essence-cards-hint',
+  target: 'essence-cards-target', separator: 'essence-cards-separator', error: 'essence-cards-error', hint: 'essence-cards-hint', source: 'essence-cards-source',
 };
 const KINDS = new Map(Object.entries(CLASSES).map(([kind, name]) => [name, kind as Mark['kind']]));
 const targetLine = Decoration.line({ class: CLASSES.target });
 const separator = Decoration.mark({ class: CLASSES.separator });
 
-function decorate(marks: readonly Mark[]): DecorationSet {
+function decorate(marks: readonly (Mark & { hit?: SourceHit })[]): DecorationSet {
   const ranges: Range<Decoration>[] = marks.map(mark => {
     if (mark.kind === 'target') return targetLine.range(mark.from);
     if (mark.kind === 'separator') return separator.range(mark.from, mark.to);
-    // aria-label：Obsidian 滑過時顯示的說明（§1-1）。
-    return Decoration.mark({ class: CLASSES[mark.kind], attributes: { 'aria-label': mark.tip ?? '' } }).range(mark.from, mark.to);
+    // aria-label：Obsidian 滑過時顯示的說明（§1-1）。看不懂的出處把那一段帶在 spec 裡，點了用它開表單。
+    return Decoration.mark({ class: CLASSES[mark.kind], attributes: { 'aria-label': mark.tip ?? '' }, ...(mark.hit ? { hit: mark.hit } : {}) }).range(mark.from, mark.to);
   });
   return Decoration.set(ranges, true);
 }
@@ -85,41 +107,33 @@ const REPARSE_DELAY = 250;
 /** 使用者自己的編輯（含 Undo／Redo）：標示先跟著平移，停下來才重新解析；其他交易（打開別的檔、外部改檔後重新載入）馬上重算。 */
 const isEdit = (tr: Transaction): boolean => ['input', 'delete', 'move', 'undo', 'redo'].some(event => tr.isUserEvent(event));
 
-export interface MarkupOptions {
+export interface MarkupOptions<H extends SourceHit = SourceHit> {
   /** 這個編輯器開的是不是卡組筆記（和 ID 鎖定同一個判斷，main.ts 的 lockable）。 */
   isDeck: (state: EditorState) => boolean;
   /** 點了「填出處」的圖示（§2 第 2 點）：出處欄位那一行（從 1 算）。沒給就不畫圖示。 */
   onAdd?: (view: EditorView, line: number) => void;
   /** 使用者改到筆記：開著的表單要關掉（§2 第 1 點）。 */
   onEdit?: () => void;
+  /** 看不懂的出處（§1-3）：要看材料與目錄，由 main.ts 給。沒給就不標。 */
+  unreadable?: (state: EditorState, deck: LaidOut) => readonly H[];
+  /** 點了看不懂的出處：那一段與它在文件裡的開頭（§2 第 1 點）。 */
+  onSource?: (view: EditorView, hit: H, from: number) => void;
 }
 
 // ── 「填出處」的圖示（§2 第 2 點）──
-// 哪一行是出處欄位：游標所在的那幾行簡單地看（每次移動游標都要判斷，不重新解析整篇）。
-// 解析多記出處欄位的位置之後（§3 的 sourceFields）改用那一份，這裡的判斷就拿掉。
+// 哪一行是出處欄位：用解析記下的出處欄位（§3 的 layout.fields），欄位那一行、名稱、冒號、值所在的行與分行的子項目都算。
+// 每次移動游標都要判斷，不重新解析：記下那幾行的行首，改字時跟著平移，停下來重新解析時重算。
 
-const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d{1,9}[.)])[ \t]+(.*)$/;
-const FIELD_START = /^(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
-/** 這一段資料有 `出處` 欄位：開頭就是，或用 `｜`（半形的 `|` 也算，D-170 第 12 點）接在別的欄位後面。 */
-const HAS_SOURCE = /(?:^|[｜|])\s*出處\s*[：:]/;
-const indentOf = (text: string): number => { let width = 0; for (const ch of text) width += ch === '\t' ? 4 - width % 4 : 1; return width; };
-const isSourceField = (body: string): boolean => FIELD_START.test(body) && HAS_SOURCE.test(body);
-
-/** 第 line 行（從 1 算）是出處欄位那一行，或它分行的子項目時，回傳欄位那一行；不是回傳 null。欄位要在目標底下（有縮排）。 */
-function sourceFieldAt(doc: Text, line: number): number | null {
-  const item = LIST_ITEM.exec(doc.line(line).text);
-  if (!item) return null;
-  const indent = indentOf(item[1]);
-  if (isSourceField(item[2])) return indent > 0 ? line : null;
-  for (let at = line - 1; at >= 1; at--) {
-    const text = doc.line(at).text;
-    if (!text.trim()) return null;
-    const parent = LIST_ITEM.exec(text);
-    if (!parent) continue;
-    const width = indentOf(parent[1]);
-    if (width < indent) return width > 0 && isSourceField(parent[2]) ? at : null;
-  }
-  return null;
+/** 一個出處欄位：anchor 是欄位那一行的行首，lines 是算在這個欄位裡的每一行的行首。 */
+interface FieldLines { anchor: number; lines: number[] }
+function fieldLinesOf(doc: Text, deck: LaidOut): FieldLines[] {
+  const start = (index: number): number | null => index + 1 <= doc.lines ? doc.line(index + 1).from : null;
+  return [...deck.layout.values()].flatMap(layout => layout.fields.flatMap(field => {
+    const anchor = start(field.line);
+    if (anchor === null) return [];
+    const indexes = [field.line, field.name.line, field.colon.line, ...(field.value ? [field.value.line] : []), ...field.children];
+    return [{ anchor, lines: [...new Set(indexes)].flatMap(index => start(index) ?? []) }];
+  }));
 }
 
 class AddWidget extends WidgetType {
@@ -157,31 +171,49 @@ export function targetAt(doc: Text, deck: Deck, line: number): Deck['targets'][n
 
 /**
  * 編輯器的標示：extension 用 registerEditorExtension 裝上（只在電腦）；marks 是目前畫的標示，refresh 是馬上重新解析的 effect，
- * icon 是「填出處」圖示所在的那一行（從 1 算，沒有是 null）：測試與開發命令用。
+ * icon 是「填出處」圖示所在的那一行（從 1 算，沒有是 null）：測試與開發命令用。sourceAt：pos 在看不懂的出處上時是那一段（命令「填出處」用）。
  */
-export interface Markup { extension: Extension; marks: (state: EditorState) => Mark[]; refresh: StateEffect<null>; icon: (state: EditorState) => number | null }
-export function markup(options: MarkupOptions): Markup {
+export interface Markup<H extends SourceHit = SourceHit> {
+  extension: Extension;
+  marks: (state: EditorState) => Mark[];
+  refresh: StateEffect<null>;
+  icon: (state: EditorState) => number | null;
+  sourceAt: (state: EditorState, pos: number) => { hit: H; from: number } | null;
+}
+export function markup<H extends SourceHit = SourceHit>(options: MarkupOptions<H>): Markup<H> {
   const reparse = StateEffect.define<null>();
-  const build = (state: EditorState): DecorationSet => options.isDeck(state) ? decorate(marksOf(state.doc)) : Decoration.none;
-  const field = StateField.define<DecorationSet>({
+  interface Built { set: DecorationSet; fields: FieldLines[] }
+  const none: Built = { set: Decoration.none, fields: [] };
+  const build = (state: EditorState): Built => {
+    if (!options.isDeck(state)) return none;
+    const deck = parseDeck(state.doc.toString(), { layout: true });
+    const sources = options.unreadable ? sourceMarks(state.doc, deck, options.unreadable(state, deck)) : [];
+    return { set: decorate([...marksOf(state.doc, deck), ...sources].sort((a, b) => a.from - b.from || a.to - b.to)), fields: fieldLinesOf(state.doc, deck) };
+  };
+  const field = StateField.define<Built>({
     create: build,
     update(value, tr) {
-      if (!options.isDeck(tr.state)) return Decoration.none;
+      if (!options.isDeck(tr.state)) return none;
       if (!options.isDeck(tr.startState) || tr.effects.some(effect => effect.is(reparse))) return build(tr.state);
       if (!tr.docChanged) return value;
-      return isEdit(tr) ? value.map(tr.changes) : build(tr.state);
+      if (!isEdit(tr)) return build(tr.state);
+      // 停下來才重新解析：標示與出處欄位的行跟著平移（行首往前靠，在行首打字還是那一行）。
+      const map = (pos: number): number => tr.changes.mapPos(pos, -1);
+      return { set: value.set.map(tr.changes), fields: value.fields.map(each => ({ anchor: map(each.anchor), lines: each.lines.map(map) })) };
     },
-    provide: f => EditorView.decorations.from(f),
+    provide: f => EditorView.decorations.from(f, value => value.set),
   });
   // 圖示：主要的選取是空的、在出處欄位那一行或它的子項目上時，那一欄第一行的行尾；一篇只有一個。
   const iconLine = (state: EditorState): number | null => {
     if (!options.onAdd || !options.isDeck(state) || !state.selection.main.empty) return null;
-    return sourceFieldAt(state.doc, state.doc.lineAt(state.selection.main.head).number);
+    const start = state.doc.lineAt(state.selection.main.head).from;
+    const found = state.field(field, false)?.fields.find(each => each.lines.includes(start));
+    return found ? state.doc.lineAt(found.anchor).number : null;
   };
   const icon = StateField.define<{ line: number | null; set: DecorationSet }>({
     create: state => drawIcon(state, iconLine(state)),
     update(value, tr) {
-      if (!tr.docChanged && !tr.selection) return value;
+      if (!tr.docChanged && !tr.selection && !tr.effects.some(effect => effect.is(reparse))) return value;
       const line = iconLine(tr.state);
       return line === value.line && !tr.docChanged ? value : drawIcon(tr.state, line);
     },
@@ -203,8 +235,27 @@ export function markup(options: MarkupOptions): Markup {
     }
     destroy(): void { window.clearTimeout(this.timer); }
   });
+  const sourceAt = (state: EditorState, pos: number): { hit: H; from: number } | null => {
+    let found: { hit: H; from: number } | null = null;
+    state.field(field, false)?.set.between(pos, pos, (from, to, value) => {
+      const hit = (value.spec as { hit?: H }).hit;
+      if (hit && from <= pos && pos <= to) { found = { hit, from }; return false; }
+      return undefined;
+    });
+    return found;
+  };
+  // 點看不懂的出處（§2 第 1 點）：游標照常放到點的位置，同時打開那一段的表單；焦點留在編輯器。
+  const click = EditorView.domEventHandlers({
+    click(event, view) {
+      if (!options.onSource || !(event.target instanceof Element) || !event.target.closest('.' + CLASSES.source)) return false;
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      const found = pos === null ? null : sourceAt(view.state, pos);
+      if (found) options.onSource(view, found.hit, found.from);
+      return false;
+    },
+  });
   const marks = (state: EditorState): Mark[] => {
-    const set = state.field(field, false);
+    const set = state.field(field, false)?.set;
     const out: Mark[] = [];
     set?.between(0, state.doc.length, (from, to, value) => {
       const spec = value.spec as { class?: string; attributes?: Record<string, string> };
@@ -216,5 +267,6 @@ export function markup(options: MarkupOptions): Markup {
     // RangeSet 一層一層走，不是照位置：排好再交出去。
     return out.sort((a, b) => a.from - b.from || a.to - b.to);
   };
-  return { extension: [field, icon, delay], marks, refresh: reparse.of(null), icon: state => state.field(icon, false)?.line ?? null };
+  return { extension: [field, icon, delay, click], marks, refresh: reparse.of(null), icon: state => state.field(icon, false)?.line ?? null, sourceAt };
 }
+

@@ -105,7 +105,7 @@ const unreadable = (sources: string, materials: Record<string, Material | null>,
 void test('§9-5 看不懂：回傳行號、目標與原文；讀懂的都不提示；材料的快取還沒建好時不知道，字面上就有問題的照提示', () => {
   const text = '---\n材料: "[[甲]]"\n---\n- 溫度影響溶解度 ^a\n    - 出處：p.44, 45、睡眠的階段、[[x]]、先備：比例、第 3 頁\n    - 問 :: 答\n- 第二個 ^b\n    - 出處：看不懂的字\n    - 問 :: 答\n- 第三個 ^c\n    - 出處：p.46-44\n    - 問 :: 答\n';
   const { app } = appWith({ '材料/甲.md': { headings: ['睡眠的階段'] } });
-  assert.deepEqual(unreadableSources(app, '卡組/本篇.md', parseDeck(text), NO_UNITS), [
+  assert.deepEqual(unreadableSources(app, '卡組/本篇.md', parseDeck(text), NO_UNITS).map(({ line, name, text: original }) => ({ line, name, text: original })), [
     { line: 6, name: '第二個', text: '看不懂的字' },
     { line: 9, name: '第三個', text: 'p.46-44' },
   ]);
@@ -190,6 +190,46 @@ void test('D-170 否定字只提示：材料裡有同名標題也不連；像編
   assert.equal(resolveSource(app, '卡組/本篇.md', ['[[甲]]'], link('不是 p.44')), null);
   assert.deepEqual(hints('國二上 1-3，不算這個'), ['國二上 1-3', '不算這個']);
   assert.deepEqual(hints('國二上 1-3、溶解, 1-8'), ['溶解, 1-8']);
+});
+
+// tasks/edit-markup.md §1-3：每一段原文判斷一次；說明照表上最前面的原因，最後都加「點一下幫你改。」
+void test('§1-3 看不懂的出處的說明：每一種原因一句', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const units: UnitDecks = (term, code) => term === '國二上' && code === '2-1' ? [{ path: '卡組/2-1.md', materials: ['[[甲]]'], name: '水溶液' }] : [];
+  const tips = (sources: string): string[] => unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf(sources), units).map(each => each.tip);
+  const tail = '。點一下幫你改。';
+  assert.deepEqual(tips('1-3 p.20'), ['沒寫年級學期，不知道是哪一個 1-3' + tail], '沒寫年級學期排在 before 前面');
+  assert.deepEqual(tips('L1'), ['沒寫年級學期，不知道是哪一個 L1' + tail], '用原文的編號');
+  assert.deepEqual(tips('小五上 p.15'), ['寫了年級學期，沒有完整的單元編號' + tail]);
+  assert.deepEqual(tips('p.46-44'), ['頁碼或範圍寫反了，連不到' + tail]);
+  assert.deepEqual(tips('老師說過 p.44'), ['位置前面有一句話，不確定是不是出處' + tail]);
+  assert.deepEqual(tips('p.44 和 1-8'), ['裡面有像單元編號的字，沒有算進去' + tail]);
+  assert.deepEqual(tips('p.44、不是重點'), ['有否定的字，外掛不確定意思' + tail]);
+  assert.deepEqual(tips('國二上 2-1、10-15'), ['找不到這個單元' + tail]);
+  assert.deepEqual(tips('老師說的'), ['材料裡找不到這個標題' + tail]);
+  assert.deepEqual(tips('國二上 2-1 那次考不好'), ['單元後面的字看不懂' + tail]);
+});
+
+void test('§1-3 改成數段：同一個位置寫兩次標有問題的那一段；同一段兩個有問題的按鈕算一段，用最前面的原因', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const found = (sources: string) => unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf(sources), NO_UNITS).map(each => [each.text, each.tip]);
+  assert.deepEqual(found('p.44、p.45、老師說過 p.44'), [['老師說過 p.44', '位置前面有一句話，不確定是不是出處。點一下幫你改。']]);
+  assert.deepEqual(found('老師說過 p.44 和 1-3 p.45'), [['老師說過 p.44 和 1-3 p.45', '位置前面有一句話，不確定是不是出處。點一下幫你改。']], '原本是兩個按鈕、兩個提示');
+  assert.deepEqual(found('老師說過 p.44、老師說過 p.44').length, 2, '同一個位置寫兩次都有問題：兩段');
+  const [first] = unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf('老師說過 p.44 和 1-3 p.45'), NO_UNITS);
+  assert.deepEqual([first.item.text, first.item.problem], ['老師說過 p.44 和 1-3 p.45', 'before'], '給表單猜的那一項：那一段的原文、第一個有問題的項目');
+});
+
+void test('§1-3 卡組有 layout 時回傳那一段在檔案的位置；切不出原文的是 null', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2\n材料: "[[甲]]"\n---\n- 目標 ^a\n    - 問 :: 答\n';
+  const text = head + '    - 出處：p.44、老師說過 p.45\n';
+  const [hit] = unreadableSources(appWith(material).app, '卡組/本篇.md', parseDeck(text, { layout: true }), NO_UNITS);
+  const line = text.split('\n')[hit.at?.line ?? 0];
+  assert.deepEqual([hit.at?.line, line.slice(hit.at?.from, hit.at?.to)], [8, '老師說過 p.45']);
+  assert.equal(unreadableSources(appWith(material).app, '卡組/本篇.md', parseDeck(text), NO_UNITS)[0].at, null, '沒有 layout');
+  const crossing = head + '    - 出處：老師說過\n      p.45\n';
+  assert.equal(unreadableSources(appWith(material).app, '卡組/本篇.md', parseDeck(crossing, { layout: true }), NO_UNITS)[0].at, null, '跨了接續行');
 });
 
 void test('D-170 單元：標準的編號沒有卡組不提示；其他編號、列表沿用學期的對不到才提示；單元後面的字比名稱與那個單元的材料', () => {

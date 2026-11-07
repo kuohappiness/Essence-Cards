@@ -168,6 +168,43 @@ void test('§2 第 3 點 命令「填出處」：游標在目標那一行到它�
     [null, null, '能說出溶劑', '能說出溶劑', '能說出溶劑', '能說出溶劑', null, '能說明擴散', '能說明擴散']);
 });
 
+void test('§1-3 看不懂的出處：畫在那一段，帶說明；切不出原文的畫那一欄出處的第一行；sourceAt 找得到那一段', () => {
+  const doc = '- 目標 ^k3m9x2\n    - 出處：p.44、老師說過 p.45\n    - Q :: A\n- 第二個 ^h2m8qd\n    - 出處：老師說過\n      p.46 ^x\n    - Q2 :: A2\n';
+  // 看不懂的判斷要看材料與目錄（main.ts 給）；這裡用替身：每一段都說看不懂，at 照 layout 算。
+  const m = markup({
+    isDeck: () => true,
+    unreadable: (_state, deck) => [...deck.layout.entries()].flatMap(([line, layout]) => layout.parts.slice(-1).map(part => {
+      const entry = layout.entries[part.entry];
+      return { line, tip: '說明' + line, at: entry && part.from !== null && part.to !== null ? { line: entry.line, from: entry.from + part.from, to: entry.from + part.to } : null };
+    })),
+  });
+  const state = EditorState.create({ doc, extensions: [m.extension] });
+  const sources = m.marks(state).filter(mark => mark.kind === 'source');
+  assert.deepEqual(sources.map(mark => [state.sliceDoc(mark.from, mark.to), mark.tip]), [['老師說過 p.45', '說明0'], ['出處：老師說過', '說明3']]);
+  assert.deepEqual(m.sourceAt(state, sources[0].from + 2)?.hit.tip, '說明0');
+  assert.equal(m.sourceAt(state, pos(state, 2, 6)), null, '不在看不懂的出處上');
+});
+
+void test('§1-3 看不懂的出處跟著改字平移；重新解析時重算（材料、目錄變了也用 refresh）', () => {
+  let calls = 0;
+  const m = markup({ isDeck: () => true, unreadable: (_state, deck) => { calls++; return [...deck.layout.keys()].map(line => ({ line, tip: 't', at: null })); } });
+  let state = EditorState.create({ doc: '- 目標 ^k3m9x2\n    - 出處：看不懂\n    - Q :: A\n', extensions: [m.extension] });
+  const before = m.marks(state).find(mark => mark.kind === 'source');
+  state = state.update({ changes: { from: 0, insert: '\n' }, userEvent: 'input.type' }).state;
+  assert.deepEqual(m.marks(state).find(mark => mark.kind === 'source'), before && { ...before, from: before.from + 1, to: before.to + 1 });
+  assert.equal(calls, 1, '打字時不重算');
+  state = state.update({ effects: m.refresh }).state;
+  assert.equal(calls, 2);
+});
+
+void test('§2 第 2 點 圖示跟著改字平移：上面多一行，游標在出處那一行還是有圖示', () => {
+  const m = markup({ isDeck: () => true, onAdd: () => {} });
+  let state = EditorState.create({ doc: '- 目標 ^k3m9x2\n    - 出處：p.44\n    - Q :: A\n', extensions: [m.extension] });
+  state = state.update({ changes: { from: 0, insert: '前言\n\n' }, userEvent: 'input.type' }).state;
+  state = state.update({ selection: { anchor: pos(state, 4, 8) } }).state;
+  assert.equal(m.icon(state), 4);
+});
+
 void test('§1 不是卡組筆記不標', () => {
   assert.deepEqual(editor(NATURAL, false).marks, []);
 });

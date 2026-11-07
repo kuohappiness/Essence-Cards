@@ -1,4 +1,4 @@
-import { apiVersion, editorInfoField, FileSystemAdapter, Notice, Platform, Plugin } from 'obsidian';
+import { apiVersion, editorInfoField, FileSystemAdapter, MarkdownView, Notice, Platform, Plugin } from 'obsidian';
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
@@ -15,13 +15,14 @@ import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { markup, targetAt, type Markup } from './obsidian/markup.ts';
-import { openBlankSourceForm } from './obsidian/source-entry.ts';
+import { openBlankSourceForm, openUnreadableSourceForm } from './obsidian/source-entry.ts';
 import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { versionText } from './obsidian/version.ts';
 import { createState, type ErrorSource, type State, type StudyPick } from './state/index.ts';
 import { reminderView, type Session } from './review/index.ts';
+import { unreadableSources, type UnreadableSource } from './ui/sources.ts';
 import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
@@ -72,7 +73,7 @@ export interface PluginEvents {
 export type PluginEvent = keyof PluginEvents;
 
 /** 電腦上補 ID、鎖定與標示接好之後交回的：鎖住的 ID 與畫的標示（開發命令看）、存檔按鈕與離開筆記的備援。 */
-export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver; markup: Pick<Markup, 'marks' | 'refresh' | 'icon'> }
+export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver; markup: Pick<Markup<UnreadableSource>, 'marks' | 'refresh' | 'icon' | 'sourceAt'>; refreshMarks: () => void }
 
 export default class EssenceCardsPlugin extends Plugin {
   /** 這台裝置的碼（W5 說明 §4-2）；紀錄的檔名用它。 */
@@ -272,13 +273,33 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     this.registerEditorExtension(lock.extension);
     // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。游標在出處那一行時的「填出處」圖示、改到筆記時關掉表單（§2）。
-    const marks = markup({
+    // 看不懂的出處（§1-3）要看材料與目錄：和存檔按鈕同一個判斷，點了打開那一段的表單。
+    const marks = markup<UnreadableSource>({
       isDeck: state => lockable(pathOf(state)),
       onAdd: (view, line) => { openBlankSourceForm(view, view.state.doc.line(line).to, this.state); },
       onEdit: closeSourceForm,
+      unreadable: (state, deck) => {
+        const path = pathOf(state);
+        return path ? unreadableSources(this.app, path, deck, (term, code) => this.state?.unitMaterials(path, term, code) ?? []) : [];
+      },
+      onSource: (view, hit, from) => { openUnreadableSourceForm(view, from, this.state, hit); },
     });
     this.registerEditorExtension(marks.extension);
-    // 命令「填出處」（§2 第 3 點）：游標在某個目標裡才可用，打開空白的表單。
+    // 目錄、別篇卡組或材料變了（§1-5）：開著的卡組重新判斷看不懂的出處。材料存檔很頻繁，停一下再算；卡組自己改字由標示自己重算。
+    let timer = 0;
+    const refreshMarks = (except?: string): void => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        this.app.workspace.iterateAllLeaves(leaf => {
+          const view = leaf.view instanceof MarkdownView ? leaf.view : null;
+          const cm = (view?.editor as unknown as { cm?: EditorView } | undefined)?.cm;
+          if (cm && view?.file && view.file.path !== except && lockable(view.file.path)) cm.dispatch({ effects: marks.refresh });
+        });
+      }, 250);
+    };
+    this.register(() => { window.clearTimeout(timer); });
+    this.registerEvent(this.app.metadataCache.on('changed', file => { refreshMarks(file.path); }));
+    // 命令「填出處」（§2 第 3 點）：游標在某個目標裡才可用；在看不懂的出處上時打開那一段的表單，否則打開空白的表單。
     this.addCommand({
       id: 'fill-source',
       name: '填出處',
@@ -289,7 +310,10 @@ export default class EssenceCardsPlugin extends Plugin {
         const head = view.state.selection.main.head;
         const target = targetAt(view.state.doc, parseDeck(view.state.doc.toString()), view.state.doc.lineAt(head).number);
         if (!target) return false;
-        if (!checking) openBlankSourceForm(view, head, this.state);
+        if (checking) return true;
+        const found = marks.sourceAt(view.state, head);
+        if (found) openUnreadableSourceForm(view, found.from, this.state, found.hit);
+        else openBlankSourceForm(view, head, this.state);
         return true;
       },
     });
@@ -302,7 +326,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開完馬上關時，Obsidian 只在關之後送一次 layout-change（技術債 A3，a3check 的 C1、C3）。
     this.registerEditorExtension(ViewPlugin.define(view => { saver.opened(pathOf(view.state)); return {}; }));
-    return { tokens: lock.tokens, saver, markup: marks };
+    return { tokens: lock.tokens, saver, markup: marks, refreshMarks };
   }
 
   /** 這個外掛自己的錯：照舊印在 console，再交給錯誤紀錄（where 照 syntax.md §9）。 */
@@ -386,7 +410,7 @@ export default class EssenceCardsPlugin extends Plugin {
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
     // unread() 變了不經 onChange（§8）：這裡只更新狀態列，入口開著時自己也有訂。
     this.state.onUnread(() => { this.updateReminders(); });
     this.entry?.refresh();
