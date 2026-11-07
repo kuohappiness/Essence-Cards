@@ -127,3 +127,22 @@ void test('L2 R10：標示之後改了前面的單元，表單預選現在跟著
   assert.equal(written, '    - 出處：國二上 1-4 p.20、國二上 1-4 p.21');
   view.destroy();
 });
+
+void test('L2 R14：標示之後加了「不算這個」，表單照現在的讀法改成當場教，不預選被排除的單元', () => {
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2 本篇\n---\n';
+  const old = head + '- 甲 ^abc123\n    - Q :: A\n    - 出處：國二上 1-3 和 1-8\n';
+  const [hit] = hitsOf(old);
+  assert.equal(hit.text, '國二上 1-3 和 1-8');
+  assert.notEqual(hit.item.problem, 'negative');
+  const view = new EditorView({ state: EditorState.create({ doc: old }), parent: document.body });
+  const from = view.state.doc.line(hit.at!.line + 1).from + hit.at!.from;
+  const end = view.state.doc.line(8).to;
+  view.dispatch({ changes: { from: end, insert: '、不算這個' }, userEvent: 'input.type' });
+  openUnreadableSourceForm(view, from, entry, hit);
+  const checked = Array.from(form().querySelectorAll('[role="radio"][aria-checked="true"]')).map(each => each.textContent);
+  assert.deepEqual(checked, ['這一篇'], '有否定的字：預選這一篇（§4-1）');
+  assert.equal(form().querySelector<HTMLInputElement>('input[aria-label="說明（選填）"]')!.value, '', '說明留空');
+  assert.match(form().querySelector('.essence-cards-source-form-note')?.textContent ?? '', /可以這樣寫/);
+  closeSourceForm();
+  view.destroy();
+});

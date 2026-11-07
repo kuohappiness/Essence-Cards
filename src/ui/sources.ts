@@ -100,14 +100,15 @@ function segmentOf(sources: readonly string[], parts: readonly SourcePart[], ind
  * 所以用標示現在的位置找（line、column 從 0 算，是標示開頭現在的位置），不用標示記的行號：上面多了一個出處相同的目標時，舊行號指到別的目標。
  * 有位置的段：那個位置開頭的那一段，原文要和標示時一樣；切不出原文的段（at 是 null，標示畫在那一欄出處的第一行）：那一行是哪個目標的
  * 第一個出處欄位、同一個第幾段的原文一樣。找不到（那裡的字改過）是 null。
- * 接在後面的位置、原文與跟著的單元也用現在的全文重算（L2 第二輪 R10：標示之後改了後面的頁碼或前面的單元，用標示時的會寫回舊的字）。
+ * 接在後面的位置、原文與跟著的單元也用現在的全文重算（L2 第二輪 R10：標示之後改了後面的頁碼或前面的單元，用標示時的會寫回舊的字）；
+ * item 是標示時的那一項，讀法的問題（problem）換成那一段現在的（L2 第三輪 R14：後面加了「不算這個」，表單要照否定的填法）。
  */
 export function relocateSource(
   deck: { targets: readonly { line: number; fields: { sources: readonly string[] } }[]; layout: ReadonlyMap<number, Pick<TargetLayout, 'entries' | 'parts' | 'fields'>> },
-  hit: Pick<UnreadableSource, 'at' | 'part' | 'text'>,
+  hit: Pick<UnreadableSource, 'at' | 'part' | 'text' | 'item'>,
   line: number,
   column: number,
-): ({ target: number; part: number } & Segment) | null {
+): ({ target: number; part: number; item: SourceItem } & Segment) | null {
   for (const { line: target, fields } of deck.targets) {
     const layout = deck.layout.get(target);
     if (!layout) continue;
@@ -117,7 +118,11 @@ export function relocateSource(
         const entry = layout.entries[each.entry];
         return entry && each.from !== null && entry.line === line && entry.from + each.from === column;
       });
-    if (part >= 0 && partText(fields.sources, layout.parts[part]) === hit.text) return { target, part, ...segmentOf(fields.sources, layout.parts, part) };
+    if (part < 0 || partText(fields.sources, layout.parts[part]) !== hit.text) continue;
+    const item: SourceItem = { ...hit.item }, problem = layout.parts[part].items.find(each => each.problem)?.problem;
+    delete item.problem;
+    if (problem) item.problem = problem;
+    return { target, part, item, ...segmentOf(fields.sources, layout.parts, part) };
   }
   return null;
 }
