@@ -9,7 +9,7 @@ import type { EmbeddedRule, RuleSubject } from './rules.ts';
 // 提示的組成（tasks/ai-cards-mvp.md §3）：規則組的每一份 → 任務段，照順序、中間空一行接起來；每一部分與整份提示各算 SHA-256。
 
 /** §3 的任務段與附加說明的版號：改字就加一（§1〈提示模板的版本〉）。 */
-const PROMPT_VERSION = '提示 v1';
+const PROMPT_VERSION = '提示 v2';
 export const PURPOSES = ['準備段考', '準備小考', '平常複習'] as const;
 export type Purpose = (typeof PURPOSES)[number];
 
@@ -101,6 +101,8 @@ export function taskSection(form: CardForm, subject: Pick<RuleSubject, 'subject'
     '- 不要寫學習目標 ID 與屬性區，程式會加。',
     ...subject.r3 ? ['- 照規則交三段，標記照抄（`<<<全貌>>>`、`<<<架構>>>`、`<<<卡組>>>`）。'] : [],
     '- 回覆的最後單獨一行寫 `<<<完>>>`。',
+    // 提示 v2（真人測試 2026-11-07）：網頁的回覆複製按鈕會壓平縮排或跳脫清單符號；程式碼區塊的「複製」照原文。
+    '- 整段回覆放進**一個**程式碼區塊：第一行寫 ````markdown（四個反引號），最後一行寫 ````，`<<<完>>>` 是框裡的最後一行。家長會按程式碼區塊的「複製」把它貼回來，框外不用寫說明。',
   ];
   return lines.join('\n');
 }

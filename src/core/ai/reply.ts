@@ -185,16 +185,26 @@ const OWN_NAMES = new Set(['英文', '國語']);
 /** 出處可以不寫的科目：英文預設「出處、類型不用寫（出處沒寫就是這一課）」（english.md〈錯題〉前的寫法）。 */
 const SOURCE_OPTIONAL = new Set(['英文']);
 
-/** 一篇的檢查（§4〈檢查〉）：check-syntax 算錯誤的擋住、算不符的提示，提醒不列。 */
+/**
+ * 清單結構跑掉的「不符」：照規則寫的 AI 輸出不會有（之前 13 份真實輸出都是 0 次），網頁的回覆複製按鈕卻會大量造成
+ * （真人測試 2026-11-07：Gemini 壓平縮排、ChatGPT 把 `-` 跳脫成 `\-`）。存下去的草稿結構是錯的，所以在 AI 製卡擋下，
+ * 一篇只報一次、指到第一處。出處與類型分兩行（data-position）不是複製造成的、照樣讀得懂，不在裡面。
+ */
+const STRUCTURE = new Set(['top-question', 'no-question', 'para']);
+
+/** 一篇的檢查（§4〈檢查〉）：check-syntax 算錯誤的擋住、算不符的提示，提醒不列；清單結構跑掉的合成一個錯誤。 */
 export function checkPiece(text: string, rawLine: (line: number) => number, subject: Pick<RuleSubject, 'subject' | 'r3'>, form: CardForm): { errors: ReplyIssue[]; hints: ReplyIssue[]; result: CheckResult } {
-  const errors: ReplyIssue[] = [], hints: ReplyIssue[] = [];
+  const errors: ReplyIssue[] = [], hints: ReplyIssue[] = [], broken: number[] = [];
   const result = check(text, { subject: subject.subject ?? '一般知識', unit: subject.subject === null ? null : unitCode(form.unit) });
   for (const issue of result.issues) {
     if (issue.level === '提醒' || HANDLED.has(issue.code)) continue;
     if (issue.code === 'target-name' && OWN_NAMES.has(subject.subject ?? '')) continue;
     if (issue.code === 'no-source' && SOURCE_OPTIONAL.has(subject.subject ?? '')) continue;
+    if (STRUCTURE.has(issue.code)) { broken.push(rawLine(issue.line - 1)); continue; }
     (issue.level === '錯誤' ? errors : hints).push({ line: rawLine(issue.line - 1), message: issue.msg });
   }
+  // 處數算行：最上層的題目同時是「沒有題目的目標」，同一行不算兩處。
+  if (broken.length) errors.push({ line: Math.min(...broken), message: `回覆的縮排或清單符號在複製時跑掉了（這一篇共 ${String(new Set(broken).size)} 處）：請按 AI 回覆裡程式碼區塊右上角的「複製」，再整段貼一次` });
   const first = text.split('\n').findIndex(line => line.trim() !== '');
   if (first >= 0 && text.split('\n')[first].trim() === '---') errors.push({ line: rawLine(first), message: 'AI 寫了屬性區（開頭的 ---）：請把屬性區刪掉，程式會加' });
   return { errors, hints, result };

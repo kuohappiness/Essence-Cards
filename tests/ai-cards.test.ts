@@ -22,7 +22,7 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
   assert.equal(a.text, b.text);
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.sha256, sha256Hex(a.text));
-  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v1']);
+  assert.deepEqual(a.parts.map(part => `${part.name} ${part.version}`), ['通用 v0.15', '英文 v0.14', '任務段 提示 v2']);
   assert.equal(a.text, ['# 通用', '# 英文', a.parts[2].text].join('\n\n'));
   assert.equal(a.parts[2].text, [
     '## 這一次的任務',
@@ -43,6 +43,7 @@ void test('§3 提示：同樣的表單、規則與已有目標組出的文字�
     '- 一課分成幾篇時，篇名照 `國二上英文 L3 <篇名>` 寫，例如 `國二上英文 L3 單字`，單獨一行、前面不加 `#`。',
     '- 不要寫學習目標 ID 與屬性區，程式會加。',
     '- 回覆的最後單獨一行寫 `<<<完>>>`。',
+    '- 整段回覆放進**一個**程式碼區塊：第一行寫 ````markdown（四個反引號），最後一行寫 ````，`<<<完>>>` 是框裡的最後一行。家長會按程式碼區塊的「複製」把它貼回來，框外不用寫說明。',
   ].join('\n'));
   // R3 的科目多一句三段的標記；沒有已有目標寫「無」；家長調整與教材照填。
   const science = taskSection(form({ adjust: '這次最多 8 個目標', material: '課本 p.40～51 的照片' }), subject('science'), []);
@@ -229,6 +230,24 @@ void test('§4 檢查：check-syntax 算錯誤的擋（缺答案、pick-mixed、
   const noSource = ENGLISH.split('\n').filter(line => !line.includes('出處：')).join('\n');
   assert.ok(!inspectEnglish(noSource).hints.some(each => each.message.startsWith('沒有出處')));
   assert.ok(inspectReply(R3_REPLY.replace('出處：p.44｜類型：因果', '類型：因果'), form(), science, [], nobody).hints.some(each => each.message.startsWith('沒有出處')));
+});
+
+void test('§4 複製時清單結構跑掉（真人測試 2026-11-07）：縮排被壓平、清單符號被跳脫都擋，一篇一個原因、指到第一處、寫出處數；程式碼區塊照常讀', () => {
+  const broken = (reply: string) => inspectEnglish(reply).errors.map(each => `${String(each.line)} ${each.message}`);
+  // Gemini 的複製按鈕：每一行都變成最上層的 `* `，縮排全部不見。
+  const flat = ['國二上英文 L3 單字', '', '* borrow 英翻中', '* borrow :: 借入', '* 例句：I borrow a pen. 我借了一支筆。', '', '* lend 英翻中', '* lend :: 借出', '<<<完>>>'].join('\n');
+  assert.deepEqual(broken(flat), ['3 回覆的縮排或清單符號在複製時跑掉了（這一篇共 5 處）：請按 AI 回覆裡程式碼區塊右上角的「複製」，再整段貼一次']);
+  // ChatGPT 的複製按鈕：縮排留著，但有的清單符號被跳脫成 `\-`，讀成一般段落；底下的題目變成最上層的題目。
+  const escaped = ENGLISH.replace('- 能用 be going to 說未來的計畫', '\\- 能用 be going to 說未來的計畫').replace('    - 出處：p.42\n', '')
+    .replace('<<<完>>>', '- 能用 will 說未來\n    - 我會幫你。I ＿＿ help you. :: will\n<<<完>>>');
+  assert.deepEqual(broken(escaped), ['13 回覆的縮排或清單符號在複製時跑掉了（這一篇共 2 處）：請按 AI 回覆裡程式碼區塊右上角的「複製」，再整段貼一次']);
+  // 照新的提示放進四個反引號的程式碼區塊、整段（含框）貼回：拿掉框照常讀，<<<完>>> 認得。
+  const fenced = inspectEnglish('````markdown\n' + ENGLISH + '\n````\n');
+  assert.deepEqual([fenced.errors, fenced.ended, fenced.pieces.length], [[], true, 2]);
+  // 出處與類型分兩行（data-position）不是複製造成的，卡組照樣讀得懂：照舊只提示。
+  const twoData = inspectEnglish(ENGLISH.replace('    - 出處：p.40\n', '    - 出處：p.40\n    - 類型：記憶\n'));
+  assert.deepEqual(twoData.errors, []);
+  assert.ok(twoData.hints.some(each => each.message.startsWith('AI 把資料寫成一行')));
 });
 
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {

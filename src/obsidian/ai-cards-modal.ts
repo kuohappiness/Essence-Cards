@@ -13,7 +13,7 @@ const TEXT = {
   resumeSave: (label: string) => `繼續存上一次的結果（${label}，存到一半）`,
   resumePaste: (label: string, ago: string) => `接著貼回上一次的結果（${label}，${ago}複製）`,
   newLesson: '做新的一課',
-  next: '下一步：到 ChatGPT 或 Claude 開一個新對話，附上課本頁面的照片或 PDF，貼上提示送出；AI 回完後，把整段回覆複製回來，貼在下面。',
+  next: '下一步：到 ChatGPT、Gemini 或 Claude 開一個新對話，附上課本頁面的照片或 PDF，貼上提示送出；AI 回完後，按回覆裡程式碼區塊右上角的「複製」，貼在下面。',
   copied: (chars: number) => `已複製提示，共 ${chars.toLocaleString('en-US')} 字。`,
   paste: '把 AI 的整段回覆貼在這裡',
   confirmEnd: '我確定整段都貼了',
