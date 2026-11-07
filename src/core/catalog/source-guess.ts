@@ -1,5 +1,5 @@
 import { codeKey, sourceLinks, splitSource, termKey, termRank } from '../deck/index.ts';
-import type { SourceItem, SourceLink, SourceOwner } from '../deck/index.ts';
+import type { SourceItem, SourceLink, SourceOwner, SourceScope } from '../deck/index.ts';
 
 // 填出處的小表單（D-169 第 4、5 點、D-170 第 2、9、10 點，tasks/edit-markup.md §4-1、§4-2）：先填好的內容與會寫成的字。
 // 只建議，不改歸屬：家長按套用才寫，寫的是 syntax §2-5 本來就有的寫法。要看目錄（同一科有哪些單元），所以放在 catalog。
@@ -46,8 +46,10 @@ const byTerm = (a: CatalogUnit, b: CatalogUnit): number => (termRank(termKey(a.t
 /**
  * 一項看不懂的出處（或 null：從圖示、命令打開的空白表單）→ 先填好的表單（§4-1 的表）。
  * follows：接在它後面、同一個單元的位置（`1-3 p.20、21` 的 `21`，§4-3 第 1 點），寫回時一起換掉，所以位置一起帶進來。
+ * scope：這一段跟著哪個單元（readSourceParts 的 scope）；跟著別的單元、自己又沒寫單元時預選那個單元（L2 第一輪 R3：
+ * `國二上 1-3 p.20、老師說過 p.21` 的第二段是 1-3 的 p.21，選「這一篇」寫回會把頁碼改到這一篇）。
  */
-export function guessSource(item: SourceItem | null, own: SourceOwner, units: readonly CatalogUnit[], follows: readonly SourceItem[] = []): SourceForm {
+export function guessSource(item: SourceItem | null, own: SourceOwner, units: readonly CatalogUnit[], follows: readonly SourceItem[] = [], scope: SourceScope = null): SourceForm {
   const blank: SourceForm = { unit: 'own', unitOrigin: 'original', candidates: [], places: [], placesOrigin: 'unset', remark: '', remarkOrigin: 'unset', note: null, unitNote: null };
   if (!item) return blank;
   const teach = (): SourceForm => ({ ...blank, note: TEACH });
@@ -102,7 +104,10 @@ export function guessSource(item: SourceItem | null, own: SourceOwner, units: re
     return { ...blank, ...filled, unit: null, unitOrigin: 'unset', candidates: [...first, ...rest], note: badNote, unitNote: '原文沒寫年級學期，請選一個' };
   }
   // 這一篇的位置：位置前面有一句話、頁碼看不懂。
-  if (places.length || parts.bad || parts.places.length) return { ...blank, ...filled, unitOrigin: 'original', note: badNote };
+  if (places.length || parts.bad || parts.places.length) {
+    const unit = scope && scope !== 'this' ? choice(scope.term, scope.unit) : null;
+    return { ...blank, ...filled, unit: unit && !isOwn(unit) ? unit : 'own', unitOrigin: 'original', note: badNote };
+  }
   // 舊標題找不到、猜不出來的：照 D-169 第 4 點當場教。
   return teach();
 

@@ -17,7 +17,7 @@ export { englishParts, lineSpeech, otherAnswers, englishBeside, englishBreak, gl
 export { crumb } from './crumb.ts';
 export { anchorBreak, anchorParts, extraLabel, splitTranslation } from './extras.ts';
 export { headingKey, readSourceParts, sourceLabel, sourceLinks, splitSource } from './sources.ts';
-export type { SourceItem, SourceLink, SourceOwner, SourcePart, Span, TargetLayout } from './sources.ts';
+export type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceScope, Span, TargetLayout } from './sources.ts';
 export { catalogView, entryView, examRow, examSubject, reminderView } from './entry.ts';
 export { checkDates, examFailure, examForm, formChange, normalDate, ORDER_WORD, toggleRow } from './exam-form.ts';
 export type { ExamForm, ScopeRow } from './exam-form.ts';

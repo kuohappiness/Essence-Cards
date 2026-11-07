@@ -83,7 +83,7 @@ function open(view: EditorView, pos: number, target: number, entry: SourceEntry,
   openSourceForm({
     rect: { left: at.left, top: at.top, bottom: at.bottom },
     original: hit?.whole ?? null,
-    form: guessSource(hit?.item ?? null, own, units, hit?.follows),
+    form: guessSource(hit?.item ?? null, own, units, hit?.follows, hit?.scope),
     own,
     units,
     blocked: stale ? '筆記剛改過，請再點一次' : canEditSource(text, target, hit?.part ?? null, entry.version),

@@ -1,6 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import { headingKey, readSourceParts, splitSource } from '../review/index.ts';
-import type { SourceItem, SourceLink, SourceOwner, SourcePart, Span, TargetLayout } from '../review/index.ts';
+import type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceScope, Span, TargetLayout } from '../review/index.ts';
 
 // 出處的 Obsidian 層（W6 §3-8）：出處的每一項由純函式（core/deck）變成連結的目標；這裡用 metadataCache 判斷
 // 卡組的「材料」裡哪一份有那個區塊或標題，回傳要打開的連結文字。跨單元的候選由索引提供（§10），這裡只管找錨點。
@@ -71,9 +71,9 @@ export function firstMaterial(app: App, deckPath: string, materials: readonly st
  * 一段裡只要有一項有問題就算一段。line 從 0 算，是目標那一行；text 是那一段的原文；tip 是滑過的說明；
  * item 是那一段裡第一個有問題的項目，text 換成那一段的原文（表單猜測用）；at 是那一段在檔案的位置，卡組有 layout 而且切得出原文時才有。
  * part 是第幾段（readSourceParts 的順序，寫回用）；follows 是接在它後面、同一個單元的位置的項目（`1-3 p.20、21` 的 `21`，§4-3 第 1 點），
- * 寫回時一起換掉；whole 是那一段連同它們的原文（表單上的「原文」）。
+ * 寫回時一起換掉；whole 是那一段連同它們的原文（表單上的「原文」）；scope 是那一段跟著哪個單元（表單預選單元用，L2 第一輪 R3）。
  */
-export interface UnreadableSource { line: number; name: string; text: string; tip: string; item: SourceItem; at: Span | null; part: number; follows: SourceItem[]; whole: string }
+export interface UnreadableSource { line: number; name: string; text: string; tip: string; item: SourceItem; at: Span | null; part: number; follows: SourceItem[]; whole: string; scope: SourceScope }
 interface SourceDeck {
   props: SourceOwner & { materials: readonly string[] };
   targets: readonly { line: number; name: string; fields: { sources: readonly string[] } }[];
@@ -147,7 +147,7 @@ export function unreadableSources(app: App, deckPath: string, deck: SourceDeck, 
       // layout 的段沒有位置時（那一項切不出原文）at 是 null。
       const entry = layout?.entries[part.entry];
       const at = entry && part.from !== null && part.to !== null ? { line: entry.line, from: entry.from + part.from, to: entry.from + part.to } : null;
-      return [{ line, name, text, tip: reason + '。點一下幫你改。', item: { ...first.item, text }, at, part: index, follows: chain.flatMap(each => each.items), whole }];
+      return [{ line, name, text, tip: reason + '。點一下幫你改。', item: { ...first.item, text }, at, part: index, follows: chain.flatMap(each => each.items), whole, scope: part.scope }];
     });
   });
 }

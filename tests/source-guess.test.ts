@@ -140,3 +140,16 @@ void test('§4-1 接續段的位置一起帶進來：1-3 p.20、21 是 p.20、p.
   assert.deepEqual(summary(form).places, ['頁 20', '頁 21']);
   assert.equal(form.placesOrigin, 'original');
 });
+
+void test('L2 R3：這一段跟著別的單元（國二上 1-3 p.20、老師說過 p.21 的第二段）：單元預選那個單元，原文', () => {
+  const [, second] = sourceLinks(['國二上 1-3 p.20', '老師說過 p.21'], OWN);
+  const form = guessSource(second, OWN, UNITS, [], { term: '國二上', unit: '1-3' });
+  assert.deepEqual(summary(form), { unit: '國二上 1-3', unitOrigin: 'original', candidates: [], places: ['頁 21'], placesOrigin: 'original', remark: '老師說過', note: null });
+  // 寫回的字是那個單元的，頁碼不會跑到這一篇。
+  assert.equal(sourceText(form), '國二上 1-3 p.21 老師說過');
+  // 範圍寫反的也一樣跟著那個單元。
+  const [, reversed] = sourceLinks(['國二上 1-3 p.20', 'p.46-44'], OWN);
+  assert.equal(summary(guessSource(reversed, OWN, UNITS, [], { term: '國二上', unit: '1-3' })).unit, '國二上 1-3');
+  // 跟著的是這一篇：照舊。
+  assert.equal(guessSource(second, OWN, UNITS, [], 'this').unit, 'own');
+});
