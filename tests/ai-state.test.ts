@@ -112,7 +112,7 @@ void test('§6 候選框裡的 ID 不再配出；剪下貼成目標後照舊出�
   assert.deepEqual([...moved.state.aiWhere(['aaaaaa'])!], [['aaaaaa', [other]]]);
 });
 
-void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: status；暫停、啟用的不動；手機不寫；屬性區讀不懂的不寫', async t => {
+void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: status；暫停、啟用的不動；需要新版的擋下；手機不寫；屬性區讀不懂的不寫', async t => {
   const draft = head('草稿') + '- 能說出密度 ^k3m9qa\n    - 密度？ :: 質量除以體積\n';
   const paused = 'Essence Cards/學業/國二上/自然/2-2.md';
   const broken = 'Essence Cards/學業/國二上/自然/2-3.md';
@@ -127,6 +127,13 @@ void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: sta
   assert.equal((await h.state.activateDraft(paused, null)).kind, 'unchanged');
   assert.ok(h.texts.get(paused)!.includes('狀態: 暫停'));
   assert.equal((await h.state.activateDraft(broken, null)).kind, 'unchanged');
+  // 需要新版的草稿：和目錄的暫停同一道門檻（needs-update），不改字、不記。
+  const newer = draft.replace('狀態: 草稿', '狀態: 草稿\n需要版本: 99.0.0');
+  const gated = await setup(t, { [DECK]: newer });
+  assert.deepEqual(await gated.state.activateDraft(DECK, null), { kind: 'blocked', reason: 'needs-update' });
+  assert.equal(gated.texts.get(DECK), newer);
+  await gated.state.flush();
+  assert.deepEqual(gated.logged().filter(each => each.set === 'status'), []);
   // 目錄的暫停不能把草稿改成暫停（照舊）。
   const again = await setup(t, { [DECK]: draft });
   assert.equal((await again.state.setDeckStatus(DECK, '暫停', null)).kind, 'unchanged');
