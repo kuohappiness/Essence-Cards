@@ -5,6 +5,7 @@ import { NEEDS_NEWER, canEditSource, editSource, fieldFixes, fixField, fixQuesti
 import type { FieldFix, SourceEditAction } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import { closeSourceForm, openAskPanel, openSourceForm } from './source-form.ts';
+import { relocateSource } from '../ui/sources.ts';
 import type { UnreadableSource } from '../ui/sources.ts';
 
 // 填出處的入口（tasks/edit-markup.md §2）：圖示與命令「填出處」打開空白的表單，用來加一項；
@@ -61,18 +62,19 @@ export function openFieldFix(view: EditorView, pos: number, entry: SourceEntry, 
   });
 }
 
-function open(view: EditorView, pos: number, target: number, entry: SourceEntry, hit: UnreadableSource | null): void {
+function open(view: EditorView, pos: number, blankTarget: number, entry: SourceEntry, hit: UnreadableSource | null): void {
   const opened = view.state.doc;
   const text = opened.toString();
   const deck = parseDeck(text, { layout: true });
-  // 標示是停止打字 250 ms 之後算的：這之間改過字，點到的那一段可能已經不是第幾段，不寫（換錯段的話核對擋不到）。
-  const part = hit ? deck.layout.get(target)?.parts[hit.part] : undefined;
-  const sources = deck.targets.find(each => each.line === target)?.fields.sources ?? [];
-  const stale = hit !== null && (!part || part.from === null || part.to === null || sources[part.entry]?.slice(part.from, part.to) !== hit.text);
+  // 標示是停止打字 250 ms 之後算的，之後跟著改字平移：用標示現在的位置（pos）找那一段，不用標示時的行號與第幾段（L2 第一輪 R2、R6）。
+  // 找不到（那裡的字改過）不寫，換錯段的話核對擋不到。
+  const found = hit ? relocateSource(deck, hit, opened.lineAt(pos).number - 1, pos - opened.lineAt(pos).from) : null;
+  const stale = hit !== null && found === null;
+  const target = found?.target ?? blankTarget, partIndex = found?.part ?? null;
   const own = { term: deck.props.term, subject: deck.props.subject, unit: deck.props.unit };
   const units = catalogUnits(entry.state, deck.props.subject);
   const at = view.coordsAtPos(pos) ?? view.contentDOM.getBoundingClientRect();
-  const action = (written: string, mine: boolean): SourceEditAction => hit ? { kind: 'replace', part: hit.part, text: written, own: mine } : { kind: 'add', text: written, own: mine };
+  const action = (written: string, mine: boolean): SourceEditAction => partIndex !== null ? { kind: 'replace', part: partIndex, text: written, own: mine } : { kind: 'add', text: written, own: mine };
   // 核對不成立（不是預期的不寫）每次打開表單只記一次：表單每打一個字就核對一次。
   let logged = false;
   const edit = (written: string, mine: boolean) => {
@@ -86,7 +88,7 @@ function open(view: EditorView, pos: number, target: number, entry: SourceEntry,
     form: guessSource(hit?.item ?? null, own, units, hit?.follows, hit?.scope),
     own,
     units,
-    blocked: stale ? '筆記剛改過，請再點一次' : canEditSource(text, target, hit?.part ?? null, entry.version),
+    blocked: stale ? '筆記剛改過，請再點一次' : canEditSource(text, target, partIndex, entry.version),
     check: (written, mine) => {
       if (!written) return { reason: null, written };
       const result = edit(written, mine);

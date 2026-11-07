@@ -80,6 +80,39 @@ interface SourceDeck {
   layout?: ReadonlyMap<number, Pick<TargetLayout, 'entries' | 'parts'>>;
 }
 
+/** 一段的原文；切不出來時用讀出的字。 */
+const partText = (sources: readonly string[], part: SourcePart): string =>
+  part.from !== null && part.to !== null ? sources[part.entry].slice(part.from, part.to) : part.items.map(item => item.text).join(' ');
+
+/**
+ * 點了看不懂的出處、用命令打開時，那一段現在是哪個目標的第幾段（L2 第一輪 R2、R6）。標示是停止打字 250 ms 後算的，之後改字時跟著平移，
+ * 所以用標示現在的位置找（line、column 從 0 算，是標示開頭現在的位置），不用標示記的行號：上面多了一個出處相同的目標時，舊行號指到別的目標。
+ * 有位置的段：那個位置開頭的那一段，原文要和標示時一樣；切不出原文的段（at 是 null，標示畫在那一欄出處的第一行）：那一行是哪個目標的
+ * 第一個出處欄位、同一個第幾段的原文一樣。找不到（那裡的字改過）是 null。
+ */
+export function relocateSource(
+  deck: { targets: readonly { line: number; fields: { sources: readonly string[] } }[]; layout: ReadonlyMap<number, Pick<TargetLayout, 'entries' | 'parts' | 'fields'>> },
+  hit: Pick<UnreadableSource, 'at' | 'part' | 'text'>,
+  line: number,
+  column: number,
+): { target: number; part: number } | null {
+  for (const { line: target, fields } of deck.targets) {
+    const layout = deck.layout.get(target);
+    if (!layout) continue;
+    if (hit.at === null) {
+      const part = layout.parts[hit.part];
+      if (layout.fields[0]?.line === line && part && partText(fields.sources, part) === hit.text) return { target, part: hit.part };
+      continue;
+    }
+    const part = layout.parts.findIndex(each => {
+      const entry = layout.entries[each.entry];
+      return entry && each.from !== null && entry.line === line && entry.from + each.from === column;
+    });
+    if (part >= 0 && partText(fields.sources, layout.parts[part]) === hit.text) return { target, part };
+  }
+  return null;
+}
+
 /** 看不懂的原因，照 §1-3 的表排：同一段有好幾個時用最前面的。 */
 const REASONS = {
   term: (code: string) => `沒寫年級學期，不知道是哪一個 ${code}`,
@@ -130,8 +163,7 @@ export function unreadableSources(app: App, deckPath: string, deck: SourceDeck, 
     // 有 layout 時段已經讀好了（編輯器每次重新解析都要算，不讀第二次，§1-5 的速度）。
     const layout = deck.layout?.get(line);
     const parts = layout?.parts ?? readSourceParts(fields.sources, deck.props);
-    /** 一段的原文；切不出來時用讀出的字。 */
-    const rawOf = (part: SourcePart): string => part.from !== null && part.to !== null ? fields.sources[part.entry].slice(part.from, part.to) : part.items.map(item => item.text).join(' ');
+    const rawOf = (part: SourcePart): string => partText(fields.sources, part);
     return parts.flatMap((part, index) => {
       const found = part.items.flatMap(item => { const reason = reasonOf(item); return reason ? [{ item, reason }] : []; });
       if (!found.length) return [];
