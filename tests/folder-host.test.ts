@@ -150,8 +150,15 @@ void test('wireFolderGuard：磁碟上那個位置的內容和 Obsidian 的清�
     assert.match(String(failures[0]), /對不上/);
     guard.close();
   }
-  // 磁碟上多了清單還沒有的（剛同步來的）不算對不上。
+  // 磁碟上多了清單還沒有的（剛同步來的）不算對不上；同一個名字寫法不同（NFD）也不算。
   const synced = plugin(() => Promise.resolve(), path => path === FROM ? Promise.resolve({ files: [`${FROM}/段考.md`, `${FROM}/剛同步來的.md`], folders: [] }) : DISK(path));
+  synced.folders.get(FROM)?.children.push({ name: 'Café.md' });
+  const nfd = 'Café.md'.normalize('NFD');
+  const listed = synced.plugin.app.vault.adapter.list;
+  synced.plugin.app.vault.adapter.list = async (path: string) => {
+    const result = await listed(path);
+    return path === FROM ? { files: [...result.files, `${FROM}/${nfd}`], folders: result.folders } : result;
+  };
   const guard = wire(synced.plugin as never, { notify: () => {}, fail: () => {}, removeEmpty });
   guard.check();
   assert.equal(await guard.moveBack(guard.issues()[0]), true);

@@ -35,13 +35,14 @@ export function wireFolderGuard(plugin: Plugin, options: {
     },
     // 還在清單裡、而且那個位置就是它本身：拿掉之後同一個位置再建的是另一個物件。
     where: folder => folder instanceof TFolder && vault.getAbstractFileByPath(folder.path) === folder ? folder.path : null,
-    // 清單裡它底下的每一項磁碟上都在（第五輪）：磁碟上剛同步來、清單還沒有的不算對不上。讀不到就是對不上。
+    // 清單裡它底下的每一項磁碟上都在（第五輪）：磁碟上剛同步來、清單還沒有的不算對不上。讀不到就是對不上。名字照 NFC 比：
+    // Mac、iCloud 的檔名可能是分解的寫法，同一個名字不能因此算成對不上、讓每一次搬回都放棄。
     async intact(folder) {
       if (!(folder instanceof TFolder)) return false;
       try {
         const { files, folders } = await vault.adapter.list(folder.path);
-        const names = new Set([...files, ...folders].map(path => path.slice(path.lastIndexOf('/') + 1)));
-        return folder.children.every(child => names.has(child.name));
+        const names = new Set([...files, ...folders].map(path => path.slice(path.lastIndexOf('/') + 1).normalize('NFC')));
+        return folder.children.every(child => names.has(child.name.normalize('NFC')));
       } catch { return false; }
     },
     exists: path => vault.adapter.exists(path),
