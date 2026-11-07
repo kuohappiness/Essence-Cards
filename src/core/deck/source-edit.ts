@@ -174,8 +174,15 @@ function removeGroup(f: Field, group: readonly number[]): TextChange | { line: n
  */
 function removeGroups(f: Field, groups: readonly (readonly number[])[]): TextChange[] {
   const removed = groups.map(group => removeGroup(f, group));
+  const lines = new Set(removed.flatMap(each => 'line' in each ? [each.line] : []));
+  // 拿到檔尾、檔尾沒有換行時，夾在拿掉的行之間、會留在檔尾的空行算進同一段（L2 第三輪 R15）：removeLines 會往前拿空行，
+  // 範圍不能和前面拿掉的行重疊。
+  const last = f.doc.lines.length - 1;
+  if (lines.has(last) && !f.doc.lines[last].eol) {
+    for (let at = last - 1; at >= 0 && (lines.has(at) || !f.doc.lines[at].raw.trim()); at--) lines.add(at);
+  }
   const runs: [number, number][] = [];
-  for (const line of removed.flatMap(each => 'line' in each ? [each.line] : []).sort((a, b) => a - b)) {
+  for (const line of [...lines].sort((a, b) => a - b)) {
     const run = runs.at(-1);
     if (run && run[1] + 1 === line) run[1] = line; else runs.push([line, line]);
   }
@@ -523,6 +530,8 @@ function merge(f: Field, sources: readonly string[]): TextChange[] {
 /** 拿掉第 first 到 last 行；拿到檔尾、最後一行沒有換行時連前一行的換行一起拿（檔尾有沒有換行照舊）。 */
 function removeLines(doc: Doc, first: number, last: number): TextChange {
   if (last + 1 < doc.lines.length) return { from: doc.starts[first], to: doc.starts[last + 1], insert: '' };
+  // 檔尾沒有換行：拿完之後留在檔尾的空行一起拿（L2 第三輪 R15），再往前拿一個換行。
+  if (!doc.lines[last].eol) while (first > 0 && !doc.lines[first - 1].raw.trim()) first--;
   const from = first > 0 && !doc.lines[last].eol ? doc.starts[first] - doc.lines[first - 1].eol.length : doc.starts[first];
   return { from, to: doc.text.length, insert: '' };
 }

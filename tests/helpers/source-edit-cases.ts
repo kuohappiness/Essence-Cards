@@ -83,6 +83,11 @@ export const EDIT_CASES: EditCase[] = [
   { name: 'L2 R12：拿掉兩個接續段、檔尾沒有換行', text: split('老師說過 p.20', '21', '22').slice(0, -1), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22').slice(0, -1) },
   { name: 'L2 R12：拿掉兩個接續段、CRLF 檔尾沒有換行', text: split('老師說過 p.20', '21', '22').slice(0, -1).replaceAll('\n', '\r\n'), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22').slice(0, -1).replaceAll('\n', '\r\n') },
   { name: 'L2 R12：拿掉中間兩個接續段，後面的子項目留著', text: split('老師說過 p.20', '21', '22', 'p.30'), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22', 'p.30') },
+  // L2 第三輪 R15：拿掉的接續段隔著空行到檔尾、檔尾沒有換行：拿完之後檔尾的空行一起拿，檔尾照舊沒有換行；附著的引言留著。
+  { name: 'L2 R15：接續段隔著空行到檔尾、檔尾沒有換行', text: split('老師說過 p.20', '21') + '\n        - 22', action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22').slice(0, -1) },
+  { name: 'L2 R15：接續段隔著空行到檔尾、CRLF', text: (split('老師說過 p.20', '21') + '\n        - 22').replaceAll('\n', '\r\n'), action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22').slice(0, -1).replaceAll('\n', '\r\n') },
+  { name: 'L2 R15：空行前有附著的引言，引言留著、檔尾沒有換行', text: split('老師說過 p.20', '21') + '            > 家長備忘\n\n        - 22', action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22') + '            > 家長備忘' },
+  { name: 'L2 R15：檔尾有換行時空行照舊', text: split('老師說過 p.20', '21') + '\n        - 22\n', action: replace(0, 'p.20 p.21 p.22', true), want: split('p.20 p.21 p.22') + '\n' },
   // L2 第二輪 R13：分行的子項目有接續行，和那一欄有接續行一樣不寫（§4-3 第 4 點、§8）。
   { name: 'L2 R13：分行的子項目有接續行，加一段不寫', text: split('p.44、') + '          國二上 1-3 p.20\n', action: add('p.50', true), want: SPLIT_LINE },
   { name: 'L2 R13：分行的子項目有接續行，換一段也不寫', text: split('p.44', '老師說過 p.45') + '          p.46\n', action: replace(0, 'p.43', true), want: SPLIT_LINE },
