@@ -1,8 +1,37 @@
 # 系統資料夾的防呆：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第四輪，2026-11-07）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）已修
+狀態：待審（第五輪，2026-11-07）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）、第四輪 F1a～F1d 已修
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-07-system-folder-guard-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
+
+## 第五輪（2026-11-07）
+
+第四輪之後還有擋合併的發現，照 code-quality 的收尾規則交給使用者決定；使用者選了改結構，並同意修完再送一輪只查這段差異。
+
+請**新開一個 Codex 對話**（推理等級：高；不要沿用第四輪的對話，[quality.md](../docs/agents/quality.md) 的〈Codex 審查時〉），回報接在討論稿最後（〈Codex 第五輪〉）。先讀討論稿的〈Codex 第四輪〉與〈Claude 回應：第四輪〉。
+
+- **待審**：`32d7c1efab1b22f5ea93c735651997b2c525e7d0`（改成認資料夾本身的修正與回歸測試）。它之後只有文件的 commit。
+- **基準**：`d1c5667ba4f40cfba61d49910fa6ee62d5d27cd8`（第四輪的待審）。
+
+```bash
+git diff d1c5667ba4f40cfba61d49910fa6ee62d5d27cd8 32d7c1efab1b22f5ea93c735651997b2c525e7d0 -- src tests
+```
+
+- **改了什麼**：
+  - `src/obsidian/folder-guard.ts`：`GuardHost` 的 `folder`、`where`、`move(folder, to)`；`Hold.ref`、`Stray`；`restore` 每一步問位置，新增 `'back'`；`spots`、`hidden` 每次重算。
+  - `src/obsidian/folder-host.ts`：`folder`、`where` 用 `TFolder` 物件。
+  - `tests/folder-guard.test.ts`：替身有資料夾物件與 Obsidian 的事件順序，新增「第四輪」6 個。
+  - `tests/folder-host.test.ts`：替身同一個位置給同一個物件。
+- **請特別找**：
+  - 「同一個物件＝同一個資料夾」在 Obsidian 的哪些操作下不成立：上一層改名、在 Obsidian 以外改名、iCloud 留下的空資料夾、Obsidian 清單和磁碟不一致（討論稿〈Claude 回應：第四輪〉的觀察）。實機只驗了 W10 那幾種。
+  - `restore` 的 `'back'`、`'gone'` 和既有結果的交錯：逾時之後才回來、停用、`moveBack` 按鈕，以及 `release` 記與不記。
+  - 搬回期間家長又改名時，防呆把資料夾從新位置搬回原位（照資料夾本身），而不是停下來：和「只對原位名單自動搬回」的政策是否一致。
+  - 落在系統資料夾原位時不排除（F1c）：考試範圍原位的範圍檔、小考、錯誤紀錄等子資料夾的情形。
+  - `hidden` 每次重算、`excluded` 只拿來找變了的：state 會不會漏掉該重讀的通知。
+- **驗證**：
+  - 實作者跑過 `npm run check`（pre-commit，1933 個測試）、接上新介面的 R4a～R4i 副本（9 個通過）、11 種變異。
+  - Windows 實機見任務說明 W10。
+  - 請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
 
 ## 第四輪（2026-11-07）
 
