@@ -43,8 +43,11 @@ function placeOf(link: SourceLink): Place | null {
 const sameUnit = (unit: CatalogUnit, term: string, code: string): boolean => termKey(unit.term) === termKey(term) && codeKey(unit.code) === codeKey(code);
 const byTerm = (a: CatalogUnit, b: CatalogUnit): number => (termRank(termKey(a.term)) ?? 99) - (termRank(termKey(b.term)) ?? 99);
 
-/** 一項看不懂的出處（或 null：從圖示、命令打開的空白表單）→ 先填好的表單（§4-1 的表）。 */
-export function guessSource(item: SourceItem | null, own: SourceOwner, units: readonly CatalogUnit[]): SourceForm {
+/**
+ * 一項看不懂的出處（或 null：從圖示、命令打開的空白表單）→ 先填好的表單（§4-1 的表）。
+ * follows：接在它後面、同一個單元的位置（`1-3 p.20、21` 的 `21`，§4-3 第 1 點），寫回時一起換掉，所以位置一起帶進來。
+ */
+export function guessSource(item: SourceItem | null, own: SourceOwner, units: readonly CatalogUnit[], follows: readonly SourceItem[] = []): SourceForm {
   const blank: SourceForm = { unit: 'own', unitOrigin: 'original', candidates: [], places: [], placesOrigin: 'unset', remark: '', remarkOrigin: 'unset', note: null, unitNote: null };
   if (!item) return blank;
   const teach = (): SourceForm => ({ ...blank, note: TEACH });
@@ -56,7 +59,8 @@ export function guessSource(item: SourceItem | null, own: SourceOwner, units: re
     const found = units.find(unit => sameUnit(unit, term, code));
     return found ? { ...found, exists: true } : { term, code, name: '', exists: false };
   };
-  const places = parts.bad ? [] : parts.places.map(placeOf).filter((each): each is Place => each !== null);
+  const followed = follows.map(each => placeOf(each.link.kind === 'unit' && each.link.rest ? each.link.rest : each.link));
+  const places = parts.bad ? [] : [...parts.places.map(placeOf), ...followed].filter((each): each is Place => each !== null);
   const filled = {
     places, placesOrigin: places.length ? 'original' as const : 'unset' as const,
     remark: parts.left, remarkOrigin: parts.left ? 'original' as const : 'unset' as const,

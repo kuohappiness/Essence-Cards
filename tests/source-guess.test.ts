@@ -133,3 +133,10 @@ void test('§4-2 能套用：選了單元、字不是空的、讀回來和表單
   // 只有說明：會被當成標題。
   assert.equal(applyBlock(form('own', [], '老師說過'), OWN), '只有說明會被當成標題，請加位置，或寫在「備註」');
 });
+
+void test('§4-1 接續段的位置一起帶進來：1-3 p.20、21 是 p.20、p.21 兩列', () => {
+  const [first, next] = sourceLinks(['1-3 p.20', '21'], OWN);
+  const form = guessSource(first, OWN, UNITS, [next]);
+  assert.deepEqual(summary(form).places, ['頁 20', '頁 21']);
+  assert.equal(form.placesOrigin, 'original');
+});

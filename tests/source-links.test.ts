@@ -245,3 +245,14 @@ void test('D-170 單元：標準的編號沒有卡組不提示；其他編號、
   assert.deepEqual(unreadable('國二上 2-1 那次考不好', material, units), ['國二上 2-1 那次考不好']);
   assert.deepEqual(unreadable('國二上 2-1 水溶液 p.15', material, units), [], '單元與位置之間的字是說明');
 });
+
+void test('§4-3 第 1 點：看不懂的段帶著接在後面、同一個單元的位置（1-3 p.20、21），沿用學期的不算', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const hits = (sources: string) => unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf(sources), NO_UNITS);
+  const [hit] = hits('p.44、1-3 p.20、21');
+  assert.deepEqual([hit.part, hit.text, hit.whole, hit.follows.map(item => item.text)], [1, '1-3 p.20', '1-3 p.20、21', ['p.21']]);
+  const [same] = hits('1-3 p.20, 21');
+  assert.deepEqual([same.part, same.whole, same.follows.map(item => item.text)], [0, '1-3 p.20, 21', ['p.21']], '同一項裡用逗號接的');
+  const [carried] = hits('國二上 1-3 和 1-8、1-9 p.21');
+  assert.deepEqual([carried.part, carried.whole, carried.follows], [0, '國二上 1-3 和 1-8', []], '回報 R8：1-9 是另一個單元');
+});

@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 import { NEED_FORMS } from './helpers/need-forms.ts';
+import { EDIT_CASES } from './helpers/source-edit-cases.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -1170,6 +1171,9 @@ void test('標記的每一種寫法（寫之前、寫之後）都受下面往返
     if (want !== null) parseDeck(want);
   }
 });
+
+// 出處寫回的例子（tasks/edit-markup.md §6-1）：輸入與成功的輸出都受補 ID 與改縮排的往返保護，寫不回去的輸入也留著。
+for (const each of EDIT_CASES) { deckCases.add(each.text); if (typeof each.want === 'string') deckCases.add(each.want); }
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 after(() => {

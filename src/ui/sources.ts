@@ -1,6 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import { headingKey, readSourceParts, splitSource } from '../review/index.ts';
-import type { SourceItem, SourceLink, SourceOwner, Span, TargetLayout } from '../review/index.ts';
+import type { SourceItem, SourceLink, SourceOwner, SourcePart, Span, TargetLayout } from '../review/index.ts';
 
 // 出處的 Obsidian 層（W6 §3-8）：出處的每一項由純函式（core/deck）變成連結的目標；這裡用 metadataCache 判斷
 // 卡組的「材料」裡哪一份有那個區塊或標題，回傳要打開的連結文字。跨單元的候選由索引提供（§10），這裡只管找錨點。
@@ -70,8 +70,10 @@ export function firstMaterial(app: App, deckPath: string, materials: readonly st
  * 看不懂的出處（§9-5、D-170）：字面上就有問題，或要對目錄、材料才知道有問題。每一段原文判斷一次（tasks/edit-markup.md §1-3），
  * 一段裡只要有一項有問題就算一段。line 從 0 算，是目標那一行；text 是那一段的原文；tip 是滑過的說明；
  * item 是那一段裡第一個有問題的項目，text 換成那一段的原文（表單猜測用）；at 是那一段在檔案的位置，卡組有 layout 而且切得出原文時才有。
+ * part 是第幾段（readSourceParts 的順序，寫回用）；follows 是接在它後面、同一個單元的位置的項目（`1-3 p.20、21` 的 `21`，§4-3 第 1 點），
+ * 寫回時一起換掉；whole 是那一段連同它們的原文（表單上的「原文」）。
  */
-export interface UnreadableSource { line: number; name: string; text: string; tip: string; item: SourceItem; at: Span | null }
+export interface UnreadableSource { line: number; name: string; text: string; tip: string; item: SourceItem; at: Span | null; part: number; follows: SourceItem[]; whole: string }
 interface SourceDeck {
   props: SourceOwner & { materials: readonly string[] };
   targets: readonly { line: number; name: string; fields: { sources: readonly string[] } }[];
@@ -127,18 +129,25 @@ export function unreadableSources(app: App, deckPath: string, deck: SourceDeck, 
   return deck.targets.flatMap(({ line, name, fields }) => {
     // 有 layout 時段已經讀好了（編輯器每次重新解析都要算，不讀第二次，§1-5 的速度）。
     const layout = deck.layout?.get(line);
-    return (layout?.parts ?? readSourceParts(fields.sources, deck.props)).flatMap(part => {
+    const parts = layout?.parts ?? readSourceParts(fields.sources, deck.props);
+    /** 一段的原文；切不出來時用讀出的字。 */
+    const rawOf = (part: SourcePart): string => part.from !== null && part.to !== null ? fields.sources[part.entry].slice(part.from, part.to) : part.items.map(item => item.text).join(' ');
+    return parts.flatMap((part, index) => {
       const found = part.items.flatMap(item => { const reason = reasonOf(item); return reason ? [{ item, reason }] : []; });
       if (!found.length) return [];
       // 給表單的是第一個有問題的項目；說明用表上最前面的原因。
       const first = { item: found[0].item, reason: ORDER.find(each => found.some(hit => hit.reason === each)) ?? found[0].reason };
-      const source = fields.sources[part.entry];
-      const text = part.from !== null && part.to !== null ? source.slice(part.from, part.to) : part.items.map(item => item.text).join(' ');
+      const text = rawOf(part);
+      // 接在後面、同一個單元的位置：同一項裡照原文切（分隔符號照實），跨項用頓號接。
+      const chain: SourcePart[] = [];
+      for (let at = index + 1; parts[at]?.follows === 'place'; at++) chain.push(parts[at]);
+      const last = chain.at(-1);
+      const whole = !last ? text : last.entry === part.entry && part.from !== null && last.to !== null ? fields.sources[part.entry].slice(part.from, last.to) : [part, ...chain].map(rawOf).join('、');
       const reason = first.reason === 'term' ? REASONS.term(splitSource(first.item.text, deck.props).code ?? '') : REASONS[first.reason];
       // layout 的段沒有位置時（那一項切不出原文）at 是 null。
       const entry = layout?.entries[part.entry];
       const at = entry && part.from !== null && part.to !== null ? { line: entry.line, from: entry.from + part.from, to: entry.from + part.to } : null;
-      return [{ line, name, text, tip: reason + '。點一下幫你改。', item: { ...first.item, text }, at }];
+      return [{ line, name, text, tip: reason + '。點一下幫你改。', item: { ...first.item, text }, at, part: index, follows: chain.flatMap(each => each.items), whole }];
     });
   });
 }

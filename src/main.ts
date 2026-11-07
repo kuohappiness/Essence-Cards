@@ -6,6 +6,7 @@ import type { EditorView } from '@codemirror/view';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
+import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
@@ -15,7 +16,7 @@ import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
 import { markup, targetAt, type Markup } from './obsidian/markup.ts';
-import { openBlankSourceForm, openUnreadableSourceForm } from './obsidian/source-entry.ts';
+import { openBlankSourceForm, openUnreadableSourceForm, type SourceEntry } from './obsidian/source-entry.ts';
 import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
@@ -274,15 +275,24 @@ export default class EssenceCardsPlugin extends Plugin {
     this.registerEditorExtension(lock.extension);
     // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。游標在出處那一行時的「填出處」圖示、改到筆記時關掉表單（§2）。
     // 看不懂的出處（§1-3）要看材料與目錄：和存檔按鈕同一個判斷，點了打開那一段的表單。
+    // 寫回出處（§4-3）：需要新版的不寫；核對不成立記進錯誤紀錄（where: "edit"，帶卡組路徑）。
+    const sourceEntry = (view: EditorView): SourceEntry => ({
+      state: this.state,
+      version: releaseOf(BUILD),
+      fail: error => { this.fail('edit', error, pathOf(view.state)); },
+    });
     const marks = markup<UnreadableSource>({
       isDeck: state => lockable(pathOf(state)),
-      onAdd: (view, line) => { openBlankSourceForm(view, view.state.doc.line(line).to, this.state); },
+      onAdd: (view, line) => {
+        const target = targetAt(view.state.doc, parseDeck(view.state.doc.toString()), line);
+        if (target) openBlankSourceForm(view, view.state.doc.line(line).to, target.line, sourceEntry(view));
+      },
       onEdit: closeSourceForm,
       unreadable: (state, deck) => {
         const path = pathOf(state);
         return path ? unreadableSources(this.app, path, deck, (term, code) => this.state?.unitMaterials(path, term, code) ?? []) : [];
       },
-      onSource: (view, hit, from) => { openUnreadableSourceForm(view, from, this.state, hit); },
+      onSource: (view, hit, from) => { openUnreadableSourceForm(view, from, sourceEntry(view), hit); },
     });
     this.registerEditorExtension(marks.extension);
     // 目錄、別篇卡組或材料變了（§1-5）：開著的卡組重新判斷看不懂的出處。材料存檔很頻繁，停一下再算；卡組自己改字由標示自己重算。
@@ -312,8 +322,8 @@ export default class EssenceCardsPlugin extends Plugin {
         if (!target) return false;
         if (checking) return true;
         const found = marks.sourceAt(view.state, head);
-        if (found) openUnreadableSourceForm(view, found.from, this.state, found.hit);
-        else openBlankSourceForm(view, head, this.state);
+        if (found) openUnreadableSourceForm(view, found.from, sourceEntry(view), found.hit);
+        else openBlankSourceForm(view, head, target.line, sourceEntry(view));
         return true;
       },
     });

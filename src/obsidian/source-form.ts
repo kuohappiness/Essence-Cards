@@ -3,8 +3,10 @@ import type { CatalogUnit, PlaceKind, SourceForm, UnitChoice } from '../core/cat
 import type { SourceOwner } from '../core/deck/index.ts';
 
 // 填出處的小表單（tasks/edit-markup.md §2、§4）：浮在那段文字或圖示的下方，下面放不下就往上開。
-// 先填好的內容與會寫成的字是 core/catalog 的純函式；這裡只畫畫面、收輸入。套用寫回筆記是 §4-3（還沒做）。
+// 先填好的內容與會寫成的字是 core/catalog 的純函式，寫回與核對是 core/deck 的 editSource（§4-3）；這裡只畫畫面、收輸入。
 
+/** 寫回的核對結果：不能寫的一句原因（可以是 null），和實際會寫進的字（跟著別的單元時前面多 `本單元`）。 */
+interface FormCheck { reason: string | null; written: string }
 export interface FormOptions {
   /** 表單貼著的位置（螢幕座標）：那段字或圖示的上緣與下緣。 */
   rect: { left: number; top: number; bottom: number };
@@ -14,15 +16,19 @@ export interface FormOptions {
   own: SourceOwner & { unit: { code: string; name: string } | null };
   /** 同一科目錄裡的單元（其他單元…的選單）。 */
   units: readonly CatalogUnit[];
-  /** 寫進去的位置前面那幾項（讀回核對用）。 */
-  preceding?: readonly string[];
-  /** 按了套用：會寫成的字。 */
-  apply: (text: string) => void;
+  /** 打開時就知道寫不回去的原因（§4-3 第 4 點）：表單照樣打開，套用不能按。 */
+  blocked?: string | null;
+  /** 這些字寫進筆記的核對（§4-3 第 6 點）；own 是選了「這一篇」。 */
+  check?: (text: string, own: boolean) => FormCheck;
+  /** 按了套用：會寫成的字（表單上的，不含 `本單元`）與是不是「這一篇」。 */
+  apply: (text: string, own: boolean) => void;
   /** 表單關掉了（取消、Esc、點外面、改到筆記）。 */
   closed?: () => void;
 }
 export interface FormHandle { close: () => void; element: HTMLElement }
 
+/** 停止打字多久之後核對寫回（ms）。 */
+const CHECK_DELAY = 150;
 const KINDS: PlaceKind[] = ['頁', '圖', '表', '例題', '筆記連結'];
 const label = (unit: UnitChoice | CatalogUnit): string => `${unit.term} ${unit.code}`;
 
@@ -36,6 +42,8 @@ export function openSourceForm(options: FormOptions): FormHandle {
   const state: SourceForm = { ...options.form, places: options.form.places.length ? options.form.places.map(place => ({ ...place })) : [{ kind: '頁', value: '' }], candidates: [...options.form.candidates] };
   let guessed = state.unitOrigin === 'guessed';
   let otherOpen = false;
+  /** 等著核對寫回的計時器（update）。 */
+  let checking = 0;
   const box = doc.body.createDiv({ cls: 'essence-cards-source-form', attr: { role: 'dialog', 'aria-label': '填出處' } });
   const render = (): void => {
     box.empty();
@@ -95,15 +103,34 @@ export function openSourceForm(options: FormOptions): FormHandle {
     const cancel = buttons.createEl('button', { text: '取消', attr: { type: 'button' } });
     cancel.onclick = () => { handle.close(); };
     const applyButton = buttons.createEl('button', { cls: 'mod-cta', text: '套用', attr: { type: 'button' } });
-    applyButton.onclick = () => { const written = sourceText(state); if (!applyBlock(state, options.own, options.preceding)) options.apply(written); };
-    function update(): void {
-      const written = sourceText(state);
-      textValue.setText(written || '—');
-      unitValue.setText(countedUnit(state, options.own) || '—（請先選單元）');
-      const blocked = applyBlock(state, options.own, options.preceding);
-      applyButton.disabled = blocked !== null;
+    /** 不能套用的原因（表單本身，再來是寫回筆記的核對）與實際會寫進的字。 */
+    /** 表單本身的原因（不用讀筆記）；可以時是 null。 */
+    const quick = (): FormCheck & { shown: boolean } | null => {
+      const text = sourceText(state);
+      if (options.blocked) return { reason: options.blocked, written: text, shown: true };
+      const form = applyBlock(state, options.own);
       // 還沒選單元、還沒寫字時按鈕本來就不能按，不另外說。
-      reason.setText(blocked && state.unit !== null && written ? blocked : '');
+      return form ? { reason: form, written: text, shown: state.unit !== null && text !== '' } : null;
+    };
+    const verdict = (): FormCheck & { shown: boolean } => {
+      const text = sourceText(state);
+      return quick() ?? { ...(options.check?.(text, state.unit === 'own') ?? { reason: null, written: text }), shown: true };
+    };
+    applyButton.onclick = () => { if (!verdict().reason) options.apply(sourceText(state), state.unit === 'own'); };
+    const show = ({ reason: blocked, written, shown }: FormCheck & { shown: boolean }): void => {
+      textValue.setText(written || '—');
+      applyButton.disabled = blocked !== null;
+      reason.setText(blocked && shown ? blocked : '');
+    };
+    function update(): void {
+      unitValue.setText(countedUnit(state, options.own) || '—（請先選單元）');
+      window.clearTimeout(checking);
+      const found = quick();
+      if (found) { show(found); return; }
+      // 寫回的核對要重新讀整篇（300 個目標約 70 ms）：停止打字一下再核對，這之間套用先不能按。
+      show({ reason: null, written: sourceText(state), shown: false });
+      applyButton.disabled = true;
+      checking = window.setTimeout(() => { show(verdict()); }, CHECK_DELAY);
     }
     update();
     place();
@@ -156,6 +183,7 @@ export function openSourceForm(options: FormOptions): FormHandle {
     close() {
       if (current !== handle) return;
       current = null;
+      window.clearTimeout(checking);
       doc.removeEventListener('keydown', onKey, true);
       doc.removeEventListener('mousedown', onDown, true);
       box.remove();

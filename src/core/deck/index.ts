@@ -11,3 +11,5 @@ export { isDeckPath, listDeckPaths, readDecks } from './read.ts';
 export { chapterAlias, codeKey, headingKey, readSourceParts, readTerm, sourceLabel, sourceLinks, splitSource, splitUnit, termKey, termRank, tidy } from './sources.ts';
 export type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceProblem, SourceScope } from './sources.ts';
 export type { Deck, DeckProps, PickGroup, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult, FieldColon, FieldName, SourceFieldLayout, Span, TargetLayout } from './types.ts';
+export { canEditSource, editSource, verifySourceEdit } from './source-edit.ts';
+export type { SourceEditAction, SourceEditInput, SourceEditPlan, SourceEditResult, TextChange } from './source-edit.ts';
