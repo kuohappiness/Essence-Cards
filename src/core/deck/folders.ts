@@ -82,7 +82,7 @@ export function folderIssues(files: readonly string[], remembered: readonly stri
   return issues;
 }
 
-/** 搬錯位置的那幾個資料夾（§2-3）：裡面的 .md 不當卡組讀。 */
-export function misplacedFolders(issues: readonly FolderIssue[]): string[] {
-  return issues.flatMap(issue => issue.kind === 'missing' ? [] : issue.at);
+/** 搬錯位置的那幾個資料夾（§2-3）：找到的位置（at）裡面的 .md 不當卡組讀；from 是它的原位。 */
+export function misplacedFolders(issues: readonly FolderIssue[]): { from: string; at: string }[] {
+  return issues.flatMap(issue => issue.kind === 'missing' ? [] : issue.at.map(at => ({ from: issue.folder, at })));
 }

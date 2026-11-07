@@ -70,7 +70,7 @@ void test('removeEmptyFolder：照實際路徑判斷，經過 junction 走到 va
 // folder-host.ts 接 Obsidian：用 esbuild 載入正式的檔，obsidian 換成只有 TFolder／TFile 的替身（不是 Obsidian 實機）。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({ absWorkingDir: root, entryPoints: ['src/obsidian/folder-host.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', external: ['obsidian'], write: false })).outputFiles[0].text;
-class TFolder { path: string; constructor(path: string) { this.path = path; } }
+class TFolder { path: string; children: { name: string }[] = []; constructor(path: string) { this.path = path; } }
 class TFile {}
 const load = (): typeof Wire => {
   const mod = { exports: {} as { wireFolderGuard: typeof Wire } };
@@ -85,21 +85,29 @@ const load = (): typeof Wire => {
 };
 
 const R = 'Essence Cards';
-/** 考試範圍在 Obsidian 以外被搬進英文，原位剩下 Obsidian 看不到的空資料夾。 */
-function plugin(rmdir: (path: string, recursive: boolean) => Promise<void>) {
-  const from = `${R}/英文/考試範圍`;
-  const files = [`${R}/英文/L1.md`, `${from}/段考.md`];
+const FROM = `${R}/英文/考試範圍`;
+type Listed = { files: string[]; folders: string[] };
+/** 磁碟上的樣子：搬走的考試範圍裡有段考.md，其他位置（原位）是空的。 */
+const DISK = (path: string): Promise<Listed> => Promise.resolve({ files: path === FROM ? [`${FROM}/段考.md`] : [], folders: [] });
+/** 考試範圍在 Obsidian 以外被搬進英文，原位剩下 Obsidian 看不到的空資料夾。list 是磁碟上看到的（adapter.list）。 */
+function plugin(rmdir: (path: string, recursive: boolean) => Promise<void>, list: (path: string) => Promise<Listed> = DISK) {
+  const files = [`${R}/英文/L1.md`, `${FROM}/段考.md`];
   const renamed: string[] = [];
   // 同一個位置每次拿到同一個物件（Obsidian 的清單也是）：防呆照物件認資料夾。
-  const folders = new Map([R, `${R}/英文`, from].map(path => [path, new TFolder(path)]));
+  const folders = new Map([R, `${R}/英文`, FROM].map(path => [path, new TFolder(path)]));
+  folders.get(FROM)?.children.push({ name: '段考.md' });
+  const handlers = new Map<string, (entry: unknown, oldPath: string) => void>();
   const vault = {
     getFiles: () => files.map(path => ({ path })),
     getAbstractFileByPath: (path: string) => folders.get(path) ?? null,
-    on: () => ({}),
-    adapter: { exists: () => Promise.resolve(true), list: () => Promise.resolve({ files: [], folders: [] }), rmdir },
+    on: (name: string, run: (entry: unknown, oldPath: string) => void) => { handlers.set(name, run); return {}; },
+    adapter: { exists: () => Promise.resolve(true), list, rmdir },
   };
-  const app = { vault, loadLocalStorage: () => [R, `${R}/考試範圍`], saveLocalStorage: () => {}, fileManager: { renameFile: (_: unknown, to: string) => { renamed.push(to); return Promise.resolve(); } } };
-  return { plugin: { app, register: () => {}, registerEvent: () => {} }, renamed };
+  const app = { vault, loadLocalStorage: () => [R, `${R}/考試範圍`], saveLocalStorage: () => {}, fileManager: { renameFile: (folder: TFolder, to: string) => {
+    // 和 Obsidian 一樣：同一個物件換位置。
+    renamed.push(to); folders.delete(folder.path); folder.path = to; folders.set(to, folder); return Promise.resolve();
+  } } };
+  return { plugin: { app, register: () => {}, registerEvent: () => {} }, renamed, folders, handlers };
 }
 
 void test('wireFolderGuard：電腦版經過 removeEmpty，不用 adapter；其他平台只用非遞迴的 adapter.rmdir', async () => {
@@ -123,4 +131,45 @@ void test('wireFolderGuard：電腦版經過 removeEmpty，不用 adapter；其�
   assert.equal(failures.length, 1);
   assert.deepEqual(other.renamed, []);
   guard2.close();
+});
+
+void test('wireFolderGuard：磁碟上那個位置的內容和 Obsidian 的清單對不上（換成了別的資料夾、讀不到）就不搬（第五輪）', async () => {
+  const wire = load();
+  const removeEmpty = (): Promise<void> => Promise.resolve();
+  for (const list of [
+    (path: string) => path === FROM ? Promise.resolve({ files: [`${FROM}/家長的.md`], folders: [] }) : DISK(path),
+    (path: string) => path === FROM ? Promise.reject(Error('EIO')) : DISK(path),
+  ]) {
+    const other = plugin(() => Promise.resolve(), list);
+    const failures: unknown[] = [];
+    const guard = wire(other.plugin as never, { notify: () => {}, fail: error => { failures.push(error); }, removeEmpty });
+    guard.check();
+    assert.equal(await guard.moveBack(guard.issues()[0]), false);
+    assert.deepEqual(other.renamed, []);
+    assert.equal(failures.length, 1);
+    assert.match(String(failures[0]), /對不上/);
+    guard.close();
+  }
+  // 磁碟上多了清單還沒有的（剛同步來的）不算對不上。
+  const synced = plugin(() => Promise.resolve(), path => path === FROM ? Promise.resolve({ files: [`${FROM}/段考.md`, `${FROM}/剛同步來的.md`], folders: [] }) : DISK(path));
+  const guard = wire(synced.plugin as never, { notify: () => {}, fail: () => {}, removeEmpty });
+  guard.check();
+  assert.equal(await guard.moveBack(guard.issues()[0]), true);
+  assert.deepEqual(synced.renamed, [`${R}/考試範圍`]);
+  guard.close();
+});
+
+void test('wireFolderGuard：rename 事件帶來的資料夾本身直接交給防呆，事件當下照路徑查不到也照它搬（第五輪）', async () => {
+  const wire = load();
+  const host = plugin(() => Promise.resolve());
+  const notices: string[] = [];
+  const guard = wire(host.plugin as never, { notify: message => { notices.push(message); }, fail: () => {}, removeEmpty: () => Promise.resolve() });
+  // 在 Obsidian 裡把考試範圍從原位拖進英文：事件當下清單還查不到新位置，之後才查得到。
+  const entry = host.folders.get(FROM);
+  host.folders.delete(FROM);
+  host.handlers.get('rename')?.(entry, `${R}/考試範圍`);
+  if (entry) host.folders.set(FROM, entry);
+  for (let i = 0; i < 20 && !host.renamed.length; i++) await new Promise(resolve => { setTimeout(resolve, 5); });
+  assert.deepEqual(host.renamed, [`${R}/考試範圍`]);
+  guard.close();
 });

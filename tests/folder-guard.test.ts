@@ -34,6 +34,8 @@ interface Fake {
   outside: (from: string, to: string) => void;
   /** 收著通知跑 run，跑完再送。 */
   quietly: (run: () => void) => void;
+  /** 磁碟上這個位置換成了別的資料夾，Obsidian 的清單卻沒跟上（W10 遇過）：清單裡的資料夾物件磁碟上對不上。 */
+  swap: (path: string) => void;
   notices: string[];
   failures: unknown[];
   moves: string[];
@@ -72,20 +74,19 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
   const inDisk = (path: string): boolean => [...disk].some(d => d.startsWith(path + '/'));
   const within = (path: string, folder: string): boolean => path === folder || path.startsWith(folder + '/');
   const known = (path: string): 'folder' | 'file' | null => memory.texts.has(path) ? 'file' : has(path) || visible.has(path) ? 'folder' : null;
-  /** 資料夾物件（Obsidian 的 TFolder 替身）：同一個位置拿到同一個；不在了就作廢，之後同一個位置是新的。 */
+  /** 資料夾物件（Obsidian 的 TFolder 替身）：同一個位置拿到同一個；Obsidian 以外搬走（outside）就作廢，之後同一個位置是新的。 */
   const refs: { path: string; alive: boolean }[] = [];
   const where = (ref: FolderRef): string | null => {
     const found = refs.find(each => each === ref);
-    if (!found?.alive) return null;
-    if (known(found.path) !== 'folder') { found.alive = false; return null; }
-    return found.path;
+    return found?.alive && known(found.path) === 'folder' ? found.path : null;
   };
   const relocate = (from: string, to: string): void => {
     for (const ref of refs) if (ref.alive && within(ref.path, from)) ref.path = to + ref.path.slice(from.length);
   };
-  const shift = (from: string, to: string): void => { memory.rename(from, to); relocate(from, to); };
   let queue: (() => void)[] | null = null;
   const quietly = (run: () => void): void => {
+    // 已經在收著了：一起收，最外面那一層跑完再送。
+    if (queue) { run(); return; }
     queue = [];
     try { run(); } finally {
       const later = queue;
@@ -93,6 +94,10 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
       for (const each of later) each();
     }
   };
+  /** 磁碟上已經不是它的資料夾物件（swap）。 */
+  const swapped = new Set<object>();
+  // 檔案和資料夾物件一起換好，才送通知（和 Obsidian 一樣：清單整個換好才通知）。
+  const shift = (from: string, to: string): void => { quietly(() => { memory.rename(from, to); relocate(from, to); }); };
   const files: Files = {
     ...memory.files,
     watch: onChange => memory.files.watch(path => { if (queue) queue.push(() => { onChange(path); }); else onChange(path); }),
@@ -109,6 +114,7 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
       return ref;
     },
     where,
+    intact: ref => Promise.resolve(!swapped.has(ref)),
     exists: path => Promise.resolve(memory.texts.has(path) || has(path) || disk.has(path) || visible.has(path)),
     empty: path => Promise.resolve(!has(path) && !inDisk(path)),
     rmdir(path) {
@@ -145,7 +151,8 @@ function fake(initial: Record<string, string> = VAULT, seen?: string[]): Fake {
     for (const ref of refs) if (within(ref.path, from)) ref.alive = false;
     memory.rename(from, to);
   };
-  return { host, memory, files, shift, outside, quietly, notices, failures, moves, removed, disk, visible, beforeRmdir, failMoves, residue, clock: () => clock, run, timers, saved: () => saved };
+  const swap = (path: string): void => { for (const ref of refs) if (ref.alive && ref.path === path) swapped.add(ref); };
+  return { host, memory, files, shift, outside, quietly, swap, notices, failures, moves, removed, disk, visible, beforeRmdir, failMoves, residue, clock: () => clock, run, timers, saved: () => saved };
 }
 
 /** 在 Obsidian 裡拖動：清單先換（資料夾物件跟著走），防呆先收到 rename（它比 state 先註冊），state 才收到通知。 */
@@ -180,9 +187,11 @@ void test('§1 拖走紀錄：搬回原位、跳一次通知', async () => {
 void test('§1-2 整個 Essence Cards 拖走：同一批只搬最上層', async () => {
   const f = fake();
   const guard = started(f);
-  guard.renamed('學校/Essence Cards', R, true);
-  for (const sub of ['紀錄', '紀錄/錯誤', '考試範圍']) guard.renamed(`學校/${R}/${sub}`, `${R}/${sub}`, true);
-  f.memory.rename(R, '學校/' + R);
+  f.quietly(() => {
+    f.shift(R, '學校/' + R);
+    guard.renamed('學校/Essence Cards', R, true);
+    for (const sub of ['紀錄', '紀錄/錯誤', '考試範圍']) guard.renamed(`學校/${R}/${sub}`, `${R}/${sub}`, true);
+  });
   await f.run();
   assert.deepEqual(f.moves, [`學校/${R} → ${R}`]);
   assert.deepEqual([...f.memory.texts.keys()].sort(), Object.keys(VAULT).sort());
@@ -725,6 +734,8 @@ void test('第四輪 F1a 重試等待時家長又改名、舊位置放了自己�
   };
   drag(f, guard, WRONG, temp);
   await f.run();
+  // 等待中收到的改名排的工作也跑完：多排了一筆的話它會在這裡搬。
+  await f.run();
   assert.deepEqual(f.moves, [`${temp} → ${WRONG}`, `${next} → ${WRONG}`]);
   assert.equal(f.memory.texts.get(`${WRONG}/草稿.md`), DRAFT);
   assert.equal(f.memory.texts.get(`${temp}/自己的.md`), OWN);
@@ -837,6 +848,141 @@ void test('第四輪 F1d 搬不回之後在 Obsidian 以外搬回原位、舊位
   drag(f, guard, temp, `${R}/自己的資料夾`);
   assert.equal(guard.misplaced(`${R}/自己的資料夾/自己的.md`), false);
   assert.equal(guard.misplaced(`${WRONG}/草稿.md`), false);
+});
+
+void test('第五輪 F1a 重試等待時被拖過另一個系統資料夾的空原位再改名：同一個資料夾只搬一次，不被搬到那個原位', async () => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const temp = `${R}/英文/錯題本`, anchors = `${R}/記憶錨點`, next = `${R}/另一個名字`;
+  f.failMoves.push(EPERM);
+  const sleep = f.host.sleep.bind(f.host);
+  let once = true;
+  f.host.sleep = ms => {
+    if (once) {
+      once = false;
+      drag(f, guard, temp, anchors);
+      drag(f, guard, anchors, next);
+    }
+    return sleep(ms);
+  };
+  drag(f, guard, WRONG, temp);
+  await f.run();
+  // 等待中收到的改名排的工作也跑完：多排了一筆的話它會在這裡搬。
+  await f.run();
+  assert.deepEqual(f.moves, [`${temp} → ${WRONG}`, `${next} → ${WRONG}`]);
+  assert.equal(f.memory.texts.get(`${WRONG}/草稿.md`), DRAFT);
+  assert.deepEqual(f.notices, [NOTICE_WRONG]);
+  assert.equal(guard.misplaced(`${WRONG}/草稿.md`), false);
+});
+
+void test('第五輪 F1a 搬好之後、回報之前又被拖走：照它現在的位置再搬一次，搬好了才放行', async () => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const temp = `${R}/英文/錯題本`, again = `${R}/又一次`;
+  const moves: string[] = [];
+  let finish = (): void => {};
+  f.host.move = (ref, to) => {
+    const from = f.host.where(ref) ?? '';
+    moves.push(`${from} → ${to}`);
+    // 實際的 Obsidian：搬好時防呆也收到自己的 rename，底層的 Promise 晚一點才回來。
+    f.quietly(() => { f.shift(from, to); guard.renamed(to, from, true); });
+    return moves.length === 1 ? new Promise<void>(resolve => { finish = resolve; }) : Promise.resolve();
+  };
+  drag(f, guard, WRONG, temp);
+  await f.run();
+  // 還沒回報：家長又把它從原位拖走。這次改名被正在進行的那一筆擋下。
+  drag(f, guard, WRONG, again);
+  assert.equal(guard.misplaced(`${again}/草稿.md`), true);
+  assert.notEqual(guard.pause(`${again}/草稿.md`), null);
+  finish();
+  await drain();
+  assert.deepEqual(moves, [`${temp} → ${WRONG}`, `${again} → ${WRONG}`]);
+  assert.equal(f.memory.texts.get(`${WRONG}/草稿.md`), DRAFT);
+  assert.equal(guard.pause(`${WRONG}/草稿.md`), null);
+  assert.deepEqual(f.notices, [NOTICE_WRONG]);
+});
+
+void test('第五輪 F1a 重試時磁碟上已經換成別的資料夾、Obsidian 的清單沒跟上：不搬，請家長自己拖回', async () => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const temp = `${R}/英文/錯題本`;
+  f.failMoves.push(EPERM);
+  const sleep = f.host.sleep.bind(f.host);
+  let once = true;
+  f.host.sleep = ms => { if (once) { once = false; f.swap(temp); } return sleep(ms); };
+  drag(f, guard, WRONG, temp);
+  await f.run();
+  assert.deepEqual(f.moves, [`${temp} → ${WRONG}`]);
+  assert.match(f.notices[0], /沒能搬回原位/);
+  assert.equal(f.failures.length, 1);
+  assert.match(String(f.failures[0]), /對不上/);
+});
+
+void test('第五輪 F1a 收到 rename 時找不到資料夾本身：之後不照路徑重找，不搬', async () => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const temp = `${R}/草稿資料夾`, own = `${temp}/自己的.md`;
+  // 事件沒帶資料夾、當下照路徑也找不到；之後那個路徑上的是別的資料夾：錯題本在 Obsidian 以外搬走，家長在原處建了自己的卡組。
+  guard.renamed(temp, WRONG, true);
+  f.shift(WRONG, temp);
+  f.outside(temp, `${R}/另一個名字`);
+  f.memory.write(own, '- 家長的卡組\n    - Q :: A\n');
+  await f.run();
+  assert.deepEqual(f.moves, []);
+  // 也不照路徑記成沒搬回：家長的卡組照常讀。
+  assert.equal(guard.misplaced(own), false);
+  assert.notEqual(await guard.wrap(f.files).read(own), null);
+});
+
+// 根資料夾不算「原位例外」之後（第五輪 F1c），它回到原位時要靠「回到原位就不排除」這一條（其他系統資料夾兩條都成立）。
+void test('第五輪 F1c 整個 Essence Cards 搬不回、之後家長拖回原位：卡組照常讀，不等判斷', async () => {
+  const f = fake();
+  const guard = started(f);
+  const away = `學校/${R}`;
+  f.failMoves.push(EACCES);
+  drag(f, guard, R, away);
+  await f.run();
+  assert.equal(guard.misplaced(`學校/${DECK}`), true);
+  drag(f, guard, away, R);
+  assert.equal(guard.misplaced(DECK), false);
+  assert.notEqual(await guard.wrap(f.files).read(DECK), null);
+});
+
+void test('第五輪 F1c 整個 Essence Cards 搬回期間家長自己拖回原位：等的時候卡組就不算搬錯，不搬、不通知', async () => {
+  const f = fake();
+  const guard = started(f);
+  const away = `學校/${R}`;
+  f.failMoves.push(EPERM);
+  const sleep = f.host.sleep.bind(f.host);
+  let during: boolean | null = null;
+  f.host.sleep = ms => {
+    if (during === null) {
+      drag(f, guard, away, R);
+      during = guard.misplaced(DECK);
+    }
+    return sleep(ms);
+  };
+  drag(f, guard, R, away);
+  await f.run();
+  assert.equal(during, false);
+  assert.deepEqual(f.moves, [`${away} → ${R}`]);
+  assert.deepEqual(f.notices, []);
+});
+
+void test('第五輪 F1c 搬不回的資料夾被改名成空出來的 Essence Cards 根資料夾：根層的 .md 是卡組，照樣排除、不補 ID', async (t: TestContext) => {
+  const f = fake({ [`${WRONG}/草稿.md`]: DRAFT, '其他/筆記.md': 'x' });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  await strandedAt(f, guard, '其他/草稿資料夾');
+  assert.equal(f.host.known(R), null, '根資料夾空出來了');
+  drag(f, guard, '其他/草稿資料夾', R);
+  const at = `${R}/草稿.md`;
+  assert.equal(guard.misplaced(at), true);
+  assert.equal(await guard.wrap(f.files).read(at), null);
+  assert.equal(await state.fillIds(at), false);
+  assert.notEqual((await state.save(editorOn(at, DRAFT))).kind, 'done');
+  assert.equal(f.memory.texts.get(at), DRAFT);
 });
 
 void test('第二輪 F4 等磁碟的時候 Obsidian 才看到的空資料夾：原位當成有東西，清理也不刪', async () => {

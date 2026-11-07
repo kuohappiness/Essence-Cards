@@ -35,6 +35,15 @@ export function wireFolderGuard(plugin: Plugin, options: {
     },
     // 還在清單裡、而且那個位置就是它本身：拿掉之後同一個位置再建的是另一個物件。
     where: folder => folder instanceof TFolder && vault.getAbstractFileByPath(folder.path) === folder ? folder.path : null,
+    // 清單裡它底下的每一項磁碟上都在（第五輪）：磁碟上剛同步來、清單還沒有的不算對不上。讀不到就是對不上。
+    async intact(folder) {
+      if (!(folder instanceof TFolder)) return false;
+      try {
+        const { files, folders } = await vault.adapter.list(folder.path);
+        const names = new Set([...files, ...folders].map(path => path.slice(path.lastIndexOf('/') + 1)));
+        return folder.children.every(child => names.has(child.name));
+      } catch { return false; }
+    },
     exists: path => vault.adapter.exists(path),
     empty,
     // 只用非遞迴的刪除：有東西就失敗，不會刪到內容。
@@ -62,7 +71,9 @@ export function wireFolderGuard(plugin: Plugin, options: {
   // 監看不了時防呆就不作用。不另外記：state 的監看用同一個 vault.on，layout ready 時會失敗、記一行 init（tasks/error-log.md §2-3），同一個原因不記兩次。
   try {
     plugin.registerEvent(vault.on('rename', (entry, oldPath) => {
-      guard.renamed(entry.path, oldPath, entry instanceof TFolder);
+      // 事件帶來的資料夾本身直接交給防呆（第五輪），不在之後照路徑重找。
+      if (entry instanceof TFolder) guard.renamed(entry.path, oldPath, true, entry);
+      else guard.renamed(entry.path, oldPath, false);
       guard.changed();
     }));
     plugin.registerEvent(vault.on('create', () => { guard.changed(); }));

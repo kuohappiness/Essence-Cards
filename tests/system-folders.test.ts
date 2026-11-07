@@ -84,7 +84,7 @@ for (const each of cases) {
 void test('§2-3 只排除判定出來的資料夾', () => {
   const files = [...move(NORMAL, `${R}/考試範圍`, `${R}/英文/考試範圍`), `${R}/學業/考試範圍2/x.md`];
   const issues = folderIssues(files, REMEMBERED);
-  assert.deepEqual(misplacedFolders(issues), [`${R}/英文/考試範圍`]);
+  assert.deepEqual(misplacedFolders(issues), [{ from: `${R}/考試範圍`, at: `${R}/英文/考試範圍` }]);
   // 搬進卡組資料夾的範圍檔，isDeckPath 本身仍會當成卡組，所以要靠 misplacedFolders 排除。
   assert.equal(isDeckPath(`${R}/英文/考試範圍/段考.md`), true);
   assert.deepEqual(misplacedFolders([{ kind: 'missing', folder: `${R}/紀錄` }]), []);
