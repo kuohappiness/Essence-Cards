@@ -1,6 +1,6 @@
 # AI 製卡最小版：複製貼上、草稿與啟用（給 Claude，本機執行）
 
-狀態：草稿；§0 的科目使用者 2026-11-07 定了（五科全開）；Codex 格式查核四輪（九項、五項、一項、一項）都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)）；第四輪的 R4-1 改完沒有再審（D-171：第四輪後停，交給使用者決定）；還沒開工
+狀態：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§4～§6 寫進檔案的格式開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -46,8 +46,8 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 | 步驟 | 內容 | 誰 |
 |---|---|---|
 | 0 | 使用者決定 §0 開哪幾科（做完，2026-11-07：五科全開） | 使用者 |
-| 1 | §4～§6 格式查核（[請求](ai-cards-mvp-format-review.md)；第一輪做完，第二輪只看改過的寫法） | Codex |
-| 2 | Claude 核對查核回報、改這份說明 | Claude（雲端或本機） |
+| 1 | §4～§6 格式查核（[請求](ai-cards-mvp-format-review.md)；四輪做完） | Codex |
+| 2 | Claude 核對查核回報、改這份說明（做完，2026-11-07） | Claude |
 | 3 | §1 → §2 → §3 → §4 → §5 → §6 的程式與測試（分支 `claude/ai-cards-mvp`，從 `main` 開） | Claude |
 | 4 | §8 Windows 實機（開發版），含一次真的 AI 對話 | Claude ＋ 使用者（貼到 AI 那一步） |
 | 5 | Codex L2，通過後請使用者同意合併 | Codex → Claude → 使用者 |
