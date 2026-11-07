@@ -137,12 +137,13 @@ export function createAiCards(deps: AiCardsDeps) {
       const subject = subjects.find(each => each.key === form.subject);
       if (!state || state.writeBlock() === 'loading') return { error: '正在讀取卡組，讀完才知道學生已有哪些學習目標；等一下再按' };
       if (!subject) return { error: '這一科還沒有規則' };
-      const prompt = buildPrompt(form, subject, deps.rules[subject.key], state.aiExisting(subject.subject, form.term));
+      const existing = state.aiExisting(subject.subject, form.term);
+      const prompt = buildPrompt(form, subject, deps.rules[subject.key], existing);
       const at = deps.now();
       const job: CardJob = {
         id: newId(deps.random ?? Math.random, new Set(jobs.map(each => each.id)), { letterFirst: true }),
         copiedAt: stamp(at.ms, at.offset), copiedMs: at.ms, form, subject: { key: subject.key, label: subject.label, subject: subject.subject, r3: subject.r3 },
-        parts: prompt.parts, promptSha: prompt.sha256, existing: state.aiExisting(subject.subject, form.term).map(each => ({ ...each })), save: null,
+        parts: prompt.parts, promptSha: prompt.sha256, existing: existing.map(each => ({ ...each })), save: null,
       };
       try { put(job); } catch (error) { deps.onError(error); return { error: '存不進這台電腦，這次沒有複製；請再按一次' }; }
       deps.store.saveLast({ subject: subject.key, term: form.term });
@@ -215,8 +216,6 @@ export function createAiCards(deps: AiCardsDeps) {
       drop(latest);
       return { left };
     },
-    /** 不要了的待貼回工作（還沒開始存草稿）：拿掉。 */
-    discard(job: CardJob): void { if (!job.save) drop(job); },
   };
 }
 export type AiCards = ReturnType<typeof createAiCards>;

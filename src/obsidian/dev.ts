@@ -1,6 +1,7 @@
 import { entryCheck, entryUnread, type EntryDevHost } from './dev-entry.ts';
 import { examDev } from './dev-exam.ts';
 import { practiceDev } from './dev-practice.ts';
+import { aiCardsDev } from './dev-ai.ts';
 import { quizDev, quizProbe } from './dev-quiz.ts';
 import { apiVersion, Component, MarkdownRenderer, Notice, Platform, type App, type Plugin, type TFile } from 'obsidian';
 import { assignIds } from '../core/deck/index.ts';
@@ -92,6 +93,8 @@ const commands: Record<string, DevCommand> = {
   // 小考標記（tasks/quiz-mark.md §6）：目錄設小考、入口那一列、日期過了、取消、段考同時生效、連結。
   'quiz-mark': { name: 'Essence 開發：小考標記（截圖）', run: (host, _ids, params) => params.do === 'probe' ? Promise.resolve(quizProbe()) : quizDev(hostFor(host), `${W6_ROOT}/結果/小考 ${stampOf(new Date())}`, host.device), desktop: true, root: W6_ROOT },
   ui: { name: 'Essence 開發：畫面與鍵盤', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
+  // AI 製卡（tasks/ai-cards-mvp.md §8 第 1 點）：填表 → 複製 → 接著貼回 → 檢查 → 存成草稿 → 預覽 → 啟用，截圖寫在 Essence W6/結果/AI 製卡 …/。
+  'ai-cards': { name: 'Essence 開發：AI 製卡（截圖）', run: host => aiCardsDev(host, `${W6_ROOT}/結果/AI 製卡 ${stampOf(new Date())}`), desktop: true, root: W6_ROOT },
   'ui-phone': { name: 'Essence 開發：畫面與鍵盤（手機寬度）', run: host => uiShots(host, `${W6_ROOT}/結果/畫面 手機寬度 ${stampOf(new Date())}`, true), desktop: true, root: W6_ROOT },
   away: { name: 'Essence 開發：切走再回來', run: awayCheck, desktop: true, root: W6_ROOT },
   // D-145 的 iPhone 實測：iPhone 也能用。
