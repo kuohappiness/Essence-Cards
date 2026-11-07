@@ -1,8 +1,28 @@
 # 系統資料夾的防呆：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第二輪，2026-11-07）；第一輪待修 F1～F4，已修
+狀態：待審（第三輪，2026-11-07）；第一輪 F1～F4、第二輪 F1、F4～F6 已修
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-07-system-folder-guard-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
+
+## 第三輪（2026-11-07）
+
+請**新開一個 Codex 對話**（推理等級：高；不要沿用第二輪的對話，[quality.md](../docs/agents/quality.md) 的〈Codex 審查時〉），回報接在討論稿最後（〈Codex 第三輪〉）。先讀討論稿的〈Codex 第二輪〉與〈Claude 回應：第二輪〉。
+
+- **待審**：`48ec6cfae0b6375a52e189f43a65d4cbd80ae676`（第二輪 F1、F4～F6 的修正與回歸測試）。它之後只有文件的 commit。
+- **基準**：`593d836436f0399ba90d02469e71af0c977125bb`（第二輪的待審）。
+
+```bash
+git diff 593d836436f0399ba90d02469e71af0c977125bb 48ec6cfae0b6375a52e189f43a65d4cbd80ae676 -- src tests
+```
+
+- **改了什麼**：`src/obsidian/folder-guard.ts`（`stranded`、`when`、`pause`、`attempt` 的總時限、`close()` 放行、刪之前再問 `known`）、`src/obsidian/files.ts`（`pause` 選項，排隊之後、找檔之前問）、`src/obsidian/folder-host.ts`（`later`）、`src/main.ts`（建 `Files` 時傳 `pause`）、`src/desktop/index.ts`（`removeEmptyFolder` 照實際路徑判斷）；測試 `tests/folder-guard.test.ts` 最後一段、`tests/folder-host.test.ts`、`tests/obsidian-files.test.ts` 最後一個。
+- **請特別找**：
+  - `stranded` 什麼時候拿掉：判斷時「已經不是資料夾」才拿掉，同一個位置又建了資料夾會一直排除（測試裡寫明了這個行為）；外掛重新載入就不記得。有沒有該排除卻沒排除、或排除了不該排除的卡組。
+  - `pause` 接到 `obsidian/files.ts` 之後，外掛其他用到同一個 `Files` 的地方（備份、錯誤紀錄、開發命令）在搬回期間等待，會不會卡住或互等；錯誤紀錄寫進 `紀錄/錯誤` 時剛好 `紀錄` 在搬回。
+  - 總時限到了之後放行、底層的搬動之後才結束的各種結果（搬好、失敗、停用），以及 `release` 被呼叫兩次（`close()` 先放行、搬回結束再一次）。
+  - `removeEmptyFolder` 的 `realpath`／`lstat` 之間的時間差，以及 `isInside` 加 `relative` 的判斷在 Windows 大小寫、UNC、磁碟機根目錄的行為。
+  - 〈Claude 回應：第二輪〉維持不做的外部移動時間窗，理由是否成立。
+- **驗證**：實作者跑過 `npm run check`（pre-commit，1922 個測試）、第二輪的探針（加了 `later` 的副本：R2a～R2d、R2h 改成失敗，R2e、R2g 的原因見回應）、11 種變異。Windows 實機見任務說明〈Windows 實機〉W9。請不要在 L2 裡開 Obsidian 或碰 iCloud 資料夾。
 
 ## 第二輪（2026-11-07）
 
