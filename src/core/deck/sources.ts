@@ -84,27 +84,36 @@ export function splitOutsideLinks(text: string, separator: RegExp): string[] {
 
 // ── 原文位置（tasks/edit-markup.md §3）：處理過的字（遮罩、換掉、刪掉）每一個都記得自己來自原文的 [starts, ends) ──
 
-interface Traced { text: string; starts: number[]; ends: number[] }
-const traced = (text: string): Traced => ({ text, starts: Array.from({ length: text.length }, (_, at) => at), ends: Array.from({ length: text.length }, (_, at) => at + 1) });
-const tSlice = (t: Traced, from: number, to = t.text.length): Traced => ({ text: t.text.slice(from, to), starts: t.starts.slice(from, to), ends: t.ends.slice(from, to) });
+/**
+ * map 是 null 時每個字就在原文的 offset + 第幾個字（沒有換過字，多數的出處都是這樣，不用建陣列，§1-5 的速度）；
+ * 換過字之後 map 記每個字的 [開始, 結束)。
+ */
+interface Traced { text: string; offset: number; map: { starts: number[]; ends: number[] } | null }
+const traced = (text: string): Traced => ({ text, offset: 0, map: null });
+const startOf = (t: Traced, at: number): number => t.map ? t.map.starts[at] : t.offset + at;
+const endOf = (t: Traced, at: number): number => t.map ? t.map.ends[at] : t.offset + at + 1;
+const tSlice = (t: Traced, from: number, to = t.text.length): Traced =>
+  ({ text: t.text.slice(from, to), offset: t.offset + from, map: t.map && { starts: t.map.starts.slice(from, to), ends: t.map.ends.slice(from, to) } });
 const tTrim = (t: Traced): Traced => tSlice(t, t.text.length - t.text.trimStart().length, t.text.trimEnd().length);
-/** 換掉每一個符合的字串（pattern 要有 g）：換上的字都算來自整個符合的範圍。 */
+/** 換掉每一個符合的字串（pattern 要有 g）：換上的字都算來自整個符合的範圍。沒有符合的照原樣。 */
 function tReplace(t: Traced, pattern: RegExp, replace: (match: RegExpExecArray) => string): Traced {
-  const out: Traced = { text: '', starts: [], ends: [] };
+  const matches = [...t.text.matchAll(pattern)];
+  if (!matches.length) return t;
+  const out = { text: '', starts: [] as number[], ends: [] as number[] };
   let cursor = 0;
   const copy = (to: number): void => {
     out.text += t.text.slice(cursor, to);
-    for (let k = cursor; k < to; k++) { out.starts.push(t.starts[k]); out.ends.push(t.ends[k]); }
+    for (let k = cursor; k < to; k++) { out.starts.push(startOf(t, k)); out.ends.push(endOf(t, k)); }
   };
-  for (const match of t.text.matchAll(pattern)) {
+  for (const match of matches) {
     copy(match.index);
     const insert = replace(match), end = match.index + match[0].length;
     out.text += insert;
-    for (let k = 0; k < insert.length; k++) { out.starts.push(t.starts[match.index]); out.ends.push(t.ends[end - 1]); }
+    for (let k = 0; k < insert.length; k++) { out.starts.push(startOf(t, match.index)); out.ends.push(endOf(t, end - 1)); }
     cursor = end;
   }
   copy(t.text.length);
-  return out;
+  return { text: out.text, offset: 0, map: { starts: out.starts, ends: out.ends } };
 }
 /** 照分隔符號切（pattern 要有 g）。 */
 function tSplit(t: Traced, pattern: RegExp): Traced[] {
@@ -113,7 +122,7 @@ function tSplit(t: Traced, pattern: RegExp): Traced[] {
   for (const match of t.text.matchAll(pattern)) { pieces.push(tSlice(t, cursor, match.index)); cursor = match.index + match[0].length; }
   return [...pieces, tSlice(t, cursor)];
 }
-const tSpan = (t: Traced): [number, number] | null => t.text ? [t.starts[0], t.ends[t.text.length - 1]] : null;
+const tSpan = (t: Traced): [number, number] | null => t.text ? [startOf(t, 0), endOf(t, t.text.length - 1)] : null;
 const tMask = (t: Traced, tokens: string[]): Traced => tReplace(t, MASKED, match => { if (match[0].length === 1) return ''; tokens.push(match[0]); return `\uE000${tokens.length - 1}\uE001`; });
 
 /** splitOutsideLinks 的一段，帶著原文位置：masked 是遮罩後的字，range 把 masked 的 [from, to) 對回原文的範圍與還原連結後的字。 */
