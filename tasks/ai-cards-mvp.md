@@ -1,6 +1,6 @@
 # AI 製卡最小版：複製貼上、草稿與啟用（給 Claude，本機執行）
 
-狀態：草稿，等使用者決定 §0 開哪幾科、Codex 做 §4～§6 的格式查核（[請求](ai-cards-mvp-format-review.md)）；還沒開工
+狀態：草稿；§0 的科目使用者 2026-11-07 定了（五科全開）；等 Codex 做 §4～§6 的格式查核（[請求](ai-cards-mvp-format-review.md)）；還沒開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§4～§6 寫進檔案的格式開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -29,7 +29,7 @@
 | 引言框裡的 ID 算占用 | 點選填空的家長勾選（[D-182](../docs/decisions.md#d-182-比較點選各科都能用家長出題時勾選)）：要在規則加一條，跟[重整製卡規則](../docs/backlog.md#其他待決)一起做 |
 
 - 引言框（給家長的備註、加進已有的學習目標、候選卡片）照 [syntax §2-9](../docs/syntax.md#2-9-ai-製卡交回的草稿) 留在草稿裡，這一份不排程也不搬（D-089 第 8 條本來就不排程）。家長要用候選卡片，可以手動剪下貼到清單裡；有 ID 的跟著搬。
-- **開哪幾科**（使用者決定，見下表；決定後把這一段改成結果）：
+- **開哪幾科**：使用者 2026-11-07 決定下表五科全開，國小社會也先開（「最小製卡全部都要開」；改變 2026-11-03 的「試用通過才開放」，backlog 已同步）。之後還要加國中自然的科目預設、國小與國中數學（記在 [backlog](../docs/backlog.md#待決問題)），不在這一份：
 
 | 科目 | 規則組（照順序接） | 現況 |
 |---|---|---|
@@ -37,7 +37,7 @@
 | 英文（國中） | [common.md](../docs/card-rules/common.md) ＋ [english.md](../docs/card-rules/english.md) | v0.14，L4、L5 試過；新題型的程式還沒做，照填空翻面出（english.md 開頭的說明） |
 | 自然 | R3 四份 | 第二輪的 R3，沒有科目預設（D-132 暫選 R3） |
 | 一般知識 | common.md ＋ [general.md](../docs/card-rules/general.md) | 只用 Claude 寫的筆記試過 |
-| 社會（國小） | R3 四份 ＋ [elementary-social.md](../docs/card-rules/elementary-social.md) | v0.7；試用先停（使用者 2026-11-03），[backlog](../docs/backlog.md#v1-需要做的任務)寫「通過才開放」 |
+| 社會（國小） | R3 四份 ＋ [elementary-social.md](../docs/card-rules/elementary-social.md) | v0.7；試用先停在這版（使用者 2026-11-03），還沒判定通過；使用者 2026-11-07 決定最小版先開，草稿照樣審 |
 
 R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短規則.md`、`experiments/t4/arch/第二輪/判斷邊界.md`、`experiments/t4/arch/第二輪/五步.md`（和試用時 `國小國語設定.json` 的順序相同；搬移不改凍結內容，環節 8 第 6 條）。表上沒開的科目，製卡畫面不列。
 
@@ -45,7 +45,7 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 
 | 步驟 | 內容 | 誰 |
 |---|---|---|
-| 0 | 使用者決定 §0 開哪幾科 | 使用者 |
+| 0 | 使用者決定 §0 開哪幾科（做完，2026-11-07：五科全開） | 使用者 |
 | 1 | §4～§6 格式查核（[請求](ai-cards-mvp-format-review.md)） | Codex |
 | 2 | Claude 核對查核回報、改這份說明 | Claude（雲端或本機） |
 | 3 | §1 → §2 → §3 → §4 → §5 → §6 的程式與測試（分支 `claude/ai-cards-mvp`，從 `main` 開） | Claude |
@@ -250,7 +250,6 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 ## 9. 待決（不擋開工）
 
 - 「給家長的備註」這個名稱要不要改（backlog：「寫 AI 製卡與說明書時一起問使用者」）。改的話，規則、syntax §2-9 與 §4 的檢查一起改；這一份先兩種都認。
-- 國小社會什麼時候開放：看使用者對 §0 的決定與 backlog 的兩項試用。
 
 ## 結果
 
