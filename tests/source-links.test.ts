@@ -265,7 +265,7 @@ void test('L2 R2：上面貼了一個出處相同的目標，平移後的標示�
   assert.deepEqual(hit.at, { line: 2, from: 9, to: 18 });
   const now = parseDeck('- 乙 ^abc234\n    - Q :: A\n    - 出處：老師說過 p.44\n' + old, { layout: true });
   // 標示跟著平移到第 5 行第 9 欄：那裡是甲的出處。
-  assert.deepEqual(relocateSource(now, hit, 5, 9), { target: 3, part: 0 });
+  assert.deepEqual(relocateSource(now, hit, 5, 9), { target: 3, part: 0, follows: [], whole: '老師說過 p.44', scope: 'this' });
   // 那個位置的字變了：找不回來。
   assert.equal(relocateSource(parseDeck(old.replace('老師說過', '老師講過'), { layout: true }), hit, 2, 9), null);
 });
@@ -276,6 +276,6 @@ void test('L2 R6：切不出原文的出處（接續行）找得回來，交給�
   const deck = parseDeck(text, { layout: true });
   const [hit] = unreadableSources(app, '卡組/本篇.md', deck, NO_UNITS);
   assert.equal(hit.at, null);
-  assert.deepEqual(relocateSource(deck, hit, 2, 6), { target: 0, part: 0 });
+  assert.deepEqual(relocateSource(deck, hit, 2, 6), { target: 0, part: 0, follows: [], whole: hit.text, scope: 'this' });
   assert.equal(relocateSource(deck, hit, 1, 6), null, '不在那一欄出處的第一行');
 });

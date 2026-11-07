@@ -94,3 +94,36 @@ void test('L2 R6：切不出原文的出處（接續行）打開表單，說這�
   assert.equal(view.state.doc.toString(), text);
   view.destroy();
 });
+
+void test('L2 R10：標示之後改了後面接著的頁碼，表單的原文、位置與寫回都用現在的字', async () => {
+  const old = '- 甲 ^abc123\n    - Q :: A\n    - 出處：老師說過 p.21、22\n';
+  const [hit] = hitsOf(old);
+  const view = new EditorView({ state: EditorState.create({ doc: old }), parent: document.body });
+  const from = view.state.doc.line(hit.at!.line + 1).from + hit.at!.from;
+  const end = view.state.doc.line(3).to;
+  view.dispatch({ changes: { from: end - 2, to: end, insert: '23' }, userEvent: 'input.type' });
+  openUnreadableSourceForm(view, from, entry, hit);
+  assert.equal(form().querySelector('.essence-cards-source-form-original')?.textContent, '原文：老師說過 p.21、23');
+  await clearRemarkAndApply();
+  assert.equal(view.state.doc.toString(), '- 甲 ^abc123\n    - Q :: A\n    - 出處：p.21 p.23\n');
+  view.destroy();
+});
+
+void test('L2 R10：標示之後改了前面的單元，表單預選現在跟著的單元', async () => {
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2 本篇\n---\n';
+  const old = head + '- 目標 ^abc123\n    - Q :: A\n    - 出處：國二上 1-3 p.20、老師說過 p.21\n';
+  const [hit] = hitsOf(old);
+  assert.equal(hit.text, '老師說過 p.21');
+  const view = new EditorView({ state: EditorState.create({ doc: old }), parent: document.body });
+  const from = view.state.doc.line(hit.at!.line + 1).from + hit.at!.from;
+  const unit = view.state.doc.line(8).from + view.state.doc.line(8).text.indexOf('1-3');
+  view.dispatch({ changes: { from: unit, to: unit + 3, insert: '1-4' }, userEvent: 'input.type' });
+  openUnreadableSourceForm(view, from, entry, hit);
+  const checked = Array.from(form().querySelectorAll('[role="radio"][aria-checked="true"]')).map(each => each.textContent);
+  assert.deepEqual(checked, ['國二上 1-4還沒有卡組']);
+  await clearRemarkAndApply();
+  const written = view.state.doc.line(8).text;
+  assert.ok(!written.includes('1-3'), written);
+  assert.equal(written, '    - 出處：國二上 1-4 p.20、國二上 1-4 p.21');
+  view.destroy();
+});

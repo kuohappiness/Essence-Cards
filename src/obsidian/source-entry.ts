@@ -84,8 +84,10 @@ function open(view: EditorView, pos: number, blankTarget: number, entry: SourceE
   };
   openSourceForm({
     rect: { left: at.left, top: at.top, bottom: at.bottom },
-    original: hit?.whole ?? null,
-    form: guessSource(hit?.item ?? null, own, units, hit?.follows, hit?.scope),
+    // 原文、接在後面的位置與跟著的單元用現在的全文（found），不用標示時的 hit（L2 第二輪 R10）。
+    // 找不到時表單只顯示、不能套用（stale），照標示時的。
+    original: (found ?? hit)?.whole ?? null,
+    form: guessSource(hit?.item ?? null, own, units, (found ?? hit)?.follows, (found ?? hit)?.scope),
     own,
     units,
     blocked: stale ? '筆記剛改過，請再點一次' : canEditSource(text, target, partIndex, entry.version),
