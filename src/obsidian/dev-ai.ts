@@ -144,12 +144,20 @@ export async function aiCardsDev(host: EntryDevHost & { device: string }, folder
     // 啟用：標題列的按鈕 → 先問 → 啟用。
     const deck = science.decks[0];
     checks.targetsBefore = state.deckTargets(deck).length;
-    const activate = document.querySelector<HTMLElement>('.essence-cards-activate');
+    // 只按這一篇分頁裡的按鈕：家長開著別的草稿時，document 裡第一個按鈕可能是別篇的（2026-11-08 誤啟用了測試 vault 的另一篇草稿）。
+    const leaf = app.workspace.getLeavesOfType('markdown').find(each => each.view instanceof MarkdownView && each.view.file?.path === deck);
+    const activate = leaf?.view.containerEl.querySelector<HTMLElement>('.essence-cards-activate') ?? null;
     checks.activateButton = !!activate;
     activate?.click();
     await until(() => !!button('啟用', lastModal() ?? null));
-    checks.activateText = text(lastModal());
+    const confirm = text(lastModal());
+    checks.activateText = confirm;
     await capture('自然 啟用的確認');
+    // 這次建立的那一篇只有 1 個學習目標；確認視窗寫的不是它就取消，不啟用。
+    if (!confirm.includes('這一篇的 1 個學習目標')) {
+      button('取消', lastModal() ?? null)?.click();
+      throw Error('啟用的確認不是這次建立的那一篇，沒有按啟用');
+    }
     button('啟用', lastModal() ?? null)?.click();
     await until(() => state.deckTargets(deck).length > 0);
     await sleep(500);
