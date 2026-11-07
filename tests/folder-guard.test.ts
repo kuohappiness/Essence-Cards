@@ -536,16 +536,114 @@ void test('第二輪 F1 在 Obsidian 裡改成別的名字、搬不回：照 ren
   assert.equal(guard.misplaced(`${renamed}/草稿.md`), true);
   assert.equal(await state.fillIds(`${renamed}/草稿.md`), false);
   assert.equal(f.memory.texts.get(`${renamed}/草稿.md`), DRAFT);
-  // 家長自己拖回去：那個位置不在了，不再排除。
-  f.memory.rename(renamed, WRONG);
-  f.memory.write(`${renamed}/自己的.md`, '- 能說明 B\n    - QB :: AB\n');
-  guard.check();
-  assert.deepEqual(guard.issues(), []);
-  assert.equal(guard.misplaced(`${renamed}/自己的.md`), true, '同一個位置還是資料夾時照樣排除（只看位置，不看是誰建的）');
-  f.memory.remove(`${renamed}/自己的.md`);
-  guard.check();
+  // 家長在 Obsidian 裡拖回去：不再記那個位置，之後在那裡新建的資料夾是家長自己的（第三輪 F1：不必等判斷）。
+  drag(f, guard, renamed, WRONG);
   f.memory.write(`${renamed}/自己的.md`, '- 能說明 B\n    - QB :: AB\n');
   assert.equal(guard.misplaced(`${renamed}/自己的.md`), false);
+  assert.equal(await guard.wrap(f.memory.files).read(`${renamed}/自己的.md`), '- 能說明 B\n    - QB :: AB\n');
+  assert.deepEqual(await guard.wrap(f.memory.files).list(renamed), [`${renamed}/自己的.md`]);
+  guard.check();
+  assert.deepEqual(guard.issues(), []);
+  assert.equal(guard.misplaced(`${renamed}/自己的.md`), false);
+});
+
+/** 錯題本搬不回、停在 at（改了名，§2-2 找不到同名）。 */
+async function strandedAt(f: Fake, guard: FolderGuard, at: string): Promise<void> {
+  f.failMoves.push(EACCES);
+  drag(f, guard, WRONG, at);
+  await f.run();
+  assert.equal(guard.misplaced(`${at}/草稿.md`), true);
+}
+
+void test('第三輪 F1 搬不回之後再改一次名：新位置照樣不當卡組，不補 ID', async (t: TestContext) => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  await strandedAt(f, guard, `${R}/草稿資料夾`);
+  const next = `${R}/另一個名字`;
+  drag(f, guard, `${R}/草稿資料夾`, next);
+  // 不等判斷：rename 事件就換了位置。
+  const at = `${next}/草稿.md`;
+  assert.equal(guard.misplaced(at), true);
+  assert.equal(await guard.wrap(f.memory.files).read(at), null);
+  assert.notEqual((await state.save(editorOn(at, DRAFT))).kind, 'done');
+  assert.equal(await state.fillIds(at), false);
+  guard.check();
+  assert.equal(guard.misplaced(at), true);
+  assert.equal(f.memory.texts.get(at), DRAFT);
+  assert.deepEqual(f.moves, [`${R}/草稿資料夾 → ${WRONG}`], '只有原位名單的改名才自動搬回');
+});
+
+void test('第三輪 F1 上一層改名帶走搬不回的資料夾：跟著換，旁邊的卡組照常', async (t: TestContext) => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  await strandedAt(f, guard, `${R}/英文/草稿資料夾`);
+  drag(f, guard, `${R}/英文`, `${R}/English`);
+  const at = `${R}/English/草稿資料夾/草稿.md`;
+  assert.equal(guard.misplaced(at), true);
+  assert.equal(await state.fillIds(at), false);
+  assert.equal(guard.misplaced(`${R}/English/L1.md`), false);
+  guard.check();
+  assert.equal(guard.misplaced(at), true);
+  assert.equal(f.memory.texts.get(at), DRAFT);
+  // 再把它拖回原位：不再記。
+  drag(f, guard, `${R}/English/草稿資料夾`, WRONG);
+  guard.check();
+  assert.deepEqual(guard.issues(), []);
+  assert.equal(guard.misplaced(`${WRONG}/草稿.md`), false);
+});
+
+void test('第三輪 F1 搬回期間又被改名、之後搬不回：記的是改名後的位置', async (t: TestContext) => {
+  const f = fake({ ...VAULT, [`${WRONG}/草稿.md`]: DRAFT });
+  const guard = started(f);
+  const state = study(f, guard, t);
+  await state.ready();
+  let fail: (error: Error) => void = () => {};
+  f.host.move = () => new Promise<void>((_resolve, reject) => { fail = reject; });
+  drag(f, guard, WRONG, `${R}/英文/錯題本`);
+  await f.run();
+  const next = `${R}/草稿資料夾`;
+  drag(f, guard, `${R}/英文/錯題本`, next);
+  assert.equal(guard.misplaced(`${next}/草稿.md`), true, '搬回期間也不當卡組');
+  fail(Object.assign(Error('ENOENT: no such file or directory, rename'), { code: 'ENOENT' }));
+  await drain();
+  guard.check();
+  assert.equal(guard.misplaced(`${next}/草稿.md`), true);
+  assert.equal(await state.fillIds(`${next}/草稿.md`), false);
+  assert.equal(f.memory.texts.get(`${next}/草稿.md`), DRAFT);
+});
+
+void test('第三輪 F1 防呆自己搬回時收到的 rename：原位的檔不當成搬錯位置', async () => {
+  const f = fake();
+  const guard = started(f);
+  let finish = (): void => {};
+  // 實際的 Obsidian 搬好時，防呆也會收到自己這次搬動的 rename；底層的 Promise 晚一點才結束。
+  f.host.move = (from, to) => new Promise<void>(resolve => { guard.renamed(to, from, true); f.memory.rename(from, to); finish = resolve; });
+  drag(f, guard, `${R}/考試範圍`, `${R}/英文/考試範圍`);
+  await f.run();
+  assert.equal(f.memory.texts.has(RANGE), true);
+  assert.equal(guard.misplaced(RANGE), false);
+  finish();
+  await drain();
+  assert.equal(guard.misplaced(RANGE), false);
+  assert.match(f.notices[0], /已經搬回原位/);
+});
+
+void test('第三輪 F1 判斷出搬錯位置的上一層在 Obsidian 裡改名：下一次判斷之前也跟著換', () => {
+  const f = fake();
+  const guard = movedOutside(f);
+  const at = `${R}/English/考試範圍`;
+  drag(f, guard, `${R}/英文`, `${R}/English`);
+  assert.equal(guard.misplaced(`${at}/段考.md`), true);
+  assert.equal(guard.misplaced(`${R}/English/L1.md`), false);
+  // 拖回原位：不等判斷就不再排除。
+  drag(f, guard, at, `${R}/考試範圍`);
+  assert.equal(guard.misplaced(RANGE), false);
+  guard.check();
+  assert.deepEqual(guard.issues(), []);
 });
 
 void test('第二輪 F4 等磁碟的時候 Obsidian 才看到的空資料夾：原位當成有東西，清理也不刪', async () => {
