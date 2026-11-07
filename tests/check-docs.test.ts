@@ -167,7 +167,7 @@ void test('已完成：10 列通過、11 列要報', async t => {
 void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一個非空行要有狀態；README、子資料夾與其他資料夾不查', async t => {
   const { add, run } = await repo(t);
   await add('tasks/ok.md', '# 任務\n\n狀態：進行中\n');
-  await add('tasks/inline.md', '# 任務\n日期：2026-10-27｜整理者：Claude｜狀態：已結案 → D-141\n');
+  await add('tasks/inline.md', '# 任務\n日期：2026-10-27｜整理者：Claude｜狀態：討論中 → D-141\n');
   await add('tasks/missing.md', '# 任務\n\n建議模型：Opus\n\n狀態：進行中\n');
   await add('tasks/no-title.md', '狀態：進行中\n');
   await add('Claude Codex Discussion/2026-10-27-x.md', '# 討論\n\n日期：2026-10-27\n');
@@ -184,6 +184,27 @@ void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一�
     'tasks/missing.md:3  狀態：  標題下第一個非空行沒有狀態',
     'tasks/no-title.md:1  # 標題  沒有一級標題',
   ]);
+});
+
+void test('D-195：結束的任務〈結果〉要有填好的「延後的測試：」；進行中、審查請求、D-195 之前結束的不查；印出補測列數', async t => {
+  const { root, add, run } = await repo(t);
+  const task = (status: string, result?: string) => `# 任務\n\n狀態：${status}\n\n## 1. 做什麼\n\n延後的測試：寫在這裡不算\n${result === undefined ? '' : `\n## 結果\n\n${result}\n`}`;
+  await add('tasks/doing.md', task('進行中', '（實作後填）'));
+  await add('tasks/none.md', task('已合併（2026-11-08）', '延後的測試：無'));
+  await add('tasks/listed.md', task('已完成', '- **延後的測試**：技術債表「補測：存到一半中斷」'));
+  await add('tasks/missing.md', task('已結案', '合併了。'));
+  await add('tasks/no-result.md', task('完成：已合併'));
+  await add('tasks/todo.md', task('已完成', '延後的測試：（實作後填）'));
+  await add('tasks/x-review.md', task('已完成', '通過'));
+  await add('tasks/w4.md', task('已合併', '合併了。'));
+  await add('docs/x.md', task('已完成', '合併了。'));
+  await add('docs/backlog.md', '# B\n\n| 項目 | 觸發點 |\n|---|---|\n| 補測：甲 | 空檔 |\n| 補做：乙 | 空檔 |\n| 其他 | 空檔 |\n');
+  assert.deepEqual(run(), [
+    'tasks/missing.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/no-result.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/todo.md:11  延後的測試：  還沒填：寫技術債表的「補測：」列或「無」（D-195）',
+  ]);
+  assert.equal(checkDocs(root, { exceptions: [] }).deferred, 2);
 });
 
 void test('例外表只蓋掉逐項列出的連結；沒用到的例外要報', async t => {
@@ -204,7 +225,7 @@ void test('命令列：有問題時 exit code 1 並逐行列出，沒有時印�
   const script = fileURLToPath(new URL('../tools/check-docs.ts', import.meta.url));
   await add('a.md', '# A\n\n[b](b.md)、[網站](https://example.com)\n');
   await add('b.md', '# B\n');
-  assert.equal(execFileSync(process.execPath, [script, '--root', root], { encoding: 'utf8', stdio: 'pipe' }).trim(), '文件檢查通過（工作樹）：2 個 Markdown 檔、1 個連結');
+  assert.equal(execFileSync(process.execPath, [script, '--root', root], { encoding: 'utf8', stdio: 'pipe' }).trim(), '文件檢查通過（工作樹）：2 個 Markdown 檔、1 個連結；待補測與補做 0 列（backlog 技術債，D-195）');
   await add('a.md', '# A\n\n[c](c.md)\n');
   assert.throws(
     () => execFileSync(process.execPath, [script, '--staged', '--root', root], { encoding: 'utf8', stdio: 'pipe' }),
