@@ -2,6 +2,7 @@ import { codeKey, sourceLinks, termKey, termRank } from '../deck/index.ts';
 import type { Deck, Target } from '../deck/index.ts';
 import type { MemoryColor } from '../study/index.ts';
 import { compareCode, compareTerm } from './order.ts';
+export { compareCode, compareTerm };
 import { unitInScope } from './scope.ts';
 import type { ScopeFile } from './scope.ts';
 

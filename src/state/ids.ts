@@ -1,4 +1,4 @@
-import { assignIds, blockIds, parseDeck, setTargetId } from '../core/deck/index.ts';
+import { assignIds, blockIds, newId, parseDeck, setTargetId } from '../core/deck/index.ts';
 import type { Deck, ProblemCode, Target } from '../core/deck/index.ts';
 import { findDuplicateIds } from '../core/study/index.ts';
 import type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
@@ -88,6 +88,8 @@ export interface IdTrackerOptions {
   partial: () => boolean;
   /** 這份卡組這一版讀得懂；需要新版的不參與重複 ID 的判斷（D-157）。 */
   readable: (deck: Deck) => boolean;
+  /** 這台電腦預留、不能配出的 ID：AI 製卡沒完成的工作配好的、不再配出的清單（tasks/ai-cards-mvp.md §5〈ID 的預留〉）。 */
+  reserved?: () => Iterable<string>;
 }
 
 /**
@@ -279,7 +281,7 @@ export function createIdTracker(options: IdTrackerOptions) {
     return skip;
   }
   function taken(): Set<string> {
-    const ids = new Set([...seen, ...options.logIds(), ...removed]);
+    const ids = new Set([...seen, ...options.logIds(), ...removed, ...options.reserved?.() ?? []]);
     for (const items of pending.values()) for (const item of items) if (item.issue.restore) ids.add(item.issue.restore);
     return ids;
   }
@@ -317,6 +319,26 @@ export function createIdTracker(options: IdTrackerOptions) {
       stale = true;
     },
     lines,
+    /**
+     * 配 count 個新的 ID（AI 製卡的存草稿，tasks/ai-cards-mvp.md §5 第 1 步）：避開所有卡組看過的（含引言框的行尾 ID）、紀錄的 lt、刻意拿掉的、
+     * 待處理問題的原本 ID、這台電腦的預留；配出的立刻記進 seen（預留），之後的補 ID 與另一次製卡都避開。
+     */
+    allocate(count: number): string[] {
+      const used = taken(), ids: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const id = newId(options.random ?? Math.random, used);
+        used.add(id);
+        seen.add(id);
+        ids.push(id);
+      }
+      return ids;
+    },
+    /** 這些 ID 現在在哪幾篇卡組（每一行行尾的區塊 ID 與目標行中被認得的，引言框裡的也算），照路徑排。 */
+    where(ids: readonly string[]): Map<string, string[]> {
+      const found = new Map<string, string[]>();
+      for (const [path, set] of [...present].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) for (const id of ids) if (set.has(id)) found.set(id, [...found.get(id) ?? [], path]);
+      return found;
+    },
     /** 寫法有問題的目標從最近一版已解析的卡組拿，不另外解析（技術債 A8、D1）。 */
     status(path: string): { missing: number; issues: IdIssue[]; malformed: Malformed[] } {
       const text = texts.get(path), deck = versions.get(path);

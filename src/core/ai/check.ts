@@ -43,7 +43,7 @@ type Cont = Extract<Block, { kind: 'cont' | 'para' }>;
 interface TreeNode extends Item { children: TreeNode[]; cont: Cont[] }
 
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）。 */
-function blocksOf(lines: readonly Line[]): Block[] {
+export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
   for (let i = 0; i < lines.length; i++) {
     const { no, raw } = lines[i];

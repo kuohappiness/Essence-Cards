@@ -1,5 +1,5 @@
 import { MarkdownView, type App, type WorkspaceLeaf } from 'obsidian';
-import type { DeckStatusValue, State, WriteBlock, WriteResult } from '../state/index.ts';
+import type { DeckStatusValue, EditorHandle, State, WriteBlock, WriteResult } from '../state/index.ts';
 import { editorOf } from './save.ts';
 
 // 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只在電腦。開著的筆記走編輯器（和存檔同一條），沒開著的走檔案（和離開筆記補 ID 同一條）。
@@ -31,11 +31,18 @@ const viewOf = (leaf: WorkspaceLeaf, path: string): MarkdownView | null => leaf.
 const sameText = (a: string, b: string): boolean => a.replace(/\r\n?/g, '\n') === b.replace(/\r\n?/g, '\n');
 
 /** 暫停或恢復這一篇。回傳要提示的字，沒事是 null；不會 reject，寫不進去與讀不到都交給 onError。 */
-export async function changeDeckStatus(app: App, state: State, path: string, value: DeckStatusValue, onError: (error: unknown) => void): Promise<string | null> {
+export function changeDeckStatus(app: App, state: Pick<State, 'setDeckStatus'>, path: string, value: DeckStatusValue, onError: (error: unknown) => void): Promise<string | null> {
+  return change(app, path, onError, editor => state.setDeckStatus(path, value, editor));
+}
+/** 草稿的「啟用」（tasks/ai-cards-mvp.md §7）：和暫停／恢復同一條路，只有草稿能改成啟用。 */
+export function activateDeck(app: App, state: Pick<State, 'activateDraft'>, path: string, onError: (error: unknown) => void): Promise<string | null> {
+  return change(app, path, onError, editor => state.activateDraft(path, editor));
+}
+async function change(app: App, path: string, onError: (error: unknown) => void, write: (editor: EditorHandle | null) => Promise<WriteResult | { kind: 'unwritable' }>): Promise<string | null> {
   try {
     const view = app.workspace.getLeavesOfType('markdown').map(leaf => viewOf(leaf, path)).find(each => each !== null) ?? null;
     if (view?.file && !sameText(view.editor.getValue(), await app.vault.read(view.file))) return STATUS_TIPS.unsaved;
-    const result = await state.setDeckStatus(path, value, view && editorOf(view, path));
+    const result = await write(view && editorOf(view, path));
     if (result.kind === 'failed') onError(result.error);
     return tipOf(result);
   } catch (error) {

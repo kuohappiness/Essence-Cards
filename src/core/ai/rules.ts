@@ -57,3 +57,8 @@ export function ruleText(raw: string, file: Pick<RuleFile, 'path' | 'marker'>): 
   if (!text) throw Error(`${file.path} 送出的部分是空的`);
   return text;
 }
+
+/** 建置嵌進外掛的一份規則：名稱、版號、文字與文字的 SHA-256（UTF-8）。 */
+export interface EmbeddedRule { name: string; version: string; text: string; sha256: string }
+/** 每一科（key）的規則，照表的順序。 */
+export type EmbeddedRules = Readonly<Record<string, readonly EmbeddedRule[]>>;

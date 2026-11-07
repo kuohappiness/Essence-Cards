@@ -42,6 +42,9 @@ export type WriteResult =
   /** 已寫進磁碟，但核對時讀不到：state 自己重試，讀到後照核對採用。 */
   | { kind: 'saved' };
 
+/** 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。 */
+export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: WriteBlock } | { kind: 'failed'; error: unknown };
+
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
 /**
@@ -117,7 +120,7 @@ export function createWrites(options: WritesOptions) {
   /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending 裡有不在 unread 的路徑（except 那一篇除外）。 */
   const waiting = reads.waiting;
   /** 排進寫入的那一列；排隊時就記下對象，輪到時才取最新的文字。 */
-  function enqueue(job: () => Promise<WriteResult>): Promise<WriteResult> {
+  function enqueue<T>(job: () => Promise<T>): Promise<T> {
     const next = writes.then(job);
     // 失敗由 next 交回排這份工作的呼叫端；這一列只是接著排下一份。
     writes = next.catch(() => {});
@@ -141,9 +144,9 @@ export function createWrites(options: WritesOptions) {
     }
     return writable(path);
   }
-  /** 第 4 步：這篇的 I/O 開始（§2 第 1 點）。 */
+  /** 第 4 步：這篇的 I/O 開始（§2 第 1 點）。卡組以外的檔（AI 製卡的原文與快照）不經過讀取層，只記正在 I/O。 */
   function begin(path: string): void {
-    reads.hold(path);
+    if (isDeckPath(path)) reads.hold(path);
     active = new Promise(resolve => { finish = resolve; });
   }
   /**
@@ -160,11 +163,44 @@ export function createWrites(options: WritesOptions) {
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
-    reads.unhold(path);
+    const deck = isDeckPath(path);
+    if (deck) reads.unhold(path);
     finish?.();
     finish = null;
     active = null;
-    reads.reread(path);
+    if (deck) reads.reread(path);
+  }
+  /**
+   * 只建立新檔（AI 製卡的原文、卡組與快照，tasks/ai-cards-mvp.md §5）：同一列、同樣不看是哪一篇的門檻（電腦、讀完、沒關閉、備份成功、沒有讀不到的）；
+   * 已經有檔（含零位元組的空檔）不動、回 exists。寫好再讀一次，一字不差才是 done；讀回來不同或讀不到回 failed（之後重試時照實際的檔核對）。
+   */
+  async function create(path: string, text: string): Promise<CreateResult> {
+    if (life.closed) return { kind: 'blocked', reason: 'closed' };
+    const reason = blockedNow();
+    if (reason) return { kind: 'blocked', reason };
+    begin(path);
+    let exists = false, live = true;
+    try {
+      await persist(files.modify(path, (current, has) => {
+        // 逾時之後才輪到回呼：中止，不建立（同 fillFile 的 Stopped）。
+        if (!live || life.closed) throw new Stopped();
+        if (has) { exists = true; return current; }
+        return text;
+      }));
+    } catch (error) {
+      return error instanceof Stopped ? { kind: 'blocked', reason: 'closed' } : { kind: 'failed', error };
+    } finally {
+      live = false;
+      end(path);
+    }
+    if (exists) return { kind: 'exists' };
+    try {
+      const back = await files.read(path);
+      return back === text ? { kind: 'done' } : { kind: 'failed', error: Error(`讀回來和寫的不同：${path}`) };
+    } catch (error) {
+      // 讀不到：不算寫成，交回呼叫端；之後重試時照實際的檔核對（tasks/ai-cards-mvp.md §5〈中斷與重試〉）。
+      return { kind: 'failed', error };
+    }
   }
   /** 第 6、7 步：登記這份寫入的核對，等核對讀取（end 已經排好）。 */
   function verify(path: string, original: string, prepared: Prepared | null, fallback: WriteResult): Promise<WriteResult> | WriteResult {
@@ -253,6 +289,7 @@ export function createWrites(options: WritesOptions) {
     enqueue,
     edit,
     fillFile,
+    create,
     blockedNow,
     /**
      * 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、

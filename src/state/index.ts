@@ -15,8 +15,10 @@ import { createIdTracker } from './ids.ts';
 import { Closed, createReads } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
 import { createWrites } from './writes.ts';
-import type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
-export type { EditorHandle, WriteBlock, WriteResult } from './writes.ts';
+import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
+export type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
+import { existingTargets } from '../core/ai/index.ts';
+import type { ExistingNow, ExistingTarget } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
@@ -65,6 +67,11 @@ export interface StateOptions {
    * from 是那份小考檔的路徑（相對路徑要用）。
    */
   resolveLink?: (link: string, from: string) => QuizResolved;
+  /**
+   * 這台電腦預留、不能配出的 ID（tasks/ai-cards-mvp.md §5〈ID 的預留〉）：AI 製卡沒完成的工作配好的，加上不再配出的清單。補 ID 與 aiIds 都避開。
+   * 每次配號時才問，外層在建立 state 之前就讀好這台電腦的工作，所以第一次配號時預留一定已經載入。
+   */
+  reserved?: () => Iterable<string>;
 }
 export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
 /**
@@ -219,6 +226,21 @@ export interface State {
    */
   setDeckStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
   /**
+   * 草稿 → 啟用（tasks/ai-cards-mvp.md §7）：和 setDeckStatus 同一條寫入、同樣的門檻，只改這一篇的 `狀態: 啟用`；寫成才記一行 `set: status`（`val: 啟用`）。
+   * 不是草稿（啟用、暫停）是 unchanged；需要新版、屬性區讀不懂的照 setDeckStatus。
+   */
+  activateDraft(path: string, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
+  /** AI 製卡（tasks/ai-cards-mvp.md §2）：會一起送出的已有學習目標，照 core/ai 的 existingTargets；ID 重複的不送。還沒 ready 是空的。 */
+  aiExisting(subject: string | null, term: string): readonly ExistingTarget[];
+  /** 這個學習目標 ID 現在的樣子（§5 加進已有的學習目標轉成連結）：剛好一個讀得懂的目標才是 one；重複、需要新版、寫法有問題是 unusable。 */
+  aiTarget(id: string): ExistingNow;
+  /** 配 count 個新的 ID（§5 第 1 步）：門檻和寫入相同（writeBlock），沒過回原因；避開所有占用與這台電腦的預留，配出的之後都不再配。 */
+  aiIds(count: number): string[] | WriteBlock;
+  /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID，§5〈中斷與重試〉）；還沒讀完或有讀不到的卡組、紀錄是 null（不知道不當成沒有）。 */
+  aiWhere(ids: readonly string[]): ReadonlyMap<string, readonly string[]> | null;
+  /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
+  aiCreate(path: string, text: string): Promise<CreateResult>;
+  /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
    */
@@ -318,7 +340,7 @@ export function createState(options: StateOptions): State {
     if (seenIds?.of !== history) seenIds = { of: history, ids: new Set(history.seen) };
     return seenIds.ids;
   }
-  const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck) });
+  const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck), reserved: options.reserved });
 
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
   function record(entry: NewEntry): QueuedLine {
@@ -625,6 +647,23 @@ export function createState(options: StateOptions): State {
     return queued;
   }
 
+  /** 目錄的暫停／恢復與草稿的啟用（§7）：只改屬性區的 `狀態`，和補 ID 走同一條寫入。activate：只有草稿能改（改成啟用）；否則草稿不動。 */
+  async function changeStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null, activate: boolean): Promise<WriteResult | { kind: 'unwritable' }> {
+    let unwritable = false;
+    const plan = (text: string): Prepared | null => {
+      // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
+      track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
+      if ((parseDeck(text).props.status === 'draft') !== activate) return null;
+      const next = setStatusLine(text, value);
+      if (next === null) unwritable = true;
+      return next === null ? null : { text: next, expect: [], fresh: [], record: null, need: null, status: parseDeck(next).props.status };
+    };
+    const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
+    if (unwritable) return { kind: 'unwritable' };
+    if (result.kind === 'done' || result.kind === 'saved') record({ set: 'status', deck: path, val: value });
+    return result;
+  }
+
   return {
     ready() {
       // 除了 close() 之外，讓 ready() 拒絕的每一條路都恰好經過一次 onError（tasks/error-log.md §2-3）：監看拋錯、首次排程
@@ -659,21 +698,26 @@ export function createState(options: StateOptions): State {
       // 寫進檔、核對還沒讀到（saved）也算改了字，和原本「有改字回傳 true」相同（2026-10-29 和環節 4 的 session 確認）。
       return result.kind === 'done' || result.kind === 'saved';
     },
-    async setDeckStatus(path, value, editor) {
-      let unwritable = false;
-      const plan = (text: string): Prepared | null => {
-        // 這份文字可能比讀到的新：先當成新版本比對（和存檔的準備相同），不配新的 ID。
-        track(path, () => { if (tracker.text(path) !== text) tracker.observe([{ path, text, deck: parseDeck(text) }], true); });
-        if (parseDeck(text).props.status === 'draft') return null;
-        const next = setStatusLine(text, value);
-        if (next === null) unwritable = true;
-        return next === null ? null : { text: next, expect: [], fresh: [], record: null, need: null, status: parseDeck(next).props.status };
-      };
-      const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
-      if (unwritable) return { kind: 'unwritable' };
-      if (result.kind === 'done' || result.kind === 'saved') record({ set: 'status', deck: path, val: value });
-      return result;
+    setDeckStatus: (path, value, editor) => changeStatus(path, value, editor, false),
+    activateDraft: (path, editor) => changeStatus(path, '啟用', editor, true),
+    aiExisting(subject, term) {
+      if (!life.loaded) return [];
+      return existingTargets(deckList, subject, term, new Set([...tracker.duplicates().map(each => each.id), ...gatedIds]));
     },
+    aiTarget(id) {
+      if (!life.loaded || tracker.isDuplicate(id) || gatedIds.has(id)) return { kind: 'unusable' };
+      const found = deckList.flatMap(entry => entry.deck.targets.filter(t => t.id === id).map(t => ({ path: entry.path, target: t })));
+      if (!found.length) return { kind: 'none' };
+      return found.length === 1 && found[0].target.ok ? { kind: 'one', path: found[0].path, name: found[0].target.name } : { kind: 'unusable' };
+    },
+    aiIds(count) {
+      return writes.blockedNow() ?? tracker.allocate(count);
+    },
+    aiWhere(ids) {
+      if (!life.loaded || unread.size) return null;
+      return tracker.where(ids);
+    },
+    aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(path, ids) { tracker.removed(path, ids); },
