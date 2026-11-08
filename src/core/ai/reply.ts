@@ -1,5 +1,5 @@
 import { codeKey, nameIds, parseDeck, pickWord, readTerm, termKey } from '../deck/index.ts';
-import { blocksOf, check } from './check.ts';
+import { blocksOf, check, fenceCloses } from './check.ts';
 import type { CheckResult } from './check.ts';
 import type { RuleSubject } from './rules.ts';
 import { titlePrefix, unitCode } from './prompt.ts';
@@ -15,10 +15,6 @@ export interface ReplyIssue { line: number; message: string; quote?: string }
 export interface Normalized { lines: string[]; raw: number[] }
 
 const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})[ \t]*(?:markdown|md)?[ \t]*$/i;
-const fenceClose = (line: string, mark: string): boolean => {
-  const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
-  return !!match && match[1][0] === mark[0] && match[1].length >= mark.length;
-};
 /** Gemini 的引用標記：`[cite_start]`、`[cite: 1, 2]`。 */
 const CITE = /\[cite(?:_start|_end)?(?::[^\]\n]*)?\]/g;
 /** `<<<完>>>` 後面可以略過的一行：空白、引用標記、程式碼區塊的結尾符號，或結尾符號接著引用標記。 */
@@ -39,18 +35,20 @@ export function normalizeReply(text: string): Normalized {
   const from = open ? first + 1 : 0;
   const end = markers(lines.slice(from)).filter(each => each.name === END).at(-1);
   const tail = end ? lines.slice(from + end.at + 1) : [];
-  let closing: string | null = null;
-  if (end && tail.some(line => line.trim() !== '') && tail.every(tailJunk)) {
-    closing = tail.map(line => line.replace(CITE, '').trim()).find(rest => rest !== '') ?? null;
+  const fences = tail.map(line => line.replace(CITE, '').trim()).filter(rest => rest !== '');
+  const closing = fences.length === 1 ? fences[0] : null;
+  // 尾巴只認一個結尾符號（L2-7），有外框時還要和開頭配成一對；配不起來的留著，分段會擋下「<<<完>>> 後面還有文字」。
+  const pairs = closing === null || !open || (fenceCloses(closing, open[1]) && !lines.slice(first + 1, from + end!.at + 1).some(line => fenceCloses(line, open[1])));
+  if (end && tail.some(line => line.trim() !== '') && tail.every(tailJunk) && fences.length <= 1 && pairs) {
     lines = lines.slice(0, from + end.at + 1);
     raw = raw.slice(0, from + end.at + 1);
   }
   let last = lines.length - 1;
   while (last >= 0 && lines[last].trim() === '') last--;
   if (!open) return { lines, raw };
-  const plain = (to: number): boolean => !lines.slice(first + 1, to).some(line => fenceClose(line, open[1]));
-  if (closing !== null) return fenceClose(closing, open[1]) && plain(lines.length) ? { lines: lines.slice(first + 1), raw: raw.slice(first + 1) } : { lines, raw };
-  if (last > first && fenceClose(lines[last], open[1]) && plain(last)) return { lines: lines.slice(first + 1, last), raw: raw.slice(first + 1, last) };
+  const plain = (to: number): boolean => !lines.slice(first + 1, to).some(line => fenceCloses(line, open[1]));
+  if (closing !== null && pairs && lines.length === from + end!.at + 1) return { lines: lines.slice(first + 1), raw: raw.slice(first + 1) };
+  if (last > first && fenceCloses(lines[last], open[1]) && plain(last)) return { lines: lines.slice(first + 1, last), raw: raw.slice(first + 1, last) };
   return { lines, raw };
 }
 
@@ -69,17 +67,17 @@ const END = '完';
 /** 分段的結果：卡組段是 [start, end)（整理後的行）；ended 是最後一個非空行是單獨的 `<<<完>>>`。 */
 export interface Segments { start: number; end: number; ended: boolean; errors: ReplyIssue[] }
 
-/** 最外層、單獨一行的段標記（程式碼區塊裡的不算；引言框、清單的行本來就不會整行都是標記）。 */
+/**
+ * 最外層、單獨一行的段標記：照 blocksOf 的區塊邊界，程式碼、引言框、清單裡的不算（§4）。
+ * 接在清單後面又有縮排的是清單的內文；頂格寫的算最外層（AI 常把 `<<<完>>>` 直接接在最後一題的下一行）。
+ */
 function markers(lines: readonly string[]): { at: number; name: string }[] {
   const found: { at: number; name: string }[] = [];
-  let fence: string | null = null;
-  lines.forEach((line, at) => {
-    const code = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    if (fence !== null) { if (code && code[1][0] === fence[0] && code[1].length >= fence.length && /^ {0,3}[`~]+[ \t]*$/.test(line)) fence = null; return; }
-    if (code) { fence = code[1]; return; }
-    const match = MARKER.exec(line);
-    if (match) found.push({ at, name: match[1].trim() });
-  });
+  for (const block of blocksOf(lines.map((raw, no) => ({ no, raw })))) {
+    if (block.kind !== 'para' && block.kind !== 'cont') continue;
+    const match = MARKER.exec(lines[block.line]);
+    if (match && (block.kind === 'para' || !lines[block.line].startsWith(' '))) found.push({ at: block.line, name: match[1].trim() });
+  }
   return found;
 }
 

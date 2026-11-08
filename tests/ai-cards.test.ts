@@ -302,6 +302,38 @@ void test('§4 <<<完>>> 後面的圍欄與引用標記（真人測試 2026-11-0
     [[20, '- The clerk ＿＿ his jacket to the cold man yesterday. :: lent', '比較題的每一題都要是「題目裡一個 ＿＿，答案是 lend」：這一題不是，請改成這樣的句子，或刪掉這一題']]);
 });
 
+void test('§4 整理、分段、拆篇用同一套區塊邊界（L2-7）：縮排在清單裡的 <<<完>>> 不算；多重結尾不拿掉；內層圍欄長度不同時框裡的字不算', () => {
+  const english = subject('english');
+  const f = form({ subject: 'english', unit: 'L3' });
+  const list = ['國二上英文 L3 單字', '', '## 單字', '', '- borrow 英翻中', '    - 出處：p.40', '    - borrow :: 借入'];
+  // 縮排在清單裡：不是最外層的結束標記，要家長確認。
+  for (const end of ['  <<<完>>>', '    <<<完>>>']) assert.equal(inspectReply([...list, end].join('\n'), f, english, [], nobody).ended, false, end);
+  assert.equal(inspectReply([...list, '', '      <<<完>>>'].join('\n'), f, english, [], nobody).ended, false);
+  // 頂格接在最後一題下一行、隔空行頂格：是結束標記。
+  for (const lines of [[...list, '<<<完>>>'], [...list, '', '<<<完>>>']]) {
+    const result = inspectReply(lines.join('\n'), f, english, [], nobody);
+    assert.equal(result.ended, true);
+    assert.deepEqual(result.errors, []);
+  }
+  // 結尾只認一個結尾符號：多重尾巴不拿掉，擋下。
+  const frame = (tail: string[]) => ['````', ...list, '<<<完>>>', ...tail].join('\n');
+  assert.deepEqual(inspectReply(frame(['````[cite: 1]']), f, english, [], nobody).errors, []);
+  assert.ok(inspectReply(frame(['````[cite: 1]', '~~~']), f, english, [], nobody).errors.length > 0);
+  assert.ok(inspectReply(frame(['````', '````']), f, english, [], nobody).errors.length > 0);
+  // 結尾符號和開頭的圍欄配不起來：不當成一對。
+  assert.ok(inspectReply(frame(['~~~~']), f, english, [], nobody).errors.length > 0);
+  // 「複製程式碼」沒有開頭、帶回單一結尾（Gemini 實測）：照樣通過。
+  assert.deepEqual(inspectReply([...list, '<<<完>>>', '````[cite: 1, 2]'].join('\n'), f, english, [], nobody).errors, []);
+  // 沒有外框的回覆裡，四個反引號的程式碼框內有三個反引號與篇名：框裡的字不拆篇。
+  const code = [...list, '    - 寫法', '', '````', '```', '國二上英文 L3 文法', '```', '````', '', '<<<完>>>'].join('\n');
+  const nested = inspectReply(code, f, english, [], nobody);
+  assert.equal(nested.pieces.length, 1, JSON.stringify(nested.pieces.map(each => each.name)));
+  assert.equal(nested.ended, true);
+  // 框裡的 <<<完>>> 不算（長度不同的內層圍欄也一樣）。
+  const inner = inspectReply([...list, '', '````', '```', '<<<完>>>', '```', '````'].join('\n'), f, english, [], nobody);
+  assert.equal(inner.ended, false);
+});
+
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {
   const science = subject('science');
   const withIds = R3_REPLY

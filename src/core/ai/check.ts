@@ -42,13 +42,25 @@ type Item = Extract<Block, { kind: 'item' }>;
 type Cont = Extract<Block, { kind: 'cont' | 'para' }>;
 interface TreeNode extends Item { children: TreeNode[]; cont: Cont[] }
 
-/** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）。 */
+/** 開圍欄的符號（CommonMark：行首最多 3 格、3 個以上的反引號或波浪號；反引號圍欄的說明文字不能有反引號）；不是開圍欄是 null。 */
+function fenceOpen(line: string): string | null {
+  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+  return match && !(match[1][0] === '`' && match[2].includes('`')) ? match[1] : null;
+}
+/** 這一行能不能關掉 mark 開的圍欄：同一種符號、至少一樣長、後面只有空白。 */
+export function fenceCloses(line: string, mark: string): boolean {
+  const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+  return !!match && match[1][0] === mark[0] && match[1].length >= mark.length;
+}
+
+/** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
 export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
   for (let i = 0; i < lines.length; i++) {
     const { no, raw } = lines[i];
-    if (/^\s{0,3}(```|~~~)/.test(raw)) {
-      while (i + 1 < lines.length && !/^\s{0,3}(```|~~~)/.test(lines[i + 1].raw)) i++;
+    const fence = fenceOpen(raw);
+    if (fence !== null) {
+      while (i + 1 < lines.length && !fenceCloses(lines[i + 1].raw, fence)) i++;
       i++; blocks.push({ kind: 'code', line: no }); continue;
     }
     if (/^\s{0,3}>/.test(raw)) {
