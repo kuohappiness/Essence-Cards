@@ -2,7 +2,7 @@ import type { EditorView } from '@codemirror/view';
 import { guessSource } from '../core/catalog/index.ts';
 import type { CatalogUnit } from '../core/catalog/index.ts';
 import { NEEDS_NEWER, canEditSource, editSource, fieldFixes, fixField, fixQuestion, parseDeck } from '../core/deck/index.ts';
-import type { FieldFix, SourceEditAction } from '../core/deck/index.ts';
+import type { Deck, FieldFix, SourceEditAction, TargetLayout } from '../core/deck/index.ts';
 import type { State } from '../state/index.ts';
 import { closeSourceForm, openAskPanel, openSourceForm } from './source-form.ts';
 import { relocateSource } from '../ui/sources.ts';
@@ -16,6 +16,8 @@ export interface SourceEntry {
   state: State | null;
   version: string | null;
   fail: (error: Error) => void;
+  /** 這份全文裡看不懂的出處（和標示同一個判斷）：點下去時重算，舊標示不算數（L2 第四輪 R17）。 */
+  unreadable: (deck: Deck & { layout: Map<number, TargetLayout> }) => readonly UnreadableSource[];
 }
 
 /** 同一科目錄裡的單元，照目錄的順序（「其他單元…」的選單）。目錄的名稱是「編號 名稱」，這裡拆開。 */
@@ -66,11 +68,11 @@ function open(view: EditorView, pos: number, blankTarget: number, entry: SourceE
   const opened = view.state.doc;
   const text = opened.toString();
   const deck = parseDeck(text, { layout: true });
-  // 標示是停止打字 250 ms 之後算的，之後跟著改字平移：用標示現在的位置（pos）找那一段，不用標示時的行號與第幾段（L2 第一輪 R2、R6）。
-  // 找不到（那裡的字改過）不寫，換錯段的話核對擋不到。
-  const found = hit ? relocateSource(deck, hit, opened.lineAt(pos).number - 1, pos - opened.lineAt(pos).from) : null;
+  // 標示是停止打字 250 ms 之後算的，之後跟著改字平移：用標示現在的位置（pos）在現在的全文裡找那一段，不用標示時的行號、第幾段與讀法（L2 第一輪 R2、R6，第四輪 R17）。
+  // 找不到（那裡的字改過、已經讀得懂）不寫，換錯段的話核對擋不到。
+  const found = hit ? relocateSource(deck, entry.unreadable(deck), hit, opened.lineAt(pos).number - 1, pos - opened.lineAt(pos).from) : null;
   const stale = hit !== null && found === null;
-  const target = found?.target ?? blankTarget, partIndex = found?.part ?? null;
+  const target = found?.line ?? blankTarget, partIndex = found?.part ?? null;
   const own = { term: deck.props.term, subject: deck.props.subject, unit: deck.props.unit };
   const units = catalogUnits(entry.state, deck.props.subject);
   const at = view.coordsAtPos(pos) ?? view.contentDOM.getBoundingClientRect();

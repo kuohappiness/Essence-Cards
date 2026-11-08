@@ -261,21 +261,24 @@ void test('§4-3 第 1 點：看不懂的段帶著接在後面、同一個單元
 void test('L2 R2：上面貼了一個出處相同的目標，平移後的標示找回的是原本那個目標', () => {
   const { app } = appWith({});
   const old = '- 甲 ^abc123\n    - Q :: A\n    - 出處：老師說過 p.44\n';
-  const [hit] = unreadableSources(app, '卡組/本篇.md', parseDeck(old, { layout: true }), NO_UNITS);
+  const hitsOf = (text: string) => { const deck = parseDeck(text, { layout: true }); return { deck, hits: unreadableSources(app, '卡組/本篇.md', deck, NO_UNITS) }; };
+  const [hit] = hitsOf(old).hits;
   assert.deepEqual(hit.at, { line: 2, from: 9, to: 18 });
-  const now = parseDeck('- 乙 ^abc234\n    - Q :: A\n    - 出處：老師說過 p.44\n' + old, { layout: true });
+  const now = hitsOf('- 乙 ^abc234\n    - Q :: A\n    - 出處：老師說過 p.44\n' + old);
   // 標示跟著平移到第 5 行第 9 欄：那裡是甲的出處。
-  assert.deepEqual(relocateSource(now, hit, 5, 9), { target: 3, part: 0, item: hit.item, follows: [], whole: '老師說過 p.44', scope: 'this' });
+  const found = relocateSource(now.deck, now.hits, hit, 5, 9);
+  assert.deepEqual([found?.line, found?.part, found?.whole, found?.follows, found?.scope], [3, 0, '老師說過 p.44', [], 'this']);
   // 那個位置的字變了：找不回來。
-  assert.equal(relocateSource(parseDeck(old.replace('老師說過', '老師講過'), { layout: true }), hit, 2, 9), null);
+  const changed = hitsOf(old.replace('老師說過', '老師講過'));
+  assert.equal(relocateSource(changed.deck, changed.hits, hit, 2, 9), null);
 });
 
 void test('L2 R6：切不出原文的出處（接續行）找得回來，交給「這一項分在兩行」', () => {
   const { app } = appWith({});
   const text = '- 目標 ^abc123\n    - Q :: A\n    - 出處：老師說過\n      p.44\n';
   const deck = parseDeck(text, { layout: true });
-  const [hit] = unreadableSources(app, '卡組/本篇.md', deck, NO_UNITS);
+  const hits = unreadableSources(app, '卡組/本篇.md', deck, NO_UNITS), [hit] = hits;
   assert.equal(hit.at, null);
-  assert.deepEqual(relocateSource(deck, hit, 2, 6), { target: 0, part: 0, item: hit.item, follows: [], whole: hit.text, scope: 'this' });
-  assert.equal(relocateSource(deck, hit, 1, 6), null, '不在那一欄出處的第一行');
+  assert.equal(relocateSource(deck, hits, hit, 2, 6), hit);
+  assert.equal(relocateSource(deck, hits, hit, 1, 6), null, '不在那一欄出處的第一行');
 });

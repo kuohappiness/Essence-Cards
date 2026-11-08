@@ -276,10 +276,15 @@ export default class EssenceCardsPlugin extends Plugin {
     // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。游標在出處那一行時的「填出處」圖示、改到筆記時關掉表單（§2）。
     // 看不懂的出處（§1-3）要看材料與目錄：和存檔按鈕同一個判斷，點了打開那一段的表單。
     // 寫回出處（§4-3）：需要新版的不寫；核對不成立記進錯誤紀錄（where: "edit"，帶卡組路徑）。
+    const unreadableIn = (state: EditorView['state'], deck: Parameters<SourceEntry['unreadable']>[0]): UnreadableSource[] => {
+      const path = pathOf(state);
+      return path ? unreadableSources(this.app, path, deck, (term, code) => this.state?.unitMaterials(path, term, code) ?? []) : [];
+    };
     const sourceEntry = (view: EditorView): SourceEntry => ({
       state: this.state,
       version: releaseOf(BUILD),
       fail: error => { this.fail('edit', error, pathOf(view.state)); },
+      unreadable: deck => unreadableIn(view.state, deck),
     });
     const marks = markup<UnreadableSource>({
       isDeck: state => lockable(pathOf(state)),
@@ -289,10 +294,7 @@ export default class EssenceCardsPlugin extends Plugin {
         if (target) openBlankSourceForm(view, view.state.doc.line(line).to, target.line, sourceEntry(view));
       },
       onEdit: closeSourceForm,
-      unreadable: (state, deck) => {
-        const path = pathOf(state);
-        return path ? unreadableSources(this.app, path, deck, (term, code) => this.state?.unitMaterials(path, term, code) ?? []) : [];
-      },
+      unreadable: unreadableIn,
       onSource: (view, hit, from) => { openUnreadableSourceForm(view, from, sourceEntry(view), hit); },
       // 出處的欄位名稱寫錯、半形冒號（§1-4）：後面的字要每一段都讀得懂，和看不懂的出處同一個判斷；點了問一句。
       readable: (state, deck, sources) => {

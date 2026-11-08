@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
 import { setTimeout as wait } from 'node:timers/promises';
+import type { SourceEntry } from '../src/obsidian/source-entry.ts';
 import { installDom } from './helpers/dom.ts';
 
 // 點看不懂的出處 → 表單 → 套用，走到 CodeMirror 的交易（tasks/edit-markup.md §2 第 1 點、§4-3；L2 第一輪 R2、R6）：
@@ -37,8 +38,9 @@ const { openUnreadableSourceForm } = await import('../src/obsidian/source-entry.
 const { closeSourceForm } = await import('../src/obsidian/source-form.ts');
 
 const app = { metadataCache: { getFirstLinkpathDest: () => null, getFileCache: () => null } } as unknown as App;
-const entry = { state: null, version: '0.4.0', fail: (error: Error) => { throw error; } };
-const hitsOf = (text: string) => unreadableSources(app, '卡組/本篇.md', parseDeck(text, { layout: true }), () => []);
+const unreadable: SourceEntry['unreadable'] = deck => unreadableSources(app, '卡組/本篇.md', deck, () => []);
+const entry = { state: null, version: '0.4.0', fail: (error: Error) => { throw error; }, unreadable };
+const hitsOf = (text: string) => unreadable(parseDeck(text, { layout: true }));
 const form = (): HTMLElement => { const box = document.querySelector<HTMLElement>('.essence-cards-source-form'); assert.ok(box, '表單沒有打開'); return box; };
 const button = (text: string): HTMLButtonElement => Array.from(form().querySelectorAll('button')).find(each => each.textContent === text)!;
 const reason = (): string => form().querySelector('.essence-cards-source-form-reason')?.textContent ?? '';
@@ -125,6 +127,22 @@ void test('L2 R10：標示之後改了前面的單元，表單預選現在跟著
   const written = view.state.doc.line(8).text;
   assert.ok(!written.includes('1-3'), written);
   assert.equal(written, '    - 出處：國二上 1-4 p.20、國二上 1-4 p.21');
+  view.destroy();
+});
+
+void test('L2 R17：標示之後改了別段，那一段現在讀得懂了：不寫，說筆記剛改過', () => {
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2 本篇\n---\n';
+  const old = head + '- 甲 ^abc123\n    - Q :: A\n    - 出處：44、看不懂\n';
+  const hit = hitsOf(old).find(each => each.text === '44')!;
+  const view = new EditorView({ state: EditorState.create({ doc: old }), parent: document.body });
+  const from = view.state.doc.line(hit.at!.line + 1).from + hit.at!.from;
+  const end = view.state.doc.line(8).to;
+  view.dispatch({ changes: { from: end - 3, to: end, insert: '46頁' }, userEvent: 'input.type' });
+  openUnreadableSourceForm(view, from, entry, hit);
+  assert.equal(reason(), '筆記剛改過，請再點一次');
+  assert.equal(button('套用').disabled, true);
+  closeSourceForm();
+  assert.equal(view.state.doc.line(8).text, '    - 出處：44、46頁');
   view.destroy();
 });
 

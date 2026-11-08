@@ -96,35 +96,23 @@ function segmentOf(sources: readonly string[], parts: readonly SourcePart[], ind
 }
 
 /**
- * 點了看不懂的出處、用命令打開時，那一段現在是哪個目標的第幾段（L2 第一輪 R2、R6）。標示是停止打字 250 ms 後算的，之後改字時跟著平移，
- * 所以用標示現在的位置找（line、column 從 0 算，是標示開頭現在的位置），不用標示記的行號：上面多了一個出處相同的目標時，舊行號指到別的目標。
- * 有位置的段：那個位置開頭的那一段，原文要和標示時一樣；切不出原文的段（at 是 null，標示畫在那一欄出處的第一行）：那一行是哪個目標的
- * 第一個出處欄位、同一個第幾段的原文一樣。找不到（那裡的字改過）是 null。
- * 接在後面的位置、原文與跟著的單元也用現在的全文重算（L2 第二輪 R10：標示之後改了後面的頁碼或前面的單元，用標示時的會寫回舊的字）；
- * item 是標示時的那一項，讀法的問題（problem）換成那一段現在的（L2 第三輪 R14：後面加了「不算這個」，表單要照否定的填法）。
+ * 點了看不懂的出處、用命令打開時，那一段現在是 hits 的哪一個（L2 第一輪 R2、R6）。標示是停止打字 250 ms 後算的，之後改字時跟著平移，
+ * 所以 hits 要是現在的全文算的（L2 第四輪 R17：別段改過之後，這一段可能已經讀得懂，舊的標示還提供單元候選；第二、三輪 R10、R14 的同一類：
+ * 接在後面的位置、跟著的單元、讀法的問題都用現在的），用標示現在的位置找（line、column 從 0 算，是標示開頭現在的位置），
+ * 不用標示記的行號：上面多了一個出處相同的目標時，舊行號指到別的目標。
+ * 有位置的段：那個位置開頭的那一段，原文要和標示時一樣；切不出原文的段（at 是 null，標示畫在那一欄出處的第一行）：那一行是它的目標的
+ * 第一個出處欄位、同一個第幾段的原文一樣。找不到（那裡的字改過、已經讀得懂）是 null。
  */
 export function relocateSource(
-  deck: { targets: readonly { line: number; fields: { sources: readonly string[] } }[]; layout: ReadonlyMap<number, Pick<TargetLayout, 'entries' | 'parts' | 'fields'>> },
-  hit: Pick<UnreadableSource, 'at' | 'part' | 'text' | 'item'>,
+  deck: { layout: ReadonlyMap<number, Pick<TargetLayout, 'fields'>> },
+  hits: readonly UnreadableSource[],
+  hit: Pick<UnreadableSource, 'at' | 'part' | 'text'>,
   line: number,
   column: number,
-): ({ target: number; part: number; item: SourceItem } & Segment) | null {
-  for (const { line: target, fields } of deck.targets) {
-    const layout = deck.layout.get(target);
-    if (!layout) continue;
-    const part = hit.at === null
-      ? layout.fields[0]?.line === line && layout.parts[hit.part] ? hit.part : -1
-      : layout.parts.findIndex(each => {
-        const entry = layout.entries[each.entry];
-        return entry && each.from !== null && entry.line === line && entry.from + each.from === column;
-      });
-    if (part < 0 || partText(fields.sources, layout.parts[part]) !== hit.text) continue;
-    const item: SourceItem = { ...hit.item }, problem = layout.parts[part].items.find(each => each.problem)?.problem;
-    delete item.problem;
-    if (problem) item.problem = problem;
-    return { target, part, item, ...segmentOf(fields.sources, layout.parts, part) };
-  }
-  return null;
+): UnreadableSource | null {
+  return hits.find(each => each.text === hit.text && (hit.at === null
+    ? each.at === null && each.part === hit.part && deck.layout.get(each.line)?.fields[0]?.line === line
+    : each.at?.line === line && each.at.from === column)) ?? null;
 }
 
 /** 看不懂的原因，照 §1-3 的表排：同一段有好幾個時用最前面的。 */
