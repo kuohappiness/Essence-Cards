@@ -46,10 +46,11 @@ function vault(files = new Map<string, string>()) {
       files.set(path, text);
       return Promise.resolve({ kind: 'done' });
     },
+    createDeck(path, text) { return this.create(path, text); },
     where(ids) {
       const found = new Map<string, string[]>();
       for (const [path, text] of files) if (isDeckPath(path)) for (const id of blockIds(text)) if (ids.includes(id)) found.set(id, [...found.get(id) ?? [], path]);
-      return found;
+      return Promise.resolve(found);
     },
     names: () => new Set([...files.keys()].map(path => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '').toLowerCase())),
     now: () => ({ ms: NOW + 3 * 3_600_000, offset: 480 }),

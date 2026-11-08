@@ -126,6 +126,17 @@ export function createWrites(options: WritesOptions) {
     writes = next.catch(() => {});
     return next;
   }
+  /** 先讀完已知的待讀（最多 DRAIN_ROUNDS 輪，rounds 由呼叫端累計）：讀完是 null；關閉了或讀不完回傳原因。 */
+  async function drain(rounds: { count: number }): Promise<WriteResult | null> {
+    while (waiting()) {
+      if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
+      rounds.count++;
+      // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
+      await reads.readNow();
+    }
+    return null;
+  }
   /**
    * 第 1～3 步：已關閉、先讀完已知的待讀（包括這一篇；最多 DRAIN_ROUNDS 輪，rounds 跨過 fillIds 的重來累計）、門檻。
    * 回傳 null 時可以開始 I/O；呼叫端接著同步開始，中間不能有 await。
@@ -135,14 +146,7 @@ export function createWrites(options: WritesOptions) {
     // 手機、還沒 ready、不是卡組：不用先讀。讀不到、需要新版要看讀到的內容：先讀完待讀再判斷（待讀裡可能就是改回來的那一篇）。
     const early = writable(path);
     if (early && !(early.kind === 'blocked' && (early.reason === 'unread' || early.reason === 'needs-update'))) return early;
-    while (waiting()) {
-      if (life.closed) return { kind: 'blocked', reason: 'closed' };
-      if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
-      rounds.count++;
-      // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
-      await reads.readNow();
-    }
-    return writable(path);
+    return await drain(rounds) ?? writable(path);
   }
   /** 第 4 步：這篇的 I/O 開始（§2 第 1 點）。卡組以外的檔（AI 製卡的原文與快照）不經過讀取層，只記正在 I/O。 */
   function begin(path: string): void {
@@ -173,11 +177,16 @@ export function createWrites(options: WritesOptions) {
   /**
    * 只建立新檔（AI 製卡的原文、卡組與快照，tasks/ai-cards-mvp.md §5）：同一列、同樣不看是哪一篇的門檻（電腦、讀完、沒關閉、備份成功、沒有讀不到的）；
    * 已經有檔（含零位元組的空檔）不動、回 exists。寫好再讀一次，一字不差才是 done；讀回來不同或讀不到回 failed（之後重試時照實際的檔核對）。
+   * free（建卡組時給）：先讀完已知的變動，同一步問這些 ID 是不是還沒有人用；有人用了回 elsewhere、不建（L2-2：改名、搬移、同步都是先有事件才讀檔）。
    */
-  async function create(path: string, text: string): Promise<CreateResult> {
+  function create(path: string, text: string): Promise<CreateResult>;
+  function create(path: string, text: string, free: () => boolean): Promise<CreateResult | { kind: 'elsewhere' }>;
+  async function create(path: string, text: string, free?: () => boolean): Promise<CreateResult | { kind: 'elsewhere' }> {
     if (life.closed) return { kind: 'blocked', reason: 'closed' };
+    if (free && await drain({ count: 0 })) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
     const reason = blockedNow();
     if (reason) return { kind: 'blocked', reason };
+    if (free && !free()) return { kind: 'elsewhere' };
     begin(path);
     let exists = false, live = true;
     try {
@@ -287,6 +296,7 @@ export function createWrites(options: WritesOptions) {
 
   return {
     enqueue,
+    drain,
     edit,
     fillFile,
     create,

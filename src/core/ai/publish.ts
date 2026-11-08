@@ -19,8 +19,10 @@ export interface PublishIo {
   /** 讀檔；不存在是 null，讀不到丟錯（讀不到不算不存在）。 */
   read(path: string): Promise<string | null>;
   create(path: string, text: string): Promise<CreateResult>;
-  /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID）；占用資訊不完整（有讀不到的、還沒讀完）是 null。 */
-  where(ids: readonly string[]): ReadonlyMap<string, readonly string[]> | null;
+  /** 建卡組：建之前再核對一次這些 ID 沒有人用，有人用了是 elsewhere、不建。 */
+  createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'elsewhere' }>;
+  /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID）：等已知的變動讀完才回答；占用資訊不完整（有讀不到的、讀不完）是 null。 */
+  where(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 整個 vault 現在的檔名（小寫、不含 .md）。 */
   names(): Set<string>;
   now(): { ms: number; offset: number };
@@ -130,7 +132,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
       if (deck.stage !== 'written') update({ stage: 'written' });
       continue;
     }
-    const where = io.where(deck.ids);
+    const where = await io.where(deck.ids);
     if (!where) return { kind: 'blocked', reason: 'unread' };
     // 目的地的檔照剛讀到的內容算（state 可能還沒讀到它），其他卡組問 state。
     // 只看這次配出的 ID：舊位置上別的區塊 ID 和這一篇無關（L2-6，家長改名後拿原檔名做了另一篇）。
@@ -151,7 +153,9 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     let path = deck.path;
     if (found.text !== null) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), io.names())}.md`;
     update({ path, stage: 'started' });
-    const created = await io.create(path, deck.text);
+    const created = await io.createDeck(path, deck.text, deck.ids);
+    // 建之前才發現 ID 已經在某一篇（剛搬走或同步送來）：這一篇已記成開始建了，回頭照現在的樣子重新判斷，不會再走到建檔。
+    if (created.kind === 'elsewhere') { index--; continue; }
     if (created.kind === 'exists') return { kind: 'deck', index, situation: 'missing', path };
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });

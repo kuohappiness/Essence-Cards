@@ -71,7 +71,7 @@ void test('§5 只建立：寫好讀回核對；已經有檔（含空檔）不�
   assert.deepEqual(await h.state.aiCreate(DECK, text), { kind: 'done' });
   assert.equal(h.texts.get(DECK), text);
   await new Promise(resolve => setTimeout(resolve, 20));
-  assert.deepEqual([...h.state.aiWhere(['k3m9qa', 'zzzzzz'])!], [['k3m9qa', [DECK]]]);
+  assert.deepEqual([...(await h.state.aiWhere(['k3m9qa', 'zzzzzz']))!], [['k3m9qa', [DECK]]]);
   assert.equal(h.state.decks().find(each => each.path === DECK)?.deck.props.status, 'draft');
 });
 
@@ -109,7 +109,7 @@ void test('§6 候選框裡的 ID 不再配出；剪下貼成目標後照舊出�
   const moved = await setup(t, { [DECK]: head('啟用') + '- 能說出密度\n    - 密度？ :: 質量除以體積\n', [other]: candidate });
   assert.equal(await moved.state.fillIds(DECK), true);
   assert.ok(moved.texts.get(DECK)!.includes('- 能說出密度 ^aaaaab\n'));
-  assert.deepEqual([...moved.state.aiWhere(['aaaaaa'])!], [['aaaaaa', [other]]]);
+  assert.deepEqual([...(await moved.state.aiWhere(['aaaaaa']))!], [['aaaaaa', [other]]]);
 });
 
 void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: status；暫停、啟用的不動；需要新版的擋下；手機不寫；屬性區讀不懂的不寫', async t => {

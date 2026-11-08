@@ -113,6 +113,95 @@ void test('§5 同一個工作同時只有一個操作（L2-1）：存到一半�
   assert.deepEqual(memory.texts, before);
 });
 
+/** 卡組都寫成、快照寫不進去：工作停在準備發布前後，卡組已經在 vault。 */
+async function snapshotFailed(t: TestContext) {
+  const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+  const box = machine();
+  const loaded = await load(t, memory, box, Math.random);
+  const copied = await loaded.cards.copy(form);
+  assert.ok('job' in copied);
+  const original = memory.files.modify.bind(memory.files);
+  memory.files.modify = (path, edit) => path.includes('紀錄/AI 輸出/2026') ? Promise.reject(Error('磁碟滿了')) : original(path, edit);
+  assert.equal((await loaded.cards.save(copied.job, reply(), null)).kind, 'stop');
+  memory.files.modify = original;
+  await settle();
+  return { memory, box, ...loaded, job: loaded.cards.jobs()[0] };
+}
+const MOVED = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+
+void test('§5 卡組剛搬走、還沒讀完（L2-2）：等讀完再判斷，不會回報找不到、不會在舊位置再建一份', async t => {
+  // 新路徑讀到了：跟到新位置。
+  {
+    const { memory, cards, state, job } = await snapshotFailed(t);
+    const held = memory.holdRead(MOVED);
+    memory.rename(WORD, MOVED);
+    await held.started;
+    let finished = false;
+    const resuming = cards.resume(job).then(result => { finished = true; return result; });
+    await settle();
+    assert.equal(finished, false, '讀完之前不能下結論');
+    held.release();
+    const result = await resuming;
+    assert.deepEqual(result.kind === 'done' && result.decks.map(path => path.slice(path.lastIndexOf('/') + 1)), ['單字 改名.md', '國二上英文 L3 文法.md'], JSON.stringify(result));
+    assert.ok(!memory.texts.has(WORD));
+    await settle();
+    assert.deepEqual(state.conflicts(), []);
+  }
+  // 讀完發現有兩份：停下，不重建。
+  {
+    const { memory, cards, job } = await snapshotFailed(t);
+    const text = memory.texts.get(WORD)!;
+    const held = memory.holdRead(MOVED);
+    memory.rename(WORD, MOVED);
+    memory.write('Essence Cards/學業/國二上/英文/單字 副本.md', text);
+    await held.started;
+    const resuming = cards.resume(job);
+    held.release();
+    const result = await resuming;
+    assert.equal(result.kind === 'stop' && result.deck?.situation, 'split', JSON.stringify(result));
+    assert.ok(!memory.texts.has(WORD));
+  }
+  // 新路徑讀不到：不知道就不下結論。
+  {
+    const { memory, cards, job } = await snapshotFailed(t);
+    const held = memory.holdRead(MOVED);
+    memory.rename(WORD, MOVED);
+    await held.started;
+    memory.failing.add(MOVED);
+    const resuming = cards.resume(job);
+    held.release(Error('iCloud 還沒下載'));
+    const result = await resuming;
+    assert.equal(result.kind, 'stop');
+    assert.equal(result.kind === 'stop' && result.deck, undefined, JSON.stringify(result));
+    assert.ok(!memory.texts.has(WORD));
+    memory.failing.delete(MOVED);
+  }
+  // 家長按重建的當下才冒出來（同步把它送回來）：照現在的位置，不多建一份。
+  {
+    const { memory, cards, job } = await snapshotFailed(t);
+    const text = memory.texts.get(WORD)!;
+    memory.remove(WORD);
+    await settle();
+    const stop = await cards.resume(job);
+    assert.equal(stop.kind === 'stop' && stop.deck?.situation, 'missing', JSON.stringify(stop));
+    const held = memory.holdRead(MOVED);
+    memory.write(MOVED, text);
+    await held.started;
+    const rebuilding = cards.choose(job, 0, 'rebuild');
+    held.release();
+    const result = await rebuilding;
+    assert.equal(result.kind, 'done', JSON.stringify(result));
+    assert.ok(!memory.texts.has(WORD));
+  }
+  // 受保護的建檔：檢查與建立之間，這些 ID 已經在某一篇，就不建。
+  {
+    const { memory, state, job } = await snapshotFailed(t);
+    const deck = job.save!.decks[0];
+    assert.deepEqual(await state.aiCreateDeck(MOVED, deck.text, deck.ids), { kind: 'elsewhere' });
+    assert.ok(!memory.texts.has(MOVED));
+  }
+});
+
 void test('§5 寫到一半失敗 → 重新載入：預留的 ID 補 ID 與另一次製卡都避開（R2-3）；同一個工作貼不同的回覆停下；繼續不用再貼；放棄後 ID 不再配出', async t => {
   const memory = createMemoryFiles({ [OLD]: OLD_TEXT, 'Essence Cards/一般.md': '- 能說出 A\n    - A？ :: 是\n' });
   const box = machine();

@@ -94,6 +94,7 @@ export function createAiCards(deps: AiCardsDeps) {
       remove(done) { drop(done); },
       read: path => deps.files.read(path),
       create: (path, text) => state.aiCreate(path, text),
+      createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids),
       where: ids => state.aiWhere(ids),
       names: deps.names,
       now: deps.now,

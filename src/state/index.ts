@@ -236,10 +236,12 @@ export interface State {
   aiTarget(id: string): ExistingNow;
   /** 配 count 個新的 ID（§5 第 1 步）：門檻和寫入相同（writeBlock），沒過回原因；避開所有占用與這台電腦的預留，配出的之後都不再配。 */
   aiIds(count: number): string[] | WriteBlock;
-  /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID，§5〈中斷與重試〉）；還沒讀完或有讀不到的卡組、紀錄是 null（不知道不當成沒有）。 */
-  aiWhere(ids: readonly string[]): ReadonlyMap<string, readonly string[]> | null;
+  /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID，§5〈中斷與重試〉）：先讀完已知的變動（L2-2）；還沒讀完或有讀不到的卡組、紀錄是 null（不知道不當成沒有）。 */
+  aiWhere(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
   aiCreate(path: string, text: string): Promise<CreateResult>;
+  /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇就回 elsewhere、不建（L2-2）。 */
+  aiCreateDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'elsewhere' }>;
   /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
@@ -713,11 +715,13 @@ export function createState(options: StateOptions): State {
     aiIds(count) {
       return writes.blockedNow() ?? tracker.allocate(count);
     },
-    aiWhere(ids) {
-      if (!life.loaded || unread.size) return null;
+    async aiWhere(ids) {
+      const stopped = await writes.enqueue(() => writes.drain({ count: 0 }));
+      if (stopped || !life.loaded || unread.size) return null;
       return tracker.where(ids);
     },
     aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
+    aiCreateDeck: (path, text, ids) => writes.enqueue(() => writes.create(path, text, () => !tracker.where(ids).size)),
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(path, ids) { tracker.removed(path, ids); },
