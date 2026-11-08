@@ -411,6 +411,15 @@ void test('§5 即將建立時再核對整個 vault 的檔名（L2-9）：別的
   }
 });
 
+void test('§5 跨午夜才補完（L2 規格核對）：檔名照開始存草稿那一天，日期與時間照準備發布那一刻', async () => {
+  const { files, io } = vault();
+  const job = saved(copied());
+  io.store(job);
+  io.now = () => ({ ms: NOW + 24 * 3_600_000, offset: 480 });
+  assert.equal((await publish(job, io)).kind, 'done');
+  assert.ok(files.get(SNAPSHOT)!.startsWith('---\n日期: 2026-11-08\n時間: 2026-11-08T10:23:45+08:00\n'));
+});
+
 void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前刪掉那一篇，繼續停下、跳過與放棄都不把 ID 當成沒用過；開始建了、還沒建檔就當掉也停下', async () => {
   // 「記成開始建了 → 建檔」之間當掉：檔沒建，ID 哪裡都沒有，但不能確定，停下問。
   const between = async (crash: (what: 'store' | 'create' | 'remove', path?: string) => boolean, remove: boolean) => {
