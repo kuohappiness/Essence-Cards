@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
-import { buildPrompt, existingTargets, groupHints, inspectReply, normalizeReply, planDraft, readJobs, RULE_SUBJECTS, sha256Hex, studentOf, taskSection } from '../src/core/ai/index.ts';
+import { activationCounts, buildPrompt, existingTargets, groupHints, inspectReply, normalizeReply, planDraft, readJobs, RULE_SUBJECTS, sha256Hex, studentOf, taskSection } from '../src/core/ai/index.ts';
 import type { CardForm, EmbeddedRule, ExistingNow, ExistingTarget, RuleSubject } from '../src/core/ai/index.ts';
 
 // tasks/ai-cards-mvp.md §3、§4、§5 的核心（不寫檔的部分）。只用自編的內容。
@@ -418,6 +418,17 @@ void test('§5 有比較卡的篇寫需要版本；一般知識只寫狀態；�
   const two = planDraft(inspectEnglish(ENGLISH), englishForm, subject('english'), [], nobody, counter(), new Set(['國二上英文 l3 單字']), '2026-11-07');
   assert.deepEqual(two.decks.map(deck => [deck.path.split('/').pop(), deck.ids]), [['國二上英文 L3 單字 2.md', ['aaaaa2']], ['國二上英文 L3 文法.md', ['bbbbb2']]]);
   assert.ok(two.decks[0].text.startsWith('---\n年級學期: 國二上\n科目: 英文\n單元: "L3 Sports: Week 1"\n狀態: 草稿\n---\n\n## 單字\n'));
+});
+
+void test('§7 啟用確認的計數照啟用後實際排得進去的（L2-11）：暫停、寫法有問題、ID 重複、還沒有 ID 的都不算', () => {
+  const text = ['---', '狀態: 草稿', '---', '',
+    '- 能說出 A ^aaaaa2', '    - A？ :: 是',
+    '- 能說出 B ^bbbbb2', '    - 狀態：暫停', '    - B？ :: 是',
+    '- 能說出 C ^ccccc2', '    - C？ ::',
+    '- 能說出 D ^ddddd2', '    - D？ :: 是',
+    '- 能說出 E', '    - E？ :: 是', ''].join('\n');
+  assert.deepEqual(activationCounts(text, new Set(['ddddd2'])), { ready: 1, malformed: 1, paused: 1, duplicate: 1, noId: 1 });
+  assert.deepEqual(activationCounts('---\n狀態: 草稿\n---\n\n- 能說出 A ^aaaaa2\n    - 狀態：暫停\n    - A？ :: 是\n', new Set()), { ready: 0, malformed: 0, paused: 1, duplicate: 0, noId: 0 });
 });
 
 void test('§3 待貼回的工作：最多 5 個、14 天；過期的只丟還沒開始存草稿的；缺欄位的不能用', () => {

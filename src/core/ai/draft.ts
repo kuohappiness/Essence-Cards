@@ -106,6 +106,22 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
   return { normalized, ended: segments.ended, errors: errors.sort(byLine).map(quoted), hints: hints.sort(byLine).map(quoted), pieces, removed };
 }
 
+/**
+ * 按「啟用」先問的數字（§7，L2-11）：ready 是啟用後排得進去的目標（同 catalog 的 usableTarget：讀得懂、沒暫停、有 ID，再扣掉 D-157 重複停出的），其他各算一種沒排進去的原因。
+ * duplicates 是目前重複的 ID。
+ */
+export function activationCounts(text: string, duplicates: ReadonlySet<string>): { ready: number; malformed: number; paused: number; duplicate: number; noId: number } {
+  const counts = { ready: 0, malformed: 0, paused: 0, duplicate: 0, noId: 0 };
+  for (const target of parseDeck(text).targets) {
+    if (!target.ok) counts.malformed++;
+    else if (target.fields.paused) counts.paused++;
+    else if (target.id === null) counts.noId++;
+    else if (duplicates.has(target.id)) counts.duplicate++;
+    else counts.ready++;
+  }
+  return counts;
+}
+
 /** 卡組放在哪（§5，D-040 的預設編排）：學業卡組 `Essence Cards/學業/<年級學期>/<科目>/`，一般知識 `Essence Cards/`。 */
 function deckFolder(form: Pick<CardForm, 'term'>, subject: Pick<RuleSubject, 'subject'>): string {
   return subject.subject === null ? 'Essence Cards' : `Essence Cards/學業/${form.term.trim()}/${subject.subject}`;

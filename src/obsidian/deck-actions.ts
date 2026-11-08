@@ -1,6 +1,6 @@
 import { MarkdownView, Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
-import { check } from '../core/ai/index.ts';
+import { activationCounts, check } from '../core/ai/index.ts';
 import { codeKey, isDeckPath, parseDeck, termKey } from '../core/deck/index.ts';
 import { createPreview } from '../review/index.ts';
 import type { Session } from '../review/index.ts';
@@ -64,11 +64,13 @@ class RemindModal extends Modal {
 function activationText(state: State, path: string, text: string): string[] {
   const entry = state.decks().find(each => each.path === path);
   const deck = parseDeck(text);
-  const malformed = state.deckStatus(path).malformed.length;
-  const ready = deck.targets.length - malformed;
+  const counts = activationCounts(text, new Set(state.conflicts().map(each => each.id)));
   const boxes = check(text);
   const more = [
-    ...malformed ? [`${String(malformed)} 個學習目標寫法有問題，會先跳過`] : [],
+    ...counts.malformed ? [`${String(counts.malformed)} 個學習目標寫法有問題，會先跳過`] : [],
+    ...counts.paused ? [`${String(counts.paused)} 個學習目標已暫停，不會出題`] : [],
+    ...counts.duplicate ? [`${String(counts.duplicate)} 個學習目標的 ID 重複，先停出`] : [],
+    ...counts.noId ? [`${String(counts.noId)} 個學習目標還沒有 ID，補上才會出題`] : [],
     ...boxes.candidates.length || boxes.existing.length ? [[
       ...boxes.candidates.length ? [`候選卡片 ${String(boxes.candidates.length)} 個`] : [],
       ...boxes.existing.length ? [`加進已有的學習目標 ${String(boxes.existing.length)} 項`] : [],
@@ -78,7 +80,7 @@ function activationText(state: State, path: string, text: string): string[] {
   const siblings = props.term === null || props.subject === null || props.unit === null ? [] : state.decks().filter(each => each.path !== path && each.deck.props.status === 'draft'
     && each.deck.props.subject === props.subject && each.deck.props.term !== null && termKey(each.deck.props.term) === termKey(props.term!) && each.deck.props.unit !== null && codeKey(each.deck.props.unit.code) === codeKey(props.unit!.code));
   return [
-    `啟用後，孩子就會開始複習這一篇的 ${String(ready)} 個學習目標。`,
+    `啟用後，孩子就會開始複習這一篇的 ${String(counts.ready)} 個學習目標。`,
     ...more.length ? [`還有：${more.join('；')}。`] : [],
     ...siblings.length ? [`同一課還有 ${String(siblings.length)} 篇草稿：${siblings.map(each => each.path.slice(each.path.lastIndexOf('/') + 1, -3)).join('、')}。`] : [],
   ];
