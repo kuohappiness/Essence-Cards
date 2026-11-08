@@ -123,8 +123,8 @@ void test('接線：補 ID、存檔命令與編輯器的鎖定只在電腦；手
     t.after(() => { plugin.onunload(); });
     plugin.onload();
     assert.equal(commands.has('save'), desktop);
-    // 鎖定，以及告訴離開筆記的備援「這篇開著」的 ViewPlugin。
-    assert.equal(extensions(), desktop ? 2 : 0);
+    // 鎖定、編輯畫面的標示（D-047），以及告訴離開筆記的備援「這篇開著」的 ViewPlugin。
+    assert.equal(extensions(), desktop ? 3 : 0);
     layoutReady();
     assert.ok(plugin.state);
     await plugin.state.ready();

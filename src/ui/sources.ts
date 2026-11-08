@@ -1,6 +1,6 @@
 import type { App, TFile } from 'obsidian';
-import { headingKey, sourceLinks } from '../review/index.ts';
-import type { SourceLink, SourceOwner } from '../review/index.ts';
+import { headingKey, readSourceParts, splitSource } from '../review/index.ts';
+import type { SourceItem, SourceLink, SourceOwner, SourcePart, SourceScope, Span, TargetLayout } from '../review/index.ts';
 
 // 出處的 Obsidian 層（W6 §3-8）：出處的每一項由純函式（core/deck）變成連結的目標；這裡用 metadataCache 判斷
 // 卡組的「材料」裡哪一份有那個區塊或標題，回傳要打開的連結文字。跨單元的候選由索引提供（§10），這裡只管找錨點。
@@ -66,9 +66,69 @@ export function firstMaterial(app: App, deckPath: string, materials: readonly st
   return materialFiles(app, deckPath, materials)[0]?.path ?? null;
 }
 
-/** 看不懂的出處（§9-5、D-170）：字面上就有問題，或要對目錄、材料才知道有問題。line 從 0 算，是目標那一行。 */
-export interface UnreadableSource { line: number; name: string; text: string }
-interface SourceDeck { props: SourceOwner & { materials: readonly string[] }; targets: readonly { line: number; name: string; fields: { sources: readonly string[] } }[] }
+/**
+ * 看不懂的出處（§9-5、D-170）：字面上就有問題，或要對目錄、材料才知道有問題。每一段原文判斷一次（tasks/edit-markup.md §1-3），
+ * 一段裡只要有一項有問題就算一段。line 從 0 算，是目標那一行；text 是那一段的原文；tip 是滑過的說明；
+ * item 是那一段裡第一個有問題的項目，text 換成那一段的原文（表單猜測用）；at 是那一段在檔案的位置，卡組有 layout 而且切得出原文時才有。
+ * part 是第幾段（readSourceParts 的順序，寫回用）；follows 是接在它後面、同一個單元的位置的項目（`1-3 p.20、21` 的 `21`，§4-3 第 1 點），
+ * 寫回時一起換掉；whole 是那一段連同它們的原文（表單上的「原文」）；scope 是那一段跟著哪個單元（表單預選單元用，L2 第一輪 R3）。
+ */
+export interface UnreadableSource { line: number; name: string; text: string; tip: string; item: SourceItem; at: Span | null; part: number; follows: SourceItem[]; whole: string; scope: SourceScope }
+interface SourceDeck {
+  props: SourceOwner & { materials: readonly string[] };
+  targets: readonly { line: number; name: string; fields: { sources: readonly string[] } }[];
+  layout?: ReadonlyMap<number, Pick<TargetLayout, 'entries' | 'parts'>>;
+}
+
+/** 一段的原文；切不出來時用讀出的字。 */
+const partText = (sources: readonly string[], part: SourcePart): string =>
+  part.from !== null && part.to !== null ? sources[part.entry].slice(part.from, part.to) : part.items.map(item => item.text).join(' ');
+/** 表單要的那一段：接在後面、同一個單元的位置（follows），連同它們的原文（whole），這一段跟著哪個單元（scope）。 */
+type Segment = Pick<UnreadableSource, 'follows' | 'whole' | 'scope'>;
+function segmentOf(sources: readonly string[], parts: readonly SourcePart[], index: number): Segment {
+  const part = parts[index], text = partText(sources, part);
+  // 接在後面、同一個單元的位置：同一項裡照原文切（分隔符號照實），跨項用頓號接。
+  const chain: SourcePart[] = [];
+  for (let at = index + 1; parts[at]?.follows === 'place'; at++) chain.push(parts[at]);
+  const last = chain.at(-1);
+  const whole = !last ? text : last.entry === part.entry && part.from !== null && last.to !== null ? sources[part.entry].slice(part.from, last.to) : [part, ...chain].map(each => partText(sources, each)).join('、');
+  return { follows: chain.flatMap(each => each.items), whole, scope: part.scope };
+}
+
+/**
+ * 點了看不懂的出處、用命令打開時，那一段現在是 hits 的哪一個（L2 第一輪 R2、R6）。標示是停止打字 250 ms 後算的，之後改字時跟著平移，
+ * 所以 hits 要是現在的全文算的（L2 第四輪 R17：別段改過之後，這一段可能已經讀得懂，舊的標示還提供單元候選；第二、三輪 R10、R14 的同一類：
+ * 接在後面的位置、跟著的單元、讀法的問題都用現在的），用標示現在的位置找（line、column 從 0 算，是標示開頭現在的位置），
+ * 不用標示記的行號：上面多了一個出處相同的目標時，舊行號指到別的目標。
+ * 有位置的段：那個位置開頭的那一段，原文要和標示時一樣；切不出原文的段（at 是 null，標示畫在那一欄出處的第一行）：那一行是它的目標的
+ * 第一個出處欄位、同一個第幾段的原文一樣。找不到（那裡的字改過、已經讀得懂）是 null。
+ */
+export function relocateSource(
+  deck: { layout: ReadonlyMap<number, Pick<TargetLayout, 'fields'>> },
+  hits: readonly UnreadableSource[],
+  hit: Pick<UnreadableSource, 'at' | 'part' | 'text'>,
+  line: number,
+  column: number,
+): UnreadableSource | null {
+  return hits.find(each => each.text === hit.text && (hit.at === null
+    ? each.at === null && each.part === hit.part && deck.layout.get(each.line)?.fields[0]?.line === line
+    : each.at?.line === line && each.at.from === column)) ?? null;
+}
+
+/** 看不懂的原因，照 §1-3 的表排：同一段有好幾個時用最前面的。 */
+const REASONS = {
+  term: (code: string) => `沒寫年級學期，不知道是哪一個 ${code}`,
+  'term-only': '寫了年級學期，沒有完整的單元編號',
+  position: '頁碼或範圍寫反了，連不到',
+  before: '位置前面有一句話，不確定是不是出處',
+  leftover: '裡面有像單元編號的字，沒有算進去',
+  negative: '有否定的字，外掛不確定意思',
+  unit: '找不到這個單元',
+  heading: '材料裡找不到這個標題',
+  rest: '單元後面的字看不懂',
+} as const;
+const ORDER = ['term', 'term-only', 'position', 'before', 'leftover', 'negative', 'unit', 'heading', 'rest'] as const;
+type Reason = typeof ORDER[number];
 
 /**
  * 只在電腦判斷：要看 metadataCache。材料的快取還沒建好（null）時不知道，不提示，下次再看；連不到檔案的材料本來就找不到。
@@ -79,17 +139,43 @@ export function unreadableSources(app: App, deckPath: string, deck: SourceDeck, 
   const missing = (caches: ReturnType<typeof cachesOf>, heading: string): boolean =>
     !caches.some(cache => cache === null) && !caches.some(cache => cache?.headings?.some(each => headingKey(each.heading) === headingKey(heading)));
   const own = cachesOf(deckPath, deck.props.materials);
-  return deck.targets.flatMap(({ line, name, fields }) => sourceLinks(fields.sources, deck.props).flatMap(item => {
+  /** 這一項為什麼看不懂；看得懂是 null。 */
+  function reasonOf(item: SourceItem): Reason | null {
     const { link } = item;
-    let unreadable = item.problem !== undefined;
-    if (link.kind === 'heading' && !item.remark) unreadable ||= missing(own, link.heading);
+    const found: Reason[] = [];
+    // 原文有沒有年級學期、編號是什麼，用表單猜測的同一個函式判斷（§1-3）。
+    if (item.missed) {
+      const split = splitSource(item.text, deck.props);
+      if (split.term === null && split.short === null && split.code !== null) found.push('term');
+    }
+    if (item.problem) found.push(item.problem);
+    if (link.kind === 'heading' && !item.remark && missing(own, link.heading)) found.push('heading');
     if (link.kind === 'unit') {
       const decks = units(link.term, link.unit);
-      if (!decks.length) unreadable ||= item.needsUnit === true;
+      if (!decks.length) { if (item.needsUnit) found.push('unit'); }
       else if (link.rest?.kind === 'heading' && !decks.some(each => each.name && headingKey(each.name) === headingKey((link.rest as { heading: string }).heading))) {
-        unreadable ||= missing(decks.flatMap(each => cachesOf(each.path, each.materials)), link.rest.heading);
+        if (missing(decks.flatMap(each => cachesOf(each.path, each.materials)), link.rest.heading)) found.push('rest');
       }
     }
-    return unreadable ? [{ line, name, text: item.text }] : [];
-  }));
+    // 沒寫年級學期只決定說明哪一句，本身不算看不懂（`1-2 溶液` 在材料裡找得到就是那個標題）。
+    if (!found.some(each => each !== 'term')) return null;
+    return ORDER.find(each => found.includes(each)) ?? null;
+  }
+  return deck.targets.flatMap(({ line, name, fields }) => {
+    // 有 layout 時段已經讀好了（編輯器每次重新解析都要算，不讀第二次，§1-5 的速度）。
+    const layout = deck.layout?.get(line);
+    const parts = layout?.parts ?? readSourceParts(fields.sources, deck.props);
+    return parts.flatMap((part, index) => {
+      const found = part.items.flatMap(item => { const reason = reasonOf(item); return reason ? [{ item, reason }] : []; });
+      if (!found.length) return [];
+      // 給表單的是第一個有問題的項目；說明用表上最前面的原因。
+      const first = { item: found[0].item, reason: ORDER.find(each => found.some(hit => hit.reason === each)) ?? found[0].reason };
+      const text = partText(fields.sources, part);
+      const reason = first.reason === 'term' ? REASONS.term(splitSource(first.item.text, deck.props).code ?? '') : REASONS[first.reason];
+      // layout 的段沒有位置時（那一項切不出原文）at 是 null。
+      const entry = layout?.entries[part.entry];
+      const at = entry && part.from !== null && part.to !== null ? { line: entry.line, from: entry.from + part.from, to: entry.from + part.to } : null;
+      return [{ line, name, text, tip: reason + '。點一下幫你改。', item: { ...first.item, text }, at, part: index, ...segmentOf(fields.sources, parts, index) }];
+    });
+  });
 }

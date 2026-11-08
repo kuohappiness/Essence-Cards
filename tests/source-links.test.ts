@@ -4,7 +4,7 @@ import type { App } from 'obsidian';
 import { buildIndex } from '../src/core/catalog/index.ts';
 import { parseDeck, sourceLabel, sourceLinks } from '../src/core/deck/index.ts';
 import { createState } from '../src/state/index.ts';
-import { firstMaterial, resolveSource, unreadableSources, type UnitDecks } from '../src/ui/sources.ts';
+import { firstMaterial, relocateSource, resolveSource, unreadableSources, type UnitDecks } from '../src/ui/sources.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
 // 跨單元的出處可以點、按鈕不露出括號、看不懂的判斷（tasks/entry-and-catalog.md §9-5、§10）：metadataCache 用替身。
@@ -105,7 +105,7 @@ const unreadable = (sources: string, materials: Record<string, Material | null>,
 void test('§9-5 看不懂：回傳行號、目標與原文；讀懂的都不提示；材料的快取還沒建好時不知道，字面上就有問題的照提示', () => {
   const text = '---\n材料: "[[甲]]"\n---\n- 溫度影響溶解度 ^a\n    - 出處：p.44, 45、睡眠的階段、[[x]]、先備：比例、第 3 頁\n    - 問 :: 答\n- 第二個 ^b\n    - 出處：看不懂的字\n    - 問 :: 答\n- 第三個 ^c\n    - 出處：p.46-44\n    - 問 :: 答\n';
   const { app } = appWith({ '材料/甲.md': { headings: ['睡眠的階段'] } });
-  assert.deepEqual(unreadableSources(app, '卡組/本篇.md', parseDeck(text), NO_UNITS), [
+  assert.deepEqual(unreadableSources(app, '卡組/本篇.md', parseDeck(text), NO_UNITS).map(({ line, name, text: original }) => ({ line, name, text: original })), [
     { line: 6, name: '第二個', text: '看不懂的字' },
     { line: 9, name: '第三個', text: 'p.46-44' },
   ]);
@@ -192,6 +192,46 @@ void test('D-170 否定字只提示：材料裡有同名標題也不連；像編
   assert.deepEqual(hints('國二上 1-3、溶解, 1-8'), ['溶解, 1-8']);
 });
 
+// tasks/edit-markup.md §1-3：每一段原文判斷一次；說明照表上最前面的原因，最後都加「點一下幫你改。」
+void test('§1-3 看不懂的出處的說明：每一種原因一句', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const units: UnitDecks = (term, code) => term === '國二上' && code === '2-1' ? [{ path: '卡組/2-1.md', materials: ['[[甲]]'], name: '水溶液' }] : [];
+  const tips = (sources: string): string[] => unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf(sources), units).map(each => each.tip);
+  const tail = '。點一下幫你改。';
+  assert.deepEqual(tips('1-3 p.20'), ['沒寫年級學期，不知道是哪一個 1-3' + tail], '沒寫年級學期排在 before 前面');
+  assert.deepEqual(tips('L1'), ['沒寫年級學期，不知道是哪一個 L1' + tail], '用原文的編號');
+  assert.deepEqual(tips('小五上 p.15'), ['寫了年級學期，沒有完整的單元編號' + tail]);
+  assert.deepEqual(tips('p.46-44'), ['頁碼或範圍寫反了，連不到' + tail]);
+  assert.deepEqual(tips('老師說過 p.44'), ['位置前面有一句話，不確定是不是出處' + tail]);
+  assert.deepEqual(tips('p.44 和 1-8'), ['裡面有像單元編號的字，沒有算進去' + tail]);
+  assert.deepEqual(tips('p.44、不是重點'), ['有否定的字，外掛不確定意思' + tail]);
+  assert.deepEqual(tips('國二上 2-1、10-15'), ['找不到這個單元' + tail]);
+  assert.deepEqual(tips('老師說的'), ['材料裡找不到這個標題' + tail]);
+  assert.deepEqual(tips('國二上 2-1 那次考不好'), ['單元後面的字看不懂' + tail]);
+});
+
+void test('§1-3 改成數段：同一個位置寫兩次標有問題的那一段；同一段兩個有問題的按鈕算一段，用最前面的原因', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const found = (sources: string) => unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf(sources), NO_UNITS).map(each => [each.text, each.tip]);
+  assert.deepEqual(found('p.44、p.45、老師說過 p.44'), [['老師說過 p.44', '位置前面有一句話，不確定是不是出處。點一下幫你改。']]);
+  assert.deepEqual(found('老師說過 p.44 和 1-3 p.45'), [['老師說過 p.44 和 1-3 p.45', '位置前面有一句話，不確定是不是出處。點一下幫你改。']], '原本是兩個按鈕、兩個提示');
+  assert.deepEqual(found('老師說過 p.44、老師說過 p.44').length, 2, '同一個位置寫兩次都有問題：兩段');
+  const [first] = unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf('老師說過 p.44 和 1-3 p.45'), NO_UNITS);
+  assert.deepEqual([first.item.text, first.item.problem], ['老師說過 p.44 和 1-3 p.45', 'before'], '給表單猜的那一項：那一段的原文、第一個有問題的項目');
+});
+
+void test('§1-3 卡組有 layout 時回傳那一段在檔案的位置；切不出原文的是 null', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2\n材料: "[[甲]]"\n---\n- 目標 ^a\n    - 問 :: 答\n';
+  const text = head + '    - 出處：p.44、老師說過 p.45\n';
+  const [hit] = unreadableSources(appWith(material).app, '卡組/本篇.md', parseDeck(text, { layout: true }), NO_UNITS);
+  const line = text.split('\n')[hit.at?.line ?? 0];
+  assert.deepEqual([hit.at?.line, line.slice(hit.at?.from, hit.at?.to)], [8, '老師說過 p.45']);
+  assert.equal(unreadableSources(appWith(material).app, '卡組/本篇.md', parseDeck(text), NO_UNITS)[0].at, null, '沒有 layout');
+  const crossing = head + '    - 出處：老師說過\n      p.45\n';
+  assert.equal(unreadableSources(appWith(material).app, '卡組/本篇.md', parseDeck(crossing, { layout: true }), NO_UNITS)[0].at, null, '跨了接續行');
+});
+
 void test('D-170 單元：標準的編號沒有卡組不提示；其他編號、列表沿用學期的對不到才提示；單元後面的字比名稱與那個單元的材料', () => {
   const material = { '材料/甲.md': { headings: [] }, '材料/乙.md': { headings: ['水溶液的濃度'] } };
   const units: UnitDecks = (term, code) => term === '國二上' && code === '2-1' ? [{ path: '卡組/2-1.md', materials: ['[[乙]]'], name: '水溶液' }] : term === '國一上' && code === 'Starter' ? [{ path: '卡組/s.md', materials: [], name: '' }] : [];
@@ -204,4 +244,41 @@ void test('D-170 單元：標準的編號沒有卡組不提示；其他編號、
   assert.deepEqual(unreadable('國二上 2-1 水溶液的濃度', material, units), [], '那個單元材料的標題');
   assert.deepEqual(unreadable('國二上 2-1 那次考不好', material, units), ['國二上 2-1 那次考不好']);
   assert.deepEqual(unreadable('國二上 2-1 水溶液 p.15', material, units), [], '單元與位置之間的字是說明');
+});
+
+void test('§4-3 第 1 點：看不懂的段帶著接在後面、同一個單元的位置（1-3 p.20、21），沿用學期的不算', () => {
+  const material = { '材料/甲.md': { headings: [] } };
+  const hits = (sources: string) => unreadableSources(appWith(material).app, '卡組/本篇.md', deckOf(sources), NO_UNITS);
+  const [hit] = hits('p.44、1-3 p.20、21');
+  assert.deepEqual([hit.part, hit.text, hit.whole, hit.follows.map(item => item.text)], [1, '1-3 p.20', '1-3 p.20、21', ['p.21']]);
+  const [same] = hits('1-3 p.20, 21');
+  assert.deepEqual([same.part, same.whole, same.follows.map(item => item.text)], [0, '1-3 p.20, 21', ['p.21']], '同一項裡用逗號接的');
+  const [carried] = hits('國二上 1-3 和 1-8、1-9 p.21');
+  assert.deepEqual([carried.part, carried.whole, carried.follows], [0, '國二上 1-3 和 1-8', []], '回報 R8：1-9 是另一個單元');
+});
+
+// L2 第一輪 R2、R6：標示是停止打字 250 ms 後算的，點下去時要用現在的全文找回那一段，不能用舊的行號。
+void test('L2 R2：上面貼了一個出處相同的目標，平移後的標示找回的是原本那個目標', () => {
+  const { app } = appWith({});
+  const old = '- 甲 ^abc123\n    - Q :: A\n    - 出處：老師說過 p.44\n';
+  const hitsOf = (text: string) => { const deck = parseDeck(text, { layout: true }); return { deck, hits: unreadableSources(app, '卡組/本篇.md', deck, NO_UNITS) }; };
+  const [hit] = hitsOf(old).hits;
+  assert.deepEqual(hit.at, { line: 2, from: 9, to: 18 });
+  const now = hitsOf('- 乙 ^abc234\n    - Q :: A\n    - 出處：老師說過 p.44\n' + old);
+  // 標示跟著平移到第 5 行第 9 欄：那裡是甲的出處。
+  const found = relocateSource(now.deck, now.hits, hit, 5, 9);
+  assert.deepEqual([found?.line, found?.part, found?.whole, found?.follows, found?.scope], [3, 0, '老師說過 p.44', [], 'this']);
+  // 那個位置的字變了：找不回來。
+  const changed = hitsOf(old.replace('老師說過', '老師講過'));
+  assert.equal(relocateSource(changed.deck, changed.hits, hit, 2, 9), null);
+});
+
+void test('L2 R6：切不出原文的出處（接續行）找得回來，交給「這一項分在兩行」', () => {
+  const { app } = appWith({});
+  const text = '- 目標 ^abc123\n    - Q :: A\n    - 出處：老師說過\n      p.44\n';
+  const deck = parseDeck(text, { layout: true });
+  const hits = unreadableSources(app, '卡組/本篇.md', deck, NO_UNITS), [hit] = hits;
+  assert.equal(hit.at, null);
+  assert.equal(relocateSource(deck, hits, hit, 2, 6), hit);
+  assert.equal(relocateSource(deck, hits, hit, 1, 6), null, '不在那一欄出處的第一行');
 });

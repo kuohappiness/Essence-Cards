@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { catalogView, entryView, examRow, examSubject, quizButton, quizViews, reminderView } from '../review/index.ts';
+import type { FolderActions } from '../review/index.ts';
 import type { Catalog, DeckStatusValue, QuizRef, State, StudyPick, UnitView } from '../state/index.ts';
 import { Icon } from './entry-icon.tsx';
 import { ExamScope } from './ExamScope.tsx';
@@ -30,6 +31,8 @@ export interface EntryProps {
   close: () => void;
   /** 提醒一區：只有電腦（D-103、D-163 第 5 點）。 */
   reminders: boolean;
+  /** 系統資料夾的防呆：搬錯位置的列在提醒一區（tasks/system-folder-guard.md §2-4）。 */
+  folders: FolderActions | null;
   terms: { get(): TermOpen; set(terms: TermOpen): void };
   /** 複習畫面蓋在上面：焦點是它的，這裡不搶。 */
   covered: () => boolean;
@@ -100,7 +103,7 @@ function Home(props: EntryProps): React.JSX.Element {
       {ready && view.more && <button type="button" className="ec-en-more" onClick={() => { props.start({ more: true }); }}>再複習一些</button>}
       <ExamRow {...props} />
       <button type="button" className="ec-en-row" onClick={() => { props.store.go('catalog'); }}><span>目錄</span><Icon type="next" size={18} /></button>
-      {props.reminders && <Reminders state={state} />}
+      {props.reminders && <Reminders state={state} folders={props.folders} />}
     </div>
     <p className="ec-en-mark" lang="en">Essence Cards</p>
   </>;
@@ -121,9 +124,11 @@ function ExamRow({ state, store }: EntryProps): React.JSX.Element {
 }
 
 /** 提醒一區（D-163 第 5 點）：只有電腦；沒有提醒時整區消失。說明書還沒寫，先不放連結。 */
-function Reminders({ state }: { state: State | null }): React.JSX.Element | null {
-  const view = reminderView(state);
+function Reminders({ state, folders }: { state: State | null; folders: FolderActions | null }): React.JSX.Element | null {
+  const view = reminderView(state, folders?.issues());
   const [open, setOpen] = useState(false);
+  /** 正在搬回的那一項：按鈕停用，不重複按。 */
+  const [moving, setMoving] = useState<string | null>(null);
   if (!view.count) return null;
   return <section className="ec-rem">
     <h2>提醒</h2>
@@ -132,6 +137,15 @@ function Reminders({ state }: { state: State | null }): React.JSX.Element | null
       {open && <ul className="ec-rem-paths">{view.unread.map(path => <li key={path}>{path}</li>)}</ul>}
     </div>}
     {view.needsUpdate && <p className="ec-rem-row ec-rem-text">有內容需要新版才讀得懂，請更新外掛</p>}
+    {folders && view.folders.map(item => <div key={item.folder} className="ec-rem-row">
+      <p className="ec-rem-text">{item.text}</p>
+      {item.action === 'move' && <button type="button" className="ec-rem-act" disabled={moving === item.folder} onClick={() => {
+        setMoving(item.folder);
+        // moveBack 不會拒絕：失敗的原因防呆自己通知、記進錯誤紀錄（Codex L2 F3）；這裡只把按鈕恢復。
+        void folders.moveBack(item.issue).finally(() => { setMoving(null); });
+      }}>搬回原位</button>}
+      {item.action === 'dismiss' && <button type="button" className="ec-rem-act" onClick={() => { folders.dismiss(item.folder); }}>不用了</button>}
+    </div>)}
   </section>;
 }
 

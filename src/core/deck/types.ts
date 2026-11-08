@@ -1,3 +1,5 @@
+import type { SourcePart } from './sources.ts';
+
 export interface Deck {
   props: DeckProps;
   targets: Target[];
@@ -61,7 +63,33 @@ export interface Problem {
   code: ProblemCode;
   message: string;
   targetLine: number | null;
+  /**
+   * 資料欄位那一項的其中一段（tasks/edit-markup.md §1-2，座標照 §3-2）：line 是那一段所在的行（接續行照實），from、to 是那一行原文的位置。
+   * 只有 unknown-field-value、duplicate-field（那一段的值）與 unknown-field（整段）會填；跨了兩行的不填，畫 line 那一行。
+   */
+  columns?: Span;
 }
+/**
+ * 原文的一段（tasks/edit-markup.md §3-2）：line 從 0 算，是檔案的第幾行；from、to 是那一行原文的 UTF-16 位置，範圍是 [from, to)。
+ * Tab、全形空白各算一個字元；縮排的顯示寬度（Item.indent、contentColumn）是另一種單位，不能拿來切字串。
+ */
+export interface Span { line: number; from: number; to: number }
+/** 資料欄位的名稱（syntax §2-4）。 */
+export type FieldName = '出處' | '類型' | '重要性' | '狀態' | '備註' | '錯題補強';
+/**
+ * 一個 `出處` 欄位（§3-3 第 1 點），照遞迴的順序；同一行用 `｜` 寫了兩個算兩個。line 是欄位那一項的第一行；
+ * name、colon 各帶自己的行號（出處從接續行開始、名稱後面換行才打冒號時就在接續行）；value 是冒號後面同一行的值，那一行沒有字是 null。
+ * joined：這一項用 `｜` 或半形 `|` 接了別的欄位；continued：這一項或當成出處值的子項目有接續行；children：當成出處值的子項目的第一行。
+ */
+export interface SourceFieldLayout { line: number; name: Span; colon: Span; value: Span | null; joined: boolean; continued: boolean; children: number[] }
+/** 一個資料欄位的名稱與冒號（§3-3 第 4 點）：六個欄位都算，同一行用 `｜` 接的每一段也算；可以跨行。 */
+export interface FieldColon { field: FieldName; name: Span; colon: Span }
+/**
+ * 一個目標的出處原文位置（§3-3），只有 parseDeck(text, { layout: true }) 才有；不放進 Target，改縮排與 ID 的保護比的是 targets（回報 R2）。
+ * entries 和 fields.sources 一一對應，跨了接續行或原文沒有一段連續的字等於它時是 null；parts 是 sourceLinks 讀的時候切出的每一段，那一項是 null 時它的段也沒有位置。
+ */
+/** end：目標的範圍到哪一行之前（從 0 算，不含），和解析把題目歸給這個目標的範圍相同（L2 第一輪 R4）。 */
+export interface TargetLayout { fields: SourceFieldLayout[]; entries: (Span | null)[]; parts: SourcePart[]; fieldColons: FieldColon[]; end: number }
 export type ProblemCode =
   | 'empty-question' | 'missing-answer' | 'typed-answer-invalid'
   // typed-answer-words：hint，好幾個答案的字數不一樣，畫線照第一個（D-122）。

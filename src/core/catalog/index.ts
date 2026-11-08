@@ -16,6 +16,8 @@ export { editQuiz, isQuizFile, newQuizText, parseQuiz, quizFileName, quizInputSa
 export type { QuizContext, QuizFile, QuizInput, QuizProblem, QuizRef, QuizResolved, QuizRow } from './quiz.ts';
 export { scopeAfter, scopeCheck, scopeCountdown, scopeDates, scopeHasSubject, scopeLabels, scopeNotes, scopeRows, scopeStartDate, targetsInScope } from './scope-view.ts';
 export type { ScopeCheck, ScopeRow, ScopeRowTerm } from './scope-view.ts';
+export { applyBlock, countedUnit, guessSource, placeValid, sourceText } from './source-guess.ts';
+export type { CatalogUnit, PlaceKind, SourceForm, UnitChoice } from './source-guess.ts';
 
 export interface CatalogDeck { path: string; deck: Deck }
 type DeckStatus = Deck['props']['status'];

@@ -18,6 +18,7 @@ import { lockTest, saveFlow, saveTest, saveTips, t1Close, t1Prep, w2Check, type 
 import { duplicatesCheck } from './dev-duplicates.ts';
 import { a3Check, eventsTest, recordStart, recordStop, type EventsHost } from './dev-events.ts';
 import { markdownCases } from './dev-markdown.ts';
+import { markupCheck } from './dev-markup.ts';
 import { awayCheck, deckHashes, openTimes, practice, reviewScript, saveExamples, uiShots, voices, W6_ROOT, watchReview } from './dev-review.ts';
 import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, saveBlocked, type Params } from './dev-cloud.ts';
 import { versionCheck } from './dev-version.ts';
@@ -126,6 +127,8 @@ const commands: Record<string, DevCommand> = {
   'error-probe': { name: 'Essence 開發：錯誤紀錄實測', run: errorProbe },
   // 外掛內的備份（tasks/plugin-backup.md §1-2、§1-10）：URI 的 do 參數選要做的事，截圖寫在 Essence W5/結果/備份 …/。
   backup: { name: 'Essence 開發：備份', run: (host, ids, params) => backupDev({ app: host.app, backup: host.backup, state: host.state, notices: ids.devLog.notices, refresh: () => { host.ids?.saver.refresh(); } }, params, `${root}/結果/備份 ${host.device} ${stampOf(new Date())}`), desktop: true },
+  // tasks/edit-markup.md §6-3：編輯畫面的標示、填出處的圖示與表單、300 個目標的速度。
+  markup: { name: 'Essence 開發：編輯畫面標示（截圖）', run: host => markupCheck(host.app, host.ids, `${root}/結果/標示 ${stampOf(new Date())}`), desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },
 };
 

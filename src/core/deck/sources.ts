@@ -82,6 +82,64 @@ export function splitOutsideLinks(text: string, separator: RegExp): string[] {
   return mask(text, tokens).split(separator).map(each => restore(each, tokens));
 }
 
+// ── 原文位置（tasks/edit-markup.md §3）：處理過的字（遮罩、換掉、刪掉）每一個都記得自己來自原文的 [starts, ends) ──
+
+/**
+ * map 是 null 時每個字就在原文的 offset + 第幾個字（沒有換過字，多數的出處都是這樣，不用建陣列，§1-5 的速度）；
+ * 換過字之後 map 記每個字的 [開始, 結束)。
+ */
+interface Traced { text: string; offset: number; map: { starts: number[]; ends: number[] } | null }
+const traced = (text: string): Traced => ({ text, offset: 0, map: null });
+const startOf = (t: Traced, at: number): number => t.map ? t.map.starts[at] : t.offset + at;
+const endOf = (t: Traced, at: number): number => t.map ? t.map.ends[at] : t.offset + at + 1;
+const tSlice = (t: Traced, from: number, to = t.text.length): Traced =>
+  ({ text: t.text.slice(from, to), offset: t.offset + from, map: t.map && { starts: t.map.starts.slice(from, to), ends: t.map.ends.slice(from, to) } });
+const tTrim = (t: Traced): Traced => tSlice(t, t.text.length - t.text.trimStart().length, t.text.trimEnd().length);
+/** 換掉每一個符合的字串（pattern 要有 g）：換上的字都算來自整個符合的範圍。沒有符合的照原樣。 */
+function tReplace(t: Traced, pattern: RegExp, replace: (match: RegExpExecArray) => string): Traced {
+  const matches = [...t.text.matchAll(pattern)];
+  if (!matches.length) return t;
+  const out = { text: '', starts: [] as number[], ends: [] as number[] };
+  let cursor = 0;
+  const copy = (to: number): void => {
+    out.text += t.text.slice(cursor, to);
+    for (let k = cursor; k < to; k++) { out.starts.push(startOf(t, k)); out.ends.push(endOf(t, k)); }
+  };
+  for (const match of matches) {
+    copy(match.index);
+    const insert = replace(match), end = match.index + match[0].length;
+    out.text += insert;
+    for (let k = 0; k < insert.length; k++) { out.starts.push(startOf(t, match.index)); out.ends.push(endOf(t, end - 1)); }
+    cursor = end;
+  }
+  copy(t.text.length);
+  return { text: out.text, offset: 0, map: { starts: out.starts, ends: out.ends } };
+}
+/** 照分隔符號切（pattern 要有 g）。 */
+function tSplit(t: Traced, pattern: RegExp): Traced[] {
+  const pieces: Traced[] = [];
+  let cursor = 0;
+  for (const match of t.text.matchAll(pattern)) { pieces.push(tSlice(t, cursor, match.index)); cursor = match.index + match[0].length; }
+  return [...pieces, tSlice(t, cursor)];
+}
+const tSpan = (t: Traced): [number, number] | null => t.text ? [startOf(t, 0), endOf(t, t.text.length - 1)] : null;
+const tMask = (t: Traced, tokens: string[]): Traced => tReplace(t, MASKED, match => { if (match[0].length === 1) return ''; tokens.push(match[0]); return `\uE000${tokens.length - 1}\uE001`; });
+
+/** splitOutsideLinks 的一段，帶著原文位置：masked 是遮罩後的字，range 把 masked 的 [from, to) 對回原文的範圍與還原連結後的字。 */
+export interface TracedPiece { text: string; masked: string; range(from: number, to: number): { from: number; to: number; text: string } | null }
+/** 和 splitOutsideLinks 同一個切法，每一段多帶原文位置（§3-3：欄位用同一次遞迴收集，不另寫一套掃描）。 */
+export function tracedSplit(text: string, separator: RegExp): TracedPiece[] {
+  const tokens: string[] = [];
+  const global = new RegExp(separator.source, separator.flags.includes('g') ? separator.flags : separator.flags + 'g');
+  return tSplit(tMask(traced(text), tokens), global).map(piece => {
+    const range = (from: number, to: number): ReturnType<TracedPiece['range']> => {
+      const span = tSpan(tSlice(piece, from, to));
+      return span && { from: span[0], to: span[1], text: restore(piece.text.slice(from, to), tokens) };
+    };
+    return { text: restore(piece.text, tokens), masked: piece.text, range };
+  });
+}
+
 /** `100%.md` 這種原樣的百分號不是編碼：解不開就用原字，不用記進錯誤紀錄，一筆出處不能讓整份目錄建不起來（§9-5）。 */
 function decodedPath(path: string): string {
   try { return decodeURIComponent(path); } catch { return path; }
@@ -251,10 +309,33 @@ interface UnitName { term: string; code: string; basis: 'written' | 'carried' }
 /** codeLike：只有字但像編號，不當說明：材料裡找得到是標題（`1-2 溶液`），找不到才提示。written：這一段自己明寫了年級學期與標準的編號。 */
 interface Pending extends SourceItem { codeLike?: true; written?: true }
 
+/** 讀這一段時位置跟著哪個單元：'this' 是這一篇；null 是不知道（前面寫了別的學期卻沒有單元）。 */
+export type SourceScope = 'this' | { term: string; unit: string } | null;
+/**
+ * 讀的時候實際切出的一段，去重之前，照原文順序（tasks/edit-markup.md §3-3 第 3 點）。
+ * entry 是出自 sources 的第幾項；from、to 是在那一項原文裡的範圍（去掉前後的分隔符號與空白），段超過 RAW_CUT_LIMIT 時是 null。
+ * follows：這一段的讀法用到前一段的哪一種，place 是接著前一個位置（同一個單元），term 是沿用前一個單元的學期（另一個單元）；往後看的不記。
+ */
+export interface SourcePart { entry: number; from: number | null; to: number | null; items: SourceItem[]; follows: 'place' | 'term' | null; scope: SourceScope }
+interface Reading { entry: number; span: [number, number] | null; items: Pending[]; follows: SourcePart['follows']; scope: SourceScope }
+
+/** 一欄出處的按鈕：去重之後，照原文順序。 */
 export function sourceLinks(sources: readonly string[], own: SourceOwner): SourceItem[] {
+  return readSources(sources, own).items;
+}
+/** 一欄出處的原文段（§3-3）：攤平再去重就是 sourceLinks 的按鈕。 */
+export function readSourceParts(sources: readonly string[], own: SourceOwner): SourcePart[] {
+  return readSources(sources, own).parts;
+}
+
+const RAW_END_ALL = new RegExp(RAW_END.source, 'g');
+const SEPARATOR_ALL = new RegExp(SEPARATOR.source, 'g');
+
+function readSources(sources: readonly string[], own: SourceOwner): { parts: SourcePart[]; items: SourceItem[] } {
   const tokens: string[] = [];
-  // 一項一項藏：不同項的字不會接成一個連結。
-  const masked = sources.map(source => mask(source, tokens).replace(/[\u200B\u200C\uFEFF]/g, '')).join('、');
+  // 一項一項藏：不同項的字不會接成一個連結。每一項再照頓號切（小頓號 `﹑` 在同一項裡），每個字記得在 sources 第幾項的哪裡。
+  const entries = sources.flatMap((source, index) => tSplit(tReplace(tMask(traced(source), tokens), /[\u200B\u200C\uFEFF]/g, () => ''), /[、﹑]/g)
+    .map(tTrim).filter(each => each.text).map(each => ({ index, t: each })));
   // 這一篇的屬性也去雜訊再比：`八上` 就是 `國二上`，`Ｌ３` 就是 `L3`。
   const ownCode = tidy(own.unit?.code ?? '').trim();
   const ownTerm = own.term === null ? null : termKey(own.term);
@@ -273,17 +354,21 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
   const hasOwnKindCode = (text: string): boolean => ownLetters !== null && new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(ownLetters)}\\d+(?![A-Za-z0-9])`, 'i').test(text);
   const looksLikeCode = (text: string): boolean => hasCode(text) || hasOwnKindCode(text);
   const forget = (): void => { lastPlace = null; carry = null; };
-  const items: Pending[] = [];
+  const readings: Reading[] = [];
+  /** 正在讀的這一段用到前一段的哪一種（SourcePart.follows）。 */
+  let follows: SourcePart['follows'] = null;
 
   /** 接著前一個位置：p.44, 45；圖 2-14、2-15；圖 2-13a、b；44、46頁。 */
   function continuation(segment: string, display: string, next: string | undefined): Pending | null {
-    if (lastPlace?.startsWith('p') && /^\d+$/.test(segment)) return follow('p' + segment, 'p.' + segment);
+    const after = (id: string, text: string): Pending => { follows = 'place'; return follow(id, text); };
+    if (lastPlace?.startsWith('p') && /^\d+$/.test(segment)) return after('p' + segment, 'p.' + segment);
     const kind = /^(fig|tab|ex)/.exec(lastPlace ?? '')?.[1];
-    if (kind && /^\d+-\d+$/.test(segment)) return follow(kind + segment, `${FULL_NAME[kind]} ${segment}`);
+    if (kind && /^\d+-\d+$/.test(segment)) return after(kind + segment, `${FULL_NAME[kind]} ${segment}`);
     if (kind === 'fig' && /^[A-Za-z]$/.test(segment)) {
       const id = (lastPlace ?? '').replace(/[a-z]$/, '') + segment.toLowerCase();
-      return follow(id, '圖 ' + id.slice(3));
+      return after(id, '圖 ' + id.slice(3));
     }
+    // 往後看的（`44、46頁` 的 44 靠下一段的「頁」）不記成 follows。
     return /^\d+$/.test(segment) && /^\d+ ?頁/.test(next ?? '') ? follow('p' + segment, display) : null;
   }
 
@@ -331,9 +416,10 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
       forget();
       // 緊接在沒有位置的單元後面（`國二上 1-3，不算這個`）：說的就是那個單元，一起先不算。有位置的是實際的出處，照連；
       // 否定段自己點名了別的（`不是 p.46`、`不是國二上 1-8`、`不是 [[筆記]]`）：說的不是前面的單元。
-      const last = items.at(-1);
-      if (last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading') && !namesOther(segment, last.link.term, last.link.unit)) {
-        items[items.length - 1] = { text: last.text, link: { kind: 'text' }, problem: 'negative' };
+      // 改的是前一段的項目：段要等整欄讀完才定稿（§3-4）。
+      const previous = readings.at(-1)?.items, last = previous?.at(-1);
+      if (previous && last?.link.kind === 'unit' && (last.link.rest === null || last.link.rest.kind === 'heading') && !namesOther(segment, last.link.term, last.link.unit)) {
+        previous[previous.length - 1] = { text: last.text, link: { kind: 'text' }, problem: 'negative' };
         scope = 'this';
       }
       return [{ text: display, link: { kind: 'text' }, problem: 'negative' }];
@@ -376,6 +462,7 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
           unit = { term: carry.term, code: code.code, basis: 'carried' };
           needsUnit = true;
           rest = code.rest;
+          follows = 'term';
         }
       }
     }
@@ -424,55 +511,76 @@ export function sourceLinks(sources: readonly string[], own: SourceOwner): Sourc
     return placed;
   }
 
+  /** 一段的字與原文；trace 是 null 時切不出原文（太長、照去雜訊之後的字切的）。 */
+  interface Segment { text: string; trace: Traced | null }
+  const segmentOf = (trace: Traced): Segment => ({ text: trace.text, trace });
   /** 切段：分隔符號；位置後面直接接年級學期加編號也切（`p.44 國二上 1-3 p.20`）。`p，44` 的逗號不是分隔。 */
-  function segmentsOf(entry: string): string[] {
-    const fixed = entry.replace(/(?<![A-Za-zＡ-Ｚａ-ｚ])([pPｐＰ])\s*[，,]\s*(?=[0-9０-９])/g, '$1.');
-    return fixed.split(SEPARATOR).map(each => each.trim()).filter(Boolean).flatMap(part => {
-      const clean = tidy(part);
+  function segmentsOf(entry: Traced): Segment[] {
+    const fixed = tReplace(entry, /(?<![A-Za-zＡ-Ｚａ-ｚ])([pPｐＰ])\s*[，,]\s*(?=[0-9０-９])/g, match => match[1] + '.');
+    return tSplit(fixed, SEPARATOR_ALL).map(tTrim).filter(each => each.text).flatMap(part => {
+      const clean = tidy(part.text);
       for (let at = 1; at < clean.length; at++) {
         if (clean[at - 1] !== ' ' || !readTerm(clean.slice(at))) continue;
         const head = scan(clean.slice(0, at).trim(), tokens);
         if (!head.found.length || head.left) continue;
-        if (part.length > RAW_CUT_LIMIT) return [clean.slice(0, at).trim(), clean.slice(at).trim()];
-        const cut = rawCutter(part)(at);
-        return [part.slice(0, cut).trim(), part.slice(cut).trim()];
+        if (part.text.length > RAW_CUT_LIMIT) return [{ text: clean.slice(0, at).trim(), trace: null }, { text: clean.slice(at).trim(), trace: null }];
+        const cut = rawCutter(part.text)(at);
+        return [segmentOf(tTrim(tSlice(part, 0, cut))), segmentOf(tTrim(tSlice(part, cut)))];
       }
-      return [part];
+      return [segmentOf(part)];
     });
   }
+  /** 段在 sources 那一項原文的範圍：去掉尾端的分隔符號與前後空白；超過 RAW_CUT_LIMIT 的不切（和讀法切原文的界線相同）。 */
+  const spanOf = (trace: Traced | null): [number, number] | null => {
+    const kept = trace && tTrim(tReplace(trace, RAW_END_ALL, () => ''));
+    return kept && kept.text.length <= RAW_CUT_LIMIT ? tSpan(kept) : null;
+  };
+  const scopeNow = (): SourceScope => scope && scope !== 'this' ? { term: scope.term, unit: scope.code } : scope;
 
-  const entries = masked.split(/[、﹑]/).map(each => each.trim()).filter(Boolean);
-  for (const [index, entry] of entries.entries()) {
+  for (const [at, { index, t }] of entries.entries()) {
+    const entry = t.text;
     const display = restore(entry.replace(RAW_END, ''), tokens);
-    if (/^先備 ?[：:]/.test(entry)) { forget(); items.push({ text: display, link: { kind: 'text' } }); continue; }
-    const parts = segmentsOf(entry), start = items.length;
-    parts.forEach((part, at) => {
-      const clean = tidy(part).replace(END, '').trim();
-      const next = parts[at + 1] ?? entries[index + 1];
-      if (clean) items.push(...readSegment(clean, part.replace(RAW_END, '').trim(), next && tidy(next)));
+    if (/^先備 ?[：:]/.test(entry)) {
+      forget();
+      readings.push({ entry: index, span: spanOf(t), items: [{ text: display, link: { kind: 'text' } }], follows: null, scope: scopeNow() });
+      continue;
+    }
+    const segments = segmentsOf(t), start = readings.length;
+    segments.forEach((segment, k) => {
+      const clean = tidy(segment.text).replace(END, '').trim();
+      const next = segments[k + 1]?.text ?? entries[at + 1]?.t.text;
+      if (!clean) return;
+      follows = null;
+      const items = readSegment(clean, segment.text.replace(RAW_END, '').trim(), next && tidy(next));
+      readings.push({ entry: index, span: spanOf(segment.trace), items, follows, scope: scopeNow() });
     });
-    // 這一項切成好幾段、全部都沒讀懂：是一句話或舊標題（`溶解, 擴散`），併回一個。
-    const added = items.slice(start);
-    if (added.length > 1 && added.every(each => each.link.kind === 'heading')) {
-      const problem = added.find(each => each.problem)?.problem;
-      items.splice(start, added.length, { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}), ...(added.some(each => each.missed) ? { missed: true as const } : {}), ...(added.some(each => each.codeLike) ? { codeLike: true as const } : {}) });
+    // 這一項切成好幾段、全部都沒讀懂：是一句話或舊標題（`溶解, 擴散`），併回一個，範圍是那一項。只在同一項裡併。
+    const added = readings.slice(start), merged = added.flatMap(each => each.items);
+    if (merged.length > 1 && merged.every(each => each.link.kind === 'heading')) {
+      const problem = merged.find(each => each.problem)?.problem;
+      const item: Pending = { text: display, link: { kind: 'heading', heading: display }, ...(problem ? { problem } : {}), ...(merged.some(each => each.missed) ? { missed: true as const } : {}), ...(merged.some(each => each.codeLike) ? { codeLike: true as const } : {}) };
+      readings.splice(start, added.length, { entry: index, span: spanOf(t), items: [item], follows: null, scope: added[0].scope });
     }
   }
-  const anyRead = items.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
+  const pending = readings.flatMap(each => each.items);
+  const anyRead = pending.some(each => each.link.kind !== 'heading' && each.link.kind !== 'text');
+  // 整欄讀完才定稿：同一欄有讀懂別的，只有字的段是說明（remark）。
+  const finish = ({ codeLike, written: _written, ...item }: Pending): SourceItem => anyRead && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true } : item;
+  const parts: SourcePart[] = readings.map(({ entry, span, items, follows: after, scope: where }) => ({ entry, from: span?.[0] ?? null, to: span?.[1] ?? null, items: items.map(finish), follows: after, scope: where }));
   // 讀完才去重：`本篇` 這種字會影響後面的意思（D-170 第 6 點）。只顯示的項目照文字比。
   // 同一個目標寫兩次時按鈕留一個，診斷與確認依據不丟：後面的有問題就照它提示；有一項明寫了學期就不算沿用。
+  // 按鈕是段裡項目的複本，改按鈕不會改到 parts（回報 R5）。
   const kept = new Map<string, SourceItem>();
-  for (const { codeLike, written, ...item } of items) {
-    const marked: SourceItem = anyRead && !codeLike && !item.problem && item.link.kind === 'heading' ? { ...item, remark: true } : item;
+  parts.flatMap(part => part.items).forEach((item, at) => {
     const key = item.link.kind === 'text' ? item.text : JSON.stringify(item.link);
     const first = kept.get(key);
-    if (!first) { kept.set(key, marked); continue; }
-    if (marked.problem && !first.problem) { first.text = marked.text; first.problem = marked.problem; }
-    if (written) delete first.needsUnit;
+    if (!first) { kept.set(key, { ...item }); return; }
+    if (item.problem && !first.problem) { first.text = item.text; first.problem = item.problem; }
+    if (pending[at].written) delete first.needsUnit;
     if (item.basis === 'written') first.basis = 'written';
     if (item.missed) first.missed = true;
-  }
-  return [...kept.values()];
+  });
+  return { parts, items: [...kept.values()] };
 }
 
 /** 「編號 名稱」的切法（§9-2）：第一個空白前是編號，半形空白、全形空白、Tab 都算；屬性和出處共用。 */
@@ -490,4 +598,34 @@ export function sourceLabel({ text, link }: SourceItem): string {
   const parts = note.link.split('#');
   const heading = parts.at(-1) ?? '';
   return parts.length > 1 && heading && !heading.startsWith('^') ? heading : parts[0];
+}
+
+// ── 表單用：一項出處拆成年級學期、編號、位置與剩下的字（tasks/edit-markup.md §4-1）──
+
+/**
+ * 一項出處拆開的樣子：用讀法的同一套（readTerm、readCode、scan），只拆、不判斷歸屬（D-170 第 2 點）。
+ * term 是認得的年級學期（`國二上`）；只寫 `二上` 這種要靠學制才知道的放在 short；code 是編號（`1-3`、`L1`）；
+ * places 是認得的位置，照原文順序；bad 是範圍寫反、`p53` 後面接字；left 是沒用到的字（連結已經還原）。
+ */
+export interface SourceSplit { term: string | null; short: string | null; code: string | null; places: SourceLink[]; bad: boolean; left: string }
+const SHORT_TERM = /^([一二三四五六1-6]) ?(?:年級)? ?([上下])(?: ?(?:學期|冊))?(?![0-9])/;
+export function splitSource(text: string, own: SourceOwner): SourceSplit {
+  const tokens: string[] = [];
+  const subject = own.subject ? new RegExp(`^${escapeRegExp(tidy(own.subject).trim())} ?`) : null;
+  const dropSubject = (value: string): string => subject ? value.replace(subject, '') : value;
+  let rest = dropSubject(tidy(mask(text, tokens)).replace(END, '').trim());
+  let term: string | null = null, short: string | null = null, code: string | null = null;
+  const read = readTerm(rest);
+  const shortTerm = read ? null : SHORT_TERM.exec(rest);
+  if (read) { term = read.term; rest = rest.slice(read.length); }
+  else if (shortTerm) {
+    short = (/\d/.test(shortTerm[1]) ? ZH_GRADE[Number(shortTerm[1]) - 1] : shortTerm[1]) + shortTerm[2];
+    rest = rest.slice(shortTerm[0].length);
+  }
+  rest = dropSubject(rest.trimStart());
+  // 其他形狀的編號（`Starter`）只在寫了學期之後算；開頭就是一個英文字的多半是教材名稱（`Workbook p.12`）。
+  const found = readCode(rest);
+  if (found && (!found.other || term || short)) { code = found.code; rest = found.rest; }
+  const scanned = scan(rest, tokens);
+  return { term, short, code, places: scanned.found.map(each => each.link), bad: scanned.bad, left: restore(scanned.left, tokens) };
 }

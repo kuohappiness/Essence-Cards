@@ -59,6 +59,9 @@
 .ec-app .ec-rem-go[aria-expanded="true"] svg { transform: rotate(90deg); }
 .ec-rem-paths { margin: 8px 0 0; padding: 0; list-style: none; color: var(--ec-muted); font-size: var(--ec-size-small); overflow-wrap: anywhere; }
 .ec-rem-paths li + li { margin-top: 4px; }
+/* 搬錯位置的系統資料夾（tasks/system-folder-guard.md §2-4）：一段說明，底下一顆按鈕 */
+.ec-rem-row > .ec-rem-text { margin: 0; overflow-wrap: anywhere; }
+.ec-app .ec-rem-act { margin-top: 8px; min-height: 30px; height: auto; padding: 0 14px; border: 1px solid var(--ec-line); border-radius: 999px; background: none; font-size: var(--ec-size-small); }
 
 /* 目錄（D-097）：學期 → 科目 → 單元 */
 .ec-seg { display: inline-flex; margin-top: 14px; padding: 2px; border: 1px solid var(--ec-line); border-radius: 999px; }

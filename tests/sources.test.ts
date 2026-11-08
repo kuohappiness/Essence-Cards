@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { App } from 'obsidian';
 import { buildIndex } from '../src/core/catalog/index.ts';
-import { codeKey, headingKey, parseDeck, sourceLinks, splitUnit, termKey, termRank } from '../src/core/deck/index.ts';
-import type { SourceItem, SourceLink, SourceOwner } from '../src/core/deck/index.ts';
+import { codeKey, headingKey, parseDeck, readSourceParts, sourceLinks, splitUnit, termKey, termRank, tidy } from '../src/core/deck/index.ts';
+import type { SourceItem, SourceLink, SourceOwner, SourcePart } from '../src/core/deck/index.ts';
 import { unreadableSources } from '../src/ui/sources.ts';
 
 // 出處的讀法（tasks/entry-and-catalog.md §9-3、§9-6，D-170）：預期值都來自那份說明的表，不用同一個正則再算一次。
@@ -392,4 +392,120 @@ void test('年級學期的順序：小 → 國 → 高、年級、上 → 下；
   assert.ok(order.every(rank => rank !== null));
   assert.deepEqual([...order].sort((a, b) => (a ?? 0) - (b ?? 0)), order);
   for (const text of ['高六上', '國四上', '一小上', '國二', '暑假', '']) assert.equal(termRank(text), null, text);
+});
+
+// ── 出處的原文段（tasks/edit-markup.md §3-3、§3-4）：讀法與按鈕不變，只多一份每一段在原文的位置 ──
+
+const partsOf = (sources: readonly string[], own: SourceOwner = NATURE): SourcePart[] => readSourceParts(sources, own);
+/** 每一段切出來的原文；切不出來是 null。 */
+const slices = (sources: readonly string[], own: SourceOwner = NATURE): (string | null)[] =>
+  partsOf(sources, own).map(part => part.from === null || part.to === null ? null : sources[part.entry].slice(part.from, part.to));
+
+void test('§3-4 回報裡的例子：每一段切出來的原文寫死', () => {
+  assert.deepEqual(slices(['p.44, 45']), ['p.44', '45']);
+  assert.deepEqual(slices(['p，44']), ['p，44']);
+  assert.deepEqual(slices(['ｐ　．　４４']), ['ｐ　．　４４']);
+  assert.deepEqual(slices(['溶解, 擴散']), ['溶解, 擴散'], '整項沒讀懂、併回一個舊標題：範圍是那一項');
+  assert.deepEqual(slices(['溶解, 擴散', '睡眠的階段']), ['溶解, 擴散', '睡眠的階段'], '只在同一項裡併，不跨項');
+  assert.deepEqual(slices(['[[a、b]]']), ['[[a、b]]']);
+  assert.deepEqual(slices(['「c、d」']), ['「c、d」']);
+  assert.deepEqual(slices(['[[筆記｜別名]]', '[[筆記|類型：x]]']), ['[[筆記｜別名]]', '[[筆記|類型：x]]']);
+  assert.deepEqual(slices(['p.44﹑p.45']), ['p.44', 'p.45'], '小頓號在同一項裡切');
+  assert.deepEqual(partsOf(['p.44﹑p.45']).map(part => part.entry), [0, 0]);
+  assert.deepEqual(slices(['p.43', 'p.44', '國二上 1-3 p.20']), ['p.43', 'p.44', '國二上 1-3 p.20']);
+  assert.deepEqual(partsOf(['p.43', 'p.44', '國二上 1-3 p.20']).map(part => part.entry), [0, 1, 2]);
+  assert.deepEqual(slices(['（p.44 p.45）。']), ['（p.44 p.45）'], '外面的括號在段裡，尾端的句號不在');
+  assert.deepEqual(slices(['p.44 國二上 1-3 p.20']), ['p.44', '國二上 1-3 p.20'], '位置後面接年級學期也切');
+  assert.deepEqual(slices(['ｐ．４４　國二上　１－３　ｐ．２０']), ['ｐ．４４', '國二上　１－３　ｐ．２０']);
+  const zero = String.fromCharCode(0x200b);
+  assert.deepEqual(slices([zero + 'p.44' + zero + ', 45' + zero]), ['p.44', '45'], '頭尾的零寬字元不在段裡');
+});
+
+void test('§3-4 長連結與 RAW_CUT_LIMIT 的兩側：連結遮成短字也對回原文；段超過長度不切原文', () => {
+  const long = '[[' + 'x'.repeat(3000) + ']]';
+  assert.deepEqual(slices(['p.43, ' + long + ', p.44']), ['p.43', long, 'p.44']);
+  // 段的長度照讀法切原文時量的那一段（sources.ts 的 RAW_CUT_LIMIT）。
+  const near = (length: number): string => 'p.44 ' + '說'.repeat(length - 5);
+  assert.deepEqual(slices([near(2000)]), [near(2000)]);
+  assert.deepEqual(slices([near(2001)]), [null]);
+  assert.deepEqual(slices(['p.43、' + near(2001)]), ['p.43', null], '只有太長的那一段切不出來');
+});
+
+void test('§3-3 follows：place 是同一個單元的位置接續，term 是沿用學期的另一個單元；往後看的不記', () => {
+  const follows = (text: string, own: SourceOwner = NATURE): (string | null)[] => partsOf([text], own).map(part => part.follows);
+  assert.deepEqual(follows('p.44、45'), [null, 'place']);
+  assert.deepEqual(follows('圖2-13a、b'), [null, 'place']);
+  assert.deepEqual(follows('國二上 1-3、1-8'), [null, 'term']);
+  assert.deepEqual(follows('國二上 1-3 和 1-8、1-9 p.21'), [null, 'term']);
+  assert.deepEqual(follows('44、46頁'), [null, null]);
+  assert.deepEqual(follows('國二上 1-3、p.44'), [null, null], '位置跟著單元是 scope，不是 follows');
+});
+
+void test('§3-3 scope：讀這一段時位置跟著哪個單元', () => {
+  const scopes = (text: string): SourcePart['scope'][] => partsOf([text]).map(part => part.scope);
+  assert.deepEqual(scopes('國二上 1-3、p.44'), [{ term: '國二上', unit: '1-3' }, { term: '國二上', unit: '1-3' }]);
+  assert.deepEqual(scopes('國二上 1-3 p.20、老師說過 p.21'), [{ term: '國二上', unit: '1-3' }, { term: '國二上', unit: '1-3' }]);
+  assert.deepEqual(scopes('國二上 1-3 p.20，本篇 p.44'), [{ term: '國二上', unit: '1-3' }, 'this']);
+  assert.deepEqual(scopes('p.44'), ['this']);
+  assert.deepEqual(scopes('國二上 1-3 p.44，國一下 p.15，p.16'), [{ term: '國二上', unit: '1-3' }, null, null], '別的學期沒寫單元：不知道');
+});
+
+void test('§3-4 parts 要等整欄讀完才定稿，去重不改 parts', () => {
+  const items = (text: string): [string, string, string | undefined][][] => partsOf([text]).map(part => part.items.map(item => [item.text, item.link.kind, item.problem]));
+  assert.deepEqual(items('國二上 1-3、不算這個'), [[['國二上 1-3', 'text', 'negative']], [['不算這個', 'text', 'negative']]], '否定段回頭改前一段');
+  assert.deepEqual(items('44、46頁'), [[['44', 'block', undefined]], [['46頁', 'block', undefined]]], '往後看的段');
+  const merged = partsOf(['國二上 1-3、溶解, 1-8']);
+  assert.deepEqual(merged.map(part => part.items.map(item => [item.text, item.link.kind, item.remark])), [[['國二上 1-3', 'unit', undefined]], [['溶解, 1-8', 'heading', undefined]]], '同一項併回舊標題，不標成說明');
+  assert.deepEqual(sourceLinks(['國二上 L1-2 p.20、p.20'], ENGLISH).map(item => item.needsUnit), [true], 'codeLike、written 用完；第二次的位置不消掉 needsUnit');
+  assert.deepEqual(partsOf(['國二上 L1-2 p.20、p.20'], ENGLISH).map(part => part.items.map(item => item.needsUnit)), [[true], [undefined]]);
+  const twice = ['p.44', 'p.45', '老師說過 p.44'];
+  assert.deepEqual(sourceLinks(twice, NATURE).map(item => [item.text, item.problem]), [['老師說過 p.44', 'before'], ['p.45', undefined]]);
+  assert.deepEqual(partsOf(twice).map(part => part.items.map(item => [item.text, item.problem])), [[['p.44', undefined]], [['p.45', undefined]], [['老師說過 p.44', 'before']]], '去重只改按鈕的複本');
+  assert.deepEqual(slices(twice), twice);
+  assert.deepEqual(partsOf(['老師說過 p.44 和 1-3 p.45']).map(part => part.items.map(item => item.problem)), [['before', 'leftover']], '同一段讀出兩個有問題的按鈕');
+});
+
+/** 一欄出處的原文段與按鈕之間的性質（§3-4）：攤平去重等於按鈕、段照原文順序不重疊、沒用到的原文只有分隔符號、段的原文就是讀的那一段。 */
+function checkParts(sources: readonly string[], own: SourceOwner, context: string): void {
+  const parts = partsOf(sources, own), buttons = sourceLinks(sources, own);
+  const flat = parts.flatMap(part => part.items);
+  // 去重的規則（sources.ts 讀完才去重那一段）：位置照連結比、只顯示的照文字比；按鈕留第一個，後面有問題的換成後面的文字與問題。
+  const keyOf = (item: SourceItem): string => item.link.kind === 'text' ? 'text:' + item.text : JSON.stringify(item.link);
+  const groups = new Map<string, SourceItem[]>();
+  for (const item of flat) groups.set(keyOf(item), [...(groups.get(keyOf(item)) ?? []), item]);
+  assert.deepEqual(buttons.map(keyOf), [...groups.keys()], context + '：按鈕的順序');
+  for (const button of buttons) {
+    const group = groups.get(keyOf(button)) ?? [];
+    const flagged = group[0].problem ? group[0] : group.find(item => item.problem) ?? group[0];
+    assert.deepEqual([button.text, button.problem, button.remark, button.missed], [flagged.text, flagged.problem, group[0].remark, group.some(item => item.missed) || undefined], context + '：按鈕 ' + button.text);
+    assert.equal(button.basis, group.some(item => item.basis === 'written') ? 'written' : group[0].basis, context + '：歸屬依據');
+    if (button.needsUnit) assert.ok(group[0].needsUnit, context + '：needsUnit 從哪裡來');
+  }
+  for (const [entry, source] of sources.entries()) {
+    const mine = parts.filter(part => part.entry === entry);
+    if (mine.some(part => part.from === null || part.to === null)) continue;
+    let cursor = 0, rest = '';
+    for (const part of mine) {
+      const from = part.from ?? 0, to = part.to ?? 0;
+      assert.ok(cursor <= from && from < to, context + '：段照原文順序、不重疊');
+      rest += source.slice(cursor, from);
+      cursor = to;
+      const slice = source.slice(from, to);
+      assert.equal(slice, slice.trim(), context + '：段的頭尾沒有空白');
+      if (part.items.length === 1 && part.follows !== 'place') assert.equal(tidy(slice.replace(/[\uE000\uE001]/g, '')), tidy(part.items[0].text), context + '：段的原文就是讀的那一段');
+    }
+    rest += source.slice(cursor);
+    assert.match(rest, /^[\s,，﹐/／;；﹔、﹑。．.\u200B\u200C\u200D\uFEFF\uE000\uE001]*$/, context + '：沒有算進任何一段的原文');
+  }
+}
+
+void test('§3-4 性質：登錄的例子與打字雜訊，原文段都對得上按鈕與原文', () => {
+  for (const [text, , , own = NATURE] of EXAMPLES) {
+    checkParts([text], own, text);
+    for (const [name, change] of Object.entries(INSIDE)) checkParts([outside(text, change)], own, name + '：' + outside(text, change));
+    for (const [name, [start, end]] of Object.entries(AROUND)) checkParts([start + text + end], own, name + '：' + start + text + end);
+  }
+  for (const [text, , own] of FIELD_CASES) checkParts([text], own ?? OWN, text);
+  checkParts(['p.44', 'p.45', '老師說過 p.44'], NATURE, '重複的位置');
+  checkParts(['[[a', 'p.44', 'b]]'], NATURE, '不同項的字不接成連結');
 });

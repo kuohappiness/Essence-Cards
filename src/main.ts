@@ -1,11 +1,13 @@
-import { apiVersion, editorInfoField, FileSystemAdapter, Notice, Platform, Plugin } from 'obsidian';
+import { apiVersion, editorInfoField, FileSystemAdapter, MarkdownView, Notice, Platform, Plugin } from 'obsidian';
 import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
+import type { EditorView } from '@codemirror/view';
 import type { EmbeddedRules } from './core/ai/index.ts';
-import { isDeckPath } from './core/deck/index.ts';
+import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
+import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
@@ -15,12 +17,18 @@ import { wireDeckActions } from './obsidian/deck-actions.ts';
 import { activateDeck, changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
+import type { FolderGuard } from './obsidian/folder-guard.ts';
+import { wireFolderGuard } from './obsidian/folder-host.ts';
 import { idLock, type IdToken } from './obsidian/lock.ts';
+import { markup, sourceFieldTarget, targetAt, type Markup } from './obsidian/markup.ts';
+import { openBlankSourceForm, openFieldFix, openUnreadableSourceForm, type SourceEntry } from './obsidian/source-entry.ts';
+import { closeSourceForm } from './obsidian/source-form.ts';
 import { quizLinkResolver } from './obsidian/quiz-links.ts';
 import { wireSave, type Saver } from './obsidian/save.ts';
 import { versionText } from './obsidian/version.ts';
 import { createState, type ErrorSource, type State, type StudyPick } from './state/index.ts';
 import { reminderView, type Session } from './review/index.ts';
+import { unreadableSources, type UnreadableSource } from './ui/sources.ts';
 import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
 import { aiPrefs } from './ui/prefs.ts';
 
@@ -73,8 +81,8 @@ export interface PluginEvents {
 }
 export type PluginEvent = keyof PluginEvents;
 
-/** 電腦上補 ID 與鎖定接好之後交回的：鎖住的 ID（開發命令看）、存檔按鈕與離開筆記的備援。 */
-export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver }
+/** 電腦上補 ID、鎖定與標示接好之後交回的：鎖住的 ID 與畫的標示（開發命令看）、存檔按鈕與離開筆記的備援。 */
+export interface IdsWiring { tokens: (state: EditorState) => IdToken[]; saver: Saver; markup: Pick<Markup<UnreadableSource>, 'marks' | 'refresh' | 'icon' | 'sourceAt'>; refreshMarks: () => void }
 
 export default class EssenceCardsPlugin extends Plugin {
   /** 這台裝置的碼（W5 說明 §4-2）；紀錄的檔名用它。 */
@@ -91,6 +99,8 @@ export default class EssenceCardsPlugin extends Plugin {
   entry: EntryHandle | null = null;
   /** 標題列的全部卡與預覽（D-146、D-161）。 */
   private deckActions: { refresh: () => void } | null = null;
+  /** 系統資料夾的防呆（tasks/system-folder-guard.md）。 */
+  private guard: FolderGuard | null = null;
   /** 狀態列的提醒（D-163 第 5 點）：只有電腦。 */
   private statusBar: HTMLElement | null = null;
   /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
@@ -111,7 +121,8 @@ export default class EssenceCardsPlugin extends Plugin {
     const loadedAt = performance.now();
     // 只註冊命令與事件，不讀任何檔案：layout ready 之前 Obsidian 會對每個檔案發 create（§4-1）。
     this.device = loadDeviceCode(this.app);
-    let files: Files = createObsidianFiles(this.app);
+    // 系統資料夾正在搬回時，碰那兩處的讀寫在真正開始之前等（tasks/system-folder-guard.md §1-8）；防呆在 layout ready 才建立。
+    let files: Files = createObsidianFiles(this.app, { pause: (path, folder) => this.guard?.pause(path, folder) ?? null });
     // 錯誤紀錄等 layout ready 才讀寫：之前 vault 的索引還不完整，數不到當月的行數（D-155 第 3 點）。
     const layoutReady = new Promise<void>(resolve => { this.app.workspace.onLayoutReady(resolve); });
     const nameStacks = Platform.isIosApp;
@@ -231,6 +242,12 @@ export default class EssenceCardsPlugin extends Plugin {
       openNote: (path, line) => { this.openNote(path, line); },
       openSettings: () => { this.openSettings(); },
       reminders: Platform.isDesktop,
+      // 入口可能在 layout ready 之前打開，防呆那時還沒建立：每次都問現在的。
+      folders: {
+        issues: () => this.guard?.issues() ?? [],
+        moveBack: issue => this.guard?.moveBack(issue) ?? Promise.resolve(false),
+        dismiss: folder => { this.guard?.dismiss(folder); },
+      },
       covered: () => this.review !== null,
       notify: message => { new Notice(message); },
       setDeckStatus: Platform.isDesktopApp ? (path, value) => this.state ? changeDeckStatus(this.app, this.state, path, value, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
@@ -257,7 +274,7 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 狀態列（D-163 第 5 點）：只有電腦，內容只放在入口，這裡只是提示；沒有提醒時不顯示。 */
   private updateReminders(): void {
     if (!this.statusBar) return;
-    const { count } = reminderView(this.state);
+    const { count } = reminderView(this.state, this.guard?.issues());
     this.statusBar.style.display = count ? '' : 'none';
     this.statusBar.textContent = count ? `Essence Cards：${String(count)} 項提醒` : '';
   }
@@ -295,6 +312,69 @@ export default class EssenceCardsPlugin extends Plugin {
       },
     });
     this.registerEditorExtension(lock.extension);
+    // 編輯畫面標示卡組結構（D-047）：和鎖定同一個判斷，只在電腦的卡組筆記。游標在出處那一行時的「填出處」圖示、改到筆記時關掉表單（§2）。
+    // 看不懂的出處（§1-3）要看材料與目錄：和存檔按鈕同一個判斷，點了打開那一段的表單。
+    // 寫回出處（§4-3）：需要新版的不寫；核對不成立記進錯誤紀錄（where: "edit"，帶卡組路徑）。
+    const unreadableIn = (state: EditorView['state'], deck: Parameters<SourceEntry['unreadable']>[0]): UnreadableSource[] => {
+      const path = pathOf(state);
+      return path ? unreadableSources(this.app, path, deck, (term, code) => this.state?.unitMaterials(path, term, code) ?? []) : [];
+    };
+    const sourceEntry = (view: EditorView): SourceEntry => ({
+      state: this.state,
+      version: releaseOf(BUILD),
+      fail: error => { this.fail('edit', error, pathOf(view.state)); },
+      unreadable: deck => unreadableIn(view.state, deck),
+    });
+    const marks = markup<UnreadableSource>({
+      isDeck: state => lockable(pathOf(state)),
+      onAdd: (view, line) => {
+        // 那一行現在要還是出處欄位（L2 第二輪 R11：刪掉那一欄、還沒重新解析時，圖示可能在別的行）。
+        const target = sourceFieldTarget(parseDeck(view.state.doc.toString(), { layout: true }), line);
+        if (target) openBlankSourceForm(view, view.state.doc.line(line).to, target.line, sourceEntry(view));
+      },
+      onEdit: closeSourceForm,
+      unreadable: unreadableIn,
+      onSource: (view, hit, from) => { openUnreadableSourceForm(view, from, sourceEntry(view), hit); },
+      // 出處的欄位名稱寫錯、半形冒號（§1-4）：後面的字要每一段都讀得懂，和看不懂的出處同一個判斷；點了問一句。
+      readable: (state, deck, sources) => {
+        const path = pathOf(state);
+        return !path || !unreadableSources(this.app, path, { props: deck.props, targets: [{ line: 0, name: '', fields: { sources } }] }, (term, code) => this.state?.unitMaterials(path, term, code) ?? []).length;
+      },
+      onFix: (view, fix, from) => { openFieldFix(view, from, sourceEntry(view), fix.kind); },
+    });
+    this.registerEditorExtension(marks.extension);
+    // 目錄、別篇卡組或材料變了（§1-5）：開著的卡組重新判斷看不懂的出處。材料存檔很頻繁，停一下再算；卡組自己改字由標示自己重算。
+    let timer = 0;
+    const refreshMarks = (except?: string): void => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        this.app.workspace.iterateAllLeaves(leaf => {
+          const view = leaf.view instanceof MarkdownView ? leaf.view : null;
+          const cm = (view?.editor as unknown as { cm?: EditorView } | undefined)?.cm;
+          if (cm && view?.file && view.file.path !== except && lockable(view.file.path)) cm.dispatch({ effects: marks.refresh });
+        });
+      }, 250);
+    };
+    this.register(() => { window.clearTimeout(timer); });
+    this.registerEvent(this.app.metadataCache.on('changed', file => { refreshMarks(file.path); }));
+    // 命令「填出處」（§2 第 3 點）：游標在某個目標裡才可用；在看不懂的出處上時打開那一段的表單，否則打開空白的表單。
+    this.addCommand({
+      id: 'fill-source',
+      name: '填出處',
+      editorCheckCallback: (checking, editor, context) => {
+        // Obsidian 的 Editor 背後是 CodeMirror 6 的 EditorView（cm），型別檔沒有寫出來。
+        const view = (editor as unknown as { cm?: EditorView }).cm;
+        if (!view || !lockable(context.file?.path)) return false;
+        const head = view.state.selection.main.head;
+        const target = targetAt(parseDeck(view.state.doc.toString(), { layout: true }), view.state.doc.lineAt(head).number);
+        if (!target) return false;
+        if (checking) return true;
+        const found = marks.sourceAt(view.state, head);
+        if (found) openUnreadableSourceForm(view, found.from, sourceEntry(view), found.hit);
+        else openBlankSourceForm(view, head, target.line, sourceEntry(view));
+        return true;
+      },
+    });
     const saver = wireSave({
       plugin: this,
       state: () => this.state,
@@ -304,7 +384,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // 編輯器一建立就告訴離開筆記的備援「這篇開著」：開完馬上關時，Obsidian 只在關之後送一次 layout-change（技術債 A3，a3check 的 C1、C3）。
     this.registerEditorExtension(ViewPlugin.define(view => { saver.opened(pathOf(view.state)); return {}; }));
-    return { tokens: lock.tokens, saver };
+    return { tokens: lock.tokens, saver, markup: marks, refreshMarks };
   }
 
   /** 這個外掛自己的錯：照舊印在 console，再交給錯誤紀錄（where 照 syntax.md §9）。 */
@@ -383,12 +463,25 @@ export default class EssenceCardsPlugin extends Plugin {
     if (this.unloaded) return;
     // BUILD 由這裡傳進 state，核心不讀全域（任務說明 2-1）：版本行與讀取閘門都照它。
     // 電腦上改寫卡組要先有一份成功的備份（D-150 第 3 點）：閘門一開始關著，備份確認之後才打開。
-    this.state = createState({ files, device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
+    // 系統資料夾的防呆（tasks/system-folder-guard.md）：rename 的監聽要比 state 的監看先註冊（§1-8），所以在建立 state 之前；
+    // 不在 onload 裡，layout ready 之前不碰 vault（T12）。先判斷一次搬錯位置的：第一次列卡組時就不把它們當卡組（§2-3）。
+    const adapter = this.app.vault.adapter;
+    const guard = this.guard = wireFolderGuard(this, {
+      notify: message => { new Notice(message); this.emit('notice', message); },
+      fail: error => { this.fail('folder', error); },
+      // 電腦版刪空資料夾經過 src/desktop（非遞迴，Codex L2 F2）；用到時才載入（D-148）。
+      removeEmpty: Platform.isDesktopApp && adapter instanceof FileSystemAdapter
+        ? async path => { await (await import('./desktop/index.ts')).removeEmptyFolder(adapter.getBasePath(), path); }
+        : undefined,
+    });
+    guard.onChange(() => { this.updateReminders(); this.entry?.refresh(); });
+    guard.check();
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
     // 卡組重讀之後更新存檔按鈕的樣子。
-    this.state.onChange(() => { this.ids?.saver.refresh(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
+    this.state.onChange(() => { this.ids?.saver.refresh(); this.ids?.refreshMarks(); this.deckActions?.refresh(); this.updateReminders(); this.warnUpdate(); });
     // unread() 變了不經 onChange（§8）：這裡只更新狀態列，入口開著時自己也有訂。
     this.state.onUnread(() => { this.updateReminders(); });
     this.entry?.refresh();

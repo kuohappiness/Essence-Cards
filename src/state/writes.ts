@@ -86,6 +86,8 @@ export interface WritesOptions {
   backupPending: () => boolean;
   /** 這台讀得懂的版本（releaseOf）；不明是 null。核對標記用（tasks/question-type-seam.md §3）。 */
   version: string | null;
+  /** 搬錯位置的系統資料夾裡的檔（StateOptions.skip）：不是卡組。 */
+  skip?: (path: string) => boolean;
 }
 
 export function createWrites(options: WritesOptions) {
@@ -124,7 +126,7 @@ export function createWrites(options: WritesOptions) {
   function writable(path: string, text?: string): WriteResult | null {
     const reason = blockedNow();
     if (reason) return { kind: 'blocked', reason };
-    if (!isDeckPath(path)) return { kind: 'unchanged' };
+    if (!isDeckPath(path) || options.skip?.(path)) return { kind: 'unchanged' };
     // 需要新版的卡組（任務說明 2-2、syntax.md §2-1）：state 最近讀到的，或這次要寫的最新文字，任何一邊讀不懂都不寫。
     if (blockedText(path, text)) return { kind: 'blocked', reason: 'needs-update' };
     return null;

@@ -5,6 +5,8 @@ import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, se
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 import { NEED_FORMS } from './helpers/need-forms.ts';
 import { inspectReply, planDraft, RULE_SUBJECTS } from '../src/core/ai/index.ts';
+import { COLON_CASES, NOT_COLONS, NOT_RENAMED, RENAME_CASES } from './helpers/field-fix-cases.ts';
+import { EDIT_CASES } from './helpers/source-edit-cases.ts';
 
 // 每次使用公開介面的範例都登錄到同一份清單；新增測試也自動受到往返保護。
 const deckCases = new Set<string>();
@@ -155,6 +157,116 @@ void test('D-089 #11 欄位不認得使用預設值但照常排程', () => {
   const t = first('  - 重要性：很高｜狀態：不明\n  - Q :: A');
   assert.equal(t.ok, true); assert.equal(t.fields.importance, 'medium'); assert.equal(t.fields.paused, false);
   assert.deepEqual(codes('  - 重要性：很高｜狀態：不明\n  - Q :: A'), ['unknown-field-value', 'unknown-field-value']);
+});
+void test('§1-2 欄位那一段的問題記原文位置：值、重複欄位的值、不認得的欄位整段；接續行照實填那一行', () => {
+  const text = '- 目標\n    - 重要性：很高｜狀態：不明｜陌生：X｜重要性：低\n\t- 備註：A｜狀態：亂\n    - Q :: A\n    - 類型：定義\n      接續｜重要性：怪\n';
+  const lines = text.split('\n');
+  const parsed = parseDeck(text);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.line, p.columns && [p.columns.line, lines[p.columns.line].slice(p.columns.from, p.columns.to)]]), [
+    ['unknown-field-value', 1, [1, '很高']], ['unknown-field-value', 1, [1, '不明']], ['unknown-field', 1, [1, '陌生：X']], ['duplicate-field', 1, [1, '低']],
+    // 狀態、重要性前面已經寫過：重複的那一段標值。
+    ['duplicate-field', 2, [2, '亂']],
+    // 寫在接續行：問題的行是那一項的第一行，位置在接續行。
+    ['duplicate-field', 4, [5, '怪']],
+  ]);
+  // 位置寫死：第二行 `    - ` 之後；接續行去掉前面 6 格之後。
+  assert.deepEqual(parsed.problems[0].columns, { line: 1, from: 10, to: 12 });
+  assert.deepEqual(parsed.problems[5].columns, { line: 5, from: 13, to: 14 });
+});
+void test('§1-2 回報 R6：出處底下接續行的 ｜重要性：很高 標在接續行；前一段的值跨行也不影響', () => {
+  const text = '- 目標\n    - 出處：p.44\n      ｜重要性：很高\n    - 類型：定\n      義｜重要性：怪\n    - Q :: A\n';
+  const parsed = parseDeck(text);
+  assert.deepEqual(parsed.problems.map(p => [p.code, p.line, p.columns]), [
+    ['unknown-field-value', 1, { line: 2, from: 11, to: 13 }],
+    ['duplicate-field', 3, { line: 4, from: 12, to: 13 }],
+  ]);
+  // 值本身跨了兩行：不填，畫那一項的第一行。
+  assert.deepEqual(parseDeck('- 目標\n    - 狀態：暫\n      停\n    - Q :: A\n').problems.map(p => [p.code, p.columns]), [['unknown-field-value', undefined]]);
+});
+
+// ── §3 出處的原文位置：parseDeck(text, { layout: true })，座標照 §3-2（line 從 0 算，[from, to) 是那一行的 UTF-16 位置）──
+
+/** 登錄進 deckCases，再讀出那一行目標的 layout。 */
+function layoutOf(text: string, line = 0) {
+  deckCases.add(text);
+  const layout = parse(text, { layout: true }).layout.get(line);
+  assert.ok(layout, '第 ' + line + ' 行沒有目標的 layout');
+  return layout;
+}
+const span = (line: number, from: number, to: number) => ({ line, from, to });
+
+void test('§3-1 沒給選項時結果和現在完全一樣，沒有 layout', () => {
+  const text = '- 目標 ^abc123\n    - Q :: A\n    - 出處：p.44、圖 2-14\n';
+  assert.equal('layout' in parseDeck(text), false);
+  const withLayout = parse(text, { layout: true });
+  assert.deepEqual([withLayout.props, withLayout.targets, withLayout.problems], Object.values(parseDeck(text)));
+});
+
+void test('§3-3 一欄出處：名稱、冒號、值、每一項與每一段的原文位置', () => {
+  const layout = layoutOf('- 目標 ^abc123\n    - Q :: A\n    - 出處：p.44、圖 2-14\n');
+  assert.deepEqual(layout.fields, [{ line: 2, name: span(2, 6, 8), colon: span(2, 8, 9), value: span(2, 9, 20), joined: false, continued: false, children: [] }]);
+  assert.deepEqual(layout.entries, [span(2, 9, 13), span(2, 14, 20)]);
+  assert.deepEqual(layout.parts.map(({ entry, from, to }) => [entry, from, to]), [[0, 0, 4], [1, 0, 6]]);
+  assert.deepEqual(layout.fieldColons, [{ field: '出處', name: span(2, 6, 8), colon: span(2, 8, 9) }]);
+});
+
+void test('§3-4 回報 R9：出處從接續行開始；名稱與冒號跨行；兩種都是 continued', () => {
+  const joined = layoutOf('- 目標 ^abc123\n    - 類型：定義\n        ｜出處：p.44\n    - Q :: A\n');
+  assert.deepEqual(joined.fields, [{ line: 1, name: span(2, 9, 11), colon: span(2, 11, 12), value: span(2, 12, 16), joined: true, continued: true, children: [] }]);
+  assert.deepEqual(joined.entries, [span(2, 12, 16)]);
+  assert.deepEqual(joined.fieldColons, [{ field: '類型', name: span(1, 6, 8), colon: span(1, 8, 9) }, { field: '出處', name: span(2, 9, 11), colon: span(2, 11, 12) }]);
+  // 第三輪：`name` 第 1 行 [6, 8)、`colon` 第 2 行 [8, 9)、`value` 第 2 行 [9, 13)。
+  const split = layoutOf('- 目標\n    - 出處\n        :p.44\n    - Q :: A\n');
+  assert.deepEqual(split.fields, [{ line: 1, name: span(1, 6, 8), colon: span(2, 8, 9), value: span(2, 9, 13), joined: false, continued: true, children: [] }]);
+  assert.deepEqual(split.entries, [span(2, 9, 13)]);
+  const both = layoutOf('- 目標\n    - 類型：定義\n        ｜出處\n        :p.44\n    - Q :: A\n');
+  assert.deepEqual(both.fields, [{ line: 1, name: span(2, 9, 11), colon: span(3, 8, 9), value: span(3, 9, 13), joined: true, continued: true, children: [] }]);
+  assert.deepEqual(both.fieldColons.map(each => [each.field, each.name, each.colon]), [['類型', span(1, 6, 8), span(1, 8, 9)], ['出處', span(2, 9, 11), span(3, 8, 9)]]);
+  // 半形冒號換成全形只改 colon 那一個字，讀法不變（§3-4）。
+  const text = '- 目標\n    - 出處\n        :p.44\n    - Q :: A\n';
+  const lines = text.split('\n');
+  lines[2] = lines[2].slice(0, 8) + '：' + lines[2].slice(9);
+  const { layout: _layout, ...fixed } = parse(lines.join('\n'), { layout: true });
+  assert.deepEqual(fixed, parseDeck(text));
+});
+
+void test('§3-3 冒號前的空白不在名稱與冒號裡；值在子項目時 value 是 null，children 照順序', () => {
+  const layout = layoutOf('- 目標\n    - Q :: A\n    - 出處 ：\n        - p.44\n        - 國二上 1-3 p.20\n');
+  assert.deepEqual(layout.fields, [{ line: 2, name: span(2, 6, 8), colon: span(2, 9, 10), value: null, joined: false, continued: false, children: [3, 4] }]);
+  assert.deepEqual(layout.entries, [span(3, 10, 14), span(4, 10, 22)]);
+  assert.deepEqual(layoutOf('- 目標\n    - Q :: A\n    - 出處\t:p.44\n').fields.map(field => [field.name, field.colon, field.value]), [[span(2, 6, 8), span(2, 9, 10), span(2, 10, 14)]]);
+});
+
+void test('§3-3 同一行兩個出處算兩個欄位；連結裡的 ｜ 不切；半形冒號的每一段都在 fieldColons', () => {
+  const text = '- 目標\n    - 出處:p.44｜出處：[[a｜b]]｜類型:定義\n    - Q :: A\n';
+  assert.deepEqual(parseDeck(text).targets[0].fields.sources, ['p.44', '[[a｜b]]']);
+  const layout = layoutOf(text);
+  assert.deepEqual(layout.fields, [
+    { line: 1, name: span(1, 6, 8), colon: span(1, 8, 9), value: span(1, 9, 13), joined: true, continued: false, children: [] },
+    { line: 1, name: span(1, 14, 16), colon: span(1, 16, 17), value: span(1, 17, 24), joined: true, continued: false, children: [] },
+  ]);
+  assert.deepEqual(layout.entries, [span(1, 9, 13), span(1, 17, 24)]);
+  assert.deepEqual(layout.fieldColons, [
+    { field: '出處', name: span(1, 6, 8), colon: span(1, 8, 9) }, { field: '出處', name: span(1, 14, 16), colon: span(1, 16, 17) }, { field: '類型', name: span(1, 25, 27), colon: span(1, 27, 28) },
+  ]);
+});
+
+void test('§3-3 切不出原文的項目是 null：私用區字元（回報 R6）、跨了接續行；它的段也是 null', () => {
+  const hidden = layoutOf('- 目標\n    - Q :: A\n    - 出處：p\uE000.44、p.45\n');
+  assert.deepEqual(parseDeck('- 目標\n    - Q :: A\n    - 出處：p\uE000.44、p.45\n').targets[0].fields.sources, ['p.44', 'p.45']);
+  assert.deepEqual(hidden.entries, [null, span(2, 15, 19)]);
+  assert.deepEqual(hidden.parts.map(({ entry, from, to }) => [entry, from, to]), [[0, null, null], [1, 0, 4]]);
+  const crossing = layoutOf('- 目標\n    - Q :: A\n    - 出處：p.44\n      p.45\n');
+  assert.deepEqual(crossing.entries, [null]);
+  assert.deepEqual(crossing.fields.map(field => [field.value, field.continued]), [[span(2, 9, 13), true]]);
+});
+
+void test('§3-3 欄位在題目底下、補充底下，第二個目標各自一份', () => {
+  const text = '- 甲\n    - Q :: A\n        - 出處：p.1\n- 乙\n    - 補充\n        - 出處：p.2\n    - Q :: B\n';
+  // `        - 出處：` 之後：8 格、符號、空白、出處、冒號，p 在第 13 個字。
+  assert.deepEqual(layoutOf(text, 0).entries, [span(2, 13, 16)]);
+  assert.deepEqual(layoutOf(text, 3).entries, [span(5, 13, 16)]);
+  assert.deepEqual([...parse(text, { layout: true }).layout.keys()], [0, 3]);
 });
 void test('D-089 #12 沒題目的一般筆記不產生目標或問題', () => {
   assert.deepEqual(parseDeck('- 一般筆記\n  - 重要性：錯字').targets, []);
@@ -1062,6 +1174,12 @@ void test('標記的每一種寫法（寫之前、寫之後）都受下面往返
   }
 });
 
+// 出處寫回的例子（tasks/edit-markup.md §6-1）：輸入與成功的輸出都受補 ID 與改縮排的往返保護，寫不回去的輸入也留著。
+for (const each of EDIT_CASES) { deckCases.add(each.text); if (typeof each.want === 'string') deckCases.add(each.want); }
+// §1-4 的例子（§6-1）：改名與半形冒號的輸入、改完的全文，不標的也留著。
+for (const each of [...RENAME_CASES, ...COLON_CASES]) { deckCases.add(each.text); if (typeof each.want === 'string') deckCases.add(each.want); }
+for (const each of [...NOT_RENAMED, ...NOT_COLONS]) deckCases.add(each.text);
+
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
 // AI 製卡存成的草稿（tasks/ai-cards-mvp.md §8 的 R2-5）：疑似篇名的每一種寫法擋下或照常讀之後，能存的草稿全文也受上面的往返與冪等保護。
 void test('AI 製卡的草稿：篇名行拆成的篇、## 小標題照常的篇，存成的全文登錄進往返範例', () => {
@@ -1120,8 +1238,47 @@ after(() => {
       if (original.id) assert.equal(after.targets[i].id, original.id, context + '：既有 ID 改變');
       const promptContent = (prompts: Prompt[]) => prompts.map(({ line, fingerprint, ...content }) => content);
       assert.deepEqual(promptContent(after.targets[i].prompts), promptContent(before.targets[i].prompts), context + '：題目內容改變');
+      // 背面補充與全部的資料欄位也不變（tasks/edit-markup.md §6-1，格式查核回報）。
+      assert.deepEqual(after.targets[i].shared, before.targets[i].shared, context + '：背面補充改變');
+      assert.deepEqual(after.targets[i].fields, before.targets[i].fields, context + '：資料欄位改變');
     }
   }
+  // 出處的原文位置（§3-4）：語意和不給選項時一樣；座標切出來是那幾個字。
+  const nullEntries: string[] = [];
+  for (const text of deckCases) {
+    const context = '原文位置：' + text.slice(0, 160);
+    const plain = parse(text), { layout, ...semantic } = parse(text, { layout: true });
+    assert.deepEqual(semantic, plain, context + '：給了選項讀法就不同');
+    assert.deepEqual([...layout.keys()], plain.targets.map(target => target.line), context + '：layout 的目標');
+    const lines = text.split(/\r\n|\n|\r/);
+    const cut = ({ line, from, to }: { line: number; from: number; to: number }) => lines[line].slice(from, to);
+    for (const target of plain.targets) {
+      const { fields, entries, parts, fieldColons } = layout.get(target.line)!;
+      assert.equal(entries.length, target.fields.sources.length, context + '：entries 和 sources 一一對應');
+      entries.forEach((entry, at) => {
+        const source = target.fields.sources[at];
+        if (entry) assert.equal(cut(entry), source, context + '：entries 切出來不是那一項');
+        // 切不出來的只有兩種：跨了接續行、原文有私用區字元（回報 R6）。
+        else { nullEntries.push(JSON.stringify(source)); assert.ok(source.includes('\n') || /[\uE000\uE001]/.test(text), context + '：切不出來的原因不明：' + source); }
+      });
+      for (const field of fields) {
+        assert.equal(cut(field.name), '出處', context + '：name');
+        assert.match(cut(field.colon), /^[：:]$/, context + '：colon');
+      }
+      for (const each of fieldColons) {
+        assert.equal(cut(each.name), each.field, context + '：fieldColons 的名稱');
+        assert.match(cut(each.colon), /^[：:]$/, context + '：fieldColons 的冒號');
+      }
+      for (const part of parts) {
+        const entry = entries[part.entry];
+        if (part.from === null || part.to === null) continue;
+        assert.ok(entry, context + '：項目切不出來，段卻有位置');
+        const slice = target.fields.sources[part.entry].slice(part.from, part.to);
+        assert.ok(slice && slice === slice.trim(), context + '：段切出空字或帶空白');
+      }
+    }
+  }
+  console.log('原文位置：切不出原文的出處（跨行或私用區字元）：' + nullEntries.join('、'));
   // 暫停／恢復（§5）：每份範例都要改得正確、冪等、只動屬性區，學習目標與題目完全不變；寫不了的是 null，不是寫壞。
   const content = (text: string) => parse(text).targets.map(({ id, name, prompts }) => [id, name, prompts.map(p => p.fingerprint)]);
   const status = { 暫停: 'paused', 啟用: 'active' } as const;

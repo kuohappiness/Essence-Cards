@@ -6,6 +6,8 @@ export interface Item {
   indent: number;
   contentColumn: number;
   text: string;
+  /** text 每一行在原文的位置（tasks/edit-markup.md §3-2）：和 text.split('\n') 一一對應；第一行是清單符號與後面的空白之後，接續行是去掉前面空白之後。 */
+  starts: { line: number; column: number }[];
   children: Item[];
   section: string | null;
 }
@@ -163,13 +165,14 @@ export function listTree(lines: Line[], start: number): Item[] {
         continue;
       }
       const item: Item = { line: i, end: i + 1, indent, contentColumn: indent + match[2].length + gap,
-        text: body.trimEnd(), children: [], section };
+        text: body.trimEnd(), starts: [{ line: i, column: raw.length - body.length }], children: [], section };
       (stack.at(-1)?.children ?? roots).push(item);
       stack.push(item);
       paragraph = body.trim() ? item : null; inside = false;
     } else if (paragraph && !breaks) {
       // 段落的延續行，縮排不夠也一樣。
       paragraph.text += '\n' + raw.trim();
+      paragraph.starts.push({ line: i, column: raw.length - raw.trimStart().length });
       extend(i);
     } else if (inside && !breaks && stack.length && indent < stack.at(-1)!.contentColumn) {
       extend(i);
@@ -177,6 +180,7 @@ export function listTree(lines: Line[], start: number): Item[] {
       while (stack.length && indent < stack.at(-1)!.contentColumn) stack.pop();
       if (stack.length) {
         stack.at(-1)!.text += '\n' + raw.trim();
+        stack.at(-1)!.starts.push({ line: i, column: raw.length - raw.trimStart().length });
         extend(i);
         // 標題與分隔線之後沒有段落可以延續；分隔線之後縮排不夠的行仍留在這個項目裡。
         paragraph = heading || thematic ? null : stack.at(-1)!;
