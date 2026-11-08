@@ -204,16 +204,20 @@ export function createAiCards(deps: AiCardsDeps) {
       return latest ? run(latest) : Promise.resolve(GONE);
     }),
     /** 家長選了：跳過這一篇（其他篇照常發布）或重建這一篇（只在 ID 一個都找不到時）。 */
-    choose: (job: CardJob, index: number, choice: 'skip' | 'rebuild'): Promise<Outcome> => exclusive(job.id, () => {
+    choose: (job: CardJob, index: number, choice: 'skip' | 'rebuild'): Promise<Outcome> => exclusive(job.id, async () => {
+      if (!current(job)) return GONE;
+      // 畫面上的提示可能已經過時（R2-7，家長讀提示的時間足夠同步送回來）：先照現況走一次，還是停在同一篇、選擇仍然適用才套用。
+      const now = await run(current(job)!);
+      if (now.kind !== 'stop' || now.deck?.index !== index || (choice === 'rebuild' && now.deck.situation !== 'missing')) return now;
       const latest = current(job);
-      if (!latest) return Promise.resolve(GONE);
+      if (!latest) return GONE;
       let next: CardJob;
       if (choice === 'skip') {
         const released = skipDeck(latest, index);
         deps.store.retire(released.retire);
         next = released.job!;
       } else next = rebuildDeck(latest, index);
-      try { put(next); } catch (error) { deps.onError(error); return Promise.resolve({ kind: 'stop', message: '存不進這台電腦；請再按一次' }); }
+      try { put(next); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦；請再按一次' } satisfies Outcome; }
       return run(next);
     }),
     /**
