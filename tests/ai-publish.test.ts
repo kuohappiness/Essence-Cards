@@ -359,6 +359,58 @@ void test('§5 準備發布存下快照全文（L2-8）：重試照存下的位�
   }
 });
 
+void test('§5 即將建立時再核對整個 vault 的檔名（L2-9）：別的資料夾在存檔途中出現同名檔，卡組與快照都往後加（大小寫不同也算），路徑先存再寫', async () => {
+  // 卡組：規畫之後，別的資料夾多了一篇同名（大小寫不同）。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set('其他資料夾/國二上英文 l3 單字.md', '別人的筆記');
+    const result = await publish(job, io);
+    assert.deepEqual(result, { kind: 'done', decks: [WORD.replace('.md', ' 2.md'), GRAMMAR], targets: 3 });
+    assert.equal(files.get('其他資料夾/國二上英文 l3 單字.md'), '別人的筆記');
+    assert.ok(files.get(SNAPSHOT)!.includes('  - "[[國二上英文 L3 單字 2]]"\n'));
+    assert.throws(reload);
+  }
+  // 卡組：改名先存進恢復資料，建檔當掉、重開也是同一個路徑。
+  {
+    const { files, io, box, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set('其他資料夾/國二上英文 L3 單字.md', '別人的筆記');
+    const renamed = WORD.replace('.md', ' 2.md');
+    box.crash = (what, path) => what === 'create' && path === renamed;
+    await assert.rejects(publish(job, io), Crash);
+    assert.equal(reload().save!.decks[0].path, renamed);
+    assert.equal(reload().save!.decks[0].stage, 'started');
+  }
+  // 快照：準備發布之前。
+  {
+    const { files, io } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set('其他資料夾/2026-11-07 國二上英文 L3 Sports： Week 1.md', '別人的筆記');
+    assert.equal((await publish(job, io)).kind, 'done');
+    assert.ok(!files.has(SNAPSHOT));
+    assert.ok(files.get(SNAPSHOT.replace('.md', ' 2.md'))!.startsWith('---\n日期: 2026-11-07\n'));
+  }
+  // 快照：準備發布之後、寫之前（快照寫不成，隔天重開，別的資料夾多了同名檔）。
+  {
+    const { files, io, box, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    box.crash = (what, path) => what === 'create' && path === SNAPSHOT;
+    await assert.rejects(publish(job, io), Crash);
+    box.crash = () => false;
+    files.set('其他資料夾/2026-11-07 國二上英文 L3 Sports： Week 1.md', '別人的筆記');
+    const again = reload();
+    assert.equal((await publish(again, io)).kind, 'done');
+    assert.ok(!files.has(SNAPSHOT));
+    // 全文不變，只換位置。
+    assert.equal(files.get(SNAPSHOT.replace('.md', ' 2.md')), again.save!.published!.text);
+  }
+});
+
 void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前刪掉那一篇，繼續停下、跳過與放棄都不把 ID 當成沒用過；開始建了、還沒建檔就當掉也停下', async () => {
   // 「記成開始建了 → 建檔」之間當掉：檔沒建，ID 哪裡都沒有，但不能確定，停下問。
   const between = async (crash: (what: 'store' | 'create' | 'remove', path?: string) => boolean, remove: boolean) => {

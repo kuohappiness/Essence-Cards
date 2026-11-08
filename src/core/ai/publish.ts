@@ -150,8 +150,10 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // 記成開始建了或寫出過、但 ID 一個都找不到：可能建好之後在記下之前中斷、家長又刪了，也可能真的沒建成，分不出來就停下（R4-1）。
     if (deck.stage !== 'pending' && deck.stage !== 'rebuild') return { kind: 'deck', index, situation: 'missing', path: deck.path };
     // ID 一個都不在任何卡組，而且從來沒碰過 vault 或家長選了重建：照全文建；目的地被別人用了往後加。
+    // 即將建立時再用整個 vault 的檔名核對一次（D-081、L2-9）：同步可能在規畫之後送來別的資料夾的同名檔。路徑跟著「開始建了」一起存好才建。
     let path = deck.path;
-    if (found.text !== null) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), io.names())}.md`;
+    const names = io.names();
+    if (found.text !== null || names.has(fileName(path).toLowerCase())) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), names)}.md`;
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
     // 建之前才發現 ID 已經在某一篇（剛搬走或同步送來）：這一篇已記成開始建了，回頭照現在的樣子重新判斷，不會再走到建檔。
@@ -173,16 +175,17 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
   const before = save().published;
   const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
-  if (!before || before.targets.join('\n') !== targets.join('\n')) {
+  const stale = !before || before.targets.join('\n') !== targets.join('\n');
+  const located = await read(save().snapshotPath);
+  if ('kind' in located) return located;
+  // 整個 vault 的檔名再核對一次（L2-9）。已經準備發布、那個位置又有檔的，交給第 6 步比內容（不同就停下，§5），不換位置。
+  const names = io.names();
+  const taken = located.text === null ? names.has(fileName(save().snapshotPath).toLowerCase()) : !before;
+  const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(fileName(save().snapshotPath), names)}.md` : save().snapshotPath;
+  if (stale || snapshotPath !== save().snapshotPath) {
     let time = before?.time;
     if (time === undefined) { const at = io.now(); time = stamp(at.ms, at.offset); }
-    let snapshotPath = save().snapshotPath;
-    if (!before) {
-      const found = await read(snapshotPath);
-      if ('kind' in found) return found;
-      if (found.text !== null) snapshotPath = `${folderOf(snapshotPath)}/${freeName(fileName(snapshotPath), io.names())}.md`;
-    }
-    const text = snapshotText(job, time);
+    const text = stale ? snapshotText(job, time) : before.text;
     keep({ ...save(), snapshotPath, published: { time, text, sha256: sha256Hex(text), targets } });
   }
 
