@@ -19,8 +19,8 @@ export interface PublishIo {
   /** 讀檔；不存在是 null，讀不到丟錯（讀不到不算不存在）。 */
   read(path: string): Promise<string | null>;
   create(path: string, text: string): Promise<CreateResult>;
-  /** 建卡組：建之前再核對一次這些 ID 沒有人用，有人用了是 elsewhere、不建。 */
-  createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'elsewhere' }>;
+  /** 建卡組：寫入的當下再核對一次這些 ID 沒有人用（卡組與複習紀錄），有人用了是 refused、不建。 */
+  createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID）：等已知的變動讀完才回答；占用資訊不完整（有讀不到的、讀不完）是 null。 */
   where(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 整個 vault 現在的檔名（小寫、不含 .md）。 */
@@ -157,7 +157,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
     // 建之前才發現 ID 已經在某一篇（剛搬走或同步送來）：這一篇已記成開始建了，回頭照現在的樣子重新判斷，不會再走到建檔。
-    if (created.kind === 'elsewhere') return settle(index);
+    if (created.kind === 'refused') return settle(index);
     if (created.kind === 'exists') return { kind: 'deck', index, situation: 'missing', path };
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });

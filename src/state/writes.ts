@@ -42,9 +42,17 @@ export type WriteResult =
   /** 已寫進磁碟，但核對時讀不到：state 自己重試，讀到後照核對採用。 */
   | { kind: 'saved' };
 
+/**
+ * 建檔前的核對（AI 製卡，tasks/ai-cards-mvp.md §5，R2-1）：check 在進入寫入回呼前與回呼裡各問一次，回傳不能建的原因（沒問題是 null）。
+ * 回呼裡還有沒讀完的變動時，放棄這一次、讀完再來。
+ */
+export interface CreateGuard<Why extends string> { check: () => Why | null }
+
 /** 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。 */
 export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: WriteBlock } | { kind: 'failed'; error: unknown };
 
+/** 建檔的回呼裡發現不能建（核對沒過，或還有沒讀完的變動）：中止 modify，不建立檔案。 */
+class NotNow extends Error {}
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
 /**
@@ -181,38 +189,54 @@ export function createWrites(options: WritesOptions) {
   /**
    * 只建立新檔（AI 製卡的原文、卡組與快照，tasks/ai-cards-mvp.md §5）：同一列、同樣不看是哪一篇的門檻（電腦、讀完、沒關閉、備份成功、沒有讀不到的）；
    * 已經有檔（含零位元組的空檔）不動、回 exists。寫好再讀一次，一字不差才是 done；讀回來不同或讀不到回 failed（之後重試時照實際的檔核對）。
-   * free（建卡組時給）：先讀完已知的變動，同一步問這些 ID 是不是還沒有人用；有人用了回 elsewhere、不建（L2-2：改名、搬移、同步都是先有事件才讀檔）。
+   * guard（建卡組與快照時給）：先讀完已知的變動再核對，寫入回呼裡再核對一次（L2-2、R2-1：改名、搬移、同步都是先有事件才讀檔，排隊與等回呼的期間都可能再來）。
+   * 核對沒過回 refused、不建；回呼裡還有沒讀完的變動就放棄這一次、讀完再來，最多 DRAIN_ROUNDS 輪。
    */
   function create(path: string, text: string): Promise<CreateResult>;
-  function create(path: string, text: string, free: () => boolean): Promise<CreateResult | { kind: 'elsewhere' }>;
-  async function create(path: string, text: string, free?: () => boolean): Promise<CreateResult | { kind: 'elsewhere' }> {
-    if (life.closed) return { kind: 'blocked', reason: 'closed' };
-    if (free && await drain({ count: 0 }, true)) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
-    const reason = blockedNow();
-    if (reason) return { kind: 'blocked', reason };
-    if (free && !free()) return { kind: 'elsewhere' };
-    begin(path);
-    let exists = false, live = true;
-    try {
-      await persist(files.modify(path, (current, has) => {
-        // 逾時之後才輪到回呼：中止，不建立（同 fillFile 的 Stopped）。
-        if (!live || life.closed) throw new Stopped();
-        if (has) { exists = true; return current; }
-        return text;
-      }));
-    } catch (error) {
-      return error instanceof Stopped ? { kind: 'blocked', reason: 'closed' } : { kind: 'failed', error };
-    } finally {
-      live = false;
-      end(path);
-    }
-    if (exists) return { kind: 'exists' };
-    try {
-      const back = await files.read(path);
-      return back === text ? { kind: 'done' } : { kind: 'failed', error: Error(`讀回來和寫的不同：${path}`) };
-    } catch (error) {
-      // 讀不到：不算寫成，交回呼叫端；之後重試時照實際的檔核對（tasks/ai-cards-mvp.md §5〈中斷與重試〉）。
-      return { kind: 'failed', error };
+  function create<Why extends string>(path: string, text: string, guard: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }>;
+  async function create<Why extends string>(path: string, text: string, guard?: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }> {
+    const rounds = { count: 0 };
+    for (;;) {
+      if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      if (guard && await drain(rounds, true)) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
+      const reason = blockedNow();
+      if (reason) return { kind: 'blocked', reason };
+      let why = guard?.check() ?? null;
+      if (why !== null) return { kind: 'refused', why };
+      begin(path);
+      let exists = false, live = true, again = false;
+      try {
+        await persist(files.modify(path, (current, has) => {
+          // 逾時之後才輪到回呼：中止，不建立（同 fillFile 的 Stopped）。
+          if (!live || life.closed) throw new Stopped();
+          if (has) { exists = true; return current; }
+          if (guard) {
+            if (waiting(path)) { again = true; throw new NotNow(); }
+            why = guard.check();
+            if (why !== null) throw new NotNow();
+          }
+          return text;
+        }));
+      } catch (error) {
+        if (!(error instanceof NotNow)) return error instanceof Stopped ? { kind: 'blocked', reason: 'closed' } : { kind: 'failed', error };
+      } finally {
+        live = false;
+        end(path);
+      }
+      if (why !== null) return { kind: 'refused', why };
+      if (again) {
+        if (rounds.count >= DRAIN_ROUNDS) return { kind: 'blocked', reason: 'unread' };
+        rounds.count++;
+        continue;
+      }
+      if (exists) return { kind: 'exists' };
+      try {
+        const back = await files.read(path);
+        return back === text ? { kind: 'done' } : { kind: 'failed', error: Error(`讀回來和寫的不同：${path}`) };
+      } catch (error) {
+        // 讀不到：不算寫成，交回呼叫端；之後重試時照實際的檔核對（tasks/ai-cards-mvp.md §5〈中斷與重試〉）。
+        return { kind: 'failed', error };
+      }
     }
   }
   /** 第 6、7 步：登記這份寫入的核對，等核對讀取（end 已經排好）。 */

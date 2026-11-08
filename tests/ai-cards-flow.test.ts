@@ -197,8 +197,84 @@ void test('§5 卡組剛搬走、還沒讀完（L2-2）：等讀完再判斷，�
   {
     const { memory, state, job } = await snapshotFailed(t);
     const deck = job.save!.decks[0];
-    assert.deepEqual(await state.aiCreateDeck(MOVED, deck.text, deck.ids), { kind: 'elsewhere' });
+    assert.deepEqual(await state.aiCreateDeck(MOVED, deck.text, deck.ids), { kind: 'refused', why: 'ids' });
     assert.ok(!memory.texts.has(MOVED));
+  }
+});
+
+/** 讓某個路徑下一次的 modify 停在寫入回呼之前：核對已經做完、回呼還沒跑（R2-1 的空檔）。 */
+function gateModify(memory: ReturnType<typeof createMemoryFiles>, target: string) {
+  const original = memory.files.modify.bind(memory.files);
+  let open = (): void => {}, arrived = (): void => {};
+  const gate = new Promise<void>(resolve => { open = resolve; });
+  const reached = new Promise<void>(resolve => { arrived = resolve; });
+  memory.files.modify = (path, edit) => {
+    if (path !== target) return original(path, edit);
+    memory.files.modify = original;
+    arrived();
+    return gate.then(() => original(path, edit));
+  };
+  return { reached, open };
+}
+/** 卡組寫成、快照失敗，再刪掉第一篇，繼續得到「找不到」：畫面停在可以選重建的地方。 */
+async function waitingForRebuild(t: TestContext) {
+  const loaded = await snapshotFailed(t);
+  const text = loaded.memory.texts.get(WORD)!;
+  loaded.memory.remove(WORD);
+  await settle();
+  const stop = await loaded.cards.resume(loaded.job);
+  assert.equal(stop.kind === 'stop' && stop.deck?.situation, 'missing', JSON.stringify(stop));
+  return { ...loaded, text };
+}
+
+void test('§5 建卡組的寫入回呼裡再核對（R2-1）：最後一次檢查之後才同步到的卡組或複習紀錄，都不會再寫出同 ID 的一篇', async t => {
+  // 回呼之前 state 已經讀到：跟到新位置。
+  {
+    const { memory, cards, state, job, text } = await waitingForRebuild(t);
+    const gate = gateModify(memory, WORD);
+    const rebuilding = cards.choose(job, 0, 'rebuild');
+    await gate.reached;
+    memory.write(MOVED, text);
+    await settle();
+    assert.ok(state.decks().some(each => each.path === MOVED));
+    gate.open();
+    const result = await rebuilding;
+    assert.equal(result.kind, 'done', JSON.stringify(result));
+    assert.ok(!memory.texts.has(WORD));
+    await settle();
+    assert.deepEqual(state.conflicts(), []);
+  }
+  // 回呼的當下還沒讀完：等讀完再判斷。
+  {
+    const { memory, cards, job, text } = await waitingForRebuild(t);
+    const gate = gateModify(memory, WORD);
+    const rebuilding = cards.choose(job, 0, 'rebuild');
+    await gate.reached;
+    const held = memory.holdRead(MOVED);
+    memory.write(MOVED, text);
+    await held.started;
+    gate.open();
+    await new Promise(resolve => setTimeout(resolve, 3));
+    held.release();
+    const result = await rebuilding;
+    assert.equal(result.kind, 'done', JSON.stringify(result));
+    assert.ok(!memory.texts.has(WORD));
+  }
+  // 只有舊複習紀錄先到：這些 ID 用過了，不再建。
+  {
+    const { memory, cards, state, job } = await waitingForRebuild(t);
+    const id = job.save!.decks[0].ids[0];
+    const gate = gateModify(memory, WORD);
+    const rebuilding = cards.choose(job, 0, 'rebuild');
+    await gate.reached;
+    memory.write('Essence Cards/紀錄/2026-11 iPhone-test.jsonl', JSON.stringify({ t: '2026-11-01T10:00:00+08:00', lt: id, r: 'good', v: '12345678' }) + '\n');
+    await settle();
+    assert.ok(state.history().seen.includes(id));
+    gate.open();
+    const result = await rebuilding;
+    assert.equal(result.kind, 'stop', JSON.stringify(result));
+    assert.ok(result.kind === 'stop' && result.deck);
+    assert.ok(!memory.texts.has(WORD));
   }
 });
 
