@@ -11,6 +11,16 @@ import type { CardForm } from './prompt.ts';
 /** 擋住（不能存）或提示（可以存）的一項；line 是原文的第幾行（從 1 算），0 是整段；quote 是那一行的原文（縮短過，給家長找）。 */
 export interface ReplyIssue { line: number; message: string; quote?: string }
 
+const lineText = (issue: ReplyIssue): string => `第 ${String(issue.line)} 行${issue.quote === undefined ? '' : `「${issue.quote}」`}`;
+/** 一項擋住或提示：行號與那一行的原文（輸入框沒有行號，家長靠原文找）。 */
+export const issueText = (issue: ReplyIssue): string => (issue.line ? `${lineText(issue)}：` : '') + issue.message;
+/** 同一句提示合成一列（例如每張圖都提示一次）：共用那句話，底下列出每一行的原文（§4 每一項都要寫出原文，L2-10）。 */
+export function groupHints(hints: readonly ReplyIssue[]): { text: string; lines: string[] }[] {
+  const groups = new Map<string, ReplyIssue[]>();
+  for (const hint of hints) groups.set(hint.message, [...groups.get(hint.message) ?? [], hint]);
+  return [...groups].map(([message, same]) => same.length === 1 ? { text: issueText(same[0]), lines: [] } : { text: `${message}（共 ${String(same.length)} 處）`, lines: same.map(lineText) });
+}
+
 /** 整理後的回覆：lines 是每一行（不含換行），raw[i] 是第 i 行在原文的行號（從 1 算）。 */
 export interface Normalized { lines: string[]; raw: number[] }
 

@@ -1,7 +1,7 @@
 import { Modal } from 'obsidian';
 import type { App, Plugin } from 'obsidian';
-import { freeName, PURPOSES } from '../core/ai/index.ts';
-import type { CardForm, CardJob, Inspection, Purpose, ReplyIssue } from '../core/ai/index.ts';
+import { freeName, groupHints, issueText, PURPOSES } from '../core/ai/index.ts';
+import type { CardForm, CardJob, Inspection, Purpose } from '../core/ai/index.ts';
 import { SERVICES } from './ai-cards.ts';
 import type { AiCards, Outcome } from './ai-cards.ts';
 
@@ -32,18 +32,6 @@ function ago(ms: number, now: number): string {
   return hours < 24 ? `${String(hours)} 小時前` : `${String(Math.round(hours / 24))} 天前`;
 }
 const labelOf = (job: CardJob): string => `${job.subject.subject === null ? '' : job.form.term}${job.subject.subject ?? job.subject.label} ${job.form.unit}`.trim();
-/** 一項擋住或提示：行號與那一行的原文（輸入框沒有行號，家長靠原文找）。 */
-const issueText = (issue: ReplyIssue): string => (issue.line ? `第 ${String(issue.line)} 行${issue.quote === undefined ? '' : `「${issue.quote}」`}：` : '') + issue.message;
-/** 同一句提示合成一列（例如每張圖都提示一次）：寫出共幾處與前幾個行號。 */
-function groupHints(hints: readonly ReplyIssue[]): string[] {
-  const groups = new Map<string, ReplyIssue[]>();
-  for (const hint of hints) groups.set(hint.message, [...groups.get(hint.message) ?? [], hint]);
-  return [...groups].map(([message, same]) => {
-    if (same.length === 1) return issueText(same[0]);
-    const shown = same.slice(0, 5).map(each => String(each.line)).join('、') + (same.length > 5 ? '……' : '');
-    return `${message}（共 ${String(same.length)} 處：第 ${shown} 行）`;
-  });
-}
 
 export interface AiCardsModalHost {
   cards: () => AiCards | null;
@@ -244,7 +232,10 @@ class AiCardsModal extends Modal {
     if (inspection.hints.length) {
       el.createEl('p', { text: TEXT.hints, cls: 'essence-cards-issue-note' });
       const hints = el.createEl('ul', { cls: 'essence-cards-issue-note' });
-      for (const line of groupHints(inspection.hints)) hints.createEl('li', { text: line });
+      for (const group of groupHints(inspection.hints)) {
+        const item = hints.createEl('li', { text: group.text });
+        if (group.lines.length) { const lines = item.createEl('ul'); for (const line of group.lines) lines.createEl('li', { text: line }); }
+      }
     }
     if (!inspection.ended) {
       const label = el.createEl('label', { cls: 'essence-cards-remind-off' });

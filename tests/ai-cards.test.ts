@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeck } from '../src/core/deck/index.ts';
-import { buildPrompt, existingTargets, inspectReply, normalizeReply, planDraft, readJobs, RULE_SUBJECTS, sha256Hex, studentOf, taskSection } from '../src/core/ai/index.ts';
+import { buildPrompt, existingTargets, groupHints, inspectReply, normalizeReply, planDraft, readJobs, RULE_SUBJECTS, sha256Hex, studentOf, taskSection } from '../src/core/ai/index.ts';
 import type { CardForm, EmbeddedRule, ExistingNow, ExistingTarget, RuleSubject } from '../src/core/ai/index.ts';
 
 // tasks/ai-cards-mvp.md §3、§4、§5 的核心（不寫檔的部分）。只用自編的內容。
@@ -332,6 +332,18 @@ void test('§4 整理、分段、拆篇用同一套區塊邊界（L2-7）：縮�
   // 框裡的 <<<完>>> 不算（長度不同的內層圍欄也一樣）。
   const inner = inspectReply([...list, '', '````', '```', '<<<完>>>', '```', '````'].join('\n'), f, english, [], nobody);
   assert.equal(inner.ended, false);
+});
+
+void test('§4 同一句提示合成一列時，每一行的原文都留著（L2-10），超過五處也一樣', () => {
+  const hints = [2, 4, 6, 8, 10, 12].map(line => ({ line, message: '附件沒有圖檔，這張圖不會顯示', quote: `- 第 ${String(line)} 行的圖 ![[a.png]]` }));
+  assert.deepEqual(groupHints([...hints, { line: 20, message: '只有一處', quote: '- 別的' }]), [
+    { text: '附件沒有圖檔，這張圖不會顯示（共 6 處）', lines: hints.map(each => `第 ${String(each.line)} 行「${each.quote}」`) },
+    { text: '第 20 行「- 別的」：只有一處', lines: [] },
+  ]);
+  // 從檢查一路接過來：兩張圖各自的原文都在。
+  const reply = ['## 單字', '', '- borrow 英翻中', '    - borrow :: 借入 ![[a.png]]', '- lend 英翻中', '    - lend :: 借出 ![[b.png]]', '<<<完>>>'].join('\n');
+  const grouped = groupHints(inspectReply(reply, form({ subject: 'english', unit: 'L3' }), subject('english'), [], nobody).hints).find(each => each.text.startsWith('附件沒有圖檔'))!;
+  assert.deepEqual(grouped.lines, ['第 4 行「- borrow :: 借入 ![[a.png]]」', '第 6 行「- lend :: 借出 ![[b.png]]」']);
 });
 
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {
