@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（Codex L2 審查請求）
 
-狀態：待審（第四輪，見最後〈第四輪〉）。第一輪審 `268b625`、第二輪審 `154d732`、第三輪審 `3124f09`，[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。
+狀態：已完成：五輪查核，第五輪通過（`c3684d8`）。第一輪審 `268b625`、第二輪審 `154d732`、第三輪審 `3124f09`、第四輪審 `6b4514c`，[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
@@ -96,3 +96,9 @@
   3. R18：`mergeRenamed` 先刪再併：那一項在欄位前面或後面、檔尾有沒有換行、CRLF、併進去要分行；`verifyRename` 仍然拿原本的全文核對；`changes` 是一個範圍，`Ctrl+Z` 一次復原。
 - **驗證方式**：和前幾輪相同。實作者在 `9a7997f` 跑過全部檢查（2053 個測試）與 `npm run build`。Windows 版 Obsidian 在 `4408380` 重跑開發命令 `markup` 三次，寫回各步與 `Ctrl+Z` 通過（數字見任務說明〈結果〉）；標示平移後點擊與 R16～R18 的特定寫法沒有在實機做，由 `tests/source-entry.test.ts`（真的 `EditorView`）與 `tests/field-fix.test.ts` 測。
 - **回報**：接在分支上那一份 `Claude Codex Discussion/2026-11-07-edit-markup-l2.md` 最後，標題「## 第五輪」；標題下的狀態行一起更新。這一輪之後是否合併由使用者決定，請分別寫出各項的真實路徑判斷。
+
+## 結果
+
+延後的測試：無
+
+五輪查核的發現與回應都在[報告](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)。

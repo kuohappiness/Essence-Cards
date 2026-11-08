@@ -1,6 +1,6 @@
 # 編輯畫面標示與出處小表單（入口與目錄第四批，給 Claude，本機執行）
 
-狀態：💬 任務說明定稿，可以開工；§7 的 7 個 commit 都已在分支 `claude/edit-markup`，Windows 實機做完（見〈結果〉）；Codex L2 第一～四輪的發現已修（[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)），使用者 2026-11-08 決定第四輪的 R16～R18 修完再驗一輪，合併前等第五輪（[審查請求](edit-markup-l2.md)）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
+狀態：已合併（2026-11-09）：§7 的 7 個 commit 與 Windows 實機都做完（見〈結果〉）；Codex L2 五輪，第五輪通過（[報告與回應](<../Claude Codex Discussion/2026-11-07-edit-markup-l2.md>)、[審查請求](edit-markup-l2.md)）；格式查核三輪結束（[回報與 Claude 的回應](<../Claude Codex Discussion/2026-11-06-edit-markup-format-review.md>)），R1～R10 與第三輪的 R9 續都採用，Claude 判斷不開第四輪，合併前 L2 一起核對。使用者 2026-11-06 看過[樣式稿](../experiments/mockups/edit-markup.html)同意，並選定：正常的目標與題目也淡淡標示、游標在出處那一行時出現圖示（另有同名命令）、表單寫回後照 D-164 第 4 點分行、出處的欄位名稱寫錯時問一句就改、所有資料欄位的半形冒號也問一句就改成全形（§1-4，按鈕「修改」「不用」）。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。要改寫使用者的筆記，也動到解析的結果，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。§3（解析多記原文位置）、§4-3、§4-4（寫回）開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點），§1、§2 不用等。
 
@@ -308,6 +308,8 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
 
 ## 結果
 
+延後的測試：無
+
 ### §7 第 1～3 個 commit（2026-11-06，分支 `claude/edit-markup`）
 
 - `42a84f8`：§1 的標示（目標細線、`::`、`error`／`hint` 的波浪線與 tooltip），不含看不懂的出處；`markup.css`。
@@ -437,3 +439,7 @@ tooltip 照原因寫一句，最後都加「點一下幫你改。」；同一段
 - `9a7997f`（R18，寫回）：§4-4 改名併進去時先刪掉那一行，再用刪掉之後的全文併進去，插入點不會落在要刪的範圍裡。
 - 所有檢查、測試（2053 個）與 `npm run build` 在 `9a7997f` 通過。
 - Windows 版 Obsidian 1.15.0 在 `4408380`（程式和 `9a7997f` 相同）跑開發命令 `markup` 三次（`markup Windows-c50c 2026-11-08 234921.json`、`235034`、`235120`）：寫回各步與 `Ctrl+Z` 都通過，第一次的結果除了截圖與速度，和 `6b4514c` 那次完全相同。300 個目標重新解析加產生標示加畫面更新的中位數 30.7、26.5、30.8 ms（最慢 43.6、32.6、50.3），連續打字每一下 2.9～3.2 ms。有兩次比 30 ms 高不到 1 ms；這三個修正只動點下去之後的路徑，重新解析的程式沒有變，和之前量到的 25.5～28.7 ms 是同一個範圍，不改做法。實機沒有做 R16～R18 的特定寫法，由 `tests/source-entry.test.ts`（真的 `EditorView`）與 `tests/field-fix.test.ts` 測。
+
+### 合併（2026-11-09）
+
+併入最新的 `origin/main` 時，`docs/syntax.md`、`src/core/deck/index.ts`、`src/core/errors/log.ts`、`tests/boundaries.test.ts` 有衝突，都是雙方各多一項（`edit` 與 `folder` 的錯誤環節、出處與系統資料夾的匯出），兩邊都留。
