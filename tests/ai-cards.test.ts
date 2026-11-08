@@ -361,6 +361,20 @@ void test('§4 同一句提示合成一列時，每一行的原文都留著（L2
   assert.deepEqual(grouped.lines, ['第 4 行「- borrow :: 借入 ![[a.png]]」', '第 6 行「- lend :: 借出 ![[b.png]]」']);
 });
 
+void test('§4 清單裡沒關的圍欄不會吃到清單外面（R2-9）；最外層沒關的圍欄裡的標記照舊不算', () => {
+  const english = subject('english');
+  const f = form({ subject: 'english', unit: 'L3' });
+  const first = ['## 單字', '', '- borrow 英翻中', '  - 出處：p.40', '  - borrow :: 借入', '  ```js', '  const a = 1;'];
+  const second = ['- lend 英翻中', '  - 出處：p.41', '  - lend :: 借出'];
+  const result = inspectReply([...first, ...second, '<<<完>>>'].join('\n'), f, english, [], nobody);
+  assert.equal(result.ended, true);
+  assert.equal(result.pieces[0].targets, 2);
+  // 清單裡有關好的圍欄：照舊。
+  assert.equal(inspectReply([...first, '  ```', ...second, '<<<完>>>'].join('\n'), f, english, [], nobody).ended, true);
+  // 最外層沒關的圍欄：標記在框裡，不算。
+  assert.equal(inspectReply(['## 單字', '', '- borrow 英翻中', '  - 出處：p.40', '  - borrow :: 借入', '', '```js', 'x', '<<<完>>>'].join('\n'), f, english, [], nobody).ended, false);
+});
+
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {
   const science = subject('science');
   const withIds = R3_REPLY

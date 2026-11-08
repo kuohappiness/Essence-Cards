@@ -53,6 +53,16 @@ export function fenceCloses(line: string, mark: string): boolean {
   return !!match && match[1][0] === mark[0] && match[1].length >= mark.length;
 }
 
+/** 這一欄的內容屬於哪一個清單項目：往回找內文起點不超過這一欄的項目；碰到清單以外的區塊就是不在清單裡。 */
+function listOwner(blocks: readonly Block[], column: number): Item | undefined {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i];
+    if (block.kind === 'item') { if (block.contentCol <= column) return block; }
+    else if (block.kind !== 'cont' && block.kind !== 'blank' && block.kind !== 'code') return undefined;
+  }
+  return undefined;
+}
+
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
 export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
@@ -60,8 +70,13 @@ export function blocksOf(lines: readonly Line[]): Block[] {
     const { no, raw } = lines[i];
     const fence = fenceOpen(raw);
     if (fence !== null) {
-      while (i + 1 < lines.length && !fenceCloses(lines[i + 1].raw, fence)) i++;
-      i++; blocks.push({ kind: 'code', line: no }); continue;
+      // 在清單項目裡開的圍欄，清單項目結束就結束（CommonMark 的容器規則，R2-9），沒關好也不會吃到外面的目標與 <<<完>>>。
+      const column = /^ */.exec(raw)![0].length;
+      const owner = listOwner(blocks, column);
+      const leaves = (text: string): boolean => !!owner && text.trim() !== '' && /^ */.exec(expand(text))![0].length < owner.contentCol;
+      while (i + 1 < lines.length && !fenceCloses(lines[i + 1].raw, fence) && !leaves(lines[i + 1].raw)) i++;
+      if (i + 1 < lines.length && fenceCloses(lines[i + 1].raw, fence)) i++;
+      blocks.push({ kind: 'code', line: no }); continue;
     }
     if (/^\s{0,3}>/.test(raw)) {
       const body: Line[] = [];
