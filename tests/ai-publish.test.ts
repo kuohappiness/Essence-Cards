@@ -242,6 +242,35 @@ void test('§5 搬走與刪掉（R3-1）：改名與搬走跟到新位置、快�
   }
 });
 
+void test('§5 判斷搬走只看這次配出的 ID（L2-6）：舊位置被無關的筆記占用仍跟到新位置；只有部分 ID 留在舊處、另一處有重複都停下', async () => {
+  const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+  {
+    const { files, io, reload } = await firstWritten();
+    files.set(moved, files.get(WORD)!);
+    files.set(WORD, '- 別的筆記 ^unrelated\n    - 題目 :: 答案\n');
+    const result = await publish(reload(), io);
+    assert.deepEqual(result, { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
+    assert.equal(files.get(WORD), '- 別的筆記 ^unrelated\n    - 題目 :: 答案\n');
+    assert.ok(files.get(SNAPSHOT)!.includes('  - "[[單字 改名]]"\n'));
+  }
+  {
+    const { files, io, reload } = await firstWritten();
+    const text = files.get(WORD)!;
+    files.set(moved, text);
+    // 舊位置還留著其中一個 ID。
+    files.set(WORD, '- borrow 英翻中 ^aaaaa2\n    - borrow :: 借入\n');
+    assert.equal((await publish(reload(), io) as { situation: string }).situation, 'split');
+  }
+  {
+    const { files, io, reload } = await firstWritten();
+    const text = files.get(WORD)!;
+    files.set(moved, text);
+    files.set('Essence Cards/學業/國二上/英文/單字 副本.md', text);
+    files.set(WORD, '- 別的筆記 ^unrelated\n    - 題目 :: 答案\n');
+    assert.equal((await publish(reload(), io) as { situation: string }).situation, 'split');
+  }
+});
+
 void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前刪掉那一篇，繼續停下、跳過與放棄都不把 ID 當成沒用過；開始建了、還沒建檔就當掉也停下', async () => {
   // 「記成開始建了 → 建檔」之間當掉：檔沒建，ID 哪裡都沒有，但不能確定，停下問。
   const between = async (crash: (what: 'store' | 'create' | 'remove', path?: string) => boolean, remove: boolean) => {

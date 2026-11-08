@@ -133,16 +133,18 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const where = io.where(deck.ids);
     if (!where) return { kind: 'blocked', reason: 'unread' };
     // 目的地的檔照剛讀到的內容算（state 可能還沒讀到它），其他卡組問 state。
-    const here = found.text === null ? new Set<string>() : blockIds(found.text);
+    // 只看這次配出的 ID：舊位置上別的區塊 ID 和這一篇無關（L2-6，家長改名後拿原檔名做了另一篇）。
+    const inFile = found.text === null ? new Set<string>() : blockIds(found.text);
+    const here = deck.ids.filter(id => inFile.has(id));
     const paths = deck.ids.map(id => (where.get(id) ?? []).filter(path => path !== deck.path));
     const other = paths[0]?.[0];
-    if (!here.size && other !== undefined && paths.every(each => each.length === 1 && each[0] === other)) {
+    if (!here.length && other !== undefined && paths.every(each => each.length === 1 && each[0] === other)) {
       // 家長把它改名或搬走了：照現在的位置算寫成，不在舊位置再建一份。
       update({ path: other, stage: 'written' });
       continue;
     }
     // ID 分在好幾篇或只剩一部分（家長拆開、刪了一些目標）：停下，不自動補回。
-    if (deck.ids.some(id => here.has(id)) || paths.some(each => each.length)) return { kind: 'deck', index, situation: 'split', path: deck.path };
+    if (here.length || paths.some(each => each.length)) return { kind: 'deck', index, situation: 'split', path: deck.path };
     // 記成開始建了或寫出過、但 ID 一個都找不到：可能建好之後在記下之前中斷、家長又刪了，也可能真的沒建成，分不出來就停下（R4-1）。
     if (deck.stage !== 'pending' && deck.stage !== 'rebuild') return { kind: 'deck', index, situation: 'missing', path: deck.path };
     // ID 一個都不在任何卡組，而且從來沒碰過 vault 或家長選了重建：照全文建；目的地被別人用了往後加。
