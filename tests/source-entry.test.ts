@@ -128,6 +128,21 @@ void test('L2 R10：標示之後改了前面的單元，表單預選現在跟著
   view.destroy();
 });
 
+void test('L2 R16：前面是別的學期、沒有單元：表單不預選，家長選了「這一篇」才寫', async () => {
+  const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2 本篇\n---\n';
+  const text = head + '- 甲 ^abc123\n    - Q :: A\n    - 出處：小五上 p.20、老師說過 p.21\n';
+  const hit = hitsOf(text).find(each => each.text === '老師說過 p.21')!;
+  const view = new EditorView({ state: EditorState.create({ doc: text }), parent: document.body });
+  openUnreadableSourceForm(view, view.state.doc.line(hit.at!.line + 1).from + hit.at!.from, entry, hit);
+  assert.deepEqual(Array.from(form().querySelectorAll('[role="radio"][aria-checked="true"]')), [], '沒有預選');
+  assert.equal(button('套用').disabled, true, '沒選單元不能套用');
+  assert.match(form().querySelector('.essence-cards-source-form-note')?.textContent ?? '', /前面的單元沒寫完整/);
+  Array.from(form().querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(each => each.textContent === '這一篇')!.click();
+  await clearRemarkAndApply();
+  assert.equal(view.state.doc.line(8).text, '    - 出處：小五上 p.20、本單元 p.21');
+  view.destroy();
+});
+
 void test('L2 R14：標示之後加了「不算這個」，表單照現在的讀法改成當場教，不預選被排除的單元', () => {
   const head = '---\n年級學期: 國二上\n科目: 自然\n單元: 2-2 本篇\n---\n';
   const old = head + '- 甲 ^abc123\n    - Q :: A\n    - 出處：國二上 1-3 和 1-8\n';

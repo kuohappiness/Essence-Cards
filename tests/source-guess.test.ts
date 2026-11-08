@@ -153,3 +153,12 @@ void test('L2 R3：這一段跟著別的單元（國二上 1-3 p.20、老師說�
   // 跟著的是這一篇：照舊。
   assert.equal(guessSource(second, OWN, UNITS, [], 'this').unit, 'own');
 });
+
+void test('L2 R16：前面寫了別的學期卻沒有單元（小五上 p.20、老師說過 p.21 的第二段）：不知道跟著誰，不預選', () => {
+  const [, second] = sourceLinks(['小五上 p.20', '老師說過 p.21'], OWN);
+  const form = guessSource(second, OWN, UNITS, [], null);
+  assert.deepEqual(summary(form), { unit: null, unitOrigin: 'unset', candidates: [], places: ['頁 21'], placesOrigin: 'original', remark: '老師說過', note: '前面的單元沒寫完整，請選一個' });
+  assert.equal(applyBlock(form, OWN), '請先選單元');
+  // 沒給 scope 是不知道它在哪一欄（單獨猜一項）：這一篇，和 §4-1 的表相同。
+  assert.equal(guessSource(second, OWN, UNITS).unit, 'own');
+});

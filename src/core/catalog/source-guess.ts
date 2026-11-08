@@ -47,9 +47,10 @@ const byTerm = (a: CatalogUnit, b: CatalogUnit): number => (termRank(termKey(a.t
  * 一項看不懂的出處（或 null：從圖示、命令打開的空白表單）→ 先填好的表單（§4-1 的表）。
  * follows：接在它後面、同一個單元的位置（`1-3 p.20、21` 的 `21`，§4-3 第 1 點），寫回時一起換掉，所以位置一起帶進來。
  * scope：這一段跟著哪個單元（readSourceParts 的 scope）；跟著別的單元、自己又沒寫單元時預選那個單元（L2 第一輪 R3：
- * `國二上 1-3 p.20、老師說過 p.21` 的第二段是 1-3 的 p.21，選「這一篇」寫回會把頁碼改到這一篇）。
+ * `國二上 1-3 p.20、老師說過 p.21` 的第二段是 1-3 的 p.21，選「這一篇」寫回會把頁碼改到這一篇）；null 是不知道跟著誰（前面寫了別的學期
+ * 卻沒有單元），不預選（L2 第四輪 R16：預選「這一篇」會把本來沒有連結的頁碼寫到這一篇）。
  */
-export function guessSource(item: SourceItem | null, own: SourceOwner, units: readonly CatalogUnit[], follows: readonly SourceItem[] = [], scope: SourceScope = null): SourceForm {
+export function guessSource(item: SourceItem | null, own: SourceOwner, units: readonly CatalogUnit[], follows: readonly SourceItem[] = [], scope: SourceScope = 'this'): SourceForm {
   const blank: SourceForm = { unit: 'own', unitOrigin: 'original', candidates: [], places: [], placesOrigin: 'unset', remark: '', remarkOrigin: 'unset', note: null, unitNote: null };
   if (!item) return blank;
   const teach = (): SourceForm => ({ ...blank, note: TEACH });
@@ -105,7 +106,8 @@ export function guessSource(item: SourceItem | null, own: SourceOwner, units: re
   }
   // 這一篇的位置：位置前面有一句話、頁碼看不懂。
   if (places.length || parts.bad || parts.places.length) {
-    const unit = scope && scope !== 'this' ? choice(scope.term, scope.unit) : null;
+    if (scope === null) return { ...blank, ...filled, unit: null, unitOrigin: 'unset', note: badNote, unitNote: '前面的單元沒寫完整，請選一個' };
+    const unit = scope !== 'this' ? choice(scope.term, scope.unit) : null;
     return { ...blank, ...filled, unit: unit && !isOwn(unit) ? unit : 'own', unitOrigin: 'original', note: badNote };
   }
   // 舊標題找不到、猜不出來的：照 D-169 第 4 點當場教。
