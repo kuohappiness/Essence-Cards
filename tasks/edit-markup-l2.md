@@ -94,5 +94,5 @@
   1. R16：`scope` 是 null、有位置時不預選；`scope` 是 null、沒有位置（`teach`）時照 §4-1「猜不出來的」那一列仍是「這一篇」，是否合理；家長選「這一篇」時寫 `本單元`；`guessSource` 的 `scope` 預設改成 `'this'` 之後，有沒有呼叫端原本靠 null。
   2. R17：`relocateSource` 現在在現在的全文重算的 hits 裡找，R2、R6、R10、R14 的原例是否仍成立；材料快取還沒好（null）時標示消失，點舊標示會說「筆記剛改過」，是否可以接受；`main.ts` 的 `unreadableIn` 和標示是不是同一個判斷。
   3. R18：`mergeRenamed` 先刪再併：那一項在欄位前面或後面、檔尾有沒有換行、CRLF、併進去要分行；`verifyRename` 仍然拿原本的全文核對；`changes` 是一個範圍，`Ctrl+Z` 一次復原。
-- **驗證方式**：和前幾輪相同。實作者在 `9a7997f` 跑過全部檢查（2053 個測試）與 `npm run build`。Windows 實機上一次是 `6b4514c`，這三個修正還沒有重跑；標示平移後點擊的情形由 `tests/source-entry.test.ts`（真的 `EditorView`）測。
+- **驗證方式**：和前幾輪相同。實作者在 `9a7997f` 跑過全部檢查（2053 個測試）與 `npm run build`。Windows 版 Obsidian 在 `4408380` 重跑開發命令 `markup` 三次，寫回各步與 `Ctrl+Z` 通過（數字見任務說明〈結果〉）；標示平移後點擊與 R16～R18 的特定寫法沒有在實機做，由 `tests/source-entry.test.ts`（真的 `EditorView`）與 `tests/field-fix.test.ts` 測。
 - **回報**：接在分支上那一份 `Claude Codex Discussion/2026-11-07-edit-markup-l2.md` 最後，標題「## 第五輪」；標題下的狀態行一起更新。這一輪之後是否合併由使用者決定，請分別寫出各項的真實路徑判斷。
