@@ -37,7 +37,7 @@ export const RULE_SUBJECTS: readonly RuleSubject[] = [
   { key: 'english', label: '英文（國中）', subject: '英文', r3: false, supplement: false, files: [COMMON, { path: 'docs/card-rules/english.md', name: '英文', version: 'v0.14', marker: true }] },
   { key: 'science', label: '自然', subject: '自然', r3: true, supplement: true, files: R3 },
   { key: 'general', label: '一般知識', subject: null, r3: false, supplement: false, files: [COMMON, { path: 'docs/card-rules/general.md', name: '一般知識', version: 'v0.4', marker: true }] },
-  { key: 'social', label: '社會（國小）', subject: '社會', r3: true, supplement: true, files: [...R3, { path: 'docs/card-rules/elementary-social.md', name: '國小社會', version: 'v0.7', marker: true }] },
+  { key: 'social', label: '社會（國小）', subject: '社會', r3: true, supplement: true, files: [...R3, { path: 'docs/card-rules/elementary-social.md', name: '國小社會', version: 'v0.8', marker: true }] },
 ];
 
 /**

@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RULE_MARKER, RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
+import { buildPrompt, RULE_MARKER, RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
 import { embedRules, ruleFiles } from '../tools/build.mjs';
 
 // tasks/ai-cards-mvp.md §1：規則組嵌進外掛、記版號與雜湊。
@@ -30,7 +30,7 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
     english: ['通用 v0.15', '英文 v0.14'],
     science: r3.map(name => name + ' R3 第二輪'),
     general: ['通用 v0.15', '一般知識 v0.4'],
-    social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.7'],
+    social: [...r3.map(name => name + ' R3 第二輪'), '國小社會 v0.8'],
   });
   for (const path of ruleFiles().filter(path => path.startsWith('docs/'))) {
     const text = await readFile(join(root, path), 'utf8');
@@ -47,6 +47,15 @@ void test('§1 表：五科全開（§0），規則照表的順序；docs/card-r
   // 狀態框裡給 AI 的那一段搬到標記下面，字不改（§1）。
   assert.ok(rules.english[1].text.startsWith('適用於國中英文，不限版本；國小之後用同一份接上。搭配通用規則（common.md）使用；與通用規則衝突時，以本檔為準。'));
   assert.ok(rules.english[0].text.startsWith('## 你的任務'));
+});
+
+void test('§3 社會的提示：規則寫的已有目標格式和任務段實際送出的相同（L2 規格核對）', async () => {
+  const social = RULE_SUBJECTS.find(subject => subject.key === 'social')!;
+  const rules = (await embedRules(root)).social;
+  const prompt = buildPrompt({ subject: 'social', term: '小五上', unit: '2-2 人口', purpose: '準備段考', supplement: true, adjust: '', material: '' }, social, rules, [{ id: 'k3m9qa', name: '能說出台灣東部海岸的地形', source: '小五上 2-1 p.30', path: 'a.md' }]);
+  assert.ok(prompt.text.includes('收到的已有目標每項是 `ID 名稱｜出處`'));
+  assert.ok(!prompt.text.includes('名稱｜ID｜出處'));
+  assert.ok(prompt.parts.at(-1)!.text.includes('  - k3m9qa 能說出台灣東部海岸的地形｜小五上 2-1 p.30'));
 });
 
 void test('§1 建置：表上的檔讀不到就失敗，說出是哪一份', async t => {

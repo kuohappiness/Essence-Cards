@@ -37,7 +37,7 @@
 | 英文（國中） | [common.md](../docs/card-rules/common.md) ＋ [english.md](../docs/card-rules/english.md) | v0.14，L4、L5 試過；新題型的程式還沒做，照填空翻面出（english.md 開頭的說明） |
 | 自然 | R3 四份 | 第二輪的 R3，沒有科目預設（D-132 暫選 R3） |
 | 一般知識 | common.md ＋ [general.md](../docs/card-rules/general.md) | 只用 Claude 寫的筆記試過 |
-| 社會（國小） | R3 四份 ＋ [elementary-social.md](../docs/card-rules/elementary-social.md) | v0.7；試用先停在這版（使用者 2026-11-03），還沒判定通過；使用者 2026-11-07 決定最小版先開，草稿照樣審 |
+| 社會（國小） | R3 四份 ＋ [elementary-social.md](../docs/card-rules/elementary-social.md) | v0.8（比試用的 v0.7 只多統一已有目標的寫法）；試用先停在 v0.7（使用者 2026-11-03），還沒判定通過；使用者 2026-11-07 決定最小版先開，草稿照樣審 |
 
 R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短規則.md`、`experiments/t4/arch/第二輪/判斷邊界.md`、`experiments/t4/arch/第二輪/五步.md`（和試用時 `國小國語設定.json` 的順序相同；搬移不改凍結內容，環節 8 第 6 條）。表上沒開的科目，製卡畫面不列。
 
