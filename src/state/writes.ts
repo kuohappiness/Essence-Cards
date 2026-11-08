@@ -126,14 +126,18 @@ export function createWrites(options: WritesOptions) {
     writes = next.catch(() => {});
     return next;
   }
-  /** 先讀完已知的待讀（最多 DRAIN_ROUNDS 輪，rounds 由呼叫端累計）：讀完是 null；關閉了或讀不完回傳原因。 */
-  async function drain(rounds: { count: number }): Promise<WriteResult | null> {
+  /**
+   * 先讀完已知的待讀（最多 DRAIN_ROUNDS 輪，rounds 由呼叫端累計）：讀完是 null；關閉了或讀不完回傳原因。
+   * giveUp（AI 製卡）：讀取被判定卡住就停，回受阻的原因，放開寫入的那一列（R2-5，iCloud 佔位檔的讀取可能一直不回來）。
+   */
+  async function drain(rounds: { count: number }, giveUp = false): Promise<WriteResult | null> {
     while (waiting()) {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      if (giveUp && reads.unread.size) return { kind: 'blocked', reason: 'unread' };
       if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
       rounds.count++;
       // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
-      await reads.readNow();
+      await (giveUp ? reads.readOrStuck() : reads.readNow());
     }
     return null;
   }
@@ -183,7 +187,7 @@ export function createWrites(options: WritesOptions) {
   function create(path: string, text: string, free: () => boolean): Promise<CreateResult | { kind: 'elsewhere' }>;
   async function create(path: string, text: string, free?: () => boolean): Promise<CreateResult | { kind: 'elsewhere' }> {
     if (life.closed) return { kind: 'blocked', reason: 'closed' };
-    if (free && await drain({ count: 0 })) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
+    if (free && await drain({ count: 0 }, true)) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
     const reason = blockedNow();
     if (reason) return { kind: 'blocked', reason };
     if (free && !free()) return { kind: 'elsewhere' };

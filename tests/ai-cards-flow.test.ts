@@ -138,7 +138,7 @@ void test('§5 卡組剛搬走、還沒讀完（L2-2）：等讀完再判斷，�
     await held.started;
     let finished = false;
     const resuming = cards.resume(job).then(result => { finished = true; return result; });
-    await settle();
+    await new Promise(resolve => setTimeout(resolve, 3));
     assert.equal(finished, false, '讀完之前不能下結論');
     held.release();
     const result = await resuming;
@@ -200,6 +200,26 @@ void test('§5 卡組剛搬走、還沒讀完（L2-2）：等讀完再判斷，�
     assert.deepEqual(await state.aiCreateDeck(MOVED, deck.text, deck.ids), { kind: 'elsewhere' });
     assert.ok(!memory.texts.has(MOVED));
   }
+});
+
+void test('§5 讀取一直沒回來（R2-5）：判定讀不到就放開寫入佇列，回可重試的原因，不建檔；讀回來之後重試照常', async t => {
+  const { memory, cards, state, job } = await snapshotFailed(t);
+  const held = memory.holdRead(MOVED);
+  memory.rename(WORD, MOVED);
+  await held.started;
+  const resuming = cards.resume(job);
+  await new Promise(resolve => setTimeout(resolve, 3));
+  const behind = state.aiCreate('Essence Cards/紀錄/AI 輸出/排在後面.md', 'x');
+  const result = await resuming;
+  assert.match((result as { message: string }).message, /沒讀到/);
+  assert.equal(result.kind === 'stop' && result.deck, undefined);
+  assert.deepEqual(await behind, { kind: 'blocked', reason: 'unread' });
+  assert.ok(!memory.texts.has(WORD));
+  held.release();
+  await settle();
+  const again = await cards.resume(job);
+  assert.equal(again.kind, 'done', JSON.stringify(again));
+  assert.ok(!memory.texts.has(WORD));
 });
 
 void test('§5 配號避開同一份回覆裡要留著的區塊 ID（L2-12）：題目行的 ID 保留原字，同篇、另一篇都不撞', async t => {

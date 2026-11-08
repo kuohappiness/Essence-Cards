@@ -716,7 +716,7 @@ export function createState(options: StateOptions): State {
       return writes.blockedNow() ?? tracker.allocate(count, avoid);
     },
     async aiWhere(ids) {
-      const stopped = await writes.enqueue(() => writes.drain({ count: 0 }));
+      const stopped = await writes.enqueue(() => writes.drain({ count: 0 }, true));
       if (stopped || !life.loaded || unread.size) return null;
       return tracker.where(ids);
     },
