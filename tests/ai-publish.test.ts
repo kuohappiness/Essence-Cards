@@ -133,8 +133,8 @@ void test('§5 中斷與重試：存了恢復資料、原文、每一篇、準�
   const counted = (what: 'store' | 'create', n: number) => { let count = 0; return (kind: string) => kind === what && ++count === n; };
   // 建檔：第 1～4 次是原文、第 7 次是快照（第 5、6 次是卡組，當掉時照 R4-1 停下問，另外測）。
   for (const n of [1, 2, 3, 4, 7]) points.push([`第 ${String(n)} 次建檔`, counted('create', n)]);
-  // 存恢復資料：第一篇開始建了、寫出過，第二篇開始建了、寫出過，準備發布的時間、快照的雜湊，共 6 次。
-  for (let n = 1; n <= 6; n++) points.push([`第 ${String(n)} 次存恢復資料`, counted('store', n)]);
+  // 存恢復資料：第一篇開始建了、寫出過，第二篇開始建了、寫出過，準備發布（時間、快照全文與雜湊一次存），共 5 次。
+  for (let n = 1; n <= 5; n++) points.push([`第 ${String(n)} 次存恢復資料`, counted('store', n)]);
   points.push(['快照寫成、清理之前', what => what === 'remove']);
   for (const [name, crash] of points) {
     const files = await crashThenResume(crash);
@@ -306,6 +306,55 @@ void test('§5 準備發布時再核對每一篇（L2-5）：後面的篇還在�
     box.crash = () => false;
     const result = await publish(skipDeck(reload(), 0).job!, io);
     assert.deepEqual(result, { kind: 'done', decks: [GRAMMAR], targets: 1 });
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
+  }
+});
+
+void test('§5 準備發布存下快照全文（L2-8）：重試照存下的位元組寫，外掛更新也不重新產生；卡組搬走或跳過才更新對象，而且先存再寫', async () => {
+  const stopAtSnapshot = async () => {
+    const v = vault();
+    const job = saved(copied());
+    v.io.store(job);
+    v.box.crash = (what, path) => what === 'create' && path === SNAPSHOT;
+    await assert.rejects(publish(job, v.io), Crash);
+    v.box.crash = () => false;
+    return v;
+  };
+  // 存下的全文就是要寫的：換版後序列化不同也照舊。
+  {
+    const { files, io, reload } = await stopAtSnapshot();
+    const job = reload();
+    const published = job.save!.published!;
+    assert.equal(sha256Hex(published.text), published.sha256);
+    assert.ok(published.text.startsWith('---\n日期: 2026-11-07\n'));
+    const older = published.text.replace('接法: 複製貼上', '接法:   複製貼上');
+    const stored = { ...job, save: { ...job.save!, published: { ...published, text: older, sha256: sha256Hex(older) } } };
+    io.store(stored);
+    assert.equal((await publish(stored, io)).kind, 'done');
+    assert.equal(files.get(SNAPSHOT), older);
+  }
+  // 搬走：對象更新，時間沿用，寫之前先存好更新後的全文。
+  {
+    const { files, io, box, reload } = await stopAtSnapshot();
+    const job = reload();
+    const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+    files.set(moved, files.get(WORD)!);
+    files.delete(WORD);
+    box.crash = (what, path) => what === 'create' && path === SNAPSHOT;
+    await assert.rejects(publish(job, io), Crash);
+    box.crash = () => false;
+    const again = reload();
+    assert.ok(again.save!.published!.text.includes('[[單字 改名]]'));
+    assert.equal(again.save!.published!.time, job.save!.published!.time);
+    assert.equal(sha256Hex(again.save!.published!.text), again.save!.published!.sha256);
+    assert.equal((await publish(again, io)).kind, 'done');
+    assert.equal(files.get(SNAPSHOT), again.save!.published!.text);
+  }
+  // 明確跳過：對象不列它。
+  {
+    const { files, io, reload } = await stopAtSnapshot();
+    const skipped = skipDeck(reload(), 0).job!;
+    assert.equal((await publish(skipped, io)).kind, 'done');
     assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
   }
 });

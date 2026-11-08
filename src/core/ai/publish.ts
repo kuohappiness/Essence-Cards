@@ -169,21 +169,25 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     }
   }
 
-  // 第 5 步：準備發布。時間取一次就存起來；快照的位置被別人用了往後加。
-  let time = save().published?.time;
-  if (time === undefined) {
-    const at = io.now();
-    time = stamp(at.ms, at.offset);
-    const found = await read(save().snapshotPath);
-    if ('kind' in found) return found;
-    const snapshotPath = found.text === null ? save().snapshotPath : `${folderOf(save().snapshotPath)}/${freeName(fileName(save().snapshotPath), io.names())}.md`;
-    keep({ ...save(), snapshotPath, published: { time, sha256: '' } });
+  // 第 5 步：準備發布。時間取一次、全文做一次，一起存起來，重試照存下的寫（L2-8）；快照的位置被別人用了往後加。
+  // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
+  const before = save().published;
+  const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
+  if (!before || before.targets.join('\n') !== targets.join('\n')) {
+    let time = before?.time;
+    if (time === undefined) { const at = io.now(); time = stamp(at.ms, at.offset); }
+    let snapshotPath = save().snapshotPath;
+    if (!before) {
+      const found = await read(snapshotPath);
+      if ('kind' in found) return found;
+      if (found.text !== null) snapshotPath = `${folderOf(snapshotPath)}/${freeName(fileName(snapshotPath), io.names())}.md`;
+    }
+    const text = snapshotText(job, time);
+    keep({ ...save(), snapshotPath, published: { time, text, sha256: sha256Hex(text), targets } });
   }
-  const text = snapshotText(job, time);
-  if (save().published!.sha256 !== sha256Hex(text)) keep({ ...save(), published: { time, sha256: sha256Hex(text) } });
 
   // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
-  const created = await io.create(save().snapshotPath, text);
+  const created = await io.create(save().snapshotPath, save().published!.text);
   if (created.kind === 'exists') {
     const found = await read(save().snapshotPath);
     if ('kind' in found) return found;
