@@ -272,6 +272,44 @@ void test('§5 判斷搬走只看這次配出的 ID（L2-6）：舊位置被無�
   }
 });
 
+void test('§5 準備發布時再核對每一篇（L2-5）：後面的篇還在寫時前面的被刪、搬走、拆開，都不會寫出對不上的快照', async () => {
+  /** 建第二篇的當下，對第一篇做 change。 */
+  const during = (change: (files: Map<string, string>) => void) => {
+    const v = vault();
+    const job = saved(copied());
+    v.io.store(job);
+    const create = v.io.create.bind(v.io);
+    v.io.createDeck = (path, text) => { if (path === GRAMMAR) change(v.files); return create(path, text); };
+    return { ...v, job };
+  };
+  const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+  {
+    const { files, io, job } = during(each => { each.delete(WORD); });
+    assert.deepEqual(await publish(job, io), { kind: 'deck', index: 0, situation: 'missing', path: WORD });
+    assert.ok(!files.has(SNAPSHOT));
+  }
+  {
+    const { files, io, job } = during(each => { each.set(moved, each.get(WORD)!); each.delete(WORD); });
+    assert.deepEqual(await publish(job, io), { kind: 'done', decks: [moved, GRAMMAR], targets: 3 });
+    assert.ok(files.get(SNAPSHOT)!.includes('  - "[[單字 改名]]"\n'));
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
+  }
+  {
+    const { files, io, job } = during(each => { const text = each.get(WORD)!; each.set(WORD, text.slice(0, text.indexOf('> [!note]-'))); each.set('Essence Cards/別篇.md', text.slice(text.indexOf('> [!note]-'))); });
+    assert.equal((await publish(job, io) as { situation: string }).situation, 'split');
+    assert.ok(!files.has(SNAPSHOT));
+  }
+  // 跳過第一篇再繼續：快照不列它，通知只算剩下的。
+  {
+    const { files, io, box, reload, job } = during(each => { each.delete(WORD); });
+    await publish(job, io);
+    box.crash = () => false;
+    const result = await publish(skipDeck(reload(), 0).job!, io);
+    assert.deepEqual(result, { kind: 'done', decks: [GRAMMAR], targets: 1 });
+    assert.ok(!files.get(SNAPSHOT)!.includes('[[國二上英文 L3 單字]]'));
+  }
+});
+
 void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前刪掉那一篇，繼續停下、跳過與放棄都不把 ID 當成沒用過；開始建了、還沒建檔就當掉也停下', async () => {
   // 「記成開始建了 → 建檔」之間當掉：檔沒建，ID 哪裡都沒有，但不能確定，停下問。
   const between = async (crash: (what: 'store' | 'create' | 'remove', path?: string) => boolean, remove: boolean) => {

@@ -121,16 +121,16 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     } else if (created.kind !== 'done') return created;
   }
 
-  // 第 4 步：一篇一篇建卡組，每一篇先記成開始建了、存好，才去建檔；建好、讀回核對過，再記成寫出過。
-  for (let index = 0; index < save().decks.length; index++) {
+  /** 第 4 步的一篇：先記成開始建了、存好，才去建檔；建好、讀回核對過，再記成寫出過。這一篇算寫成（或跳過）回 null，否則回停下的原因。 */
+  const settle = async (index: number): Promise<PublishResult | null> => {
     const deck = save().decks[index];
-    if (deck.skipped) continue;
+    if (deck.skipped) return null;
     const found = await read(deck.path);
     if ('kind' in found) return found;
     const update = (change: Partial<SavedDeck>): void => { keep({ ...save(), decks: save().decks.map((each, i) => i === index ? { ...each, ...change } : each) }); };
     if (writtenIn(deck, found.text)) {
       if (deck.stage !== 'written') update({ stage: 'written' });
-      continue;
+      return null;
     }
     const where = await io.where(deck.ids);
     if (!where) return { kind: 'blocked', reason: 'unread' };
@@ -143,7 +143,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     if (!here.length && other !== undefined && paths.every(each => each.length === 1 && each[0] === other)) {
       // 家長把它改名或搬走了：照現在的位置算寫成，不在舊位置再建一份。
       update({ path: other, stage: 'written' });
-      continue;
+      return null;
     }
     // ID 分在好幾篇或只剩一部分（家長拆開、刪了一些目標）：停下，不自動補回。
     if (here.length || paths.some(each => each.length)) return { kind: 'deck', index, situation: 'split', path: deck.path };
@@ -155,10 +155,18 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
     // 建之前才發現 ID 已經在某一篇（剛搬走或同步送來）：這一篇已記成開始建了，回頭照現在的樣子重新判斷，不會再走到建檔。
-    if (created.kind === 'elsewhere') { index--; continue; }
+    if (created.kind === 'elsewhere') return settle(index);
     if (created.kind === 'exists') return { kind: 'deck', index, situation: 'missing', path };
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });
+    return null;
+  };
+  // 建完一輪再核對一輪（L2-5）：後面的篇還在寫時，前面的篇可能已被家長或同步搬走、刪掉；快照的對象要是實際寫成的篇。
+  for (let round = 0; round < 2; round++) {
+    for (let index = 0; index < save().decks.length; index++) {
+      const stop = await settle(index);
+      if (stop) return stop;
+    }
   }
 
   // 第 5 步：準備發布。時間取一次就存起來；快照的位置被別人用了往後加。
