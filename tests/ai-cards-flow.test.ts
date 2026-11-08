@@ -279,7 +279,7 @@ void test('§5 建卡組的寫入回呼裡再核對（R2-1）：最後一次檢�
 });
 
 void test('§5 寫入的當下再核對整個 vault 的檔名（R2-4）：排隊之後才在別的資料夾出現同名檔，卡組與快照都往後加', async t => {
-  for (const target of [WORD]) {
+  for (const target of [WORD, 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md']) {
     const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
     const { cards } = await load(t, memory, machine(), Math.random);
     const copied = await cards.copy(form);
@@ -295,6 +295,45 @@ void test('§5 寫入的當下再核對整個 vault 的檔名（R2-4）：排隊
     assert.ok(!memory.texts.has(target), target);
     assert.ok(memory.texts.has(target.replace('.md', ' 2.md')), target);
     assert.equal(memory.texts.get(same), '別人的筆記');
+  }
+});
+
+void test('§5 快照寫入的當下再確認每一篇還在（R2-3）：最後一次核對之後才被刪、搬走，都不會寫出對不上的快照', async t => {
+  const SNAP = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
+  const start = async () => {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const loaded = await load(t, memory, machine(), Math.random);
+    const copied = await loaded.cards.copy(form);
+    assert.ok('job' in copied);
+    return { memory, ...loaded, job: copied.job };
+  };
+  // 停在讀快照位置的時候刪掉第一篇。
+  {
+    const { memory, cards, state, job } = await start();
+    const held = memory.holdRead(SNAP);
+    const saving = cards.save(job, reply(), null);
+    await held.started;
+    memory.remove(WORD);
+    await settle();
+    assert.ok(!state.decks().some(each => each.path === WORD));
+    held.release();
+    const result = await saving;
+    assert.equal(result.kind === 'stop' && result.deck?.situation, 'missing', JSON.stringify(result));
+    assert.ok(!memory.texts.has(SNAP));
+  }
+  // 停在快照的寫入回呼之前搬走第一篇：跟到新位置，對象也跟著改。
+  {
+    const { memory, cards, job } = await start();
+    const gate = gateModify(memory, SNAP);
+    const saving = cards.save(job, reply(), null);
+    await gate.reached;
+    memory.rename(WORD, MOVED);
+    await settle();
+    gate.open();
+    const result = await saving;
+    assert.equal(result.kind, 'done', JSON.stringify(result));
+    assert.ok(memory.texts.get(SNAP)!.includes('[[單字 改名]]'));
+    assert.ok(!memory.texts.get(SNAP)!.includes('[[國二上英文 L3 單字]]'));
   }
 });
 

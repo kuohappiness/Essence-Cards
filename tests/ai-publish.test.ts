@@ -47,6 +47,7 @@ function vault(files = new Map<string, string>()) {
       return Promise.resolve({ kind: 'done' });
     },
     createDeck(path, text) { return this.create(path, text); },
+    createSnapshot(path, text, decks) { return decks.some(deck => { const found = blockIds(files.get(deck.path) ?? ''); return !deck.ids.every(id => found.has(id)); }) ? Promise.resolve({ kind: 'refused', why: 'decks' }) : this.create(path, text); },
     where(ids) {
       const found = new Map<string, string[]>();
       for (const [path, text] of files) if (isDeckPath(path)) for (const id of blockIds(text)) if (ids.includes(id)) found.set(id, [...found.get(id) ?? [], path]);

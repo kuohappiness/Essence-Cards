@@ -97,6 +97,7 @@ export function createAiCards(deps: AiCardsDeps) {
       read: path => deps.files.read(path),
       create: (path, text) => state.aiCreate(path, text),
       createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids, nameFree(path)),
+      createSnapshot: (path, text, decks) => state.aiCreateSnapshot(path, text, decks, nameFree(path)),
       where: ids => state.aiWhere(ids),
       names: deps.names,
       now: deps.now,

@@ -236,6 +236,8 @@ export interface State {
   aiTarget(id: string): ExistingNow;
   /** 配 count 個新的 ID（§5 第 1 步）：門檻和寫入相同（writeBlock），沒過回原因；避開所有占用、這台電腦的預留與 avoid（將一起存入的區塊 ID），配出的之後都不再配。 */
   aiIds(count: number, avoid?: Iterable<string>): string[] | WriteBlock;
+  /** 建快照（§5 第 6 步）：同 aiCreate，但先讀完已知的變動，寫入的當下每一篇都還要在原位置（ID 都在），整個 vault 也沒有同名檔；不符合回 refused、不建（R2-3、R2-4）。 */
+  aiCreateSnapshot(path: string, text: string, decks: readonly { path: string; ids: readonly string[] }[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID，§5〈中斷與重試〉）：先讀完已知的變動（L2-2）；還沒讀完或有讀不到的卡組、紀錄是 null（不知道不當成沒有）。 */
   aiWhere(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
@@ -722,6 +724,10 @@ export function createState(options: StateOptions): State {
     },
     aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
     aiCreateDeck: (path, text, ids, nameFree) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' })),
+    aiCreateSnapshot: (path, text, decks, nameFree) => writes.enqueue(() => writes.create<'decks' | 'name'>(path, text, {
+      check: () => decks.some(deck => { const found = tracker.where(deck.ids); return deck.ids.some(id => !found.get(id)?.includes(deck.path)); }) ? 'decks' : null,
+      atWrite: () => nameFree() ? null : 'name',
+    })),
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(path, ids) { tracker.removed(path, ids); },

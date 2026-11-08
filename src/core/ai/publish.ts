@@ -21,6 +21,8 @@ export interface PublishIo {
   create(path: string, text: string): Promise<CreateResult>;
   /** 建卡組：寫入的當下再核對一次這些 ID 沒有人用（卡組與複習紀錄）、整個 vault 沒有同名檔，不符合是 refused、不建。 */
   createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
+  /** 建快照：寫入的當下每一篇都還要在原位置、整個 vault 沒有同名檔，不符合是 refused、不建。 */
+  createSnapshot(path: string, text: string, decks: readonly { path: string; ids: readonly string[] }[]): Promise<CreateResult | { kind: 'refused'; why: 'decks' | 'name' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID）：等已知的變動讀完才回答；占用資訊不完整（有讀不到的、讀不完）是 null。 */
   where(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 整個 vault 現在的檔名（小寫、不含 .md）。 */
@@ -169,42 +171,45 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     update({ stage: 'written' });
     return null;
   };
-  // 建完一輪再核對一輪（L2-5）：後面的篇還在寫時，前面的篇可能已被家長或同步搬走、刪掉；快照的對象要是實際寫成的篇。
-  for (let round = 0; round < 2; round++) {
+  // 快照的寫入回呼裡才是最後的核對（R2-3）：有一篇不在原位置，或檔名被占了，回到這裡照現況重新核對每一篇、重做快照；最多三次，都趕不上就請家長等一下。
+  for (let attempt = 0; attempt < 3; attempt++) {
     for (let index = 0; index < save().decks.length; index++) {
       const stop = await settle(index);
       if (stop) return stop;
     }
-  }
 
-  // 第 5 步：準備發布。時間取一次、全文做一次，一起存起來，重試照存下的寫（L2-8）；快照的位置被別人用了往後加。
-  // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
-  const before = save().published;
-  const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
-  const stale = !before || before.targets.join('\n') !== targets.join('\n');
-  const located = await read(save().snapshotPath);
-  if ('kind' in located) return located;
-  // 整個 vault 的檔名再核對一次（L2-9）。已經準備發布、那個位置又有檔的，交給第 6 步比內容（不同就停下，§5），不換位置。
-  const names = io.names();
-  if (located.text !== null && !before) names.add(fileName(save().snapshotPath).toLowerCase());
-  const taken = located.text === null || !before ? names.has(fileName(save().snapshotPath).toLowerCase()) : false;
-  const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(fileName(save().snapshotPath), names)}.md` : save().snapshotPath;
-  if (stale || snapshotPath !== save().snapshotPath) {
-    let time = before?.time;
-    if (time === undefined) { const at = io.now(); time = stamp(at.ms, at.offset); }
-    const text = stale ? snapshotText(job, time) : before.text;
-    keep({ ...save(), snapshotPath, published: { time, text, sha256: sha256Hex(text), targets } });
-  }
+    // 第 5 步：準備發布。時間取一次、全文做一次，一起存起來，重試照存下的寫（L2-8）；快照的位置被別人用了往後加。
+    // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
+    const before = save().published;
+    const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
+    const stale = !before || before.targets.join('\n') !== targets.join('\n');
+    const located = await read(save().snapshotPath);
+    if ('kind' in located) return located;
+    // 整個 vault 的檔名再核對一次（L2-9）。已經準備發布、那個位置又有檔的，交給第 6 步比內容（不同就停下，§5），不換位置。
+    const names = io.names();
+    if (located.text !== null && !before) names.add(fileName(save().snapshotPath).toLowerCase());
+    const taken = located.text === null || !before ? names.has(fileName(save().snapshotPath).toLowerCase()) : false;
+    const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(fileName(save().snapshotPath), names)}.md` : save().snapshotPath;
+    if (stale || snapshotPath !== save().snapshotPath) {
+      let time = before?.time;
+      if (time === undefined) { const at = io.now(); time = stamp(at.ms, at.offset); }
+      const text = stale ? snapshotText(job, time) : before.text;
+      keep({ ...save(), snapshotPath, published: { time, text, sha256: sha256Hex(text), targets } });
+    }
 
-  // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
-  const created = await io.create(save().snapshotPath, save().published!.text);
-  if (created.kind === 'exists') {
-    const found = await read(save().snapshotPath);
-    if ('kind' in found) return found;
-    if (found.text === null || sha256Hex(found.text) !== save().published!.sha256) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
-  } else if (created.kind !== 'done') return created;
-  // 第 7 步：清理。
-  return done();
+    // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
+    const decks = save().decks.filter(deck => !deck.skipped).map(deck => ({ path: deck.path, ids: deck.ids }));
+    const created = await io.createSnapshot(save().snapshotPath, save().published!.text, decks);
+    if (created.kind === 'refused') continue;
+    if (created.kind === 'exists') {
+      const found = await read(save().snapshotPath);
+      if ('kind' in found) return found;
+      if (found.text === null || sha256Hex(found.text) !== save().published!.sha256) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
+    } else if (created.kind !== 'done') return created;
+    // 第 7 步：清理。
+    return done();
+  }
+  return { kind: 'blocked', reason: 'unread' };
 }
 
 /** 跳過、重建、放棄之後 ID 怎麼處理（§5〈ID 的預留〉）：retire 進這台電腦的「不再配出」清單。 */
