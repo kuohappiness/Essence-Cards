@@ -10,7 +10,8 @@ import { checkDocs, formatProblem, DONE_ROWS, ROADMAP } from '../tools/check-doc
 // pre-commit 會匯出 GIT_DIR / GIT_INDEX_FILE 等；在另一個 repo 操作前必須清除。
 for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith('GIT_')) delete process.env[key];
 
-const git = (root: string, ...args: string[]) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', ...args], { cwd: root, stdio: 'pipe' });
+// CI 的 git 沒有設作者身分：暫存 repo 裡 commit 時自己給一個。
+const git = (root: string, ...args: string[]) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false', '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', ...args], { cwd: root, stdio: 'pipe' });
 
 async function repo(t: { after: (fn: () => Promise<void>) => void }) {
   const root = await mkdtemp(join(tmpdir(), 'essence-docs-'));
@@ -167,7 +168,7 @@ void test('已完成：10 列通過、11 列要報', async t => {
 void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一個非空行要有狀態；README、子資料夾與其他資料夾不查', async t => {
   const { add, run } = await repo(t);
   await add('tasks/ok.md', '# 任務\n\n狀態：進行中\n');
-  await add('tasks/inline.md', '# 任務\n日期：2026-10-27｜整理者：Claude｜狀態：已結案 → D-141\n');
+  await add('tasks/inline.md', '# 任務\n日期：2026-10-27｜整理者：Claude｜狀態：討論中 → D-141\n');
   await add('tasks/missing.md', '# 任務\n\n建議模型：Opus\n\n狀態：進行中\n');
   await add('tasks/no-title.md', '狀態：進行中\n');
   await add('Claude Codex Discussion/2026-10-27-x.md', '# 討論\n\n日期：2026-10-27\n');
@@ -184,6 +185,48 @@ void test('tasks、討論稿與 docs/plans 第一層的檔案，標題下第一�
     'tasks/missing.md:3  狀態：  標題下第一個非空行沒有狀態',
     'tasks/no-title.md:1  # 標題  沒有一級標題',
   ]);
+});
+
+void test('D-195：結束的任務〈結果〉要有恰好一行填好的「延後的測試：」；進行中、審查請求、D-195 之前結束的不查；印出補測列數', async t => {
+  const { root, add, run } = await repo(t);
+  const task = (status: string, result?: string, title = '結果') => `# 任務\n\n狀態：${status}\n\n## 1. 做什麼\n\n延後的測試：寫在這裡不算\n${result === undefined ? '' : `\n## ${title}\n\n${result}\n`}`;
+  await add('tasks/doing.md', task('進行中', '延後的測試：（實作後填）'));
+  await add('tasks/part.md', task('已完成第一部分，第二部分進行中', '合併了一半。'));
+  await add('tasks/not-yet.md', task('完成條件還沒達成，實作中', '還沒。'));
+  await add('tasks/none.md', task('已合併（2026-11-08）', '延後的測試：無'));
+  await add('tasks/bold.md', task('已結案｜備註', '- **延後的測試**：「補測：存到一半中斷」、「補做：重貼」'));
+  await add('tasks/sub.md', task('已完成', '### Windows\n\n延後的測試：無', '結果（2026-11-08）'));
+  await add('tasks/missing.md', task('已結案', '合併了。'));
+  await add('tasks/no-result.md', task('完成：已合併'));
+  await add('tasks/todo.md', task('已完成', '延後的測試：（實作後填）'));
+  await add('tasks/empty-bold.md', task('已完成', '**延後的測試：**'));
+  await add('tasks/twice.md', task('已完成', '延後的測試：（實作後填）\n\n延後的測試：無'));
+  await add('tasks/no-quote.md', task('已完成', '延後的測試：補測：沒有括號'));
+  await add('tasks/quoted.md', task('已完成', '> 引言\n延後的測試：無'));
+  await add('tasks/fenced.md', task('已完成', '```\n延後的測試：無\n```\n\n<!-- 延後的測試：無 -->\n\n| 延後的測試：無 |\n|---|'));
+  await add('tasks/h3.md', task('已完成', '### 結果\n\n延後的測試：無', '10. 實機'));
+  await add('tasks/x-review.md', task('已完成', '通過'));
+  await add('tasks/w4.md', task('已合併', '合併了。'));
+  await add('docs/x.md', task('已完成', '合併了。'));
+  await add('docs/backlog.md', '# B\n\n## v1\n\n| 項目 | 觸發點 |\n|---|---|\n| 補測：不算 | 別節 |\n\n### 技術債\n\n| 項目 | 觸發點 |\n|---|---|\n| **補測：存到一半中斷**，影響小 | 空檔 |\n| 補做：重貼 | 空檔 |\n| 其他 | 空檔 |\n\n### 待決問題\n\n| 補做：也不算 | x |\n|---|---|\n');
+  const common = [
+    'tasks/empty-bold.md:11  延後的測試：  還沒填：寫「無」或技術債表的列名（D-195）',
+    'tasks/fenced.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/h3.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/missing.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/no-quote.md:11  延後的測試：  寫「無」，或用「」括住技術債表的列名，例如「補測：……」（D-195）',
+    'tasks/no-result.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/quoted.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/todo.md:11  延後的測試：  還沒填：寫「無」或技術債表的列名（D-195）',
+    'tasks/twice.md:13  延後的測試：  「延後的測試：」有 2 行，只能有一行（D-195）',
+  ];
+  assert.deepEqual(run(), common);
+  assert.equal(checkDocs(root, { exceptions: [] }).deferred, 2);
+  // 暫存區模式只對這次改到的任務對照列名；找不到的列報出來。
+  await add('tasks/ghost.md', task('已完成', '延後的測試：「補測：存到一半中斷」、「補測：不存在」'));
+  assert.deepEqual(run(true), [...common.slice(0, 2), 'tasks/ghost.md:11  延後的測試：  技術債表找不到「補測：不存在」開頭的列（D-195）', ...common.slice(2)]);
+  git(root, 'commit', '-q', '-m', 'x', '--no-verify');
+  assert.deepEqual(run(true).filter(p => p.startsWith('tasks/ghost.md')), []);
 });
 
 void test('例外表只蓋掉逐項列出的連結；沒用到的例外要報', async t => {
@@ -204,7 +247,7 @@ void test('命令列：有問題時 exit code 1 並逐行列出，沒有時印�
   const script = fileURLToPath(new URL('../tools/check-docs.ts', import.meta.url));
   await add('a.md', '# A\n\n[b](b.md)、[網站](https://example.com)\n');
   await add('b.md', '# B\n');
-  assert.equal(execFileSync(process.execPath, [script, '--root', root], { encoding: 'utf8', stdio: 'pipe' }).trim(), '文件檢查通過（工作樹）：2 個 Markdown 檔、1 個連結');
+  assert.equal(execFileSync(process.execPath, [script, '--root', root], { encoding: 'utf8', stdio: 'pipe' }).trim(), '文件檢查通過（工作樹）：2 個 Markdown 檔、1 個連結；待補測與補做 0 列（backlog 技術債，D-195）');
   await add('a.md', '# A\n\n[c](c.md)\n');
   assert.throws(
     () => execFileSync(process.execPath, [script, '--staged', '--root', root], { encoding: 'utf8', stdio: 'pipe' }),

@@ -1,6 +1,6 @@
 # 系統資料夾的防呆（給 Claude，本機執行）
 
-狀態：§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完，Windows 實機通過（2026-11-07，〈實作〉、〈Windows 實機〉）；Codex L2 第一輪的 F1～F4、第二輪的 F1、F4～F6 已修（`593d836`、`48ec6cf`），修正後 Windows 實機重測通過（W8、W9）；第三輪的 F1（續）已修（`d1c5667`）；第四輪的 F1a～F1d 由使用者決定改結構修正（`32d7c1e`，改成認資料夾本身），Windows 實機通過（W10）；第五輪的三項已修（`45ebe5b`、`e40405d`），Windows 實機通過（W11）；第六輪的兩項 P2 與一項 P3 使用者決定記成限制、不改程式（2026-11-08，〈實作〉的限制、[技術債](../docs/backlog.md#技術債)），L2 結束，待合併；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
+狀態：已合併進 `main`（2026-11-08，程式的最後一版 `e40405d`）。§1、§2 的程式與測試在分支 `claude/system-folder-guard` 做完，Windows 實機通過（2026-11-07，〈實作〉、〈Windows 實機〉）；Codex L2 第一輪的 F1～F4、第二輪的 F1、F4～F6 已修（`593d836`、`48ec6cf`），修正後 Windows 實機重測通過（W8、W9）；第三輪的 F1（續）已修（`d1c5667`）；第四輪的 F1a～F1d 由使用者決定改結構修正（`32d7c1e`，改成認資料夾本身），Windows 實機通過（W10）；第五輪的三項已修（`45ebe5b`、`e40405d`），Windows 實機通過（W11）；第六輪的兩項 P2 與一項 P3 使用者決定記成限制、不改程式（2026-11-08，〈實作〉的限制、[技術債](../docs/backlog.md#技術債)），L2 結束；§5 兩題使用者照建議決定；開工前的 Windows 實測做完（〈結果〉）；iPhone 的部分列進 backlog「下一次 iPhone 實機測試」
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。§1 會替家長搬動 vault 裡的資料夾，§2 會改哪些檔算卡組（`core/deck` 與 `state` 都用），屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。不新增、不改任何寫進檔案的格式，所以**不用開工前的格式查核**（[quality.md](../docs/agents/quality.md#開工前的格式查核) 只管格式）。
 

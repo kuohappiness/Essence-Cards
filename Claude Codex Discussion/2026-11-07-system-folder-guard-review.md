@@ -1,6 +1,6 @@
 # 系統資料夾的防呆：Codex L2 審查
 
-狀態：L2 結束（2026-11-08，待審版 `e40405d`）。第六輪的兩項 P2 與一項 P3 使用者決定記成限制、不改程式（技術債），待合併
+狀態：L2 結束（2026-11-08，待審版 `e40405d`）。第六輪的兩項 P2 與一項 P3 使用者決定記成限制、不改程式（技術債）；已合併進 `main`
 
 審查請求：[tasks/system-folder-guard-review.md](../tasks/system-folder-guard-review.md)。Codex 的回報接在下面。
 
