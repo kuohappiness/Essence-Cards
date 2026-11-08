@@ -1,6 +1,6 @@
 # 系統資料夾的防呆：L2 審查請求（給新開的 Codex session）
 
-狀態：待審（第六輪，2026-11-08）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）、第四輪 F1a～F1d、第五輪 F1a（續一、續二）與 F1c（續）已修
+狀態：審查結束（第六輪，2026-11-08，待審版 `e40405d`）；第一輪 F1～F4、第二輪 F1、F4～F6、第三輪 F1（續）、第四輪 F1a～F1d、第五輪 F1a（續一、續二）與 F1c（續）已修；第六輪的兩項 P2 與一項 P3 使用者決定記成限制、不改程式
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。只審查，不改產品程式；可以在隔離環境重現。回報接在這個 worktree 的 `Claude Codex Discussion/2026-11-07-system-folder-guard-review.md` 最後（不用 commit，Claude 整合時會 commit）；所有檔案都在這個 worktree，不要寫到主資料夾。
 
