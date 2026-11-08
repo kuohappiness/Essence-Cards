@@ -144,8 +144,8 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // ID 分在好幾篇或只剩一部分（家長拆開、刪了一些目標）：停下，不自動補回。
     if (deck.ids.some(id => here.has(id)) || paths.some(each => each.length)) return { kind: 'deck', index, situation: 'split', path: deck.path };
     // 記成開始建了或寫出過、但 ID 一個都找不到：可能建好之後在記下之前中斷、家長又刪了，也可能真的沒建成，分不出來就停下（R4-1）。
-    if (deck.stage !== 'pending') return { kind: 'deck', index, situation: 'missing', path: deck.path };
-    // ID 一個都不在任何卡組、從來沒碰過 vault：照全文建；目的地被別人用了往後加。
+    if (deck.stage !== 'pending' && deck.stage !== 'rebuild') return { kind: 'deck', index, situation: 'missing', path: deck.path };
+    // ID 一個都不在任何卡組，而且從來沒碰過 vault 或家長選了重建：照全文建；目的地被別人用了往後加。
     let path = deck.path;
     if (found.text !== null) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), io.names())}.md`;
     update({ path, stage: 'started' });
@@ -189,9 +189,9 @@ export function skipDeck(job: CardJob, index: number): Released {
   return { job: { ...job, save: { ...job.save!, decks } }, retire: deck.stage === 'pending' ? [] : deck.ids };
 }
 
-/** 重建這一篇（只在 ID 一個都找不到時可以選）：當成還沒碰過 vault，照全文建；目的地被用了往後加。 */
+/** 重建這一篇（只在 ID 一個都找不到時可以選）：照全文建，目的地被用了往後加；曾經開始建過的事實留著（L2-4），放棄或跳過時 ID 照樣不再配出。 */
 export function rebuildDeck(job: CardJob, index: number): CardJob {
-  const decks = job.save!.decks.map((each, i) => i === index ? { ...each, stage: 'pending' as const } : each);
+  const decks = job.save!.decks.map((each, i) => i === index ? { ...each, stage: 'rebuild' as const } : each);
   return { ...job, save: { ...job.save!, decks } };
 }
 

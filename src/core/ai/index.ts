@@ -9,6 +9,6 @@ export type { ReplyIssue } from './reply.ts';
 export { freeName, inspectReply, planDraft, rawPath } from './draft.ts';
 export type { ExistingNow, Inspection } from './draft.ts';
 export { isJob, readJobs, reservedIds } from './job.ts';
-export type { CardJob } from './job.ts';
+export type { CardJob, SavedDeck } from './job.ts';
 export { abandonJob, beginSave, publish, rebuildDeck, skipDeck } from './publish.ts';
 export type { CreateResult, DeckStop, PublishIo, PublishResult } from './publish.ts';

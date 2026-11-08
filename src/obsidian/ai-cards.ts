@@ -1,5 +1,5 @@
 import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
-import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject } from '../core/ai/index.ts';
+import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
 import { codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
 import type { State, WriteBlock } from '../state/index.ts';
@@ -28,7 +28,7 @@ export interface AiCardsDeps {
 /** 存草稿或繼續之後：done 是快照寫成（製卡成功）；stop 寫原因，deck 是要家長選的那一篇。 */
 export type Outcome =
   | { kind: 'done'; decks: string[]; targets: number }
-  | { kind: 'stop'; message: string; deck?: DeckStop & { name: string; stage: 'pending' | 'started' | 'written' } };
+  | { kind: 'stop'; message: string; deck?: DeckStop & { name: string; stage: SavedDeck['stage'] } };
 
 const BLOCKED: Record<WriteBlock, string> = {
   phone: 'AI 製卡只在電腦上做',

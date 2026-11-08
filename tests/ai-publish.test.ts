@@ -276,6 +276,33 @@ void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前�
     assert.equal(result.kind, 'done');
     assert.ok(files.get(WORD)!.includes('^aaaaa2'));
   }
+  // 重建之後又停在建檔之前（原文讀不到、寫入門檻）：曾經開始建過的事實不能消失，放棄與跳過照樣不再配出，重開也一樣（L2-4）。
+  {
+    const { io, box, reload } = await between(createWord, false);
+    const rebuilt = rebuildDeck(reload(), 0);
+    io.store(rebuilt);
+    const read = io.read.bind(io);
+    const error = Error('原文還在同步');
+    io.read = () => Promise.reject(error);
+    assert.equal((await publish(rebuilt, io)).kind, 'unreadable');
+    io.read = read;
+    const again = reload();
+    assert.deepEqual(abandonJob(again).retire, ['aaaaa2', 'bbbbb2']);
+    assert.deepEqual(skipDeck(again, 0).retire, ['aaaaa2', 'bbbbb2']);
+    // 再選一次重建照樣能建：允許重建不會因為中斷而消失。
+    box.crash = () => false;
+    assert.equal((await publish(again, io)).kind, 'done');
+  }
+  // 重建寫到一半又當掉：回到開始建了，要再問一次，不會自動再建。
+  {
+    const { io, box, reload } = await between(createWord, false);
+    const rebuilt = rebuildDeck(reload(), 0);
+    io.store(rebuilt);
+    box.crash = createWord;
+    await assert.rejects(publish(rebuilt, io), Crash);
+    box.crash = () => false;
+    assert.deepEqual(await publish(reload(), io), { kind: 'deck', index: 0, situation: 'missing', path: WORD });
+  }
   // 跳過之後其他篇照常發布，快照的對象不列它。
   {
     const { files, io, reload } = await between(createWord, false);

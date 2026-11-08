@@ -5,8 +5,8 @@ import type { RuleSubject } from './rules.ts';
 // 待貼回的工作（tasks/ai-cards-mvp.md §3）與存草稿的恢復資料（§5）：存在這台電腦，不寫進 vault。
 // 按「複製提示」的當下就存每一部分的全文；之後外掛更新、規則或模板改了，這一份照舊是當時送出的文字。
 
-/** 一篇卡組在恢復資料裡的樣子。stage：pending 還沒碰 vault；started 記成開始建了（可能已經建了）；written 建好、讀回核對過（R3-1、R4-1）。 */
-export interface SavedDeck { path: string; text: string; sha256: string; ids: string[]; stage: 'pending' | 'started' | 'written'; skipped: boolean }
+/** 一篇卡組在恢復資料裡的樣子。stage：pending 還沒碰 vault；started 記成開始建了（可能已經建了）；written 建好、讀回核對過（R3-1、R4-1）；rebuild 曾經開始建過、家長選了重建（L2-4：允許重建和曾經建過是兩件事，ID 照樣不再配出）。 */
+export interface SavedDeck { path: string; text: string; sha256: string; ids: string[]; stage: 'pending' | 'started' | 'written' | 'rebuild'; skipped: boolean }
 
 /** 存草稿的恢復資料（§5 第 2 步）：之後每一步都照這份寫，不重新整理、不重新查已有目標、不重新配號。 */
 export interface SaveState {
@@ -60,7 +60,7 @@ function isExisting(value: unknown): value is ExistingTarget {
 }
 function isDeck(value: unknown): value is SavedDeck {
   return isObject(value) && isString(value.path) && isString(value.text) && isString(value.sha256) && strings(value.ids)
-    && (value.stage === 'pending' || value.stage === 'started' || value.stage === 'written') && typeof value.skipped === 'boolean';
+    && (value.stage === 'pending' || value.stage === 'started' || value.stage === 'written' || value.stage === 'rebuild') && typeof value.skipped === 'boolean';
 }
 function isSave(value: unknown): value is SaveState {
   if (!isObject(value)) return false;
