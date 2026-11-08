@@ -19,8 +19,8 @@ export interface PublishIo {
   /** 讀檔；不存在是 null，讀不到丟錯（讀不到不算不存在）。 */
   read(path: string): Promise<string | null>;
   create(path: string, text: string): Promise<CreateResult>;
-  /** 建卡組：寫入的當下再核對一次這些 ID 沒有人用（卡組與複習紀錄），有人用了是 refused、不建。 */
-  createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' }>;
+  /** 建卡組：寫入的當下再核對一次這些 ID 沒有人用（卡組與複習紀錄）、整個 vault 沒有同名檔，不符合是 refused、不建。 */
+  createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
   /** 這些 ID 現在在哪幾篇卡組（含引言框的行尾 ID）：等已知的變動讀完才回答；占用資訊不完整（有讀不到的、讀不完）是 null。 */
   where(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 整個 vault 現在的檔名（小寫、不含 .md）。 */
@@ -155,16 +155,16 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // 即將建立時再用整個 vault 的檔名核對一次（D-081、L2-9）：同步可能在規畫之後送來別的資料夾的同名檔。路徑跟著「開始建了」一起存好才建。
     let path = deck.path;
     const names = io.names();
-    if (found.text !== null || names.has(fileName(path).toLowerCase())) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), names)}.md`;
+    if (found.text !== null) names.add(fileName(path).toLowerCase());
+    if (names.has(fileName(path).toLowerCase())) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), names)}.md`;
     const prior = deck.stage;
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
     // 寫入前就擋下了，確定沒有寫：階段改回去，照現在的樣子重新判斷（剛搬走就跟過去；還沒建過而 ID 已被占用就停下）。
-    if (created.kind === 'refused') {
+    if (created.kind === 'refused' || created.kind === 'exists') {
       update({ stage: prior });
       return tries < 2 ? settle(index, tries + 1) : { kind: 'deck', index, situation: 'taken', path };
     }
-    if (created.kind === 'exists') return { kind: 'deck', index, situation: 'missing', path };
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });
     return null;
@@ -186,7 +186,8 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   if ('kind' in located) return located;
   // 整個 vault 的檔名再核對一次（L2-9）。已經準備發布、那個位置又有檔的，交給第 6 步比內容（不同就停下，§5），不換位置。
   const names = io.names();
-  const taken = located.text === null ? names.has(fileName(save().snapshotPath).toLowerCase()) : !before;
+  if (located.text !== null && !before) names.add(fileName(save().snapshotPath).toLowerCase());
+  const taken = located.text === null || !before ? names.has(fileName(save().snapshotPath).toLowerCase()) : false;
   const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(fileName(save().snapshotPath), names)}.md` : save().snapshotPath;
   if (stale || snapshotPath !== save().snapshotPath) {
     let time = before?.time;

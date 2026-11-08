@@ -84,6 +84,8 @@ export function createAiCards(deps: AiCardsDeps) {
       }
     }
   }
+  /** 寫入的當下問：整個 vault 還沒有這個檔名（D-081）；只在這個路徑沒有檔時問。 */
+  const nameFree = (path: string) => (): boolean => !deps.names().has(fileName(path).toLowerCase());
   /** 照恢復資料做第 3～7 步；每一步改了恢復資料都先存。 */
   async function run(job: CardJob): Promise<Outcome> {
     const state = deps.state();
@@ -94,7 +96,7 @@ export function createAiCards(deps: AiCardsDeps) {
       remove(done) { drop(done); },
       read: path => deps.files.read(path),
       create: (path, text) => state.aiCreate(path, text),
-      createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids),
+      createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids, nameFree(path)),
       where: ids => state.aiWhere(ids),
       names: deps.names,
       now: deps.now,

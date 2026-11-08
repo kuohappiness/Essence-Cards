@@ -61,6 +61,7 @@ function vault(files = new Map<string, string>()) {
 }
 const WORD = 'Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md';
 const GRAMMAR = 'Essence Cards/學業/國二上/英文/國二上英文 L3 文法.md';
+const fileNameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase();
 const SNAPSHOT = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports： Week 1.md';
 
 void test('§5 一次做完：原文（送出的每一部分與回覆原文逐位元組相同）→ 兩篇卡組 → 快照 → 清理', async () => {
@@ -449,6 +450,21 @@ void test('§5 第一次建檔就發現 ID 被占用（R2-2）：不把別篇當
     files.delete(WORD);
     assert.equal((await publish(reload(), io)).kind, 'done');
   }
+});
+
+void test('§5 檔名清單比檔案事件慢（R2-4）：讀到目的地已有檔，就算清單還沒列也往後加', async () => {
+  const { files, io } = vault();
+  const job = saved(copied());
+  io.store(job);
+  files.set(WORD, '家長剛建的筆記');
+  files.set(SNAPSHOT, '別人的筆記');
+  const list = io.names.bind(io);
+  io.names = () => { const names = list(); names.delete(fileNameOf(WORD)); names.delete(fileNameOf(SNAPSHOT)); return names; };
+  const result = await publish(job, io);
+  assert.deepEqual(result, { kind: 'done', decks: [WORD.replace('.md', ' 2.md'), GRAMMAR], targets: 3 });
+  assert.equal(files.get(WORD), '家長剛建的筆記');
+  assert.equal(files.get(SNAPSHOT), '別人的筆記');
+  assert.ok(files.has(SNAPSHOT.replace('.md', ' 2.md')));
 });
 
 void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前刪掉那一篇，繼續停下、跳過與放棄都不把 ID 當成沒用過；開始建了、還沒建檔就當掉也停下', async () => {

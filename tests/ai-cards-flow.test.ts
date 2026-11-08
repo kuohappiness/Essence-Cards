@@ -197,7 +197,7 @@ void test('§5 卡組剛搬走、還沒讀完（L2-2）：等讀完再判斷，�
   {
     const { memory, state, job } = await snapshotFailed(t);
     const deck = job.save!.decks[0];
-    assert.deepEqual(await state.aiCreateDeck(MOVED, deck.text, deck.ids), { kind: 'refused', why: 'ids' });
+    assert.deepEqual(await state.aiCreateDeck(MOVED, deck.text, deck.ids, () => true), { kind: 'refused', why: 'ids' });
     assert.ok(!memory.texts.has(MOVED));
   }
 });
@@ -275,6 +275,26 @@ void test('§5 建卡組的寫入回呼裡再核對（R2-1）：最後一次檢�
     assert.equal(result.kind, 'stop', JSON.stringify(result));
     assert.ok(result.kind === 'stop' && result.deck);
     assert.ok(!memory.texts.has(WORD));
+  }
+});
+
+void test('§5 寫入的當下再核對整個 vault 的檔名（R2-4）：排隊之後才在別的資料夾出現同名檔，卡組與快照都往後加', async t => {
+  for (const target of [WORD]) {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const { cards } = await load(t, memory, machine(), Math.random);
+    const copied = await cards.copy(form);
+    assert.ok('job' in copied);
+    const gate = gateModify(memory, target);
+    const saving = cards.save(copied.job, reply(), null);
+    await gate.reached;
+    const same = '其他資料夾/' + target.slice(target.lastIndexOf('/') + 1);
+    memory.write(same, '別人的筆記');
+    gate.open();
+    const result = await saving;
+    assert.equal(result.kind, 'done', JSON.stringify(result));
+    assert.ok(!memory.texts.has(target), target);
+    assert.ok(memory.texts.has(target.replace('.md', ' 2.md')), target);
+    assert.equal(memory.texts.get(same), '別人的筆記');
   }
 });
 

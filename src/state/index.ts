@@ -240,8 +240,8 @@ export interface State {
   aiWhere(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
   aiCreate(path: string, text: string): Promise<CreateResult>;
-  /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇或複習紀錄裡就回 refused、不建；寫入回呼裡再核對一次（L2-2、R2-1）。 */
-  aiCreateDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' }>;
+  /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇或複習紀錄裡就回 refused、不建；寫入回呼裡再核對一次，並確認整個 vault 沒有同名檔（nameFree，R2-4）。 */
+  aiCreateDeck(path: string, text: string, ids: readonly string[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
   /**
    * 不看是哪一篇的受阻原因，依 state 目前所知、和寫入的門檻同一個順序：phone、loading、closed、backup、unread；沒有是 null。
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
@@ -721,7 +721,7 @@ export function createState(options: StateOptions): State {
       return tracker.where(ids);
     },
     aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
-    aiCreateDeck: (path, text, ids) => writes.enqueue(() => writes.create(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' as const : null })),
+    aiCreateDeck: (path, text, ids, nameFree) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' })),
     writeBlock: () => writes.blockedNow(),
     backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(path, ids) { tracker.removed(path, ids); },

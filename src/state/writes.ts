@@ -46,7 +46,11 @@ export type WriteResult =
  * 建檔前的核對（AI 製卡，tasks/ai-cards-mvp.md §5，R2-1）：check 在進入寫入回呼前與回呼裡各問一次，回傳不能建的原因（沒問題是 null）。
  * 回呼裡還有沒讀完的變動時，放棄這一次、讀完再來。
  */
-export interface CreateGuard<Why extends string> { check: () => Why | null }
+export interface CreateGuard<Why extends string> {
+  check: () => Why | null;
+  /** 只在寫入回呼裡問、而且這個路徑沒有檔的時候（整個 vault 的檔名）；同路徑已有檔照舊回 exists。 */
+  atWrite?: () => Why | null;
+}
 
 /** 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。 */
 export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: WriteBlock } | { kind: 'failed'; error: unknown };
@@ -212,7 +216,7 @@ export function createWrites(options: WritesOptions) {
           if (has) { exists = true; return current; }
           if (guard) {
             if (waiting(path)) { again = true; throw new NotNow(); }
-            why = guard.check();
+            why = guard.check() ?? guard.atWrite?.() ?? null;
             if (why !== null) throw new NotNow();
           }
           return text;
