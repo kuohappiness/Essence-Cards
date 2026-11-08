@@ -52,6 +52,17 @@ export function createAiCards(deps: AiCardsDeps) {
   const put = (job: CardJob): void => { persist([job, ...jobs.filter(each => each.id !== job.id)]); };
   const drop = (job: CardJob): void => { persist(jobs.filter(each => each.id !== job.id)); };
   const subjectOf = (job: CardJob): Pick<RuleSubject, 'subject' | 'r3'> => job.subject;
+  const GONE: Outcome = { kind: 'stop', message: '這次製卡已經結束或放棄了；要再做一份請重新複製提示' };
+  const SAVING: Outcome = { kind: 'stop', message: '這一課還在存，沒有停下來；等一下再打開「AI 製卡」看結果' };
+  /** 正在存、選擇或放棄的工作（L2-1）。視窗可以關掉重開，所以記在這裡、不記在視窗：同一個工作同時只有一個操作，放棄不會和還在跑的存檔交錯。 */
+  const busy = new Set<string>();
+  async function exclusive<T>(id: string, work: () => Promise<T>): Promise<T | Outcome> {
+    if (busy.has(id)) return SAVING;
+    busy.add(id);
+    try { return await work(); } finally { busy.delete(id); }
+  }
+  /** 這個工作現在的樣子；視窗留著的那一份可能已經完成或放棄，不拿它當數（否則存回去就復活了）。 */
+  const current = (job: CardJob): CardJob | undefined => jobs.find(each => each.id === job.id);
 
   /** PublishResult 換成給家長看的字（§5）；寫不進去的錯誤交給錯誤紀錄。 */
   function outcome(job: CardJob, result: PublishResult): Outcome {
@@ -77,9 +88,9 @@ export function createAiCards(deps: AiCardsDeps) {
   async function run(job: CardJob): Promise<Outcome> {
     const state = deps.state();
     if (!state) return { kind: 'stop', message: BLOCKED.loading };
-    let current = job;
+    let latest = job;
     const io: PublishIo = {
-      store(next) { current = next; put(next); },
+      store(next) { latest = next; put(next); },
       remove(done) { drop(done); },
       read: path => deps.files.read(path),
       create: (path, text) => state.aiCreate(path, text),
@@ -90,8 +101,8 @@ export function createAiCards(deps: AiCardsDeps) {
     try {
       const result = await publish(job, io);
       // 通知寫學習目標數：寫成的篇裡的學習目標，候選卡片不算（§7）。
-      if (result.kind === 'done') return { ...result, targets: current.save!.decks.filter(deck => !deck.skipped).reduce((sum, deck) => sum + parseDeck(deck.text).targets.length, 0) };
-      return outcome(current, result);
+      if (result.kind === 'done') return { ...result, targets: latest.save!.decks.filter(deck => !deck.skipped).reduce((sum, deck) => sum + parseDeck(deck.text).targets.length, 0) };
+      return outcome(latest, result);
     } catch (error) {
       deps.onError(error);
       return { kind: 'stop', message: '存到一半出了問題，這次停在一半；按「繼續」會從停下的地方接著做' };
@@ -163,30 +174,34 @@ export function createAiCards(deps: AiCardsDeps) {
     /**
      * 存成草稿（§5 第 1、2 步之後接著做）。同一個工作已經用另一份回覆存過一部分就停下；用同一份就從停下的地方接著做。
      */
-    async save(job: CardJob, reply: string, service: string | null): Promise<Outcome> {
-      const latest = jobs.find(each => each.id === job.id);
-      if (!latest) return { kind: 'stop', message: '找不到這次複製的提示（可能放太久被清掉了）；請重新複製一次' };
-      if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆存過一部分：要繼續上一次的，或放棄它' };
+    save: (job: CardJob, reply: string, service: string | null): Promise<Outcome> => exclusive(job.id, async () => {
+      const latest = current(job);
+      if (!latest) return { kind: 'stop', message: '找不到這次複製的提示，可能已經結束了或放太久被清掉了；請重新複製一次' } satisfies Outcome;
+      if (latest.save) return latest.save.replySha === sha256Hex(reply) ? run(latest) : { kind: 'stop', message: '這次的提示已經用另一份回覆存過一部分：要繼續上一次的，或放棄它' } satisfies Outcome;
       const state = deps.state();
-      if (!state) return { kind: 'stop', message: BLOCKED.loading };
+      if (!state) return { kind: 'stop', message: BLOCKED.loading } satisfies Outcome;
       const inspection = inspectReply(reply, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id));
-      if (inspection.errors.length) return { kind: 'stop', message: '還有擋住的地方，先改好再存' };
+      if (inspection.errors.length) return { kind: 'stop', message: '還有擋住的地方，先改好再存' } satisfies Outcome;
       const count = inspection.pieces.reduce((sum, piece) => sum + piece.names.length, 0);
       const ids = state.aiIds(count);
-      if (typeof ids === 'string') return { kind: 'stop', message: BLOCKED[ids] };
+      if (typeof ids === 'string') return { kind: 'stop', message: BLOCKED[ids] } satisfies Outcome;
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;
       const planned = planDraft(inspection, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id), () => ids[n++], deps.names(), started.slice(0, 10));
       const saved = beginSave(latest, reply, service, planned, started);
       // 第 2 步：恢復資料先存進這台電腦，存不進去就不碰 vault。
-      try { put(saved); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次' }; }
+      try { put(saved); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦，這次沒有寫任何檔；請再按一次' } satisfies Outcome; }
       return run(saved);
-    },
+    }),
     /** 繼續存上一次的結果（§5〈中斷與重試〉）：不用再貼一次。 */
-    resume: (job: CardJob): Promise<Outcome> => run(jobs.find(each => each.id === job.id) ?? job),
+    resume: (job: CardJob): Promise<Outcome> => exclusive(job.id, () => {
+      const latest = current(job);
+      return latest ? run(latest) : Promise.resolve(GONE);
+    }),
     /** 家長選了：跳過這一篇（其他篇照常發布）或重建這一篇（只在 ID 一個都找不到時）。 */
-    choose(job: CardJob, index: number, choice: 'skip' | 'rebuild'): Promise<Outcome> {
-      const latest = jobs.find(each => each.id === job.id) ?? job;
+    choose: (job: CardJob, index: number, choice: 'skip' | 'rebuild'): Promise<Outcome> => exclusive(job.id, () => {
+      const latest = current(job);
+      if (!latest) return Promise.resolve(GONE);
       let next: CardJob;
       if (choice === 'skip') {
         const released = skipDeck(latest, index);
@@ -195,13 +210,14 @@ export function createAiCards(deps: AiCardsDeps) {
       } else next = rebuildDeck(latest, index);
       try { put(next); } catch (error) { deps.onError(error); return Promise.resolve({ kind: 'stop', message: '存不進這台電腦；請再按一次' }); }
       return run(next);
-    },
+    }),
     /**
      * 放棄（§5）：只有還沒發布的能放棄。已寫成的卡組照樣是草稿、不刪；開始建了或寫出過的篇，ID 進不再配出的清單。回傳留下的篇。
      * 快照其實已經寫成（清理前中斷）時不放棄，照發布處理。
      */
-    async abandon(job: CardJob): Promise<{ left: string[] } | Outcome> {
-      const latest = jobs.find(each => each.id === job.id) ?? job;
+    abandon: (job: CardJob): Promise<{ left: string[] } | Outcome> => exclusive<{ left: string[] } | Outcome>(job.id, async () => {
+      const latest = current(job);
+      if (!latest) return GONE;
       if (latest.save?.published) {
         try {
           const text = await deps.files.read(latest.save.snapshotPath);
@@ -215,7 +231,7 @@ export function createAiCards(deps: AiCardsDeps) {
       deps.store.retire(retire);
       drop(latest);
       return { left };
-    },
+    }),
   };
 }
 export type AiCards = ReturnType<typeof createAiCards>;

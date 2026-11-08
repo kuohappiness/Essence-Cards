@@ -19,6 +19,7 @@ const reply = (extra = '') => [
   '國二上英文 L3 文法', '', '## 文法', '', '- 能用 be going to 說未來的計畫' + extra, '    - 出處：p.42', '    - 我明天要去游泳。I ＿＿ swim tomorrow. :: am going to', '<<<完>>>',
 ].join('\n');
 const form: CardForm = { subject: 'english', term: '國二上', unit: 'L3 Sports', purpose: '準備段考', supplement: false, adjust: '', material: '' };
+const WORD = 'Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md';
 
 /** 這台電腦的存放（localStorage 的替身）與一次載入（state＋製卡流程）；reload 是重開 Obsidian。 */
 function machine() {
@@ -83,6 +84,33 @@ void test('§2～§5 複製 → 貼回 → 存成草稿：提示照存下的、�
   assert.deepEqual(state.deckTargets('Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md'), []);
   assert.equal((await state.activateDraft('Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md', null)).kind, 'done');
   assert.equal(state.deckTargets('Essence Cards/學業/國二上/英文/國二上英文 L3 單字.md').length, 1);
+});
+
+void test('§5 同一個工作同時只有一個操作（L2-1）：存到一半關掉重開，繼續、放棄、選擇都不動它；存完之後舊視窗也叫不回來', async t => {
+  const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+  const box = machine();
+  const { cards } = await load(t, memory, box, Math.random);
+  const copied = await cards.copy(form);
+  assert.ok('job' in copied);
+  const held = memory.holdModify(WORD);
+  const saving = cards.save(copied.job, reply(), null);
+  while (!memory.texts.has(WORD)) await new Promise(resolve => setTimeout(resolve, 1));
+  // 工作已經記成開始建了：重開視窗看到的是同一個工作，四個操作都要回「還在存」，工作不能被清掉。
+  const stale = cards.jobs()[0];
+  assert.equal(stale.save!.decks[0].stage, 'started');
+  for (const again of [cards.resume(stale), cards.abandon(stale), cards.choose(stale, 0, 'skip'), cards.save(stale, reply(), null)]) assert.match((await again as { message: string }).message, /還在存/);
+  assert.deepEqual(box.saved.retired, []);
+  assert.equal(cards.jobs().length, 1);
+  held.release();
+  const result = await saving;
+  assert.equal(result.kind, 'done', JSON.stringify(result));
+  assert.deepEqual(cards.jobs(), []);
+  // 舊視窗還留著那個工作：不能讓它復活，也不能再寫。
+  const before = new Map(memory.texts);
+  for (const late of [() => cards.resume(stale), () => cards.abandon(stale), () => cards.choose(stale, 0, 'rebuild'), () => cards.save(stale, reply(), null)]) assert.match((await late() as { message: string }).message, /已經結束|找不到/);
+  assert.deepEqual(cards.jobs(), []);
+  assert.deepEqual(box.saved.retired, []);
+  assert.deepEqual(memory.texts, before);
 });
 
 void test('§5 寫到一半失敗 → 重新載入：預留的 ID 補 ID 與另一次製卡都避開（R2-3）；同一個工作貼不同的回覆停下；繼續不用再貼；放棄後 ID 不再配出', async t => {
