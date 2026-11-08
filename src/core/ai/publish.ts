@@ -28,8 +28,8 @@ export interface PublishIo {
   now(): { ms: number; offset: number };
 }
 
-/** 一篇停下來要家長選（§5〈中斷與重試〉）：missing 是 ID 一個都找不到（可以重建）；split 是 ID 分在好幾篇或只剩一部分。 */
-export interface DeckStop { kind: 'deck'; index: number; situation: 'missing' | 'split'; path: string }
+/** 一篇停下來要家長選（§5〈中斷與重試〉）：missing 是 ID 一個都找不到（可以重建）；split 是 ID 分在好幾篇或只剩一部分；taken 是這一篇還沒建過，它的 ID 卻已經有人用了。 */
+export interface DeckStop { kind: 'deck'; index: number; situation: 'missing' | 'split' | 'taken'; path: string }
 export type PublishResult =
   | { kind: 'done'; decks: string[]; targets: number }
   | { kind: 'blocked'; reason: string }
@@ -122,7 +122,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   }
 
   /** 第 4 步的一篇：先記成開始建了、存好，才去建檔；建好、讀回核對過，再記成寫出過。這一篇算寫成（或跳過）回 null，否則回停下的原因。 */
-  const settle = async (index: number): Promise<PublishResult | null> => {
+  const settle = async (index: number, tries = 0): Promise<PublishResult | null> => {
     const deck = save().decks[index];
     if (deck.skipped) return null;
     const found = await read(deck.path);
@@ -140,6 +140,8 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const here = deck.ids.filter(id => inFile.has(id));
     const paths = deck.ids.map(id => (where.get(id) ?? []).filter(path => path !== deck.path));
     const other = paths[0]?.[0];
+    // 還沒碰過 vault 的篇不可能被搬走：它的 ID 出現在別處是撞號或同步來的，不能算成自己（R2-2）。
+    if (deck.stage === 'pending' && (here.length || paths.some(each => each.length))) return { kind: 'deck', index, situation: 'taken', path: deck.path };
     if (!here.length && other !== undefined && paths.every(each => each.length === 1 && each[0] === other)) {
       // 家長把它改名或搬走了：照現在的位置算寫成，不在舊位置再建一份。
       update({ path: other, stage: 'written' });
@@ -154,10 +156,14 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     let path = deck.path;
     const names = io.names();
     if (found.text !== null || names.has(fileName(path).toLowerCase())) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), names)}.md`;
+    const prior = deck.stage;
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
-    // 建之前才發現 ID 已經在某一篇（剛搬走或同步送來）：這一篇已記成開始建了，回頭照現在的樣子重新判斷，不會再走到建檔。
-    if (created.kind === 'refused') return settle(index);
+    // 寫入前就擋下了，確定沒有寫：階段改回去，照現在的樣子重新判斷（剛搬走就跟過去；還沒建過而 ID 已被占用就停下）。
+    if (created.kind === 'refused') {
+      update({ stage: prior });
+      return tries < 2 ? settle(index, tries + 1) : { kind: 'deck', index, situation: 'taken', path };
+    }
     if (created.kind === 'exists') return { kind: 'deck', index, situation: 'missing', path };
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });

@@ -77,8 +77,8 @@ export function createAiCards(deps: AiCardsDeps) {
       case 'deck': {
         const deck = job.save!.decks[result.index];
         const name = fileName(deck.path);
-        const message = result.situation === 'split'
-          ? `「${name}」的學習目標現在分在好幾篇，或只剩一部分；不會自動補回`
+        const message = result.situation === 'taken' ? `「${name}」要用的學習目標 ID 已經被別的卡組或複習紀錄用了，這一篇沒有建`
+          : result.situation === 'split' ? `「${name}」的學習目標現在分在好幾篇，或只剩一部分；不會自動補回`
           : deck.stage === 'written' ? `「${name}」寫成之後找不到了（可能被刪掉）；不會自動補回` : `上一次建「${name}」時中斷，現在找不到它；不會自動補回`;
         return { kind: 'stop', message, deck: { ...result, name, stage: deck.stage } };
       }

@@ -420,6 +420,37 @@ void test('§5 跨午夜才補完（L2 規格核對）：檔名照開始存草�
   assert.ok(files.get(SNAPSHOT)!.startsWith('---\n日期: 2026-11-08\n時間: 2026-11-08T10:23:45+08:00\n'));
 });
 
+void test('§5 第一次建檔就發現 ID 被占用（R2-2）：不把別篇當成自己搬走了，回報占用，這一篇維持沒碰過 vault', async () => {
+  // 建檔時才被擋下（別的筆記剛同步進來）：階段改回來，不寫快照。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const other = 'Essence Cards/學業/國二上/英文/剛同步.md';
+    io.createDeck = (path, text, ids) => {
+      if (path !== WORD) return io.create(path, text);
+      files.set(other, `- 別的目標 ^${ids[0]}\n    - 別的題目 :: 別的答案\n`);
+      return Promise.resolve({ kind: 'refused', why: 'ids' });
+    };
+    assert.deepEqual(await publish(job, io), { kind: 'deck', index: 0, situation: 'taken', path: WORD });
+    assert.ok(!files.has(SNAPSHOT));
+    assert.ok(!files.has(WORD));
+    // 重開也一樣：沒碰過 vault 的篇不會跟到別篇。
+    const again = reload();
+    assert.equal(again.save!.decks[0].stage, 'pending');
+    assert.deepEqual(await publish(again, io), { kind: 'deck', index: 0, situation: 'taken', path: WORD });
+    assert.deepEqual(skipDeck(again, 0).retire, []);
+  }
+  // 原草稿真的搬走（曾經開始建過）：照樣跟到新位置。
+  {
+    const { files, io, reload } = await firstWritten();
+    const moved = 'Essence Cards/學業/國二上/英文/單字 改名.md';
+    files.set(moved, files.get(WORD)!);
+    files.delete(WORD);
+    assert.equal((await publish(reload(), io)).kind, 'done');
+  }
+});
+
 void test('§5 開始建了（R4-1）：兩個間隔各當掉一次、重開前刪掉那一篇，繼續停下、跳過與放棄都不把 ID 當成沒用過；開始建了、還沒建檔就當掉也停下', async () => {
   // 「記成開始建了 → 建檔」之間當掉：檔沒建，ID 哪裡都沒有，但不能確定，停下問。
   const between = async (crash: (what: 'store' | 'create' | 'remove', path?: string) => boolean, remove: boolean) => {
