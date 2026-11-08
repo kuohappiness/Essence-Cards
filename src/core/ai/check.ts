@@ -372,6 +372,9 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
       } else if (title === '候選卡片') {
         order.push({ kind: 'candidate', line: block.line });
         parseBox(inner);
+        // 候選是之後會搬出去出題的完整目標，比較卡的錯誤分類和本文相同（R2-6）；行號換回 text 的行。
+        const boxText = inner.map(l => l.raw).join('\n');
+        checkPick(boxText, parseDeck(boxText), (line, level, code, msg) => { issue(inner[line - 1].no, level, code, msg); });
         if (head?.[2] !== '-') issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
         for (const node of roots) candidates.push(analyzeTarget(node, 'candidate'));
         if (roots.length > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(roots.length)} 個，最多 5 個（§2-9）`);

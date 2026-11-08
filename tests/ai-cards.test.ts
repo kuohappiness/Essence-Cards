@@ -260,6 +260,21 @@ void test('§4 正式解析器判成錯誤的目標要擋（L2-3）：中翻英�
   assert.equal(twoIds.errors.length, 1, JSON.stringify(twoIds.errors));
 });
 
+void test('§4 候選卡片的比較組和本文同一套擋法（R2-6）：混了別種題目、認不出來都擋，行號對得上；合法的候選不擋', () => {
+  const english = subject('english');
+  const f = form({ subject: 'english', unit: 'L3 Sports' });
+  const box = (lines: string[]) => ['## 單字', '', '- borrow 英翻中', '    - 出處：p.40', '    - borrow :: 借入', '', '> [!note]- 候選卡片', ...lines, '<<<完>>>'].join('\n');
+  const mixed = inspectReply(box(['> - lend（borrow、lend） 比較', '>     - 理由：課本只出現一次', '>     - Can you ＿＿ me a pen? :: lend', '>     - lend 是什麼？ :: 借出']), f, english, [], nobody);
+  assert.equal(mixed.errors.length, 1, JSON.stringify(mixed.errors));
+  assert.equal(mixed.errors[0].line, 11);
+  assert.match(mixed.errors[0].message, /比較題的每一題都要是/);
+  const unknown = inspectReply(box(['> - lend 比較', '>     - 理由：課本只出現一次', '>     - Can you ＿＿ me a pen? :: lend']), f, english, [], nobody);
+  assert.equal(unknown.errors.length, 1, JSON.stringify(unknown.errors));
+  assert.equal(unknown.errors[0].line, 8);
+  const legal = inspectReply(box(['> - lend（borrow、lend） 比較', '>     - 理由：課本只出現一次', '>     - Can you ＿＿ me a pen? :: lend', '>     - Please ＿＿ him your book. :: lend']), f, english, [], nobody);
+  assert.deepEqual(legal.errors, []);
+});
+
 void test('§4 複製時清單結構跑掉（真人測試 2026-11-07）：縮排被壓平、清單符號被跳脫都擋，一篇一個原因、指到第一處、寫出處數；程式碼區塊照常讀', () => {
   const broken = (reply: string) => inspectEnglish(reply).errors.map(each => `${String(each.line)} ${each.message}`);
   // Gemini 的複製按鈕：每一行都變成最上層的 `* `，縮排全部不見。
