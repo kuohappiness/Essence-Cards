@@ -1,6 +1,6 @@
 # AI 製卡最小版：L2 獨立審查（給 Codex）
 
-狀態：待再審（2026-11-08，第二輪）。第一輪審查 `9723536`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
+狀態：待再審（2026-11-09，第三輪）。第一輪審查 `9723536`、第二輪審查 `d776969`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。這次會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險範圍（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)），合併前做 L2。**只審查，不改產品程式**；可以在隔離的暫存資料夾重現。
 
@@ -88,3 +88,24 @@
 - **想請特別找的新組合**：放棄與存檔之外的互斥（例如 `copy` 同時進行）；`drain` 讀不完（`stale`）時的回報；`elsewhere` 重新判斷的各種結果；跨午夜加上搬走（`對象` 變了、`時間` 沿用）；`names()` 比檔案事件慢的情況；內層圍欄沒有關的回覆。
 - **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸（13 份輸出與 Gemini 重測，只在本機，不進 repo）。**沒跑**：修完之後的 Windows 實機（第二輪通過後在最後要合併的 commit 重跑）；Claude 網頁（額度）；iPhone（使用者同意延後，技術債「補測：iPhone 草稿不出題、啟用後才出題」）。
 - **回報**：寫在 L2 報告最後新增一節〈第二輪〉，標題下的狀態行改成結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。
+
+## 第三輪再審
+
+這一輪只讀：本節、〈審查對象〉、[L2 報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)的〈第二輪的 Claude 回應〉。前幾輪的發現原文需要時照 ID 查。遵守 repo 根目錄的 `AGENTS.md`，建議推理等級：**高**；只審查，不改產品程式，可以在隔離的暫存資料夾重現。依 [review.md](../.claude/skills/code-quality/review.md)，第四輪之後還有擋合併的發現就交使用者決定，所以請把真實路徑寫清楚：家長的實際操作或 Obsidian 的實際行為會不會產生這個輸入、間隔有多長。
+
+- **審查對象**：worktree `D:\程式開發\Essence Cards\.claude\worktrees\ai-cards-mvp`，分支 `claude/ai-cards-mvp` 的最新 commit。看 `git diff d776969...claude/ai-cards-mvp`，排除合併帶進來的改動時用 `git log d776969..claude/ai-cards-mvp --first-parent`；`98d3093` 併入 `main` 的 `f911bf8`，只看它解衝突的部分（`src/main.ts`、`src/state/index.ts`、`src/core/errors/log.ts`、`tests/boundaries.test.ts`、`tests/build.test.ts`、`tests/deck.test.ts`、`docs/syntax.md` §9、backlog 與 roadmap）。沒有未提交的修改。
+- **還沒結的發現**：R2-1～R2-9。每項都修了，請確認修法涵蓋同一類輸入、有沒有帶進新問題。
+- **可能碰到的已結項目**：L2-2、L2-5、L2-8、L2-9（它們的測試都還在 `tests/ai-*.test.ts`）；R3-1、R4-1；本檔〈行為與風險〉的不可破壞性質第 1～9 點。`writes.ts` 的 `create` 改成迴圈，`drain` 多了 `giveUp`，`admit` 的行為要和基準相同（性質第 7 點）。
+- **實作者自己選的做法**（規格沒寫，請先看）：
+  1. R2-1：`create` 的 `guard` 在排隊後與寫入回呼裡各核對一次；回呼裡還有沒讀完的變動就中止這次、讀完再來，最多 `DRAIN_ROUNDS` 輪，用完回 `unread`。回呼裡判斷是同步的，之後到 `modify` 寫進去之間由 `Files.modify` 的同路徑排隊負責。
+  2. R2-1：複習紀錄的 `lt` 算占用；只有紀錄占用時，重建最後停在 `taken`，只能跳過或放棄。
+  3. R2-2：`pending` 不跟隨到別篇，新的 `taken` 情形；寫入前就擋下時確定沒有寫，階段改回原本的值。
+  4. R2-3：拿掉第二輪核對，改成快照寫入回呼裡核對每一篇還在原位置，沒過就照現況重新核對、重做快照，最多三次，都趕不上回 `unread`。
+  5. R2-4：`atWrite` 只在寫入回呼、而且這個路徑沒有檔時問整個 vault 的檔名；同路徑已有檔照舊是 `exists`，卡組改成往後加，快照照舊比內容。
+  6. R2-5：只有 AI 製卡的路徑用 `readOrStuck`，既有的補 ID、作答照舊等讀取回來。
+  7. R2-7：`choose` 先照現況走一次，還是停在同一篇、選擇仍適用才套用。
+  8. R2-8：`state.aiStopped(path)` 把待處理的行、重複、需要新版、紀錄讀不懂或不完整都算進去。
+  9. R2-9：圍欄往回找內文起點不超過這一欄的清單項目，那一項結束圍欄就結束。
+- **想請特別找的新組合**：`refused` 之後重新判斷的各種結果（尤其 `rebuild` 階段）；三次重試用完的回報；系統資料夾防呆（`guard.wrap(files)`）搬回 `紀錄/AI 輸出/` 的檔時，AI 製卡的讀與建；編輯畫面標示對草稿的影響。
+- **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸。**沒跑**：修完之後的 Windows 實機（第三輪通過後在最後要合併的 commit 重跑，含系統剪貼簿）；Claude 網頁（額度）；iPhone（延後，技術債）。
+- **回報**：寫在 L2 報告最後新增一節〈第三輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。
