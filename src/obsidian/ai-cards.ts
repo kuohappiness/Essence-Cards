@@ -1,6 +1,6 @@
 import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
-import { codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
+import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
 import type { Files } from '../core/files.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
@@ -184,7 +184,8 @@ export function createAiCards(deps: AiCardsDeps) {
       const inspection = inspectReply(reply, latest.form, subjectOf(latest), latest.existing, id => state.aiTarget(id));
       if (inspection.errors.length) return { kind: 'stop', message: '還有擋住的地方，先改好再存' } satisfies Outcome;
       const count = inspection.pieces.reduce((sum, piece) => sum + piece.names.length, 0);
-      const ids = state.aiIds(count);
+      // 題目、答案與其他行的區塊 ID 會原樣存進卡組（§4）：配號要避開，新目標的連結才不會指到別行（L2-12）。
+      const ids = state.aiIds(count, blockIds(inspection.normalized.lines.join('\n')));
       if (typeof ids === 'string') return { kind: 'stop', message: BLOCKED[ids] } satisfies Outcome;
       const at = deps.now(), started = stamp(at.ms, at.offset);
       let n = 0;

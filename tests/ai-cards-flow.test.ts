@@ -202,6 +202,24 @@ void test('§5 卡組剛搬走、還沒讀完（L2-2）：等讀完再判斷，�
   }
 });
 
+void test('§5 配號避開同一份回覆裡要留著的區塊 ID（L2-12）：題目行的 ID 保留原字，同篇、另一篇都不撞', async t => {
+  // 固定亂數第一個一定配到 aaaaaa。
+  for (const text of [
+    reply().replace('- borrow :: 借入', '- borrow :: 借入 ^aaaaaa'),
+    reply().replace('- 我明天要去游泳。I ＿＿ swim tomorrow. :: am going to', '- 我明天要去游泳。I ＿＿ swim tomorrow. :: am going to ^aaaaaa'),
+  ]) {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const { cards } = await load(t, memory, machine());
+    const copied = await cards.copy(form);
+    assert.ok('job' in copied);
+    assert.equal((await cards.save(copied.job, text, null)).kind, 'done');
+    const decks = [memory.texts.get(WORD)!, memory.texts.get('Essence Cards/學業/國二上/英文/國二上英文 L3 文法.md')!];
+    const owners = decks.join('').split('\n').filter(line => line.trimEnd().endsWith('^aaaaaa'));
+    assert.equal(owners.length, 1, owners.join(' / '));
+    assert.ok(owners[0].includes(' :: '), '只有題目行留著它');
+  }
+});
+
 void test('§5 寫到一半失敗 → 重新載入：預留的 ID 補 ID 與另一次製卡都避開（R2-3）；同一個工作貼不同的回覆停下；繼續不用再貼；放棄後 ID 不再配出', async t => {
   const memory = createMemoryFiles({ [OLD]: OLD_TEXT, 'Essence Cards/一般.md': '- 能說出 A\n    - A？ :: 是\n' });
   const box = machine();

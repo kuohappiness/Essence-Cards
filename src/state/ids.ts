@@ -321,10 +321,11 @@ export function createIdTracker(options: IdTrackerOptions) {
     lines,
     /**
      * 配 count 個新的 ID（AI 製卡的存草稿，tasks/ai-cards-mvp.md §5 第 1 步）：避開所有卡組看過的（含引言框的行尾 ID）、紀錄的 lt、刻意拿掉的、
-     * 待處理問題的原本 ID、這台電腦的預留；配出的立刻記進 seen（預留），之後的補 ID 與另一次製卡都避開。
+     * 待處理問題的原本 ID、這台電腦的預留，以及 avoid（這份回覆將原樣保留的區塊 ID，L2-12）；配出的立刻記進 seen（預留），之後的補 ID 與另一次製卡都避開。
      */
-    allocate(count: number): string[] {
+    allocate(count: number, avoid: Iterable<string>): string[] {
       const used = taken(), ids: string[] = [];
+      for (const id of avoid) used.add(id);
       for (let i = 0; i < count; i++) {
         const id = newId(options.random ?? Math.random, used);
         used.add(id);
