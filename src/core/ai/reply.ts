@@ -203,8 +203,8 @@ export function pieceText(normalized: Normalized, piece: Piece): { text: string;
   return { text: piece.lines.map(no => normalized.lines[no]).join('\n'), rawLine: line => normalized.raw[piece.lines[line]] ?? 0 };
 }
 
-/** check 的「不符」裡，這幾種由這裡另外處理或這一版不適用：屬性區（擋）、AI 寫的 ID（拿掉）、加進已有的 ID（存草稿時核對）。 */
-const HANDLED = new Set(['yaml', 'target-id', 'existing-id']);
+/** check 的問題裡，這幾種由這裡另外處理或這一版不適用：屬性區（擋）、AI 寫的 ID（拿掉）、一行兩個 ID（nameLineIds 擋）、加進已有的 ID（存草稿時核對）。 */
+const HANDLED = new Set(['yaml', 'target-id', 'ambiguous-id', 'existing-id']);
 /** 名稱有自己的寫法、不寫「能……」的科目（syntax §2-3 英文、國語預設〈名稱〉）。 */
 const OWN_NAMES = new Set(['英文', '國語']);
 /** 出處可以不寫的科目：英文預設「出處、類型不用寫（出處沒寫就是這一課）」（english.md〈錯題〉前的寫法）。 */

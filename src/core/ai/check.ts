@@ -330,6 +330,11 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
 
   // 最上層的區塊依序走一遍，順便檢查順序：備註 → 學習目標 → 加進已有 → 候選。
   const blocks = blocksOf(all.slice(start));
+  /** 引言框裡之後會搬出去出題的（候選、加進已有）：解析器判成錯誤的那幾行（行號已換回 text 的行）。本文的直接看 deck.problems。 */
+  const boxProblems: { line: number; code: string; message: string }[] = [];
+  const parseBox = (inner: readonly Line[]): void => {
+    for (const p of parseDeck(inner.map(l => l.raw).join('\n')).problems) if (p.level === 'error') boxProblems.push({ line: inner[p.line].no, code: p.code, message: p.message });
+  };
   const order: { kind: 'note' | 'existing' | 'candidate' | 'other' | 'body' | 'para'; line: number }[] = [];
   for (const block of blocks) {
     if (block.kind === 'callout') {
@@ -349,10 +354,12 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
         if (!roots.length) issue(block.line, '不符', 'note-empty', '沒有備註時整段省略');
       } else if (title === '加進已有的學習目標') {
         order.push({ kind: 'existing', line: block.line });
+        parseBox(inner);
         for (const node of roots) existing.push(analyzeTarget(node, 'existing'));
         issue(block.line, '提醒', 'existing-present', `「加進已有的學習目標」有 ${String(roots.length)} 項：確認輸入真的給了這些已有的學習目標`);
       } else if (title === '候選卡片') {
         order.push({ kind: 'candidate', line: block.line });
+        parseBox(inner);
         if (head?.[2] !== '-') issue(block.line, '不符', 'candidate-folded', '候選卡片預設摺起，寫成 `> [!note]- 候選卡片`（§2-9）');
         for (const node of roots) candidates.push(analyzeTarget(node, 'candidate'));
         if (roots.length > 5) issue(block.line, '不符', 'candidate-count', `候選卡片 ${String(roots.length)} 個，最多 5 個（§2-9）`);
@@ -393,6 +400,11 @@ export function check(text: string, options: CheckOptions = {}): CheckResult {
   const understanding = targets.filter(t => UNDERSTANDING.includes(t.data['類型'])).length;
   if (subject === '自然' && n && understanding * 3 < n) issue(1, '不符', 'understanding-ratio', `理解型目標 ${String(understanding)}/${String(n)}，少於三分之一（自然預設規則 1）`);
   checkPick(text, deck, issue);
+  // 正式解析器判成 error 的目標（ok: false）複習時不會出：一律算錯誤，不靠這裡各讀各的（L2-3，例如中翻英的答案不是單行英文）。同一行這裡已經報過的不重複。
+  const reported = new Set(issues.filter(each => each.level === '錯誤').map(each => each.line));
+  for (const p of [...deck.problems.filter(each => each.level === 'error').map(each => ({ line: each.line + 1, code: each.code, message: each.message })), ...boxProblems]) {
+    if (!reported.has(p.line)) issue(p.line, '錯誤', p.code, p.message);
+  }
   const language = languageStats(text);
   if (language.simplified) issue(1, '不符', 'simplified', `有 ${String(language.simplified)} 個常見簡體字形`);
   for (const [term, count] of Object.entries(language.terms)) if (count) issue(1, '不符', 'mainland-term', `大陸用語「${term}」${String(count)} 次`);

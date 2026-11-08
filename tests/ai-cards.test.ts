@@ -234,6 +234,32 @@ void test('§4 檢查：check-syntax 算錯誤的擋（缺答案、pick-mixed、
   assert.ok(inspectReply(R3_REPLY.replace('出處：p.44｜類型：因果', '類型：因果'), form(), science, [], nobody).hints.some(each => each.message.startsWith('沒有出處')));
 });
 
+void test('§4 正式解析器判成錯誤的目標要擋（L2-3）：中翻英答案方向錯、多行、連結，本文、候選框都一樣，行號與原文對得上；合法的單行與多個答案不擋', () => {
+  const english = subject('english');
+  const f = form({ subject: 'english', unit: 'L3 Sports' });
+  const body = (lines: string[]) => ['## 單字', '', '- borrow 中翻英', '    - 出處：p.40', ...lines, '<<<完>>>'].join('\n');
+  const invalid = /中翻英的答案只能是單行英文/;
+  for (const lines of [['    - 借入 :: 借'], ['    - 借入 ::', '        - borrow', '        - lend'], ['    - 借入 :: [[borrow]]']]) {
+    const result = inspectReply(body(lines), f, english, [], nobody);
+    assert.equal(result.errors.filter(each => invalid.test(each.message)).length, 1, JSON.stringify(result.errors));
+    assert.equal(result.errors[0].line, 5);
+    assert.equal(result.errors[0].quote, lines[0].trim());
+  }
+  for (const answer of ['borrow', 'borrow | lend', 'borrow from']) assert.deepEqual(inspectReply(body([`    - 借入 :: ${answer}`]), f, english, [], nobody).errors, [], answer);
+  // 候選卡片與加進已有的學習目標：之後會被搬出去出題，同一類的錯誤也要擋，行號指原文。
+  const boxed = (title: string, name: string) => ['## 單字', '', '- borrow 英翻中', '    - 出處：p.40', '    - borrow :: 借入', '', `> [!note]- ${title}`, `> - ${name}`, ...title === '候選卡片' ? ['>     - 理由：課本只出現一次'] : ['>     - 出處：p.41'], '>     - 借出 :: 借', '<<<完>>>'].join('\n');
+  for (const [title, name] of [['候選卡片', 'lend 中翻英'], ['加進已有的學習目標', 'k3m9qa lend 中翻英']]) {
+    const result = inspectReply(boxed(title, name), f, english, [], nobody);
+    assert.equal(result.errors.filter(each => invalid.test(each.message)).length, 1, title + JSON.stringify(result.errors));
+    assert.equal(result.errors.find(each => invalid.test(each.message))!.line, 10, title);
+  }
+  // 不重複回報：缺答案、一行兩個 ID 這些原本就擋的，各只有一項。
+  const noAnswer = inspectReply(['## 單字', '', '- 能說出 A', '    - 出處：p.40', '    - A？ ::', '<<<完>>>'].join('\n'), f, english, [], nobody);
+  assert.equal(noAnswer.errors.length, 1, JSON.stringify(noAnswer.errors));
+  const twoIds = inspectReply(['## 單字', '', '- 能說出 ^aaaaaa A ^bbbbbb', '    - 出處：p.40', '    - A？ :: 是', '<<<完>>>'].join('\n'), f, english, [], nobody);
+  assert.equal(twoIds.errors.length, 1, JSON.stringify(twoIds.errors));
+});
+
 void test('§4 複製時清單結構跑掉（真人測試 2026-11-07）：縮排被壓平、清單符號被跳脫都擋，一篇一個原因、指到第一處、寫出處數；程式碼區塊照常讀', () => {
   const broken = (reply: string) => inspectEnglish(reply).errors.map(each => `${String(each.line)} ${each.message}`);
   // Gemini 的複製按鈕：每一行都變成最上層的 `* `，縮排全部不見。
