@@ -442,8 +442,8 @@ void test('§7 啟用確認的計數照啟用後實際排得進去的（L2-11）
     '- 能說出 C ^ccccc2', '    - C？ ::',
     '- 能說出 D ^ddddd2', '    - D？ :: 是',
     '- 能說出 E', '    - E？ :: 是', ''].join('\n');
-  assert.deepEqual(activationCounts(text, new Set(['ddddd2'])), { ready: 1, malformed: 1, paused: 1, duplicate: 1, noId: 1 });
-  assert.deepEqual(activationCounts('---\n狀態: 草稿\n---\n\n- 能說出 A ^aaaaa2\n    - 狀態：暫停\n    - A？ :: 是\n', new Set()), { ready: 0, malformed: 0, paused: 1, duplicate: 0, noId: 0 });
+  assert.deepEqual(activationCounts(text, target => target.id === 'ddddd2'), { ready: 1, malformed: 1, paused: 1, stopped: 1, noId: 1 });
+  assert.deepEqual(activationCounts('---\n狀態: 草稿\n---\n\n- 能說出 A ^aaaaa2\n    - 狀態：暫停\n    - A？ :: 是\n', () => false), { ready: 0, malformed: 0, paused: 1, stopped: 0, noId: 0 });
 });
 
 void test('§3 待貼回的工作：最多 5 個、14 天；過期的只丟還沒開始存草稿的；缺欄位的不能用', () => {

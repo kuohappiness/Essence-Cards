@@ -107,16 +107,16 @@ export function inspectReply(reply: string, form: CardForm, subject: Pick<RuleSu
 }
 
 /**
- * 按「啟用」先問的數字（§7，L2-11）：ready 是啟用後排得進去的目標（同 catalog 的 usableTarget：讀得懂、沒暫停、有 ID，再扣掉 D-157 重複停出的），其他各算一種沒排進去的原因。
- * duplicates 是目前重複的 ID。
+ * 按「啟用」先問的數字（§7，L2-11）：ready 是啟用後排得進去的目標（同 catalog 的 usableTarget：讀得懂、沒暫停、有 ID，再扣掉 stopped 判定停出的），其他各算一種沒排進去的原因。
+ * stopped 由 state.aiStopped 給，和正式排程同一套條件（R2-8）。
  */
-export function activationCounts(text: string, duplicates: ReadonlySet<string>): { ready: number; malformed: number; paused: number; duplicate: number; noId: number } {
-  const counts = { ready: 0, malformed: 0, paused: 0, duplicate: 0, noId: 0 };
+export function activationCounts(text: string, stopped: (target: { id: string; line: number }) => boolean): { ready: number; malformed: number; paused: number; stopped: number; noId: number } {
+  const counts = { ready: 0, malformed: 0, paused: 0, stopped: 0, noId: 0 };
   for (const target of parseDeck(text).targets) {
     if (!target.ok) counts.malformed++;
     else if (target.fields.paused) counts.paused++;
     else if (target.id === null) counts.noId++;
-    else if (duplicates.has(target.id)) counts.duplicate++;
+    else if (stopped({ id: target.id, line: target.line })) counts.stopped++;
     else counts.ready++;
   }
   return counts;

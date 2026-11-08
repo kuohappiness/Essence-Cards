@@ -1,6 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { activationCounts } from '../src/core/ai/index.ts';
 import { blockIds } from '../src/core/deck/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State, StateOptions } from '../src/state/index.ts';
@@ -110,6 +111,29 @@ void test('§6 候選框裡的 ID 不再配出；剪下貼成目標後照舊出�
   assert.equal(await moved.state.fillIds(DECK), true);
   assert.ok(moved.texts.get(DECK)!.includes('- 能說出密度 ^aaaaab\n'));
   assert.deepEqual([...(await moved.state.aiWhere(['aaaaaa']))!], [['aaaaaa', [other]]]);
+});
+
+void test('§7 啟用確認的計數和正式排程同一套停出條件（R2-8）：和需要新版的卡組同 ID、讀不懂的紀錄停掉的都不算', async t => {
+  const body = (id: string) => `- 能說出密度 ^${id}\n    - 密度？ :: 質量除以體積\n`;
+  // 另一篇需要新版，同一個 ID。
+  {
+    const newer = 'Essence Cards/學業/國二上/自然/新版.md';
+    const h = await setup(t, { [DECK]: head('草稿') + body('k3m9qa'), [newer]: '---\n狀態: 啟用\n需要版本: 99.0.0\n---\n\n' + body('k3m9qa') });
+    assert.deepEqual(activationCounts(h.texts.get(DECK)!, h.state.aiStopped(DECK)), { ready: 0, malformed: 0, paused: 0, stopped: 1, noId: 0 });
+    assert.equal((await h.state.activateDraft(DECK, null)).kind, 'done');
+    assert.deepEqual(h.state.deckTargets(DECK), []);
+  }
+  // 讀不懂的紀錄行停掉這個目標。
+  {
+    const h = await setup(t, { [DECK]: head('草稿') + body('k3m9qa'), [LOG]: JSON.stringify({ t: '2026-11-01T10:00:00+08:00', lt: 'k3m9qa', r: 'good', v: '12345678', need: '99.0.0' }) + '\n' });
+    assert.ok(h.state.history().held.includes('k3m9qa'));
+    assert.deepEqual(activationCounts(h.texts.get(DECK)!, h.state.aiStopped(DECK)), { ready: 0, malformed: 0, paused: 0, stopped: 1, noId: 0 });
+  }
+  // 沒有停出的原因：照常算。
+  {
+    const h = await setup(t, { [DECK]: head('草稿') + body('k3m9qa') });
+    assert.deepEqual(activationCounts(h.texts.get(DECK)!, h.state.aiStopped(DECK)), { ready: 1, malformed: 0, paused: 0, stopped: 0, noId: 0 });
+  }
 });
 
 void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: status；暫停、啟用的不動；需要新版的擋下；手機不寫；屬性區讀不懂的不寫', async t => {

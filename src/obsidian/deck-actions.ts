@@ -64,12 +64,12 @@ class RemindModal extends Modal {
 function activationText(state: State, path: string, text: string): string[] {
   const entry = state.decks().find(each => each.path === path);
   const deck = parseDeck(text);
-  const counts = activationCounts(text, new Set(state.conflicts().map(each => each.id)));
+  const counts = activationCounts(text, state.aiStopped(path));
   const boxes = check(text);
   const more = [
     ...counts.malformed ? [`${String(counts.malformed)} 個學習目標寫法有問題，會先跳過`] : [],
     ...counts.paused ? [`${String(counts.paused)} 個學習目標已暫停，不會出題`] : [],
-    ...counts.duplicate ? [`${String(counts.duplicate)} 個學習目標的 ID 重複，先停出`] : [],
+    ...counts.stopped ? [`${String(counts.stopped)} 個學習目標暫時停出（ID 重複、需要新版或紀錄讀不懂）`] : [],
     ...counts.noId ? [`${String(counts.noId)} 個學習目標還沒有 ID，補上才會出題`] : [],
     ...boxes.candidates.length || boxes.existing.length ? [[
       ...boxes.candidates.length ? [`候選卡片 ${String(boxes.candidates.length)} 個`] : [],

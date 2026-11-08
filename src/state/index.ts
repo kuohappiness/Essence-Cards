@@ -234,6 +234,8 @@ export interface State {
   aiExisting(subject: string | null, term: string): readonly ExistingTarget[];
   /** 這個學習目標 ID 現在的樣子（§5 加進已有的學習目標轉成連結）：剛好一個讀得懂的目標才是 one；重複、需要新版、寫法有問題是 unusable。 */
   aiTarget(id: string): ExistingNow;
+  /** 這一篇的目標會不會被正式排程停出（§7 啟用確認的計數，R2-8）：待處理的行、重複的 ID、和需要新版的卡組同 ID、紀錄讀不懂或不完整。 */
+  aiStopped(path: string): (target: { id: string; line: number }) => boolean;
   /** 配 count 個新的 ID（§5 第 1 步）：門檻和寫入相同（writeBlock），沒過回原因；避開所有占用、這台電腦的預留與 avoid（將一起存入的區塊 ID），配出的之後都不再配。 */
   aiIds(count: number, avoid?: Iterable<string>): string[] | WriteBlock;
   /** 建快照（§5 第 6 步）：同 aiCreate，但先讀完已知的變動，寫入的當下每一篇都還要在原位置（ID 都在），整個 vault 也沒有同名檔；不符合回 refused、不建（R2-3、R2-4）。 */
@@ -713,6 +715,10 @@ export function createState(options: StateOptions): State {
       const found = deckList.flatMap(entry => entry.deck.targets.filter(t => t.id === id).map(t => ({ path: entry.path, target: t })));
       if (!found.length) return { kind: 'none' };
       return found.length === 1 && found[0].target.ok ? { kind: 'one', path: found[0].path, name: found[0].target.name } : { kind: 'unusable' };
+    },
+    aiStopped(path) {
+      const skip = life.loaded ? tracker.lines(path) : new Set<number>();
+      return target => skip.has(target.line) || tracker.isDuplicate(target.id) || gatedIds.has(target.id) || history.incomplete || history.held.includes(target.id);
     },
     aiIds(count, avoid = []) {
       return writes.blockedNow() ?? tracker.allocate(count, avoid);
