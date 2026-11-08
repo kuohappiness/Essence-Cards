@@ -28,6 +28,7 @@
 |---|---|---|---|
 | Pele（Obsidian 團隊開源的 Mermaid 繪圖器，MIT；使用者原文寫「pele mermaid」） | 把純文字的 Mermaid 畫成 SVG，AI 讀寫都容易；Obsidian 1.15 早期版已改用它；顏色跟著深淺色模式、窄螢幕會自動改排版 | [介紹文章](https://xlrocket.blog/2026/10/25/obsidian-%e5%bc%80%e6%ba%90-pele-mermaid-%e6%b8%b2%e6%9f%93%e5%99%a8%ef%bc%9a%e6%96%b0%e4%b8%80%e4%bb%a3%e6%96%87%e5%ad%97%e7%94%bb%e5%9b%be%e7%bb%84%e4%bb%b6%ef%bc%8c%e5%a6%82%e4%bd%95%e7%94%a8/)、[GitHub](https://github.com/obsidianmd/pele)、[Playground](https://pele.run/playground) | 待評估 |
 | tldraw Offline（tldraw 官方的免費桌面白板） | 無限畫布，離線、存成本機檔（`.tldraw`）；AI 走「自備 AI」，Claude Code、Codex 這類 agent 可以看畫布、改圖形、寫腳本。要查：檔案格式 AI 讀起來省不省、授權（SDK 要商業授權）、能不能放進 Obsidian、iPhone 能不能用 | [介紹文章](https://xlrocket.blog/2026/11/08/tldraw-offline%ef%bc%9a%e5%85%8d%e8%b4%b9%e7%a6%bb%e7%ba%bf%e6%97%a0%e9%99%90%e7%94%bb%e5%b8%83%ef%bc%8c%e8%ae%a9-ai-%e7%9b%b4%e6%8e%a5%e5%9c%a8%e4%bd%a0%e7%9a%84%e6%9c%ac%e5%9c%b0%e7%99%bd%e6%9d%bf/)、[官網](https://offline.tldraw.com) | 待評估 |
+| Scapple（Literature & Latte，Scrivener 的同一家公司；使用者 2026-11-08 加入） | 自由擺放的發想白板：在任何地方點一下就寫一則筆記，再拉線連起來，不強迫成樹狀的心智圖。以上是 Claude 的已知資訊，還沒核對；付費、授權、檔案格式與 AI 能不能讀，評估時再查 | [官網](https://www.literatureandlatte.com/scapple) | 待評估 |
 
 ## 和 Cards 有關、留在 Cards 的項目
 
