@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { lstat, realpath, rmdir } from 'node:fs/promises';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import type { BackupHost } from '../core/backup/index.ts';
 import { checkFolder, listBackups, prepareFolder, readBackup, removeBackup, writeBackup } from './backup.ts';
-import { defaultBackupFolder, realTarget, sameFileKey } from './io.ts';
+import { defaultBackupFolder, isInside, realTarget, sameFileKey } from './io.ts';
 
 // 外掛的電腦專用接點（D-148）：main.ts 在 Platform.isDesktopApp 成立後才動態 import 這個檔，不經共用的重新匯出檔。
 // 載入時沒有副作用；對外只給具體的動作，不交出 fs。
@@ -22,6 +22,25 @@ export interface Desktop {
   open(folder: string): Promise<string | null>;
   /** 系統的選資料夾對話框；取消是 null。叫不到對話框就丟錯（設定頁改用文字欄位）。 */
   choose(start: string): Promise<string | null>;
+}
+
+/**
+ * 刪掉 vault 裡一個空的資料夾（系統資料夾的防呆 §1-5，tasks/system-folder-guard.md）。用非遞迴的 rmdir：有東西就由系統
+ * 拒絕（ENOTEMPTY），確認是空的之後才同步進來的內容也不會被刪（Codex L2 F2）。Obsidian 電腦版的 adapter.rmdir(path, false)
+ * 對資料夾回 EISDIR（實機 W2），所以不經 adapter。
+ * path 是 vault 相對路徑，寫法和 obsidian/files.ts 一樣（不能是絕對路徑、不能有 \ 或 ..）。比對用實際路徑（Codex L2 第二輪 F6）：
+ * 上一層經過 junction 或符號連結走到 vault 外面、或要刪的本身是連結，都不刪；vault 本身不刪（大小寫不同的寫法也一樣）。
+ */
+export async function removeEmptyFolder(basePath: string, path: string): Promise<void> {
+  const refuse = (): never => { throw Error('不是 vault 裡的資料夾：' + path); };
+  if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path) || path.split('/').some(part => part === '' || part === '.' || part === '..')) refuse();
+  const vault = await realpath(basePath);
+  const target = resolve(vault, path);
+  const real = join(await realpath(dirname(target)), basename(target));
+  if ((await lstat(real)).isSymbolicLink()) refuse();
+  // isInside 用 path.relative（Windows 不分大小寫）：relative 是空的就是 vault 本身。
+  if (!isInside(real, vault) || relative(vault, real) === '') refuse();
+  await rmdir(real);
 }
 
 /** basePath 是 Obsidian 給的 vault 位置（FileSystemAdapter.getBasePath）。 */

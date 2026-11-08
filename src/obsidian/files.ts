@@ -1,9 +1,14 @@
 import { TFile, TFolder, type App, type TAbstractFile } from 'obsidian';
 import type { Files } from '../core/files.ts';
 
-/** 檔案存取的 Obsidian 版（W5 說明 §2）：照 src/core/files.ts 的契約，和 tools/node-files.ts 跑同一份契約檢查。 */
-export function createObsidianFiles(app: App): Files {
+/**
+ * 檔案存取的 Obsidian 版（W5 說明 §2）：照 src/core/files.ts 的契約，和 tools/node-files.ts 跑同一份契約檢查。
+ * pause：系統資料夾正在搬回時回傳等待的 Promise（FolderGuard.pause，tasks/system-folder-guard.md §1-8）。排隊之後、真正
+ * 依路徑找檔之前問，沒有擋住就在同一個同步段落裡開始：搬走的那一刻排著的寫入不會在原位建出新的資料夾（Codex L2 第二輪 F1）。
+ */
+export function createObsidianFiles(app: App, options: { pause?: (path: string, folder?: boolean) => Promise<void> | null } = {}): Files {
   const { vault } = app;
+  const pause = (path: string, folder = false): Promise<void> | null => options.pause?.(path, folder) ?? null;
   const pending = new Map<string, Promise<void>>();
   // vault 的路徑本來就是相對的；擋掉絕對路徑與任何一段是 ..，不讓它碰 vault 以外。
   function location(path: string): string {
@@ -58,23 +63,31 @@ export function createObsidianFiles(app: App): Files {
   return {
     list(folder) {
       // 包在 Promise 裡：路徑不合法時和 Node 版一樣是 reject。
-      return Promise.resolve().then(() => {
+      return Promise.resolve().then(async () => {
         const prefix = location(folder) === '' ? '' : folder.replace(/\/$/, '') + '/';
+        // 擋住時等完再問；最後一次沒有擋住和讀清單在同一個同步段落（下面幾個也一樣）。
+        const at = prefix.slice(0, -1);
+        for (let wait = pause(at, true); wait; wait = pause(at, true)) await wait;
         return vault.getFiles().map(f => f.path).filter(path => path.startsWith(prefix)).sort();
       });
     },
     async read(path) {
-      const found = file(location(path));
+      location(path);
+      for (let wait = pause(path); wait; wait = pause(path)) await wait;
+      const found = file(path);
       // vault.read 讀磁碟上最新的內容（cachedRead 可能是舊的），包括 iCloud 剛同步來的。
       return found ? vault.read(found) : null;
     },
     async readBytes(path) {
-      const found = file(location(path));
+      location(path);
+      for (let wait = pause(path); wait; wait = pause(path)) await wait;
+      const found = file(path);
       return found ? new Uint8Array(await vault.readBinary(found)) : null;
     },
     modify(path, edit) {
       location(path);
       return serial(path, async () => {
+        for (let wait = pause(path); wait; wait = pause(path)) await wait;
         const found = file(path);
         // vault.process 一次讀、改、寫（D-110）；edit 回傳原文時不寫入（契約 C6 在 Obsidian 驗）。
         if (found) await vault.process(found, text => edit(text, true));
@@ -84,6 +97,7 @@ export function createObsidianFiles(app: App): Files {
     append(path, line) {
       location(path);
       return serial(path, async () => {
+        for (let wait = pause(path); wait; wait = pause(path)) await wait;
         const found = file(path);
         if (found) await vault.append(found, line + '\n');
         else await create(path, line + '\n');

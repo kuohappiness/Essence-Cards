@@ -8,6 +8,8 @@ export { setDeckStatus } from './status.ts';
 export { nameIds } from './markdown.ts';
 export type { NameIds } from './markdown.ts';
 export { isDeckPath, listDeckPaths, readDecks } from './read.ts';
+export { folderIssues, folderLabel, guardedMoves, misplacedFolders, presentFolders } from './folders.ts';
+export type { FolderIssue } from './folders.ts';
 export { chapterAlias, codeKey, headingKey, readTerm, sourceLabel, sourceLinks, splitUnit, termKey, termRank, tidy } from './sources.ts';
 export type { SourceItem, SourceLink, SourceOwner, SourceProblem } from './sources.ts';
 export type { Deck, DeckProps, PickGroup, PropertyIssue, Target, Fields, Prompt, Problem, ProblemCode, AssignOptions, AssignResult } from './types.ts';
