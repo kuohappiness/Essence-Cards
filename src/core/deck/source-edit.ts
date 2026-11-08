@@ -499,13 +499,16 @@ export function fixField(input: { text: string; fix: FieldFixAction; version: st
   const index = parent.children.filter(child => !fieldStart.test(child.text) && (prompt || !isPrompt(child))).findIndex(child => child.line === line);
   // 就地改名：開頭的名稱、冒號與後面的空白換成 `出處：`，後面的字一字不動。
   const prefix = MISNAMED.exec(item.text)?.[0] ?? '', column = item.starts[0].column;
-  const list: { changes: TextChange[]; label: string; split: boolean }[] = [];
-  // 已經有一個（沒有接續行）：併進那一欄，再刪掉這一項；沒有、已經有兩個以上、那一欄有接續行時就地改名，讀法照舊合併。
-  if (f.layout.fields.length === 1 && !f.field?.continued && item.end === line + 1) list.push({ changes: [...merge(f, fix.sources), removeLine(doc, line)], label: '併', split: true });
-  list.push({ changes: [{ from: offset(doc, line, column), to: offset(doc, line, column + prefix.length), insert: '出處：' }], label: '改名', split: false });
+  const list: { written: string; label: string; split: boolean }[] = [];
+  // 已經有一個（沒有接續行）：刪掉這一項，再併進那一欄；沒有、已經有兩個以上、那一欄有接續行時就地改名，讀法照舊合併。
+  if (f.layout.fields.length === 1 && !f.field?.continued && item.end === line + 1) {
+    const written = mergeRenamed(input.text, doc, line, fix);
+    if (written !== null) list.push({ written, label: '併', split: true });
+  }
+  list.push({ written: applyChanges(input.text, [{ from: offset(doc, line, column), to: offset(doc, line, column + prefix.length), insert: '出處：' }]), label: '改名', split: false });
   let first: { reason: string; failure: string } | null = null;
-  for (const { changes, label, split } of list) {
-    let text = applyChanges(input.text, changes);
+  for (const { written, label, split } of list) {
+    let text = written;
     let now = parseDeck(text, { layout: true });
     if (split) {
       const again = fieldOf(docOf(text), now, fix.target);
@@ -517,6 +520,15 @@ export function fixField(input: { text: string; fix: FieldFixAction; version: st
     first ??= { ...found, failure: `${found.failure} action:${label} line:${line}` };
   }
   return { ok: false, ...(first ?? fail('none')) };
+}
+/**
+ * 刪掉寫錯的那一項，再用刪掉之後的全文併進已有的那一欄（L2 第四輪 R18：同時算的話，那一項隔著空行在檔尾時，
+ * 併進去的插入點落在要刪的範圍裡）。出處欄位找不到是 null。
+ */
+function mergeRenamed(text: string, doc: Doc, line: number, fix: Rename): string | null {
+  const removed = applyChanges(text, [removeLine(doc, line)]);
+  const f = fieldOf(docOf(removed), parseDeck(removed, { layout: true }), fix.target);
+  return f && applyChanges(removed, merge(f, fix.sources));
 }
 /** 併進已有的那一欄（§4-3 第 2 點）：開頭是這一篇的位置時加在第一個跟著別的單元的段前面，其他加在最後；分行的一個頓號項一個子項目。 */
 function merge(f: Field, sources: readonly string[]): TextChange[] {

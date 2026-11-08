@@ -30,6 +30,11 @@ export const RENAME_CASES: RenameCase[] = [
   },
   // L2 第三輪 R15 的同一類：併進去之後拿掉的那一項隔著空行在檔尾、檔尾沒有換行：空行一起拿，檔尾照舊沒有換行。
   { name: 'L2 R15：拿掉的項目隔著空行在檔尾', text: HEAD + T + '    - 出處：p.44\n\n    - 來源 p.45', line: 9, want: HEAD + T + '    - 出處：p.44、p.45' },
+  // L2 第四輪 R18：併進分行的出處，寫錯的那一項隔著空行在檔尾、檔尾沒有換行：併成一欄，不留第二個出處欄位。
+  { name: 'L2 R18：分行的出處隔著空行，寫錯的項目在檔尾', text: split('p.44') + '\n    - 來源：p.45', line: 10, want: split('p.44', 'p.45').slice(0, -1) },
+  { name: 'L2 R18：檔尾那一項有兩個位置', text: split('p.44') + '\n    - 來源：p.45、p.46', line: 10, want: split('p.44', 'p.45', 'p.46').slice(0, -1) },
+  { name: 'L2 R18：這一篇的位置加在別的單元前面', text: split('國二上 1-3 p.20') + '\n    - 來源：p.45', line: 10, want: split('p.45', '國二上 1-3 p.20').slice(0, -1) },
+  { name: 'L2 R18：CRLF、隔著兩個空行', text: (split('p.44') + '\n\n    - 來源：p.45').replaceAll('\n', '\r\n'), line: 11, want: split('p.44', 'p.45').slice(0, -1).replaceAll('\n', '\r\n') },
   // 附著在這一項底下的引言：不刪這一行（引言會跑到別的項目底下），就地改名。
   { name: '底下附著引言：就地改名', text: HEAD + T + '    - 出處：p.44\n    - 來源：p.45\n        > 家長備忘\n', line: 8, want: HEAD + T + '    - 出處：p.44\n    - 出處：p.45\n        > 家長備忘\n' },
   {
