@@ -278,6 +278,74 @@ void test('§5 建卡組的寫入回呼裡再核對（R2-1）：最後一次檢�
   }
 });
 
+void test('§5 寫入回呼裡重查全部門檻（R3-1）：回呼前才讀失敗的卡組或紀錄，卡組與快照都不寫；讀回來之後照現況接著做', async t => {
+  const SNAP = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
+  const recover = async (memory: ReturnType<typeof createMemoryFiles>, path: string) => { memory.failing.delete(path); memory.notify(path); await settle(); };
+  // 重建：同步送來帶同 ID 的卡組，但讀不到。不知道就不能當成沒有人用。
+  {
+    const { memory, cards, state, job, text } = await waitingForRebuild(t);
+    const gate = gateModify(memory, WORD);
+    const rebuilding = cards.choose(job, 0, 'rebuild');
+    await gate.reached;
+    memory.failing.add(MOVED);
+    memory.write(MOVED, text);
+    await settle();
+    assert.ok(state.unread().includes(MOVED));
+    gate.open();
+    assert.match((await rebuilding as { message: string }).message, /沒讀到/);
+    assert.ok(!memory.texts.has(WORD));
+    await recover(memory, MOVED);
+    const again = await cards.resume(job);
+    assert.equal(again.kind, 'done', JSON.stringify(again));
+    assert.ok(!memory.texts.has(WORD));
+    await settle();
+    assert.deepEqual(state.conflicts(), []);
+  }
+  // 快照：已寫的草稿換了內容，重新讀取失敗。上一次讀到的索引不算數。
+  {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const { cards, state } = await load(t, memory, machine(), Math.random);
+    const copied = await cards.copy(form);
+    assert.ok('job' in copied);
+    const gate = gateModify(memory, SNAP);
+    const saving = cards.save(copied.job, reply(), null);
+    await gate.reached;
+    memory.failing.add(WORD);
+    memory.write(WORD, '---\n狀態: 草稿\n---\n\n另一份內容\n');
+    await settle();
+    assert.ok(state.unread().includes(WORD));
+    gate.open();
+    assert.match((await saving as { message: string }).message, /沒讀到/);
+    assert.ok(!memory.texts.has(SNAP));
+    await recover(memory, WORD);
+    const again = await cards.resume(cards.jobs()[0]);
+    assert.equal(again.kind === 'stop' && again.deck?.situation, 'missing', JSON.stringify(again));
+    assert.ok(!memory.texts.has(SNAP));
+  }
+  // 第一次建檔被擋下：確定沒有寫，階段照舊，讀回來之後不會回報「上一次建到一半」。
+  {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const { cards, state } = await load(t, memory, machine(), Math.random);
+    const copied = await cards.copy(form);
+    assert.ok('job' in copied);
+    const gate = gateModify(memory, WORD);
+    const saving = cards.save(copied.job, reply(), null);
+    await gate.reached;
+    memory.failing.add(OLD);
+    memory.notify(OLD);
+    await settle();
+    assert.ok(state.unread().includes(OLD));
+    gate.open();
+    assert.match((await saving as { message: string }).message, /沒讀到/);
+    assert.ok(!memory.texts.has(WORD));
+    assert.equal(cards.jobs()[0].save!.decks[0].stage, 'pending');
+    await recover(memory, OLD);
+    const again = await cards.resume(cards.jobs()[0]);
+    assert.equal(again.kind, 'done', JSON.stringify(again));
+    assert.ok(memory.texts.has(WORD));
+  }
+});
+
 void test('§5 寫入的當下再核對整個 vault 的檔名（R2-4）：排隊之後才在別的資料夾出現同名檔，卡組與快照都往後加', async t => {
   for (const target of [WORD, 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md']) {
     const memory = createMemoryFiles({ [OLD]: OLD_TEXT });

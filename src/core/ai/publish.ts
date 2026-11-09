@@ -167,6 +167,8 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
       update({ stage: prior });
       return tries < 2 ? settle(index, tries + 1) : { kind: 'deck', index, situation: 'taken', path };
     }
+    // 門檻沒過也是寫入前就擋下了（R3-1）：階段照舊，讀回來之後不會變成「上一次建到一半」要家長選。
+    if (created.kind === 'blocked') { update({ stage: prior }); return created; }
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });
     return null;

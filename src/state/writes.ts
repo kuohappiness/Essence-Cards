@@ -196,7 +196,7 @@ export function createWrites(options: WritesOptions) {
    * 只建立新檔（AI 製卡的原文、卡組與快照，tasks/ai-cards-mvp.md §5）：同一列、同樣不看是哪一篇的門檻（電腦、讀完、沒關閉、備份成功、沒有讀不到的）；
    * 已經有檔（含零位元組的空檔）不動、回 exists。寫好再讀一次，一字不差才是 done；讀回來不同或讀不到回 failed（之後重試時照實際的檔核對）。
    * guard（建卡組與快照時給）：先讀完已知的變動再核對，寫入回呼裡再核對一次（L2-2、R2-1：改名、搬移、同步都是先有事件才讀檔，排隊與等回呼的期間都可能再來）。
-   * 核對沒過回 refused、不建；回呼裡還有沒讀完的變動就放棄這一次、讀完再來，最多 DRAIN_ROUNDS 輪。
+   * 核對沒過回 refused、不建；回呼裡還有沒讀完的變動就放棄這一次、讀完再來，最多 DRAIN_ROUNDS 輪。門檻在回呼裡也再問一次（R3-1）：blocked 一定是還沒寫。
    */
   function create(path: string, text: string): Promise<CreateResult>;
   function create<Why extends string>(path: string, text: string, guard: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }>;
@@ -210,12 +210,15 @@ export function createWrites(options: WritesOptions) {
       let why = guard?.check() ?? null;
       if (why !== null) return { kind: 'refused', why };
       begin(path);
-      let exists = false, live = true, again = false;
+      let exists = false, live = true, again = false, gate: WriteBlock | null = null;
       try {
         await persist(files.modify(path, (current, has) => {
           // 逾時之後才輪到回呼：中止，不建立（同 fillFile 的 Stopped）。
           if (!live || life.closed) throw new Stopped();
           if (has) { exists = true; return current; }
+          // 等回呼的期間門檻也可能變了（R3-1）：剛讀失敗的卡組或紀錄不在 waiting 裡，占用的索引卻可能還缺著它，不能當成沒有人用。
+          gate = blockedNow();
+          if (gate) throw new NotNow();
           if (guard) {
             if (waiting(path)) { again = true; throw new NotNow(); }
             why = guard.check() ?? guard.atWrite?.() ?? null;
@@ -229,6 +232,7 @@ export function createWrites(options: WritesOptions) {
         live = false;
         end(path);
       }
+      if (gate) return { kind: 'blocked', reason: gate };
       if (why !== null) return { kind: 'refused', why };
       if (again) {
         if (rounds.count >= DRAIN_ROUNDS) return { kind: 'blocked', reason: 'unread' };
