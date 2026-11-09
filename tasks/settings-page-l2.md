@@ -1,6 +1,14 @@
 # 設定頁（Codex L2 審查請求）
 
-狀態：第二輪待審；第一輪審 `8717c09`，[報告與核對](<../Claude Codex Discussion/2026-11-09-settings-page-l2.md>)。
+狀態：第三輪待審；第一輪審 `8717c09`、第二輪審 `69ae53e`，[報告與核對](<../Claude Codex Discussion/2026-11-09-settings-page-l2.md>)。
+
+## 第三輪（只審修正）
+
+- **待審**：`4824ade`（完整 SHA `4824ade6b393fbccb47a7829ece61d0dc6f5ec3d`）到 `b7cccac`（`b7cccac8f792f53e6582070a994d3352e085abb6`）的差異，以及受影響的路徑：`src/core/settings/store.ts` 的讀、採用、通知與隊伍，`src/main.ts` 的重讀入口。不用整包重審。
+- **先看**：報告最後的〈Claude 核對（第二輪）〉，尤其 F4 沒有照建議比讀取順序，改成晚到的內容一律不採用、排一次重讀；F3 已送出的寫入停用後回 `failed`。
+- **請特別試**：補讀（`followUp`）和隊伍裡的存檔、`close()` 交錯；補讀排隊時又有另一筆晚到的結果，會不會多排；`absent` 的檢查和 `saveData` 之間還有沒有空隙；重讀失敗時 `announce` 會不會造成多餘通知或重排。
+- **驗證**：`b7cccac` 的 pre-commit（完整的 `npm run check`）通過；回歸測試在 `4824ade` 的 store 上跑，8 項失敗（新增 7 項，加一項改了期望）；修正後 Windows 實機 §8 重跑，35 項通過。沒跑的：iPhone、雙機同步。
+- 報告接在 `Claude Codex Discussion/2026-11-09-settings-page-l2.md` 的後面，標「第三輪」。
 
 ## 第二輪（只審修正）
 
