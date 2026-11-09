@@ -4,9 +4,12 @@ import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
 import type { EmbeddedRules } from './core/ai/index.ts';
+import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
+import { createSettingsStore, type SaveResult } from './core/settings/index.ts';
+import { dayOf } from './core/study/index.ts';
 import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
@@ -59,6 +62,16 @@ function safely<T>(get: () => T, fallback: T): T {
 }
 /** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
 const VERSION_WAIT = 2000;
+/** 設定沒有存下（tasks/settings-page.md §2-6）。 */
+const SETTINGS_NOTICE: Record<Exclude<SaveResult, 'saved'>, string> = {
+  unreadable: 'Essence Cards：設定暫時讀不到，這次沒有存下，請再試一次',
+  failed: 'Essence Cards：設定暫時寫不進去，這次沒有存下，請再試一次',
+};
+/** 今天（`YYYY-MM-DD`，清晨 4 點換日，和複習同一個換日）。 */
+function todayText(): string {
+  const at = Date.now();
+  return scopeDate(dayOf(at, -new Date(at).getTimezoneOffset()));
+}
 
 /** 編輯器開的檔案（CodeMirror 的 state 裡 Obsidian 放的資訊）。 */
 // obsidian.d.ts 用 CommonJS 的 @codemirror/state 型別，這裡是 ESM 的；同一個執行期物件，只是型別宣告分成兩份。
@@ -110,6 +123,13 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 電腦專用的功能載入失敗的原因（設定頁顯示）。 */
   private backupError: string | null = null;
   private settingTab: { refresh: () => void } | null = null;
+  /** data.json 的設定（tasks/settings-page.md）。 */
+  private readonly store = createSettingsStore({
+    load: () => this.loadData() as Promise<unknown>,
+    save: data => this.saveData(data),
+    today: todayText,
+    onError: error => { this.fail('ui', error); },
+  });
   /** 這次載入已經提示過的來源：同一種只提示一次。 */
   private warned = new Set<ErrorSource>();
   /** 錯誤紀錄（D-155）：onload 裡裝置碼確定之後建立；這個外掛自己的錯都經過它。建立之前什麼都不記。 */
@@ -137,8 +157,14 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     // 補 ID 與鎖住 ID 只在電腦（D-134：iPhone 不寫卡組筆記，也不裝編輯器的鎖定）。
     if (Platform.isDesktopApp) this.ids = this.wireIds();
-    // 設定分頁（D-104、D-156 依功能分區）：「備份」一區；iPhone 上只寫「備份在電腦上做」。
-    this.settingTab = wireSettings({ plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); } });
+    // 設定分頁（D-104、D-156 依功能分區）：備份一區在 iPhone 上只寫「備份在電腦上做」。
+    this.settingTab = wireSettings({
+      plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
+      settings: this.store, today: todayText,
+      saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
+    });
+    // 這裡只訂閱；data.json 要到 layout ready 才讀（T12），第一次由 start() 開始。
+    this.store.onChange(value => { this.state?.applySettings(value); this.settingTab?.refresh(); });
     // 圖示和「打開入口」都開入口，「目錄」直接開目錄；Obsidian 啟動時不自動打開（D-057）。
     this.addRibbonIcon('graduation-cap', 'Essence Cards：打開入口', () => { this.openEntry(); });
     this.addCommand({ id: 'open-entry', name: '打開入口', callback: () => { this.openEntry(); } });
@@ -185,6 +211,8 @@ export default class EssenceCardsPlugin extends Plugin {
     this.registerDomEvent(document, 'visibilitychange', () => {
       // 寫不進去的錯誤 writer 已經回報過；這裡只接住，不留下沒人處理的 rejection（Codex 審查 W5 的 F5）。
       if (document.visibilityState === 'hidden') this.state?.flush().catch((error: unknown) => { this.report(error, 'write'); });
+      // iPhone 回到前景：別台改的設定可能剛同步過來，而 iPhone 上 onExternalSettingsChange 還沒確認會不會被呼叫（§2-4）。
+      else if (Platform.isMobileApp) void this.store.reload();
     });
     // 開發版（tools/build.mjs --dev）：計數 layout ready 之前的檔案存取（T12 的證據）、載入開發命令；正式建置整段拿掉。
     if (DEV) {
@@ -194,8 +222,14 @@ export default class EssenceCardsPlugin extends Plugin {
     }
   }
 
+  /** Obsidian 發現 data.json 被外部改了（同步或手動）：只當成「該重讀了」的提示（§2）。 */
+  onExternalSettingsChange(): void {
+    void this.store.reload();
+  }
+
   onunload(): void {
     this.unloaded = true;
+    this.store.close();
     // 外掛停用時一起關掉複習畫面與入口（什麼都不寫，D-074）。
     this.review?.close();
     this.entry?.close();
@@ -476,7 +510,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     guard.onChange(() => { this.updateReminders(); this.entry?.refresh(); });
     guard.check();
-    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();
