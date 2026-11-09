@@ -1,6 +1,6 @@
 # 設定頁：每日時間上限、目標保持率、目前學期（給 Claude，本機執行）
 
-狀態：L2 四輪通過（[報告](<../Claude Codex Discussion/2026-11-09-settings-page-l2.md>)），待合併；iPhone 實機延後（2026-11-09）：使用者同意；格式查核的[回報](<../Claude Codex Discussion/2026-11-09-settings-page-format-review.md>)已核對，§1～§4、§7 已照改。
+狀態：已合併進 `main`（2026-11-09）；L2 四輪通過（[報告](<../Claude Codex Discussion/2026-11-09-settings-page-l2.md>)）；iPhone 實機延後（技術債表）。任務說明：使用者同意；格式查核的[回報](<../Claude Codex Discussion/2026-11-09-settings-page-format-review.md>)已核對，§1～§4、§7 已照改。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。新增外掛會寫的檔案格式（`data.json`）、改 `state` 與排程的輸入，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1～§3 開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
