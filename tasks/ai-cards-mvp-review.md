@@ -1,6 +1,6 @@
 # AI 製卡最小版：L2 獨立審查（給 Codex）
 
-狀態：待再審（2026-11-09，第五輪窄審，使用者決定）。第一輪審查 `9723536`、第二輪審查 `d776969`、第三輪審查 `1f291ae`、第四輪審查 `b4ff11f`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
+狀態：待再審（2026-11-09，第六輪窄審，使用者決定）。第一輪審查 `9723536`、第二輪審查 `d776969`、第三輪審查 `1f291ae`、第四輪審查 `b4ff11f`、第五輪審查 `f6526d4`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。這次會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險範圍（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)），合併前做 L2。**只審查，不改產品程式**；可以在隔離的暫存資料夾重現。
 
@@ -144,3 +144,20 @@
 - **想請特別找的新組合**：快照位置留在候選名之後，對象變動或家長跳過一篇；卡組路徑留在候選名之後，重建或搬走的判斷；`missing` 與 `moved` 交替時的解除；清單內圍欄後接比圍欄淺的題目。
 - **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts tests/obsidian-files.test.ts tests/folder-guard.test.ts tests/files-contract.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸（`1f291ae` 與 `26417ed` 輸出相同）。**沒跑**：修完之後的 Windows 實機（這一輪通過後在最後要合併的 commit 重跑）；Claude 網頁（額度）；iPhone（延後，技術債）。
 - **回報**：寫在 L2 報告最後新增一節〈第五輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。還有擋合併的發現時，照第四輪的寫法列出真實路徑與不修的代價，交使用者決定。
+
+## 第六輪窄審
+
+使用者 2026-11-09 看過第五輪的兩項後，選兩項都修、再窄審一輪。這一輪只讀：本節、[L2 報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)的〈第五輪的 Claude 回應〉。**範圍只有 `git diff f6526d4...claude/ai-cards-mvp` 與它直接影響的路徑**，不重審前幾輪已結的部分，也不找這段差異以外的新問題。遵守 repo 根目錄的 `AGENTS.md`，建議推理等級：**高**；只審查，不改產品程式，可以在隔離的暫存資料夾重現。
+
+- **審查對象**：worktree `D:\程式開發\Essence Cards\.claude\worktrees\ai-cards-mvp`，分支 `claude/ai-cards-mvp` 的最新 commit。最後一個改程式的 commit 是 `db0cec5`，之後只有文件。沒有未提交的修改。
+- **還沒結的發現**：R5-1（`db0cec5`）、R5-2（`c3d5cdd`）。兩項都修了，請確認修法涵蓋同一類輸入、有沒有帶進新問題。
+- **可能碰到的已結項目**：R3-6、R4-1、R4-2、R4-4 的回歸（`tests/ai-publish.test.ts`、`tests/folder-guard.test.ts`）。
+- **實作者自己選的做法**（規格沒寫的部分，§5 已補兩句）：
+  1. `published.attempted` 跟著位置走：開始寫之前記成 `true` 並存好；`refused`、`blocked` 改回原值；`failed`、`unreadable`、寫的時候當掉都留 `true`。換位置才歸零，對象變動不歸零。
+  2. 第一次寫這個位置就回 `exists`、內容又不同：換下一個後綴，不再回 `conflict`（`f6526d4` 是 `conflict`）。曾經開始寫過的位置照舊停下。
+  3. R5-1 只找同檔名、SHA-256 相同的 Markdown，用既有的 `aiRead`，不掃整個 vault 的內容。家長連快照檔都改名、或資料夾搬出 vault 後原位又長出新檔時，找不到同一份，會再發布一份；後者 vault 裡仍只有一份。
+  4. 「放棄」用同一個檢查：別處有同一份就照發布處理，讀不到就停下。
+  5. 恢復資料的 `published` 多一個必填的 `attempted`。舊格式的進行中工作會被當成讀不懂；這種工作只存在開發版，正式 vault 的 `0.3.0` 沒有 AI 製卡。
+- **想請特別找的新組合**：`attempted` 為 `true` 時對象變動或檔名被占用；同一輪裡 `refused` 之後接 `exists`；`displaced` 與別處有同一份同時成立；放棄和繼續遇到別處同名但內容不同或讀不到的檔。
+- **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts tests/obsidian-files.test.ts tests/folder-guard.test.ts tests/files-contract.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）。**沒跑**：真實回覆的回歸（這兩個 commit 沒動 `check.ts`、`draft.ts` 與貼回的解析）；修完之後的 Windows 實機（這一輪通過後在最後要合併的 commit 重跑）；Claude 網頁（額度）；iPhone（延後，技術債）。
+- **回報**：寫在 L2 報告最後新增一節〈第六輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。還有擋合併的發現時，照第四輪的寫法列出真實路徑與不修的代價，交使用者決定。
