@@ -208,7 +208,7 @@
 
 延後的測試：iPhone 實機寫出基準與切面、同步到電腦、兩台各一份不撞（第 2 類），見[技術債表](../docs/backlog.md#技術債)開頭「補測：」那一列。
 
-**Windows 實機**（§7，建置 `0.4.0+3fb6349`，Obsidian 1.15.0）：用獨立的 Obsidian 與暫存 vault 跑，沒有動測試 vault，所以沒有經過 iCloud。
+**Windows 實機**（§7，併入設定頁後的建置 `0.4.0+8c72d3c`，Obsidian 1.15.0）：用獨立的 Obsidian 與暫存 vault 跑，沒有動測試 vault，所以沒有經過 iCloud。
 
 - 第 1 項：4 篇各一行基準、設定三行；停用再啟用外掛多 0 行。
 - 第 2 項：編輯器打到 `狀態: 暫` 存檔多 0 行，改完 `狀態: 暫停` 多一行；目錄的暫停（`setDeckStatus`，暫存 vault 沒做過備份，先用 `backupReady(true)` 過門檻）多一行。
