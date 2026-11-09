@@ -57,6 +57,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-09 | 設定頁：每日時間上限、目標保持率、目前學期、考試倒數存進 `data.json`、跟著同步，改了今天的份馬上照新的值；別台改的回到前景或打開設定頁就讀到；iPhone 併入下一次實機測試（[任務說明](../tasks/settings-page.md)） |
 | 2026-11-09 | 省 token 補充（[D-171](decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點）：Codex 跑檢查一次等到結束（輪詢曾佔輸入 43%，試行）；Claude 不例行換對話、找不回依據才留一句進度；L2 報告不重述規格與差異 |
 | 2026-11-09 | Mindboard 的 repo 定案：開獨立的 `Essence-Mindboard`，開始寫程式時才建；規劃、決定與進度留在 Essence Cards，做法照 Capture（[D-196](decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)） |
 | 2026-11-09 | 編輯畫面標示與出處小表單合併：卡組筆記標出目標、題目與寫錯的地方；看不懂的出處點一下用表單改，欄位名稱寫錯、半形冒號問一句就改；只在電腦；Windows 實機通過，Codex L2 五輪（[任務說明](../tasks/edit-markup.md)） |
@@ -66,4 +67,3 @@ flowchart LR
 | 2026-11-06 | 開發進度畫板上線：[開發進度地圖](progress-map.md)是唯一來源，`main` 上改了就由 GitHub Actions 產生畫板網頁、發布到 <https://kuohappiness.github.io/Essence-Cards/>，網頁不進 repo；功能做完時改地圖裡的符號（[PR #3](https://github.com/kuohappiness/Essence-Cards/pull/3)） |
 | 2026-11-06 | 小考標記合併：目錄替一篇或一個單元設小考日期，寫成 `考試範圍/小考/` 的小考檔；入口最上面列出哪天考，全部卡只練那幾篇；連結找不到或重名時寫出怎麼修；Windows 實機通過，iPhone 還沒測（[D-189](decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)，[任務說明](../tasks/quiz-mark.md)、[Codex L2](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md>)） |
 | 2026-11-06 | 加深的主動提示定案：上一次還沒記穩的目標有三分之一記穩了，電腦的提醒區就問要不要加深，按一下才呼叫 AI；記穩了改看穩定度 7 天以上且最後一次答對，不跟著保持率與考試變（[D-194](decisions.md#d-194-加深的主動提示記穩了三分之一就問按一下才做)） |
-| 2026-11-06 | 題型接點與點選填空合併：翻面、打字、點選填空走同一個接點；比較卡一組併成一張、一格一個目標，有比較卡的卡組舊裝置整篇擋住；Windows 實機通過，iPhone 還沒測（[任務說明](../tasks/question-type-seam.md)、[Codex L2](<../Claude Codex Discussion/2026-11-05-question-type-seam-l2.md>)） |

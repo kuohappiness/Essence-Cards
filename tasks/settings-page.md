@@ -237,4 +237,4 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 
 ## 結果
 
-延後的測試：（實作後填）
+延後的測試：iPhone 實機（§8 最後一段），記在[技術債表](../docs/backlog.md#技術債)「補測：設定頁的 iPhone 實機」那一列。
