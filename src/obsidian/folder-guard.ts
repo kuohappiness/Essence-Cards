@@ -71,7 +71,7 @@ export interface FolderGuard {
   pause(path: string, folder?: boolean): Promise<void> | null;
   /** 這個檔在搬錯位置的資料夾裡：不當卡組（StateOptions.skip）。 */
   misplaced(path: string): boolean;
-  /** 這個路徑的上層有系統資料夾已知不在原位、也沒搬回：原位讀到「沒有」不代表真的沒有（AI 製卡，R3-4）。 */
+  /** 這個路徑的上層有系統資料夾已知不在原位、也沒搬回，或原位不見了又找不到：原位讀到「沒有」不代表真的沒有（AI 製卡，R3-4、R4-1）。 */
   displaced(path: string): boolean;
   /** issues() 變了。 */
   onChange(listener: () => void): () => void;
@@ -445,8 +445,9 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
       const at = placeOf(each);
       return at !== null && at !== each.from && !ownRules(at) && inside(path, at);
     }),
-    // 沒搬回的先記下（release 在放行之前），所以等完搬回的讀寫問這裡一定問得到。
-    displaced: path => judged.some(each => inside(path, each.from)) || stranded.some(each => {
+    // 沒搬回的先記下（release 在放行之前），所以等完搬回的讀寫問這裡一定問得到。沒搬回的只記在記憶體：重開之後搬到 Essence Cards 外面的
+    // 找不到位置，判斷是 missing，也算不在原位（R4-1），家長放回去或按「不用了」就解除。
+    displaced: path => current.some(issue => issue.kind === 'missing' && inside(path, issue.folder)) || judged.some(each => inside(path, each.from)) || stranded.some(each => {
       const at = strayAt(each);
       return at !== null && at !== each.from && inside(path, each.from);
     }),

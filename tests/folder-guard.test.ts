@@ -1086,8 +1086,7 @@ const AI_SNAP = `${R}/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`;
 const STRAY = `${R}/英文/紀錄`;
 
 /** 真的防呆、state 與製卡流程，加上這台電腦的存放；failDrop 時工作清不掉（快照寫成、清理前中斷）。 */
-async function aiCards(f: Fake, guard: FolderGuard, t: TestContext) {
-  const box = { jobs: null as unknown, failDrop: false };
+async function aiCards(f: Fake, guard: FolderGuard, t: TestContext, box = { jobs: null as unknown, failDrop: false }) {
   // eslint-disable-next-line prefer-const -- state 與流程互相參照
   let state: ReturnType<typeof createState>;
   const cards = createAiCards({
@@ -1141,6 +1140,37 @@ void test('R3-4 紀錄資料夾搬回失敗：原位讀到沒有不算沒有，�
   assert.equal((await cards.resume(job)).kind, 'done');
   assert.deepEqual(snapshots(f), [AI_SNAP]);
   assert.deepEqual(cards.jobs(), []);
+});
+
+void test('R4-1 搬回失敗後重開：搬到 Essence Cards 外面、原位又長出新的紀錄，都不再發布一份、不放棄；放回原位之後只清理', async t => {
+  const OUT = '紀錄';
+  for (const regrown of [false, true]) {
+    const f = fake();
+    const first = started(f);
+    const before = await published(f, first, t);
+    // 看過 AI 輸出：下一次判斷記住它（搬走之前 vault 有變動）。
+    first.check();
+    f.failMoves.push(Error('沒有權限'));
+    drag(f, first, `${R}/紀錄`, OUT);
+    await f.run();
+    assert.match((await before.cards.resume(before.job) as { message: string }).message, /不在原位/);
+    // 重開：防呆、state、製卡都重建，防呆只剩這台記住的名字；恢復資料還在。沒搬回的記憶體已經沒了。
+    first.close();
+    if (regrown) f.memory.write(`${R}/紀錄/2026-11 PC-test.jsonl`, '');
+    const guard = started(f);
+    const after = await aiCards(f, guard, t, before.box);
+    const job = after.cards.jobs().find(each => each.save)!;
+    assert.match((await after.cards.resume(job) as { message: string }).message, /不在原位/);
+    assert.deepEqual(snapshots(f), [`${OUT}/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`]);
+    assert.match((await after.cards.abandon(job) as { message: string }).message, /不在原位/);
+    assert.ok(after.cards.jobs().some(each => each.id === job.id));
+    if (regrown) continue;
+    // 家長放回原位：只清理，還是一份。
+    drag(f, guard, OUT, `${R}/紀錄`);
+    guard.check();
+    assert.equal((await after.cards.resume(job)).kind, 'done');
+    assert.deepEqual(snapshots(f), [AI_SNAP]);
+  }
 });
 
 void test('R3-4 對照：搬回成功時等回原位再讀，只有一份快照', async t => {
