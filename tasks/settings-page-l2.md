@@ -7,7 +7,7 @@
 - **待審**：`8717c09`（完整 SHA `8717c0952246b18c85ed661a97b7efc774ae7f1c`）到 `69ae53e`（`69ae53e5b91c824e0ba6148f29e2a4ea5ae97eee`）的差異，以及受影響的路徑：`src/core/settings/store.ts` 的讀、採用與隊伍，`src/main.ts` 的停用與 `saveFailed`，`tools/compare-versions.ts` 的 `adapterInput`。不用整包重審。
 - **先看**：報告最後的〈Claude 核對〉表，尤其 F3 不處理的新舊實例重疊、F4 採用晚到結果的條件（`writes` 計數，`!known`）、F6 不為電腦加計時器。
 - **請特別試**：晚到的結果和隊伍裡的讀、存檔交錯；`close()` 和晚到的結果交錯；第一次讀逾時但 `classify` 把 `seenFile` 設起來之後，後面的 `null` 的判斷；重讀時 `fingerprint` 含學期造成的多餘通知。
-- **F7** 是規格衝突，由使用者決定；文件的結果不用審。
+- **F7** 是規格衝突，使用者已決定維持例外（D-150 第 2 點已補），不用審。
 - **驗證**：`69ae53e` 的 pre-commit（完整的 `npm run check`）通過；回歸測試在 `8717c09` 的 store 上跑，F1、F2、F3、F4、F6 五項失敗；修正後 Windows 實機 §8 重跑，35 項通過。沒跑的：iPhone、雙機同步。
 - 報告接在 `Claude Codex Discussion/2026-11-09-settings-page-l2.md` 的後面，標「第二輪」。
 
