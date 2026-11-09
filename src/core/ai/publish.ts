@@ -49,8 +49,8 @@ export type PublishResult =
 export function beginSave(job: CardJob, reply: string, service: string | null, planned: PlannedDraft, startedAt: string): CardJob {
   const save: SaveState = {
     reply, replySha: sha256Hex(reply), service, startedAt,
-    decks: planned.decks.map(deck => ({ path: deck.path, text: deck.text, sha256: deck.sha256, ids: deck.ids, stage: 'pending', skipped: false })),
-    snapshotPath: planned.snapshotPath, snapshotBody: planned.snapshotBody, edits: planned.edits, published: null,
+    decks: planned.decks.map(deck => ({ path: deck.path, base: deck.base, text: deck.text, sha256: deck.sha256, ids: deck.ids, stage: 'pending', skipped: false })),
+    snapshotPath: planned.snapshotPath, snapshotBase: planned.snapshotBase, snapshotBody: planned.snapshotBody, edits: planned.edits, published: null,
   };
   return { ...job, save };
 }
@@ -168,12 +168,12 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     let path = deck.path;
     const names = io.names();
     if (found.text !== null) names.add(fileName(path).toLowerCase());
-    if (names.has(fileName(path).toLowerCase())) path = `${folderOf(deck.path)}/${freeName(fileName(deck.path), names)}.md`;
+    if (names.has(fileName(path).toLowerCase())) path = `${folderOf(deck.path)}/${freeName(deck.base, names)}.md`;
     const prior = deck.stage;
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
-    // 寫入前就擋下了，確定沒有寫：階段與路徑改回去（門檻沒過時讀回來之後也不會變成「上一次建到一半」，R3-1；下一個候選名照原始檔名遞增，R3-6）。
-    if (created.kind === 'refused' || created.kind === 'exists' || created.kind === 'blocked') update({ path: deck.path, stage: prior });
+    // 寫入前就擋下了，確定沒有寫：階段改回去（門檻沒過時讀回來之後也不會變成「上一次建到一半」，R3-1）。
+    if (created.kind === 'refused' || created.kind === 'exists' || created.kind === 'blocked') update({ stage: prior });
     if (created.kind === 'blocked') return created;
     // 照現在的樣子重新判斷（剛搬走就跟過去；還沒建過而 ID 已被占用就停下）；三次都趕不上，照最後一次的原因回報。
     if (created.kind === 'refused' || created.kind === 'exists') {
@@ -195,7 +195,6 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // 第 5 步：準備發布。時間取一次、全文做一次，一起存起來，重試照存下的寫（L2-8）；快照的位置被別人用了往後加。
     // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
     const before = save().published;
-    const planned = save().snapshotPath;
     const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
     const stale = !before || before.targets.join('\n') !== targets.join('\n');
     const located = await read(save().snapshotPath);
@@ -204,7 +203,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const names = io.names();
     if (located.text !== null && !before) names.add(fileName(save().snapshotPath).toLowerCase());
     const taken = located.text === null || !before ? names.has(fileName(save().snapshotPath).toLowerCase()) : false;
-    const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(fileName(save().snapshotPath), names)}.md` : save().snapshotPath;
+    const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(save().snapshotBase, names)}.md` : save().snapshotPath;
     if (stale || snapshotPath !== save().snapshotPath) {
       let time = before?.time;
       if (time === undefined) { const at = io.now(); time = stamp(at.ms, at.offset); }
@@ -214,11 +213,9 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
 
     // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
     const decks = save().decks.filter(deck => !deck.skipped).map(deck => ({ path: deck.path, ids: deck.ids }));
-    const candidate = save().snapshotPath;
-    const created = await io.createSnapshot(candidate, save().published!.text, decks);
-    // 確定沒有寫：位置改回去，下一個候選名照原始檔名遞增（R3-6）。
-    if (created.kind === 'refused' || created.kind === 'blocked') keep({ ...save(), snapshotPath: planned });
-    if (created.kind === 'refused') { nameTaken = created.why === 'name' ? candidate : null; continue; }
+    const created = await io.createSnapshot(save().snapshotPath, save().published!.text, decks);
+    // 位置和全文、雜湊一起留著（R4-2）：退回原名的話，重開會把別人的檔當成這份快照的異文。
+    if (created.kind === 'refused') { nameTaken = created.why === 'name' ? save().snapshotPath : null; continue; }
     if (created.kind === 'exists') {
       const found = await read(save().snapshotPath);
       if ('kind' in found) return found;

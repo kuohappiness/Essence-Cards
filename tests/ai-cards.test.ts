@@ -496,7 +496,7 @@ void test('§3 待貼回的工作：最多 5 個、14 天；過期的只丟還�
   const job = (id: string, ms: number, saved = false) => ({
     id, copiedAt: 'x', copiedMs: ms, form: form(), subject: { key: 'science', label: '自然', subject: '自然', r3: true },
     parts: [{ name: '任務段', version: '提示 v1', text: 't', sha256: sha256Hex('t') }], promptSha: 'p', existing: [],
-    save: saved ? { reply: 'r', replySha: 's', service: null, startedAt: 'x', decks: [], snapshotPath: 'p', snapshotBody: 'b', edits: [], published: null } : null,
+    save: saved ? { reply: 'r', replySha: 's', service: null, startedAt: 'x', decks: [], snapshotPath: 'p', snapshotBase: 'p', snapshotBody: 'b', edits: [], published: null } : null,
   });
   const now = 100 * day;
   const read = readJobs([job('a', now - 15 * day), job('b', now - 15 * day, true), ...['c', 'd', 'e', 'f', 'g', 'h'].map((id, i) => job(id, now - i * day)), { id: 'broken' }], now);

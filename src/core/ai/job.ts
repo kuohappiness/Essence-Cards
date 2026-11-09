@@ -5,8 +5,8 @@ import type { RuleSubject } from './rules.ts';
 // 待貼回的工作（tasks/ai-cards-mvp.md §3）與存草稿的恢復資料（§5）：存在這台電腦，不寫進 vault。
 // 按「複製提示」的當下就存每一部分的全文；之後外掛更新、規則或模板改了，這一份照舊是當時送出的文字。
 
-/** 一篇卡組在恢復資料裡的樣子。stage：pending 還沒碰 vault；started 記成開始建了（可能已經建了）；written 建好、讀回核對過（R3-1、R4-1）；rebuild 曾經開始建過、家長選了重建（L2-4：允許重建和曾經建過是兩件事，ID 照樣不再配出）。 */
-export interface SavedDeck { path: string; text: string; sha256: string; ids: string[]; stage: 'pending' | 'started' | 'written' | 'rebuild'; skipped: boolean }
+/** 一篇卡組在恢復資料裡的樣子。base：還沒加後綴的檔名，再撞名照它遞增（R4-4）。stage：pending 還沒碰 vault；started 記成開始建了（可能已經建了）；written 建好、讀回核對過（R3-1、R4-1）；rebuild 曾經開始建過、家長選了重建（L2-4：允許重建和曾經建過是兩件事，ID 照樣不再配出）。 */
+export interface SavedDeck { path: string; base: string; text: string; sha256: string; ids: string[]; stage: 'pending' | 'started' | 'written' | 'rebuild'; skipped: boolean }
 
 /** 存草稿的恢復資料（§5 第 2 步）：之後每一步都照這份寫，不重新整理、不重新查已有目標、不重新配號。 */
 export interface SaveState {
@@ -19,6 +19,8 @@ export interface SaveState {
   startedAt: string;
   decks: SavedDeck[];
   snapshotPath: string;
+  /** 快照還沒加後綴的檔名（SavedDeck.base 的快照版）。 */
+  snapshotBase: string;
   snapshotBody: string;
   edits: string[];
   /** 第 5 步（準備發布）取的 `時間`、做出的快照全文與 SHA-256、當時的 `對象`（路徑）：之後重試照存下的全文寫，對象變了才重做（L2-8）。 */
@@ -59,14 +61,14 @@ function isExisting(value: unknown): value is ExistingTarget {
   return isObject(value) && isString(value.id) && isString(value.name) && isString(value.source) && isString(value.path);
 }
 function isDeck(value: unknown): value is SavedDeck {
-  return isObject(value) && isString(value.path) && isString(value.text) && isString(value.sha256) && strings(value.ids)
+  return isObject(value) && isString(value.path) && isString(value.base) && isString(value.text) && isString(value.sha256) && strings(value.ids)
     && (value.stage === 'pending' || value.stage === 'started' || value.stage === 'written' || value.stage === 'rebuild') && typeof value.skipped === 'boolean';
 }
 function isSave(value: unknown): value is SaveState {
   if (!isObject(value)) return false;
   const published = value.published;
   return isString(value.reply) && isString(value.replySha) && (value.service === null || isString(value.service)) && isString(value.startedAt)
-    && Array.isArray(value.decks) && value.decks.every(isDeck) && isString(value.snapshotPath) && isString(value.snapshotBody) && strings(value.edits)
+    && Array.isArray(value.decks) && value.decks.every(isDeck) && isString(value.snapshotPath) && isString(value.snapshotBase) && isString(value.snapshotBody) && strings(value.edits)
     && (published === null || (isObject(published) && isString(published.time) && isString(published.text) && isString(published.sha256) && strings(published.targets)));
 }
 /** 這份是不是完整的工作；缺欄位的不能貼回（§3：沒有送出的證據就不建快照）。 */

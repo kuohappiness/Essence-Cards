@@ -140,12 +140,14 @@ export function freeName(base: string, taken: Set<string>): string {
 }
 
 /** 一篇卡組的全文要寫成的樣子。 */
-interface PlannedDeck { path: string; text: string; sha256: string; ids: string[] }
+interface PlannedDeck { path: string; base: string; text: string; sha256: string; ids: string[] }
 export interface PlannedDraft {
   decks: PlannedDeck[];
   /** 快照本文（§5〈快照〉）：整理後的整段回覆，名稱行只多了配好的 ID、少了 AI 的 ID；加進已有的照原文。 */
   snapshotBody: string;
   snapshotPath: string;
+  /** 快照還沒加後綴的檔名；卡組的在 PlannedDeck.base。之後再撞名照這個遞增（R4-4）。 */
+  snapshotBase: string;
   /** 快照的 `程式改動`：「第 37 行 拿掉 ^abc123」（行號是原文的）。 */
   edits: string[];
 }
@@ -206,11 +208,12 @@ export function planDraft(inspection: Inspection, form: CardForm, subject: Pick<
       : props.term === form.term.trim() && props.subject === subject.subject && props.unit?.code === unit.code && props.unit.name === unit.name.replace(/[ \t　]+/g, ' '));
     const trailing = new Set(text.split('\n').map(line => TRAILING_ID.exec(line)?.[1]).filter((id): id is string => !!id));
     if (!same || (piece.pick && props.need !== PICK_NEEDS) || !ids.every(id => trailing.has(id))) throw Error(`做出來的卡組讀回來和要寫的不同：${piece.name}`);
-    decks.push({ path: `${folder}/${freeName(piece.name, taken)}.md`, text, sha256: sha256Hex(text), ids });
+    decks.push({ path: `${folder}/${freeName(piece.name, taken)}.md`, base: piece.name, text, sha256: sha256Hex(text), ids });
   }
   const prefix = titlePrefix(form, subject);
   const label = prefix === null ? form.unit.trim() : `${form.term.trim()}${subject.subject ?? ''} ${form.unit.trim()}`;
-  const snapshot = freeName(safeFileName(`${date} ${label}`.replace(/[ 	　]+/g, ' ')), taken);
-  return { decks, snapshotBody: edited.join('\n'), snapshotPath: `${SNAPSHOT_FOLDER}/${snapshot}.md`, edits };
+  const snapshotBase = safeFileName(`${date} ${label}`.replace(/[ 	　]+/g, ' '));
+  const snapshot = freeName(snapshotBase, taken);
+  return { decks, snapshotBody: edited.join('\n'), snapshotPath: `${SNAPSHOT_FOLDER}/${snapshot}.md`, snapshotBase, edits };
 }
 

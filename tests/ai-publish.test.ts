@@ -502,6 +502,59 @@ void test('§5 還沒建過的篇，目的地已有同 ID、內容不同的檔�
   }
 });
 
+void test('§5 檔名存下原始基底（R4-2、R4-4）：快照改用後綴後被擋，重開照那個位置接著做；重試與規畫時已加後綴都照原始檔名遞增', async () => {
+  const SECOND = SNAPSHOT.replace('.md', ' 2.md'), THIRD = SNAPSHOT.replace('.md', ' 3.md');
+  // 改用 ` 2` 之後門檻擋下：位置與全文一起留著，重開不退回別人的原名。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set(SNAPSHOT, '別人的快照');
+    const create = io.createSnapshot.bind(io);
+    let once = true;
+    io.createSnapshot = (path, text, decks) => { if (!once) return create(path, text, decks); once = false; return Promise.resolve({ kind: 'blocked', reason: 'unread' }); };
+    assert.deepEqual(await publish(job, io), { kind: 'blocked', reason: 'unread' });
+    const again = reload();
+    assert.equal(again.save!.snapshotPath, SECOND);
+    assert.ok(again.save!.published);
+    assert.equal((await publish(again, io)).kind, 'done');
+    assert.ok(files.has(SECOND));
+    assert.equal(files.get(SNAPSHOT), '別人的快照');
+  }
+  // 原名被占、` 2` 寫入的當下也被別的資料夾占走：往 ` 3`，不回到原名而卡住。
+  {
+    const { files, io } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set(SNAPSHOT, '別人的快照');
+    const create = io.createSnapshot.bind(io);
+    io.createSnapshot = (path, text, decks) => {
+      if (path !== SECOND) return create(path, text, decks);
+      files.set('其他資料夾/' + path.slice(path.lastIndexOf('/') + 1), '別人的筆記');
+      return Promise.resolve({ kind: 'refused', why: 'name' });
+    };
+    assert.equal((await publish(job, io)).kind, 'done');
+    assert.ok(files.has(THIRD));
+  }
+  // 規畫時卡組與快照就已經是 ` 2`：再撞名是 ` 3`，不是 ` 2 2`。
+  {
+    const { files, io } = vault();
+    const job = saved(copied(), new Set([fileNameOf(WORD), fileNameOf(SNAPSHOT)]));
+    io.store(job);
+    const deck2 = WORD.replace('.md', ' 2.md');
+    assert.equal(job.save!.decks[0].path, deck2);
+    assert.equal(job.save!.snapshotPath, SECOND);
+    files.set('其他資料夾/' + deck2.slice(deck2.lastIndexOf('/') + 1), '別人的');
+    files.set('其他資料夾/' + SECOND.slice(SECOND.lastIndexOf('/') + 1), '別人的');
+    files.set('其他資料夾/' + WORD.slice(WORD.lastIndexOf('/') + 1), '別人的');
+    files.set('其他資料夾/' + SNAPSHOT.slice(SNAPSHOT.lastIndexOf('/') + 1), '別人的');
+    assert.equal((await publish(job, io)).kind, 'done');
+    assert.ok(files.has(WORD.replace('.md', ' 3.md')));
+    assert.ok(files.has(THIRD));
+    assert.ok(![...files.keys()].some(path => path.includes(' 2 2')));
+  }
+});
+
 void test('§5 快照三次都趕不上（R3-6）：卡組一直在變動回 changing，不說成讀不到；不寫快照', async () => {
   const { files, io } = vault();
   const job = saved(copied());
