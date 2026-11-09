@@ -1,6 +1,6 @@
 # 補上錯過就補不回來的紀錄：格式查核（Codex）
 
-狀態：待修（2026-11-09）
+狀態：已核對（2026-11-09）：修正寫進任務說明，見文末〈Claude 核對〉
 
 查核 [任務說明](../tasks/record-gaps.md) §1、§2、§6，並依 [查核請求](../tasks/record-gaps-format-review.md) 交叉核對 §3、§4 的格式邊界。基準是 main 的請求 commit 3404c3812a49bf70e6b896dcd6519156ccaa1337、分支 claude/ai-cards-mvp 的 src/state/（bc83daa40110121dae414a37f6b85e0c9f461f7f，共同祖先 f911bf8c52084c1d8ea8512f222b194800d3b3ae），舊版是 v0.3.0（5b3dc942e3e4fb3003fd55eb121aa066ee6977df）。
 
@@ -58,3 +58,24 @@
 - 既有測試用 node --test 串行執行，涵蓋 study、catalog、exam-scope、state-version、state-unread、state-writes、backup-take、restore、update-vault、folder-guard，共 237 例，220 通過、17 未通過，失敗都在 restore.test.ts。輸出包含 Windows 沙箱暫存路徑的 rename／symlink 權限錯誤。還原實際寫檔未確認通過，本文的切面還原結論限於另外已通過的 planRestore 探針。
 
 未查：尚未實作的 §1、§2 與 §6 的端對端測試。Windows Obsidian、iPhone、實際 iCloud 的列檔與同步行為沒有實測，本輪是開工前的格式查核。
+
+## Claude 核對（2026-11-09）
+
+逐項對照程式（`log.ts`、`parse.ts`、`scope.ts`、`catalog/index.ts`、`history.ts`、`state/index.ts`、`writes.ts`、`folder-files.ts`、`dev-entry.ts`）。P1 全部成立，修正都在[任務說明](../tasks/record-gaps.md)。程式還沒寫，所以是讀碼確認，沒有重跑探針。
+
+| 發現 | 處理 |
+|---|---|
+| 跨月回撥重複寫 | 採用。比較時這次執行寫過的值優先，重開最多多一行；不加寫入序號 |
+| 回測用最早的那一筆 | 採用。syntax 的兩處改寫 |
+| 第一行分不出 | 採用最小改寫：每行是「在 t 的觀察」。不加基準標記，手寫卡組的第一行同時是基準與開始，加了也答不了從哪天起 |
+| 目標缺行 | 採用。缺行只是比較預設，不加啟用行 |
+| 沒寫與讀壞 | 採用。`parseDeck` 傳出結構化結果，卡組和目標都要 |
+| 切面的鍵 | 採用。鍵是 `chooseScope` 分組字串的 SHA-256 前 12 碼，具名與無識別碼自然分開 |
+| 切面完整性 | 採用「每台各留一份有效觀察」，別台的檔不再擋 |
+| 等候選讀完 | 採用，用既有的 `drain`。另把「紀錄檔讀不到」從條件拿掉，切面用不到紀錄 |
+| 哪幾篇 | 採用。從 `deckMap` 取，用 `sourceLinks`，不用 `index.members` |
+| 零篇切面 | 回報要求定義，這裡定為不寫：剛裝好卡組還沒同步時，空切面會擋掉之後完整的那一份 |
+| 取消行自己的 `t` | 不納入避撞：`history.ts` 的 `take` 只把 `undo` 指向的 `t` 收進 `cancelled`，沒有東西用取消行自己的 `t` 認人。取消指向已納入 |
+| P2 其餘與 §8 的回歸例子 | 採用，併入任務說明 §1、§2、§6 |
+
+修改後的格式由 L2 一起查，不另開一輪：正式資料要到升版才開始寫，L2 在那之前。
