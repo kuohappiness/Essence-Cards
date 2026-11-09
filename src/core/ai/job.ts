@@ -23,8 +23,11 @@ export interface SaveState {
   snapshotBase: string;
   snapshotBody: string;
   edits: string[];
-  /** 第 5 步（準備發布）取的 `時間`、做出的快照全文與 SHA-256、當時的 `對象`（路徑）：之後重試照存下的全文寫，對象變了才重做（L2-8）。 */
-  published: { time: string; text: string; sha256: string; targets: string[] } | null;
+  /**
+   * 第 5 步（準備發布）取的 `時間`、做出的快照全文與 SHA-256、當時的 `對象`（路徑）：之後重試照存下的全文寫，對象變了才重做（L2-8）。
+   * attempted：snapshotPath 這個位置開始寫過、可能已經寫成（同卡組的 started）；寫入前就擋下、確定沒寫過是 false（R5-2）。
+   */
+  published: { time: string; text: string; sha256: string; targets: string[]; attempted: boolean } | null;
 }
 
 export interface CardJob {
@@ -69,7 +72,7 @@ function isSave(value: unknown): value is SaveState {
   const published = value.published;
   return isString(value.reply) && isString(value.replySha) && (value.service === null || isString(value.service)) && isString(value.startedAt)
     && Array.isArray(value.decks) && value.decks.every(isDeck) && isString(value.snapshotPath) && isString(value.snapshotBase) && isString(value.snapshotBody) && strings(value.edits)
-    && (published === null || (isObject(published) && isString(published.time) && isString(published.text) && isString(published.sha256) && strings(published.targets)));
+    && (published === null || (isObject(published) && isString(published.time) && isString(published.text) && isString(published.sha256) && strings(published.targets) && typeof published.attempted === 'boolean'));
 }
 /** 這份是不是完整的工作；缺欄位的不能貼回（§3：沒有送出的證據就不建快照）。 */
 export function isJob(value: unknown): value is CardJob {

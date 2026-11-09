@@ -115,7 +115,9 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   if (save().published) {
     const found = await read(save().snapshotPath);
     if ('kind' in found) return found;
-    if (found.text !== null) return sha256Hex(found.text) === save().published!.sha256 ? done() : { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
+    if (found.text !== null && sha256Hex(found.text) === save().published!.sha256) return done();
+    // 確定沒寫過的位置被別人用了，不是這份快照的異文：第 5 步換下一個後綴（R5-2）。
+    if (found.text !== null && save().published!.attempted) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
   }
 
   // 第 3 步：原文（送出的每一部分與回覆原文），只建立；已存在而且內容相同就跳過。
@@ -199,27 +201,39 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const stale = !before || before.targets.join('\n') !== targets.join('\n');
     const located = await read(save().snapshotPath);
     if ('kind' in located) return located;
-    // 整個 vault 的檔名再核對一次（L2-9）。已經準備發布、那個位置又有檔的，交給第 6 步比內容（不同就停下，§5），不換位置。
+    // 整個 vault 的檔名再核對一次（L2-9）。可能已經寫成的位置又有檔的，交給第 6 步比內容（不同就停下，§5），不換位置；確定沒寫過的位置被用了才往後加（R5-2）。
+    const mine = before?.attempted ?? false;
     const names = io.names();
-    if (located.text !== null && !before) names.add(fileName(save().snapshotPath).toLowerCase());
-    const taken = located.text === null || !before ? names.has(fileName(save().snapshotPath).toLowerCase()) : false;
+    if (located.text !== null && !mine) names.add(fileName(save().snapshotPath).toLowerCase());
+    const taken = located.text === null || !mine ? names.has(fileName(save().snapshotPath).toLowerCase()) : false;
     const snapshotPath = taken ? `${folderOf(save().snapshotPath)}/${freeName(save().snapshotBase, names)}.md` : save().snapshotPath;
     if (stale || snapshotPath !== save().snapshotPath) {
       let time = before?.time;
       if (time === undefined) { const at = io.now(); time = stamp(at.ms, at.offset); }
       const text = stale ? snapshotText(job, time) : before.text;
-      keep({ ...save(), snapshotPath, published: { time, text, sha256: sha256Hex(text), targets } });
+      keep({ ...save(), snapshotPath, published: { time, text, sha256: sha256Hex(text), targets, attempted: mine && snapshotPath === save().snapshotPath } });
     }
 
     // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
     const decks = save().decks.filter(deck => !deck.skipped).map(deck => ({ path: deck.path, ids: deck.ids }));
+    // 同卡組的 started：先記成可能寫成、存好才去寫；寫入前就擋下的改回去（R5-2）。
+    const attempted = save().published!.attempted;
+    const mark = (value: boolean): void => { keep({ ...save(), published: { ...save().published!, attempted: value } }); };
+    if (!attempted) mark(true);
     const created = await io.createSnapshot(save().snapshotPath, save().published!.text, decks);
+    if ((created.kind === 'refused' || created.kind === 'blocked') && !attempted) mark(false);
     // 位置和全文、雜湊一起留著（R4-2）：退回原名的話，重開會把別人的檔當成這份快照的異文。
     if (created.kind === 'refused') { nameTaken = created.why === 'name' ? save().snapshotPath : null; continue; }
     if (created.kind === 'exists') {
       const found = await read(save().snapshotPath);
       if ('kind' in found) return found;
-      if (found.text === null || sha256Hex(found.text) !== save().published!.sha256) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
+      if (found.text === null || sha256Hex(found.text) !== save().published!.sha256) {
+        if (attempted) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
+        // 這個位置這次才第一次寫：那個檔不是這份快照，換下一個後綴（R5-2）。
+        mark(false);
+        nameTaken = save().snapshotPath;
+        continue;
+      }
     } else if (created.kind !== 'done') return created;
     // 第 7 步：清理。
     return done();

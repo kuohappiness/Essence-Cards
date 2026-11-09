@@ -555,6 +555,65 @@ void test('§5 檔名存下原始基底（R4-2、R4-4）：快照改用後綴後
   }
 });
 
+void test('§5 快照分得出確定沒寫與可能寫成（R5-2）：確定沒寫的候選被占用就換後綴，可能寫成的位置有異文照舊不蓋掉', async () => {
+  const SECOND = SNAPSHOT.replace('.md', ' 2.md'), THIRD = SNAPSHOT.replace('.md', ' 3.md');
+  const BASE = SNAPSHOT.slice(SNAPSHOT.lastIndexOf('/') + 1);
+  // 改用 ` 2` 之後門檻擋下，確定沒寫；重開之前 ` 2` 被第二個工作占了：存成 ` 3`，時間與全文沿用，` 2` 不動。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set('其他資料夾/' + BASE, '別人的筆記');
+    const create = io.createSnapshot.bind(io);
+    let once = true;
+    io.createSnapshot = (path, text, decks) => { if (!once) return create(path, text, decks); once = false; return Promise.resolve({ kind: 'blocked', reason: 'unread' }); };
+    assert.deepEqual(await publish(job, io), { kind: 'blocked', reason: 'unread' });
+    const held = reload();
+    assert.equal(held.save!.snapshotPath, SECOND);
+    files.set(SECOND, '第二個工作的快照');
+    assert.equal((await publish(held, io)).kind, 'done');
+    assert.equal(files.get(SECOND), '第二個工作的快照');
+    assert.equal(files.get(THIRD), held.save!.published!.text);
+  }
+  // 第一次寫這個位置，寫入的當下才發現有檔：不是這份快照，換下一個後綴。
+  {
+    const { files, io } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const create = io.createSnapshot.bind(io);
+    io.createSnapshot = (path, text, decks) => { if (path === SNAPSHOT) files.set(SNAPSHOT, '剛同步來的筆記'); return create(path, text, decks); };
+    assert.equal((await publish(job, io)).kind, 'done');
+    assert.equal(files.get(SNAPSHOT), '剛同步來的筆記');
+    assert.ok(files.has(SECOND));
+  }
+  // 寫不進去，不知道寫了沒有：那個位置之後出現別的內容，停下、不蓋掉、不換位置。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const create = io.createSnapshot.bind(io);
+    let once = true;
+    io.createSnapshot = (path, text, decks) => { if (!once) return create(path, text, decks); once = false; return Promise.resolve({ kind: 'failed', error: Error('寫不進去') }); };
+    assert.equal((await publish(job, io)).kind, 'failed');
+    files.set(SNAPSHOT, '別人的快照');
+    assert.deepEqual(await publish(reload(), io), { kind: 'conflict', path: SNAPSHOT, what: 'snapshot' });
+    assert.equal(files.get(SNAPSHOT), '別人的快照');
+    assert.ok(!files.has(SECOND));
+  }
+  // 記成可能寫成、存好才去寫：寫的時候當掉，重開看到的是可能寫成。
+  {
+    const { files, io, box, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    box.crash = (what, path) => what === 'create' && path === SNAPSHOT;
+    await assert.rejects(publish(job, io), Crash);
+    box.crash = () => false;
+    files.set(SNAPSHOT, '別人的快照');
+    assert.deepEqual(await publish(reload(), io), { kind: 'conflict', path: SNAPSHOT, what: 'snapshot' });
+    assert.equal(files.get(SNAPSHOT), '別人的快照');
+  }
+});
+
 void test('§5 快照三次都趕不上（R3-6）：卡組一直在變動回 changing，不說成讀不到；不寫快照', async () => {
   const { files, io } = vault();
   const job = saved(copied());
