@@ -20,6 +20,8 @@ export const incomplete = (value: unknown): boolean => typeof value === 'string'
 /** 讀到不完整的內容：不是寫入失敗，呼叫的一方分得出來（考試切面的 modify 這次不寫、下次再查）。 */
 export class IncompleteRead extends Error {}
 const incompleteError = (path: string): Error => new IncompleteRead('讀到的內容不完整（含 NUL），當成讀不到：' + path);
+/** 月檔的讀取等到上限還沒回來，這一批先不等它（L2 的 R15）。 */
+class ReadStuck extends Error {}
 /** 直接讀一個檔的結果（不經過讀取層的）：不完整就丟錯。 */
 export function completeText(path: string, text: string | null): string | null {
   if (incomplete(text)) throw incompleteError(path);
@@ -194,22 +196,29 @@ export function createReads(options: ReadsOptions) {
     const at = paths.map(path => marks.get(path));
     // 一直沒回來的讀取也算讀不到（D-154、任務說明 §8）：iCloud 的佔位檔可能讓 read 一直不回來，unread() 不能只看讀失敗的。
     const settled = new Set<string>();
+    let abandon = (): void => { /* 下面換成真的。 */ };
+    const abandoned = new Promise<never>((_, reject) => { abandon = () => { reject(new ReadStuck()); }; });
+    abandoned.catch(() => { /* 只給月檔的讀取用；這一批沒有月檔時沒有人接。 */ });
     const stuck = setTimeout(() => {
       stuckTimers.delete(stuck);
       for (const path of paths) if (!settled.has(path)) unread.add(path);
       unreadCheck();
       for (const wake of stuckWakes) wake();
       stuckWakes.clear();
+      // 載入完成之後，卡住的只剩月檔：照讀不到處理，讀到的卡組先用，後面的讀取也不排在它後面（L2 的 R15）。卡組不放，不知道 ID 用過沒（D-134）。
+      if (life.loaded && !options.alone && paths.every(path => settled.has(path) || isLogPath(path))) abandon();
     }, options.stuckAfter);
     stuckTimers.add(stuck);
-    const reading = paths.map(path => files.read(path));
+    const started = paths.map(path => files.read(path));
     // 另外接，不串在讀取上：讀完之後的先後不能因為多了這個計時而改變。
-    reading.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); }; each.then(done, done); });
+    started.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); }; each.then(done, done); });
+    // 同樣的理由，只有載入之後的月檔多包一層，卡組的先後不變。
+    const reading = started.map((each, i) => life.loaded && isLogPath(paths[i]) ? Promise.race([each, abandoned]) : each);
     const results = await Promise.allSettled(reading);
     clearTimeout(stuck);
     stuckTimers.delete(stuck);
     if (life.closed) return;
-    let failure: { error: unknown } | null = null;
+    let failure: { error: unknown } | null = null, retry = false;
     const texts: Texts = new Map(), logs: Texts = new Map();
     for (const [i, path] of paths.entries()) {
       // 讀到不完整的內容當成讀不到（§3）：走下面的 unread 與重試，不採用、不解析。
@@ -225,16 +234,18 @@ export function createReads(options: ReadsOptions) {
         pending.add(path);
         unread.add(path);
         options.unreadable(path);
-        failure ??= { error: result.reason };
+        retry = true;
+        // 卡住不是錯誤（unread() 已經列著）：和一直沒回來的讀取一樣不報。
+        if (!(result.reason instanceof ReadStuck)) failure ??= { error: result.reason };
         continue;
       }
       unread.delete(path);
       (isDeckPath(path) ? texts : logs).set(path, result.value);
     }
     const finish = options.batch(texts, logs);
-    if (failure) {
+    if (retry) {
       failures++;
-      onError(failure.error);
+      if (failure) onError(failure.error);
       // 等待中已經有新的通知排好時，就跟著那一次重讀。
       if (timer === null) schedule(retryDelay());
     } else if (!unread.size) failures = 0;

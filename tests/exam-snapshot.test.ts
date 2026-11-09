@@ -702,18 +702,63 @@ for (const [name, order] of [['回呼前', 'callback'], ['查核前', 'before']]
   assert.deepEqual(written(memory), [FILE]);
 });
 
-void test('26 卡組和月檔同一批、月檔卡住：卡組還不知道，先不寫；那批回來就寫（相鄰情況）', async t => {
+const EDITED_NATURE = NATURE_TEXT.replace('答 k3m9x2', '新答案');
+void test('26 卡組和月檔同一批、月檔卡住：到讀取上限之前先不寫，到了就用讀到的卡組寫；月檔晚回來不多寫（L2 的 R15）', async t => {
   const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
   const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
   const read = memory.holdRead(PHONE_LOG);
-  memory.notify(PHONE_LOG, NATURE);
+  memory.notify(PHONE_LOG);
+  memory.write(NATURE, EDITED_NATURE);
   await h.pump();
   await read.started;
   h.setNow(OPEN);
   h.state.today();
   await h.pump(0);
-  assert.deepEqual(written(memory), []);
+  assert.deepEqual(written(memory), [], '卡組還不知道');
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.deepEqual(rows(memory)[1], { path: NATURE, text: EDITED_NATURE });
   read.release();
+  await h.pump(0);
+  await h.pump(120_000);
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('月檔卡住之後才改的卡組：不被它擋住，照常讀到（L2 的 R15）', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
+  const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
+  const read = memory.holdRead(PHONE_LOG);
+  t.after(() => { read.release(); });
+  memory.notify(PHONE_LOG);
+  await h.pump();
+  await read.started;
+  await h.pump(STUCK);
+  memory.write(NATURE, EDITED_NATURE);
+  await h.pump();
+  h.setNow(OPEN);
+  h.state.today();
+  await h.pump(0);
+  assert.deepEqual(rows(memory)[1], { path: NATURE, text: EDITED_NATURE });
+});
+
+void test('卡組自己也卡住：到上限也不寫，整批回來才寫（相鄰情況）', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
+  const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
+  const log = memory.holdRead(PHONE_LOG), deck = memory.holdRead(NATURE);
+  memory.notify(PHONE_LOG, NATURE);
+  await h.pump();
+  await deck.started;
+  h.setNow(OPEN);
+  h.state.today();
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(written(memory), []);
+  assert.deepEqual([...h.state.unread()].sort(), [NATURE, PHONE_LOG].sort());
+  log.release();
+  deck.release();
   await h.pump(0);
   assert.deepEqual(written(memory), [FILE]);
 });
