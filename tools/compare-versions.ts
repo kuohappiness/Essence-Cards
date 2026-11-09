@@ -73,7 +73,8 @@ export function adapterInput(backup: Extract<ReturnType<typeof openBackup>, { ok
     if (path.startsWith('Essence Cards/') && (path.endsWith('.md') || path.endsWith('.jsonl'))) files[path] = decoder.decode(content);
   }
   const data = backup.files.get(backup.manifest.vault.config + '/' + PLUGIN_DATA);
-  return { now: started.at, offset: started.offset, files, ...data ? { data: decoder.decode(data) } : {} };
+  // 保留 BOM：Obsidian 讀 data.json 時不拿掉它，JSON.parse 會失敗；交給各版本照實際的讀法（§2-9）。
+  return { now: started.at, offset: started.offset, files, ...data ? { data: new TextDecoder('utf-8', { ignoreBOM: true }).decode(data) } : {} };
 }
 
 /**

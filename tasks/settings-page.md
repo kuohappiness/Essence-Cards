@@ -78,10 +78,10 @@
 規則：
 
 1. **存檔**（D-149 第 7 點）：`loadData()` → 只改這次的欄位 → `saveData()` → 再 `loadData()` 核對這次的欄位真的是新值（恢復預設看欄位真的不見）。**存檔與重讀走同一條隊伍，一次一件**，較早開始的讀不會蓋掉較新的結果。寫入 10 秒沒回來先回報失敗，隊伍仍等它結束才放行，舊的寫入不會晚到蓋掉新的。讀回的值和這次要存的不同時，採用讀回的值並回報失敗。
-2. **不蓋掉**：寫前讀到 `undefined`、不是物件（陣列、數字）、等超過 5 秒沒回來，或**這次執行讀到過檔、現在卻回 `null`**（例如 iPhone 的佔位檔回報成不存在；外掛自己不會刪這個檔），這次不寫，回報失敗。其他情況的 `null` 當成空物件。
+2. **不蓋掉**：任何一次讀到物件（包括寫前的讀）就算這次見過檔。寫前讀到 `undefined`、不是物件（陣列、數字）、等超過 5 秒沒回來，或**這次執行讀到過檔、現在卻回 `null`**（例如 iPhone 的佔位檔回報成不存在；外掛自己不會刪這個檔），這次不寫，回報失敗。其他情況的 `null` 當成空物件。
 3. **選過的值就算等於預設也存**；「恢復預設」才刪欄位，刪完是空物件也留著檔。
 4. **重讀的時機**：載入時（`layout ready` 之後，和 `state` 同時開始；在那之前的重讀不做）、`onExternalSettingsChange`、打開設定頁、iPhone 上 Obsidian 回到前景（`visibilitychange`）、每次存檔後。不另加檔案監看，不自動回寫（技術債表那一列）。
-5. **讀不到時**：維持目前手上的值；一次都沒讀成功時用預設值，並標成「不知道」（`known: false`，§3）。之後任何一次重讀成功就更新。
+5. **讀不到時**：維持目前手上的值；一次都沒讀成功時用預設值，並標成「不知道」（`known: false`，§3）。之後任何一次重讀成功就更新。讀了超過 5 秒才回來的結果不採用，例外是一次都還沒讀到、這段期間也沒人存過：沒有東西會被它蓋掉，採用，否則這次開啟可能一直用預設值。
 6. **失敗時使用者看到什麼**：一則通知「Essence Cards：設定暫時讀不到，這次沒有存下，請再試一次」（寫入失敗時「寫不進去」），下拉選單回到實際的值，記進錯誤紀錄（`where: "ui"`）。
 7. **跨裝置的限制**：本機核對只證明當時這台看到的值。兩台在同步完成之前各改一項，iCloud 留下其中一份，另一項會退回去；外掛不合併、不挑衝突副本。一台改完等同步再改另一台就不會發生，寫進說明書的注意事項。要無損得換存法，只有幾個欄位、重選一次就回來，不值得。
 8. **不等備份**：D-150 第 2 點的第一次備份在新版啟動時自動做；第 3 點的閘門是為了卡組。設定最壞的損失是重選幾個值，擋住的話備份失敗時連上限都調不了。
@@ -98,7 +98,7 @@ interface SettingsValue {
   examCountdown: boolean;
   known: boolean;                      // false：data.json 還沒讀到，上面是預設值
 }
-StateOptions.settingsFirst?: Promise<SettingsValue>;   // 第一次載入等它（最多 2 秒）
+StateOptions.settingsFirst?: Promise<SettingsValue>;   // 第一次載入等它；2 秒的上限由 store 的 first() 保證
 State.applySettings(value: SettingsValue): void;       // 設定頁、別台裝置改了都走這裡
 State.currentSettings(): { settings: Settings; semester: string | null; examCountdown: boolean; known: boolean };
 ```
@@ -143,7 +143,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 - **恢復預設**：上限、保持率、考試倒數已經存過時，那一列多一個小圖示（`addExtraButton`，提示「恢復預設」），沒存過不顯示。學期選 `未設定` 就是刪掉。
 - **考試倒數只管入口**：關掉時 `src/review/entry.ts` 的 `countdownOf` 回 `null`。目錄科目標題旁的倒數不受影響（[D-097](../docs/decisions.md#d-097-目錄畫面)），排程、考前提高、「考試範圍與日期」那一列都不變。
 - **小選擇**：學期用一個選單，不拆年級和上下：少一種「只選了一半」的狀態（D-179）。ⓘ 用點的，和備份那一列相同，電腦和 iPhone 一套，不做 D-078 寫的滑鼠移過去。
-- 選單顯示的是今天算出來的學期；旁邊不顯示積了幾張（D-071）。
+- 選單顯示的是今天算出來的學期，內容沒變、但重讀時學期換了也重畫；旁邊不顯示積了幾張（D-071）。
 - 打開設定頁先用手上的值畫，同時重讀，值不同才重畫。
 - iPhone 同樣顯示這四列；備份那一區照舊。
 
@@ -171,7 +171,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 **§3 `state`**
 
 10. `settingsFirst` 給 `capMinutes: 5`：`ready()` 後第一次 `today()` 的份就照 5 分鐘（份數和直接傳 `settings` 相同），排程只算了一次。
-11. `settingsFirst` 3 秒才回來：`ready()` 在 2 秒多完成、用預設值、`known: false`；回來後重排一次、`known: true`。
+11. store 的第一次讀 3 秒才回來（`settingsFirst` 是 `store.first()`，2 秒的上限由它保證）：`ready()` 在 2 秒多完成、用預設值、`known: false`；回來後重排一次、`known: true`。第一次讀 5.2 秒才回來、中間沒有存檔：一樣採用；中間存過：不採用。
 12. `applySettings` 上限 30 → 5：`onChange` 通知一次，`today()` 的份變少；上限調回 30：回到原本的份。今天已答對的目標改上限後不重出，作答還在 `history`。完成數算新的份裡完成了幾個：一科 40 張答第 1 張是 1/40 → 1/20；答第 26 張是 1/40 → 0/20，調回 30 又是 1/40（核對時實跑的數字；只有當天做過排在後面的卡又調低上限才會這樣）。手上的卡移出份內時，那一張照樣可以記一次作答，下一張照新的份。
 13. `retention` 0.8 → 0.95：到期日變早的目標出現在今天的份裡（字面的例子，用手算的時間）；考前提高（D-078）的 `max(設定, 0.9)` 照舊：設定 0.95 時範圍內用 0.95。
 14. 值完全相同再呼叫十次：不重排（`today()` 回同一個物件）、`onChange` 零次、不多寫任何紀錄行。
@@ -181,7 +181,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 18. 外部改了 `data.json`（呼叫 store 的重讀）：值真的變了才 `applySettings` 重排；內容相同不重排。外部只補上和預設相同的欄位：畫面多恢復預設，`today()` 同一個物件。
 19. `applySettings` 不寫任何紀錄行、不寫任何卡組（`Files` 的寫入次數為零）。
 32. 晚到的舊讀不蓋新值：重讀還在等時存檔，隊伍依序，最後的值是存檔的值。第一筆失敗後第二筆照常。寫入逾時回報失敗，第二筆等它結束才開始。
-33. 這次執行讀到過檔、之後 `load` 回 `null`：不寫。合法 JSON 的 `null`（沒讀到過檔）：當空物件。確認沒有檔時 `known` 是 `true`，暫時讀不到才是 `false`。
+33. 這次執行讀到過檔（包括只有寫前讀到過，核對時回 `null` 算失敗）、之後 `load` 回 `null`：不寫。合法 JSON 的 `null`（沒讀到過檔）：當空物件。確認沒有檔時 `known` 是 `true`，暫時讀不到才是 `false`。
 34. 同一時段換日、範圍變動、設定變動，最後一次排程同時用到新的日子、範圍與設定。
 
 **§4 學期**（預期值是手算的字面值）
@@ -214,10 +214,10 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 25. 沒存過時沒有恢復預設，存過才有（`examCountdown: false` 也算）；按了欄位不見、選單回到預設。
 26. 存檔失敗：有通知，選單回到實際的值。
 27. 設定頁的文字沒有「給家長」「學生」（D-156）。
-28. 外掛載入到 layout ready 之前沒有呼叫 `loadData`（T12）。
+28. 外掛載入到 layout ready 之前沒有呼叫 `loadData`（T12），在設定頁操作也沒有讀寫。外掛停用時還沒開始的存檔不做。
 29. 手機：`visibilitychange` 回到前景時重讀；電腦不多讀。
 30. 考試倒數關掉：有生效範圍時，入口每一列的 `countdown` 是 `null`，`examSubject`（目錄）照舊有字，`today()` 同一個物件；打開後入口的倒數回來。
-31. 發布前比較：凍結的 `data.json` 上限 5：有 `src/core/settings/` 的版本今天的份照 5 分鐘算；沒有的版本照預設；凍結資料裡沒有 `data.json` 時兩邊都是預設。
+31. 發布前比較：凍結的 `data.json` 上限 5：有 `src/core/settings/` 的版本今天的份照 5 分鐘算；沒有的版本照預設；凍結資料裡沒有 `data.json` 時兩邊都是預設；開頭有 BOM 時也是預設，和 Obsidian 的 `loadData` 相同。
 
 ## 8. Windows 實機（Claude 用開發版跑，先確認測試 vault 沒有別的 session 在用；結束後把 `data.json` 還原）
 

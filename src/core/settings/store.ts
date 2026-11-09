@@ -23,7 +23,10 @@ export interface SettingsStore {
   saved(): SettingsKey[];
   /** 重讀 data.json；讀不到維持手上的值。first() 之前什麼都不做。 */
   reload(): Promise<void>;
+  /** first() 之前不讀不寫，回 unreadable。 */
   change(change: SettingsChange): Promise<SaveResult>;
+  /** 外掛停用：還沒開始的讀寫不做，存檔回 failed，也不再通知。 */
+  close(): void;
   /** 值或存過的項目變了（包括 known 由 false 變 true）。 */
   onChange(listener: (value: SettingsValue) => void): () => void;
 }
@@ -32,12 +35,14 @@ const FIRST_WAIT = 2000;
 const READ_WAIT = 5000;
 const WRITE_WAIT = 10_000;
 
-type Read = { ok: true; raw: Record<string, unknown>; exists: boolean } | { ok: false };
+type Read = { ok: true; raw: Record<string, unknown> } | { ok: false };
 
 export function createSettingsStore(options: SettingsStoreOptions): SettingsStore {
   let raw: Record<string, unknown> = {};
   let saved: Saved = readSaved(raw);
-  let known = false, seenFile = false, started = false;
+  let known = false, seenFile = false, started = false, closed = false;
+  /** 開始過幾次存檔：逾時後才回來的第一次讀，只有這段期間沒人存過才能採用。 */
+  let writes = 0;
   const listeners = new Set<(value: SettingsValue) => void>();
   /** 存檔與重讀一次一件：較早開始的讀不會蓋掉較新的結果，舊的寫入不會晚到蓋掉新的（§2-1）。 */
   let tail: Promise<unknown> = Promise.resolve();
@@ -48,42 +53,60 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     return run;
   }
   const value = (): SettingsValue => valueOf(saved, known);
-  const fingerprint = (): string => JSON.stringify([saved, savedKeys(raw), known]);
+  const semesterNow = (): string | null => saved.semester ? semesterOn(saved.semester, options.today()) : null;
+  /** 算進今天的學期：內容沒變、但過了 2/1 或 8/1，開著的設定頁也要換（§5）。 */
+  const fingerprint = (): string => JSON.stringify([saved, savedKeys(raw), known, semesterNow()]);
+  let notified = fingerprint();
 
-  /** 讀一次；逾時後才回來的結果不採用。 */
+  /** load 交回的內容怎麼算。只要是物件就記下「這次見過檔」，不管這次有沒有採用（寫前的讀也算，§2-2）。 */
+  function classify(content: unknown): Read {
+    if (content === undefined) return { ok: false };
+    // 外掛自己不會刪這個檔：這次讀到過，現在卻說沒有，當成讀不到（例如 iPhone 的佔位檔），不覆寫（§2-2）。
+    if (content === null) return seenFile ? { ok: false } : { ok: true, raw: {} };
+    if (typeof content !== 'object' || Array.isArray(content)) return { ok: false };
+    seenFile = true;
+    return { ok: true, raw: content as Record<string, unknown> };
+  }
+  /** 讀一次；逾時後才回來的結果原則上不採用，可能比之後的存檔舊。 */
   async function read(): Promise<Read> {
+    const writesAtStart = writes;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<'timeout'>(resolve => { timer = setTimeout(() => { resolve('timeout'); }, READ_WAIT); });
     // load 拒絕和讀到 undefined 一樣當成讀不到：呼叫端回報 unreadable，不是程式的錯。
-    const content = await Promise.race([options.load().catch(() => undefined), timeout]);
+    const loading = options.load().catch(() => undefined);
+    const content = await Promise.race([loading, timeout]);
     clearTimeout(timer);
-    if (content === 'timeout' || content === undefined) return { ok: false };
-    // 外掛自己不會刪這個檔：這次讀到過，現在卻說沒有，當成讀不到（例如 iPhone 的佔位檔），不覆寫（§2-2）。
-    if (content === null) return seenFile ? { ok: false } : { ok: true, raw: {}, exists: false };
-    if (typeof content !== 'object' || Array.isArray(content)) return { ok: false };
-    return { ok: true, raw: content as Record<string, unknown>, exists: true };
+    if (content !== 'timeout') return classify(content);
+    // 一次都還沒讀到、這段期間也沒人存過：晚到的結果沒有東西會被它蓋掉，採用，否則這次開啟可能一直用預設值（§2-5）。
+    void loading.then(late => {
+      const result = classify(late);
+      if (result.ok && !known && !closed && writes === writesAtStart) adopt(result);
+    });
+    return { ok: false };
   }
   function adopt(result: Extract<Read, { ok: true }>): void {
-    const before = fingerprint();
     raw = result.raw;
     saved = readSaved(raw);
     known = true;
-    seenFile ||= result.exists;
-    if (fingerprint() === before) return;
+    const now = fingerprint();
+    if (now === notified) return;
+    notified = now;
     const current = value();
     for (const listener of [...listeners]) {
       try { listener(current); } catch (error) { options.onError?.(error); }
     }
   }
   const reread = (): Promise<void> => queued(async () => {
+    if (closed) return;
     const result = await read();
-    if (result.ok) adopt(result);
+    if (result.ok && !closed) adopt(result);
   });
 
   return {
     value,
-    semester: () => saved.semester ? semesterOn(saved.semester, options.today()) : null,
+    semester: semesterNow,
     saved: () => savedKeys(raw),
+    close() { closed = true; },
     async first() {
       started = true;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -94,10 +117,16 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     },
     reload: () => started ? reread() : Promise.resolve(),
     change(change) {
+      // layout ready 之前不碰 data.json（T12）：設定頁在那之前就註冊好了，所有存檔都從這裡擋。
+      if (!started) return Promise.resolve('unreadable');
       return new Promise<SaveResult>(report => {
         // 工作結束才放行隊伍：寫入逾時時畫面先知道失敗，下一筆仍等這一筆真的結束（§2-1）。
         void queued(async () => {
+          // 外掛停用之後，還沒開始的不再讀寫；已經交給 saveData 的讓它做完。
+          if (closed) { report('failed'); return; }
+          writes++;
           const base = await read();
+          if (closed) { report('failed'); return; }
           if (!base.ok) { report('unreadable'); return; }
           const timer = setTimeout(() => { report('failed'); }, WRITE_WAIT);
           try {

@@ -764,3 +764,15 @@ void test('凍結的輸入：備份裡的 data.json 原文帶過去；沒有就�
   assert.equal((await take({ '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":5}' })).data, '{"capMinutes":5}');
   assert.equal('data' in await take({}), false);
 });
+
+void test('data.json 開頭有 BOM：和 Obsidian 的 loadData 一樣讀不懂，從備份的位元組走到比較都是預設（L2 F5）', async t => {
+  const body = new TextEncoder().encode('{"capMinutes":5}');
+  const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...body]);
+  const vault = await makeVault(t, { ...manyGoals, '.obsidian/plugins/essence-cards/data.json': withBom });
+  const { path } = await backupVault({ vault, to: await tempFolder(t), by: 'backup', now: () => NOW, offset: () => 480 });
+  const opened = openBackup(new Uint8Array(await readFile(path)));
+  assert.ok(opened.ok);
+  const input = adapterInput(opened.value);
+  assert.equal(input.data?.charCodeAt(0), 0xfeff, 'BOM 留著');
+  assert.equal(shareOf(await snapshot(root, input)).length, shareOf(await snapshot(root, { ...input, data: undefined })).length);
+});

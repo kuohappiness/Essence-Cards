@@ -153,7 +153,7 @@ export default class EssenceCardsPlugin extends Plugin {
     this.settingTab = wireSettings({
       plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
       settings: this.store, today: todayText,
-      saveFailed: result => { new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
+      saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
     });
     // 這裡只訂閱；data.json 要到 layout ready 才讀（T12），第一次由 start() 開始。
     this.store.onChange(value => { this.state?.applySettings(value); this.settingTab?.refresh(); });
@@ -201,6 +201,7 @@ export default class EssenceCardsPlugin extends Plugin {
 
   onunload(): void {
     this.unloaded = true;
+    this.store.close();
     // 外掛停用時一起關掉複習畫面與入口（什麼都不寫，D-074）。
     this.review?.close();
     this.entry?.close();

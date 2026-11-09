@@ -3,6 +3,7 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState } from '../src/state/index.ts';
 import type { State } from '../src/state/index.ts';
+import { createSettingsStore } from '../src/core/settings/index.ts';
 import type { SemesterPick, SettingsValue } from '../src/core/settings/index.ts';
 import { entryView, examSubject } from '../src/review/entry.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
@@ -59,6 +60,24 @@ void test('沒傳 settingsFirst：照 settings 或預設，known 是 true', asyn
   assert.equal(h.state.today().share.length, 40);
   assert.equal(h.state.currentSettings().settings.capMinutes, 30);
   assert.equal(h.state.currentSettings().known, true);
+});
+
+void test('store 的第一次讀 3 秒才回來：ready 在 2 秒多完成、用預設值；回來後重排一次', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  mocked.add(t);
+  let answer: (content: unknown) => void = () => {};
+  const store = createSettingsStore({ load: () => new Promise(resolve => { answer = resolve; }), save: () => Promise.resolve(), today: () => '2026-11-09' });
+  const h = make(t, FORTY, { first: store.first() });
+  store.onChange(next => { h.state.applySettings(next); });
+  await ready(t, h);
+  assert.equal(h.state.currentSettings().known, false);
+  assert.equal(h.state.today().share.length, 40);
+  assert.equal(h.changes(), 0);
+  answer({ capMinutes: 5 });
+  await tick(t, 0);
+  assert.equal(h.state.currentSettings().known, true);
+  assert.equal(h.state.today().share.length, 20);
+  assert.equal(h.changes(), 1);
 });
 
 void test('settingsFirst 交出 known 是 false 的預設值：之後讀到才重排一次', async t => {

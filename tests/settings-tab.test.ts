@@ -138,6 +138,41 @@ void test('layout ready 之前沒有讀 data.json（T12）', async t => {
   assert.ok(h.data.loads >= 1);
 });
 
+/** 只跑到 onload，還沒 layout ready。 */
+function loadedOnly(t: TestContext, data: unknown) {
+  quiet(t);
+  const stub = createObsidianStub({ data, texts: deck });
+  const { default: Plugin } = stub.load<{ default: new (app: unknown, manifest: unknown) => PluginLike }>(code);
+  const plugin = new Plugin(stub.app, { id: 'essence-cards', version: '0.0.1' });
+  t.after(() => { plugin.onunload(); });
+  plugin.onload();
+  return { ...stub, plugin, tab: stub.settingTabs[0] as TabLike };
+}
+
+void test('layout ready 之前在設定頁操作：不讀不寫，有通知（L2 F2）', async t => {
+  const h = loadedOnly(t, { capMinutes: 45 });
+  h.tab.containerEl.shown = true;
+  h.tab.display();
+  h.tab.containerEl.rows.find(item => item.name === CAP)?.dropdown?.choose('5');
+  await settle();
+  assert.deepEqual([h.data.loads, h.data.saves], [0, 0]);
+  assert.deepEqual(h.data.content, { capMinutes: 45 });
+  assert.ok(h.notices.includes('Essence Cards：設定暫時讀不到，這次沒有存下，請再試一次'), h.notices.join('、'));
+});
+
+void test('外掛停用之後：還沒開始的存檔不做，不跳通知（L2 F3）', async t => {
+  const h = await open(t, { data: { capMinutes: 45 } });
+  const dropdown = h.row(CAP).dropdown;
+  dropdown?.choose('60');
+  dropdown?.choose('75');
+  h.plugin.onunload();
+  const before = h.notices.length;
+  await settle();
+  assert.equal(h.data.saves <= 1, true, '最多是停用前已經開始的那一筆');
+  assert.notEqual((h.data.content as { capMinutes: number }).capMinutes, 75);
+  assert.equal(h.notices.length, before);
+});
+
 void test('手機回到前景時重讀，電腦不多讀', async t => {
   const phone = await open(t, { data: { capMinutes: 45 } });
   phone.data.content = { capMinutes: 60 };
