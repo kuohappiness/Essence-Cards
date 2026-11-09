@@ -87,3 +87,66 @@ void test('§4 避開之後，增量併進去的結果和重讀一樣：作答�
   await reread.ready();
   assert.deepEqual(reread.history(), first.history());
 });
+
+// 這次啟動第一次讀不到自己的月檔時，舊的 undo 還看不到：這一刻記下的作答可能撞到它（L2 的 R4）。讀到之後補寫一筆新的 t，不漏掉。
+const CANCELLED_T = JSON.stringify({ t: T, lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n' + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', undo: T }) + '\n';
+async function blindRun(t: TestContext, disk: string) {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: disk });
+  memory.failing.add(OWN);
+  const state = launch(t, memory, Date.parse(T));
+  await state.ready();
+  assert.deepEqual(state.unread(), [OWN]);
+  memory.failing.delete(OWN);
+  const reread = async (): Promise<void> => {
+    await state.flush();
+    t.mock.timers.tick(1000);
+    for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+    await state.flush();
+    assert.deepEqual(state.unread(), []);
+  };
+  const lines = (): Record<string, unknown>[] => (memory.texts.get(OWN) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>);
+  return { memory, state, reread, lines };
+}
+
+void test('§4 第一次讀不到月檔時撞到舊 undo 的 t：讀到之後補寫一筆新的 t，作答不漏，重開相同（L2 的 R4）', async t => {
+  const { memory, state, reread, lines } = await blindRun(t, CANCELLED_T);
+  assert.equal(state.answer(answer), T);
+  await reread();
+  assert.deepEqual(state.history().reviews.map(review => [review.t, review.r]), [[NEXT, 'good']]);
+  assert.deepEqual(state.history().cancelled, [T]);
+  assert.deepEqual(lines().filter(line => 'r' in line).map(line => line.t), [T, T, NEXT]);
+  assert.equal(lines().filter(line => 'undo' in line).length, 1);
+  await reread();
+  assert.equal(lines().length, 4, '只補一次');
+  const again = launch(t, memory, Date.parse(T) + 60_000);
+  await again.ready();
+  assert.deepEqual(again.history(), state.history());
+});
+
+void test('§4 撞到的那一筆這次自己取消了：不補寫（相鄰情況）', async t => {
+  const { state, reread, lines } = await blindRun(t, CANCELLED_T);
+  assert.equal(state.answer(answer), T);
+  state.answer({ undo: T });
+  await reread();
+  assert.deepEqual(state.history().reviews, []);
+  assert.equal(lines().filter(line => 'r' in line).length, 2);
+});
+
+void test('§4 第一次讀不到月檔、沒有撞到：讀到之後不多寫（相鄰情況）', async t => {
+  const other = JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n';
+  const { state, reread, lines } = await blindRun(t, other);
+  assert.equal(state.answer(answer), T);
+  await reread();
+  assert.deepEqual(state.history().reviews.map(review => review.t), ['2026-10-24T18:00:00.000+08:00', T]);
+  assert.equal(lines().length, 2);
+});
+
+void test('§4 一次讀不到的期間兩筆作答，只有一筆撞到：只補那一筆（相鄰情況）', async t => {
+  const { state, reread, lines } = await blindRun(t, CANCELLED_T);
+  assert.equal(state.answer(answer), T);
+  assert.equal(state.answer(answer), NEXT);
+  await reread();
+  assert.deepEqual(state.history().reviews.map(review => review.t), [NEXT, '2026-10-24T19:00:00.002+08:00']);
+  assert.equal(lines().filter(line => 'r' in line).length, 4);
+});
