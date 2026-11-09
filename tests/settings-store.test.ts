@@ -351,9 +351,7 @@ void test('寫前底稿是「沒有檔」，等待中晚到的讀取見過檔：
   const blind: unknown[] = [];
   for (let gap = 0; gap < 12; gap++) {
     const a = deferred<unknown>(), b = deferred<unknown>();
-    let lateSeen = false;
-    const { store } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : Promise.resolve({ capMinutes: 45 }), { save: data => { if (lateSeen) blind.push(data); return Promise.resolve(); } });
-    void a.promise.then(() => undefined).then(() => { lateSeen = true; });
+    const { store } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : Promise.resolve({ capMinutes: 45 }), { save: data => { blind.push(data); return Promise.resolve(); } });
     const saving = store.change({ key: 'examCountdown', value: false });
     await flushAll();
     b.resolve(null);
@@ -395,9 +393,136 @@ void test('停用時核對還在進行：回來也不採用、不通知（L2 第
   await new Promise<void>(resolve => { setImmediate(resolve); });
   store.close();
   back.resolve({ capMinutes: 60 });
-  await saving;
+  assert.equal(await saving, 'failed', '停用後不下結論（第三輪 R3-3）');
   assert.equal(count, 0);
   assert.equal(store.value().settings.capMinutes, 45);
+});
+
+// 第三輪 R3-1：「沒有檔」的三個出口（寫前、採用、核對），以及回來的先後。
+void test('重讀回 null、更早的讀還在路上：不採用；內容晚到後補讀成已知（R3-1）', async t => {
+  for (let gap = 0; gap < 12; gap++) {
+    const a = deferred<unknown>(), b = deferred<unknown>();
+    const { store } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : Promise.resolve({ capMinutes: 45 }));
+    const reload = store.reload();
+    await flushAll();
+    b.resolve(null);
+    for (let i = 0; i < gap; i++) await Promise.resolve();
+    a.resolve({ capMinutes: 45 });
+    await flushAll();
+    await reload;
+    assert.equal(store.value().known, true, String(gap));
+    assert.equal(store.value().settings.capMinutes, 45, String(gap));
+    t.mock.timers.reset();
+  }
+});
+
+void test('重讀回 null、更早的讀很久之後才回來：等待期間一直是不知道（R3-1）', async t => {
+  const a = deferred<unknown>();
+  const { store } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? Promise.resolve(null) : Promise.resolve({ capMinutes: 45 }));
+  await store.reload();
+  assert.equal(store.value().known, false);
+  a.resolve({ capMinutes: 45 });
+  await flushAll();
+  assert.equal(store.value().settings.capMinutes, 45);
+});
+
+void test('更早的讀最後回 undefined：下一次重讀的 null 才算沒有檔（R3-1）', async t => {
+  const a = deferred<unknown>();
+  const { store } = await timedOut(t, call => call === 1 ? a.promise : Promise.resolve(null));
+  await store.reload();
+  assert.equal(store.value().known, false);
+  a.resolve(undefined);
+  await flushAll();
+  await store.reload();
+  assert.equal(store.value().known, true);
+});
+
+void test('第一次讀一直沒回來、其實沒有檔：這次不寫（§2-2 的代價）', async t => {
+  const saves: unknown[] = [];
+  const { store } = await timedOut(t, call => call === 1 ? never() : Promise.resolve(null), { save: data => { saves.push(data); return Promise.resolve(); } });
+  assert.equal(await store.change(cap(60)), 'unreadable');
+  assert.deepEqual(saves, []);
+});
+
+void test('清除欄位、saveData 吞掉錯誤、核對回 null：回 failed，不算已知（R3-1）', async () => {
+  const answers: unknown[] = [undefined, null, null];
+  const { options } = disk({ capMinutes: 45 });
+  const store = createSettingsStore({ ...options, load: () => Promise.resolve(answers.shift()), save: () => Promise.resolve() });
+  await store.first();
+  assert.equal(store.value().known, false);
+  assert.equal(await store.change({ key: 'capMinutes', value: null }), 'failed');
+  assert.equal(store.value().known, false);
+});
+
+// 第三輪 R3-2：多筆晚到的結果。
+void test('補讀進行中又有晚到：第一筆補讀成功，第二筆不擋存檔（R3-2）', async t => {
+  const a = deferred<unknown>(), b = deferred<unknown>(), c = deferred<unknown>();
+  let file: unknown = { capMinutes: 45 };
+  const { store, calls } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : call === 3 ? c.promise : Promise.resolve(file), { save: data => { file = data; return Promise.resolve(); } });
+  const reload = store.reload();
+  await flushAll();
+  t.mock.timers.tick(5000);
+  await reload;
+  a.resolve({ capMinutes: 45 });
+  await flushAll();
+  b.resolve({ capMinutes: 45 });
+  await flushAll();
+  const saving = store.change(cap(60));
+  await flushAll();
+  c.resolve({ capMinutes: 45 });
+  await flushAll();
+  assert.equal(await saving, 'saved', '不用等 5 秒');
+  assert.deepEqual(file, { capMinutes: 60 });
+  assert.equal(calls(), 5, 'A、B、補讀、寫前、核對');
+});
+
+void test('補讀進行中又有晚到：第一筆補讀失敗，第二筆接著補（R3-2）', async t => {
+  const a = deferred<unknown>(), b = deferred<unknown>(), c = deferred<unknown>();
+  const { store, calls } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : call === 3 ? c.promise : Promise.resolve({ capMinutes: 75 }));
+  const reload = store.reload();
+  await flushAll();
+  t.mock.timers.tick(5000);
+  await reload;
+  a.resolve({ capMinutes: 45 });
+  await flushAll();
+  b.resolve({ capMinutes: 45 });
+  await flushAll();
+  c.resolve(undefined);
+  await flushAll();
+  assert.equal(store.value().settings.capMinutes, 75);
+  assert.equal(calls(), 4);
+});
+
+void test('還沒輪到時晚到兩筆：只排一次補讀（R3-2）', async t => {
+  const a = deferred<unknown>(), b = deferred<unknown>(), e = deferred<unknown>();
+  const { store, calls } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : call === 3 ? e.promise : Promise.resolve(undefined));
+  const first = store.reload();
+  await flushAll();
+  t.mock.timers.tick(5000);
+  await first;
+  const holding = store.reload();
+  await flushAll();
+  a.resolve({ capMinutes: 45 });
+  b.resolve({ capMinutes: 45 });
+  await flushAll();
+  e.resolve(undefined);
+  await holding;
+  await flushAll();
+  assert.equal(calls(), 4, 'A、B、E、一次補讀');
+});
+
+void test('慢寫核對成功：排在後面的補讀不再讀（R3-2）', async t => {
+  const a = deferred<unknown>(), slow = deferred<undefined>();
+  let file: unknown = { capMinutes: 45 };
+  const { store, calls } = await timedOut(t, call => call === 1 ? a.promise : Promise.resolve(file), { save: data => slow.promise.then(() => { file = data; }) });
+  const saving = store.change(cap(60));
+  await flushAll();
+  a.resolve({ capMinutes: 45 });
+  await flushAll();
+  slow.resolve(undefined);
+  assert.equal(await saving, 'saved');
+  await flushAll();
+  assert.equal(calls(), 3, 'A、寫前、核對');
 });
 
 void test('兩次都逾時，舊的先回 null：補讀拿到最新的內容（L2 第二輪 F4）', async t => {

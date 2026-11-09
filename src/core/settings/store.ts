@@ -36,12 +36,16 @@ const READ_WAIT = 5000;
 const WRITE_WAIT = 10_000;
 
 /** absent：這次的底稿是「沒有檔」，不是讀到的內容。 */
-type Read = { ok: true; raw: Record<string, unknown>; absent: boolean } | { ok: false };
+type Found = { ok: true; raw: Record<string, unknown>; absent: boolean };
+type Read = Found | { ok: false };
 
 export function createSettingsStore(options: SettingsStoreOptions): SettingsStore {
   let raw: Record<string, unknown> = {};
   let saved: Saved = readSaved(raw);
   let known = false, seenFile = false, started = false, closed = false;
+  /** 已經開始、還沒回來的讀，包括逾時後還在路上的。 */
+  let reading = 0;
+  let retryQueued = false;
   const listeners = new Set<(value: SettingsValue) => void>();
   /** 存檔與重讀一次一件：較早開始的讀不會蓋掉較新的結果，舊的寫入不會晚到蓋掉新的（§2-1）。 */
   let tail: Promise<unknown> = Promise.resolve();
@@ -60,27 +64,30 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
   /** load 交回的內容怎麼算。只要是物件就記下「這次見過檔」，不管這次有沒有採用（寫前的讀也算，§2-2）。 */
   function classify(content: unknown): Read {
     if (content === undefined) return { ok: false };
-    // 外掛自己不會刪這個檔：這次讀到過，現在卻說沒有，當成讀不到（例如 iPhone 的佔位檔），不覆寫（§2-2）。
-    if (content === null) return seenFile ? { ok: false } : { ok: true, raw: {}, absent: true };
+    if (content === null) return { ok: true, raw: {}, absent: true };
     if (typeof content !== 'object' || Array.isArray(content)) return { ok: false };
     seenFile = true;
     return { ok: true, raw: content as Record<string, unknown>, absent: false };
   }
+  /**
+   * 「沒有檔」要用的時候才判斷，而且要所有的讀都回來、從沒見過檔才算數（§2-2）。
+   * 回來的先後不代表新舊：還在路上的讀可能正要帶回內容（iPhone 的佔位檔會回報成不存在），外掛自己也不會刪這個檔。
+   */
+  const usable = (result: Read): result is Found => result.ok && !(result.absent && (seenFile || reading > 0));
   /** 讀一次。補讀（followUp）逾時後不再排下一次，檔案一直很慢時不會不停重試。 */
   async function read(followUp = false): Promise<Read> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<'timeout'>(resolve => { timer = setTimeout(() => { resolve('timeout'); }, READ_WAIT); });
     // load 拒絕和讀到 undefined 一樣當成讀不到：呼叫端回報 unreadable，不是程式的錯。
-    const loading = options.load().catch(() => undefined);
-    const content = await Promise.race([loading, timeout]);
+    reading++;
+    // 少算一筆和見過檔要在同一步：中間不能讓別的工作看到「都回來了、卻還沒見過檔」。
+    const loading = options.load().catch(() => undefined).then(content => { reading--; return classify(content); });
+    const result = await Promise.race([loading, timeout]);
     clearTimeout(timer);
-    if (content !== 'timeout') return classify(content);
+    if (result !== 'timeout') return result;
     // 晚到的內容可能比之後的存檔舊，不採用，只記下有沒有見過檔。一次都還沒讀到時，它回來表示現在讀得到了：
     // 排一次重讀，走同一條隊伍拿最新的內容，否則這次開啟可能一直用預設值（§2-5）。
-    void loading.then(late => {
-      classify(late);
-      if (!followUp && late !== undefined && !known && !closed) void reread(true);
-    });
+    void loading.then(late => { if (!followUp && late.ok && !known) retry(); });
     return { ok: false };
   }
   /** 手上的值或今天的學期變了才通知；讀不到時也要看，學期是用手上的值算的（§5）。 */
@@ -94,18 +101,27 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
       try { listener(current); } catch (error) { options.onError?.(error); }
     }
   }
-  function adopt(result: Extract<Read, { ok: true }>): void {
+  function adopt(result: Found): void {
     if (closed) return;
     raw = result.raw;
     saved = readSaved(raw);
     known = true;
     announce();
   }
-  const reread = (followUp = false): Promise<void> => queued(async () => {
-    if (closed) return;
+  async function refresh(followUp = false): Promise<void> {
     const result = await read(followUp);
-    if (result.ok) adopt(result); else announce();
-  });
+    if (usable(result)) adopt(result); else announce();
+  }
+  const reread = (): Promise<void> => queued(async () => { if (!closed) await refresh(); });
+  /** 排隊中的補讀只留一筆；輪到時已經知道就直接放行，不卡在後面的存檔前面（§2-5）。 */
+  function retry(): void {
+    if (retryQueued) return;
+    retryQueued = true;
+    void queued(async () => {
+      retryQueued = false;
+      if (!known && !closed) await refresh(true);
+    });
+  }
 
   return {
     value,
@@ -131,8 +147,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           if (closed) { report('failed'); return; }
           const base = await read();
           if (closed) { report('failed'); return; }
-          // 底稿是「沒有檔」，但等待期間晚到的讀取見過檔：不能用空的底稿寫（§2-2）。
-          if (!base.ok || (base.absent && seenFile)) { report('unreadable'); return; }
+          if (!usable(base)) { report('unreadable'); return; }
           const timer = setTimeout(() => { report('failed'); }, WRITE_WAIT);
           try {
             await options.save(changeSaved(base.raw, change));
@@ -146,7 +161,8 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           // 停用時已經送出的寫入到此為止：舊的實例不再讀、不再通知。
           if (closed) { report('failed'); return; }
           const back = await read();
-          if (!back.ok) { report('failed'); return; }
+          // 寫進去了檔就該在，核對卻說沒有：這筆沒有落地。停用之後也不下結論。
+          if (closed || !back.ok || back.absent) { report('failed'); return; }
           adopt(back);
           report(hasChange(back.raw, change) ? 'saved' : 'failed');
         });
