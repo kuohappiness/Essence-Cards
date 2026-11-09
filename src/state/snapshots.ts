@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 import { SNAPSHOT_FOLDER, snapshotKey, snapshotPath, snapshotSuffix, snapshotText, snapshotValid } from '../core/catalog/index.ts';
 import type { SnapshotDeck } from '../core/catalog/index.ts';
-import { completeText } from './reads.ts';
+import { completeText, IncompleteRead } from './reads.ts';
 
 /** 這一刻該留下的切面（tasks/record-gaps.md §2）；不該寫是 null。day 放進來，跨過清晨 4 點就算不同。 */
 export interface SnapshotPlan {
@@ -43,6 +43,8 @@ export function createSnapshots(options: SnapshotOptions) {
   const { files } = options;
   const done = new Set<string>();
   const failed = new Map<string, number>();
+  /** 列檔之後才出現、已經重新查過一次的路徑：列檔一直列不到它時，不空轉。 */
+  const late = new Set<string>();
   let running = false, again = false;
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -85,18 +87,22 @@ export function createSnapshots(options: SnapshotOptions) {
       // 等待與列檔的時候選定的範圍、日期或卡組變了：這次不寫；變動的那一批會再查。
       if (!known || stale()) return;
       const content = snapshotText({ t: options.stamp(), exam: first.exam, scope: first.scope, start: first.start, end: first.end, units: first.units, decks: first.decks.length }, first.decks);
-      let gaveUp = false;
+      let gaveUp = false, occupied = false;
       try {
         await limited(files.modify(path, (text, exists) => {
+          occupied = exists;
           if (exists) return text;
           // modify 開始到回呼之間可能讓出執行（排隊、等搬回、建上層資料夾）：丟錯才不會建出空檔。
           if (gaveUp || stale()) throw new Stale();
           return content;
         }));
-        done.add(id);
+        // 列檔之後才出現的（L2 的 R6）：不知道有不有效，重新列一次，有效的算完成、無效的另寫序號、讀不到的下次再查。
+        if (!occupied) done.add(id);
+        else if (!late.has(path)) { late.add(path); again = true; }
       } catch (error) {
         // 內容相同的讀取不會觸發下一次查核，所以自己再查一次；要等的都在 settle 與 drain 裡，不會空轉。
         if (error instanceof Stale) { again = true; return; }
+        if (error instanceof IncompleteRead) return;
         gaveUp = true;
         failed.set(id, first.day);
         if (!options.closed()) options.onError(error);

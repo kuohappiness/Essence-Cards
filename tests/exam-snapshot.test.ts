@@ -481,6 +481,62 @@ void test('切面的 I/O 有上限：寫入卡住報 write、當天不重試；�
   assert.deepEqual(written(memory), [NEW_FILE]);
 });
 
+/** 列檔之後、modify 之前同名的檔出現了（同步、還原、前一個外掛實例晚到的寫入；L2 的 R6）。 */
+function appearLate(memory: MemoryFiles, text: string): void {
+  const modify = memory.files.modify.bind(memory.files);
+  let once = true;
+  memory.files.modify = (path, edit) => {
+    if (once && path === FILE) { once = false; memory.write(FILE, text); }
+    return modify(path, edit);
+  };
+}
+const SECOND = `${FOLDER}2026-10-28 ${KEY} PC-test 2.jsonl`;
+
+void test('24 列檔之後才出現：有效的算完成，不另寫', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const text = lines(header(), ROW);
+  appearLate(memory, text);
+  const h = await open(t, memory);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.equal(memory.texts.get(FILE), text);
+  assert.deepEqual(h.errors, []);
+});
+
+for (const [name, text] of [['空檔', ''], ['內容壞掉', 'x']] as const) void test('24 列檔之後才出現，無效：舊檔不動，另寫序號 2：' + name, async t => {
+  const memory = createMemoryFiles(VAULT);
+  appearLate(memory, text);
+  const h = await open(t, memory);
+  assert.equal(memory.texts.get(FILE), text);
+  assert.deepEqual(written(memory), [SECOND, FILE]);
+  assert.equal(rows(memory, SECOND).length, 3);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('24 列檔之後才出現，讀不完整（含 NUL）：這次不寫也不算失敗；讀得到之後照判斷', async t => {
+  const memory = createMemoryFiles(VAULT);
+  appearLate(memory, 'a\0');
+  const h = await open(t, memory);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.equal(memory.texts.get(FILE), 'a\0');
+  assert.deepEqual(h.errors, []);
+  memory.write(FILE, 'x');
+  memory.write(NATURE, NATURE_TEXT.replace('答 k3m9x2', '改過的答'));
+  await h.pump();
+  assert.deepEqual(written(memory), [SECOND, FILE]);
+});
+
+void test('24 modify 說檔在、列檔一直列不到：不空轉，下一次觸發才再試', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [FILE]: 'x' });
+  const list = memory.files.list.bind(memory.files);
+  memory.files.list = async folder => (await list(folder)).filter(path => path !== FILE);
+  let tries = 0;
+  const modify = memory.files.modify.bind(memory.files);
+  memory.files.modify = (path, edit) => { if (path === FILE) tries++; return modify(path, edit); };
+  await open(t, memory);
+  assert.equal(tries, 2);
+  assert.equal(memory.texts.get(FILE), 'x');
+});
+
 void test('28 零篇不寫，之後有卡組再寫', async t => {
   const h = await launch(t, { [SCOPE]: scope() });
   assert.deepEqual(written(h.memory), []);
