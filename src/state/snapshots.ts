@@ -35,6 +35,8 @@ interface SnapshotOptions {
 
 /** 最後一個能拒絕建檔的地方發現情況變了：這次不建，重新查（L2 的 R2）。 */
 class Stale extends Error {}
+/** 等到上限還沒回來：底層可能還在做，檔案在不在都不能當成「被拒絕」（L2 的 R10）。 */
+class Stuck extends Error {}
 
 /**
  * 考試切面的查核與寫入（§2）：每次排今天的份之後、讀不到的補齊之後呼叫 check。一次只跑一輪，跑的時候又有觸發就再查一次；
@@ -44,8 +46,13 @@ export function createSnapshots(options: SnapshotOptions) {
   const { files } = options;
   const done = new Set<string>();
   const failed = new Map<string, number>();
-  /** 列檔之後才出現、已經重新查過一次的路徑：列檔一直列不到它時，不空轉。 */
+  /** 這次觸發裡已經因為「列檔之後才出現」重新查過的路徑：列檔一直列不到它時，不空轉；下一次觸發重新算（L2 的 R10）。 */
   const late = new Set<string>();
+  function recheck(path: string): void {
+    if (late.has(path)) return;
+    late.add(path);
+    again = true;
+  }
   let running = false, again = false;
   const timers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -53,7 +60,7 @@ export function createSnapshots(options: SnapshotOptions) {
   function limited<T>(work: Promise<T>): Promise<T> {
     let id: ReturnType<typeof setTimeout> | undefined;
     const stuck = new Promise<never>((_, reject) => {
-      id = setTimeout(() => { reject(Error(`考試切面的檔案操作等了 ${String(options.stuckAfter)} ms 沒有回來（逾時）`)); }, options.stuckAfter);
+      id = setTimeout(() => { reject(new Stuck(`考試切面的檔案操作等了 ${String(options.stuckAfter)} ms 沒有回來（逾時）`)); }, options.stuckAfter);
       timers.add(id);
     });
     return Promise.race([work, stuck]).finally(() => {
@@ -99,12 +106,14 @@ export function createSnapshots(options: SnapshotOptions) {
         }));
         // 列檔之後才出現的（L2 的 R6）：不知道有不有效，重新列一次，有效的算完成、無效的另寫序號、讀不到的下次再查。
         if (!occupied) done.add(id);
-        else if (!late.has(path)) { late.add(path); again = true; }
+        else recheck(path);
       } catch (error) {
         // 內容相同的讀取不會觸發下一次查核，所以自己再查一次；要等的都在 settle 與 drain 裡，不會空轉。
         if (error instanceof Stale) { again = true; return; }
         if (error instanceof IncompleteRead) return;
         gaveUp = true;
+        // 讀舊內容就被拒絕，modify 走不到回呼：檔案在的話和「列檔之後才出現」同一種情況，不是寫失敗（L2 的 R10）。
+        if (!(error instanceof Stuck) && await limited(files.list(SNAPSHOT_FOLDER)).then(paths => paths.includes(path), () => false)) { recheck(path); return; }
         failed.set(id, first.day);
         if (!options.closed()) options.onError(error);
       }
@@ -123,6 +132,7 @@ export function createSnapshots(options: SnapshotOptions) {
   return {
     check(): void {
       if (options.closed()) return;
+      late.clear();
       if (running) { again = true; return; }
       running = true;
       void loop();

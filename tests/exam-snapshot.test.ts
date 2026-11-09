@@ -527,6 +527,60 @@ void test('24 列檔之後才出現，讀不完整（含 NUL）：這次不寫�
   assert.deepEqual(written(memory), [SECOND, FILE]);
 });
 
+void test('24 列檔之後才出現、modify 在回呼前就被拒絕：不算寫失敗，重查之後另寫序號 2（L2 的 R10）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const modify = memory.files.modify.bind(memory.files);
+  let once = true;
+  memory.files.modify = (path, edit) => {
+    if (once && path === FILE) { once = false; memory.write(FILE, 'x'); return Promise.reject(Error('EACCES')); }
+    return modify(path, edit);
+  };
+  const h = await open(t, memory);
+  assert.equal(memory.texts.get(FILE), 'x');
+  assert.deepEqual(written(memory), [SECOND, FILE]);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('24 modify 被拒絕、檔案不在：照舊算寫失敗，當天不重試（相鄰情況）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const modify = memory.files.modify.bind(memory.files);
+  let tries = 0;
+  memory.files.modify = (path, edit) => {
+    if (path !== FILE) return modify(path, edit);
+    tries++;
+    return Promise.reject(Error('EACCES'));
+  };
+  const h = await open(t, memory);
+  assert.deepEqual(h.errors.map(([, source]) => source), ['write']);
+  memory.write(NATURE, NATURE_TEXT.replace('答 k3m9x2', '改過的答'));
+  await h.pump();
+  assert.equal(tries, 1);
+  assert.deepEqual(written(memory), []);
+});
+
+void test('24 重查的額度一次觸發一份：上一次用過，之後檔案又出現，這一次照樣重查（L2 的 R10）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const modify = memory.files.modify.bind(memory.files);
+  let tries = 0;
+  memory.files.modify = (path, edit) => {
+    if (path === FILE) {
+      memory.write(FILE, '');
+      if (++tries === 1) memory.failing.add(FILE);
+    }
+    return modify(path, edit);
+  };
+  const h = await open(t, memory);
+  assert.equal(tries, 1);
+  assert.deepEqual(written(memory), [FILE]);
+  memory.failing.delete(FILE);
+  memory.remove(FILE);
+  memory.notify(NATURE);
+  await h.pump();
+  assert.equal(tries, 2);
+  assert.deepEqual(written(memory), [SECOND, FILE]);
+  assert.deepEqual(h.errors, []);
+});
+
 void test('24 modify 說檔在、列檔一直列不到：不空轉，下一次觸發才再試', async t => {
   const memory = createMemoryFiles({ ...VAULT, [FILE]: 'x' });
   const list = memory.files.list.bind(memory.files);
