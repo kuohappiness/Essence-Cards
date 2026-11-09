@@ -97,13 +97,14 @@ export function createSnapshots(options: SnapshotOptions) {
       // 等待與列檔的時候選定的範圍、日期或卡組變了：這次不寫；變動的那一批會再查。
       if (!known || stale()) return;
       const content = snapshotText({ t: options.stamp(), exam: first.exam, scope: first.scope, start: first.start, end: first.end, units: first.units, decks: first.decks.length }, first.decks);
-      let gaveUp = false, occupied = false;
+      let gaveUp = false, occupied = false, creating = false;
       try {
         const work = files.modify(path, (text, exists) => {
           occupied = exists;
           if (exists) return text;
           // modify 開始到回呼之間可能讓出執行（排隊、等搬回、建上層資料夾）：丟錯才不會建出空檔。
           if (gaveUp || stale()) throw new Stale();
+          creating = true;
           return content;
         });
         writing.add(id);
@@ -118,8 +119,14 @@ export function createSnapshots(options: SnapshotOptions) {
         if (error instanceof Stale) { again = true; return; }
         if (error instanceof IncompleteRead) return;
         gaveUp = true;
-        // 讀舊內容就被拒絕，modify 走不到回呼：檔案在的話和「列檔之後才出現」同一種情況，不是寫失敗（L2 的 R10）。
-        if (!(error instanceof Stuck) && await limited(files.list(SNAPSHOT_FOLDER)).then(paths => paths.includes(path), () => false)) { recheck(path); return; }
+        // 回呼還沒走到要建檔就逾時：還沒開始寫（之後才進回呼也不會寫），和列檔、讀檔逾時一樣下次再查（L2 的 R16）。
+        if (error instanceof Stuck && !creating) return;
+        if (!(error instanceof Stuck)) {
+          // 讀舊內容就被拒絕，modify 走不到回呼：檔案在的話和「列檔之後才出現」同一種情況，不是寫失敗（L2 的 R10）；列檔也失敗就分不出來，下次再查（L2 的 R16）。
+          const listed = await limited(files.list(SNAPSHOT_FOLDER)).then(paths => paths.includes(path), () => null);
+          if (listed === null) return;
+          if (listed) { recheck(path); return; }
+        }
         failed.set(id, first.day);
         if (!options.closed()) options.onError(error);
       }

@@ -464,23 +464,24 @@ void test('切面的 I/O 有上限：列檔卡住，等到上限後下一輪照�
   assert.deepEqual(written(memory), [NEW_FILE]);
 });
 
-void test('切面的 I/O 有上限：寫入卡住報 write、當天不重試；晚到的回呼不建檔；別場考試不受影響', async t => {
+void test('切面的 I/O 有上限：回呼還沒進入就逾時：還沒開始寫，不報錯也不算失敗；晚到的回呼不建檔；別場考試不受影響；下一次觸發照常（L2 的 R16）', async t => {
   const memory = createMemoryFiles(VAULT);
   const hold = holdWrite(memory);
   const h = await open(t, memory);
   assert.equal(hold.held(), true);
   await h.pump(STUCK);
   await h.pump(0);
-  assert.deepEqual(h.errors.map(([, source]) => source), ['write']);
-  hold.release();
-  await h.pump(0);
-  assert.deepEqual(written(memory), []);
+  assert.deepEqual(h.errors, []);
   memory.write(SCOPE, newScope());
   await h.pump();
   assert.deepEqual(written(memory), [NEW_FILE]);
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [NEW_FILE]);
   memory.write(SCOPE, scope());
   await h.pump();
-  assert.deepEqual(written(memory), [NEW_FILE]);
+  assert.deepEqual(written(memory), [FILE, NEW_FILE]);
+  assert.deepEqual(h.errors, []);
 });
 
 /** 回呼已經算好內容、空檔先出現，真正寫完要等 finish；fail 是放行時失敗（L2 的 R11）。 */
@@ -593,6 +594,48 @@ void test('24 列檔之後才出現、modify 在回呼前就被拒絕：不算�
   assert.equal(memory.texts.get(FILE), 'x');
   assert.deepEqual(written(memory), [SECOND, FILE]);
   assert.deepEqual(h.errors, []);
+});
+
+void test('24 同名檔的舊內容讀到上限才被拒絕：不算寫失敗，下一次觸發另寫序號 2，檔不動（L2 的 R16）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const modify = memory.files.modify.bind(memory.files);
+  let reject: (error: Error) => void = () => { /* 開始寫才換成真的。 */ }, once = true;
+  memory.files.modify = (path, edit) => {
+    if (!once || path !== FILE) return modify(path, edit);
+    once = false;
+    memory.write(FILE, '');
+    return new Promise<void>((_, fail) => { reject = fail; });
+  };
+  const h = await open(t, memory);
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(h.errors, []);
+  reject(Error('讀不到'));
+  await h.pump(0);
+  memory.notify(NATURE);
+  await h.pump();
+  assert.equal(memory.texts.get(FILE), '');
+  assert.deepEqual(written(memory), [SECOND, FILE]);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('24 modify 被拒絕、重新列檔也失敗：分不出來，不算寫失敗，下一次觸發再查（L2 的 R16）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const modify = memory.files.modify.bind(memory.files), list = memory.files.list.bind(memory.files);
+  let once = true, lists = 0;
+  memory.files.modify = (path, edit) => {
+    if (!once || path !== FILE) return modify(path, edit);
+    once = false;
+    memory.write(FILE, '');
+    return Promise.reject(Error('讀不到'));
+  };
+  memory.files.list = folder => (folder === FOLDER.slice(0, -1) && ++lists === 2 ? Promise.reject(Error('列不出來')) : list(folder));
+  const h = await open(t, memory);
+  assert.deepEqual(h.errors, []);
+  assert.deepEqual(written(memory), [FILE]);
+  memory.notify(NATURE);
+  await h.pump();
+  assert.deepEqual(written(memory), [SECOND, FILE]);
 });
 
 void test('24 modify 被拒絕、檔案不在：照舊算寫失敗，當天不重試（相鄰情況）', async t => {
