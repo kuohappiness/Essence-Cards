@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { hashBytes, openBackup } from '../src/core/backup/index.ts';
+import { hashBytes, openBackup, PLUGIN_DATA } from '../src/core/backup/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import type { AdapterInput } from './compare/adapter.ts';
 import { diffSnapshots, gateLines } from './compare/snapshot.ts';
@@ -16,7 +16,7 @@ const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
 
-export const LIMITS = '考試範圍照各版本自己的讀法：還沒接上範圍的舊版 `exam` 是 null，有生效的範圍時，和新版的差異會包含考前提高的保持率與考前的排序。設定用外掛的預設（每日 30 分鐘、保持率 0.8、沒有濾網）。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
+export const LIMITS = '考試範圍照各版本自己的讀法：還沒接上範圍的舊版 `exam` 是 null，有生效的範圍時，和新版的差異會包含考前提高的保持率與考前的排序。設定照備份裡的 data.json，各版本自己的讀法；還沒有設定頁的舊版用預設（每日 30 分鐘、保持率 0.8），改過設定時，和新版的差異會包含設定本身。兩邊都沒有濾網。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
 
 export interface CompareOptions {
   /** 凍結的輸入：1-1 的備份檔。 */
@@ -64,6 +64,18 @@ async function side(root: string, ref: string, input: string, work: string, inst
   }
 }
 
+/** 兩個版本共用的凍結輸入：備份的開始時間當「現在」、`Essence Cards/` 底下的文字檔、外掛的 data.json 的原文。 */
+export function adapterInput(backup: Extract<ReturnType<typeof openBackup>, { ok: true }>['value']): AdapterInput {
+  const started = parseTime(backup.manifest.started)!;
+  const decoder = new TextDecoder();
+  const files: Record<string, string> = {};
+  for (const [path, content] of backup.files) {
+    if (path.startsWith('Essence Cards/') && (path.endsWith('.md') || path.endsWith('.jsonl'))) files[path] = decoder.decode(content);
+  }
+  const data = backup.files.get(backup.manifest.vault.config + '/' + PLUGIN_DATA);
+  return { now: started.at, offset: started.offset, files, ...data ? { data: decoder.decode(data) } : {} };
+}
+
 /**
  * 發布前比較（D-149 第 5 點、任務說明 1-3）：用備份當凍結的輸入（記下 zip 的雜湊），兩個版本各自讀一次，
  * 比每篇卡組的學習目標、題目指紋、問題、會影響排程的屬性，那一版擋下來的內容（需要新版、停掉的目標、整份紀錄不完整、重複的 ID），
@@ -75,17 +87,13 @@ export async function compareVersions(options: CompareOptions): Promise<CompareR
   const opened = openBackup(bytes);
   if (!opened.ok) throw Error('這份備份不能用：' + opened.error);
   const zip = hashBytes(bytes);
+  // 報告的時間照備份開始時的時區。
   const started = parseTime(opened.value.manifest.started)!;
-  const decoder = new TextDecoder();
-  const files: Record<string, string> = {};
-  for (const [path, content] of opened.value.files) {
-    if (path.startsWith('Essence Cards/') && (path.endsWith('.md') || path.endsWith('.jsonl'))) files[path] = decoder.decode(content);
-  }
   const work = await mkdtemp(join(tmpdir(), 'essence-compare-'));
   let old: Side, next: Side;
   try {
     const input = join(work, 'input.json');
-    await writeFile(input, JSON.stringify({ now: started.at, offset: started.offset, files } satisfies AdapterInput));
+    await writeFile(input, JSON.stringify(adapterInput(opened.value)));
     const timeout = options.timeout ?? 5 * 60_000;
     old = await side(root, options.old, input, work, options.install ?? npmCi, timeout);
     next = await side(root, options.new, input, work, options.install ?? npmCi, timeout);
