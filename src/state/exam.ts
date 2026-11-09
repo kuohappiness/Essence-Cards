@@ -69,6 +69,7 @@ export function createExamFiles(options: ExamFilesOptions) {
     start: folder.start,
     settle: folder.settle,
     drain: folder.drain,
+    waiting: folder.waiting,
     settled: folder.settled,
     revision: folder.revision,
     unread: folder.unread,

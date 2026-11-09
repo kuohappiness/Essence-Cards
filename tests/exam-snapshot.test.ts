@@ -283,6 +283,83 @@ void test('27 同一個鍵兩個觸發同時到：只寫一份', async t => {
   assert.deepEqual(written(memory), [FILE]);
 });
 
+/** 切面的 modify 停在回呼之前，放行前可以改東西（L2 的 R2）：Obsidian 的 serial、搬回的等待、建上層資料夾都會在這裡讓出執行。 */
+function holdWrite(memory: MemoryFiles): { release: () => void; held: () => boolean } {
+  const modify = memory.files.modify.bind(memory.files);
+  let release = (): void => {}, held = false;
+  memory.files.modify = async (path, edit) => {
+    if (path.startsWith(FOLDER) && !held) { held = true; await new Promise<void>(resolve => { release = resolve; }); }
+    return modify(path, edit);
+  };
+  return { release: () => { release(); }, held: () => held };
+}
+
+void test('27 回呼前提前結束（endExam）：不建檔、不報錯', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  assert.equal(hold.held(), true);
+  const ended = h.state.endExam({ path: SCOPE, id: 'x7f3k2' });
+  await h.pump(0);
+  assert.equal((await ended).kind, 'done');
+  assert.equal(h.state.exam().path, null);
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), []);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('27 回呼前範圍換了：舊的不建，換成新的那一份', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  memory.write(SCOPE, scope().replace('x7f3k2', 'y9k2m4'));
+  await h.pump();
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [`${FOLDER}2026-10-28 6fc089a6a4f1 PC-test.jsonl`]);
+  assert.deepEqual(h.errors, []);
+});
+
+void test('27 回呼前跨過 04:00：照新的這一刻重新查，時間是新的', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  h.setNow(at('2026-10-29T04:00:00.000'));
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.equal(rows(memory)[0].t, '2026-10-29T04:00:00.000+08:00');
+});
+
+void test('27 回呼前卡組變了：寫進去的是新內容', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  const changed = NATURE_TEXT.replace('答 k3m9x2', '改過的答');
+  memory.write(NATURE, changed);
+  await h.pump();
+  hold.release();
+  await h.pump(0);
+  assert.equal(rows(memory)[1].text, changed);
+});
+
+void test('27 回呼前有還沒讀的通知（卡組、範圍檔），內容相同：讀完照寫', async t => {
+  for (const path of [NATURE, SCOPE]) {
+    const memory = createMemoryFiles(VAULT);
+    const hold = holdWrite(memory);
+    const h = await open(t, memory);
+    memory.notify(path);
+    const before = memory.reads.filter(each => each === path).length;
+    hold.release();
+    await h.pump(0);
+    // 這次不寫、重新查時才會先讀完那個通知；寫的是讀完之後那一輪。
+    assert.equal(memory.reads.filter(each => each === path).length, before + 1);
+    assert.deepEqual(written(memory), [FILE]);
+    await h.state.close();
+  }
+});
+
 void test('28 零篇不寫，之後有卡組再寫', async t => {
   const h = await launch(t, { [SCOPE]: scope() });
   assert.deepEqual(written(h.memory), []);

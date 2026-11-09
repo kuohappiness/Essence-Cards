@@ -24,11 +24,14 @@ interface SnapshotOptions {
   settle: () => Promise<boolean>;
   /** 範圍檔的待讀都讀完之後呼叫 decide，兩者在同一個同步區段（folder-files 的 drain）。 */
   drain: <T>(decide: (known: boolean) => T | Promise<T>) => Promise<T>;
-  /** 卡組還有沒有在讀的。 */
+  /** 卡組或範圍檔還有沒有在讀的。 */
   waiting: () => boolean;
   stamp: () => string;
   onError: (error: unknown) => void;
 }
+
+/** 最後一個能拒絕建檔的地方發現情況變了：這次不建，重新查（L2 的 R2）。 */
+class Stale extends Error {}
 
 /**
  * 考試切面的查核與寫入（§2）：每次排今天的份之後、讀不到的補齊之後呼叫 check。一次只跑一輪，跑的時候又有觸發就再查一次；
@@ -60,14 +63,22 @@ export function createSnapshots(options: SnapshotOptions) {
     let suffix = 1;
     while (taken.has(suffix)) suffix++;
     const path = snapshotPath(first.start, key, options.device, suffix);
+    const stale = (): boolean => options.closed() || options.waiting() || JSON.stringify(options.plan()) !== JSON.stringify(first);
     await options.drain(async known => {
       // 等待與列檔的時候選定的範圍、日期或卡組變了：這次不寫；變動的那一批會再查。
-      if (!known || options.closed() || options.waiting() || JSON.stringify(options.plan()) !== JSON.stringify(first)) return;
+      if (!known || stale()) return;
       const content = snapshotText({ t: options.stamp(), exam: first.exam, scope: first.scope, start: first.start, end: first.end, units: first.units, decks: first.decks.length }, first.decks);
       try {
-        await files.modify(path, (text, exists) => exists ? text : content);
+        await files.modify(path, (text, exists) => {
+          if (exists) return text;
+          // modify 開始到回呼之間可能讓出執行（排隊、等搬回、建上層資料夾）：丟錯才不會建出空檔。
+          if (stale()) throw new Stale();
+          return content;
+        });
         done.add(id);
       } catch (error) {
+        // 內容相同的讀取不會觸發下一次查核，所以自己再查一次；要等的都在 settle 與 drain 裡，不會空轉。
+        if (error instanceof Stale) { again = true; return; }
         failed.set(id, first.day);
         if (!options.closed()) options.onError(error);
       }

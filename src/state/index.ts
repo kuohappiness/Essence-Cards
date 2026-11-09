@@ -593,7 +593,7 @@ export function createState(options: StateOptions): State {
     plan: snapshotPlan,
     settle: async () => await writes.enqueue(() => writes.drain({ count: 0 }, true)) === null,
     drain: decide => exam.drain(EXAM_WAIT, decide),
-    waiting: () => reads.waiting(),
+    waiting: () => reads.waiting() || exam.waiting(),
     stamp: () => { const at = now(); return formatTime(at, offsetOf(at)); },
     onError: error => { report(error, 'write'); },
   });
