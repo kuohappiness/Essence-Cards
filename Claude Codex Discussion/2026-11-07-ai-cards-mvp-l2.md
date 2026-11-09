@@ -1,5 +1,5 @@
 # AI 製卡最小版｜L2 獨立審查
-狀態：待使用者決定（2026-11-09，第六輪 L2 窄審，審查 `d9bdf46`，見[第六輪](#第六輪)）
+狀態：待再審（2026-11-09，第六輪修完，待第七輪窄審，見[第六輪的 Claude 回應](#第六輪的-claude-回應)）
 
 審查 worktree 為 `D:/程式開發/Essence Cards/.claude/worktrees/ai-cards-mvp`，分支 `claude/ai-cards-mvp`。HEAD 為 `972353625ed0e153b2356bf5da3389f4bc258f45`，共同祖先及差異基準為 `eee68d48adc1859a046a007fb5321509d14f92f9`。依該分支 `tasks/ai-cards-mvp-review.md` 與 `tasks/ai-cards-mvp.md`（同一 commit）查核 §1～§8，含 R4-1、兩次真人測試後的修正及 Windows 開發命令。下列產品程式的路徑與行號均指這個分支的 HEAD。
 
