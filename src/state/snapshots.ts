@@ -1,6 +1,7 @@
 import type { Files } from '../core/files.ts';
 import { SNAPSHOT_FOLDER, snapshotKey, snapshotPath, snapshotSuffix, snapshotText, snapshotValid } from '../core/catalog/index.ts';
 import type { SnapshotDeck } from '../core/catalog/index.ts';
+import { parseTime } from '../core/study/index.ts';
 import { completeText, IncompleteRead } from './reads.ts';
 
 /** 這一刻該留下的切面（tasks/record-gaps.md §2）；不該寫是 null。day 放進來，跨過清晨 4 點就算不同。 */
@@ -76,7 +77,7 @@ export function createSnapshots(options: SnapshotOptions) {
     // 這台的檔讀不到：這次不寫，下次再查。
     for (const { path } of mine) {
       const text = completeText(path, await limited(files.read(path)));
-      if (text !== null && snapshotValid(text, key, first.start)) { done.add(id); return; }
+      if (text !== null && snapshotValid(text, key, first.start, t => parseTime(t) !== null)) { done.add(id); return; }
     }
     const taken = new Set(mine.map(each => each.suffix));
     let suffix = 1;

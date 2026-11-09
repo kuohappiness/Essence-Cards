@@ -135,6 +135,8 @@ for (const [name, text] of [
   ['path 重複', lines(header({ decks: 2 }), ROW, ROW)],
   ['鍵不符', lines(header({ exam: 'other1' }), ROW)],
   ['開始日不符', lines(header({ start: '2026-10-27' }), ROW)],
+  ['時間不是規格的格式', lines(header({ t: 'broken' }), ROW)],
+  ['時間是不存在的日期', lines(header({ t: '2026-02-30T05:00:00.000+08:00' }), ROW)],
   ['下面不是 path 與 text', lines(header(), { path: NATURE })],
 ] as const) void test('24 這台的檔無效：舊檔逐字不變，另寫序號 2：' + name, async t => {
   const { memory } = await launch(t, { ...VAULT, [FILE]: text });

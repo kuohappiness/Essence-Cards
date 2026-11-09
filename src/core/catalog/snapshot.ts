@@ -38,20 +38,20 @@ export function snapshotText(header: SnapshotHeader, decks: readonly SnapshotDec
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-function validHeader(value: unknown): value is SnapshotHeader {
-  return isObject(value) && typeof value.t === 'string' && (value.exam === null || typeof value.exam === 'string') && typeof value.scope === 'string'
+function validHeader(value: unknown, isTime: (t: string) => boolean): value is SnapshotHeader {
+  return isObject(value) && typeof value.t === 'string' && isTime(value.t) && (value.exam === null || typeof value.exam === 'string') && typeof value.scope === 'string'
     && typeof value.start === 'string' && typeof value.end === 'string' && Array.isArray(value.units) && value.units.every(unit => typeof unit === 'string')
     && typeof value.decks === 'number' && Number.isInteger(value.decks) && value.decks >= 0;
 }
 
-/** 這份檔算不算寫完的切面（§2 的「有效」）：檔頭合法、鍵與開始日相符、後面每行都是 {path, text}、行數對、path 不重複。 */
-export function snapshotValid(text: string, key: string, start: string): boolean {
+/** 這份檔算不算寫完的切面（§2 的「有效」）：檔頭合法、鍵與開始日相符、後面每行都是 {path, text}、行數對、path 不重複。isTime 是 §5 的時間格式檢查（catalog 不能 import study 的值）。 */
+export function snapshotValid(text: string, key: string, start: string, isTime: (t: string) => boolean): boolean {
   const lines = text.split('\n');
   if (lines.at(-1) === '') lines.pop();
   let parsed: unknown[];
   try { parsed = lines.map(line => JSON.parse(line) as unknown); } catch { return false; }
   const [header, ...decks] = parsed;
-  if (!validHeader(header) || snapshotKey(header.exam, header.scope) !== key || header.start !== start || decks.length !== header.decks) return false;
+  if (!validHeader(header, isTime) || snapshotKey(header.exam, header.scope) !== key || header.start !== start || decks.length !== header.decks) return false;
   const paths = decks.map(deck => isObject(deck) && typeof deck.path === 'string' && typeof deck.text === 'string' ? deck.path : null);
   return !paths.includes(null) && new Set(paths).size === paths.length;
 }
