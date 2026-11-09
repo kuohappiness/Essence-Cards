@@ -2,7 +2,7 @@ import type { Files } from '../core/files.ts';
 import { isDeckPath } from '../core/deck/index.ts';
 import { confirmed } from './ids.ts';
 import type { Prepared } from './ids.ts';
-import { completeText } from './reads.ts';
+import { completeText, incomplete } from './reads.ts';
 import type { Life, Reads } from './reads.ts';
 
 /**
@@ -330,6 +330,8 @@ export function createWrites(options: WritesOptions) {
     try {
       const text = editor.text();
       if (text === null) return { kind: 'stale' };
+      // 編輯器開著讀到不完整的檔時，文字不經過 Files（L2 待釐清的第一項）：和讀到的一樣不採用、不寫回。
+      if (incomplete(text)) return { kind: 'blocked', reason: 'unread' };
       // 編輯器最新的文字也過一次門檻：需要新版（state 還沒讀到）就不寫（§2-1）。
       const gate = writable(path, text);
       if (gate) return gate;

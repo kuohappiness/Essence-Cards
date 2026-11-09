@@ -16,7 +16,7 @@ export class Closed extends Error {
 }
 
 /** 這個讀取結果不完整（D-154 第 4 點）：iCloud 重新下載途中，read 可能成功回傳原本的長度，後段全是 0。不是文字（程式的錯）不算，照舊由解析丟錯、讓 ready() 拒絕。 */
-const incomplete = (value: unknown): boolean => typeof value === 'string' && value.includes('\0');
+export const incomplete = (value: unknown): boolean => typeof value === 'string' && value.includes('\0');
 /** 讀到不完整的內容：不是寫入失敗，呼叫的一方分得出來（考試切面的 modify 這次不寫、下次再查）。 */
 export class IncompleteRead extends Error {}
 const incompleteError = (path: string): Error => new IncompleteRead('讀到的內容不完整（含 NUL），當成讀不到：' + path);

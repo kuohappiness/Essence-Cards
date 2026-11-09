@@ -44,6 +44,22 @@ void test('§3 卡組讀到含 NUL 的文字：進 unread，內容與 ID 照舊�
   assert.deepEqual(ids(state), ['aaaaaa', 'bbbbbb']);
 });
 
+void test('§3 編輯器交出含 NUL 的文字：存檔、改狀態都不解析、不改字、不寫回，回 unread', async t => {
+  const memory = createMemoryFiles({ [DECK]: goal('aaaaaa') });
+  const { state, tick } = await setup(t, memory, { fillIds: true, random: () => 0.31 });
+  const bad = goal('aaaaaa') + '- 新目標\n    - 新問 :: 新答\n\0';
+  let touched = 0;
+  const editor = { path: DECK, text: () => bad, apply: () => { touched++; return true; }, persist: () => { touched++; return Promise.resolve(); } };
+  for (const run of [() => state.save(editor), () => state.setDeckStatus(DECK, '暫停', editor)]) {
+    const result = run();
+    await tick(0);
+    assert.deepEqual(await result, { kind: 'blocked', reason: 'unread' });
+  }
+  assert.equal(touched, 0);
+  assert.equal(memory.texts.get(DECK), goal('aaaaaa'));
+  assert.deepEqual(ids(state), ['aaaaaa']);
+});
+
 void test('§3 第一次載入就讀到含 NUL 的卡組：不解析，補齊後才有', async t => {
   const memory = createMemoryFiles({ [DECK]: goal('aaaaaa') + '\0' });
   const { state, tick } = await setup(t, memory);
