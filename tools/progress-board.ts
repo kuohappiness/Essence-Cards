@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BOARD_PAGE, LIST_PAGE, MAP, MapError, count, itemsOf, parseMap, percent, type Stage } from './progress-board-data.ts';
+import { BACKLOG, countDeferred } from './check-docs.ts';
 import { renderCanvas } from './progress-board-canvas.ts';
 import { renderList } from './progress-board-list.ts';
 
@@ -39,12 +40,12 @@ function main(): void {
     process.exit(1);
   }
   const updated = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23' }).format(new Date());
-  const meta = { updated, commit: process.env.GITHUB_SHA };
+  const meta = { updated, commit: process.env.GITHUB_SHA, deferred: countDeferred(readFileSync(resolve(root, BACKLOG), 'utf8')) };
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, LIST_PAGE), renderList(stages, meta));
   writeFileSync(join(out, BOARD_PAGE), renderCanvas(stages, meta));
   writeFileSync(join(out, 'index.html'), REDIRECT);
-  console.log(`進度畫板：${out}（${stages.length} 段、v1 ${percent(count(stages.flatMap(itemsOf))) ?? 0}%）`);
+  console.log(`進度畫板：${out}（${stages.length} 段、v1 ${percent(count(stages.flatMap(itemsOf))) ?? 0}%、待補測與補做 ${meta.deferred} 列）`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();

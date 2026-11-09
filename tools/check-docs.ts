@@ -264,6 +264,9 @@ export function debtRows(doc: Doc | undefined): string[] {
 
 const isDeferredRow = (row: string) => /^(?:補測|補做)：/.test(row);
 
+/** backlog 技術債表還有幾列「補測：」「補做：」（進度畫板也用）。 */
+export const countDeferred = (backlog: string) => debtRows(parse(BACKLOG, backlog)).filter(isDeferredRow).length;
+
 // D-195：任務的狀態改成已完成、已合併、已結案時，以「結果」開頭的二級標題底下（含三級小節）要有恰好一行「延後的測試：」，
 // 寫「無」或技術債表的列名（「補測：…」「補做：…」）。rows 有給時（只對這次改到的檔）列名要對得到。
 function checkDeferred(doc: Doc, rows?: string[]): Problem[] {
