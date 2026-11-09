@@ -400,6 +400,14 @@ void test('§4 清單內的圍欄照清單裡的相對縮排認（R3-7）：四�
   clean([...first, '        ```', '        - ::', '        ```', ...second, '<<<完>>>']);
   // 框裡的結束標記不算。
   clean([...first, '    ```', '    <<<完>>>', '    ```', ...second, '<<<完>>>']);
+  // 圍欄後面還有同一個目標的題目（R4-3）：第二題不是頂格的壞題目，兩題都算。
+  for (const fence of [['    ```', '    x', '    ```'], ['    ~~~', '    <<<完>>>', '    國二上英文 L3 文法', '    ~~~'], ['  ```', '  x', '  ```']]) {
+    const lines = [...first, ...fence, '    - borrowed :: 借了', ...second, '<<<完>>>'];
+    clean(lines);
+    assert.equal(parseDeck(lines.join('\n').replace('<<<完>>>', '')).targets[0].prompts.length, 2, lines.join('\n'));
+  }
+  // 頂格的圍欄照舊結束清單：後面的縮排題目沒有目標可以掛，要擋。
+  assert.notDeepEqual(inspectReply([...first, '```', 'x', '```', '    - borrowed :: 借了', ...second, '<<<完>>>'].join('\n'), f, english, [], nobody).errors, []);
   // 不在清單裡的四格不是圍欄：不會吃掉後面的目標。
   const top = inspectReply(['## 單字', '', '    ```', '', ...first.slice(2), '<<<完>>>'].join('\n'), f, english, [], nobody);
   assert.equal(top.ended, true);

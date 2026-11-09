@@ -33,7 +33,9 @@ function findLast<T>(list: readonly T[], match: (item: T) => boolean): T | undef
 }
 /** 一行文字切成的區塊：標題、引言框、程式碼、清單項目、接續行、段落、空行。line 從 1 算。 */
 type Block =
-  | { kind: 'code' | 'blank'; line: number }
+  | { kind: 'blank'; line: number }
+  /** col：清單項目裡的圍欄開在第幾欄；不在清單裡是 null。 */
+  | { kind: 'code'; line: number; col: number | null }
   | { kind: 'callout'; line: number; body: Line[] }
   | { kind: 'heading'; line: number; level: number; text: string }
   | { kind: 'item'; line: number; col: number; contentCol: number; marker: string; text: string }
@@ -68,12 +70,12 @@ const indentOf = (line: string): number => /^ */.exec(line)![0].length;
  * 這一行開的圍欄與它屬於的清單項目：在清單裡看的是項目內的相對位置（R3-7，四格是清單的常見縮排），和正式解析器（listTree）同一個邊界；
  * 不在清單裡的最多縮排三格。不是開圍欄是 null。
  */
-function openedFence(raw: string, blocks: readonly Block[]): { mark: string; owner: Item | undefined } | null {
+function openedFence(raw: string, blocks: readonly Block[]): { mark: string; owner: Item | undefined; column: number } | null {
   const line = expand(raw), column = indentOf(line);
   const mark = fenceOpen(line.slice(column));
   if (mark === null) return null;
   const owner = listOwner(blocks, column);
-  return owner || column <= 3 ? { mark, owner } : null;
+  return owner || column <= 3 ? { mark, owner, column } : null;
 }
 
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
@@ -84,12 +86,12 @@ export function blocksOf(lines: readonly Line[]): Block[] {
     const fence = openedFence(raw, blocks);
     if (fence !== null) {
       // 在清單項目裡開的圍欄，清單項目結束就結束（CommonMark 的容器規則，R2-9），沒關好也不會吃到外面的目標與 <<<完>>>。
-      const { mark, owner } = fence;
+      const { mark, owner, column } = fence;
       const leaves = (text: string): boolean => !!owner && text.trim() !== '' && indentOf(expand(text)) < owner.contentCol;
       const closes = (text: string): boolean => !leaves(text) && fenceCloses(owner ? expand(text).trimStart() : text, mark);
       while (i + 1 < lines.length && !closes(lines[i + 1].raw) && !leaves(lines[i + 1].raw)) i++;
       if (i + 1 < lines.length && closes(lines[i + 1].raw)) i++;
-      blocks.push({ kind: 'code', line: no }); continue;
+      blocks.push({ kind: 'code', line: no, col: owner ? column : null }); continue;
     }
     if (/^\s{0,3}>/.test(raw)) {
       const body: Line[] = [];
@@ -124,6 +126,8 @@ function treeOf(blocks: readonly Block[]): TreeNode[] {
       (stack.length ? stack[stack.length - 1].children : roots).push(node);
       stack.push(node);
     } else if (block.kind === 'cont') { if (stack.length) stack[stack.length - 1].cont.push(block); }
+    // 清單項目裡的圍欄只結束比它深的項目，後面的題目仍屬於同一個目標（R4-3，同 listTree）。
+    else if (block.kind === 'code' && block.col !== null) { while (stack.length && stack[stack.length - 1].contentCol > block.col) stack.pop(); }
     else if (block.kind !== 'blank') stack.length = 0;
   }
   return roots;
