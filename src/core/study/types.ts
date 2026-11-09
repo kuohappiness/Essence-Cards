@@ -101,8 +101,8 @@ export interface History {
 export interface QueuedLine { t: string; line: string; path: string }
 
 export interface LogWriter {
-  /** 排進背景佇列即回傳，不等待寫檔。要那一行或路徑時用回傳的，不重新編碼。值不合那一種的契約就丟錯，不排進去。 */
-  write(entry: NewEntry): QueuedLine;
+  /** 排進背景佇列即回傳，不等待寫檔。要那一行或路徑時用回傳的，不重新編碼。值不合那一種的契約就丟錯，不排進去。near 是從哪一毫秒開始找沒人用過的時間（補寫原本的作答，§4），沒有就用現在。 */
+  write(entry: NewEntry, near?: number): QueuedLine;
   /** 等到目前排隊的都寫完，並重試先前失敗的；仍失敗就 reject。 */
   flush(): Promise<void>;
 }

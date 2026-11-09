@@ -2,6 +2,7 @@ import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { createState } from '../src/state/index.ts';
+import type { State } from '../src/state/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import type { MemoryFiles } from './helpers/memory-files.ts';
 import { withBaseline } from './helpers/observed.ts';
@@ -90,23 +91,28 @@ void test('§4 避開之後，增量併進去的結果和重讀一樣：作答�
 
 // 這次啟動第一次讀不到自己的月檔時，舊的 undo 還看不到：這一刻記下的作答可能撞到它（L2 的 R4）。讀到之後補寫一筆新的 t，不漏掉。
 const CANCELLED_T = JSON.stringify({ t: T, lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n' + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', undo: T }) + '\n';
-async function blindRun(t: TestContext, disk: string) {
+async function blindRun(t: TestContext, disk: string, deck = goal('aaaaaa'), at = T) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: disk });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: deck }, 'Windows-2c9e'), [OWN]: disk });
   memory.failing.add(OWN);
-  const state = launch(t, memory, Date.parse(T));
+  let clock = Date.parse(at);
+  const state = createState({ files: memory.files, device: 'Windows-2c9e', delay: 30, fillIds: false, now: () => clock, offset: () => 480 });
+  t.after(() => state.close());
   await state.ready();
   assert.deepEqual(state.unread(), [OWN]);
   memory.failing.delete(OWN);
+  const pump = async (ms: number): Promise<void> => {
+    t.mock.timers.tick(ms);
+    for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+  };
   const reread = async (): Promise<void> => {
     await state.flush();
-    t.mock.timers.tick(1000);
-    for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+    await pump(1000);
     await state.flush();
     assert.deepEqual(state.unread(), []);
   };
-  const lines = (): Record<string, unknown>[] => (memory.texts.get(OWN) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>);
-  return { memory, state, reread, lines };
+  const lines = (path = OWN): Record<string, unknown>[] => (memory.texts.get(path) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>);
+  return { memory, state, reread, pump, lines, setNow: (value: number): void => { clock = value; } };
 }
 
 void test('§4 第一次讀不到月檔時撞到舊 undo 的 t：讀到之後補寫一筆新的 t，作答不漏，重開相同（L2 的 R4）', async t => {
@@ -149,4 +155,76 @@ void test('§4 一次讀不到的期間兩筆作答，只有一筆撞到：只�
   await reread();
   assert.deepEqual(state.history().reviews.map(review => review.t), [NEXT, '2026-10-24T19:00:00.002+08:00']);
   assert.equal(lines().filter(line => 'r' in line).length, 4);
+});
+
+const cancelledAt = (t0: string): string => JSON.stringify({ t: t0, lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n' + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', undo: t0 }) + '\n';
+const fingerprint = (state: State): string => {
+  const next = state.next({ deck: DECK });
+  assert.equal(next.kind, 'card');
+  return next.kind === 'card' ? next.card.prompt.fingerprint : '';
+};
+
+void test('§4 補寫保留作答的先後：先錯後對，補寫的錯仍在對之前，今天還是完成（L2 的 R13）', async t => {
+  const { memory, state, pump, setNow, lines } = await blindRun(t, CANCELLED_T);
+  const v = fingerprint(state);
+  assert.equal(state.answer({ lt: 'aaaaaa', r: 'miss', v }), T);
+  await state.flush();
+  const held = memory.holdRead(OWN);
+  await pump(1000);
+  await held.started;
+  setNow(Date.parse(T) + 60_000);
+  const good = state.answer({ lt: 'aaaaaa', r: 'good', v });
+  assert.equal(state.progress().done, 1);
+  await state.flush();
+  setNow(Date.parse(T) + 120_000);
+  held.release(memory.texts.get(OWN));
+  await pump(0);
+  await state.flush();
+  assert.deepEqual(state.history().reviews.map(review => [review.t, review.r]), [[NEXT, 'miss'], [good, 'good']]);
+  assert.equal(state.progress().done, 1);
+  assert.equal(state.next({ deck: DECK }).kind, 'done');
+  assert.equal(lines().filter(line => 'r' in line).length, 4);
+  const again = launch(t, memory, Date.parse(T) + 120_000);
+  await again.ready();
+  assert.deepEqual(again.history(), state.history());
+});
+
+void test('§4 補讀時已經換月、過清晨 4 點：補寫留在原本的月檔與複習日（L2 的 R13）', async t => {
+  const at = '2026-10-31T23:59:59.000+08:00';
+  const { memory, state, reread, setNow, lines } = await blindRun(t, cancelledAt(at), goal('aaaaaa'), at);
+  assert.equal(state.answer({ lt: 'aaaaaa', r: 'good', v: fingerprint(state) }), at);
+  await state.flush();
+  setNow(Date.parse('2026-11-01T04:00:01.000+08:00'));
+  await reread();
+  assert.deepEqual(state.history().reviews.map(review => review.t), ['2026-10-31T23:59:59.001+08:00']);
+  assert.equal(memory.texts.has('Essence Cards/紀錄/2026-11 Windows-2c9e.jsonl'), false);
+  assert.equal(lines().filter(line => 'r' in line).length, 3);
+  assert.equal(state.progress().done, 0, '算在前一個複習日');
+});
+
+void test('§4 比較卡的第一行被補寫：還帶著同一張卡的 with，其他行不用動（L2 的 R13）', async t => {
+  const { state, reread } = await blindRun(t, CANCELLED_T, goal('aaaaaa') + goal('bbbbbb'));
+  assert.equal(state.answer({ ...answer, pick: '甲' }), T);
+  const mate = state.answer({ ...answer, lt: 'bbbbbb', pick: '乙', with: T });
+  await reread();
+  assert.deepEqual(state.history().reviews.map(review => [review.t, review.lt, review.with]), [[mate, 'bbbbbb', T], ['2026-10-24T19:00:00.002+08:00', 'aaaaaa', T]]);
+});
+
+void test('§4 第一次補讀時暫時不能寫（同步來重複的 ID）：等解除之後補一次（L2 的 R13）', async t => {
+  const { memory, state, reread, pump, lines } = await blindRun(t, CANCELLED_T);
+  assert.equal(state.answer(answer), T);
+  const other = 'Essence Cards/B（卡片）.md';
+  memory.write(other, goal('aaaaaa'));
+  await reread();
+  assert.equal(state.permits(answer), false);
+  assert.deepEqual(state.history().reviews, []);
+  memory.remove(other);
+  await pump(30);
+  await state.flush();
+  // 新卡組的狀態基準行已經用掉下一個毫秒。
+  assert.deepEqual(state.history().reviews.map(review => review.t), ['2026-10-24T19:00:00.002+08:00']);
+  memory.notify(DECK);
+  await pump(30);
+  await state.flush();
+  assert.equal(lines().filter(line => 'r' in line).length, 3, '只補一次');
 });

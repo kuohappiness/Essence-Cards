@@ -397,24 +397,30 @@ export function createState(options: StateOptions): State {
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck), reserved: options.reserved });
 
   /** 月檔還讀不到時記下的作答：t 可能撞到看不到的舊 undo（tasks/record-gaps.md §4、L2 的 R4），讀到之後才知道。 */
-  const blind = new Map<string, { path: string; entry: NewEntry }>();
-  /** 讀到了的月檔：這次的作答被舊 undo 取消的，換一個沒人用過的 t 補寫一筆。回傳有沒有補寫。 */
+  const blind = new Map<string, { path: string; entry: Extract<NewEntry, { r: unknown }> }>();
+  /**
+   * 讀到了的月檔：這次的作答被舊 undo 取消的，補寫一筆。時間是原本的下一個沒人用過的毫秒，先後、月檔與複習日都不變（L2 的 R13）；
+   * 比較卡的其他行指著原本的 t，補寫的這一行也帶著，還算同一張卡。暫時不能寫的留著，門檻解除後再補。回傳有沒有補寫。
+   */
   function rescueBlind(): boolean {
     let rescued = false;
     for (const [t, { path, entry }] of [...blind]) {
       if (unread.has(path)) continue;
+      if (history.cancelled.includes(t) && !permits(entry)) continue;
       blind.delete(t);
-      if (!history.cancelled.includes(t) || !permits(entry)) continue;
-      record(entry);
+      if (!history.cancelled.includes(t)) continue;
+      record('v' in entry && !entry.with && history.reviews.some(review => review.with === t) ? { ...entry, with: t } : entry, Date.parse(t));
       rescued = true;
     }
+    // 增量併進去的排在最後，這幾筆的時間比較早：重算一次，和重讀相同。
+    if (rescued) history = mergeHistory([...sources].map(([each, text]) => ({ path: each, text })), version);
     return rescued;
   }
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
-  function record(entry: NewEntry): QueuedLine {
-    const queued = writer.write(entry);
+  function record(entry: NewEntry, near?: number): QueuedLine {
+    const queued = writer.write(entry, near);
     if ('undo' in entry) blind.delete(entry.undo);
-    else if (!('set' in entry) && unread.has(queued.path)) blind.set(queued.t, { path: queued.path, entry });
+    else if ('r' in entry && unread.has(queued.path)) blind.set(queued.t, { path: queued.path, entry });
     sources.set(queued.path, (sources.get(queued.path) ?? '') + (unterminated(queued.path) ? '\n' : '') + queued.line + '\n');
     history = appendLine(history, queued.line);
     return queued;
