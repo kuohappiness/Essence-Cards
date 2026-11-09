@@ -73,3 +73,17 @@ void test('§4 取消行自己的 t 不用避開：沒有東西用它認人', as
   await state.ready();
   assert.equal(state.answer(answer), T);
 });
+
+void test('§4 避開之後，增量併進去的結果和重讀一樣：作答、取消、變更都逐項相同', async t => {
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: JSON.stringify({ t: T, undo: '2026-10-20T19:00:00.000+08:00' }) + '\n' + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', undo: T }) + '\n' });
+  const first = launch(t, memory, Date.parse(T));
+  await first.ready();
+  const undone = first.answer(answer);
+  assert.equal(undone, NEXT);
+  first.answer({ undo: NEXT });
+  first.answer(answer);
+  await first.flush();
+  const reread = launch(t, memory, Date.parse(T));
+  await reread.ready();
+  assert.deepEqual(reread.history(), first.history());
+});

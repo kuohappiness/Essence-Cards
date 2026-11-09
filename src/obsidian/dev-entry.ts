@@ -1,4 +1,5 @@
 import { MarkdownView, type App, type Plugin, type TFile } from 'obsidian';
+import { isLogPath } from '../core/study/index.ts';
 import { compareLists, type ListItem } from '../dev/compare.ts';
 import type { State, StudyPick } from '../state/index.ts';
 import type { ReviewHandle } from '../ui/index.ts';
@@ -48,7 +49,7 @@ const inReview = (selector: string): HTMLElement[] => {
 export const buttonOf = (list: HTMLElement[], name: string): HTMLElement | undefined => list.find(each => text(each) === name || each.getAttribute('aria-label') === name);
 export const focusOk = (): boolean => document.activeElement !== document.body && document.activeElement !== null;
 const logs = async (app: App): Promise<string> => {
-  const paths = app.vault.getFiles().filter(file => file.path.startsWith('Essence Cards/紀錄/') && file.path.endsWith('.jsonl') && !file.path.includes('/錯誤/')).map(file => file.path).sort();
+  const paths = app.vault.getFiles().filter(file => isLogPath(file.path)).map(file => file.path).sort();
   return (await Promise.all(paths.map(async path => path + '\n' + await app.vault.adapter.read(path)))).join('\n');
 };
 

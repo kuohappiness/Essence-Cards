@@ -1282,3 +1282,13 @@ void test('R3-4 還沒發布時紀錄資料夾沒搬回：不在原位另建一�
   // 別的位置照常。
   assert.deepEqual(await state.aiCreate(`${R}/考試範圍/x.md`, 'x'), { kind: 'done' });
 });
+
+void test('紀錄/考試切面 搬動或改名會搬回（tasks/record-gaps.md §2）', async () => {
+  const path = `${R}/紀錄/考試切面/2026-10-28 3fa9c1d2e4b7 PC-test.jsonl`;
+  const f = fake({ ...VAULT, [path]: 'x\n' });
+  const guard = started(f);
+  drag(f, guard, `${R}/紀錄/考試切面`, `${R}/英文/切面`);
+  await f.run();
+  assert.equal(f.memory.texts.get(path), 'x\n');
+  assert.deepEqual(f.moves, [`${R}/英文/切面 → ${R}/紀錄/考試切面`]);
+});
