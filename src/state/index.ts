@@ -287,7 +287,9 @@ export function createState(options: StateOptions): State {
   const report = (error: unknown, source: ErrorSource): void => {
     try { options.onError?.(error, source); } catch { /* 回呼的錯誤不影響狀態。 */ }
   };
-  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); } });
+  /** 舊紀錄裡用來認人的 t（tasks/record-gaps.md §4）：reviews 已濾掉被取消的，所以 cancelled 要另外看；取消行自己的 t 沒有東西用它認人。 */
+  const taken = (t: string): boolean => history.cancelled.includes(t) || history.reviews.some(review => review.t === t) || history.changes.some(change => change.t === t);
+  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); }, taken });
   // 自己的紀錄：`YYYY-MM <device>.jsonl`；衝突副本（例如 `… 2.jsonl`）算別台裝置的。
   const ownName = new RegExp('^\\d{4}-\\d{2} ' + device.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.jsonl$');
   const own = (path: string): boolean => path.startsWith(LOG_FOLDER + '/') && ownName.test(path.slice(LOG_FOLDER.length + 1));

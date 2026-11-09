@@ -174,15 +174,17 @@ void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔�
   assert.equal(changed(), 0);
 });
 
-// Codex 審查 W5 的 F2：別台裝置已經取消某個 t，這台的時鐘剛好寫出同一個 t；記憶中和重新讀檔要相同。
-void test('T7 作答：別台裝置先取消了同一個 t，作答後 history 仍和 readHistory 相同', async t => {
+// Codex 審查 W5 的 F2：別台裝置已經取消某個 t，這台的時鐘剛好走到同一個 t；記憶中和重新讀檔要相同。
+// tasks/record-gaps.md §4 之後新作答避開那個 t，不會被舊的取消吃掉。
+void test('T7 作答：別台裝置先取消了同一個 t，作答避開它，history 仍和 readHistory 相同', async t => {
   const t0 = '2026-10-24T19:00:00.000+08:00';
+  const t1 = '2026-10-24T19:00:00.001+08:00';
   const { state, files } = await setup(t, { vault: { [NATURAL]: naturalText, [PHONE]: encodeEntry('2026-10-24T18:00:00.000+08:00', { undo: t0 }) + '\n' } });
   await state.ready();
   const v = state.decks()[0].deck.targets[0].prompts[0].fingerprint;
-  assert.equal(state.answer({ lt: 'a', r: 'good', v }), t0);
+  assert.equal(state.answer({ lt: 'a', r: 'good', v }), t1);
   await state.flush();
-  assert.deepEqual(state.history().reviews, []);
+  assert.deepEqual(state.history().reviews.map(review => review.t), [t1]);
   assert.deepEqual(state.history(), await readHistory(files));
 });
 

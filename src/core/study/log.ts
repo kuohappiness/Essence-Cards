@@ -14,6 +14,8 @@ export function createLogWriter(files: Files, options: {
   now?: () => number;
   offset?: (ms: number) => number;
   onError?: (error: unknown) => void;
+  /** 這個 t 字串已經有紀錄用來認人（作答、變更、被取消的）：undo 用 t 認人，新的一行要避開（tasks/record-gaps.md §4）。 */
+  taken?: (t: string) => boolean;
 }): LogWriter {
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
@@ -58,9 +60,15 @@ export function createLogWriter(files: Files, options: {
 
   return {
     write(entry: NewEntry): QueuedLine {
-      const at = Math.max(Math.trunc(now()), last + 1);
-      const offset = offsetOf(at);
-      const t = formatTime(at, offset);
+      let at = Math.max(Math.trunc(now()), last + 1);
+      let offset = offsetOf(at);
+      let t = formatTime(at, offset);
+      // 只避開完全相同的時間，不用舊紀錄的最大時間當下限：曾經把時鐘調到未來的裝置，之後每一行都會被推到未來（§4）。
+      while (options.taken?.(t)) {
+        at++;
+        offset = offsetOf(at);
+        t = formatTime(at, offset);
+      }
       const line = encodeNew(t, entry);
       const path = logPath(options.device, at, offset);
       last = at;
