@@ -1,6 +1,6 @@
 # AI 製卡最小版：複製貼上、草稿與啟用（給 Claude，本機執行）
 
-狀態：L2 第三輪修完、待第四輪（2026-11-09，分支 `claude/ai-cards-mvp` 的 `05528cc`，[查核請求](ai-cards-mvp-review.md#第四輪再審)）；§8 第 3 點做了 ChatGPT 與 Gemini（真人測試後改了兩次，Claude 網頁等額度），第 4 點（iPhone）使用者同意延後到升正式 vault 之前，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
+狀態：L2 第四輪修完、待第五輪窄審（2026-11-09，分支 `claude/ai-cards-mvp` 的 `26417ed`，[查核請求](ai-cards-mvp-review.md#第五輪窄審)）；§8 第 3 點做了 ChatGPT 與 Gemini（真人測試後改了兩次，Claude 網頁等額度），第 4 點（iPhone）使用者同意延後到升正式 vault 之前，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§4～§6 寫進檔案的格式開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 

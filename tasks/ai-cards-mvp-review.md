@@ -1,6 +1,6 @@
 # AI 製卡最小版：L2 獨立審查（給 Codex）
 
-狀態：待再審（2026-11-09，第四輪）。第一輪審查 `9723536`、第二輪審查 `d776969`、第三輪審查 `1f291ae`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
+狀態：待再審（2026-11-09，第五輪窄審，使用者決定）。第一輪審查 `9723536`、第二輪審查 `d776969`、第三輪審查 `1f291ae`、第四輪審查 `b4ff11f`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。這次會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險範圍（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)），合併前做 L2。**只審查，不改產品程式**；可以在隔離的暫存資料夾重現。
 
@@ -128,3 +128,19 @@
 - **想請特別找的新組合**：第二次 `edit` 被擋之後的重試；`displaced` 與 `unread` 同時成立時的回報；階段與路徑改回原值之後當掉重開；`readTimed` 逾時後底層讀取才回來；清單內圍欄與 `<<<完>>>`、篇名的交互。
 - **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts tests/obsidian-files.test.ts tests/folder-guard.test.ts tests/files-contract.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸（`1f291ae` 與 `05528cc` 輸出相同）。**沒跑**：修完之後的 Windows 實機（第四輪通過後在最後要合併的 commit 重跑，含系統剪貼簿與 Files 契約的開發命令）；Claude 網頁（額度）；iPhone（延後，技術債）。
 - **回報**：寫在 L2 報告最後新增一節〈第四輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。
+
+## 第五輪窄審
+
+使用者 2026-11-09 看過第四輪的四項後，選四項都修、再窄審一輪。這一輪只讀：本節、[L2 報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)的〈第四輪的 Claude 回應〉。**範圍只有 `git diff b4ff11f...claude/ai-cards-mvp` 與它直接影響的路徑**，不重審前幾輪已結的部分，也不找這段差異以外的新問題。遵守 repo 根目錄的 `AGENTS.md`，建議推理等級：**高**；只審查，不改產品程式，可以在隔離的暫存資料夾重現。
+
+- **審查對象**：worktree `D:\程式開發\Essence Cards\.claude\worktrees\ai-cards-mvp`，分支 `claude/ai-cards-mvp` 的最新 commit。最後一個改程式的 commit 是 `26417ed`，之後只有文件。沒有未提交的修改。本節的 R4-1～R4-4 指 L2 第四輪，和格式查核的 R4-1 不同。
+- **還沒結的發現**：R4-1～R4-4。每項都修了，請確認修法涵蓋同一類輸入、有沒有帶進新問題。
+- **可能碰到的已結項目**：R3-1、R3-4、R3-6、R3-7 的回歸（`tests/folder-guard.test.ts`、`tests/ai-publish.test.ts`、`tests/ai-cards-flow.test.ts`、`tests/ai-cards.test.ts`）。
+- **實作者自己選的做法**（規格沒寫，請先看）：
+  1. R4-1：`missing` 也算不在原位。代價：家長自己刪掉 `紀錄/AI 輸出` 時，製卡會停到放回原位或按「不用了」為止；這比重新發布或誤判已放棄好。
+  2. R4-2、R4-4：恢復資料多 `base`、`snapshotBase` 兩個必填欄位。舊格式的進行中工作會被當成讀不懂；這種工作只存在開發版，正式 vault 的 `0.3.0` 沒有 AI 製卡。
+  3. 有了 `base`，第三輪 R3-6 的「路徑改回原值」拿掉：卡組沒寫成時只有階段改回去，路徑留在候選名；快照的位置也留著。
+  4. R4-3：只有 `blocksOf` 判定屬於清單項目的圍欄帶欄位，頂格的照舊結束清單。
+- **想請特別找的新組合**：快照位置留在候選名之後，對象變動或家長跳過一篇；卡組路徑留在候選名之後，重建或搬走的判斷；`missing` 與 `moved` 交替時的解除；清單內圍欄後接比圍欄淺的題目。
+- **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts tests/obsidian-files.test.ts tests/folder-guard.test.ts tests/files-contract.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸（`1f291ae` 與 `26417ed` 輸出相同）。**沒跑**：修完之後的 Windows 實機（這一輪通過後在最後要合併的 commit 重跑）；Claude 網頁（額度）；iPhone（延後，技術債）。
+- **回報**：寫在 L2 報告最後新增一節〈第五輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。還有擋合併的發現時，照第四輪的寫法列出真實路徑與不修的代價，交使用者決定。
