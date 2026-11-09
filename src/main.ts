@@ -3,6 +3,7 @@ import type { MarkdownFileInfo } from 'obsidian';
 import type { EditorState, StateField } from '@codemirror/state';
 import { ViewPlugin } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
+import type { EmbeddedRules } from './core/ai/index.ts';
 import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
@@ -13,8 +14,10 @@ import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
+import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
+import { wireAiCards } from './obsidian/ai-cards-modal.ts';
 import { wireDeckActions } from './obsidian/deck-actions.ts';
-import { changeDeckStatus } from './obsidian/deck-status.ts';
+import { activateDeck, changeDeckStatus } from './obsidian/deck-status.ts';
 import { wireSettings } from './obsidian/settings.ts';
 import { createObsidianFiles } from './obsidian/files.ts';
 import type { FolderGuard } from './obsidian/folder-guard.ts';
@@ -30,11 +33,14 @@ import { createState, type ErrorSource, type State, type StudyPick } from './sta
 import { reminderView, type Session } from './review/index.ts';
 import { unreadableSources, type UnreadableSource } from './ui/sources.ts';
 import { openEntry, openPreview, openReview, type EntryHandle, type ReviewEvent, type ReviewHandle } from './ui/index.ts';
+import { aiPrefs } from './ui/prefs.ts';
 
 /** tools/build.mjs 的 define：開發版是 true，正式建置是 false，開發命令整段不進 main.js。 */
 declare const DEV: boolean;
 /** tools/build.mjs 的 define：manifest 的版本加 git commit，例如 0.0.1+50625d2（「版本」命令顯示它，W6 §7 前提）。 */
 declare const BUILD: string;
+/** tools/build.mjs 的 define：AI 製卡的規則組（tasks/ai-cards-mvp.md §1），JSON 字串。 */
+declare const CARD_RULES: string;
 
 // 照錯誤來源如實提示；監聽者丟錯是程式的錯，只記在 console（Codex 審查 W5 第 11 點）。
 const NOTICES: Partial<Record<ErrorSource, string>> = {
@@ -110,6 +116,8 @@ export default class EssenceCardsPlugin extends Plugin {
   private guard: FolderGuard | null = null;
   /** 狀態列的提醒（D-163 第 5 點）：只有電腦。 */
   private statusBar: HTMLElement | null = null;
+  /** AI 製卡（tasks/ai-cards-mvp.md）：只在電腦；手機是 null（D-039）。 */
+  private ai: AiCards | null = null;
   /** 電腦上的備份（D-150）；手機、還沒載入或載入失敗是 null。 */
   backup: BackupWiring | null = null;
   /** 電腦專用的功能載入失敗的原因（設定頁顯示）。 */
@@ -166,7 +174,27 @@ export default class EssenceCardsPlugin extends Plugin {
       start: pick => { this.startReview(pick); },
       preview: session => { this.startPreview(session); },
       notify: message => { new Notice(message); },
+      activate: Platform.isDesktopApp ? path => this.state ? activateDeck(this.app, this.state, path, error => { this.fail('write', error, path); }) : Promise.resolve(null) : undefined,
     });
+    // AI 製卡只在電腦（D-039）。待貼回的工作在建立 state 之前就讀好：state 第一次配號時，未完成工作的預留一定已經載入（§5〈ID 的預留〉）。
+    if (Platform.isDesktopApp) {
+      const app = this.app;
+      this.ai = createAiCards({
+        rules: JSON.parse(CARD_RULES) as EmbeddedRules,
+        state: () => this.state,
+        names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
+        named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
+        store: {
+          jobs: () => aiPrefs.jobs(app), saveJobs: jobs => { aiPrefs.saveJobs(app, jobs); },
+          retired: () => aiPrefs.retired(app), retire: ids => { aiPrefs.retire(app, ids); },
+          last: () => aiPrefs.last(app), saveLast: last => { aiPrefs.saveLast(app, last); },
+        },
+        clipboard: text => navigator.clipboard.writeText(text),
+        now: () => ({ ms: Date.now(), offset: -new Date().getTimezoneOffset() }),
+        onError: error => { this.fail('ai', error); },
+      });
+      wireAiCards(this, { cards: () => this.unloaded ? null : this.ai, openNote: path => { this.openNote(path); }, notify: message => { new Notice(message); }, now: () => Date.now() });
+    }
     if (Platform.isDesktop) {
       this.statusBar = this.addStatusBarItem();
       this.statusBar.addClass('essence-cards-reminders');
@@ -482,7 +510,7 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     guard.onChange(() => { this.updateReminders(); this.entry?.refresh(); });
     guard.check();
-    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), onError: (error, source) => { this.report(error, source); } });
+    this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
     this.ids?.saver.start();

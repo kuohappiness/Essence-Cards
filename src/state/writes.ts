@@ -42,6 +42,26 @@ export type WriteResult =
   /** 已寫進磁碟，但核對時讀不到：state 自己重試，讀到後照核對採用。 */
   | { kind: 'saved' };
 
+/**
+ * 建檔前的核對（AI 製卡，tasks/ai-cards-mvp.md §5，R2-1）：check 在進入寫入回呼前與回呼裡各問一次，回傳不能建的原因（沒問題是 null）。
+ * 回呼裡還有沒讀完的變動時，放棄這一次、讀完再來。
+ */
+export interface CreateGuard<Why extends string> {
+  check: () => Why | null;
+  /** 只在寫入回呼裡問、而且這個路徑沒有檔的時候（整個 vault 的檔名）；同路徑已有檔照舊回 exists。 */
+  atWrite?: () => Why | null;
+}
+
+/**
+ * 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。blocked：還沒寫。
+ * unreadable：寫出去了，讀回失敗或一直沒回來（R3-5）：不算寫成也不算寫壞，之後重試時照實際的檔核對。
+ */
+export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: CreateBlock } | { kind: 'failed'; error: unknown } | { kind: 'unreadable'; path: string; error: unknown };
+/** 只建立時不能建的原因：不看是哪一篇的，加上這個位置的系統資料夾不在原位、也沒搬回（R3-4）。 */
+type CreateBlock = WriteBlock | 'displaced';
+
+/** 建檔的回呼裡發現不能建（核對沒過，或還有沒讀完的變動）：中止 modify，不建立檔案。 */
+class NotNow extends Error {}
 /** fillIds 讀到空字串（不存在或空檔）時中止 modify，不建立檔案。 */
 class NothingToFill extends Error {}
 /**
@@ -61,6 +81,8 @@ export interface WritesOptions {
   fillIds: boolean;
   /** 等一次寫進磁碟最多多久（毫秒）。 */
   writeTimeout: number;
+  /** 直接讀一個檔最多等多久（毫秒）；和讀取層判定卡住的時間相同。 */
+  stuckAfter: number;
   /** 離開筆記時的準備：組合那一層對最新的原文做 tracker.fill，觀察到的原文照常採用。 */
   prepare: (path: string, text: string) => Prepared;
   /** 核對讀取確認寫成了：把預期的輸出當成自己的寫回（tracker.wrote）。 */
@@ -73,10 +95,12 @@ export interface WritesOptions {
   version: string | null;
   /** 搬錯位置的系統資料夾裡的檔（StateOptions.skip）：不是卡組。 */
   skip?: (path: string) => boolean;
+  /** 這個位置的系統資料夾不在原位、也沒搬回（StateOptions.displaced）。 */
+  displaced?: (path: string) => boolean;
 }
 
 export function createWrites(options: WritesOptions) {
-  const { files, life, reads, writeTimeout, prepare, blockedText } = options;
+  const { files, life, reads, writeTimeout, stuckAfter, prepare, blockedText } = options;
   /**
    * 寫成、等核對讀取的工作（§4 第 3 點），照路徑。output 是 null 時沒有改字（沒有要補的、或準備時問題已不成立），
    * 只等這次讀取、回傳 fallback。讀不到時先回 saved，核對留著，之後第一次讀到時照同一套規則採用（不重新配號、不重做交易）。
@@ -119,11 +143,26 @@ export function createWrites(options: WritesOptions) {
   /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending 裡有不在 unread 的路徑（except 那一篇除外）。 */
   const waiting = reads.waiting;
   /** 排進寫入的那一列；排隊時就記下對象，輪到時才取最新的文字。 */
-  function enqueue(job: () => Promise<WriteResult>): Promise<WriteResult> {
+  function enqueue<T>(job: () => Promise<T>): Promise<T> {
     const next = writes.then(job);
     // 失敗由 next 交回排這份工作的呼叫端；這一列只是接著排下一份。
     writes = next.catch(() => {});
     return next;
+  }
+  /**
+   * 先讀完已知的待讀（最多 DRAIN_ROUNDS 輪，rounds 由呼叫端累計）：讀完是 null；關閉了或讀不完回傳原因。
+   * giveUp（AI 製卡）：讀取被判定卡住就停，回受阻的原因，放開寫入的那一列（R2-5，iCloud 佔位檔的讀取可能一直不回來）。
+   */
+  async function drain(rounds: { count: number }, giveUp = false): Promise<WriteResult | null> {
+    while (waiting()) {
+      if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      if (giveUp && reads.unread.size) return { kind: 'blocked', reason: 'unread' };
+      if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
+      rounds.count++;
+      // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
+      await (giveUp ? reads.readOrStuck() : reads.readNow());
+    }
+    return null;
   }
   /**
    * 第 1～3 步：已關閉、先讀完已知的待讀（包括這一篇；最多 DRAIN_ROUNDS 輪，rounds 跨過 fillIds 的重來累計）、門檻。
@@ -134,18 +173,11 @@ export function createWrites(options: WritesOptions) {
     // 手機、還沒 ready、不是卡組：不用先讀。讀不到、需要新版要看讀到的內容：先讀完待讀再判斷（待讀裡可能就是改回來的那一篇）。
     const early = writable(path);
     if (early && !(early.kind === 'blocked' && (early.reason === 'unread' || early.reason === 'needs-update'))) return early;
-    while (waiting()) {
-      if (life.closed) return { kind: 'blocked', reason: 'closed' };
-      if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
-      rounds.count++;
-      // 已經排好的 delay 計時不用取消：到時 pending 是空的就什麼都不做。
-      await reads.readNow();
-    }
-    return writable(path);
+    return await drain(rounds) ?? writable(path);
   }
-  /** 第 4 步：這篇的 I/O 開始（§2 第 1 點）。 */
+  /** 第 4 步：這篇的 I/O 開始（§2 第 1 點）。卡組以外的檔（AI 製卡的原文與快照）不經過讀取層，只記正在 I/O。 */
   function begin(path: string): void {
-    reads.hold(path);
+    if (isDeckPath(path)) reads.hold(path);
     active = new Promise(resolve => { finish = resolve; });
   }
   /**
@@ -154,19 +186,86 @@ export function createWrites(options: WritesOptions) {
    * 代價：還原或當成新的在逾時之後才寫成時，可能多出一個待處理問題，要家長再選一次。
    */
   function persist(work: Promise<void>): Promise<void> {
+    return within(work, writeTimeout, `寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`);
+  }
+  function within<T>(work: Promise<T>, ms: number, late: string): Promise<T> {
     let id: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      id = setTimeout(() => { reject(Error(`寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`)); }, writeTimeout);
-    });
+    const timeout = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(Error(late)); }, ms); });
     return Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
+  }
+  /**
+   * 直接讀一個檔（AI 製卡的原文、快照、寫好之後的讀回），最多等 stuckAfter（R3-5）：這些檔不在 state 的監看裡，沒有別的地方會判定它卡住。
+   * 沒回來就丟錯，呼叫端當成讀不到，放開工作與寫入的那一列；底層的讀取取消不了，晚回來的結果沒有人用。
+   */
+  function readTimed(path: string): Promise<string | null> {
+    return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`);
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
-    reads.unhold(path);
+    const deck = isDeckPath(path);
+    if (deck) reads.unhold(path);
     finish?.();
     finish = null;
     active = null;
-    reads.reread(path);
+    if (deck) reads.reread(path);
+  }
+  /**
+   * 只建立新檔（AI 製卡的原文、卡組與快照，tasks/ai-cards-mvp.md §5）：同一列、同樣不看是哪一篇的門檻（電腦、讀完、沒關閉、備份成功、沒有讀不到的）；
+   * 已經有檔（含零位元組的空檔）不動、回 exists。寫好再讀一次，一字不差才是 done；讀回來不同回 failed，讀不到或一直沒回來回 unreadable（之後重試時照實際的檔核對）。
+   * guard（建卡組與快照時給）：先讀完已知的變動再核對，寫入回呼裡再核對一次（L2-2、R2-1：改名、搬移、同步都是先有事件才讀檔，排隊與等回呼的期間都可能再來）。
+   * 核對沒過回 refused、不建；回呼裡還有沒讀完的變動就放棄這一次、讀完再來，最多 DRAIN_ROUNDS 輪。門檻在回呼裡也再問一次（R3-1）：blocked 一定是還沒寫。
+   */
+  function create(path: string, text: string): Promise<CreateResult>;
+  function create<Why extends string>(path: string, text: string, guard: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }>;
+  async function create<Why extends string>(path: string, text: string, guard?: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }> {
+    const rounds = { count: 0 };
+    const blocked = (): CreateBlock | null => blockedNow() ?? (options.displaced?.(path) ? 'displaced' : null);
+    for (;;) {
+      if (life.closed) return { kind: 'blocked', reason: 'closed' };
+      if (guard && await drain(rounds, true)) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
+      const reason = blocked();
+      if (reason) return { kind: 'blocked', reason };
+      let why = guard?.check() ?? null;
+      if (why !== null) return { kind: 'refused', why };
+      begin(path);
+      let exists = false, live = true, again = false, gate: CreateBlock | null = null;
+      try {
+        await persist(files.modify(path, (current, has) => {
+          // 逾時之後才輪到回呼：中止，不建立（同 fillFile 的 Stopped）。
+          if (!live || life.closed) throw new Stopped();
+          if (has) { exists = true; return current; }
+          // 等回呼的期間門檻也可能變了（R3-1）：剛讀失敗的卡組或紀錄不在 waiting 裡，占用的索引卻可能還缺著它，不能當成沒有人用。
+          gate = blocked();
+          if (gate) throw new NotNow();
+          if (guard) {
+            if (waiting(path)) { again = true; throw new NotNow(); }
+            why = guard.check() ?? guard.atWrite?.() ?? null;
+            if (why !== null) throw new NotNow();
+          }
+          return text;
+        }));
+      } catch (error) {
+        if (!(error instanceof NotNow)) return error instanceof Stopped ? { kind: 'blocked', reason: 'closed' } : { kind: 'failed', error };
+      } finally {
+        live = false;
+        end(path);
+      }
+      if (gate) return { kind: 'blocked', reason: gate };
+      if (why !== null) return { kind: 'refused', why };
+      if (again) {
+        if (rounds.count >= DRAIN_ROUNDS) return { kind: 'blocked', reason: 'unread' };
+        rounds.count++;
+        continue;
+      }
+      if (exists) return { kind: 'exists' };
+      try {
+        const back = await readTimed(path);
+        return back === text ? { kind: 'done' } : { kind: 'failed', error: Error(`讀回來和寫的不同：${path}`) };
+      } catch (error) {
+        // 讀不到或一直沒回來：不算寫成，交回呼叫端；之後重試時照實際的檔核對（tasks/ai-cards-mvp.md §5〈中斷與重試〉）。
+        return { kind: 'unreadable', path, error };
+      }
+    }
   }
   /** 第 6、7 步：登記這份寫入的核對，等核對讀取（end 已經排好）。 */
   function verify(path: string, original: string, prepared: Prepared | null, fallback: WriteResult): Promise<WriteResult> | WriteResult {
@@ -253,8 +352,11 @@ export function createWrites(options: WritesOptions) {
 
   return {
     enqueue,
+    drain,
     edit,
     fillFile,
+    create,
+    readTimed,
     blockedNow,
     /**
      * 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、

@@ -4,14 +4,14 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { createObsidianStub, type FakeEl, type FakeSetting, type StubOptions } from './helpers/obsidian.ts';
-import { desktopOnly } from '../tools/build.mjs';
+import { desktopOnly, embedRules } from '../tools/build.mjs';
 
 // 設定分頁與 main 的接線（tasks/settings-page.md §5、§7 第 24～29 點）：正式建置的程式碼配 obsidian 替身，只測接線，真的畫面在 Windows 實機（§8）。
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const code = (await build({
   absWorkingDir: root, entryPoints: ['src/main.ts'], bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', plugins: [desktopOnly(root)],
-  external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: 'false', BUILD: '"0.0.1+test"' },
+  external: ['obsidian', '@codemirror/state', '@codemirror/view'], write: false, define: { 'process.env.NODE_ENV': '"production"', DEV: 'false', BUILD: '"0.0.1+test"', CARD_RULES: JSON.stringify(JSON.stringify(await embedRules(root))) },
 })).outputFiles[0].text;
 
 const deck = { 'Essence Cards/a.md': '---\n年級學期: 國二上\n科目: 自然\n單元: "1"\n---\n- 目標 ^aaaaaa\n    - Q :: A\n' };

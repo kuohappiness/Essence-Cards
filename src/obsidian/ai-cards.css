@@ -1,0 +1,23 @@
+/* AI 製卡的視窗（tasks/ai-cards-mvp.md §2）：Obsidian 原本的樣子，只排表單與貼上的框。 */
+.essence-cards-ai-modal {
+  width: min(720px, 92vw);
+}
+.essence-cards-ai-form {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 8px 0;
+}
+.essence-cards-ai-form input[type="text"] {
+  width: 100%;
+}
+.essence-cards-ai-paste {
+  width: 100%;
+  min-height: 14em;
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+}
+.essence-cards-ai ul {
+  padding-left: 1.4em;
+}

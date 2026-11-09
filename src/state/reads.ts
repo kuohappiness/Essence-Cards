@@ -144,6 +144,13 @@ export function createReads(options: ReadsOptions) {
   }
   /** 不等 delay，排一批讀取（I/O 結束後、寫入前先讀完待讀）；錯誤已經在 queue 交給 onError。 */
   const readNow = (): Promise<void> => queue(apply).catch(() => {});
+  /** 等讀取已經判定卡住的那些呼叫（R2-5）：底層的讀取可能一直不回來，只有逾時的計時器叫得醒。 */
+  const stuckWakes = new Set<() => void>();
+  /** 同 readNow，但某一批讀取被判定卡住（stuckAfter）時就先回來，不等它。 */
+  const readOrStuck = (): Promise<void> => new Promise<void>(resolve => {
+    stuckWakes.add(resolve);
+    void readNow().finally(() => { stuckWakes.delete(resolve); resolve(); });
+  });
 
   /**
    * 讀一批路徑（§2-2）：第一次載入的卡組、紀錄各一批，之後每次檔案變動一批，成功與失敗都只在這裡處理。
@@ -160,6 +167,8 @@ export function createReads(options: ReadsOptions) {
       stuckTimers.delete(stuck);
       for (const path of paths) if (!settled.has(path)) unread.add(path);
       unreadCheck();
+      for (const wake of stuckWakes) wake();
+      stuckWakes.clear();
     }, options.stuckAfter);
     stuckTimers.add(stuck);
     const reading = paths.map(path => files.read(path));
@@ -230,6 +239,7 @@ export function createReads(options: ReadsOptions) {
     queue,
     read,
     readNow,
+    readOrStuck,
     /** 讀不到的路徑（unread()）。 */
     unread: unread as ReadonlySet<string>,
     bump,

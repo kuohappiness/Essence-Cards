@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { countDeferred } from '../tools/check-docs.ts';
 import { REDIRECT } from '../tools/progress-board.ts';
 import { renderCanvas } from '../tools/progress-board-canvas.ts';
 import { BOARD_PAGE, LIST_PAGE, MAP, MapError, count, parseMap, percent } from '../tools/progress-board-data.ts';
@@ -87,4 +88,31 @@ void test('畫布頁每項一張便利貼，項目資料裡的 </script> 不會�
 void test('根網址轉到清單頁', () => {
   assert.ok(REDIRECT.includes(`url=${LIST_PAGE}`));
   assert.ok(REDIRECT.includes(`location.replace('${LIST_PAGE}'`));
+});
+
+void test('兩頁都寫出 v1 結案前待補測幾列；沒給數字就不寫（D-195）', () => {
+  const stages = parseMap(SAMPLE);
+  for (const render of [renderList, renderCanvas]) {
+    assert.match(render(stages, { updated: 'x', deferred: 3 }), /v1 結案前待補測 3 列/);
+    assert.doesNotMatch(render(stages, { updated: 'x' }), /待補測/);
+  }
+});
+
+void test('補測列數只算技術債表第一格開頭是「補測：」「補做：」的列', () => {
+  const backlog = `## v1
+
+### 技術債
+
+| 項目 | 觸發點 |
+|---|---|
+| 補測：iPhone 長篇名 | 空檔 |
+| 補做：自動接著存 | 空檔 |
+| 讀取的等待上限（不是補測：） | 真的發生 |
+
+### 待決問題
+
+| 補測：不在技術債表 | x |
+|---|---|
+`;
+  assert.equal(countDeferred(backlog), 2);
 });
