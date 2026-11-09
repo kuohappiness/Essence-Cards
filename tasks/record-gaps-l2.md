@@ -8,7 +8,7 @@
 
 ## 審查對象
 
-- 分支 `claude/record-gaps-6d3701`（worktree 在 `.claude/worktrees/edit-markup-2ba4bd`），工作區乾淨。
+- 分支 `claude/record-gaps-l2-fbaa8d`（worktree 在 `.claude/worktrees/musing-kowalevski-696591`），工作區乾淨。
 - **待審 commit**：`8c72d3cf2a3d7b282509d531c65afa3db5121e12`（程式）；之後只多文件的 commit。
 - **共同祖先**：`origin/main` 的 `047a99e2aa43ff329d61890086c57f49649e5ade`（設定頁已併進來）。看差異用 `git diff 047a99e...8c72d3c`。
 - 這次的 commit：`da4f7dd`（§4）、`480f0ad`（§3）、`9edf24d`（`parseDeck` 分辨沒寫與讀壞）、`72637d2`（§1 與按鈕走同一個出口）、`3c8a7d5`、`866cc83`、`3fb6349`（§2）、`7f960bf`（文件）、`8c72d3c`（併入設定頁並接上偵測出口）。
