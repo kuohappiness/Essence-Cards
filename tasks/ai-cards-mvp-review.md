@@ -1,6 +1,6 @@
 # AI 製卡最小版：L2 獨立審查（給 Codex）
 
-狀態：待再審（2026-11-09，第三輪）。第一輪審查 `9723536`、第二輪審查 `d776969`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
+狀態：待再審（2026-11-09，第四輪）。第一輪審查 `9723536`、第二輪審查 `d776969`、第三輪審查 `1f291ae`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。這次會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險範圍（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)），合併前做 L2。**只審查，不改產品程式**；可以在隔離的暫存資料夾重現。
 
@@ -109,3 +109,22 @@
 - **想請特別找的新組合**：`refused` 之後重新判斷的各種結果（尤其 `rebuild` 階段）；三次重試用完的回報；系統資料夾防呆（`guard.wrap(files)`）搬回 `紀錄/AI 輸出/` 的檔時，AI 製卡的讀與建；編輯畫面標示對草稿的影響。
 - **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸。**沒跑**：修完之後的 Windows 實機（第三輪通過後在最後要合併的 commit 重跑，含系統剪貼簿）；Claude 網頁（額度）；iPhone（延後，技術債）。
 - **回報**：寫在 L2 報告最後新增一節〈第三輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。
+
+## 第四輪再審
+
+這一輪只讀：本節、〈審查對象〉、[L2 報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)的〈第三輪的 Claude 回應〉。前幾輪的發現原文需要時照 ID 查。遵守 repo 根目錄的 `AGENTS.md`，建議推理等級：**高**；只審查，不改產品程式，可以在隔離的暫存資料夾重現。依 [review.md](../.claude/skills/code-quality/review.md)，這一輪之後還有擋合併的發現就交使用者決定，不再自動送下一輪，所以每一項請把真實路徑寫清楚：家長的實際操作或 Obsidian 的實際行為會不會產生這個輸入、間隔有多長，以及不修的代價。
+
+- **審查對象**：worktree `D:\程式開發\Essence Cards\.claude\worktrees\ai-cards-mvp`，分支 `claude/ai-cards-mvp` 的最新 commit。看 `git diff 1f291ae...claude/ai-cards-mvp`。最後一個改產品行為的 commit 是 `05528cc`，之後只有文件與一行註解。沒有未提交的修改。
+- **還沒結的發現**：R3-1～R3-7。每項都修了，請確認修法涵蓋同一類輸入、有沒有帶進新問題；不必整包重審前幾輪沒有發現問題的部分。
+- **可能碰到的已結項目**：R2-1、R2-3、R2-4、R2-5（`tests/ai-cards-flow.test.ts`）、R2-2（`tests/ai-publish.test.ts`）、系統資料夾防呆的既有行為（`tests/folder-guard.test.ts`）；本檔〈行為與風險〉的不可破壞性質第 1～9 點，特別是第 7 點：`Files.modify` 與 `blocksOf` 是共用路徑。
+- **實作者自己選的做法**（規格沒寫，請先看）：
+  1. R3-2：`Files.modify` 的 `edit` 可能被呼叫兩次，只發生在 Obsidian 版要先建上層資料夾時；第一次丟錯就不動資料夾（家長連資料夾刪掉時，離開筆記的補 ID 不讓它冒出來），第二次在建好之後。我看過現有呼叫端都沒有累積的副作用，契約 C5、C19 跟著改。第二次被擋時留下空資料夾，不清。Node 版只用在測試與工具，沒改。
+  2. R3-1：`create` 的 `blocked` 一定是還沒寫，`publish` 據此把階段與路徑改回原值；`unreadable` 是已經寫了，階段留著。
+  3. R3-3：`pending` 而全文一字不差仍算寫成：那就是要寫的那一份。
+  4. R3-5：讀回被拒絕從 `failed` 改成 `unreadable`，不記進錯誤紀錄，和其他讀不到一致。上限沿用 `stuckAfter`（預設 30 秒），大於防呆單次搬回的 12 秒。`createAiCards` 不再直接拿 `files`，都走 `state.aiRead`，因此也會等防呆（`guard.wrap`）。
+  5. R3-4：`displaced` 包含判斷出來的搬錯（`moved`、`both`）與沒搬回的；只有原位讀到 null 才停，讀得到的內容照常用。放回原位就解除；按「不用了」只解除判斷出來的搬錯，沒搬回的記在記憶體，重開 Obsidian 後才解除。作答紀錄照舊寫，不受這個門檻影響。
+  6. R3-6：沒寫成時路徑改回原值，候選名不跨重試累積；同路徑 `exists` 三次也回 `name`。
+  7. R3-7：清單內相對縮排 4 格以上也當圍欄（對齊 `listTree`，CommonMark 會當縮排程式碼）；縮排回到清單外的結尾符號不算關閉，會照最外層重新判斷，同 `listTree`。
+- **想請特別找的新組合**：第二次 `edit` 被擋之後的重試；`displaced` 與 `unread` 同時成立時的回報；階段與路徑改回原值之後當掉重開；`readTimed` 逾時後底層讀取才回來；清單內圍欄與 `<<<完>>>`、篇名的交互。
+- **驗證方式**：同本檔〈驗證方式〉；只跑這次的測試用 `node --test --test-timeout=60000 tests/ai-*.test.ts tests/obsidian-files.test.ts tests/folder-guard.test.ts tests/files-contract.test.ts`。Claude 跑過：每個 commit 的 `npm run check`（pre-commit）；真實回覆的回歸（`1f291ae` 與 `05528cc` 輸出相同）。**沒跑**：修完之後的 Windows 實機（第四輪通過後在最後要合併的 commit 重跑，含系統剪貼簿與 Files 契約的開發命令）；Claude 網頁（額度）；iPhone（延後，技術債）。
+- **回報**：寫在 L2 報告最後新增一節〈第四輪〉，狀態行寫結果；格式同本檔〈回報〉，最後一行寫沒測的項目與原因。
