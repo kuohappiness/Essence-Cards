@@ -237,15 +237,20 @@ export interface Catalog {
 }
 
 /**
- * 學期預設展開哪一個：設定頁的「目前學期」還沒做（D-111），先用年級學期最新的那一組；讀法集中在這個函式，設定頁做好時改這裡。
+ * 學期預設展開哪一個：設定頁的「目前學期」有卡組就是它（別名算同一個，交出去的是目錄群組的原字），沒有或沒設定就是年級學期最新的那一組（tasks/settings-page.md §4）。
  */
-function latestTerm(terms: readonly string[]): string | null {
+function latestTerm(terms: readonly string[], semester: string | null): string | null {
+  if (semester !== null) {
+    const key = termKey(semester);
+    const current = terms.find(term => termKey(term) === key);
+    if (current !== undefined) return current;
+  }
   const known = terms.filter(term => termRank(termKey(term)) !== null);
   return known.at(-1) ?? terms[0] ?? null;
 }
 
 /** 畫面要的資料：索引加上每個目標現在的記憶顏色、今天的份裡還沒完成的目標、選定的範圍。畫面不自己算。 */
-export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>, scope: Pick<ScopeFile, 'lines'> | null = null): Catalog {
+export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, MemoryColor>, today: ReadonlySet<string>, scope: Pick<ScopeFile, 'lines'> | null = null, semester: string | null = null): Catalog {
   const view = (unit: UnitNode): UnitView => {
     // 全部暫停：標「暫停」、數字 0；全部是草稿：不顯示數字（§3）。兩種都沒有可以練的目標。
     const targets = practiced(unit).map(target => ({ ...target, color: colors.get(target.id) ?? 'new' }));
@@ -266,5 +271,5 @@ export function paintCatalog(index: CatalogIndex, colors: ReadonlyMap<string, Me
     if (!row) group.subjects.push(row = { subject, units: [] });
     row.units.push(view(unit));
   }
-  return { terms, others: index.others.map(view), latest: latestTerm(terms.map(each => each.term)) };
+  return { terms, others: index.others.map(view), latest: latestTerm(terms.map(each => each.term), semester) };
 }
