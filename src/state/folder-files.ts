@@ -16,6 +16,8 @@ export interface FolderFilesOptions<F> {
   onError: (error: unknown) => void;
   /** 內容變了（或第一次讀完）：組合那一層決定怎麼通知。 */
   changed: () => void;
+  /** 這一刻沒有正在讀的了，內容相同也會呼叫：等過這些檔的人靠它再查一次（考試切面，L2 的 R9）。 */
+  readsDone?: () => void;
   unreadChanged: () => void;
   folder: string;
   /** 這個路徑是不是這個資料夾要讀的檔。 */
@@ -76,6 +78,7 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
     quiet() {
       sendChanged();
       wakeDrains();
+      options.readsDone?.();
     },
     list: async () => [(await files.list(options.folder)).filter(options.isFile), []],
     // 讀取層把卡組以外的放在第二份。

@@ -28,6 +28,8 @@ interface ExamFilesOptions {
   onError: (error: unknown) => void;
   /** 內容變了（或第一次讀完）：組合那一層比選定的結果，決定重排或只通知畫面。 */
   changed: () => void;
+  /** 這一刻沒有正在讀的範圍檔了，內容相同也會呼叫。 */
+  readsDone: () => void;
   unreadChanged: () => void;
   /** 寫了有變動的範圍：組合那一層記一行紀錄。 */
   logged: (val: ExamLog) => void;

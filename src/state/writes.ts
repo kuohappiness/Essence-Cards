@@ -153,9 +153,10 @@ export function createWrites(options: WritesOptions) {
   /**
    * 先讀完已知的待讀（最多 DRAIN_ROUNDS 輪，rounds 由呼叫端累計）：讀完是 null；關閉了或讀不完回傳原因。
    * giveUp（AI 製卡）：讀取被判定卡住就停，回受阻的原因，放開寫入的那一列（R2-5，iCloud 佔位檔的讀取可能一直不回來）。
+   * relevant：只等這些路徑（考試切面不等月檔）。讀取在同一列排隊，卡住的那一批沒結束前後面的讀不了，所以「判定卡住就停」仍看全部的 unread。
    */
-  async function drain(rounds: { count: number }, giveUp = false): Promise<WriteResult | null> {
-    while (waiting()) {
+  async function drain(rounds: { count: number }, giveUp = false, relevant?: (path: string) => boolean): Promise<WriteResult | null> {
+    while (relevant ? reads.waitingFor(relevant) : waiting()) {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (giveUp && reads.unread.size) return { kind: 'blocked', reason: 'unread' };
       if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };

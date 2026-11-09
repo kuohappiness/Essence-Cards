@@ -99,6 +99,8 @@ export function createReads(options: ReadsOptions) {
   const busy = new Set<string>();
   /** 正在讀的批數（0 或 1：一次只讀一批）。 */
   let reading = 0;
+  /** 正在讀的這一批有哪些路徑。 */
+  let readingNow: readonly string[] = [];
   /** alone 正在讀的路徑：同一份一次讀一個，晚到的舊內容才不會蓋掉新的。 */
   const flying = new Set<string>();
   let unwatch: (() => void) | null = null;
@@ -159,7 +161,8 @@ export function createReads(options: ReadsOptions) {
       return;
     }
     reading++;
-    try { await read(paths); } finally { reading--; }
+    readingNow = paths;
+    try { await read(paths); } finally { reading--; readingNow = []; }
   }
   function readAlone(path: string): void {
     flying.add(path);
@@ -276,6 +279,8 @@ export function createReads(options: ReadsOptions) {
     catchUp(): void { if (noticed) schedule(); },
     /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending、正在讀的裡面有不在 unread 的路徑（except 那一篇除外）。 */
     waiting: (except?: string): boolean => reading > 0 || [...pending, ...flying].some(path => path !== except && !unread.has(path)),
+    /** 同 waiting，只看 relevant 的路徑：考試切面不等別台的月檔（L2 的 R9）。同一批裡有 relevant 的路徑時照樣算在等。 */
+    waitingFor: (relevant: (path: string) => boolean): boolean => [...readingNow, ...pending, ...flying].some(path => relevant(path) && !unread.has(path)),
     /** 這篇的 Cards I/O 開始（§2 第 1 點）：不開始讀，序號前進。 */
     hold(path: string): void {
       busy.add(path);

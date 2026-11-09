@@ -359,6 +359,8 @@ export function createState(options: StateOptions): State {
     files, delay, stuckAfter, writeTimeout, random: options.random,
     onError: error => { report(error, 'read'); },
     changed: examChanged,
+    // 內容相同的讀回不會到 examChanged，等過它的切面要在這裡再查一次（L2 的 R9）。
+    readsDone: () => { if (life.loaded) snapshots.check(); },
     unreadChanged,
     logged: val => { record({ set: 'exam', val }); },
   });
@@ -587,13 +589,15 @@ export function createState(options: StateOptions): State {
     if (!decks.length) return null;
     return { day, exam: chosen.file.id, scope: chosen.path, start: period.start, end: period.end, units: unitsOf(chosen.file), decks };
   }
+  /** 切面用不到紀錄，別台的月檔卡住不能擋它（§2 第 3 項）。 */
+  const notLog = (path: string): boolean => !isLogPath(path);
   const snapshots = createSnapshots({
     files, device,
     closed: () => life.closed,
     plan: snapshotPlan,
-    settle: async () => await writes.enqueue(() => writes.drain({ count: 0 }, true)) === null,
+    settle: async () => await writes.enqueue(() => writes.drain({ count: 0 }, true, notLog)) === null,
     drain: decide => exam.drain(EXAM_WAIT, decide),
-    waiting: () => reads.waiting() || exam.waiting(),
+    waiting: () => reads.waitingFor(notLog) || exam.waiting(),
     stamp: () => { const at = now(); return formatTime(at, offsetOf(at)); },
     stuckAfter,
     onError: error => { report(error, 'write'); },

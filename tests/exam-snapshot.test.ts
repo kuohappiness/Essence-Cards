@@ -539,6 +539,77 @@ void test('24 modify 說檔在、列檔一直列不到：不空轉，下一次�
   assert.equal(memory.texts.get(FILE), 'x');
 });
 
+void test('26 回呼不符後，範圍檔等到上限才讀回、內容相同：讀回就查，寫得出來（L2 的 R9）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  const read = memory.holdRead(SCOPE);
+  memory.notify(SCOPE);
+  hold.release();
+  await h.pump(0);
+  await read.started;
+  await h.pump(2001);
+  assert.deepEqual(written(memory), []);
+  read.release();
+  await h.pump(0);
+  assert.deepEqual(h.state.unread(), []);
+  assert.deepEqual(written(memory), [FILE]);
+});
+
+void test('26 範圍檔讀回內容相同，選定的不是可用的考試：不空轉、不寫（L2 的 R9 的相鄰情況）', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [SCOPE]: scope('2026-10-30', '2026-10-31') });
+  let lists = 0;
+  const list = memory.files.list.bind(memory.files);
+  memory.files.list = folder => { if (folder + '/' === FOLDER) lists++; return list(folder); };
+  const h = await open(t, memory);
+  for (let i = 0; i < 3; i++) { memory.notify(SCOPE); await h.pump(); }
+  assert.equal(lists, 0);
+  assert.deepEqual(written(memory), []);
+});
+
+const PHONE_LOG = 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl';
+for (const [name, order] of [['回呼前', 'callback'], ['查核前', 'before']] as const) void test(`26 別台的月檔卡住（${name}）：切面不等它，照寫（L2 的 R9）`, async t => {
+  const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
+  // 收尾要排在 close 之前（after 照註冊順序跑）：不放行，close 會等這次讀取。
+  let read = { release: (): void => { /* 開始卡之後才換成真的。 */ } };
+  t.after(() => { read.release(); });
+  if (order === 'callback') {
+    const hold = holdWrite(memory);
+    const h = await open(t, memory);
+    read = memory.holdRead(PHONE_LOG);
+    memory.notify(PHONE_LOG);
+    await h.pump();
+    hold.release();
+    await h.pump(0);
+    assert.deepEqual(written(memory), [FILE]);
+    return;
+  }
+  const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
+  read = memory.holdRead(PHONE_LOG);
+  memory.notify(PHONE_LOG);
+  await h.pump();
+  h.setNow(OPEN);
+  h.state.today();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+});
+
+void test('26 卡組和月檔同一批、月檔卡住：卡組還不知道，先不寫；那批回來就寫（相鄰情況）', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
+  const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
+  const read = memory.holdRead(PHONE_LOG);
+  memory.notify(PHONE_LOG, NATURE);
+  await h.pump();
+  await read.started;
+  h.setNow(OPEN);
+  h.state.today();
+  await h.pump(0);
+  assert.deepEqual(written(memory), []);
+  read.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+});
+
 void test('28 零篇不寫，之後有卡組再寫', async t => {
   const h = await launch(t, { [SCOPE]: scope() });
   assert.deepEqual(written(h.memory), []);
