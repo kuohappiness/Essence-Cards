@@ -206,7 +206,7 @@
 |:-:|---|---|
 | 🟢 | 複習紀錄（只往後追加） |  |
 | 🟢 | 製卡規則的試用紀錄 | [trials.md](card-rules/trials.md) |
-| 🟡 | 狀態與設定的變更紀錄、考試切面 | 程式在分支 `claude/record-gaps-6d3701`，等 Codex L2 與合併；設定頁與批次暫停另外接。見[任務說明](../tasks/record-gaps.md) |
+| 🟡 | 狀態與設定的變更紀錄、考試切面 | 程式在分支 `claude/record-gaps-l2-fbaa8d`，Codex L2 四輪結束、Windows 實機通過，等使用者同意合併；設定頁與批次暫停另外接。見[任務說明](../tasks/record-gaps.md) |
 | ⚪ | 比對 ID、計數、照固定條件重跑 | D-114 |
 | 🔵 | 用家長的採用率優化製卡規則 | 靠 v1 的快照 |
 | 🔵 | AI 評測集、多家庭規則回饋 | 暫緩 |
