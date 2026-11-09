@@ -126,7 +126,13 @@ export function tally(counts: Counts): string {
   return LEGEND.map(([status]) => `<span class="tally s-${status}"><i></i>${counts[status]}</span>`).join('');
 }
 
-export interface Meta { updated: string; commit?: string }
+export interface Meta { updated: string; commit?: string; deferred?: number }
+
+/** D-195：v1 結案前要清空的補測與補做，數字從 backlog 技術債表算。 */
+export function debtNote(meta: Meta): string {
+  if (meta.deferred === undefined) return '';
+  return `<a class="debt" href="${DOCS_URL}backlog.md#${encodeURIComponent('技術債')}">v1 結案前待補測 ${meta.deferred} 列</a>`;
+}
 
 /** 兩頁共用的顏色（含深色模式）。 */
 export const TOKENS = `

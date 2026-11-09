@@ -1,7 +1,7 @@
 // 開發進度畫板的畫布頁（progress-map-board.html）：無限白板，拖曳、縮放，越放大看越細。
 // 縮小：只看每一段的完成度；放大一點：模組與色塊；再放大：每一項功能的便利貼，點一下看現況。
 // 位置照流程自動排（PLACES 的欄列），md 不寫座標。
-import { BACK, LEGEND, LINKS, LIST_PAGE, PLACES, TOKENS, bar, count, escape, footer, itemsOf, percent, tally, type Meta, type Stage } from './progress-board-data.ts';
+import { BACK, LEGEND, LINKS, LIST_PAGE, PLACES, TOKENS, bar, count, debtNote, escape, footer, itemsOf, percent, tally, type Meta, type Stage } from './progress-board-data.ts';
 
 // 畫布上的欄列：PLACES 的字母對到 [欄, 列, 跨幾欄]。
 const CELLS: Record<string, [number, number, number]> = { a: [0, 0, 1], c: [1, 0, 1], d: [2, 0, 1], e: [3, 0, 1], b: [0, 1, 1], f: [3, 1, 1], g: [0, 2, 4] };
@@ -54,7 +54,7 @@ export function renderCanvas(stages: readonly Stage[], meta: Meta): string {
 ${cards}
 </div></div>
 <header class="hud top">
-  <div class="ttl"><h1>Essence 開發進度</h1><span class="big">${value ?? '—'}<small>%</small></span></div>
+  <div class="ttl"><h1>Essence 開發進度</h1><span class="big">${value ?? '—'}<small>%</small></span>${debtNote(meta)}</div>
   <nav class="views" aria-label="切換畫面"><a href="${LIST_PAGE}">清單</a><span aria-current="page">畫布</span></nav>
 </header>
 <nav class="hud jump" aria-label="跳到某一段">${chips}</nav>
@@ -110,6 +110,8 @@ body[data-level="1"] .pins{grid-template-columns:repeat(auto-fill,minmax(26px,1f
 .top>*{pointer-events:auto}
 .ttl{display:flex;align-items:baseline;gap:12px;background:var(--card);border-radius:14px;padding:6px 14px;box-shadow:var(--shadow)}
 .ttl h1{margin:0;font-size:16px}.big{font-size:22px;font-weight:700}
+.ttl{flex-wrap:wrap;row-gap:0}.ttl h1,.views>*{white-space:nowrap}
+.ttl .debt{font-size:11px;color:var(--muted);white-space:nowrap}
 .views{display:inline-flex;gap:2px;background:var(--card);border-radius:999px;padding:3px;box-shadow:var(--shadow);font-size:13px}
 .views>*{padding:4px 14px;border-radius:999px;text-decoration:none;color:var(--muted)}.views [aria-current]{background:var(--done-bg);color:var(--ink);font-weight:600}
 .jump{left:12px;right:12px;top:calc(max(10px,env(safe-area-inset-top)) + 52px);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;pointer-events:auto}
@@ -122,7 +124,7 @@ body[data-level="1"] .pins{grid-template-columns:repeat(auto-fill,minmax(26px,1f
 .sheet{position:fixed;z-index:3;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));max-width:440px;margin:0 auto;background:var(--card);border-radius:18px;padding:16px 18px;box-shadow:0 8px 30px #1f2b2633;-webkit-user-select:text;user-select:text}
 .sheet h3{margin:2px 0 4px;font-size:17px}.path,.state{margin:0;font-size:12px;color:var(--muted)}.text{margin:8px 0 0;font-size:14px}
 .close{position:absolute;right:10px;top:8px;border:0;background:none;font-size:22px;color:var(--muted);width:36px;height:36px}
-@media (max-width:640px){.legend{display:none}.zoom{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 44px)}}
+@media (max-width:640px){.legend{display:none}.ttl .debt{flex-basis:100%;margin-top:-2px}.jump{top:calc(max(10px,env(safe-area-inset-top)) + 70px)}.zoom{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 44px)}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 `;
 
@@ -162,10 +164,11 @@ function zoomAt(px,py,ns){ns=Math.min(MAX,Math.max(MIN,ns));x=px-(px-x)*ns/s;y=p
 function go(tx,ty,ts){cancelAnimationFrame(anim);const fx=x,fy=y,fs=s,start=performance.now();
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){x=tx;y=ty;s=ts;apply();return;}
   const step=now=>{const k=Math.min(1,(now-start)/260),e=1-Math.pow(1-k,3);x=fx+(tx-fx)*e;y=fy+(ty-fy)*e;s=fs+(ts-fs)*e;apply();if(k<1)anim=requestAnimationFrame(step);};anim=requestAnimationFrame(step);}
-function frame(l,t,w,h,cap){const vw=innerWidth,vh=innerHeight,top=100,bottom=70,pad=24;
+function hudTop(){return document.querySelector(".jump").getBoundingClientRect().bottom+12;}
+function frame(l,t,w,h,cap){const vw=innerWidth,vh=innerHeight,top=hudTop(),bottom=70,pad=24;
   const ns=Math.min(cap,(vw-pad*2)/w,(vh-top-bottom)/h);return [(vw-w*ns)/2-l*ns,top+(vh-top-bottom-h*ns)/2-t*ns,ns];}
 function fit(){const [a,b,c]=frame(0,0,bounds.w,bounds.h,1);go(a,b,c);}
-function focus(card){const vw=innerWidth,vh=innerHeight,top=100,bottom=70,l=card.offsetLeft,t=card.offsetTop,w=card.offsetWidth,h=card.offsetHeight;
+function focus(card){const vw=innerWidth,vh=innerHeight,top=hudTop(),bottom=70,l=card.offsetLeft,t=card.offsetTop,w=card.offsetWidth,h=card.offsetHeight;
   const ns=Math.min(1.1,(vw-48)/w,w>W*2?(vh-top-bottom)/h:9);const room=vh-top-bottom-h*ns;
   go((vw-w*ns)/2-l*ns,top+Math.max(0,room/2)-t*ns,ns);}
 // 拖曳與兩指縮放：移動超過 6px 才算拖，不然算點一下。

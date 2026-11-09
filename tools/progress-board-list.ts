@@ -1,5 +1,5 @@
 // 開發進度畫板的清單頁（progress-map-list.html）：照流程的格子排列，點開模組看每一項。
-import { BACK, BOARD_PAGE, LEGEND, LINKS, PLACES, TOKENS, bar, count, escape, footer, itemsOf, percent, tally, type Meta, type Module, type Stage } from './progress-board-data.ts';
+import { BACK, BOARD_PAGE, LEGEND, LINKS, PLACES, TOKENS, bar, count, debtNote, escape, footer, itemsOf, percent, tally, type Meta, type Module, type Stage } from './progress-board-data.ts';
 
 function renderModule(module: Module): string {
   const counts = count(module.items);
@@ -46,7 +46,7 @@ export function renderList(stages: readonly Stage[], meta: Meta): string {
 <body data-filter="all">
 <header class="top">
   <div class="title"><h1>Essence 開發進度</h1><p>整個專案的功能照流程排列；點開模組看每一項。</p><nav class="views" aria-label="切換畫面"><span aria-current="page">清單</span><a href="${BOARD_PAGE}">畫布</a></nav></div>
-  <div class="overall"><span class="big">${value ?? '—'}<small>%</small></span><div><span class="label">v1 完成度（共 ${v1} 項，另有 v1 之後 ${all.later} 項）</span>${bar(value)}<div class="tallies">${tally(all)}</div></div></div>
+  <div class="overall"><span class="big">${value ?? '—'}<small>%</small></span><div><span class="label">v1 完成度（共 ${v1} 項，另有 v1 之後 ${all.later} 項）</span>${bar(value)}<div class="tallies">${tally(all)}</div>${debtNote(meta)}</div></div>
 </header>
 <nav class="tools" aria-label="篩選">
   <div class="filters" role="group">
@@ -79,6 +79,7 @@ a{color:inherit}
 .overall>div{flex:1;min-width:0}
 .big{font-size:44px;font-weight:700;line-height:1}.big small,.pct small{font-size:.45em;font-weight:600;margin-left:2px;color:var(--muted)}
 .label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.debt{display:inline-block;margin-top:6px;font-size:12px;color:var(--muted)}
 .bar{display:block;height:6px;border-radius:3px;background:var(--todo-bg);overflow:hidden}
 .bar span{display:block;height:100%;border-radius:3px;background:var(--done)}
 .tallies{display:flex;gap:12px;margin-top:6px;font-size:12px;color:var(--muted)}
