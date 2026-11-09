@@ -218,7 +218,7 @@
 | 外掛 | 目前狀態 | 清單 |
 |---|---|---|
 | Essence Capture | v1 要做，照 D-111 在 Cards 的複習閉環之後開工；開工前先找現成專案 | [查看](plans/capture.md) |
-| Essence Mindboard | 未來的第三個外掛，還沒開工 | [查看](plans/mindboard.md) |
+| Essence Mindboard | 未來的第三個外掛，還沒開工；開始寫程式時才建 repo（[D-196](decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)） | [查看](plans/mindboard.md) |
 
 ## 歷史索引
 

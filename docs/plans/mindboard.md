@@ -1,6 +1,6 @@
 # Essence Mindboard｜待做與待決
 
-狀態：未來的第三個外掛，還沒開工，也還沒建 repo；這裡收 Mindboard 的點子與待決問題（2026-10-31 從 backlog 與各份規畫整理過來）。正式名稱是 Essence Mindboard（2026-10-31 起現行文件都改用這個名稱；舊的討論紀錄仍寫暫定名「Essence Mindmap」，文件裡的「心智圖外掛」也是指它）
+狀態：未來的第三個外掛，還沒開工；開始寫程式時才建獨立的 repo，規劃與決定留在 Essence Cards（[D-196](../decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)）；這裡收 Mindboard 的點子與待決問題（2026-10-31 從 backlog 與各份規畫整理過來）。正式名稱是 Essence Mindboard（2026-10-31 起現行文件都改用這個名稱；舊的討論紀錄仍寫暫定名「Essence Mindmap」，文件裡的「心智圖外掛」也是指它）
 
 [backlog 入口](../backlog.md#essence-capture-與-essence-mindboard)｜[文件存放規則](README.md)
 
