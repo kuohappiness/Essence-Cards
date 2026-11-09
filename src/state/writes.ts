@@ -2,6 +2,7 @@ import type { Files } from '../core/files.ts';
 import { isDeckPath } from '../core/deck/index.ts';
 import { confirmed } from './ids.ts';
 import type { Prepared } from './ids.ts';
+import { completeText } from './reads.ts';
 import type { Life, Reads } from './reads.ts';
 
 /**
@@ -198,7 +199,7 @@ export function createWrites(options: WritesOptions) {
    * 沒回來就丟錯，呼叫端當成讀不到，放開工作與寫入的那一列；底層的讀取取消不了，晚回來的結果沒有人用。
    */
   function readTimed(path: string): Promise<string | null> {
-    return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`);
+    return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`).then(text => completeText(path, text));
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {

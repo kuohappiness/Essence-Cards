@@ -15,6 +15,32 @@ export class Closed extends Error {
   constructor(options?: { cause?: unknown }) { super('state 已關閉，沒有讀完', options); }
 }
 
+/** 這個讀取結果不完整（D-154 第 4 點）：iCloud 重新下載途中，read 可能成功回傳原本的長度，後段全是 0。不是文字（程式的錯）不算，照舊由解析丟錯、讓 ready() 拒絕。 */
+const incomplete = (value: unknown): boolean => typeof value === 'string' && value.includes('\0');
+const incompleteError = (path: string): Error => Error('讀到的內容不完整（含 NUL），當成讀不到：' + path);
+/** 直接讀一個檔的結果（不經過讀取層的）：不完整就丟錯。 */
+export function completeText(path: string, text: string | null): string | null {
+  if (incomplete(text)) throw incompleteError(path);
+  return text;
+}
+/**
+ * state 用的 files（tasks/record-gaps.md §3）：modify 拿到不完整的內容不呼叫 edit、不寫回。讀取在 read 拿到結果之後檢查（下面的 read），
+ * 不包在 files.read 上：多一個 then 會改變讀取與寫入的先後。append、list、watch、readBytes 不動（備份要原樣）。
+ */
+export function refuseIncomplete(files: Files): Files {
+  return {
+    list: folder => files.list(folder),
+    read: path => files.read(path),
+    readBytes: path => files.readBytes(path),
+    modify: (path, edit) => files.modify(path, (text, exists) => {
+      if (incomplete(text)) throw incompleteError(path);
+      return edit(text, exists);
+    }),
+    append: (path, line) => files.append(path, line),
+    watch: onChange => files.watch(onChange),
+  };
+}
+
 /** 第一次載入完成了沒有、關閉了沒有。由 index.ts 建立並改值，讀取層與寫入只讀。 */
 export interface Life { loaded: boolean; closed: boolean }
 /** 一批讀到的結果：路徑 → 文字；null 是不存在。 */
@@ -181,7 +207,8 @@ export function createReads(options: ReadsOptions) {
     let failure: { error: unknown } | null = null;
     const texts: Texts = new Map(), logs: Texts = new Map();
     for (const [i, path] of paths.entries()) {
-      const result = results[i];
+      // 讀到不完整的內容當成讀不到（§3）：走下面的 unread 與重試，不採用、不解析。
+      const result: PromiseSettledResult<string | null> = results[i].status === 'fulfilled' && incomplete(results[i].value) ? { status: 'rejected', reason: incompleteError(path) } : results[i];
       // 跨過這篇的 I/O（§2 第 3 點）：文字、null、reject 都不用，放回 pending；I/O 結束時已經（或會）排一批讀取。
       if (marks.get(path) !== at[i] || busy.has(path)) {
         pending.add(path);

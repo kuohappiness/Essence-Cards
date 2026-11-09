@@ -12,7 +12,7 @@ import { createQuizFiles } from './quiz.ts';
 import type { QuizOpened, QuizResult } from './quiz.ts';
 export type { QuizOpened, QuizResult } from './quiz.ts';
 import { createIdTracker } from './ids.ts';
-import { Closed, createReads } from './reads.ts';
+import { Closed, createReads, refuseIncomplete } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
 import { createWrites } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
@@ -274,7 +274,9 @@ const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancell
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
 export function createState(options: StateOptions): State {
-  const { files, device } = options;
+  const { device } = options;
+  /** 卡組、紀錄、範圍檔與小考檔都經過它（tasks/record-gaps.md §3）。 */
+  const files = refuseIncomplete(options.files);
   /** 這台的正式版號（syntax.md §0-1）；null 是版本不明。 */
   const version = options.build === undefined ? null : releaseOf(options.build);
   /** 「需要版本」讀不懂（§2-1）：整篇不出題，Cards 也不寫它。 */
