@@ -28,12 +28,13 @@ export type Outcome =
   | { kind: 'done'; decks: string[]; targets: number }
   | { kind: 'stop'; message: string; deck?: DeckStop & { name: string; stage: SavedDeck['stage'] } };
 
-const BLOCKED: Record<WriteBlock, string> = {
+const BLOCKED: Record<WriteBlock | 'displaced', string> = {
   phone: 'AI 製卡只在電腦上做',
   loading: '正在讀取卡組，先不存；讀完再按「繼續」',
   closed: '外掛關閉了，這次沒有存完；重開之後按「繼續」',
   backup: '備份還沒成功，先不存；到設定頁看原因，成功後再按「繼續」',
   unread: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），先不存；等一下再按「繼續」',
+  displaced: '外掛用的資料夾不在原位，先不存；照提醒把它放回原位，再按「繼續」',
 };
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 
@@ -93,6 +94,7 @@ export function createAiCards(deps: AiCardsDeps) {
       store(next) { latest = next; put(next); },
       remove(done) { drop(done); },
       read: path => state.aiRead(path),
+      displaced: path => state.aiDisplaced(path),
       create: (path, text) => state.aiCreate(path, text),
       createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids, nameFree(path)),
       createSnapshot: (path, text, decks) => state.aiCreateSnapshot(path, text, decks, nameFree(path)),
@@ -230,6 +232,7 @@ export function createAiCards(deps: AiCardsDeps) {
         if (!state) return { kind: 'stop', message: BLOCKED.loading };
         try {
           const text = await state.aiRead(latest.save.snapshotPath);
+          if (text === null && state.aiDisplaced(latest.save.snapshotPath)) return { kind: 'stop', message: '外掛用的資料夾不在原位，不知道是不是已經存好了；照提醒把它放回原位，再試一次' };
           if (text !== null && sha256Hex(text) === latest.save.published.sha256) return run(latest);
         } catch (error) {
           deps.onError(error);

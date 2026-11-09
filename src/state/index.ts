@@ -74,6 +74,8 @@ export interface StateOptions {
   reserved?: () => Iterable<string>;
   /** 這個檔在搬錯位置的系統資料夾裡（tasks/system-folder-guard.md §2-3）：不當卡組，不補 ID、不改狀態。files 那一邊也不列、讀不到它。 */
   skip?: (path: string) => boolean;
+  /** 這個路徑的上層有系統資料夾已知不在原位、也沒搬回（FolderGuard.displaced）：AI 製卡不在原位另建，讀到「沒有」也不算沒有（R3-4）。 */
+  displaced?: (path: string) => boolean;
 }
 export type ErrorSource = 'write' | 'read' | 'listener' | 'init';
 /**
@@ -248,6 +250,8 @@ export interface State {
   aiCreate(path: string, text: string): Promise<CreateResult>;
   /** 直接讀一個檔（§5 第 3～6 步的原文、快照與目的地）：不存在是 null；讀不到或超過 stuckAfter 沒回來就丟錯，不當成不存在（R3-5）。 */
   aiRead(path: string): Promise<string | null>;
+  /** 這個路徑的上層有系統資料夾不在原位、也沒搬回（R3-4）：aiRead 回 null 也不代表真的沒有。 */
+  aiDisplaced(path: string): boolean;
   /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇或複習紀錄裡就回 refused、不建；寫入回呼裡再核對一次，並確認整個 vault 沒有同名檔（nameFree，R2-4）。 */
   aiCreateDeck(path: string, text: string, ids: readonly string[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
   /**
@@ -648,7 +652,7 @@ export function createState(options: StateOptions): State {
   const prepare = (path: string, text: string): Prepared => withNeed(track(path, () => tracker.fill(path, text)), text, version);
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
-  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, stuckAfter, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip });
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, stuckAfter, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip, displaced: options.displaced });
   function answerLine(entry: NewEntry): QueuedLine | null {
     if (!life.loaded) throw Error('state 還沒 ready');
     if (!permits(entry)) return null;
@@ -733,6 +737,7 @@ export function createState(options: StateOptions): State {
       return tracker.where(ids);
     },
     aiRead: path => writes.readTimed(path),
+    aiDisplaced: path => options.displaced?.(path) ?? false,
     aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
     aiCreateDeck: (path, text, ids, nameFree) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' })),
     aiCreateSnapshot: (path, text, decks, nameFree) => writes.enqueue(() => writes.create<'decks' | 'name'>(path, text, {

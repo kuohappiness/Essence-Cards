@@ -18,6 +18,8 @@ export interface PublishIo {
   remove(job: CardJob): void;
   /** 讀檔；不存在是 null，讀不到丟錯（讀不到不算不存在）。 */
   read(path: string): Promise<string | null>;
+  /** 這個位置的系統資料夾不在原位、也沒搬回：read 回 null 不代表真的沒有（R3-4）。 */
+  displaced(path: string): boolean;
   create(path: string, text: string): Promise<CreateResult>;
   /** 建卡組：寫入的當下再核對一次這些 ID 沒有人用（卡組與複習紀錄）、整個 vault 沒有同名檔，不符合是 refused、不建。 */
   createDeck(path: string, text: string, ids: readonly string[]): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
@@ -95,7 +97,10 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   const save = (): SaveState => job.save!;
   const keep = (next: SaveState): void => { job = { ...job, save: next }; io.store(job); };
   const read = async (path: string): Promise<{ text: string | null } | PublishResult> => {
-    try { return { text: await io.read(path) }; } catch (error) { return { kind: 'unreadable', path, error }; }
+    let text: string | null;
+    try { text = await io.read(path); } catch (error) { return { kind: 'unreadable', path, error }; }
+    // 原快照、原文可能跟著資料夾在別處（R3-4）：當成沒有就會再發布一份，先請家長放回原位。
+    return text === null && io.displaced(path) ? { kind: 'blocked', reason: 'displaced' } : { text };
   };
   const done = (): PublishResult => {
     io.remove(job);

@@ -71,6 +71,8 @@ export interface FolderGuard {
   pause(path: string, folder?: boolean): Promise<void> | null;
   /** 這個檔在搬錯位置的資料夾裡：不當卡組（StateOptions.skip）。 */
   misplaced(path: string): boolean;
+  /** 這個路徑的上層有系統資料夾已知不在原位、也沒搬回：原位讀到「沒有」不代表真的沒有（AI 製卡，R3-4）。 */
+  displaced(path: string): boolean;
   /** issues() 變了。 */
   onChange(listener: () => void): () => void;
   /** 停用：不再開始新的搬回（待重試的停下、通知家長自己拖回），擋住的讀寫放行。 */
@@ -442,6 +444,11 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
     misplaced: path => hidden(path) || holds.some(each => {
       const at = placeOf(each);
       return at !== null && at !== each.from && !ownRules(at) && inside(path, at);
+    }),
+    // 沒搬回的先記下（release 在放行之前），所以等完搬回的讀寫問這裡一定問得到。
+    displaced: path => judged.some(each => inside(path, each.from)) || stranded.some(each => {
+      const at = strayAt(each);
+      return at !== null && at !== each.from && inside(path, each.from);
     }),
     wrap(files) {
       // 搬回期間原位與暫時位置的讀寫都先等（when），寫入的門檻在 modify 的回呼裡會再看一次（writes.ts）。

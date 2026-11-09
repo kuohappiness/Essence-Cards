@@ -56,7 +56,9 @@ export interface CreateGuard<Why extends string> {
  * 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。blocked：還沒寫。
  * unreadable：寫出去了，讀回失敗或一直沒回來（R3-5）：不算寫成也不算寫壞，之後重試時照實際的檔核對。
  */
-export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: WriteBlock } | { kind: 'failed'; error: unknown } | { kind: 'unreadable'; path: string; error: unknown };
+export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: CreateBlock } | { kind: 'failed'; error: unknown } | { kind: 'unreadable'; path: string; error: unknown };
+/** 只建立時不能建的原因：不看是哪一篇的，加上這個位置的系統資料夾不在原位、也沒搬回（R3-4）。 */
+type CreateBlock = WriteBlock | 'displaced';
 
 /** 建檔的回呼裡發現不能建（核對沒過，或還有沒讀完的變動）：中止 modify，不建立檔案。 */
 class NotNow extends Error {}
@@ -93,6 +95,8 @@ export interface WritesOptions {
   version: string | null;
   /** 搬錯位置的系統資料夾裡的檔（StateOptions.skip）：不是卡組。 */
   skip?: (path: string) => boolean;
+  /** 這個位置的系統資料夾不在原位、也沒搬回（StateOptions.displaced）。 */
+  displaced?: (path: string) => boolean;
 }
 
 export function createWrites(options: WritesOptions) {
@@ -215,22 +219,23 @@ export function createWrites(options: WritesOptions) {
   function create<Why extends string>(path: string, text: string, guard: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }>;
   async function create<Why extends string>(path: string, text: string, guard?: CreateGuard<Why>): Promise<CreateResult | { kind: 'refused'; why: Why }> {
     const rounds = { count: 0 };
+    const blocked = (): CreateBlock | null => blockedNow() ?? (options.displaced?.(path) ? 'displaced' : null);
     for (;;) {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (guard && await drain(rounds, true)) return { kind: 'blocked', reason: life.closed ? 'closed' : 'unread' };
-      const reason = blockedNow();
+      const reason = blocked();
       if (reason) return { kind: 'blocked', reason };
       let why = guard?.check() ?? null;
       if (why !== null) return { kind: 'refused', why };
       begin(path);
-      let exists = false, live = true, again = false, gate: WriteBlock | null = null;
+      let exists = false, live = true, again = false, gate: CreateBlock | null = null;
       try {
         await persist(files.modify(path, (current, has) => {
           // 逾時之後才輪到回呼：中止，不建立（同 fillFile 的 Stopped）。
           if (!live || life.closed) throw new Stopped();
           if (has) { exists = true; return current; }
           // 等回呼的期間門檻也可能變了（R3-1）：剛讀失敗的卡組或紀錄不在 waiting 裡，占用的索引卻可能還缺著它，不能當成沒有人用。
-          gate = blockedNow();
+          gate = blocked();
           if (gate) throw new NotNow();
           if (guard) {
             if (waiting(path)) { again = true; throw new NotNow(); }

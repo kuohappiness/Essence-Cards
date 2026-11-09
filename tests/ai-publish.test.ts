@@ -40,6 +40,7 @@ function vault(files = new Map<string, string>()) {
     store(job) { if (box.crash('store')) throw new Crash(); box.stored = JSON.stringify(job); },
     remove() { if (box.crash('remove')) throw new Crash(); box.stored = null; box.removed = true; },
     read: path => Promise.resolve(files.get(path) ?? null),
+    displaced: () => false,
     create(path, text): Promise<CreateResult> {
       if (box.crash('create', path)) throw new Crash();
       if ([...files.keys()].some(each => each.toLowerCase() === path.toLowerCase())) return Promise.resolve({ kind: 'exists' });
