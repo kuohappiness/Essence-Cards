@@ -28,13 +28,14 @@ export type Outcome =
   | { kind: 'done'; decks: string[]; targets: number }
   | { kind: 'stop'; message: string; deck?: DeckStop & { name: string; stage: SavedDeck['stage'] } };
 
-const BLOCKED: Record<WriteBlock | 'displaced', string> = {
+const BLOCKED: Record<WriteBlock | 'displaced' | 'changing', string> = {
   phone: 'AI 製卡只在電腦上做',
   loading: '正在讀取卡組，先不存；讀完再按「繼續」',
   closed: '外掛關閉了，這次沒有存完；重開之後按「繼續」',
   backup: '備份還沒成功，先不存；到設定頁看原因，成功後再按「繼續」',
   unread: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），先不存；等一下再按「繼續」',
   displaced: '外掛用的資料夾不在原位，先不存；照提醒把它放回原位，再按「繼續」',
+  changing: '這幾篇卡組一直在變動（可能正在同步），先不存；等一下再按「繼續」',
 };
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 
@@ -67,7 +68,8 @@ export function createAiCards(deps: AiCardsDeps) {
   function outcome(job: CardJob, result: PublishResult): Outcome {
     switch (result.kind) {
       case 'done': return result;
-      case 'blocked': return { kind: 'stop', message: BLOCKED[result.reason as WriteBlock] ?? '先不存；等一下再按「繼續」' };
+      case 'blocked': return { kind: 'stop', message: BLOCKED[result.reason as keyof typeof BLOCKED] ?? '先不存；等一下再按「繼續」' };
+      case 'name': return { kind: 'stop', message: `「${fileName(result.path)}」這個檔名一直被占用（可能正在同步），這次沒有建；等一下再按「繼續」` };
       case 'failed':
         deps.onError(result.error);
         return { kind: 'stop', message: '寫不進去，這次停在一半；按「繼續」會從停下的地方接著做' };

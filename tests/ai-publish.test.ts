@@ -502,6 +502,15 @@ void test('§5 還沒建過的篇，目的地已有同 ID、內容不同的檔�
   }
 });
 
+void test('§5 快照三次都趕不上（R3-6）：卡組一直在變動回 changing，不說成讀不到；不寫快照', async () => {
+  const { files, io } = vault();
+  const job = saved(copied());
+  io.store(job);
+  io.createSnapshot = () => Promise.resolve({ kind: 'refused', why: 'decks' });
+  assert.deepEqual(await publish(job, io), { kind: 'blocked', reason: 'changing' });
+  assert.ok(!files.has(SNAPSHOT));
+});
+
 void test('§5 檔名清單比檔案事件慢（R2-4）：讀到目的地已有檔，就算清單還沒列也往後加', async () => {
   const { files, io } = vault();
   const job = saved(copied());

@@ -366,6 +366,39 @@ void test('§5 寫入的當下再核對整個 vault 的檔名（R2-4）：排隊
   }
 });
 
+void test('§5 連續撞名（R3-6）：回報的是檔名、可以重試，不說成 ID 或讀取的問題；後綴照原始檔名遞增', async t => {
+  const SNAP = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
+  for (const target of [WORD, SNAP]) {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const { cards, state } = await load(t, memory, machine(), Math.random);
+    const copied = await cards.copy(form);
+    assert.ok('job' in copied);
+    // 每次要建這一篇之前，別的資料夾就先出現同名檔。
+    const folder = target.slice(0, target.lastIndexOf('/'));
+    const original = memory.files.modify.bind(memory.files);
+    const tried: string[] = [];
+    memory.files.modify = (path, edit) => {
+      if (path.startsWith(folder + '/') && !path.includes('原文') && (target === SNAP || path.includes('單字'))) {
+        tried.push(path.slice(path.lastIndexOf('/') + 1));
+        memory.texts.set('其他資料夾/' + path.slice(path.lastIndexOf('/') + 1), '別人的筆記');
+      }
+      return original(path, edit);
+    };
+    const stop = await cards.save(copied.job, reply(), null);
+    const base = target.slice(target.lastIndexOf('/') + 1, -3);
+    assert.deepEqual(tried, [`${base}.md`, `${base} 2.md`, `${base} 3.md`]);
+    assert.match((stop as { message: string }).message, new RegExp(`「${base} 3」這個檔名一直被占用`), JSON.stringify(stop));
+    assert.equal(stop.kind === 'stop' && stop.deck, undefined);
+    assert.deepEqual(state.unread(), []);
+    assert.equal(memory.texts.get('其他資料夾/' + base + '.md'), '別人的筆記');
+    // 同步停了：按繼續就往後加，寫得成。
+    memory.files.modify = original;
+    const again = await cards.resume(cards.jobs()[0]);
+    assert.equal(again.kind, 'done', JSON.stringify(again));
+    assert.ok(memory.texts.has(`${folder}/${base} 4.md`));
+  }
+});
+
 void test('§5 快照寫入的當下再確認每一篇還在（R2-3）：最後一次核對之後才被刪、搬走，都不會寫出對不上的快照', async t => {
   const SNAP = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
   const start = async () => {

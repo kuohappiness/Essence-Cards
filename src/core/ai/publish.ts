@@ -41,6 +41,8 @@ export type PublishResult =
   | { kind: 'unreadable'; path: string; error: unknown }
   /** 原文或快照的位置有檔、內容不同：不蓋掉。 */
   | { kind: 'conflict'; path: string; what: 'raw' | 'snapshot' }
+  /** 這個檔名連續幾次都剛好被占用（同步正在送檔）：沒有建，可以重試（R3-6）。 */
+  | { kind: 'name'; path: string }
   | DeckStop;
 
 /** 存草稿的第 2 步：恢復資料。reply 是輸入框交出的文字。 */
@@ -170,18 +172,20 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const prior = deck.stage;
     update({ path, stage: 'started' });
     const created = await io.createDeck(path, deck.text, deck.ids);
-    // 寫入前就擋下了，確定沒有寫：階段改回去，照現在的樣子重新判斷（剛搬走就跟過去；還沒建過而 ID 已被占用就停下）。
+    // 寫入前就擋下了，確定沒有寫：階段與路徑改回去（門檻沒過時讀回來之後也不會變成「上一次建到一半」，R3-1；下一個候選名照原始檔名遞增，R3-6）。
+    if (created.kind === 'refused' || created.kind === 'exists' || created.kind === 'blocked') update({ path: deck.path, stage: prior });
+    if (created.kind === 'blocked') return created;
+    // 照現在的樣子重新判斷（剛搬走就跟過去；還沒建過而 ID 已被占用就停下）；三次都趕不上，照最後一次的原因回報。
     if (created.kind === 'refused' || created.kind === 'exists') {
-      update({ stage: prior });
-      return tries < 2 ? settle(index, tries + 1) : { kind: 'deck', index, situation: 'taken', path };
+      if (tries < 2) return settle(index, tries + 1);
+      return created.kind === 'refused' && created.why === 'ids' ? { kind: 'deck', index, situation: 'taken', path } : { kind: 'name', path };
     }
-    // 門檻沒過也是寫入前就擋下了（R3-1）：階段照舊，讀回來之後不會變成「上一次建到一半」要家長選。
-    if (created.kind === 'blocked') { update({ stage: prior }); return created; }
     if (created.kind !== 'done') return created;
     update({ stage: 'written' });
     return null;
   };
-  // 快照的寫入回呼裡才是最後的核對（R2-3）：有一篇不在原位置，或檔名被占了，回到這裡照現況重新核對每一篇、重做快照；最多三次，都趕不上就請家長等一下。
+  // 快照的寫入回呼裡才是最後的核對（R2-3）：有一篇不在原位置，或檔名被占了，回到這裡照現況重新核對每一篇、重做快照；最多三次，都趕不上就照最後一次的原因請家長等一下（R3-6）。
+  let nameTaken: string | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     for (let index = 0; index < save().decks.length; index++) {
       const stop = await settle(index);
@@ -191,6 +195,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // 第 5 步：準備發布。時間取一次、全文做一次，一起存起來，重試照存下的寫（L2-8）；快照的位置被別人用了往後加。
     // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
     const before = save().published;
+    const planned = save().snapshotPath;
     const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
     const stale = !before || before.targets.join('\n') !== targets.join('\n');
     const located = await read(save().snapshotPath);
@@ -209,8 +214,11 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
 
     // 第 6 步：發布。快照寫成、讀回來相同，就是這次製卡成功。
     const decks = save().decks.filter(deck => !deck.skipped).map(deck => ({ path: deck.path, ids: deck.ids }));
-    const created = await io.createSnapshot(save().snapshotPath, save().published!.text, decks);
-    if (created.kind === 'refused') continue;
+    const candidate = save().snapshotPath;
+    const created = await io.createSnapshot(candidate, save().published!.text, decks);
+    // 確定沒有寫：位置改回去，下一個候選名照原始檔名遞增（R3-6）。
+    if (created.kind === 'refused' || created.kind === 'blocked') keep({ ...save(), snapshotPath: planned });
+    if (created.kind === 'refused') { nameTaken = created.why === 'name' ? candidate : null; continue; }
     if (created.kind === 'exists') {
       const found = await read(save().snapshotPath);
       if ('kind' in found) return found;
@@ -219,7 +227,7 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     // 第 7 步：清理。
     return done();
   }
-  return { kind: 'blocked', reason: 'unread' };
+  return nameTaken === null ? { kind: 'blocked', reason: 'changing' } : { kind: 'name', path: nameTaken };
 }
 
 /** 跳過、重建、放棄之後 ID 怎麼處理（§5〈ID 的預留〉）：retire 進這台電腦的「不再配出」清單。 */
