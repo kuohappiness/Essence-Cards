@@ -184,3 +184,30 @@ void test('S6 原例：磁碟上已經黏住的兩筆，別台的紀錄到了之
   assert.deepEqual(state.history(), await readHistory(memory.files));
   assert.equal(memory.texts.get(PC), glued);
 });
+
+for (const [name, tail, expected] of [
+  ['結尾是作答', A, ['aaaaaa', 'bbbbbb', 'bbbbbb']],
+  ['結尾是取消', A + '\n' + encodeEntry(T2, { undo: T1 }), ['bbbbbb', 'bbbbbb']],
+] as const) void test(`月檔結尾沒換行、第一次又讀不到（${name}）：補讀前的作答另起一行，連續兩筆不多空行（L2 的 R12）`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') }, 'PC-test'), [PC]: tail });
+  memory.failing.add(PC);
+  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
+  t.after(() => state.close());
+  await state.ready();
+  assert.deepEqual(state.unread(), [PC]);
+  memory.failing.delete(PC);
+  const answer = { lt: 'bbbbbb', r: 'good', v: '12345678' } as const;
+  state.answer(answer);
+  state.answer(answer);
+  await state.flush();
+  const text = memory.texts.get(PC) ?? '';
+  assert.ok(text.startsWith(tail + '\n{'), text);
+  assert.equal(text.trimEnd().split('\n').length, tail.split('\n').length + 2, '每筆一行，沒有多的空行');
+  for (const line of text.trimEnd().split('\n')) JSON.parse(line);
+  t.mock.timers.tick(1000);
+  for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(state.unread(), []);
+  assert.deepEqual(lts(state.history()), expected);
+  assert.deepEqual(state.history().problems, []);
+});

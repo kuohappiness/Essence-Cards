@@ -319,7 +319,11 @@ export function createState(options: StateOptions): State {
   };
   /** 舊紀錄裡用來認人的 t（tasks/record-gaps.md §4）：reviews 已濾掉被取消的，所以 cancelled 要另外看；取消行自己的 t 沒有東西用它認人。 */
   const taken = (t: string): boolean => history.cancelled.includes(t) || history.reviews.some(review => review.t === t) || history.changes.some(change => change.t === t);
-  const unterminated = (path: string): boolean => { const text = sources.get(path); return !!text && !text.endsWith('\n'); };
+  /** 這個檔已知的內容最後沒有換行。第一次就讀不到的不知道結尾：當成沒有，多一個空行讀得回來，黏住的舊版救不回來（L2 的 R12）。 */
+  const unterminated = (path: string): boolean => {
+    const text = sources.get(path);
+    return text === undefined ? unread.has(path) : text !== '' && !text.endsWith('\n');
+  };
   const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); }, taken, unterminated });
   // 自己的紀錄：`YYYY-MM <device>.jsonl`；衝突副本（例如 `… 2.jsonl`）算別台裝置的。
   const ownName = new RegExp('^\\d{4}-\\d{2} ' + device.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.jsonl$');
