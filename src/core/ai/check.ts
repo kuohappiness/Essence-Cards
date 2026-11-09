@@ -63,19 +63,32 @@ function listOwner(blocks: readonly Block[], column: number): Item | undefined {
   return undefined;
 }
 
+const indentOf = (line: string): number => /^ */.exec(line)![0].length;
+/**
+ * 這一行開的圍欄與它屬於的清單項目：在清單裡看的是項目內的相對位置（R3-7，四格是清單的常見縮排），和正式解析器（listTree）同一個邊界；
+ * 不在清單裡的最多縮排三格。不是開圍欄是 null。
+ */
+function openedFence(raw: string, blocks: readonly Block[]): { mark: string; owner: Item | undefined } | null {
+  const line = expand(raw), column = indentOf(line);
+  const mark = fenceOpen(line.slice(column));
+  if (mark === null) return null;
+  const owner = listOwner(blocks, column);
+  return owner || column <= 3 ? { mark, owner } : null;
+}
+
 /** 把幾行文字切成區塊（清單項目照 CommonMark 的欄位算）；整理、分段、拆篇與檢查都用這一份（L2-7）。 */
 export function blocksOf(lines: readonly Line[]): Block[] {
   const blocks: Block[] = [];
   for (let i = 0; i < lines.length; i++) {
     const { no, raw } = lines[i];
-    const fence = fenceOpen(raw);
+    const fence = openedFence(raw, blocks);
     if (fence !== null) {
       // 在清單項目裡開的圍欄，清單項目結束就結束（CommonMark 的容器規則，R2-9），沒關好也不會吃到外面的目標與 <<<完>>>。
-      const column = /^ */.exec(raw)![0].length;
-      const owner = listOwner(blocks, column);
-      const leaves = (text: string): boolean => !!owner && text.trim() !== '' && /^ */.exec(expand(text))![0].length < owner.contentCol;
-      while (i + 1 < lines.length && !fenceCloses(lines[i + 1].raw, fence) && !leaves(lines[i + 1].raw)) i++;
-      if (i + 1 < lines.length && fenceCloses(lines[i + 1].raw, fence)) i++;
+      const { mark, owner } = fence;
+      const leaves = (text: string): boolean => !!owner && text.trim() !== '' && indentOf(expand(text)) < owner.contentCol;
+      const closes = (text: string): boolean => !leaves(text) && fenceCloses(owner ? expand(text).trimStart() : text, mark);
+      while (i + 1 < lines.length && !closes(lines[i + 1].raw) && !leaves(lines[i + 1].raw)) i++;
+      if (i + 1 < lines.length && closes(lines[i + 1].raw)) i++;
       blocks.push({ kind: 'code', line: no }); continue;
     }
     if (/^\s{0,3}>/.test(raw)) {

@@ -375,6 +375,37 @@ void test('§4 清單裡沒關的圍欄不會吃到清單外面（R2-9）；最�
   assert.equal(inspectReply(['## 單字', '', '- borrow 英翻中', '  - 出處：p.40', '  - borrow :: 借入', '', '```js', 'x', '<<<完>>>'].join('\n'), f, english, [], nobody).ended, false);
 });
 
+void test('§4 清單內的圍欄照清單裡的相對縮排認（R3-7）：四格、Tab、更深一層的範例不算壞題目；和正式解析器同一個邊界', () => {
+  const english = subject('english');
+  const f = form({ subject: 'english', unit: 'L3' });
+  const first = ['## 單字', '', '- borrow 英翻中', '    - 出處：p.40', '    - borrow :: 借入'];
+  const second = ['- lend 英翻中', '    - 出處：p.41', '    - lend :: 借出'];
+  const clean = (lines: string[]) => {
+    const text = lines.join('\n');
+    const result = inspectReply(text, f, english, [], nobody);
+    assert.deepEqual(result.errors, [], text);
+    assert.equal(result.ended, true, text);
+    assert.equal(result.pieces[0].targets, 2, text);
+    assert.equal(parseDeck(text.replace('<<<完>>>', '')).targets.length, 2, text);
+  };
+  // 四格、成對，框裡有長得像清單的字。
+  clean([...first, '    ```', '    - ::', '    ```', ...second, '<<<完>>>']);
+  // 結束符號縮排不同、框比較長、波浪號。
+  clean([...first, '    ````js', '    - ::', '      ````', ...second, '<<<完>>>']);
+  clean([...first, '    ~~~', '    - ::', '    ~~~', ...second, '<<<完>>>']);
+  // 沒關：清單項目結束就結束，不吃到第二個目標與 <<<完>>>。
+  clean([...first, '    ```', '    - ::', ...second, '<<<完>>>']);
+  // Tab 縮排，以及更深一層的項目底下。
+  clean([...first, '\t```', '\t- ::', '\t```', ...second, '<<<完>>>']);
+  clean([...first, '        ```', '        - ::', '        ```', ...second, '<<<完>>>']);
+  // 框裡的結束標記不算。
+  clean([...first, '    ```', '    <<<完>>>', '    ```', ...second, '<<<完>>>']);
+  // 不在清單裡的四格不是圍欄：不會吃掉後面的目標。
+  const top = inspectReply(['## 單字', '', '    ```', '', ...first.slice(2), '<<<完>>>'].join('\n'), f, english, [], nobody);
+  assert.equal(top.ended, true);
+  assert.equal(top.pieces[0].targets, 1);
+});
+
 void test('§4 AI 自己寫的 ID：只拿掉新目標與候選名稱行行尾的（不限 6 碼）；行中、一行兩個擋；題目、答案、加進已有的不動', () => {
   const science = subject('science');
   const withIds = R3_REPLY
