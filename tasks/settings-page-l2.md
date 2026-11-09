@@ -1,6 +1,6 @@
 # 設定頁（Codex L2 審查請求）
 
-狀態：第四輪待審（最後一輪；還有擋合併的問題就交給使用者）；第一輪審 `8717c09`、第二輪審 `69ae53e`、第三輪審 `b7cccac`，[報告與核對](<../Claude Codex Discussion/2026-11-09-settings-page-l2.md>)。
+狀態：四輪審完，第四輪通過（`ace73d6`）；第一輪審 `8717c09`、第二輪審 `69ae53e`、第三輪審 `b7cccac`，[報告與核對](<../Claude Codex Discussion/2026-11-09-settings-page-l2.md>)。
 
 ## 第四輪（只審修正）
 

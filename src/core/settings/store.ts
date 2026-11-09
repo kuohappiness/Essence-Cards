@@ -81,7 +81,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     // load 拒絕和讀到 undefined 一樣當成讀不到：呼叫端回報 unreadable，不是程式的錯。
     reading++;
     // 少算一筆和見過檔要在同一步：中間不能讓別的工作看到「都回來了、卻還沒見過檔」。
-    const loading = options.load().catch(() => undefined).then(content => { reading--; return classify(content); });
+    const loading = new Promise<unknown>(resolve => { resolve(options.load()); }).catch(() => undefined).then(content => { reading--; return classify(content); });
     const result = await Promise.race([loading, timeout]);
     clearTimeout(timer);
     if (result !== 'timeout') return result;

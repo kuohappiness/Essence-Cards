@@ -454,6 +454,16 @@ void test('清除欄位、saveData 吞掉錯誤、核對回 null：回 failed，
   assert.equal(store.value().known, false);
 });
 
+void test('load 直接丟錯：算讀不到，之後確認沒有檔照常能存（R4-1）', async () => {
+  const { state, options } = disk(null);
+  let calls = 0;
+  const store = createSettingsStore({ ...options, load: () => { if (++calls === 1) throw new Error('壞了'); return options.load(); } });
+  await store.first();
+  assert.equal(store.value().known, false);
+  assert.equal(await store.change(cap(60)), 'saved');
+  assert.deepEqual(state.content, { capMinutes: 60 });
+});
+
 // 第三輪 R3-2：多筆晚到的結果。
 void test('補讀進行中又有晚到：第一筆補讀成功，第二筆不擋存檔（R3-2）', async t => {
   const a = deferred<unknown>(), b = deferred<unknown>(), c = deferred<unknown>();
