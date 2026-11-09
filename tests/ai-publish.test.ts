@@ -672,6 +672,25 @@ void test('§5 可能寫成的快照原位沒有（R5-1）：別處有同檔名�
   }
 });
 
+void test('§5 第一次建檔回 exists 就是確定沒寫（R6-1）：接著讀不到也留著確定沒寫，讀得到之後換後綴', async () => {
+  const SECOND = SNAPSHOT.replace('.md', ' 2.md');
+  const { files, io, reload } = vault();
+  const job = saved(copied());
+  io.store(job);
+  const create = io.createSnapshot.bind(io);
+  const read = io.read.bind(io);
+  const error = Error('還在下載');
+  let unread = false;
+  io.createSnapshot = (path, text, decks) => { if (path === SNAPSHOT) { files.set(SNAPSHOT, '別台的快照'); unread = true; } return create(path, text, decks); };
+  io.read = path => path === SNAPSHOT && unread ? Promise.reject(error) : read(path);
+  assert.deepEqual(await publish(job, io), { kind: 'unreadable', path: SNAPSHOT, error });
+  unread = false;
+  const held = reload();
+  assert.equal((await publish(held, io)).kind, 'done');
+  assert.equal(files.get(SNAPSHOT), '別台的快照');
+  assert.equal(files.get(SECOND), held.save!.published!.text);
+});
+
 void test('§5 快照三次都趕不上（R3-6）：卡組一直在變動回 changing，不說成讀不到；不寫快照', async () => {
   const { files, io } = vault();
   const job = saved(copied());

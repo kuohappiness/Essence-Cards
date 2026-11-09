@@ -239,7 +239,8 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     const mark = (value: boolean): void => { keep({ ...save(), published: { ...save().published!, attempted: value } }); };
     if (!attempted) mark(true);
     const created = await io.createSnapshot(save().snapshotPath, save().published!.text, decks);
-    if ((created.kind === 'refused' || created.kind === 'blocked') && !attempted) mark(false);
+    // exists 是寫入層確認那裡本來有檔、這次沒寫：先記下再去讀，讀不到也不會留成可能寫成（R6-1）。
+    if ((created.kind === 'refused' || created.kind === 'blocked' || created.kind === 'exists') && !attempted) mark(false);
     // 位置和全文、雜湊一起留著（R4-2）：退回原名的話，重開會把別人的檔當成這份快照的異文。
     if (created.kind === 'refused') { nameTaken = created.why === 'name' ? save().snapshotPath : null; continue; }
     if (created.kind === 'exists') {
@@ -248,7 +249,6 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
       if (found.text === null || sha256Hex(found.text) !== save().published!.sha256) {
         if (attempted) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
         // 這個位置這次才第一次寫：那個檔不是這份快照，換下一個後綴（R5-2）。
-        mark(false);
         nameTaken = save().snapshotPath;
         continue;
       }
