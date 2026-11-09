@@ -199,19 +199,24 @@ export function createReads(options: ReadsOptions) {
     let abandon = (): void => { /* 下面換成真的。 */ };
     const abandoned = new Promise<never>((_, reject) => { abandon = () => { reject(new ReadStuck()); }; });
     abandoned.catch(() => { /* 只給月檔的讀取用；這一批沒有月檔時沒有人接。 */ });
+    let overdue = false;
+    // 載入完成之後，過了上限、卡住的只剩月檔：照讀不到處理，讀到的卡組先用，後面的讀取也不排在它後面（L2 的 R15）。卡組不放，不知道 ID 用過沒（D-134）；卡組過了上限才回來時，回來的那一刻再問一次（L2 的 R18）。
+    const release = (): void => {
+      if (overdue && life.loaded && !options.alone && paths.every(path => settled.has(path) || isLogPath(path))) abandon();
+    };
     const stuck = setTimeout(() => {
       stuckTimers.delete(stuck);
+      overdue = true;
       for (const path of paths) if (!settled.has(path)) unread.add(path);
       unreadCheck();
       for (const wake of stuckWakes) wake();
       stuckWakes.clear();
-      // 載入完成之後，卡住的只剩月檔：照讀不到處理，讀到的卡組先用，後面的讀取也不排在它後面（L2 的 R15）。卡組不放，不知道 ID 用過沒（D-134）。
-      if (life.loaded && !options.alone && paths.every(path => settled.has(path) || isLogPath(path))) abandon();
+      release();
     }, options.stuckAfter);
     stuckTimers.add(stuck);
     const started = paths.map(path => files.read(path));
     // 另外接，不串在讀取上：讀完之後的先後不能因為多了這個計時而改變。
-    started.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); }; each.then(done, done); });
+    started.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); release(); }; each.then(done, done); });
     // 同樣的理由，只有載入之後的月檔多包一層，卡組的先後不變。
     const reading = started.map((each, i) => life.loaded && isLogPath(paths[i]) ? Promise.race([each, abandoned]) : each);
     const results = await Promise.allSettled(reading);

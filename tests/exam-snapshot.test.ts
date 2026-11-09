@@ -817,6 +817,33 @@ void test('月檔卡住之後才改的卡組：不被它擋住，照常讀到（
   assert.deepEqual(rows(memory)[1], { path: NATURE, text: EDITED_NATURE });
 });
 
+void test('卡組過了上限才回來、月檔還卡著：卡組先用，切面照寫，之後的讀取不排在它後面（L2 的 R18）', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
+  const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
+  const log = memory.holdRead(PHONE_LOG), deck = memory.holdRead(NATURE);
+  memory.notify(PHONE_LOG);
+  memory.write(NATURE, EDITED_NATURE);
+  await h.pump();
+  await deck.started;
+  h.setNow(OPEN);
+  h.state.today();
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(written(memory), []);
+  deck.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.deepEqual(rows(memory)[1], { path: NATURE, text: EDITED_NATURE });
+  const before = memory.reads.filter(path => path === ENGLISH).length;
+  memory.write(ENGLISH, ENGLISH_TEXT.replace('答 p7q2w8', '新答案'));
+  await h.pump();
+  assert.equal(memory.reads.filter(path => path === ENGLISH).length, before + 1);
+  log.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.deepEqual(h.errors, []);
+});
+
 void test('卡組自己也卡住：到上限也不寫，整批回來才寫（相鄰情況）', async t => {
   const memory = createMemoryFiles({ ...VAULT, [PHONE_LOG]: '{}\n' });
   const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
