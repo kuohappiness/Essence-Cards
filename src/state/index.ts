@@ -28,6 +28,9 @@ import type { Observation } from './observe.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, formatTime, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
 import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, QueuedLine, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
+import { DEFAULT_SETTINGS, semesterOn } from '../core/settings/index.ts';
+import type { SemesterPick, SettingsValue } from '../core/settings/index.ts';
+export type { SettingsValue } from '../core/settings/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
 import type { VersionReport } from '../core/backup/index.ts';
@@ -43,8 +46,10 @@ export interface StateOptions {
   build?: string;
   now?: () => number;
   offset?: (ms: number) => number;
-  /** 預設 { capMinutes: 30, retention: 0.8, filter: [] }（D-104、D-078）。 */
+  /** 預設 { capMinutes: 30, retention: 0.8, filter: [] }（D-104、D-078）；有傳 settingsFirst 時用不到。 */
   settings?: Settings;
+  /** data.json 第一次讀到的設定（tasks/settings-page.md §3）：第一次載入等它，和範圍檔同一段等待；一定會完成，讀不到時是 known 為 false 的預設值。 */
+  settingsFirst?: Promise<SettingsValue>;
   /** 收到檔案變動後等多久才處理（毫秒），預設 500。 */
   delay?: number;
   /** 讀取一直沒回來多久算讀不到（毫秒），預設 30 秒（任務說明〈小選擇〉第 5 項）。 */
@@ -202,6 +207,10 @@ export interface State {
   setQuiz(input: QuizInput, date: string, opened: QuizOpened | null): Promise<QuizResult>;
   /** 取消這次小考（§1）：多一行 `取消`，檔案留著。擋下來的原因同 setQuiz。 */
   cancelQuiz(opened: QuizOpened): Promise<QuizResult>;
+  /** 設定頁或別台裝置改了設定（tasks/settings-page.md §3）：上限、保持率、濾網真的變了才重排並通知，只有學期或考試倒數變了只通知，相同什麼都不做。 */
+  applySettings(value: SettingsValue): void;
+  /** 現在生效的設定；semester 是今天算出來的學期，沒設定是 null；known 是 false 時 data.json 還沒讀到，不能當成使用者的設定。 */
+  currentSettings(): { settings: Settings; semester: string | null; examCountdown: boolean; known: boolean };
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫；考試範圍只改了看不懂的行數這類只影響畫面的，也會呼叫但不重排。 */
   onChange(listener: () => void): () => void;
   /** unread() 的內容變了（多了或少了）；另外一條，不經 onChange，所以存檔按鈕不多更新一次（任務說明 §8、§11）。 */
@@ -271,7 +280,6 @@ export interface State {
   restoredInEditor(path: string, ids: readonly string[]): void;
 }
 
-const DEFAULT_SETTINGS: Settings = { capMinutes: 30, retention: 0.8, filter: [] };
 /** 第一次載入最多等範圍檔多久（毫秒，tasks/exam-scope.md §4）。 */
 const EXAM_WAIT = 2000;
 const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancelled: [], seen: [], held: [], incomplete: false };
@@ -287,7 +295,23 @@ export function createState(options: StateOptions): State {
   const needsUpdate = (deck: Deck): boolean => deck.props.need !== null && !canRead(deck.props.need, version);
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
-  const settings = options.settings ?? DEFAULT_SETTINGS;
+  let settings = options.settings ?? DEFAULT_SETTINGS;
+  let semester: SemesterPick | null = null, examCountdown = true;
+  /** 有傳 settingsFirst 時，第一次讀到之前都是不知道（補紀錄缺口不把預設值寫成基準）。 */
+  let settingsKnown = options.settingsFirst === undefined;
+  /** applySettings 比 settingsFirst 先到：那份比較新，settingsFirst 不採用。 */
+  let settingsApplied = false;
+  function takeSettings(value: SettingsValue): void {
+    settings = value.settings;
+    semester = value.semester;
+    examCountdown = value.examCountdown;
+    settingsKnown = value.known;
+  }
+  /** 今天的學期（清晨 4 點換日，tasks/settings-page.md §4）；沒設定是 null。 */
+  function currentTerm(): string | null {
+    const at = now();
+    return semester ? semesterOn(semester, scopeDate(dayOf(at, offsetOf(at)))) : null;
+  }
   const delay = options.delay ?? 500;
   const writeTimeout = options.writeTimeout ?? 10_000;
   const report = (error: unknown, source: ErrorSource): void => {
@@ -406,9 +430,14 @@ export function createState(options: StateOptions): State {
         if (permits(entry)) list.push({ entry, baseline: target.fields.paused });
       }
     }
-    list.push({ entry: { set: 'cap', val: settings.capMinutes }, baseline: true });
-    list.push({ entry: { set: 'retention', val: settings.retention }, baseline: true });
-    list.push({ entry: { set: 'filter', val: [...settings.filter] }, baseline: true });
+    // data.json 還沒讀到時手上是預設值，不是使用者的設定：不比（tasks/settings-page.md §3）。
+    if (settingsKnown) {
+      list.push({ entry: { set: 'cap', val: settings.capMinutes }, baseline: true });
+      list.push({ entry: { set: 'retention', val: settings.retention }, baseline: true });
+      list.push({ entry: { set: 'filter', val: [...settings.filter] }, baseline: true });
+      const term = currentTerm();
+      if (term !== null) list.push({ entry: { set: 'semester', val: term }, baseline: true });
+    }
     return list;
   }
   /** 偵測的唯一出口（§1）：第一次載入、每一批讀完的收尾、自己寫回被採用時都比一次。有讀不到的、紀錄不完整時不比，補齊後一定再比。 */
@@ -600,7 +629,11 @@ export function createState(options: StateOptions): State {
   /** 換日或換時區就重排（W4 的 F3：日編號相同、時區不同也要重排）。 */
   function fresh(): { today: Today; input: TodayInput } {
     const value = input();
-    if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) current = plan(value);
+    if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) {
+      // 過了 2/1、8/1 學期自己變，data.json 沒變也不會有 applySettings（tasks/settings-page.md §3）。
+      observe();
+      current = plan(value);
+    }
     return { today: current, input: value };
   }
 
@@ -694,7 +727,9 @@ export function createState(options: StateOptions): State {
   const loadQueue = (paths: string[]): Promise<void> => reads.queue(() => reads.read(paths)).catch((error: unknown) => { queueFailed = true; throw error; });
   async function load(begin: number, deckPaths: string[], logPaths: string[]): Promise<LoadTimings> {
     // 範圍檔同時開始讀，正常情況第一次就排對；一直沒回來也不卡住 ready()（§4）。
-    const examRead = Promise.all([exam.settle(EXAM_WAIT), quiz.settle(EXAM_WAIT)]);
+    // 設定併進同一段等待，不串接第二段逾時（tasks/settings-page.md §3）。
+    const firstSettings = options.settingsFirst?.then(value => { if (!settingsApplied && !life.closed) takeSettings(value); });
+    const examRead = Promise.all([exam.settle(EXAM_WAIT), quiz.settle(EXAM_WAIT), firstSettings]);
     // 卡組一批、紀錄一批（自己的紀錄也讀），和之後的檔案變動走同一個 read。
     await loadQueue(deckPaths);
     const afterDecks = performance.now();
@@ -844,7 +879,7 @@ export function createState(options: StateOptions): State {
     catalog() {
       const { today, input: value } = fresh();
       const { chosen, usable } = selection(dayOf(value.now, value.offset));
-      return paintCatalog(catalogIndex(), memoryColors(value), todayLeft(today, value), usable ? chosen?.file : null);
+      return paintCatalog(catalogIndex(), memoryColors(value), todayLeft(today, value), usable ? chosen?.file : null, currentTerm());
     },
     deckTargets: path => life.loaded ? catalogIndex().deckTargets(path) : [],
     unitMaterials(path, term, code) {
@@ -868,7 +903,7 @@ export function createState(options: StateOptions): State {
       const { chosen, usable, others } = selection(day);
       return { settled: exam.settled(), missing: exam.missing(), path: chosen?.path ?? null, file: chosen?.file ?? null, usable, others, period: chosen ? scopePeriod(chosen.file) : { kind: 'none' }, day, previousEnd: exam.previousEnd(day) };
     },
-    examCatalog: () => life.loaded ? paintCatalog(catalogIndex(), new Map(), new Set()) : null,
+    examCatalog: () => life.loaded ? paintCatalog(catalogIndex(), new Map(), new Set(), null, currentTerm()) : null,
     examCheck(change) {
       if (!life.loaded) return null;
       const at = now();
@@ -886,6 +921,19 @@ export function createState(options: StateOptions): State {
     quizzes: () => life.loaded ? quiz.rows() : [],
     setQuiz: (input, date, opened) => quiz.set(input, date, opened),
     cancelQuiz: opened => quiz.cancel(opened),
+    applySettings(value) {
+      if (life.closed) return;
+      settingsApplied = true;
+      const replans = JSON.stringify([settings.capMinutes, settings.retention, settings.filter]) !== JSON.stringify([value.settings.capMinutes, value.settings.retention, value.settings.filter]);
+      const shows = JSON.stringify([semester, examCountdown]) !== JSON.stringify([value.semester, value.examCountdown]);
+      takeSettings(value);
+      if (!life.loaded) return;
+      // 先採用、排入紀錄，再通知會讀新排程的畫面（tasks/record-gaps.md §1）；值變了或 known 由 false 變 true 都會走到。
+      observe();
+      if (replans) replan();
+      else if (shows) notifyChange();
+    },
+    currentSettings: () => ({ settings, semester: currentTerm(), examCountdown, known: settingsKnown }),
     onChange(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };

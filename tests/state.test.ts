@@ -69,7 +69,7 @@ async function setup(t: TestContext, options: Partial<StateOptions> & { vault?: 
   t.after(() => state.close());
   return Promise.resolve({ ...memory, state, changed: () => changes, clock, errors, ...timers });
 }
-const OBSERVED_SETS: string[] = ['status', 'cap', 'retention', 'filter'];
+const OBSERVED_SETS: string[] = ['status', 'cap', 'retention', 'filter', 'semester'];
 const ids = (items: { lt: string }[]) => items.map(item => item.lt);
 const cardOf = (next: Next) => next.kind === 'card' ? next.card.lt : next.kind;
 

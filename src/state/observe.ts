@@ -6,7 +6,7 @@ import type { NewEntry } from '../core/study/index.ts';
  * 只和這台自己的紀錄比：別台時鐘偏快或別台的行先同步到，都不會讓這台多寫。不存「已觀察」的狀態到磁碟。
  */
 
-type Observed = Extract<NewEntry, { set: 'status' | 'cap' | 'retention' | 'filter' }>;
+type Observed = Extract<NewEntry, { set: 'status' | 'cap' | 'retention' | 'filter' | 'semester' }>;
 export interface Observation {
   entry: Observed;
   /** 這台沒有舊行時也要寫（基準）：沒暫停的目標不寫，一篇幾十個目標不寫一堆行。 */

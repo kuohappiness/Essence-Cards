@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -18,8 +19,8 @@ import type { AdapterResult, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts
  * 所以看得到的是排在最前面的那一行與 modify，不保證抓到版本行之後才排的。
  */
 
-/** 輸入：備份的時間與時區當「現在」，`Essence Cards/` 底下的文字檔。 */
-export interface AdapterInput { now: number; offset: number; files: Record<string, string> }
+/** 輸入：備份的時間與時區當「現在」，`Essence Cards/` 底下的文字檔，外掛的 data.json 的原文（備份裡沒有就不帶）。 */
+export interface AdapterInput { now: number; offset: number; files: Record<string, string>; data?: string }
 
 type Fn = (...args: unknown[]) => unknown;
 function need(module: unknown, name: string): Fn {
@@ -94,7 +95,7 @@ function frozen(texts: Record<string, string>) {
   };
 }
 /** 載入時本來就會寫的：版本行、狀態與設定的基準、考試切面（tasks/record-gaps.md §1、§2）。比較時 Files 拒絕這些是預期的。 */
-const LOADING = new Set(['app', 'status', 'cap', 'retention', 'filter']);
+const LOADING = new Set(['app', 'status', 'cap', 'retention', 'filter', 'semester']);
 const isLoadingLine = (line: string): boolean => {
   if (line.startsWith('改 Essence Cards/紀錄/考試切面/')) return true;
   try { return LOADING.has(String((JSON.parse(line) as { set?: unknown }).set)); } catch { return false; }
@@ -196,6 +197,19 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   };
 }
 
+/** 那一版有設定（src/core/settings/）就用它自己的讀法讀 data.json；沒有的版本（0.3.0）照用它的預設（tasks/settings-page.md §2-9）。 */
+async function settingsOption(root: string, data: string | undefined): Promise<{ settingsFirst?: Promise<unknown> }> {
+  const path = join(root, 'src/core/settings/index.ts');
+  if (!existsSync(path)) return {};
+  // eslint-disable-next-line essence/module-boundaries
+  const settings = await import(pathToFileURL(path).href) as unknown;
+  let raw: unknown = {};
+  // 壞掉的 data.json：外掛用預設值，比較也是。
+  if (data !== undefined) try { raw = JSON.parse(data); } catch { raw = {}; }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) raw = {};
+  return { settingsFirst: Promise.resolve(need(settings, 'valueOf')(need(settings, 'readSaved')(raw), true)) };
+}
+
 export async function snapshot(root: string, input: AdapterInput): Promise<Snapshot> {
   const { version } = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8')) as { version: unknown };
   // 載入要比較的那個版本的程式：路徑由命令列給，只能是計算出來的（這個檔不進外掛，D-148 的邊界檢查管的是 src/）。
@@ -212,6 +226,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
   const failed = (error: unknown): void => { if (error !== refusal) failures.push(error); };
   const state = need(stateModule, 'createState')({
     files, device: 'compare', build: version, fillIds: false, now: () => input.now, offset: () => input.offset,
+    ...await settingsOption(root, input.data),
     onError: failed,
   }) as StateLike;
   let result: Snapshot;

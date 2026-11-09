@@ -39,6 +39,8 @@ export function entryView(state: State | null): EntryView {
 }
 
 function countdownOf(state: State, subject: string | null): number | 'today' | null {
+  // 設定頁的開關只管這一行（tasks/settings-page.md §5）：目錄標題旁的倒數不受影響（D-097）。
+  if (!state.currentSettings().examCountdown) return null;
   const { file, usable, period, day } = state.exam();
   return file && usable && subject !== null && scopeHasSubject(file, subject) ? scopeCountdown(period, day) : null;
 }

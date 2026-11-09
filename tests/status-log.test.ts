@@ -3,6 +3,7 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mergeHistory, planToday } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
+import type { SettingsValue } from '../src/core/settings/index.ts';
 import type { StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import type { MemoryFiles } from './helpers/memory-files.ts';
@@ -444,3 +445,54 @@ void test('§1-4 核對到不同內容：只記實際採用的值', async t => {
   assert.deepEqual(shorts(memory).slice(before), ['A（卡片）.md=草稿']);
 });
 
+
+// 和設定頁的交接（tasks/settings-page.md §3「給補紀錄缺口的介面」）。
+const SETTINGS_SETS = ['cap', 'retention', 'filter', 'semester'];
+const settingLines = (memory: MemoryFiles, path = OWN): unknown[][] => linesOf(memory, path).map(raw => JSON.parse(raw) as { set?: string; val?: unknown }).filter(each => SETTINGS_SETS.includes(each.set ?? '')).map(each => [each.set, each.val]);
+const value = (extra: Partial<SettingsValue> = {}, capMinutes = 30): SettingsValue => ({ settings: { capMinutes, retention: 0.8, filter: [] }, semester: null, examCountdown: true, known: true, ...extra });
+const DEFAULTS = [['cap', 30], ['retention', 0.8], ['filter', []]];
+
+void test('§1 交接：data.json 還沒讀到時四種設定都不比，讀到才寫基準；沒設定學期不寫 semester', async t => {
+  const memory = createMemoryFiles({ [A]: deck('啟用') });
+  const { state } = await open(t, memory, { settingsFirst: Promise.resolve(value({ known: false })) });
+  assert.deepEqual(settingLines(memory), []);
+  state.applySettings(value());
+  await state.flush();
+  assert.deepEqual(settingLines(memory), DEFAULTS);
+});
+
+void test('§1 交接：第一次的值直接進 load、不經 applySettings 也寫基準，學期是算出來的值', async t => {
+  const memory = createMemoryFiles({ [A]: deck('啟用') });
+  await open(t, memory, { settingsFirst: Promise.resolve(value({ semester: { value: '國二上', setOn: '2026-09-15' } }, 20)) });
+  assert.deepEqual(settingLines(memory), [['cap', 20], ['retention', 0.8], ['filter', []], ['semester', '國二上']]);
+});
+
+void test('§1 交接：改設定多一行，先排入紀錄再通知畫面；同樣的值再來一次不多', async t => {
+  const memory = createMemoryFiles({ [A]: deck('啟用') });
+  const { state } = await open(t, memory, { settingsFirst: Promise.resolve(value()) });
+  let seen: unknown = null;
+  state.onChange(() => { seen ??= state.history().changes.at(-1)?.val; });
+  state.applySettings(value({}, 45));
+  assert.equal(seen, 45);
+  state.applySettings(value({}, 45));
+  await state.flush();
+  assert.deepEqual(settingLines(memory), [...DEFAULTS, ['cap', 45]]);
+});
+
+void test('§1 交接：過了 2/1 學期自己變，data.json 沒變：換日後第一次排今天的份多一行，時間是發現的時候', async t => {
+  const memory = createMemoryFiles({ [A]: deck('啟用') });
+  let clock = Date.parse('2027-01-31T12:00:00.000+08:00');
+  const { state } = await open(t, memory, { now: () => clock, settingsFirst: Promise.resolve(value({ semester: { value: '國二上', setOn: '2026-09-15' } })) });
+  const JAN = ROOT + '紀錄/2027-01 Windows-2c9e.jsonl', FEB = ROOT + '紀錄/2027-02 Windows-2c9e.jsonl';
+  assert.deepEqual(settingLines(memory, JAN).at(-1), ['semester', '國二上']);
+  clock = Date.parse('2027-02-01T03:59:00.000+08:00');
+  state.today();
+  await state.flush();
+  assert.deepEqual(settingLines(memory, FEB), [], '清晨 4 點前還是前一天');
+  clock = Date.parse('2027-02-01T08:00:00.000+08:00');
+  state.today();
+  state.today();
+  await state.flush();
+  assert.deepEqual(settingLines(memory, FEB), [['semester', '國二下']]);
+  assert.equal((JSON.parse(linesOf(memory, FEB)[0]) as { t: string }).t, '2027-02-01T08:00:00.000+08:00');
+});

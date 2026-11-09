@@ -5,7 +5,7 @@
 import { createState } from '../../src/state/index.ts';
 import { createMemoryFiles } from './memory-files.ts';
 
-const OBSERVED = new Set(['status', 'cap', 'retention', 'filter']);
+const OBSERVED = new Set(['status', 'cap', 'retention', 'filter', 'semester']);
 
 export function isObserved(line: string): boolean {
   try { return OBSERVED.has(String((JSON.parse(line) as { set?: unknown }).set)); } catch { return false; }

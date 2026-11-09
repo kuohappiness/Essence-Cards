@@ -11,7 +11,8 @@ import { snapshot } from '../tools/compare/adapter.ts';
 import type { AdapterInput } from '../tools/compare/adapter.ts';
 import { diffSnapshots } from '../tools/compare/snapshot.ts';
 import type { AdapterResult, Snapshot, TodaySnap } from '../tools/compare/snapshot.ts';
-import { compareVersions } from '../tools/compare-versions.ts';
+import { adapterInput, compareVersions } from '../tools/compare-versions.ts';
+import { openBackup } from '../src/core/backup/index.ts';
 import { nextCard, questionType } from '../src/core/study/index.ts';
 import { canRead, PICK_NEEDS, releaseOf } from '../src/core/version/index.ts';
 import { createState } from '../src/state/index.ts';
@@ -316,7 +317,7 @@ void test('接不上就丟錯（比較的一方寫無法比較）：版號不是
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', 'blocked: () =>', 'renamed: () =>'), input), /這個版本沒有 blocked/);
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', 'canAnswer: answerable', 'renamed: answerable'), input), /這個版本沒有 canAnswer/);
   await assert.rejects(snapshot(await patched(t, 'src/core/version/index.ts', 'export { canRead, releaseOf }', 'export { canRead }'), input), /releaseOf/);
-  await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'semester', val: '國二上' }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"semester"/);
+  await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'exam', val: { id: 'x7f3k2', do: '建立', units: [] } }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"exam"/);
 });
 
 void test('回傳的型別不同也是接不上，不能靠真假值往下算：canAnswer 回傳 Promise 時，停掉的目標不能變成新卡（Codex L2 F1）', async t => {
@@ -740,4 +741,44 @@ void test('發布前比較：開兩個 worktree 各跑轉接器；同一個 comm
   assert.equal(hung.comparable, false);
   assert.match(hung.new.result.ok ? '' : hung.new.result.reason, /轉接器沒有跑完/);
   assert.equal(git(repo, 'worktree', 'list').split('\n').length, 1);
+});
+
+// 發布前比較帶設定（tasks/settings-page.md §2-9、§7 第 31 點）。
+const manyGoals = { 'Essence Cards/多.md': Array.from({ length: 40 }, (_, i) => goal('m' + String(i).padStart(5, '0'))).join('') };
+const shareOf = (snap: Snapshot): TodaySnap[] => snap.today.filter(item => item.list === 'share');
+
+void test('比較帶 data.json：有設定的版本照它算，0.3.0 照預設，沒有或壞掉的 data.json 都是預設', async t => {
+  const input = { now: NOW, offset: 480, files: manyGoals };
+  const plain = shareOf(await snapshot(root, input));
+  const capped = shareOf(await snapshot(root, { ...input, data: '{"capMinutes":5}' }));
+  assert.ok(capped.length < plain.length, `${String(capped.length)} < ${String(plain.length)}`);
+  assert.ok(capped.reduce((sum, item) => sum + item.seconds, 0) <= 300, '放得進 5 分鐘');
+  assert.equal(shareOf(await snapshot(root, { ...input, data: '{壞掉' })).length, plain.length);
+  assert.equal(shareOf(await snapshot(root, { ...input, data: '[1]' })).length, plain.length);
+  const old = await deployed(t, 'v0.3.0');
+  assert.equal(shareOf(await snapshot(old, { ...input, data: '{"capMinutes":5}' })).length, shareOf(await snapshot(old, input)).length);
+});
+
+void test('凍結的輸入：備份裡的 data.json 原文帶過去；沒有就不帶', async t => {
+  const take = async (extra: Record<string, string>): Promise<AdapterInput> => {
+    const vault = await makeVault(t, { ...files, ...extra });
+    const { path } = await backupVault({ vault, to: await tempFolder(t), by: 'backup', now: () => NOW, offset: () => 480 });
+    const opened = openBackup(new Uint8Array(await readFile(path)));
+    assert.ok(opened.ok);
+    return adapterInput(opened.value);
+  };
+  assert.equal((await take({ '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":5}' })).data, '{"capMinutes":5}');
+  assert.equal('data' in await take({}), false);
+});
+
+void test('data.json 開頭有 BOM：和 Obsidian 的 loadData 一樣讀不懂，從備份的位元組走到比較都是預設（L2 F5）', async t => {
+  const body = new TextEncoder().encode('{"capMinutes":5}');
+  const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...body]);
+  const vault = await makeVault(t, { ...manyGoals, '.obsidian/plugins/essence-cards/data.json': withBom });
+  const { path } = await backupVault({ vault, to: await tempFolder(t), by: 'backup', now: () => NOW, offset: () => 480 });
+  const opened = openBackup(new Uint8Array(await readFile(path)));
+  assert.ok(opened.ok);
+  const input = adapterInput(opened.value);
+  assert.equal(input.data?.charCodeAt(0), 0xfeff, 'BOM 留著');
+  assert.equal(shareOf(await snapshot(root, input)).length, shareOf(await snapshot(root, { ...input, data: undefined })).length);
 });
