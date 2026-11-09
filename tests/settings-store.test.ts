@@ -1,4 +1,5 @@
 import test from 'node:test';
+import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSettingsStore } from '../src/core/settings/index.ts';
 import type { SettingsChange, SettingsStoreOptions } from '../src/core/settings/index.ts';
@@ -286,7 +287,7 @@ void test('停用：還沒開始的存檔不做，回 failed；已經開始的�
   await new Promise<void>(resolve => { setImmediate(resolve); });
   store.close();
   slow.resolve(undefined);
-  assert.equal(await first, 'saved');
+  assert.equal(await first, 'failed', '停用後不核對，不能說存好了');
   assert.equal(await second, 'failed');
   assert.deepEqual(state.content, { capMinutes: 60 });
   state.log.length = 0;
@@ -329,6 +330,116 @@ void test('第一次讀 5 秒後才回來：沒人存過就採用；存過就不
   assert.equal(writer.value().settings.capMinutes, 75, '晚到的舊內容不蓋掉存檔的結果');
 });
 
+const flushAll = async (): Promise<void> => { for (let i = 0; i < 8; i++) await new Promise<void>(resolve => { setImmediate(resolve); }); };
+/** 第一次讀逾時：load 由 script 逐次決定。 */
+async function timedOut(t: TestContext, script: (call: number) => Promise<unknown>, extra: Partial<SettingsStoreOptions> = {}) {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { state, options } = disk(null);
+  let calls = 0;
+  const store = createSettingsStore({ ...options, ...extra, load: () => script(++calls) });
+  const first = store.first();
+  await flushAll();
+  t.mock.timers.tick(2000);
+  await first;
+  t.mock.timers.tick(3000);
+  await flushAll();
+  return { store, state, calls: () => calls };
+}
+
+void test('寫前底稿是「沒有檔」，等待中晚到的讀取見過檔：不寫（L2 第二輪 F1）', async t => {
+  // 晚到的讀取落在「底稿分類完」到「送出 saveData」之間的哪一步都要擋：逐步挪開兩者的間隔。
+  const blind: unknown[] = [];
+  for (let gap = 0; gap < 12; gap++) {
+    const a = deferred<unknown>(), b = deferred<unknown>();
+    let lateSeen = false;
+    const { store } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : Promise.resolve({ capMinutes: 45 }), { save: data => { if (lateSeen) blind.push(data); return Promise.resolve(); } });
+    void a.promise.then(() => undefined).then(() => { lateSeen = true; });
+    const saving = store.change({ key: 'examCountdown', value: false });
+    await flushAll();
+    b.resolve(null);
+    for (let i = 0; i < gap; i++) await Promise.resolve();
+    a.resolve({ capMinutes: 45, retention: 0.9, future: { x: 1 } });
+    await flushAll();
+    t.mock.timers.tick(10_000);
+    await saving;
+    t.mock.timers.reset();
+  }
+  assert.deepEqual(blind, []);
+});
+
+void test('停用時寫入還在進行：完成後不核對、不通知（L2 第二輪 F3）', async () => {
+  const { state, options } = disk({ capMinutes: 45 });
+  const slow = deferred<undefined>();
+  const store = await started({ ...options, save: data => slow.promise.then(() => options.save(data)) });
+  let count = 0;
+  store.onChange(() => { count++; });
+  const saving = store.change(cap(60));
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  store.close();
+  state.log.length = 0;
+  slow.resolve(undefined);
+  await saving;
+  assert.deepEqual(state.content, { capMinutes: 60 }, '已經送出的寫入做完');
+  assert.deepEqual(state.log, ['save']);
+  assert.equal(count, 0);
+});
+
+void test('停用時核對還在進行：回來也不採用、不通知（L2 第二輪 F3）', async () => {
+  const { options } = disk({ capMinutes: 45 });
+  const back = deferred<unknown>();
+  let saved = false;
+  const store = await started({ ...options, load: () => saved ? back.promise : options.load(), save: data => { saved = true; return options.save(data); } });
+  let count = 0;
+  store.onChange(() => { count++; });
+  const saving = store.change(cap(60));
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  store.close();
+  back.resolve({ capMinutes: 60 });
+  await saving;
+  assert.equal(count, 0);
+  assert.equal(store.value().settings.capMinutes, 45);
+});
+
+void test('兩次都逾時，舊的先回 null：補讀拿到最新的內容（L2 第二輪 F4）', async t => {
+  const a = deferred<unknown>(), b = deferred<unknown>();
+  const { store } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? b.promise : Promise.resolve({ capMinutes: 75 }));
+  const reload = store.reload();
+  await flushAll();
+  t.mock.timers.tick(5000);
+  await reload;
+  a.resolve(null);
+  await flushAll();
+  b.resolve({ capMinutes: 75 });
+  await flushAll();
+  assert.equal(store.value().known, true);
+  assert.equal(store.value().settings.capMinutes, 75);
+});
+
+void test('存檔沒有送出（寫前讀不到）：晚到的第一次讀照樣補讀（L2 第二輪 F4）', async t => {
+  const a = deferred<unknown>();
+  const { store, state } = await timedOut(t, call => call === 1 ? a.promise : call === 2 ? Promise.resolve(undefined) : Promise.resolve({ capMinutes: 45 }));
+  assert.equal(await store.change(cap(60)), 'unreadable');
+  assert.equal(state.saves.length, 0);
+  a.resolve({ capMinutes: 45 });
+  await flushAll();
+  assert.equal(store.value().known, true);
+  assert.equal(store.value().settings.capMinutes, 45);
+});
+
+void test('檔案一直很慢：補讀逾時不再排下一次', async t => {
+  const answers: ReturnType<typeof deferred<unknown>>[] = [];
+  const { store, calls } = await timedOut(t, () => { const d = deferred<unknown>(); answers.push(d); return d.promise; });
+  answers[0].resolve({ capMinutes: 45 });
+  await flushAll();
+  assert.equal(calls(), 2, '補讀一次');
+  t.mock.timers.tick(5000);
+  await flushAll();
+  answers[1].resolve({ capMinutes: 45 });
+  await flushAll();
+  assert.equal(calls(), 2, '補讀逾時後不再排');
+  assert.equal(store.value().known, false);
+});
+
 void test('內容相同的重讀跨過 2/1：通知一次，學期是新的；不寫檔（L2 F6）', async () => {
   const { state, options } = disk({ semester: '國二上', semesterSetOn: '2026-09-15' });
   let today = '2027-01-31';
@@ -344,6 +455,19 @@ void test('內容相同的重讀跨過 2/1：通知一次，學期是新的；�
   await store.reload();
   assert.equal(count, 1);
   assert.equal(state.saves.length, 0);
+});
+
+void test('重讀讀不到但跨過 2/1：照手上的值通知，學期是新的（L2 第二輪 F6）', async () => {
+  const { state, options } = disk({ semester: '國二上', semesterSetOn: '2026-09-15' });
+  let today = '2027-01-31';
+  const store = await started({ ...options, today: () => today });
+  let count = 0;
+  store.onChange(() => { count++; });
+  today = '2027-02-01';
+  state.content = undefined;
+  await store.reload();
+  assert.equal(count, 1);
+  assert.equal(store.semester(), '國二下');
 });
 
 void test('過了 2/1 不寫檔，畫面看到的是今天的學期', async () => {
