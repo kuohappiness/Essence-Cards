@@ -89,6 +89,11 @@ export function createAiCards(deps: AiCardsDeps) {
   }
   /** 寫入的當下問：整個 vault 還沒有這個檔名（D-081）；只在這個路徑沒有檔時問。 */
   const nameFree = (path: string) => (): boolean => !deps.names().has(fileName(path).toLowerCase());
+  /** 製卡成功的回報：通知寫學習目標數，寫成的篇裡的學習目標，候選卡片不算（§7）。 */
+  function finished(job: CardJob): Outcome {
+    const decks = job.save!.decks.filter(deck => !deck.skipped);
+    return { kind: 'done', decks: decks.map(deck => deck.path), targets: decks.reduce((sum, deck) => sum + parseDeck(deck.text).targets.length, 0) };
+  }
   /** 照恢復資料做第 3～7 步；每一步改了恢復資料都先存。 */
   async function run(job: CardJob): Promise<Outcome> {
     const state = deps.state();
@@ -109,9 +114,7 @@ export function createAiCards(deps: AiCardsDeps) {
     };
     try {
       const result = await publish(job, io);
-      // 通知寫學習目標數：寫成的篇裡的學習目標，候選卡片不算（§7）。
-      if (result.kind === 'done') return { ...result, targets: latest.save!.decks.filter(deck => !deck.skipped).reduce((sum, deck) => sum + parseDeck(deck.text).targets.length, 0) };
-      return outcome(latest, result);
+      return result.kind === 'done' ? finished(latest) : outcome(latest, result);
     } catch (error) {
       deps.onError(error);
       return { kind: 'stop', message: '存到一半出了問題，這次停在一半；按「繼續」會從停下的地方接著做' };
@@ -227,27 +230,32 @@ export function createAiCards(deps: AiCardsDeps) {
     }),
     /**
      * 放棄（§5）：只有還沒發布的能放棄。已寫成的卡組照樣是草稿、不刪；開始建了或寫出過的篇，ID 進不再配出的清單。回傳留下的篇。
-     * 快照其實已經寫成（清理前中斷）時不放棄，照發布處理。
+     * 快照其實已經寫成（清理前中斷）時不放棄，只清理、回報成功，不再走一次發布（R6-3）。
      */
     abandon: (job: CardJob): Promise<{ left: string[] } | Outcome> => exclusive<{ left: string[] } | Outcome>(job.id, async () => {
       const latest = current(job);
       if (!latest) return GONE;
+      let found = false;
       if (latest.save?.published) {
         const state = deps.state();
         if (!state) return { kind: 'stop', message: BLOCKED.loading };
         try {
           const text = await state.aiRead(latest.save.snapshotPath);
           if (text === null && state.aiDisplaced(latest.save.snapshotPath)) return { kind: 'stop', message: '外掛用的資料夾不在原位，不知道是不是已經存好了；照提醒把它放回原位，再試一次' };
-          if (text !== null && sha256Hex(text) === latest.save.published.sha256) return run(latest);
-          if (text === null && latest.save.published.attempted) {
+          found = text !== null && sha256Hex(text) === latest.save.published.sha256;
+          if (!found && latest.save.published.attempted) {
             const copy = await publishedElsewhere(latest.save, { read: path => state.aiRead(path), named: deps.named });
-            if (copy === true) return run(latest);
-            if (copy) return { kind: 'stop', message: `讀不到 ${copy.path}，不知道是不是已經存好了；等一下再試` };
+            if (typeof copy === 'object') return { kind: 'stop', message: `讀不到 ${copy.path}，不知道是不是已經存好了；等一下再試` };
+            found = copy;
           }
         } catch (error) {
           deps.onError(error);
           return { kind: 'stop', message: `讀不到 ${latest.save.snapshotPath}，不知道是不是已經存好了；等一下再試` };
         }
+      }
+      if (found) {
+        try { drop(latest); } catch (error) { deps.onError(error); return { kind: 'stop', message: '存不進這台電腦；請再按一次' }; }
+        return finished(latest);
       }
       const { retire, left } = abandonJob(latest);
       deps.store.retire(retire);
