@@ -1,5 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
+import { sourceLinks } from '../deck/index.ts';
 import type { Deck } from '../deck/index.ts';
 import { unitInScope } from './scope.ts';
 import type { ScopeFile } from './scope.ts';
@@ -55,9 +56,13 @@ export function snapshotValid(text: string, key: string, start: string): boolean
   return !paths.includes(null) && new Set(paths).size === paths.length;
 }
 
-/** 這一篇要不要放進切面：自己的單元在範圍內。轉錄稿不算。 */
+/**
+ * 這一篇要不要放進切面：自己的單元在範圍內，或任何一個目標（不管暫停、有沒有 ID、待處理）的出處讀出的單元在範圍內。轉錄稿不算。
+ * 屬性區壞掉、讀不出單元的篇收不到，這是查核的限制，不能推成卡片不存在。
+ */
 export function deckInScope(file: Pick<ScopeFile, 'lines'>, deck: Deck): boolean {
   const { term, subject, unit, isTranscript } = deck.props;
-  if (isTranscript || term === null || subject === null || unit === null) return false;
-  return unitInScope(file, { term, subject, code: unit.code });
+  if (isTranscript || subject === null) return false;
+  if (term !== null && unit !== null && unitInScope(file, { term, subject, code: unit.code })) return true;
+  return deck.targets.some(target => sourceLinks(target.fields.sources, deck.props).some(({ link }) => link.kind === 'unit' && unitInScope(file, { term: link.term, subject, code: link.unit })));
 }

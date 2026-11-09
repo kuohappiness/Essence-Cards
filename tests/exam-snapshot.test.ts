@@ -154,11 +154,18 @@ void test('24 這台的檔讀不到：這次不寫；有效：不寫', async t =
   assert.equal(valid.memory.texts.get(FILE), text);
 });
 
+const LINKED = '    - 出處：國二上 2-1\n';
 for (const [name, text, included] of [
   ['範圍內的草稿', head('2-1', '狀態: 草稿\n') + goal('a'), true],
   ['範圍內的暫停', head('2-1', '狀態: 暫停\n') + goal('a'), true],
   ['範圍外', head('9-1') + goal('a'), false],
   ['範圍外、出處也在範圍外', head('9-1') + goal('a', '    - 出處：國二上 8-1\n'), false],
+  ['出處連到範圍，草稿', head('9-1', '狀態: 草稿\n') + goal('a', LINKED), true],
+  ['出處連到範圍，暫停', head('9-1', '狀態: 暫停\n') + goal('a', LINKED), true],
+  ['出處連到範圍，需要新版', head('9-1', '需要版本: 99.0.0\n') + goal('a', LINKED), true],
+  ['出處連到範圍，沒有 ID', head('9-1') + `- 目標\n${LINKED}    - 問 :: 答\n`, true],
+  ['出處連到範圍，ID 在同一篇重複', head('9-1') + goal('a', LINKED) + goal('a'), true],
+  ['出處連到範圍，啟用篇裡暫停的目標', head('9-1') + goal('a', LINKED + '    - 狀態：暫停\n'), true],
   ['轉錄稿', head('2-1', '來源類型: 課堂錄音\n') + goal('a'), false],
 ] as const) void test('25 哪幾篇：' + name, async t => {
   const { memory } = await launch(t, { [SCOPE]: scope(), [ENGLISH]: ENGLISH_TEXT, [OUTSIDE]: text });
