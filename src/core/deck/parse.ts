@@ -70,6 +70,8 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
     if (doc.errors.length) throw Error('無法解析屬性');
     const data: unknown = doc.toJS();
     if (data !== null && (typeof data !== 'object' || Array.isArray(data))) throw Error('屬性不是對照表');
+    // `null`、`~` 的 toJS 也是 null，但不是空的屬性區（L2 的 R7）：顯示與排程照舊用預設值，紀錄端不把它當成沒寫狀態。
+    if (data === null && doc.contents !== null) props.statusRead = 'invalid';
     const values = (data ?? {}) as Record<string, unknown>;
     /** 這個屬性在檔案的第幾行（從 0 算）：看 YAML 解析出來的鍵，加引號、跳脫、冒號前有空白都找得到；找不到是屬性區開頭那一行。 */
     const lineOf = (key: string): number => {

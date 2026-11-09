@@ -17,6 +17,13 @@ void test('卡組的狀態：沒寫、合法、無效分得出來，status 的�
     ['不是文字', '---\n狀態: [暫停]\n---\n' + body, 'invalid', 'active'],
     ['屬性區寫壞', '---\n狀態: [\n---\n' + body, 'invalid', 'active'],
     ['屬性區沒有結束', '---\n狀態: 暫停\n' + body, 'invalid', 'active'],
+    // toJS 是 null，但不是空的屬性區（L2 的 R7）。
+    ['屬性區只有 null', '---\nnull\n---\n' + body, 'invalid', 'active'],
+    ['屬性區只有 ~', '---\n~\n---\n' + body, 'invalid', 'active'],
+    ['屬性區只有 NULL', '---\nNULL\n---\n' + body, 'invalid', 'active'],
+    ['空的屬性區', '---\n---\n' + body, 'missing', 'active'],
+    ['只有空白行的屬性區', '---\n\n---\n' + body, 'missing', 'active'],
+    ['只有註解的屬性區', '---\n# 備註\n---\n' + body, 'missing', 'active'],
   ];
   for (const [name, text, read, status] of cases) {
     const { props } = parseDeck(text);

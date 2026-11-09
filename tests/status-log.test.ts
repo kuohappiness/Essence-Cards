@@ -210,7 +210,7 @@ void test('§1-8 目標的 lt 搬到別篇：不多寫', async t => {
 });
 
 void test('§1-9 卡組的狀態打到一半、空值、屬性區壞掉：不寫，上次的值不動；改回合法值後照比', async t => {
-  for (const bad of ['---\n狀態: 暫\n---\n', '---\n狀態:\n---\n', '---\n狀態: [\n---\n', '---\n狀態: 暫停\n']) {
+  for (const bad of ['---\n狀態: 暫\n---\n', '---\n狀態:\n---\n', '---\n狀態: [\n---\n', '---\n狀態: 暫停\n', '---\nnull\n---\n', '---\n~\n---\n']) {
     const memory = createMemoryFiles({ [A]: deck('暫停') });
     const { state, tick } = await open(t, memory);
     const before = shorts(memory).length;
