@@ -1,6 +1,6 @@
 # 補上錯過就補不回來的紀錄（給 Claude，本機執行）
 
-狀態：待實作（2026-11-09）：格式查核的[回報](<../Claude Codex Discussion/2026-11-09-record-gaps-format-review.md>)已核對，§1、§2、§4、§6 已照改；程式等 AI 製卡最小版合併後開工。使用者 2026-11-09 選這件排在上線前的第一項。
+狀態：實作中（2026-11-09）：程式在分支 `claude/record-gaps-6d3701`，Windows 實機已跑，等 Codex L2；合併要使用者同意。格式查核的[回報](<../Claude Codex Discussion/2026-11-09-record-gaps-format-review.md>)已核對。使用者 2026-11-09 選這件排在上線前的第一項。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會寫新的檔案格式、追加複習紀錄、改 `state` 的讀取層，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1、§2 開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -206,4 +206,13 @@
 
 ## 結果
 
-延後的測試：（實作後填）
+延後的測試：iPhone 實機寫出基準與切面、同步到電腦、兩台各一份不撞（第 2 類），見[技術債表](../docs/backlog.md#技術債)開頭「補測：」那一列。
+
+**Windows 實機**（§7，建置 `0.4.0+3fb6349`，Obsidian 1.15.0）：用獨立的 Obsidian 與暫存 vault 跑，沒有動測試 vault，所以沒有經過 iCloud。
+
+- 第 1 項：4 篇各一行基準、設定三行；停用再啟用外掛多 0 行。
+- 第 2 項：編輯器打到 `狀態: 暫` 存檔多 0 行，改完 `狀態: 暫停` 多一行；目錄的暫停（`setDeckStatus`，暫存 vault 沒做過備份，先用 `backupReady(true)` 過門檻）多一行。
+- 第 3 項：`紀錄/考試切面/` 一份，4 篇逐字等於磁碟上的卡組；Obsidian 全庫搜尋只找到原本的卡組，`getMarkdownFiles` 沒有切面；重開不多；把資料夾改名後搬回原位。
+- 第 4 項：卡組尾端加 NUL 之後 `unread()` 有這一篇，換回正常後是空的。提醒區的畫面沒有截圖看，讀不到的提示由既有測試涵蓋。
+
+**commit 的切法**：§8 把「§1 的偵測與基準」和「`changeStatus` 改走同一個出口」列成兩個 commit；只做前者時同一次按鈕會記兩行，所以併成一個（`72637d2`）。
