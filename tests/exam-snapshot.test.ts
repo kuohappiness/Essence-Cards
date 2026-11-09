@@ -360,6 +360,71 @@ void test('27 回呼前有還沒讀的通知（卡組、範圍檔），內容相
   }
 });
 
+/** 切面停在列檔、另一份範圍檔停在讀取；跨過 04:00 後 today() 開始查（L2 的 R3）。 */
+async function twoWaits(t: TestContext) {
+  const memory = createMemoryFiles(VAULT);
+  const list = holdList(memory);
+  const h = await open(t, memory, { now: at('2026-10-28T03:59:00.000') });
+  h.setNow(OPEN);
+  h.state.today();
+  await h.pump(0);
+  assert.equal(list.held(), true);
+  const other = 'Essence Cards/考試範圍/2026-10-28 另一份.md';
+  const read = memory.holdRead(other);
+  memory.write(other, scope('2026-10-28', '2026-10-29', '提前結束: 2026-10-27\n', '識別碼: other1\n'));
+  await h.pump();
+  await read.started;
+  const edit = (): Promise<{ kind: string }> => h.state.setExam({}, { path: SCOPE, id: 'x7f3k2' });
+  return { memory, h, list, read, edit };
+}
+
+void test('27 切面先等、範圍存檔後等：讀完兩個都醒，切面寫得出來', async t => {
+  const { memory, h, list, read, edit } = await twoWaits(t);
+  list.release();
+  await h.pump(0);
+  const saved = edit();
+  await h.pump(0);
+  read.release();
+  await h.pump(0);
+  assert.equal((await saved).kind, 'done');
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+});
+
+void test('27 範圍存檔先等、切面後等：讀完兩個都醒，存檔有結果', async t => {
+  const { memory, h, list, read, edit } = await twoWaits(t);
+  const saved = edit();
+  await h.pump(0);
+  list.release();
+  await h.pump(0);
+  read.release();
+  await h.pump(0);
+  assert.equal((await saved).kind, 'done');
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+});
+
+void test('27 兩個等待各自逾時：一份一直讀不完，存檔回 unread，之後的查核還會開始', async t => {
+  const { memory, h, list, read, edit } = await twoWaits(t);
+  list.release();
+  await h.pump(0);
+  const saved = edit();
+  await h.pump(0);
+  await h.pump(2000);
+  assert.deepEqual(await saved, { kind: 'blocked', reason: 'unread' });
+  assert.deepEqual(written(memory), []);
+  read.release();
+  await h.pump(0);
+  memory.write(NATURE, NATURE_TEXT.replace('答 k3m9x2', '改過的答'));
+  await h.pump();
+  // 範圍檔讀完的那一次查核也在列檔停著，放行後看到卡組變了，再查一輪（每一輪都會停在列檔）。
+  list.release();
+  await h.pump(0);
+  list.release();
+  await h.pump(0);
+  assert.equal(rows(memory)[1].text, NATURE_TEXT.replace('答 k3m9x2', '改過的答'));
+});
+
 void test('28 零篇不寫，之後有卡組再寫', async t => {
   const h = await launch(t, { [SCOPE]: scope() });
   assert.deepEqual(written(h.memory), []);
