@@ -483,6 +483,60 @@ void test('切面的 I/O 有上限：寫入卡住報 write、當天不重試；�
   assert.deepEqual(written(memory), [NEW_FILE]);
 });
 
+/** 回呼已經算好內容、空檔先出現，真正寫完要等 finish；fail 是放行時失敗（L2 的 R11）。 */
+function slowWrite(memory: MemoryFiles): { finish: (fail?: boolean) => void } {
+  const modify = memory.files.modify.bind(memory.files);
+  let finish: (fail?: boolean) => void = () => { /* 開始寫才換成真的。 */ }, slow = true;
+  memory.files.modify = async (path, edit) => {
+    if (path !== FILE || !slow) return modify(path, edit);
+    slow = false;
+    const complete = edit('', false);
+    memory.write(path, '');
+    const fail = await new Promise<boolean | undefined>(resolve => { finish = resolve; });
+    if (fail) { memory.remove(path); throw Error('寫不進去'); }
+    memory.write(path, complete);
+  };
+  return { finish: fail => { finish(fail); } };
+}
+const BEFORE_FOUR = at('2026-10-29T03:59:59.950'), AFTER_FOUR = at('2026-10-29T04:00:00.000');
+
+void test('切面的 I/O 有上限：寫入逾時、底層還在寫，跨過清晨 4 點再查：不另寫序號，寫完只有一份（L2 的 R11）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const slow = slowWrite(memory);
+  const h = await open(t, memory, { now: BEFORE_FOUR });
+  assert.equal(memory.texts.get(FILE), '');
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(h.errors.map(([, source]) => source), ['write']);
+  h.setNow(AFTER_FOUR);
+  h.state.today();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  slow.finish();
+  await h.pump(0);
+  memory.notify(NATURE);
+  await h.pump();
+  assert.deepEqual(written(memory), [FILE]);
+  assert.equal(rows(memory).length, 3);
+  assert.deepEqual(h.errors.map(([, source]) => source), ['write']);
+});
+
+void test('切面的 I/O 有上限：逾時的寫入後來失敗了，換一天照常再寫（相鄰情況）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const slow = slowWrite(memory);
+  const h = await open(t, memory, { now: BEFORE_FOUR });
+  await h.pump(STUCK);
+  await h.pump(0);
+  slow.finish(true);
+  await h.pump(0);
+  assert.deepEqual(written(memory), []);
+  h.setNow(AFTER_FOUR);
+  h.state.today();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.equal(rows(memory).length, 3);
+});
+
 /** 列檔之後、modify 之前同名的檔出現了（同步、還原、前一個外掛實例晚到的寫入；L2 的 R6）。 */
 function appearLate(memory: MemoryFiles, text: string): void {
   const modify = memory.files.modify.bind(memory.files);
