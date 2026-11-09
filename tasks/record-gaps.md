@@ -1,6 +1,6 @@
 # 補上錯過就補不回來的紀錄（給 Claude，本機執行）
 
-狀態：等合併（2026-11-10）：程式在分支 `claude/record-gaps-l2-fbaa8d`，[Codex L2](<../Claude Codex Discussion/2026-11-09-record-gaps-l2.md>) 四輪結束，R18 已修、其餘使用者接受，Windows 實機通過；合併要使用者同意。格式查核的[回報](<../Claude Codex Discussion/2026-11-09-record-gaps-format-review.md>)已核對。使用者 2026-11-09 選這件排在上線前的第一項。
+狀態：已合併進 `main`（2026-11-10）；[Codex L2](<../Claude Codex Discussion/2026-11-09-record-gaps-l2.md>) 四輪結束，R18 已修、其餘使用者接受，Windows 實機通過；iPhone 延後（技術債表）；要升正式版才開始收資料，升版先問使用者。格式查核的[回報](<../Claude Codex Discussion/2026-11-09-record-gaps-format-review.md>)已核對。使用者 2026-11-09 選這件排在上線前的第一項。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會寫新的檔案格式、追加複習紀錄、改 `state` 的讀取層，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1、§2 開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
