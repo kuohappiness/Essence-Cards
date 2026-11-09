@@ -1,6 +1,6 @@
 # 設定頁：每日時間上限、目標保持率、目前學期（給 Claude，本機執行）
 
-狀態：使用者 2026-11-09 同意；§1～§3 等格式查核（[請求](settings-page-format-review.md)），查核核對完才開始寫程式。
+狀態：實作中（2026-11-09）：使用者同意；格式查核的[回報](<../Claude Codex Discussion/2026-11-09-settings-page-format-review.md>)已核對，§1～§4、§7 已照改。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。新增外掛會寫的檔案格式（`data.json`）、改 `state` 與排程的輸入，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1～§3 開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -25,7 +25,7 @@
 | 步驟 | 內容 | 誰 |
 |---|---|---|
 | 0 | 使用者看過這份，決定下面兩題：完成 | 使用者 |
-| 1 | §1～§3 格式查核（[請求](settings-page-format-review.md)），Claude 核對回報、改這份說明 | Codex → Claude |
+| 1 | §1～§3 格式查核（[請求](settings-page-format-review.md)），Claude 核對回報、改這份說明：完成 | Codex → Claude |
 | 2 | 程式與測試：§4 → §1、§2 → §3 → §5 | Claude |
 | 3 | merge 最新的 `main`（AI 製卡最小版先合併，兩邊都改 `src/main.ts` 的 `createState` 那一行）；§8 Windows 實機（先確認測試 vault 沒有別的 session 在用） | Claude |
 | 4 | Codex L2，通過後請使用者同意合併 | Codex → Claude → 使用者 |
@@ -47,7 +47,8 @@
   "capMinutes": 45,
   "retention": 0.85,
   "semester": "國二上",
-  "semesterSetOn": "2026-09-15"
+  "semesterSetOn": "2026-09-15",
+  "examCountdown": false
 }
 ```
 
@@ -60,7 +61,8 @@
 | `examCountdown` | `true`、`false` | `true` |
 
 - **平的欄位，不包物件**：「只改這次的欄位、保留不認得的欄位」在每一層都成立，不用處理物件裡面的未知欄位。
-- **讀不懂的值不動**：型別不對或不在選項裡，當成沒有設定，檔案裡的原值留著，使用者改那一項或按恢復預設時才換掉。
+- **讀不懂的值不動**：型別不對或不在選項裡，當成沒有設定，檔案裡的值留著，使用者改那一項或按恢復預設時才換掉。「不動」指值相同：Obsidian 會把整份 JSON 重新排版，空白與數字的寫法不保證。
+- **有沒有存過看原始物件**：外部把 `{}` 改成 `{"capMinutes":30}`，恢復預設會出現，排程不重排。`semester` 與 `semesterSetOn` 一起寫、一起刪，底稿只剩一個也一樣。
 - **`semester` 存的是選的當下，不是現在的學期**：現在的學期每次用時算（§4），外掛不會因為過了 2/1 就去改寫這個檔。
 - **沒有格式版本欄位**：只增不改，舊版忽略不認得的欄位（D-149 第 3 點的原則）。
 - `data.json` 現在還不存在：沒有檔就是全部用預設值，載入時**不建立**。使用者第一次改設定才出現。
@@ -69,18 +71,21 @@
 
 **Obsidian 的實際行為**（讀 Windows 1.15.0 的 `app.js` 的 `readJson`、`writeJson`、`_onConfigFileChange`，`%APPDATA%\obsidian\obsidian-1.15.0.asar`；iPhone 待實測）：
 
-- `loadData()`：檔案不存在回 `null`；讀不到或不是合法 JSON 時**吞掉錯誤、回 `undefined`**。型別檔只寫 `null`，這兩個的差別不是公開的保證，所以實機要對照一次（§8 第 3 點）。
+- `loadData()`：檔案不存在（`ENOENT`）回 `null`，內容是合法 JSON 的 `null` 也回 `null`；其他讀不到或不是合法 JSON 時**吞掉錯誤、回 `undefined`**。型別檔只寫 `null`，這兩個的差別不是公開的保證，所以實機要對照一次（§8 第 3 點）。
 - `saveData()`：**寫不進去時也照常完成**，錯誤被吞掉，不能用「沒有丟錯」當成存好了。
-- 自己 `saveData` 不會觸發 `onExternalSettingsChange`；設定資料夾的監看看起來只有電腦的 adapter 才有，iPhone 可能不會呼叫。
+- `onExternalSettingsChange` 只在 `data.json` 的修改時間比外掛記的新時呼叫，自己 `saveData` 通常不會觸發；刪檔、修改時間相同或較舊的同步替換不會呼叫。所以它只當「該重讀了」的提示。iPhone 會不會呼叫待實測。
 
 規則：
 
-1. **存檔**（D-149 第 7 點）：一次一件排隊。`loadData()` → 只改這次的欄位 → `saveData()` → 再 `loadData()` 核對這次的欄位真的是新值。
-2. **不蓋掉**：寫前讀到 `undefined`、不是物件（陣列、數字）、或等超過 5 秒沒回來，這次不寫，回報失敗。讀到 `null` 當成空物件。
+1. **存檔**（D-149 第 7 點）：`loadData()` → 只改這次的欄位 → `saveData()` → 再 `loadData()` 核對這次的欄位真的是新值（恢復預設看欄位真的不見）。**存檔與重讀走同一條隊伍，一次一件**，較早開始的讀不會蓋掉較新的結果。寫入 10 秒沒回來先回報失敗，隊伍仍等它結束才放行，舊的寫入不會晚到蓋掉新的。讀回的值和這次要存的不同時，採用讀回的值並回報失敗。
+2. **不蓋掉**：寫前讀到 `undefined`、不是物件（陣列、數字）、等超過 5 秒沒回來，或**這次執行讀到過檔、現在卻回 `null`**（例如 iPhone 的佔位檔回報成不存在；外掛自己不會刪這個檔），這次不寫，回報失敗。其他情況的 `null` 當成空物件。
 3. **選過的值就算等於預設也存**；「恢復預設」才刪欄位，刪完是空物件也留著檔。
-4. **重讀的時機**：載入時（`layout ready` 之後，和 `state` 同時開始）、`onExternalSettingsChange`、打開設定頁、iPhone 上 Obsidian 回到前景（`visibilitychange`）、每次存檔後。不另加檔案監看，不自動回寫（技術債表那一列）。
+4. **重讀的時機**：載入時（`layout ready` 之後，和 `state` 同時開始；在那之前的重讀不做）、`onExternalSettingsChange`、打開設定頁、iPhone 上 Obsidian 回到前景（`visibilitychange`）、每次存檔後。不另加檔案監看，不自動回寫（技術債表那一列）。
 5. **讀不到時**：維持目前手上的值；一次都沒讀成功時用預設值，並標成「不知道」（`known: false`，§3）。之後任何一次重讀成功就更新。
 6. **失敗時使用者看到什麼**：一則通知「Essence Cards：設定暫時讀不到，這次沒有存下，請再試一次」（寫入失敗時「寫不進去」），下拉選單回到實際的值，記進錯誤紀錄（`where: "ui"`）。
+7. **跨裝置的限制**：本機核對只證明當時這台看到的值。兩台在同步完成之前各改一項，iCloud 留下其中一份，另一項會退回去；外掛不合併、不挑衝突副本。一台改完等同步再改另一台就不會發生，寫進說明書的注意事項。要無損得換存法，只有幾個欄位、重選一次就回來，不值得。
+8. **不等備份**：D-150 第 2 點的第一次備份在新版啟動時自動做；第 3 點的閘門是為了卡組。設定最壞的損失是重選幾個值，擋住的話備份失敗時連上限都調不了。
+9. **發布前比較要帶設定**（D-149 第 5 點）：`--check` 的凍結輸入多帶 `data.json`，`tools/compare/adapter.ts` 在那一版有 `src/core/settings/` 時用它自己的讀法傳給 `createState`，沒有的版本（`0.3.0`）照用預設。否則改過上限或保持率的 vault，新舊版都用預設值比，只在非預設值才出現的差異看不到。
 
 程式放在新的純模組 `src/core/settings/`：選項表、預設值、讀（`raw → 值`）、改（`raw + 這次的變更 → raw`）、算學期、排隊存檔的邏輯（`load`、`save` 由外層傳入，不碰 Obsidian）。`state` 的 `DEFAULT_SETTINGS` 改成從這裡拿，只留一份。
 
@@ -98,16 +103,17 @@ State.applySettings(value: SettingsValue): void;       // 設定頁、別台裝�
 State.currentSettings(): { settings: Settings; semester: string | null; examCountdown: boolean; known: boolean };
 ```
 
-- **不晚一步**：`state` 的第一次載入本來就在等範圍檔（`EXAM_WAIT`），`settingsFirst` 併進同一段等待，不增加載入時間，第一次排今天的份就用對的值。`createState` 維持同步呼叫，`src/main.ts` 只多一個選項；`StateOptions.settings` 保留給測試。
-- **第一次沒等到**（2 秒內沒回來）：先用預設值、`known: false`，等讀到時由 `applySettings` 更新。
+- **不晚一步**：`state` 的第一次載入本來就在等範圍檔（`EXAM_WAIT`），`settingsFirst` 併進同一段等待，不串接第二段逾時，第一次排今天的份就用對的值。它一定會完成（2 秒內沒讀到時交出 `known: false` 的預設值），不會拒絕。有傳 `settingsFirst` 時以它為準，`settings` 只在沒傳時用。`createState` 維持同步呼叫，`src/main.ts` 只多一個選項；`StateOptions.settings` 保留給測試。
+- **第一次沒等到**（2 秒內沒回來）：先用預設值、`known: false`，等讀到時由 `applySettings` 更新。`applySettings` 比 `settingsFirst` 先到時，`settingsFirst` 的結果不採用。確認沒有檔是 `known: true`，預設值就是真的值。
 - **`applySettings`**：`capMinutes`、`retention`、`filter` 真的變了才重排並通知 `onChange`（`replan`）；只有學期或考試倒數變了只通知，不重排；全部相同什麼都不做。還沒 ready 時只記下；`close()` 之後不理。
 - **`currentSettings().semester`** 是照 `state` 的時鐘算好的今天的學期（`國二下`），沒設定是 `null`。
 
 **給補紀錄缺口的介面**：`set: cap`、`retention`、`filter`、`semester` 由它寫，設定頁不寫紀錄行。
 
-- 讀現在的值：`currentSettings()`；`known` 是 `false` 時不比、不寫，否則會把還沒讀到的預設值寫成基準。
-- 呼叫點：`applySettings` 裡有一個內部函式 `settingsChanged()`，值變了或 `known` 由 `false` 變 `true` 時呼叫，偵測的出口接在這裡。
-- `semester`：[record-gaps §1](record-gaps.md#1-狀態與設定的變更紀錄要格式查核) 的表寫「不比，設定頁做好才有這個值」，兩邊都合併後改成和 `cap` 同一種比法，`currentSettings().semester` 是 `null` 時不比；`val` 就是這個字串（[syntax §5](../docs/syntax.md#5-複習紀錄) 的 `國二下`）。過了 2/1 值自己變，第一次比到時寫一行，時間是外掛發現的時候（D-105 的代價）。這一列由後合併的那一件改。
+- 讀現在的值：`currentSettings()`；`known` 是 `false` 時不比、不寫，否則會把還沒讀到的預設值寫成基準。寫的是實際採用的值（讀不懂的欄位是預設值）。
+- 呼叫點：`applySettings` 裡採用新值之後、重排與通知之前，留了註解標出的位置，偵測的出口接在這裡（先採用、先排入紀錄，再通知會讀新排程的畫面）；值變了或 `known` 由 `false` 變 `true` 時都會走到。
+- 第一次的值可能直接進 `load`、不經 `applySettings`，所以 record-gaps §1 原本「第一次載入、每一批讀完的收尾」也要比，紀錄補齊後值相同也要比。
+- `semester`：[record-gaps §1](record-gaps.md#1-狀態與設定的變更紀錄要格式查核) 的表寫「不比，設定頁做好才有這個值」，兩邊都合併後改成和 `cap` 同一種比法，`currentSettings().semester` 是 `null` 時不比；`val` 就是這個字串（[syntax §5](../docs/syntax.md#5-複習紀錄) 的 `國二下`）。過了 2/1 值自己變，`data.json` 沒變也不會有 `applySettings`，所以出口在換日後第一次排今天的份時也要比一次，時間是外掛發現的時候（D-105 的代價）。學期選回 `未設定` 不寫行：學期不影響排程，清除不代表學生不在那個學期。這一列由後合併的那一件改，改完加一個交接的驗收。
 
 ## 4. 目前學期
 
@@ -118,9 +124,9 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 
 和「過一個日期就往前一格」比，這個寫法多處理一種常見情形：一月底選好「國二下」、七月底選好「國二上」，到了那一天不會多跳一格。代價：三月時手動選回「國二上」（重讀或補舊進度），到 8/1 不會變成國三上，要再手動改一次（D-104 的「重讀這類少見的情況手動改回來」）。
 
-不寫檔的好處：兩台裝置不會各寫一次、不會有衝突，時鐘不準或很久沒打開也照算，往返沒有狀態。今天用清晨 4 點換日的日子（`dayOf`），和複習同一個換日。
+不寫檔的好處：兩台裝置不會各寫一次、不會有衝突，時鐘不準或很久沒打開也照算，往返沒有狀態。今天用清晨 4 點換日的日子（`dayOf`，本機時區），和複習同一個換日；時鐘回到 `semesterSetOn` 之前時照選的值。`semesterSetOn` 要是真的日期（`2027-02-29` 不算，`2028-02-29` 算）。
 
-**用在哪裡**：`paintCatalog` 的 `latest`（目錄與考試範圍預設展開的學期，範圍畫面預先勾選也看它）。目前學期有卡組就展開它（別名算同一個學期），沒有就照現在的「有卡組的最新學期」，沒設定也一樣。`src/core/catalog/index.ts` 的 `latestTerm` 註解已經留了這個位置。學期收合照舊只記使用者動過的。
+**用在哪裡**：`paintCatalog` 的 `latest`（目錄與考試範圍預設展開的學期，範圍畫面預先勾選也看它）。`catalog()` 與 `examCatalog()` 都要帶。目前學期有卡組就展開它（比 `termKey`，別名算同一個學期，交出去的是目錄群組的原字，例如 `八上`，畫面才對得到），沒有就照現在的「有卡組的最新學期」，沒設定也一樣。`src/core/catalog/index.ts` 的 `latestTerm` 註解已經留了這個位置。學期收合照舊只記使用者動過的。
 
 ## 5. 畫面
 
@@ -166,14 +172,17 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 
 10. `settingsFirst` 給 `capMinutes: 5`：`ready()` 後第一次 `today()` 的份就照 5 分鐘（份數和直接傳 `settings` 相同），排程只算了一次。
 11. `settingsFirst` 3 秒才回來：`ready()` 在 2 秒多完成、用預設值、`known: false`；回來後重排一次、`known: true`。
-12. `applySettings` 上限 30 → 5：`onChange` 通知一次，`today()` 的份變少；上限調回 30：回到原本的份。今天已答的目標，改上限前後都算完成（`progress` 的完成數相同）。
+12. `applySettings` 上限 30 → 5：`onChange` 通知一次，`today()` 的份變少；上限調回 30：回到原本的份。今天已答對的目標改上限後不重出，作答還在 `history`。完成數算新的份裡完成了幾個：一科 40 張答第 1 張是 1/40 → 1/20；答第 26 張是 1/40 → 0/20，調回 30 又是 1/40（核對時實跑的數字；只有當天做過排在後面的卡又調低上限才會這樣）。手上的卡移出份內時，那一張照樣可以記一次作答，下一張照新的份。
 13. `retention` 0.8 → 0.95：到期日變早的目標出現在今天的份裡（字面的例子，用手算的時間）；考前提高（D-078）的 `max(設定, 0.9)` 照舊：設定 0.95 時範圍內用 0.95。
 14. 值完全相同再呼叫十次：不重排（`today()` 回同一個物件）、`onChange` 零次、不多寫任何紀錄行。
 15. 只有學期或考試倒數變：`onChange` 一次，`today()` 同一個物件。
-16. `ready` 之前呼叫 `applySettings`：不丟錯，第一次排程用它。`close()` 之後呼叫：不通知。
-17. `known` 由 `false` 變 `true`、值相同：不重排，`settingsChanged` 呼叫一次（給補紀錄缺口；用 `currentSettings().known` 看得到）。
-18. 外部改了 `data.json`（呼叫 store 的重讀）：值真的變了才 `applySettings` 重排；內容相同不重排。
+16. `ready` 之前呼叫 `applySettings`：不丟錯，第一次排程用它，之後才完成的 `settingsFirst` 不蓋掉它。`close()` 之後呼叫：不通知；遲到的 `settingsFirst` 也不理。
+17. `known` 由 `false` 變 `true`、值相同：不重排，`currentSettings().known` 變 `true`。
+18. 外部改了 `data.json`（呼叫 store 的重讀）：值真的變了才 `applySettings` 重排；內容相同不重排。外部只補上和預設相同的欄位：畫面多恢復預設，`today()` 同一個物件。
 19. `applySettings` 不寫任何紀錄行、不寫任何卡組（`Files` 的寫入次數為零）。
+32. 晚到的舊讀不蓋新值：重讀還在等時存檔，隊伍依序，最後的值是存檔的值。第一筆失敗後第二筆照常。寫入逾時回報失敗，第二筆等它結束才開始。
+33. 這次執行讀到過檔、之後 `load` 回 `null`：不寫。合法 JSON 的 `null`（沒讀到過檔）：當空物件。確認沒有檔時 `known` 是 `true`，暫時讀不到才是 `false`。
+34. 同一時段換日、範圍變動、設定變動，最後一次排程同時用到新的日子、範圍與設定。
 
 **§4 學期**（預期值是手算的字面值）
 
@@ -195,19 +204,20 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 | 國二上 | 2027-03-01 | 2027-01-01 | 國二上 |
 
 20. 上表逐列通過。
-21. 清晨換日：`國二上` 設在 2026-09-15，2027-02-01 03:59 還是國二上，04:00 是國二下（透過 `createState` 的 `now`）。
+21. 清晨換日：`國二上` 設在 2026-09-15，2027-02-01 03:59 還是國二上，04:00 是國二下；`國二下` 設在 2027-03-01，2027-08-01 03:59 還是國二下，04:00 是國三上（透過 `createState` 的 `now`）。`semesterSetOn` 是 `2027-02-29`：沒有學期；`2028-02-29`：有。
 22. 過了 2/1 不寫 `data.json`：`save` 零次。
-23. 目錄：目前學期 `國二上`，有 `國二上`、`國二下` 的卡組：`catalog().latest` 是國二上；卡組寫 `八上` 也算。目前學期沒有卡組、沒設定：照舊是最新的學期。排程不受影響。
+23. 目錄：目前學期 `國二上`，有 `國二上`、`國二下` 的卡組：`catalog().latest` 與 `examCatalog().latest` 都是國二上；卡組寫 `八上` 時 `latest` 是 `八上`，考試範圍的預先勾選找得到它。目前學期沒有卡組、沒設定：照舊是最新的學期。排程不受影響。
 
 **§5 畫面**（`tests/helpers/obsidian.ts` 的替身補上 `loadData`、`saveData` 與會記錄控制項的 `Setting`，只測接線）
 
 24. 選項與 D-104 逐項相同（上限 9 項、保持率 6 項、學期 25 項含未設定），預設選中 30、80%、未設定，考試倒數打開。
-25. 沒存過時沒有恢復預設，存過才有；按了欄位不見、選單回到預設。
+25. 沒存過時沒有恢復預設，存過才有（`examCountdown: false` 也算）；按了欄位不見、選單回到預設。
 26. 存檔失敗：有通知，選單回到實際的值。
 27. 設定頁的文字沒有「給家長」「學生」（D-156）。
 28. 外掛載入到 layout ready 之前沒有呼叫 `loadData`（T12）。
 29. 手機：`visibilitychange` 回到前景時重讀；電腦不多讀。
 30. 考試倒數關掉：有生效範圍時，入口每一列的 `countdown` 是 `null`，`examSubject`（目錄）照舊有字，`today()` 同一個物件；打開後入口的倒數回來。
+31. 發布前比較：凍結的 `data.json` 上限 5：有 `src/core/settings/` 的版本今天的份照 5 分鐘算；沒有的版本照預設；凍結資料裡沒有 `data.json` 時兩邊都是預設。
 
 ## 8. Windows 實機（Claude 用開發版跑，先確認測試 vault 沒有別的 session 在用；結束後把 `data.json` 還原）
 
@@ -223,7 +233,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 
 ## 9. commit 的切法
 
-一個決定一個 commit：`core/settings` 的讀與改；學期的計算；排隊存檔與核對；`state` 的 `applySettings` 與第一次載入；`latest` 接目前學期；設定頁的四列與入口的倒數開關；重讀的時機（`onExternalSettingsChange`、前景）；文件。
+一個決定一個 commit：`core/settings` 的讀與改；學期的計算；排隊存檔與核對；`state` 的 `applySettings` 與第一次載入；`latest` 接目前學期；設定頁的四列與入口的倒數開關；重讀的時機（`onExternalSettingsChange`、前景）；發布前比較帶設定；文件。
 
 ## 結果
 
