@@ -21,6 +21,8 @@ import { existingTargets } from '../core/ai/index.ts';
 import type { ExistingNow, ExistingTarget } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
+import { createObserver } from './observe.ts';
+import type { Observation } from './observe.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
 import { appendLine, createLogWriter, dayOf, dayStart, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
 import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, QueuedLine, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
@@ -226,11 +228,11 @@ export interface State {
   fillIds(path: string): Promise<boolean>;
   /**
    * 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只改屬性區的 `狀態`，和補 ID 走同一條寫入（同一列、同樣的門檻，手機回 blocked phone）；editor 是開著那篇的編輯器，沒開著是 null。
-   * 改了字（done、saved）才記一行 `set: status`；已經是這個值、草稿、檔不見了是 unchanged；屬性區讀不懂、只改一行讀不回來是 unwritable，都不寫。寫不進去回 failed，不丟錯。
+   * `set: status` 由偵測的出口在讀回來採用之後記，一次變更一行（tasks/record-gaps.md §1），saved 要等之後讀到；已經是這個值、草稿、檔不見了是 unchanged；屬性區讀不懂、只改一行讀不回來是 unwritable，都不寫。寫不進去回 failed，不丟錯。
    */
   setDeckStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
   /**
-   * 草稿 → 啟用（tasks/ai-cards-mvp.md §7）：和 setDeckStatus 同一條寫入、同樣的門檻，只改這一篇的 `狀態: 啟用`；寫成才記一行 `set: status`（`val: 啟用`）。
+   * 草稿 → 啟用（tasks/ai-cards-mvp.md §7）：和 setDeckStatus 同一條寫入、同樣的門檻，只改這一篇的 `狀態: 啟用`；寫成後一樣由偵測的出口記一行 `set: status`（`val: 啟用`）。
    * 不是草稿（啟用、暫停）是 unchanged；需要新版、屬性區讀不懂的照 setDeckStatus。
    */
   activateDraft(path: string, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
@@ -383,6 +385,34 @@ export function createState(options: StateOptions): State {
     record({ set: 'app', val: options.build });
     appState = 'queued';
   }
+  const observer = createObserver({ version, own: () => [...sources].filter(([path]) => own(path)), write: entry => { record(entry); } });
+  const STATUS_TEXT = { draft: '草稿', active: '啟用', paused: '暫停' } as const;
+  /** 這台現在看到的狀態與設定（tasks/record-gaps.md §1 的表）；無效的、不確定身分的不在裡面，上次的值不動。 */
+  function observations(): Observation[] {
+    const list: Observation[] = [];
+    // deckList 已經不含需要新版的卡組；裡面和需要新版的卡組同 ID 的目標由 permits 擋。
+    for (const { path, deck } of deckList) {
+      const { props, targets } = deck;
+      if (!props.isTranscript && props.statusRead !== 'invalid' && (props.statusRead === 'valid' || targets.length)) {
+        list.push({ entry: { set: 'status', deck: path, val: STATUS_TEXT[props.status] }, baseline: true });
+      }
+      const skip = tracker.lines(path);
+      for (const target of targets) {
+        if (target.id === null || skip.has(target.line) || target.fields.statusInvalid) continue;
+        const entry = { set: 'status', lt: target.id, val: target.fields.paused ? '暫停' : '啟用' } as const;
+        if (permits(entry)) list.push({ entry, baseline: target.fields.paused });
+      }
+    }
+    list.push({ entry: { set: 'cap', val: settings.capMinutes }, baseline: true });
+    list.push({ entry: { set: 'retention', val: settings.retention }, baseline: true });
+    list.push({ entry: { set: 'filter', val: [...settings.filter] }, baseline: true });
+    return list;
+  }
+  /** 偵測的唯一出口（§1）：第一次載入、每一批讀完的收尾、自己寫回被採用時都比一次。有讀不到的、紀錄不完整時不比，補齊後一定再比。 */
+  function observe(): void {
+    if (life.closed || unread.size || history.incomplete) return;
+    observer.compare(observations());
+  }
   /** 給 planToday 的卡組：拿掉待處理與用了重複 ID 的目標（W5 §8-5、D-157：不出題）。 */
   let planList: DeckEntry[] = [];
   /** 需要新版的卡組（路徑照字串排序）與它們的 ID（候選也算）。 */
@@ -440,6 +470,8 @@ export function createState(options: StateOptions): State {
     if (text === undefined) return;
     deckMap.set(path, parseDeck(text));
     rebuild();
+    // 先排入紀錄，再通知會讀新排程的畫面。
+    observe();
     replan();
   }
 
@@ -607,7 +639,11 @@ export function createState(options: StateOptions): State {
       if (tracker.revision() !== revision) decksChanged = true;
       if (decksChanged) rebuild();
       // 第一次載入時由 load() 在紀錄那一批之後比；之後是讀不到的自己的紀錄終於讀到了。
-      if (life.loaded) checkApp();
+      if (life.loaded) {
+        checkApp();
+        // 內容和快取相同也要比：這一批可能正好補齊了讀不到的。
+        observe();
+      }
       if (life.loaded && (decksChanged || logsChanged)) replan();
     };
   }
@@ -635,6 +671,7 @@ export function createState(options: StateOptions): State {
     if (life.closed) throw new Closed();
     // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
     checkApp();
+    observe();
     life.loaded = true;
     current = plan(input());
     const end = performance.now();
@@ -678,7 +715,6 @@ export function createState(options: StateOptions): State {
     };
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
     if (unwritable) return { kind: 'unwritable' };
-    if (result.kind === 'done' || result.kind === 'saved') record({ set: 'status', deck: path, val: value });
     return result;
   }
 

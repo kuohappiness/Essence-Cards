@@ -126,11 +126,13 @@ void test('2-2 answer 拒絕停掉的目標：讀不懂的紀錄行停掉的、�
   assert.equal(h.state.answer({ lt: 'gggggg', r: 'good', v: '12345678' }), null);
   assert.equal(h.state.answer({ lt: 'bbbbbb', r: 'miss', src: 'mistake' }), null);
   assert.equal(h.state.answer({ set: 'status', lt: 'gggggg', val: '暫停' }), null);
+  await h.state.flush();
+  const base = (h.texts.get(own) ?? '').trim().split('\n').length;
   const kept = h.state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
   assert.equal(typeof kept, 'string');
   assert.equal(typeof h.state.answer({ set: 'cap', val: 20 }), 'string');
   await h.state.flush();
-  const written = (h.texts.get(own) ?? '').trim().split('\n').map(line => JSON.parse(line) as { lt?: string; set?: string }).filter(line => line.set !== 'app');
+  const written = (h.texts.get(own) ?? '').trim().split('\n').slice(base).map(line => JSON.parse(line) as { lt?: string; set?: string }).filter(line => line.set !== 'app');
   assert.deepEqual(written.map(line => line.lt ?? line.set), ['aaaaaa', 'cap']);
   assert.deepEqual(h.state.history().reviews.map(r => r.lt), ['aaaaaa']);
 });

@@ -15,16 +15,20 @@ const head = (extra = ''): string => `---\n年級學期: 國二上\n科目: 英�
 const targets = (...ids: string[]): string => ids.map(id => `- 目標 ${id} ^${id}\n    - ${id} 的題目 :: 答\n`).join('');
 const DECKS = { [WORDS]: head('狀態: 啟用\n') + targets('a', 'b'), [REST]: head() + targets('c') };
 
+const lines = (memory: MemoryFiles): string[] => (memory.texts.get(LOG) ?? '').split('\n').filter(Boolean);
 interface Harness extends MemoryFiles { state: State; unit: () => UnitView; logged: () => Record<string, unknown>[] }
 async function setup(t: TestContext, texts: Record<string, string> = DECKS, options: Partial<StateOptions> = {}): Promise<Harness> {
   const memory = createMemoryFiles(texts);
   const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, stuckAfter: 20, now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480, onError() {}, ...options });
   t.after(() => state.close());
   await state.ready();
+  // 載入時的基準行不算：這裡看的是按下去之後多的行。
+  await state.flush().catch(() => {});
+  const base = lines(memory).length;
   return {
     ...memory, state,
     unit: () => state.catalog().terms[0].subjects[0].units[0],
-    logged: () => (memory.texts.get(LOG) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>),
+    logged: () => lines(memory).slice(base).map(line => JSON.parse(line) as Record<string, unknown>),
   };
 }
 const statuses = (h: Harness): Record<string, string> => Object.fromEntries(h.unit().decks.map(deck => [deck.path, deck.status]));
@@ -180,7 +184,8 @@ for (const [how, editing] of [['沒開著的筆記', false], ['開著的筆記',
     // 換成草稿：不是暫停也不是啟用。
     const h2 = await setup(t);
     assert.equal((await pressThenOverwrite(h2, WORDS, '暫停', editing, () => head('狀態: 草稿\n') + targets('a', 'b'))).kind, 'stale');
-    assert.deepEqual(await changes(h2), []);
+    // 這篇現在真的是草稿：按鈕的值不記，採用讀到的值記一行（tasks/record-gaps.md §1）。
+    assert.deepEqual(await changes(h2), [{ set: 'status', deck: WORDS, val: '草稿' }]);
   });
 
   void test(`${how}：核對時多了別的字、換了寫法，狀態還是要的：採用，記一行`, async t => {
@@ -194,12 +199,12 @@ for (const [how, editing] of [['沒開著的筆記', false], ['開著的筆記',
   });
 }
 
-void test('寫進去、核對讀不到：回 saved，記一行；之後讀到了不多記，目錄跟上', async t => {
+void test('寫進去、核對讀不到：回 saved，先不記；之後讀到了記一行，目錄跟上', async t => {
   const h = await setup(t);
   h.failing.add(WORDS);
   assert.equal((await h.state.setDeckStatus(WORDS, '暫停', null)).kind, 'saved');
   assert.equal(h.texts.get(WORDS), head('狀態: 暫停\n') + targets('a', 'b'));
-  assert.deepEqual(await changes(h), [{ set: 'status', deck: WORDS, val: '暫停' }]);
+  assert.deepEqual(await changes(h), []);
   h.failing.delete(WORDS);
   h.notify(WORDS);
   while (statuses(h)[WORDS] !== 'paused') await new Promise(resolve => setImmediate(resolve));

@@ -142,11 +142,13 @@ void test('§7 草稿 → 啟用：只改這一篇的狀態、記一行 set: sta
   const broken = 'Essence Cards/學業/國二上/自然/2-3.md';
   const h = await setup(t, { [DECK]: draft, [paused]: head('暫停') + '- 能說出浮力 ^p7q2w8\n    - 浮力？ :: 向上的力\n', [broken]: '---\n狀態: [草稿\n---\n- 能說出 A ^h2m8qd\n    - A？ :: 是\n' });
   assert.deepEqual(h.state.deckTargets(DECK), []);
+  await h.state.flush();
+  const baseline = h.logged().length;
   assert.equal((await h.state.activateDraft(DECK, null)).kind, 'done');
   assert.equal(h.texts.get(DECK), draft.replace('狀態: 草稿', '狀態: 啟用'));
   assert.deepEqual(h.state.deckTargets(DECK), ['k3m9qa']);
   await h.state.flush();
-  assert.deepEqual(h.logged().filter(each => each.set === 'status').map(({ t: _t, ...rest }) => rest), [{ set: 'status', deck: DECK, val: '啟用' }]);
+  assert.deepEqual(h.logged().slice(baseline).filter(each => each.set === 'status').map(({ t: _t, ...rest }) => rest), [{ set: 'status', deck: DECK, val: '啟用' }]);
   assert.equal((await h.state.activateDraft(DECK, null)).kind, 'unchanged');
   assert.equal((await h.state.activateDraft(paused, null)).kind, 'unchanged');
   assert.ok(h.texts.get(paused)!.includes('狀態: 暫停'));

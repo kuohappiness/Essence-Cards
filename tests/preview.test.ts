@@ -122,6 +122,7 @@ void test('預覽完一輪，複習紀錄檔的內容逐位元組不變，state.
   const state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: false, now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
   t.after(() => state.close());
   await state.ready();
+  await state.flush();
   const before = memory.texts.get(log), progress = JSON.stringify(state.progress());
   const s = open(memory.texts.get(PATH) ?? '');
   while (s.view().kind === 'card') {

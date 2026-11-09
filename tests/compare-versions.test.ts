@@ -316,7 +316,7 @@ void test('接不上就丟錯（比較的一方寫無法比較）：版號不是
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', 'blocked: () =>', 'renamed: () =>'), input), /這個版本沒有 blocked/);
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', 'canAnswer: answerable', 'renamed: answerable'), input), /這個版本沒有 canAnswer/);
   await assert.rejects(snapshot(await patched(t, 'src/core/version/index.ts', 'export { canRead, releaseOf }', 'export { canRead }'), input), /releaseOf/);
-  await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'cap', val: 5 }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"cap"/);
+  await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'semester', val: '國二上' }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"semester"/);
 });
 
 void test('回傳的型別不同也是接不上，不能靠真假值往下算：canAnswer 回傳 Promise 時，停掉的目標不能變成新卡（Codex L2 F1）', async t => {

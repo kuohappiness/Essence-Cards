@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createState } from '../src/state/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import type { MemoryFiles } from './helpers/memory-files.ts';
+import { withBaseline } from './helpers/observed.ts';
 
 // 紀錄的時間不重號（tasks/record-gaps.md §4）：undo 用 t 認人，新的一行不能和舊紀錄裡用來認人的 t 相同。
 const DECK = 'Essence Cards/A（卡片）.md';
@@ -35,7 +36,7 @@ void test('§4 重開後時鐘回到某一筆作答的同一毫秒：新一行�
 });
 
 void test('§4 舊的 undo 指向一個已經不存在的 t，新作答撞到它：新一行加 1 毫秒，新作答沒有被取消', async t => {
-  const memory = createMemoryFiles({ [DECK]: goal('aaaaaa'), [OWN]: JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', undo: T }) + '\n' });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: JSON.stringify({ t: '2026-10-20T19:00:00.000+08:00', undo: T }) + '\n' });
   const state = launch(t, memory, Date.parse(T));
   await state.ready();
   assert.equal(state.answer(answer), NEXT);
@@ -43,7 +44,7 @@ void test('§4 舊的 undo 指向一個已經不存在的 t，新作答撞到它
 });
 
 void test('§4 被取消的作答的 t 也避開：reviews 已經沒有它', async t => {
-  const memory = createMemoryFiles({ [DECK]: goal('aaaaaa'), [OWN]: JSON.stringify({ t: T, lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n' + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', undo: T }) + '\n' });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: JSON.stringify({ t: T, lt: 'aaaaaa', r: 'miss', v: '12345678' }) + '\n' + JSON.stringify({ t: '2026-10-24T18:00:00.000+08:00', undo: T }) + '\n' });
   const state = launch(t, memory, Date.parse(T));
   await state.ready();
   assert.deepEqual(state.history().reviews, []);
@@ -53,21 +54,21 @@ void test('§4 被取消的作答的 t 也避開：reviews 已經沒有它', asy
 
 void test('§4 變更行的 t 也避開；連續撞到就一直往後加', async t => {
   const line = (ms: number): string => JSON.stringify({ t: `2026-10-24T19:00:00.00${String(ms)}+08:00`, set: 'cap', val: 30 });
-  const memory = createMemoryFiles({ [DECK]: goal('aaaaaa'), [OWN]: [0, 1, 2].map(line).join('\n') + '\n' });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: [0, 1, 2].map(line).join('\n') + '\n' });
   const state = launch(t, memory, Date.parse(T));
   await state.ready();
   assert.equal(state.answer(answer), '2026-10-24T19:00:00.003+08:00');
 });
 
 void test('§4 舊紀錄有一筆 2030 年的時間：新一行用現在的時間，不被推到未來', async t => {
-  const memory = createMemoryFiles({ [DECK]: goal('aaaaaa'), [OWN]: JSON.stringify({ t: '2030-01-01T00:00:00.000+08:00', lt: 'bbbbbb', r: 'good', v: '12345678' }) + '\n' });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: JSON.stringify({ t: '2030-01-01T00:00:00.000+08:00', lt: 'bbbbbb', r: 'good', v: '12345678' }) + '\n' });
   const state = launch(t, memory, Date.parse(T));
   await state.ready();
   assert.equal(state.answer(answer), T);
 });
 
 void test('§4 取消行自己的 t 不用避開：沒有東西用它認人', async t => {
-  const memory = createMemoryFiles({ [DECK]: goal('aaaaaa'), [OWN]: JSON.stringify({ t: T, undo: '2026-10-20T19:00:00.000+08:00' }) + '\n' });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: goal('aaaaaa') }, 'Windows-2c9e'), [OWN]: JSON.stringify({ t: T, undo: '2026-10-20T19:00:00.000+08:00' }) + '\n' });
   const state = launch(t, memory, Date.parse(T));
   await state.ready();
   assert.equal(state.answer(answer), T);

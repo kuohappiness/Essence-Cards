@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { build, type Plugin as BuildPlugin } from 'esbuild';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 import { desktopOnly, embedRules } from '../tools/build.mjs';
+import { isObserved } from './helpers/observed.ts';
 
 // src/main.ts 的接線（W5 §4-1）：用共用的 obsidian 替身（tests/helpers/obsidian.ts）在 Node 跑正式建置的程式碼，不是 Obsidian 實機。
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -198,7 +199,7 @@ void test('2-1 接線：載入後這台的紀錄有版本行，版本命令列�
   await wait(50);
   const own = [...h.texts.keys()].find(path => /^Essence Cards\/紀錄\/\d{4}-\d{2} Windows-[0-9a-f]{4}\.jsonl$/.test(path));
   assert.ok(own, '這台的紀錄檔');
-  assert.deepEqual((h.text(own) ?? '').trim().split('\n').map(line => (JSON.parse(line) as { set: string; val: string })).map(line => [line.set, line.val]), [['app', '0.0.1+test']]);
+  assert.deepEqual((h.text(own) ?? '').trim().split('\n').filter(line => !isObserved(line)).map(line => (JSON.parse(line) as { set: string; val: string })).map(line => [line.set, line.val]), [['app', '0.0.1+test']]);
   const device = own.slice(own.lastIndexOf(' ') + 1, -'.jsonl'.length);
   const lines = (h.notices.at(-1) ?? '').split('\n');
   assert.deepEqual(lines.slice(0, 3), ['Essence Cards：0.0.1+test', `這台（${device}）：已記下這一版`, '各裝置最後回報的版本（不是即時狀態：還沒同步或還沒重開的裝置看不出來）：']);

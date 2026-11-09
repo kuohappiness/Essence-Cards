@@ -222,6 +222,31 @@ export function mergeHistory(sources: readonly { path: string; text: string }[],
   return history;
 }
 
+/**
+ * 一份紀錄裡讀得懂的變更，照行的順序（tasks/record-gaps.md §1 比「這台自己的最後一行」）：讀法和 mergeHistory 相同（§5-2），
+ * 帶讀不懂的 need 的不算，黏在同一行的救回；不去重、不照時間排，時鐘回撥時行的順序才是寫入的順序。
+ */
+export function changesInOrder(text: string, version: string | null = null): ChangeEntry[] {
+  const found: ChangeEntry[] = [];
+  const later = (raw: string): boolean => {
+    const data = needed(raw);
+    return data !== null && !canRead(data.need, version);
+  };
+  const take = (raw: string): boolean => {
+    const entry = parseLine(raw);
+    if (entry?.kind === 'change') found.push(entry);
+    return entry !== null;
+  };
+  for (const line of text.split('\n')) {
+    const raw = line.trim();
+    if (!raw || later(raw) || take(raw)) continue;
+    try { JSON.parse(raw); } catch {
+      for (const piece of readablePieces(raw)) if (!later(piece)) take(piece);
+    }
+  }
+  return found;
+}
+
 /** 第一筆 at 大於 time 的位置：同一個 at 的新一筆排在既有的後面，和 mergeHistory 的穩定排序一致。 */
 function firstAfter(list: readonly { at: number }[], time: number): number {
   let low = 0, high = list.length;

@@ -5,6 +5,7 @@ import type { ReviewEntry } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { Harness } from './helpers/pick-session.ts';
 import { DECK, CHARS, PC, rights, setup } from './helpers/pick-session.ts';
+import { withBaseline } from './helpers/observed.ts';
 
 // 比較卡的紀錄（tasks/question-type-seam.md §4）。預期值是任務說明的例子，字面比較。
 const T = '2026-11-05T20:15:03.250+08:00';
@@ -90,13 +91,13 @@ async function answerAll(h: Harness): Promise<void> {
   assert.equal(s.rate('good'), true);
 }
 void test('第一行已落盤、第二行暫時失敗：跨到下個月才重試，路徑還是原本的 t；重開重併的行與結果固定', async t => {
-  const steady = await setup(t, { [DECK]: CHARS });
+  const steady = await setup(t, await withBaseline({ [DECK]: CHARS }, 'PC-test'));
   await answerAll(steady);
   await steady.state.flush();
   const expected = steady.texts.get(PC) ?? '';
   assert.equal(expected.split('\n').filter(Boolean).length, 4, '對照組：一個字一行');
 
-  const h = await setup(t, { [DECK]: CHARS });
+  const h = await setup(t, await withBaseline({ [DECK]: CHARS }, 'PC-test'));
   const original = h.files.append.bind(h.files);
   let calls = 0;
   h.files.append = (file, line) => ++calls === 2 ? Promise.reject(Error('暫時失敗')) : original(file, line);

@@ -113,6 +113,7 @@ async function stopped(h: Harness, paths: readonly string[]): Promise<void> {
   assert.ok(!h.share().includes(ID), h.share().join());
   assert.ok(!h.more().includes(ID), h.more().join());
   assert.equal(h.state.canAnswer(ID), false);
+  await h.state.flush();
   const before = h.logLines();
   assert.equal(h.state.answer({ lt: ID, r: 'good', v: '12345678' }), null);
   assert.equal(h.state.answer({ lt: ID, r: 'miss', src: 'mistake' }), null);

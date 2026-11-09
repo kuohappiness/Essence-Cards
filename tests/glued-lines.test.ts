@@ -6,6 +6,7 @@ import { createState } from '../src/state/index.ts';
 import type { State } from '../src/state/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { seeded } from './helpers/seeded.ts';
+import { withBaseline } from './helpers/observed.ts';
 
 // S6（外掛架構檢查環節 3 結論第 6 條、syntax §5-2）：完整的一筆只缺換行，下一筆接在同一行時，兩筆都要算。
 // 這台的版本是 0.1.0；標記用 9.0.0 代表比這台新。
@@ -153,7 +154,7 @@ const DELAY = 50;
 void test('S6 原例：同一次執行中別台的紀錄到了之後、重開之後，兩筆都在；state 當下與重開相同；原檔不改', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const flush = () => new Promise<void>(resolve => setImmediate(resolve));
-  const memory = createMemoryFiles({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') + goal('zzzzzz'), [PC]: A });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') + goal('zzzzzz') }, 'PC-test'), [PC]: A });
   const open = (): State => {
     const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
     t.after(() => state.close());
