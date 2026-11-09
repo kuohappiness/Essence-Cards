@@ -81,8 +81,11 @@ function snapshotText(job: CardJob, time: string): string {
   return '---\n' + stringify(fields, { lineWidth: 0 }) + '---\n\n' + body;
 }
 
-/** 這一篇在目的地寫成了：內容和恢復資料相同，或這一篇配的每一個 ID 都在這個檔裡（寫成之後被家長改過字）。 */
-const writtenIn = (deck: SavedDeck, text: string | null): boolean => text !== null && (sha256Hex(text) === deck.sha256 || (() => { const ids = blockIds(text); return deck.ids.every(id => ids.has(id)); })());
+/**
+ * 這一篇在目的地寫成了：內容和恢復資料相同，或這一篇配的每一個 ID 都在這個檔裡（寫成之後被家長改過字）。
+ * 還沒碰過 vault 的篇不能靠 ID 認：那個檔不是這次寫的（R3-3，同步晚到的卡組撞了路徑與 ID）。
+ */
+const writtenIn = (deck: SavedDeck, text: string | null): boolean => text !== null && (sha256Hex(text) === deck.sha256 || (deck.stage !== 'pending' && (() => { const ids = blockIds(text); return deck.ids.every(id => ids.has(id)); })()));
 
 /**
  * 照恢復資料做第 3～7 步（§5）。每一步改了恢復資料就先存再往下。停下來的情況回傳原因，恢復資料留著，之後可以再呼叫。

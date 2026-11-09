@@ -453,6 +453,54 @@ void test('§5 第一次建檔就發現 ID 被占用（R2-2）：不把別篇當
   }
 });
 
+void test('§5 還沒建過的篇，目的地已有同 ID、內容不同的檔（R3-3）：ID 證明不了是自己寫的，回報占用；全文相同、開始建過的照舊算寫成', async () => {
+  const stranger = (ids: string[]) => `---\n狀態: 啟用\n---\n\n- 別的目標 ^${ids[0]}\n    - 別的題目 :: 別的答案\n`;
+  // 存恢復資料之後同步到同一個路徑：不是這次寫的，不算寫成，不發布。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const text = stranger(job.save!.decks[0].ids);
+    // 第一篇有兩個 ID（目標與候選）：都放進去，才是「每個 ID 都在」。
+    files.set(WORD, text + `\n> [!note]- 候選卡片\n> - 別的候選 ^${job.save!.decks[0].ids[1]}\n>     - 問 :: 答\n`);
+    const before = files.get(WORD);
+    assert.deepEqual(await publish(job, io), { kind: 'deck', index: 0, situation: 'taken', path: WORD });
+    assert.equal(files.get(WORD), before);
+    assert.ok(!files.has(SNAPSHOT));
+    assert.equal(reload().save!.decks[0].stage, 'pending');
+    assert.deepEqual(skipDeck(reload(), 0).retire, []);
+  }
+  // 建檔的當下才冒出來（exists）：照樣不算寫成。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    const { ids } = job.save!.decks[0];
+    io.createDeck = (path, text) => {
+      if (path !== WORD) return io.create(path, text);
+      files.set(WORD, stranger(ids) + `\n> [!note]- 候選卡片\n> - 別的候選 ^${ids[1]}\n>     - 問 :: 答\n`);
+      return Promise.resolve({ kind: 'exists' });
+    };
+    assert.deepEqual(await publish(job, io), { kind: 'deck', index: 0, situation: 'taken', path: WORD });
+    assert.ok(!files.has(SNAPSHOT));
+    assert.equal(reload().save!.decks[0].stage, 'pending');
+  }
+  // 全文一字不差：就是要寫的那一份，不算別人的。
+  {
+    const { files, io } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set(WORD, job.save!.decks[0].text);
+    assert.equal((await publish(job, io)).kind, 'done');
+  }
+  // 開始建過、之後被家長改字：照 ID 認得出來。
+  {
+    const { files, io, reload } = await firstWritten();
+    files.set(WORD, files.get(WORD)!.replace('借入', '借進來'));
+    assert.equal((await publish(reload(), io)).kind, 'done');
+  }
+});
+
 void test('§5 檔名清單比檔案事件慢（R2-4）：讀到目的地已有檔，就算清單還沒列也往後加', async () => {
   const { files, io } = vault();
   const job = saved(copied());
