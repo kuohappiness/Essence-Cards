@@ -48,6 +48,8 @@ export function createSnapshots(options: SnapshotOptions) {
   const failed = new Map<string, number>();
   /** 底層的寫入還沒結束的（逾時只結束等待）：這時再查會把寫到一半的檔當成無效，另寫一份序號（L2 的 R11）。 */
   const writing = new Set<string>();
+  /** 寫入還沒結束時來的查核：不開新的，等它結束再查一次（L2 的 R17）。 */
+  const deferred = new Set<string>();
   /** 這次觸發裡已經因為「列檔之後才出現」重新查過的路徑：列檔一直列不到它時，不空轉；下一次觸發重新算（L2 的 R10）。 */
   const late = new Set<string>();
   function recheck(path: string): void {
@@ -76,7 +78,8 @@ export function createSnapshots(options: SnapshotOptions) {
     const first = options.plan();
     if (!first) return;
     const key = snapshotKey(first.exam, first.scope), id = first.start + ' ' + key;
-    if (done.has(id) || failed.get(id) === first.day || writing.has(id)) return;
+    if (done.has(id) || failed.get(id) === first.day) return;
+    if (writing.has(id)) { deferred.add(id); return; }
     if (!await options.settle()) return;
     const mine: { suffix: number; path: string }[] = [];
     for (const path of await limited(files.list(SNAPSHOT_FOLDER))) {
@@ -108,7 +111,10 @@ export function createSnapshots(options: SnapshotOptions) {
           return content;
         });
         writing.add(id);
-        const finished = (): void => { writing.delete(id); };
+        const finished = (): void => {
+          writing.delete(id);
+          if (deferred.delete(id)) check();
+        };
         void work.then(finished, finished);
         await limited(work);
         // 列檔之後才出現的（L2 的 R6）：不知道有不有效，重新列一次，有效的算完成、無效的另寫序號、讀不到的下次再查。
@@ -142,14 +148,16 @@ export function createSnapshots(options: SnapshotOptions) {
     running = false;
   }
 
+  function check(): void {
+    if (options.closed()) return;
+    late.clear();
+    if (running) { again = true; return; }
+    running = true;
+    void loop();
+  }
+
   return {
-    check(): void {
-      if (options.closed()) return;
-      late.clear();
-      if (running) { again = true; return; }
-      running = true;
-      void loop();
-    },
+    check,
     /** 關閉：不等卡住的檔，等待的計時也不留著。 */
     stop(): void {
       for (const id of timers) clearTimeout(id);

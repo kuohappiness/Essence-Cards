@@ -522,6 +522,36 @@ void test('切面的 I/O 有上限：寫入逾時、底層還在寫，跨過清�
   assert.deepEqual(h.errors.map(([, source]) => source), ['write']);
 });
 
+void test('切面的 I/O 有上限：換日的查核碰上還沒結束的寫入，寫入後來失敗：接著補查，只有一份（L2 的 R17）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const slow = slowWrite(memory);
+  const h = await open(t, memory, { now: BEFORE_FOUR });
+  await h.pump(STUCK);
+  await h.pump(0);
+  h.setNow(AFTER_FOUR);
+  h.state.today();
+  await h.pump(0);
+  assert.equal(memory.texts.get(FILE), '', '在途的時候不開新的');
+  slow.finish(true);
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+  assert.equal(rows(memory).length, 3);
+});
+
+void test('切面的 I/O 有上限：回呼還沒進入就逾時、查核碰上它，放行之後接著補查（L2 的 R17）', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  await h.pump(STUCK);
+  await h.pump(0);
+  memory.notify(NATURE);
+  await h.pump();
+  assert.deepEqual(written(memory), []);
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [FILE]);
+});
+
 void test('切面的 I/O 有上限：逾時的寫入後來失敗了，換一天照常再寫（相鄰情況）', async t => {
   const memory = createMemoryFiles(VAULT);
   const slow = slowWrite(memory);
