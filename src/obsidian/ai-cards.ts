@@ -1,4 +1,4 @@
-import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
+import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, publishedElsewhere, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
 import type { State, WriteBlock } from '../state/index.ts';
@@ -15,6 +15,8 @@ export interface AiCardsDeps {
   state: () => State | null;
   /** 整個 vault 現在的 Markdown 檔名（小寫、不含 .md）：D-081 檔名整個 vault 不重複。 */
   names: () => Set<string>;
+  /** 整個 vault 裡叫這個檔名（小寫、不含 .md）的 Markdown 路徑。 */
+  named: (name: string) => string[];
   /** 這台電腦的存放（ui/prefs.ts 的 aiPrefs）。saveJobs 存不進去時丟錯。 */
   store: { jobs(): unknown; saveJobs(jobs: CardJob[]): void; retired(): string[]; retire(ids: readonly string[]): void; last(): { subject?: string; term?: string }; saveLast(last: { subject: string; term: string }): void };
   clipboard: (text: string) => Promise<void>;
@@ -102,6 +104,7 @@ export function createAiCards(deps: AiCardsDeps) {
       createSnapshot: (path, text, decks) => state.aiCreateSnapshot(path, text, decks, nameFree(path)),
       where: ids => state.aiWhere(ids),
       names: deps.names,
+      named: deps.named,
       now: deps.now,
     };
     try {
@@ -236,6 +239,11 @@ export function createAiCards(deps: AiCardsDeps) {
           const text = await state.aiRead(latest.save.snapshotPath);
           if (text === null && state.aiDisplaced(latest.save.snapshotPath)) return { kind: 'stop', message: '外掛用的資料夾不在原位，不知道是不是已經存好了；照提醒把它放回原位，再試一次' };
           if (text !== null && sha256Hex(text) === latest.save.published.sha256) return run(latest);
+          if (text === null && latest.save.published.attempted) {
+            const copy = await publishedElsewhere(latest.save, { read: path => state.aiRead(path), named: deps.named });
+            if (copy === true) return run(latest);
+            if (copy) return { kind: 'stop', message: `讀不到 ${copy.path}，不知道是不是已經存好了；等一下再試` };
+          }
         } catch (error) {
           deps.onError(error);
           return { kind: 'stop', message: `讀不到 ${latest.save.snapshotPath}，不知道是不是已經存好了；等一下再試` };

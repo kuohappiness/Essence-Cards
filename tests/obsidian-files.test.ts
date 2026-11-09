@@ -277,6 +277,7 @@ async function waitingForRebuild(t: TestContext) {
   const cards = createAiCards({
     rules, state: () => state,
     names: () => new Set(app.vault.getFiles().filter(file => file.path.endsWith('.md')).map(file => file.path.slice(file.path.lastIndexOf('/') + 1, -3).toLowerCase())),
+    named: name => app.vault.getFiles().map(file => file.path).filter(path => path.endsWith('.md') && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
     store: { jobs: () => jobs, saveJobs(next: CardJob[]) { jobs = JSON.parse(JSON.stringify(next)) as unknown; }, retired: () => retired, retire(ids) { retired = [...retired, ...ids]; }, last: () => ({}), saveLast() {} },
     clipboard: () => Promise.resolve(),
     now: () => ({ ms: Date.parse('2026-11-07T10:02:11+08:00'), offset: 480 }),

@@ -157,6 +157,7 @@ export default class EssenceCardsPlugin extends Plugin {
         rules: JSON.parse(CARD_RULES) as EmbeddedRules,
         state: () => this.state,
         names: () => new Set(app.vault.getMarkdownFiles().map(file => file.basename.toLowerCase())),
+        named: name => app.vault.getMarkdownFiles().filter(file => file.basename.toLowerCase() === name).map(file => file.path),
         store: {
           jobs: () => aiPrefs.jobs(app), saveJobs: jobs => { aiPrefs.saveJobs(app, jobs); },
           retired: () => aiPrefs.retired(app), retire: ids => { aiPrefs.retire(app, ids); },

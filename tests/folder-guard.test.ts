@@ -1092,6 +1092,7 @@ async function aiCards(f: Fake, guard: FolderGuard, t: TestContext, box = { jobs
   const cards = createAiCards({
     rules: AI_RULES, state: () => state,
     names: () => new Set([...f.memory.texts.keys()].filter(path => path.endsWith('.md')).map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
+    named: name => [...f.memory.texts.keys()].filter(path => path.endsWith('.md') && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
     store: {
       jobs: () => box.jobs,
       saveJobs(next: CardJob[]) { if (box.failDrop && !next.length) throw Error('存不進去'); box.jobs = JSON.parse(JSON.stringify(next)) as unknown; },
@@ -1170,6 +1171,34 @@ void test('R4-1 搬回失敗後重開：搬到 Essence Cards 外面、原位又�
     guard.check();
     assert.equal((await after.cards.resume(job)).kind, 'done');
     assert.deepEqual(snapshots(f), [AI_SNAP]);
+  }
+});
+
+void test('R5-1 搬回失敗後原位長出新檔：防呆不再報不在原位，同一份快照還在 vault 裡就只清理，繼續和放棄都不再發布一份', async t => {
+  const OUT = '紀錄';
+  const MOVED = `${OUT}/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`;
+  // 兩種都讓防呆認不出：還沒記住 AI 輸出時，紀錄長出新檔；已經記住時，AI 輸出長出新檔。
+  for (const { remembered, regrown } of [{ remembered: false, regrown: `${R}/紀錄/2026-11 PC-test.jsonl` }, { remembered: true, regrown: `${R}/紀錄/AI 輸出/原文/別的.md` }]) {
+    for (const action of ['resume', 'abandon'] as const) {
+      const f = fake();
+      const first = started(f);
+      const before = await published(f, first, t);
+      if (remembered) first.check();
+      f.failMoves.push(Error('沒有權限'));
+      drag(f, first, `${R}/紀錄`, OUT);
+      await f.run();
+      first.close();
+      f.memory.write(regrown, '');
+      const guard = started(f);
+      const after = await aiCards(f, guard, t, before.box);
+      guard.check();
+      assert.equal(guard.displaced(AI_SNAP), false);
+      const job = after.cards.jobs().find(each => each.save)!;
+      const result = await after.cards[action](job);
+      assert.equal('kind' in result ? result.kind : 'left', 'done');
+      assert.deepEqual(snapshots(f), [MOVED]);
+      assert.equal(after.cards.jobs().some(each => each.id === job.id), false);
+    }
   }
 });
 

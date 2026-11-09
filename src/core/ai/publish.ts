@@ -29,6 +29,8 @@ export interface PublishIo {
   where(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 整個 vault 現在的檔名（小寫、不含 .md）。 */
   names(): Set<string>;
+  /** 整個 vault 裡叫這個檔名（小寫、不含 .md）的 Markdown 路徑。 */
+  named(name: string): string[];
   now(): { ms: number; offset: number };
 }
 
@@ -57,6 +59,17 @@ export function beginSave(job: CardJob, reply: string, service: string | null, p
 
 const fileName = (path: string): string => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
 const folderOf = (path: string): string => path.slice(0, path.lastIndexOf('/'));
+
+/** 別的位置有同檔名、內容相同的檔：資料夾被搬到防呆認不出來的地方，原位讀到沒有不代表沒發布（R5-1）。讀不到不算沒有。 */
+export async function publishedElsewhere(save: SaveState, io: Pick<PublishIo, 'read' | 'named'>): Promise<boolean | { kind: 'unreadable'; path: string; error: unknown }> {
+  for (const path of io.named(fileName(save.snapshotPath).toLowerCase())) {
+    if (path === save.snapshotPath) continue;
+    let text: string | null;
+    try { text = await io.read(path); } catch (error) { return { kind: 'unreadable', path, error }; }
+    if (text !== null && sha256Hex(text) === save.published!.sha256) return true;
+  }
+  return false;
+}
 
 /** 快照的全文（§5〈快照〉）：time 是準備發布那一刻，之後重試沿用；對象是實際寫成、沒跳過的篇。 */
 function snapshotText(job: CardJob, time: string): string {
@@ -118,6 +131,11 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
     if (found.text !== null && sha256Hex(found.text) === save().published!.sha256) return done();
     // 確定沒寫過的位置被別人用了，不是這份快照的異文：第 5 步換下一個後綴（R5-2）。
     if (found.text !== null && save().published!.attempted) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
+    if (found.text === null && save().published!.attempted) {
+      const copy = await publishedElsewhere(save(), io);
+      if (copy === true) return done();
+      if (copy) return copy;
+    }
   }
 
   // 第 3 步：原文（送出的每一部分與回覆原文），只建立；已存在而且內容相同就跳過。

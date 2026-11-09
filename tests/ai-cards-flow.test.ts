@@ -42,6 +42,7 @@ async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>
   const cards = createAiCards({
     rules, state: () => state, store: box.store, random,
     names: () => new Set([...memory.texts.keys()].filter(path => path.endsWith('.md')).map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
+    named: name => [...memory.texts.keys()].filter(path => path.endsWith('.md') && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name),
     clipboard: text => { clipboard.push(text); return Promise.resolve(); },
     now: () => ({ ms: Date.parse('2026-11-07T10:02:11+08:00'), offset: 480 }),
     onError: error => { errors.push(error); },

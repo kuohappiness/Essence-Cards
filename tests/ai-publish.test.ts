@@ -55,6 +55,7 @@ function vault(files = new Map<string, string>()) {
       return Promise.resolve(found);
     },
     names: () => new Set([...files.keys()].map(path => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '').toLowerCase())),
+    named: name => [...files.keys()].filter(path => path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '').toLowerCase() === name),
     now: () => ({ ms: NOW + 3 * 3_600_000, offset: 480 }),
   };
   /** 重開：只拿得到最後一次存成功的恢復資料（JSON 往返）。 */
@@ -611,6 +612,63 @@ void test('§5 快照分得出確定沒寫與可能寫成（R5-2）：確定沒�
     files.set(SNAPSHOT, '別人的快照');
     assert.deepEqual(await publish(reload(), io), { kind: 'conflict', path: SNAPSHOT, what: 'snapshot' });
     assert.equal(files.get(SNAPSHOT), '別人的快照');
+  }
+});
+
+void test('§5 可能寫成的快照原位沒有（R5-1）：別處有同檔名、內容相同的檔就只清理；內容不同照舊換後綴；讀不到不當成沒有；確定沒寫的不必看別處', async () => {
+  const SECOND = SNAPSHOT.replace('.md', ' 2.md');
+  const AWAY = '外面/AI 輸出/' + SNAPSHOT.slice(SNAPSHOT.lastIndexOf('/') + 1);
+  /** 快照寫成、清理前當掉，資料夾被搬到防呆認不出來的地方（這裡 displaced 回 false）。 */
+  const writtenThenMoved = async () => {
+    const context = vault();
+    const job = saved(copied());
+    context.io.store(job);
+    context.box.crash = what => what === 'remove';
+    await assert.rejects(publish(job, context.io), Crash);
+    context.box.crash = () => false;
+    const text = context.files.get(SNAPSHOT)!;
+    context.files.delete(SNAPSHOT);
+    context.files.set(AWAY, text);
+    return { ...context, text };
+  };
+  {
+    const { files, io, box, reload, text } = await writtenThenMoved();
+    assert.equal((await publish(reload(), io)).kind, 'done');
+    assert.equal(box.stored, null);
+    assert.equal(files.get(AWAY), text);
+    assert.ok(!files.has(SNAPSHOT) && !files.has(SECOND));
+  }
+  // 別處那個同名的是別人的筆記：不算發布過，照 D-081 換後綴，時間與全文沿用。
+  {
+    const { files, io, reload, text } = await writtenThenMoved();
+    files.set(AWAY, '別人的筆記');
+    assert.equal((await publish(reload(), io)).kind, 'done');
+    assert.equal(files.get(SECOND), text);
+    assert.equal(files.get(AWAY), '別人的筆記');
+  }
+  // 別處那個讀不到（還在從 iCloud 下載）：不知道是不是同一份，先停下。
+  {
+    const { files, io, reload } = await writtenThenMoved();
+    const read = io.read.bind(io);
+    const error = Error('還在下載');
+    io.read = path => path === AWAY ? Promise.reject(error) : read(path);
+    assert.deepEqual(await publish(reload(), io), { kind: 'unreadable', path: AWAY, error });
+    assert.ok(!files.has(SNAPSHOT) && !files.has(SECOND));
+  }
+  // 確定沒寫過：別處同名的檔和這份快照無關，讀不到也照常做。
+  {
+    const { files, io, reload } = vault();
+    const job = saved(copied());
+    io.store(job);
+    files.set(AWAY, '別人的筆記');
+    const create = io.createSnapshot.bind(io);
+    let once = true;
+    io.createSnapshot = (path, text, decks) => { if (!once) return create(path, text, decks); once = false; return Promise.resolve({ kind: 'blocked', reason: 'unread' }); };
+    assert.deepEqual(await publish(job, io), { kind: 'blocked', reason: 'unread' });
+    const read = io.read.bind(io);
+    io.read = path => path === AWAY ? Promise.reject(Error('還在下載')) : read(path);
+    assert.equal((await publish(reload(), io)).kind, 'done');
+    assert.ok(files.has(SECOND));
   }
 });
 
