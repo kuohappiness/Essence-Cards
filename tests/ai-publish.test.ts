@@ -691,6 +691,65 @@ void test('§5 第一次建檔回 exists 就是確定沒寫（R6-1）：接著�
   assert.equal(files.get(SECOND), held.save!.published!.text);
 });
 
+void test('§5 可能寫成的快照在恢復途中才出現（R6-2）：換位置、換摘要之前再查一次，找到就只清理', async () => {
+  const AWAY = '外面/AI 輸出/' + SNAPSHOT.slice(SNAPSHOT.lastIndexOf('/') + 1);
+  const RENAMED = WORD.replace('L3 單字', 'L3 單字改名');
+  const copies = (files: Map<string, string>): string[] => [...files.keys()].filter(path => path.includes('AI 輸出/2026'));
+  /** 快照寫成、清理前當掉，重試的當下暫時看不到（同步中）。 */
+  const writtenThenGone = async () => {
+    const context = vault();
+    const job = saved(copied());
+    context.io.store(job);
+    context.box.crash = what => what === 'remove';
+    await assert.rejects(publish(job, context.io), Crash);
+    context.box.crash = () => false;
+    const text = context.files.get(SNAPSHOT)!;
+    context.files.delete(SNAPSHOT);
+    return { ...context, text };
+  };
+  // 核對卡組的時候才出現在別的資料夾。
+  {
+    const { files, io, box, reload, text } = await writtenThenGone();
+    const read = io.read.bind(io);
+    let once = true;
+    io.read = path => { if (path === WORD && once) { once = false; files.set(AWAY, text); } return read(path); };
+    assert.equal((await publish(reload(), io)).kind, 'done');
+    assert.deepEqual(copies(files), [AWAY]);
+    assert.equal(box.stored, null);
+  }
+  // 卡組同時改名：對象變了也不做第二份。
+  {
+    const { files, io, reload, text } = await writtenThenGone();
+    files.set(RENAMED, files.get(WORD)!);
+    files.delete(WORD);
+    const where = io.where.bind(io);
+    let once = true;
+    io.where = ids => { if (once) { once = false; files.set(AWAY, text); } return where(ids); };
+    assert.equal((await publish(reload(), io)).kind, 'done');
+    assert.deepEqual(copies(files), [AWAY]);
+    assert.equal(files.get(AWAY), text);
+  }
+  // 建檔的當下才看到同檔名（檔名核對擋下）：回去再查一次，是同一份就只清理。
+  {
+    const { files, io, reload, text } = await writtenThenGone();
+    const create = io.createSnapshot.bind(io);
+    let once = true;
+    io.createSnapshot = (path, body, decks) => { if (!once) return create(path, body, decks); once = false; files.set(AWAY, text); return Promise.resolve({ kind: 'refused', why: 'name' }); };
+    assert.equal((await publish(reload(), io)).kind, 'done');
+    assert.deepEqual(copies(files), [AWAY]);
+  }
+  // 卡組改名、原快照剛好在建檔前一刻回到原位：摘要已經換了，停下、不蓋掉（第六輪刻意不處理，放棄後結果正確）。
+  {
+    const { files, io, reload, text } = await writtenThenGone();
+    files.set(RENAMED, files.get(WORD)!);
+    files.delete(WORD);
+    const create = io.createSnapshot.bind(io);
+    io.createSnapshot = (path, body, decks) => { if (path === SNAPSHOT) files.set(SNAPSHOT, text); return create(path, body, decks); };
+    assert.deepEqual(await publish(reload(), io), { kind: 'conflict', path: SNAPSHOT, what: 'snapshot' });
+    assert.equal(files.get(SNAPSHOT), text);
+  }
+});
+
 void test('§5 快照三次都趕不上（R3-6）：卡組一直在變動回 changing，不說成讀不到；不寫快照', async () => {
   const { files, io } = vault();
   const job = saved(copied());

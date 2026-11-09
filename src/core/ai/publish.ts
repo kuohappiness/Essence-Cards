@@ -125,18 +125,21 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
   if (!job.save) throw Error('這個工作還沒開始存草稿');
 
   // 已發布：恢復資料裡有快照的雜湊、那個位置的檔存在而且相同，只做清理。卡組之後怎麼改都不影響。
-  if (save().published) {
+  const already = async (): Promise<PublishResult | null> => {
+    const published = save().published;
+    if (!published) return null;
     const found = await read(save().snapshotPath);
     if ('kind' in found) return found;
-    if (found.text !== null && sha256Hex(found.text) === save().published!.sha256) return done();
+    if (found.text !== null && sha256Hex(found.text) === published.sha256) return done();
     // 確定沒寫過的位置被別人用了，不是這份快照的異文：第 5 步換下一個後綴（R5-2）。
-    if (found.text !== null && save().published!.attempted) return { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' };
-    if (found.text === null && save().published!.attempted) {
-      const copy = await publishedElsewhere(save(), io);
-      if (copy === true) return done();
-      if (copy) return copy;
-    }
-  }
+    if (!published.attempted) return null;
+    const copy = await publishedElsewhere(save(), io);
+    if (copy === true) return done();
+    if (copy) return copy;
+    return found.text !== null ? { kind: 'conflict', path: save().snapshotPath, what: 'snapshot' } : null;
+  };
+  const early = await already();
+  if (early) return early;
 
   // 第 3 步：原文（送出的每一部分與回覆原文），只建立；已存在而且內容相同就跳過。
   for (const text of [...job.parts.map(part => part.text), save().reply]) {
@@ -214,6 +217,9 @@ export async function publish(start: CardJob, io: PublishIo): Promise<PublishRes
 
     // 第 5 步：準備發布。時間取一次、全文做一次，一起存起來，重試照存下的寫（L2-8）；快照的位置被別人用了往後加。
     // 卡組搬走或家長選了跳過（還沒發布）才更新對象：時間沿用，更新後的全文先存再寫。
+    // 讀原文、核對卡組的期間，可能已寫成的那份才出現：換位置、換摘要之前再問一次（R6-2）。
+    const seen = await already();
+    if (seen) return seen;
     const before = save().published;
     const targets = save().decks.filter(deck => !deck.skipped).map(deck => deck.path);
     const stale = !before || before.targets.join('\n') !== targets.join('\n');
