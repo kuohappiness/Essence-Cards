@@ -12,7 +12,7 @@ import type { Deck, DeckProps, FieldColon, FieldName, Fields, Problem, ProblemCo
 export const fieldStart = /^(出處|類型|重要性|狀態|備註|錯題補強)\s*[：:]/;
 /** 同一行接別的欄位的分隔：`｜`，或半形的 `|` 後面接欄位名稱加冒號（D-170 第 12 點）；給 tracedSplit 用，連結裡的不算。 */
 export const FIELD_SEPARATOR = /｜|\|(?=\s*(?:出處|類型|重要性|狀態|備註|錯題補強)\s*[：:])/;
-const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
+const defaultProps = (): DeckProps => ({ term: null, subject: null, unit: null, materials: [], status: 'active', statusRead: 'missing', categories: [], isTranscript: false, need: null, issues: [] });
 const string = (value: unknown): string | null => typeof value === 'string' ? value : null;
 const strings = (value: unknown): string[] => typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 
@@ -58,6 +58,7 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
   // 沒有結束的屬性區，Obsidian 當成一般文字，底下的清單照樣顯示（W5 對照）。
   if (bounds === 'unclosed') {
     hint(0, '屬性區塊沒有結束，Obsidian 把它當成一般文字；先使用預設值');
+    props.statusRead = 'invalid';
     // 沒有結束就看到檔尾（syntax.md §2-1）。
     if (mentionsNeed(lines.slice(1).map(line => line.raw).join('\n'))) props.need = false;
     return { props, start: 0, problems };
@@ -92,13 +93,14 @@ export function readProperties(lines: Line[]): { props: DeckProps; start: number
     if (Object.hasOwn(values, '需要版本')) props.need = string(values['需要版本']) ?? false;
     if (Object.hasOwn(values, '狀態')) {
       const status = values['狀態'];
+      props.statusRead = status === '草稿' || status === '暫停' || status === '啟用' ? 'valid' : 'invalid';
       if (status === '草稿') props.status = 'draft';
       else if (status === '暫停') props.status = 'paused';
       else if (status !== '啟用') hint(lineOf('狀態'), '屬性「狀態」的值認不得，先當作啟用');
     }
   } catch {
     hint(0, '屬性區塊寫法有問題，先使用預設值');
-    return { props: { ...defaultProps(), need: mentionsNeed(raw) ? false : null }, start, problems };
+    return { props: { ...defaultProps(), statusRead: 'invalid', need: mentionsNeed(raw) ? false : null }, start, problems };
   }
   return { props, start, problems };
 }
@@ -238,7 +240,10 @@ export function parseDeck(text: string, options?: { layout?: boolean }): Deck & 
             }
             if (key === '狀態') {
               if (value === '暫停') fields.paused = true;
-              else if (value !== '啟用') addProblem(node, 'unknown-field-value', '狀態的值認不得，先當作啟用', 'hint', valueSpan());
+              else if (value !== '啟用') {
+                fields.statusInvalid = true;
+                addProblem(node, 'unknown-field-value', '狀態的值認不得，先當作啟用', 'hint', valueSpan());
+              }
             }
           }
         }

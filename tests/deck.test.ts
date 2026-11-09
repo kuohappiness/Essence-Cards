@@ -31,7 +31,7 @@ const codes = (body: string) => deck(body).problems.map(p => p.code);
 
 void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題目與補充', () => {
   const parsed = parseDeck(examples[0]);
-  assert.deepEqual(parsed.props, { term: '國二上', subject: '自然', unit: { code: '2-2', name: '水溶液' }, materials: ['[[國二上自然 2-2 水溶液]]'], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
+  assert.deepEqual(parsed.props, { term: '國二上', subject: '自然', unit: { code: '2-2', name: '水溶液' }, materials: ['[[國二上自然 2-2 水溶液]]'], status: 'active', statusRead: 'valid', categories: [], isTranscript: false, need: null, issues: [] });
   assert.deepEqual(parsed.problems, []);
   const expected = [
     ['k3m9x2', '能說出溶質與溶劑的意思', '1 溶液', ['p.43'], '定義', 'medium', ['[[國二上自然 第一次段考]]'], [
@@ -63,7 +63,7 @@ void test('§2-2 自然完整例子：逐一核對屬性、目標、資料、題
 
 void test('§2-2 英文完整例子：兩方向、typed、例句與記憶錨點', () => {
   const parsed = parseDeck(examples[1]);
-  assert.deepEqual(parsed.props, { term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, materials: ['[[國二上英文 L1 Back to School]]'], status: 'active', categories: [], isTranscript: false, need: null, issues: [] });
+  assert.deepEqual(parsed.props, { term: '國二上', subject: '英文', unit: { code: 'L1', name: 'Back to School' }, materials: ['[[國二上英文 L1 Back to School]]'], status: 'active', statusRead: 'valid', categories: [], isTranscript: false, need: null, issues: [] });
   assert.deepEqual(parsed.problems, []);
   const rows = [
     ['b4rw7k', 'borrow 英翻中', 'en-zh', 'borrow', 'borrow', 'v. 借入、向別人借', ['例句：Can I borrow your pen? 我可以借你的筆嗎？'], [], null],
@@ -518,13 +518,13 @@ void test('來源類型只要存在就是轉錄稿，全部清單不當卡組', 
 });
 for (const broken of ['科目: [', '科目: 自然\n科目: 英文', '- 不是對照表']) void test('YAML 壞掉全部回預設 ' + broken, () => {
   const parsed = parseDeck('---\n' + broken + '\n---\n- Q :: A');
-  assert.deepEqual(parsed.props, parseDeck('').props); assert.equal(parsed.problems[0].line, 0); assert.equal(parsed.problems[0].code, 'unknown-property-value');
+  assert.deepEqual(parsed.props, { ...parseDeck('').props, statusRead: 'invalid' }); assert.equal(parsed.problems[0].line, 0); assert.equal(parsed.problems[0].code, 'unknown-property-value');
 });
 // W5 對照 D068：Obsidian 把沒有結束的屬性區當成一般文字，底下的清單照樣顯示，所以照樣出題。
 void test('未閉合 YAML 照 Obsidian 當成一般文字：清單照樣出題，屬性用預設值並提示', () => {
   const parsed = parseDeck('---\n科目: 自然\n- Q :: A');
   assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit]), [[2, true]]);
-  assert.deepEqual(parsed.props, parseDeck('').props);
+  assert.deepEqual(parsed.props, { ...parseDeck('').props, statusRead: 'invalid' });
   assert.deepEqual(parsed.problems.map(p => [p.line, p.code]), [[0, 'unknown-property-value']]);
 });
 // Codex 審查 W5：Obsidian 只認 `---` 當屬性區的結尾（2026-10-25 對照：`...` 是 Q 的延續文字，Q、R 都顯示），
@@ -532,7 +532,7 @@ void test('未閉合 YAML 照 Obsidian 當成一般文字：清單照樣出題�
 void test('開頭 --- 之後用 ... 結尾不算結束：當成一般文字，前後的清單都出題', () => {
   const parsed = parseDeck('---\n科目: 自然\n- Q :: A\n...\n- R :: B');
   assert.deepEqual(parsed.targets.map(t => [t.line, t.implicit, t.prompts.map(p => [qa(p).question, qa(p).answer])]), [[2, true, [['Q', 'A\n...']]], [4, true, [['R', 'B']]]]);
-  assert.deepEqual(parsed.props, parseDeck('').props);
+  assert.deepEqual(parsed.props, { ...parseDeck('').props, statusRead: 'invalid' });
   assert.deepEqual(parsed.problems.map(p => [p.line, p.code]), [[0, 'unknown-property-value']]);
 });
 void test('YAML 未知狀態提示位於狀態行', () => {
@@ -580,7 +580,7 @@ for (const [label, key] of [
     for (const broken of ['科目: [', '科目: 自然\n科目: 英文']) {
       const parsed = parseDeck('---\n' + broken + '\n' + key + '\n---\n- Q :: A');
       assert.equal(parsed.props.need, false, broken);
-      assert.deepEqual({ ...parsed.props, need: null }, parseDeck('').props, broken);
+      assert.deepEqual({ ...parsed.props, need: null }, { ...parseDeck('').props, statusRead: 'invalid' }, broken);
     }
     // 沒有結束的屬性區（Obsidian 當成一般文字）：一直看到檔尾。
     assert.equal(parseDeck('---\n' + key + '\n- Q :: A').props.need, false);
@@ -596,7 +596,7 @@ void test('§2-1 屬性區寫壞但沒有「需要版本」四個字：照舊用
   for (const text of ['---\n科目: [\n---\n- Q :: A', '---\n科目: 自然\n- Q :: A', '---\n科目: [\n"需要\n  版本": 9.0.0\n---', '---\n科目: [\n"需要\\\\u7248本": 9.0.0\n---', '---\n科目: [\n需要 版本: 1\n---']) {
     const parsed = parseDeck(text);
     assert.equal(parsed.props.need, null, text);
-    assert.deepEqual(parsed.props, parseDeck('').props, text);
+    assert.deepEqual(parsed.props, { ...parseDeck('').props, statusRead: 'invalid' }, text);
   }
   // 屬性區之後的內容不是屬性區的原文。
   assert.equal(parseDeck('---\n科目: [\n---\n- 需要版本 :: 0.6.0').props.need, null);
@@ -1290,8 +1290,8 @@ after(() => {
       assert.equal(parse(once).props.status, status[value], context + '：讀回來不是這個值');
       assert.equal(setStatus(once, value), once, context + '：第二次改字');
       assert.deepEqual(content(once), content(text), context + '：學習目標或題目改變');
-      const { status: _before, issues: _beforeIssues, ...others } = parse(text).props;
-      const { status: _after, issues: _afterIssues, ...kept } = parse(once).props;
+      const { status: _before, statusRead: _beforeRead, issues: _beforeIssues, ...others } = parse(text).props;
+      const { status: _after, statusRead: _afterRead, issues: _afterIssues, ...kept } = parse(once).props;
       assert.deepEqual(kept, others, context + '：別的屬性改變');
       const back = setStatus(once, value === '暫停' ? '啟用' : '暫停');
       assert.ok(back !== null, context + '：改得過去卻改不回來');
