@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import { encodeEntry } from '../src/core/study/index.ts';
 import { createFolderGuard, type FolderGuard, type FolderRef, type GuardHost } from '../src/obsidian/folder-guard.ts';
 import type { Files } from '../src/core/files.ts';
+import { sha256Hex } from '../src/core/ai/index.ts';
+import type { CardForm, CardJob, EmbeddedRules } from '../src/core/ai/index.ts';
+import { createAiCards } from '../src/obsidian/ai-cards.ts';
 import { createState } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
 
@@ -1072,4 +1075,205 @@ void test('第二輪 F5 正常結束時取消總時限', async () => {
   drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
   await f.run();
   assert.deepEqual(f.timers, []);
+});
+
+// ---- AI 製卡與防呆（tasks/ai-cards-mvp.md §5，Codex L2 第三輪 R3-4）----
+
+const AI_RULES: EmbeddedRules = { english: [{ name: '通用', version: 'v0.15', text: '# 通用', sha256: sha256Hex('# 通用') }, { name: '英文', version: 'v0.14', text: '# 英文', sha256: sha256Hex('# 英文') }] };
+const AI_FORM: CardForm = { subject: 'english', term: '國二上', unit: 'L3 Sports', purpose: '準備段考', supplement: false, adjust: '', material: '' };
+const AI_REPLY = ['國二上英文 L3 單字', '', '## 單字', '', '- borrow 英翻中', '    - 出處：p.40', '    - borrow :: 借入', '<<<完>>>'].join('\n');
+const AI_SNAP = `${R}/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`;
+const STRAY = `${R}/英文/紀錄`;
+
+/** 真的防呆、state 與製卡流程，加上這台電腦的存放；failDrop 時工作清不掉（快照寫成、清理前中斷）。 */
+async function aiCards(f: Fake, guard: FolderGuard, t: TestContext, box = { jobs: null as unknown, failDrop: false, beforeNamed: null as (() => void) | null }) {
+  // eslint-disable-next-line prefer-const -- state 與流程互相參照
+  let state: ReturnType<typeof createState>;
+  const cards = createAiCards({
+    rules: AI_RULES, state: () => state,
+    names: () => new Set([...f.memory.texts.keys()].filter(path => path.endsWith('.md')).map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
+    named: name => { box.beforeNamed?.(); return [...f.memory.texts.keys()].filter(path => path.endsWith('.md') && path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase() === name); },
+    store: {
+      jobs: () => box.jobs,
+      saveJobs(next: CardJob[]) { if (box.failDrop && !next.some(each => each.save)) throw Error('存不進去'); box.jobs = JSON.parse(JSON.stringify(next)) as unknown; },
+      retired: () => [], retire() {}, last: () => ({}), saveLast() {},
+    },
+    clipboard: () => Promise.resolve(),
+    now: () => ({ ms: Date.parse('2026-11-07T10:02:11+08:00'), offset: 480 }),
+    onError() {},
+  });
+  state = createState({ files: guard.wrap(f.files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: 'PC-test', delay: 1, fillIds: true, stuckAfter: 2000, reserved: () => cards.reserved(), now: () => Date.parse('2026-11-07T10:02:11+08:00'), offset: () => 480, onError() {} });
+  t.after(() => state.close());
+  await state.ready();
+  const copied = await cards.copy(AI_FORM);
+  assert.ok('job' in copied);
+  return { box, cards, state, job: copied.job };
+}
+/** 快照寫成、只有清理這台電腦的工作失敗：工作留著，已經發布了。 */
+async function published(f: Fake, guard: FolderGuard, t: TestContext) {
+  const loaded = await aiCards(f, guard, t);
+  loaded.box.failDrop = true;
+  assert.equal((await loaded.cards.save(loaded.job, AI_REPLY, null)).kind, 'stop');
+  loaded.box.failDrop = false;
+  assert.ok(f.memory.texts.has(AI_SNAP));
+  await settle();
+  return { ...loaded, job: loaded.cards.jobs()[0] };
+}
+const snapshots = (f: Fake): string[] => [...f.memory.texts.keys()].filter(path => path.includes('/AI 輸出/2026')).sort();
+
+void test('R3-4 紀錄資料夾搬回失敗：原位讀到沒有不算沒有，已發布的不另建一份快照、不放棄；家長拖回去之後只清理', async t => {
+  const f = fake();
+  const guard = started(f);
+  const { cards, job } = await published(f, guard, t);
+  f.failMoves.push(Error('沒有權限'));
+  drag(f, guard, `${R}/紀錄`, STRAY);
+  const resuming = cards.resume(job);
+  await f.run();
+  assert.match((await resuming as { message: string }).message, /不在原位/);
+  assert.deepEqual(snapshots(f), [`${STRAY}/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`]);
+  assert.equal(cards.jobs().length, 1);
+  // 不知道是不是已經存好了：不放棄。
+  assert.match((await cards.abandon(job) as { message: string }).message, /不在原位/);
+  assert.equal(cards.jobs().length, 1);
+  // 家長拖回原位：只清理，還是一份。
+  drag(f, guard, STRAY, `${R}/紀錄`);
+  await f.run();
+  assert.equal((await cards.resume(job)).kind, 'done');
+  assert.deepEqual(snapshots(f), [AI_SNAP]);
+  assert.deepEqual(cards.jobs(), []);
+});
+
+void test('R4-1 搬回失敗後重開：搬到 Essence Cards 外面、原位又長出新的紀錄，都不再發布一份、不放棄；放回原位之後只清理', async t => {
+  const OUT = '紀錄';
+  for (const regrown of [false, true]) {
+    const f = fake();
+    const first = started(f);
+    const before = await published(f, first, t);
+    // 看過 AI 輸出：下一次判斷記住它（搬走之前 vault 有變動）。
+    first.check();
+    f.failMoves.push(Error('沒有權限'));
+    drag(f, first, `${R}/紀錄`, OUT);
+    await f.run();
+    assert.match((await before.cards.resume(before.job) as { message: string }).message, /不在原位/);
+    // 重開：防呆、state、製卡都重建，防呆只剩這台記住的名字；恢復資料還在。沒搬回的記憶體已經沒了。
+    first.close();
+    if (regrown) f.memory.write(`${R}/紀錄/2026-11 PC-test.jsonl`, '');
+    const guard = started(f);
+    const after = await aiCards(f, guard, t, before.box);
+    const job = after.cards.jobs().find(each => each.save)!;
+    assert.match((await after.cards.resume(job) as { message: string }).message, /不在原位/);
+    assert.deepEqual(snapshots(f), [`${OUT}/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`]);
+    assert.match((await after.cards.abandon(job) as { message: string }).message, /不在原位/);
+    assert.ok(after.cards.jobs().some(each => each.id === job.id));
+    if (regrown) continue;
+    // 家長放回原位：只清理，還是一份。
+    drag(f, guard, OUT, `${R}/紀錄`);
+    guard.check();
+    assert.equal((await after.cards.resume(job)).kind, 'done');
+    assert.deepEqual(snapshots(f), [AI_SNAP]);
+  }
+});
+
+void test('R5-1 搬回失敗後原位長出新檔：防呆不再報不在原位，同一份快照還在 vault 裡就只清理，繼續和放棄都不再發布一份', async t => {
+  const OUT = '紀錄';
+  const MOVED = `${OUT}/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`;
+  // 兩種都讓防呆認不出：還沒記住 AI 輸出時，紀錄長出新檔；已經記住時，AI 輸出長出新檔。
+  for (const { remembered, regrown } of [{ remembered: false, regrown: `${R}/紀錄/2026-11 PC-test.jsonl` }, { remembered: true, regrown: `${R}/紀錄/AI 輸出/原文/別的.md` }]) {
+    for (const action of ['resume', 'abandon'] as const) {
+      const f = fake();
+      const first = started(f);
+      const before = await published(f, first, t);
+      if (remembered) first.check();
+      f.failMoves.push(Error('沒有權限'));
+      drag(f, first, `${R}/紀錄`, OUT);
+      await f.run();
+      first.close();
+      f.memory.write(regrown, '');
+      const guard = started(f);
+      const after = await aiCards(f, guard, t, before.box);
+      guard.check();
+      assert.equal(guard.displaced(AI_SNAP), false);
+      const job = after.cards.jobs().find(each => each.save)!;
+      const result = await after.cards[action](job);
+      assert.equal('kind' in result ? result.kind : 'left', 'done');
+      assert.deepEqual(snapshots(f), [MOVED]);
+      assert.equal(after.cards.jobs().some(each => each.id === job.id), false);
+    }
+  }
+});
+
+void test('R6-3 放棄找到同一份快照就只清理：之後看不到也不重新發布；原位內容不同、別處相同也算已發布；清不掉就停下、工作留著', async t => {
+  const OUT = '紀錄';
+  const MOVED = `${OUT}/AI 輸出/2026-11-07 國二上英文 L3 Sports.md`;
+  /** 快照寫成、清理前中斷，紀錄資料夾搬到外面沒搬回；重開時原位長出新檔。 */
+  const prepare = async () => {
+    const f = fake();
+    const first = started(f);
+    const before = await published(f, first, t);
+    f.failMoves.push(Error('沒有權限'));
+    drag(f, first, `${R}/紀錄`, OUT);
+    await f.run();
+    first.close();
+    f.memory.write(`${R}/紀錄/2026-11 PC-test.jsonl`, '');
+    const guard = started(f);
+    const after = await aiCards(f, guard, t, before.box);
+    guard.check();
+    return { f, ...after, job: after.cards.jobs().find(each => each.save)! };
+  };
+  // 查到同一份之後，同步讓它暫時看不到：放棄不再走一次發布。
+  {
+    const { f, box, cards, job } = await prepare();
+    let looked = 0;
+    box.beforeNamed = () => { if (++looked === 2) f.memory.texts.delete(MOVED); };
+    const result = await cards.abandon(job);
+    assert.deepEqual('kind' in result && result.kind === 'done' ? result.targets : null, 1);
+    assert.deepEqual(snapshots(f), [MOVED]);
+    assert.equal(cards.jobs().some(each => each.id === job.id), false);
+  }
+  // 原位被不同內容占用、別處還有相同的快照：繼續和放棄都算已發布，原位的檔不動。
+  for (const action of ['resume', 'abandon'] as const) {
+    const { f, cards, job } = await prepare();
+    f.memory.write(AI_SNAP, '別人寫的不同內容');
+    const result = await cards[action](job);
+    assert.equal('kind' in result ? result.kind : 'left', 'done');
+    assert.equal(f.memory.texts.get(AI_SNAP), '別人寫的不同內容');
+    assert.equal(cards.jobs().some(each => each.id === job.id), false);
+  }
+  // 這台電腦存不進去：沒有清理成功，工作留著，不說成完成。
+  {
+    const { f, box, cards, job } = await prepare();
+    box.failDrop = true;
+    assert.match((await cards.abandon(job) as { message: string }).message, /存不進這台電腦/);
+    assert.deepEqual(snapshots(f), [MOVED]);
+    assert.equal(cards.jobs().some(each => each.id === job.id), true);
+  }
+});
+
+void test('R3-4 對照：搬回成功時等回原位再讀，只有一份快照', async t => {
+  const f = fake();
+  const guard = started(f);
+  const { cards, job } = await published(f, guard, t);
+  drag(f, guard, `${R}/紀錄`, STRAY);
+  const resuming = cards.resume(job);
+  await f.run();
+  assert.equal((await resuming).kind, 'done');
+  assert.deepEqual(snapshots(f), [AI_SNAP]);
+});
+
+void test('R3-4 還沒發布時紀錄資料夾沒搬回：不在原位另建一套原文；已經排到建檔的也擋下', async t => {
+  const f = fake();
+  const guard = started(f);
+  const { cards, state, job } = await aiCards(f, guard, t);
+  f.failMoves.push(Error('沒有權限'));
+  drag(f, guard, `${R}/紀錄`, STRAY);
+  await f.run();
+  assert.ok(guard.displaced(`${R}/紀錄/AI 輸出/x.md`));
+  assert.equal(guard.displaced(DECK), false);
+  const stop = await cards.save(job, AI_REPLY, null);
+  assert.match((stop as { message: string }).message, /不在原位/);
+  assert.deepEqual([...f.memory.texts.keys()].filter(path => path.startsWith(`${R}/紀錄/AI 輸出`)), []);
+  assert.deepEqual(await state.aiCreate(`${R}/紀錄/AI 輸出/x.md`, 'x'), { kind: 'blocked', reason: 'displaced' });
+  assert.equal(f.memory.texts.has(`${R}/紀錄/AI 輸出/x.md`), false);
+  // 別的位置照常。
+  assert.deepEqual(await state.aiCreate(`${R}/考試範圍/x.md`, 'x'), { kind: 'done' });
 });

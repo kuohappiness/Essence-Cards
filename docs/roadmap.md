@@ -18,9 +18,9 @@ v1 開發中（2026-10-20 開始寫程式）。開工只讀這一節；還沒開
 | 入口與目錄（第一批，[D-163](decisions.md#d-163-入口與目錄的四批開法全部卡的一輪與提醒一區)） | 已合併進 `main`，Codex L2 七輪後通過、Windows 實機通過（見已完成）；出處定在 [D-164](decisions.md#d-164-出處的寫法與讀法)、[D-169](decisions.md#d-169-家長亂填出處是常態程式不猜看不懂就當場教)、[D-170](decisions.md#d-170-出處的讀法不用猜的直接讀懂要猜的讓家長選) | 隨 `0.3.0` 裝到正式使用的 vault（2026-11-04，見已完成）；iPhone 通過（2026-11-03，[結果](../tasks/iphone-test-2026-11.md)）；第二批開工前先定出處結果的欄位（[任務 §9-1](../tasks/entry-and-catalog.md#9-1-模組)） | 第二批開工 | [任務說明](../tasks/entry-and-catalog.md)、[L2 審查請求](../tasks/entry-and-catalog-review.md) |
 | 入口與目錄（第四批，編輯畫面標示與出處小表單，[D-047](decisions.md#d-047-編輯畫面標示卡組結構)） | 已合併進 `main`（2026-11-09，見已完成）：Windows 實機通過；Codex L2 五輪，第五輪通過 | 和第二批一起升正式版，升版先問使用者 | 使用者決定升版 | [任務說明](../tasks/edit-markup.md)、[L2 審查請求](../tasks/edit-markup-l2.md) |
 | 入口與目錄（第二批，考試範圍，[D-176](decisions.md#d-176-考試範圍第二批的選擇手改的範圍檔不默默失效提前結束立刻失效)） | 已合併進 `main`（2026-11-05，見已完成）：Windows 實機通過；Codex L2 五輪，第五輪留下的 R25 使用者決定不修（[技術債](backlog.md#技術債)） | 兩批都已合併，升版先問使用者；iPhone 還沒測，併入下一次實機測試 | 使用者決定升版 | [任務說明](../tasks/exam-scope.md)、[L2 審查請求](../tasks/exam-scope-review.md) |
-| AI 製卡最小版（使用者 2026-11-07：盡早開始用外掛最關鍵的一步） | [任務說明](../tasks/ai-cards-mvp.md)定稿（2026-11-07）：第一次製卡的手動接法：電腦填單元 → 複製提示 → 貼到自己的 AI 對話、附課本 → 貼回 → 檢查 → 存成草稿與快照 → 按「啟用」孩子才看得到；不需要 API 金鑰與 Capture。引言框的「加入」、加深與主動提示、訂閱接法、規則自訂版之後各自開任務（環節 8 第 10 條） | 任務說明定稿（2026-11-07，格式查核四輪都採用；科目五科全開）；本機開分支 `claude/ai-cards-mvp` 實作，合併前 Windows 實機與 Codex L2 | Claude（本機） | [任務說明](../tasks/ai-cards-mvp.md)、[格式查核請求](../tasks/ai-cards-mvp-format-review.md) |
+| AI 製卡最小版（使用者 2026-11-07：盡早開始用外掛最關鍵的一步） | 已合併進 `main`（2026-11-09，見已完成）：第一次製卡的手動接法：電腦填單元 → 複製提示 → 貼到自己的 AI 對話、附課本 → 貼回 → 檢查 → 存成草稿與快照 → 按「啟用」孩子才看得到；不需要 API 金鑰與 Capture。Windows 實機通過；Codex L2 七輪，第七輪通過。引言框的「加入」、加深與主動提示、訂閱接法、規則自訂版之後各自開任務（環節 8 第 10 條） | iPhone 還沒測，最晚在升正式 vault 之前（[技術債](backlog.md#技術債)）；Claude 網頁等額度再試；升版先問使用者 | 使用者決定升版 | [任務說明](../tasks/ai-cards-mvp.md)、[L2 報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>) |
 | 外掛架構逐環節檢視 | 整串檢視完成（2026-10-30）：九個環節都談定（[D-142](decisions.md#d-142-範圍與目錄模組的六項選擇)、[D-148](decisions.md#d-148-電腦專用的主機接點)、[D-157](decisions.md#d-157-重複的學習目標-id先停家長選)、[D-158](decisions.md#d-158-打字卡看起來一樣的字元與多按的空白不算錯照打可以跳過)、[D-159](decisions.md#d-159-當天採用的錯題補強今天的份不變另有一個練習的選項)）；施工都在 [backlog](backlog.md#技術債)，環節 5 的存檔受阻提示已隨雲端佔位檔任務合併；環節 9 的四列與環節 5 的 W3 (a)(b) 已合併（見已完成）；觸發點已到的：環節 2 兩列（D1 已合併，見已完成；D-157 見上一列）；環節 3 的打字卡比對已合併（見已完成） | 照 backlog 各列的觸發點施工，不再另開檢視 | — | [討論稿](<../Claude Codex Discussion/2026-10-26-plugin-architecture.md>) |
-| 補上錯過就補不回來的紀錄（上線前第一項，使用者 2026-11-09） | [任務說明](../tasks/record-gaps.md)寫好：狀態與設定的變更紀錄與基準、考試切面、讀到 NUL 當讀不到、紀錄時間不重號；學生和家長的畫面不變 | 格式查核已核對、任務說明已改；程式等 AI 製卡最小版合併後開工 | Claude | [任務說明](../tasks/record-gaps.md) |
+| 補上錯過就補不回來的紀錄（上線前第一項，使用者 2026-11-09） | [任務說明](../tasks/record-gaps.md)寫好：狀態與設定的變更紀錄與基準、考試切面、讀到 NUL 當讀不到、紀錄時間不重號；學生和家長的畫面不變 | 格式查核已核對、任務說明已改；AI 製卡最小版已合併，程式可以開工 | Claude | [任務說明](../tasks/record-gaps.md) |
 | 開發流程：同一項修偏兩次就停、換模型後做減法（使用者 2026-11-09） | 討論稿寫好，兩項都還沒寫進規則 | Codex 第一輪站在「不做」那一方反駁，一致後交使用者確認、寫 D-ID | 使用者轉貼給 Codex | [討論稿](<../Claude Codex Discussion/2026-11-09-fix-chains-and-rule-pruning.md>) |
 | 學習目標架構第三輪 | 暫選 R3 | 兩三個新單元與段考到齊再跑 | 新教材 | [D-132](decisions.md#d-132-學習目標架構暫選-r3第三輪在新教材比三組) |
 | 製卡規則下一輪試用 | 等真實影片筆記 | 看目標數量、共同成功判準、洩漏與放錯池 | 新教材 | [試用紀錄](card-rules/trials.md) |
@@ -58,6 +58,7 @@ flowchart LR
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-09 | AI 製卡最小版合併：家長複製提示、貼到自己的 AI 對話再貼回，檢查後存成草稿與快照，按「啟用」孩子才看得到；不需要 API 金鑰；Windows 實機通過，iPhone 延後到升正式 vault 之前，Codex L2 七輪（[任務說明](../tasks/ai-cards-mvp.md)、[L2 報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)） |
 | 2026-11-09 | 省 token 補充（[D-171](decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點）：Codex 跑檢查一次等到結束（輪詢曾佔輸入 43%，試行）；Claude 不例行換對話、找不回依據才留一句進度；L2 報告不重述規格與差異 |
 | 2026-11-09 | Mindboard 的 repo 定案：開獨立的 `Essence-Mindboard`，開始寫程式時才建；規劃、決定與進度留在 Essence Cards，做法照 Capture（[D-196](decisions.md#d-196-mindboard-開新-repo開始寫程式時才建)） |
 | 2026-11-09 | 編輯畫面標示與出處小表單合併：卡組筆記標出目標、題目與寫錯的地方；看不懂的出處點一下用表單改，欄位名稱寫錯、半形冒號問一句就改；只在電腦；Windows 實機通過，Codex L2 五輪（[任務說明](../tasks/edit-markup.md)） |
@@ -67,4 +68,3 @@ flowchart LR
 | 2026-11-06 | 開發進度畫板上線：[開發進度地圖](progress-map.md)是唯一來源，`main` 上改了就由 GitHub Actions 產生畫板網頁、發布到 <https://kuohappiness.github.io/Essence-Cards/>，網頁不進 repo；功能做完時改地圖裡的符號（[PR #3](https://github.com/kuohappiness/Essence-Cards/pull/3)） |
 | 2026-11-06 | 小考標記合併：目錄替一篇或一個單元設小考日期，寫成 `考試範圍/小考/` 的小考檔；入口最上面列出哪天考，全部卡只練那幾篇；連結找不到或重名時寫出怎麼修；Windows 實機通過，iPhone 還沒測（[D-189](decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)，[任務說明](../tasks/quiz-mark.md)、[Codex L2](<../Claude Codex Discussion/2026-11-06-quiz-mark-review.md>)） |
 | 2026-11-06 | 加深的主動提示定案：上一次還沒記穩的目標有三分之一記穩了，電腦的提醒區就問要不要加深，按一下才呼叫 AI；記穩了改看穩定度 7 天以上且最後一次答對，不跟著保持率與考試變（[D-194](decisions.md#d-194-加深的主動提示記穩了三分之一就問按一下才做)） |
-| 2026-11-06 | 題型接點與點選填空合併：翻面、打字、點選填空走同一個接點；比較卡一組併成一張、一格一個目標，有比較卡的卡組舊裝置整篇擋住；Windows 實機通過，iPhone 還沒測（[任務說明](../tasks/question-type-seam.md)、[Codex L2](<../Claude Codex Discussion/2026-11-05-question-type-seam-l2.md>)） |

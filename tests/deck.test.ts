@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { parseDeck as parse, assignIds as assign, setDeckStatus as setStatus, setTargetId as setId, baseForm, blockIds, markNeed } from '../src/core/deck/index.ts';
 import type { AssignOptions, Prompt } from '../src/core/deck/index.ts';
 import { NEED_FORMS } from './helpers/need-forms.ts';
+import { inspectReply, planDraft, RULE_SUBJECTS } from '../src/core/ai/index.ts';
 import { COLON_CASES, NOT_COLONS, NOT_RENAMED, RENAME_CASES } from './helpers/field-fix-cases.ts';
 import { EDIT_CASES } from './helpers/source-edit-cases.ts';
 
@@ -1180,6 +1181,25 @@ for (const each of [...RENAME_CASES, ...COLON_CASES]) { deckCases.add(each.text)
 for (const each of [...NOT_RENAMED, ...NOT_COLONS]) deckCases.add(each.text);
 
 // after 保證在所有範例登錄後驗證，不依賴往後新增測試的位置。
+// AI 製卡存成的草稿（tasks/ai-cards-mvp.md §8 的 R2-5）：疑似篇名的每一種寫法擋下或照常讀之後，能存的草稿全文也受上面的往返與冪等保護。
+void test('AI 製卡的草稿：篇名行拆成的篇、## 小標題照常的篇，存成的全文登錄進往返範例', () => {
+  const english = RULE_SUBJECTS.find(each => each.key === 'english')!;
+  const form = { subject: 'english', term: '國二上', unit: 'L3 Sports: Week 1', purpose: '準備段考' as const, supplement: false, adjust: '', material: '' };
+  const replies = [
+    ['國二上英文 L3 單字', '', '## 單字', '', '- borrow 英翻中', '    - borrow :: 借入', '', '> [!note]- 候選卡片', '> - lend 英翻中', '>     - 理由：x', '>     - lend :: 借出', '',
+      '國二上英文 L3 文法', '', '## 2 文法', '', '- 能用 be going to', '    - I ＿＿ swim. :: am going to', '<<<完>>>'],
+    ['## 2 擴散現象', '', '- 能用粒子運動說明擴散', '    - 為什麼？ :: 粒子**不停運動**', '<<<完>>>'],
+  ].map(lines => lines.join('\n'));
+  let n = 0;
+  for (const reply of replies) {
+    const inspection = inspectReply(reply, form, english, [], () => ({ kind: 'none' }));
+    assert.deepEqual(inspection.errors, []);
+    for (const deck of planDraft(inspection, form, english, [], () => ({ kind: 'none' }), () => 'abcde' + 'fghjk'[n++], new Set(), '2026-11-07').decks) {
+      assert.equal(parseDeck(deck.text).props.status, 'draft');
+    }
+  }
+});
+
 after(() => {
   // tools/export-compare.ts 用：全部範例寫成一個 JSON，拿到 Obsidian 和 metadataCache 對照（W5 §0-3）。
   if (process.env.ESSENCE_DECK_CASES) writeFileSync(process.env.ESSENCE_DECK_CASES, JSON.stringify([...deckCases]));

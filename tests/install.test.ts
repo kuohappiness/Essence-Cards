@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashBytes } from '../src/core/backup/index.ts';
 import { installVault, registerTestVault, releaseProblems } from '../tools/install.ts';
+import { ruleFiles } from '../tools/build.mjs';
 import type { InstallOptions } from '../tools/install.ts';
 import { makeVault, tempFolder } from './helpers/vault.ts';
 
@@ -31,7 +32,7 @@ const git = (dir: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'core.autocrlf=false', ...args], { cwd: dir, env, encoding: 'utf8' }).trim();
 
 /**
- * 暫存的 repo：src、tools/build.mjs、manifest.json、package.json，相依套件用 junction 指回；commit 後打 tag v0.0.1。
+ * 暫存的 repo：src、tools/build.mjs、AI 製卡的規則檔、manifest.json、package.json，相依套件用 junction 指回；commit 後打 tag v0.0.1。
  * 版號固定是 0.0.1，不跟著真的 repo 升版（升到 0.1.0 時這裡的測試全部壞過）。
  */
 async function repo(t: T, { tag = true }: { tag?: boolean } = {}): Promise<{ dir: string; head: string }> {
@@ -39,6 +40,11 @@ async function repo(t: T, { tag = true }: { tag?: boolean } = {}): Promise<{ dir
   await cp(join(root, 'src'), join(dir, 'src'), { recursive: true });
   await mkdir(join(dir, 'tools'));
   await cp(join(root, 'tools/build.mjs'), join(dir, 'tools/build.mjs'));
+  // 建置要讀 AI 製卡的規則檔（tasks/ai-cards-mvp.md §1）。
+  for (const path of ruleFiles()) {
+    await mkdir(dirname(join(dir, path)), { recursive: true });
+    await cp(join(root, path), join(dir, path));
+  }
   for (const name of ['manifest.json', 'package.json']) {
     const json = JSON.parse(await readFile(join(root, name), 'utf8')) as Record<string, unknown>;
     await writeFile(join(dir, name), JSON.stringify({ ...json, version: '0.0.1' }, null, 2) + '\n');

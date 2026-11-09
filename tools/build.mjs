@@ -1,8 +1,10 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { RULE_SUBJECTS, ruleText } from '../src/core/ai/index.ts';
 
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 // 由 Obsidian 提供、不打包的套件（照官方範例外掛）：CodeMirror 只能用 Obsidian 那一份（W5 §8-2 第 2 點）。
@@ -61,6 +63,30 @@ export async function buildVersion(root = defaultRoot) {
   return manifest.version + (commit ? '+' + commit : '');
 }
 
+/** AI 製卡的規則檔（tasks/ai-cards-mvp.md §1）：表上每一份，repo 根目錄算的路徑，不重複。測試的暫存專案要一起複製。 */
+export function ruleFiles() {
+  return [...new Set(RULE_SUBJECTS.flatMap(subject => subject.files.map(file => file.path)))];
+}
+
+/**
+ * 照 src/core/ai/rules.ts 的表讀規則檔、取送出的部分、算 SHA-256（UTF-8、換行統一成 
+），嵌進 main.js（D-151 第 1 點）。
+ * 表上的檔讀不到、標記找不到就建置失敗。
+ */
+export async function embedRules(root = defaultRoot) {
+  const rules = {};
+  for (const subject of RULE_SUBJECTS) {
+    rules[subject.key] = [];
+    for (const file of subject.files) {
+      let raw;
+      try { raw = await readFile(resolve(root, file.path), 'utf8'); } catch (error) { throw Error(`AI 製卡的規則檔讀不到：${file.path}`, { cause: error }); }
+      const text = ruleText(raw, file);
+      rules[subject.key].push({ name: file.name, version: file.version, text, sha256: createHash('sha256').update(text, 'utf8').digest('hex') });
+    }
+  }
+  return rules;
+}
+
 /**
  * 建置 main.js 與 styles.css 到 outdir（預設是 repo 根目錄）。dev 加上給 AI 測試與量測的開發命令；正式建置時 DEV 是 false，
  * 整段被拿掉。main.js 第一行寫 `/*! Essence Cards build=<BUILD> dev=<true|false> *\/`：安裝命令與備份工具從產出讀它
@@ -70,6 +96,7 @@ export async function buildVersion(root = defaultRoot) {
  */
 export async function buildPlugin({ root = defaultRoot, dev = false, outdir = root, sourcemap } = {}) {
   const version = await buildVersion(root);
+  const rules = await embedRules(root);
   await mkdir(outdir, { recursive: true });
   const outfile = resolve(outdir, 'main.js');
   const result = await build({
@@ -77,7 +104,8 @@ export async function buildPlugin({ root = defaultRoot, dev = false, outdir = ro
     bundle: true, minify: true, format: 'cjs', platform: 'browser', target: 'es2022',
     jsx: 'automatic', external, metafile: true, plugins: [desktopOnly(root)], sourcemap: sourcemap ? 'external' : false,
     banner: { js: `/*! Essence Cards build=${version} dev=${dev} */` },
-    define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: JSON.stringify(version) },
+    // CARD_RULES：AI 製卡的規則組（embedRules），以 JSON 字串嵌入、main.ts 解開；物件寫法 esbuild 會當成另一個輸入模組。
+    define: { 'process.env.NODE_ENV': '"production"', DEV: String(dev), BUILD: JSON.stringify(version), CARD_RULES: JSON.stringify(JSON.stringify(rules)) },
   });
   // 測試用：寫出 esbuild 的 metafile，檢查真正的建置含了哪些檔案（不另抄一份建置選項）。
   if (process.env.ESSENCE_METAFILE) await writeFile(process.env.ESSENCE_METAFILE, JSON.stringify(result.metafile));

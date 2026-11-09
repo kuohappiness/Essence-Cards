@@ -74,7 +74,8 @@ export const contractCases: readonly ContractCase[] = [
     async run({ files, dir }) {
       const got: string[] = [];
       await files.modify(`${dir}/n/m/新.md`, text => { got.push(text); return 'x'; });
-      same(got, [''], 'edit 收到');
+      // 要先建上層資料夾時，Obsidian 版建好之後再問一次 edit（R3-2）。
+      same([...new Set(got)], [''], 'edit 收到');
       same(await files.read(`${dir}/n/m/新.md`), 'x', 'read');
     },
   },
@@ -132,9 +133,10 @@ export const contractCases: readonly ContractCase[] = [
     async run({ files, dir }) {
       const missing = `${dir}/c19-missing.md`, empty = `${dir}/c19-empty.md`, full = `${dir}/c19-full.md`;
       const seen: boolean[] = [];
-      await files.modify(missing, (_, exists) => { seen.push(exists); return 'x'; });
+      // 空檔先建：上層資料夾已經有了，下面每一次 edit 都只問一次。
       await files.modify(empty, () => '');
       same(await files.read(empty), '', '建了空檔');
+      await files.modify(missing, (_, exists) => { seen.push(exists); return 'x'; });
       await files.modify(empty, (text, exists) => { seen.push(exists); return text; });
       await files.modify(full, () => 'y');
       await files.modify(full, (text, exists) => { seen.push(exists); return text; });
