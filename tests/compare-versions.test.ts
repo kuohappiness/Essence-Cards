@@ -521,6 +521,12 @@ void test('收尾：只有 Files 拒絕寫版本行是預期的；close 自己�
   await assert.rejects(snapshot(writing, versionLine), /write contract/);
 });
 
+void test('考試期間比較：切面（tasks/record-gaps.md §2）不妨礙比出結果', async () => {
+  const deck = '---\n年級學期: 國二上\n科目: 自然\n單元: "2-1"\n---\n' + goal('aaa111');
+  const input = { now: NOW, offset: 480, files: { [A]: deck, 'Essence Cards/考試範圍/段考.md': '---\n識別碼: x7f3k2\n考試開始: 2026-10-29\n考試結束: 2026-10-30\n---\n- 國二上 自然 2\n' } };
+  assert.deepEqual(Object.keys((await snapshot(root, input)).due), ['aaa111']);
+});
+
 // 假的版本回傳的每一個值，每個都會換成下面每一種不對的值。
 const fakeGood = () => ({
   state: {

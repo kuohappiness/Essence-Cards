@@ -1,0 +1,94 @@
+import type { Files } from '../core/files.ts';
+import { SNAPSHOT_FOLDER, snapshotKey, snapshotPath, snapshotSuffix, snapshotText, snapshotValid } from '../core/catalog/index.ts';
+import type { SnapshotDeck } from '../core/catalog/index.ts';
+import { completeText } from './reads.ts';
+
+/** 這一刻該留下的切面（tasks/record-gaps.md §2）；不該寫是 null。day 放進來，跨過清晨 4 點就算不同。 */
+export interface SnapshotPlan {
+  day: number;
+  exam: string | null;
+  scope: string;
+  start: string;
+  end: string;
+  units: string[];
+  decks: SnapshotDeck[];
+}
+
+interface SnapshotOptions {
+  files: Files;
+  device: string;
+  closed: () => boolean;
+  /** 同步算出現在該寫哪一份，條件都在這裡（範圍可用、日期、卡組與範圍檔都讀到、至少一篇）。 */
+  plan: () => SnapshotPlan | null;
+  /** 等已知的待讀讀完；false 是這次不寫。 */
+  settle: () => Promise<boolean>;
+  /** 範圍檔的待讀都讀完之後呼叫 decide，兩者在同一個同步區段（folder-files 的 drain）。 */
+  drain: <T>(decide: (known: boolean) => T | Promise<T>) => Promise<T>;
+  /** 卡組還有沒有在讀的。 */
+  waiting: () => boolean;
+  stamp: () => string;
+  onError: (error: unknown) => void;
+}
+
+/**
+ * 考試切面的查核與寫入（§2）：每次排今天的份之後、讀不到的補齊之後呼叫 check。一次只跑一輪，跑的時候又有觸發就再查一次；
+ * 這份已經有效的記住不再查；寫失敗的這一天不再試。不影響作答，排程與複習畫面都不讀這個資料夾。
+ */
+export function createSnapshots(options: SnapshotOptions) {
+  const { files } = options;
+  const done = new Set<string>();
+  const failed = new Map<string, number>();
+  let running = false, again = false;
+
+  async function once(): Promise<void> {
+    const first = options.plan();
+    if (!first) return;
+    const key = snapshotKey(first.exam, first.scope), id = first.start + ' ' + key;
+    if (done.has(id) || failed.get(id) === first.day) return;
+    if (!await options.settle()) return;
+    const mine: { suffix: number; path: string }[] = [];
+    for (const path of await files.list(SNAPSHOT_FOLDER)) {
+      const suffix = snapshotSuffix(path, first.start, key, options.device);
+      if (suffix !== null) mine.push({ suffix, path });
+    }
+    // 這台的檔讀不到：這次不寫，下次再查。
+    for (const { path } of mine) {
+      const text = completeText(path, await files.read(path));
+      if (text !== null && snapshotValid(text, key, first.start)) { done.add(id); return; }
+    }
+    const taken = new Set(mine.map(each => each.suffix));
+    let suffix = 1;
+    while (taken.has(suffix)) suffix++;
+    const path = snapshotPath(first.start, key, options.device, suffix);
+    await options.drain(async known => {
+      // 等待與列檔的時候選定的範圍、日期或卡組變了：這次不寫；變動的那一批會再查。
+      if (!known || options.closed() || options.waiting() || JSON.stringify(options.plan()) !== JSON.stringify(first)) return;
+      const content = snapshotText({ t: options.stamp(), exam: first.exam, scope: first.scope, start: first.start, end: first.end, units: first.units, decks: first.decks.length }, first.decks);
+      try {
+        await files.modify(path, (text, exists) => exists ? text : content);
+        done.add(id);
+      } catch (error) {
+        failed.set(id, first.day);
+        if (!options.closed()) options.onError(error);
+      }
+    });
+  }
+
+  async function loop(): Promise<void> {
+    do {
+      again = false;
+      // 列檔、讀檔失敗（iCloud 佔位檔、沒有權限）下次再查。
+      await once().catch(() => {});
+    } while (again && !options.closed());
+    running = false;
+  }
+
+  return {
+    check(): void {
+      if (options.closed()) return;
+      if (running) { again = true; return; }
+      running = true;
+      void loop();
+    },
+  };
+}

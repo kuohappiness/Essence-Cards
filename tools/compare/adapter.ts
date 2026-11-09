@@ -93,9 +93,10 @@ function frozen(texts: Record<string, string>) {
     },
   };
 }
-/** 載入時本來就會寫的行：版本行、狀態與設定的基準（tasks/record-gaps.md §1）。比較時 Files 拒絕這些是預期的。 */
+/** 載入時本來就會寫的：版本行、狀態與設定的基準、考試切面（tasks/record-gaps.md §1、§2）。比較時 Files 拒絕這些是預期的。 */
 const LOADING = new Set(['app', 'status', 'cap', 'retention', 'filter']);
 const isLoadingLine = (line: string): boolean => {
+  if (line.startsWith('改 Essence Cards/紀錄/考試切面/')) return true;
   try { return LOADING.has(String((JSON.parse(line) as { set?: unknown }).set)); } catch { return false; }
 };
 

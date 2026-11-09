@@ -1,11 +1,11 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
-import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
+import { buildIndex, deckInScope, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopeDay, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
 import type { Catalog, CatalogIndex, QuizInput, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
 export type { Catalog, QuizInput, QuizProblem, QuizRef, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
-import { createExamFiles } from './exam.ts';
+import { createExamFiles, unitsOf } from './exam.ts';
 import type { ExamBlocked, ExamChange, ExamResult } from './exam.ts';
 export type { ExamChange, ExamResult } from './exam.ts';
 import { createQuizFiles } from './quiz.ts';
@@ -22,9 +22,11 @@ import type { ExistingNow, ExistingTarget } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
 import { createObserver } from './observe.ts';
+import { createSnapshots } from './snapshots.ts';
+import type { SnapshotPlan } from './snapshots.ts';
 import type { Observation } from './observe.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, dayStart, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, formatTime, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
 import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, QueuedLine, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import { lastVersions } from '../core/backup/index.ts';
@@ -311,6 +313,7 @@ export function createState(options: StateOptions): State {
   const stuckAfter = options.stuckAfter ?? 30_000;
   function unreadChanged(): void {
     if (life.closed) return;
+    if (life.loaded) snapshots.check();
     for (const listener of [...unreadListeners]) {
       try { listener(); } catch (error) { report(error, 'listener'); }
     }
@@ -458,7 +461,9 @@ export function createState(options: StateOptions): State {
     const day = dayOf(value.now, value.offset);
     plannedKey = examPlanKey(day);
     viewedKey = examViewKey(day);
-    return planToday(value);
+    const today = planToday(value);
+    snapshots.check();
+    return today;
   }
   function replan(): void {
     current = plan(input());
@@ -533,8 +538,35 @@ export function createState(options: StateOptions): State {
       viewedKey = examViewKey(day);
       notifyChange();
     }
+    // 內容一樣的兩份範圍，換了選定不用重排，切面還是另一份（§2）。
+    snapshots.check();
   }
   const unitList = (): ScopeUnit[] => catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }));
+  /** 這一刻該留下的考試切面（tasks/record-gaps.md §2）；條件都在這裡，等待之後再算一次，結果不同就不寫。紀錄檔讀不到不擋，切面用不到紀錄。 */
+  function snapshotPlan(): SnapshotPlan | null {
+    if (!life.loaded || life.closed || !exam.settled() || exam.unread.size || [...unread].some(path => !isLogPath(path))) return null;
+    const at = now(), day = dayOf(at, offsetOf(at));
+    const { chosen, usable } = selection(day);
+    if (!chosen || !usable) return null;
+    const period = scopePeriod(chosen.file);
+    if (period.kind !== 'ok' || day < scopeDay(period.start) || day > scopeDay(period.end)) return null;
+    const decks = [...deckMap].filter(([, deck]) => deckInScope(chosen.file, deck)).flatMap(([path]) => {
+      const text = tracker.text(path);
+      return text === undefined ? [] : [{ path, text }];
+    }).sort((a, b) => a.path < b.path ? -1 : 1);
+    if (!decks.length) return null;
+    return { day, exam: chosen.file.id, scope: chosen.path, start: period.start, end: period.end, units: unitsOf(chosen.file), decks };
+  }
+  const snapshots = createSnapshots({
+    files, device,
+    closed: () => life.closed,
+    plan: snapshotPlan,
+    settle: async () => await writes.enqueue(() => writes.drain({ count: 0 }, true)) === null,
+    drain: decide => exam.drain(EXAM_WAIT, decide),
+    waiting: () => reads.waiting(),
+    stamp: () => { const at = now(); return formatTime(at, offsetOf(at)); },
+    onError: error => { report(error, 'write'); },
+  });
   /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。輪到它時選定的已經不是畫面打開的那一份（前一筆結束了、被刪、改名、換了另一次考試）：不套上去（§6）。 */
   let examWrites: Promise<unknown> = Promise.resolve();
   function examWrite(opened: ExamTarget, work: (chosen: ReturnType<typeof exam.choose>['chosen'], day: number, admit: () => ExamBlocked | null) => Promise<ExamResult>): Promise<ExamResult> {
@@ -645,6 +677,8 @@ export function createState(options: StateOptions): State {
         observe();
       }
       if (life.loaded && (decksChanged || logsChanged)) replan();
+      // 內容和快取相同也要查：這一批可能正好補齊了讀不到的。
+      if (life.loaded) snapshots.check();
     };
   }
 
