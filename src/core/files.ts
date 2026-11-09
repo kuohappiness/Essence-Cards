@@ -11,6 +11,7 @@ export interface Files {
   /**
    * 一次讀、改、寫；不存在時以 edit('', false) 建立含上層資料夾；內容不變時不寫入。exists 是讀的那一刻檔案在不在：
    * 零位元組的檔是 edit('', true)，建新檔的一方靠它不蓋掉讀與寫之間才出現的空檔（tasks/quiz-mark.md L2 R2）。
+   * edit 可能被呼叫不只一次，以最後一次為準：要先建上層資料夾時，建好之後再問一次（AI 製卡的 R3-2），所以 edit 不能有累積的副作用；丟錯就不建。
    */
   modify(path: string, edit: (text: string, exists: boolean) => string): Promise<void>;
   /** 追加 line 與換行；不存在時建立含上層資料夾。 */

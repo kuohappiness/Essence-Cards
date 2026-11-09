@@ -31,13 +31,16 @@ export function createObsidianFiles(app: App, options: { pause?: (path: string, 
     if (found instanceof TFolder) throw Error('這是資料夾，不是檔案：' + path);
     return found instanceof TFile ? found : null;
   }
+  /** 上層資料夾，外層在前。 */
+  function parents(path: string): string[] {
+    const parts = path.split('/').slice(0, -1);
+    return parts.map((_, i) => parts.slice(0, i + 1).join('/'));
+  }
+  async function makeParents(path: string): Promise<void> {
+    for (const folder of parents(path)) if (!vault.getAbstractFileByPath(folder)) await createFolder(folder);
+  }
   async function create(path: string, text: string): Promise<void> {
-    const slash = path.lastIndexOf('/');
-    let folder = '';
-    for (const part of slash < 0 ? [] : path.slice(0, slash).split('/')) {
-      folder = folder ? folder + '/' + part : part;
-      if (!vault.getAbstractFileByPath(folder)) await createFolder(folder);
-    }
+    await makeParents(path);
     await vault.create(path, text);
   }
   /**
@@ -87,11 +90,18 @@ export function createObsidianFiles(app: App, options: { pause?: (path: string, 
     modify(path, edit) {
       location(path);
       return serial(path, async () => {
-        for (let wait = pause(path); wait; wait = pause(path)) await wait;
-        const found = file(path);
-        // vault.process 一次讀、改、寫（D-110）；edit 回傳原文時不寫入（契約 C6 在 Obsidian 驗）。
-        if (found) await vault.process(found, text => edit(text, true));
-        else await create(path, edit('', false));
+        // 建上層資料夾要等，期間檔案、占用與搬回都可能變了（R3-2）：建好之後回到這裡重問一次，最後一次的 edit 到 vault.create 中間沒有等待。
+        // 第一次的 edit 決定要不要建：丟錯就不動資料夾（家長連資料夾一起刪掉時，離開筆記的補 ID 不會讓它冒出來）。
+        for (let made = false; ; made = true) {
+          for (let wait = pause(path); wait; wait = pause(path)) await wait;
+          const found = file(path);
+          // vault.process 一次讀、改、寫（D-110）；edit 回傳原文時不寫入（契約 C6 在 Obsidian 驗）。
+          if (found) { await vault.process(found, text => edit(text, true)); return; }
+          const text = edit('', false);
+          // 建過一次就直接建檔：iCloud 剛同步來的資料夾硬碟上有、清單可能一直還沒有（createFolder 當成建好）。
+          if (made || parents(path).every(folder => vault.getAbstractFileByPath(folder))) { await vault.create(path, text); return; }
+          await makeParents(path);
+        }
       });
     },
     append(path, line) {
