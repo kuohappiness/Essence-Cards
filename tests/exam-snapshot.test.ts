@@ -425,6 +425,62 @@ void test('27 兩個等待各自逾時：一份一直讀不完，存檔回 unrea
   assert.equal(rows(memory)[1].text, NATURE_TEXT.replace('答 k3m9x2', '改過的答'));
 });
 
+const STUCK = 30_000;
+const NEW_FILE = `${FOLDER}2026-10-28 6fc089a6a4f1 PC-test.jsonl`;
+const newScope = (): string => scope().replace('x7f3k2', 'y9k2m4');
+
+void test('切面的 I/O 有上限：舊檔的讀取卡住，等到上限後另一場考試照寫，舊檔不動、晚回的讀取不多寫', async t => {
+  const memory = createMemoryFiles({ ...VAULT, [FILE]: 'x' });
+  const held = memory.holdRead(FILE);
+  const h = await open(t, memory);
+  await held.started;
+  memory.write(SCOPE, newScope());
+  await h.pump();
+  assert.deepEqual(written(memory), [FILE]);
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(written(memory), [NEW_FILE, FILE].sort());
+  assert.equal(memory.texts.get(FILE), 'x');
+  assert.deepEqual(h.errors, []);
+  held.release(Error('晚回來的失敗'));
+  await h.pump(0);
+  assert.deepEqual(written(memory), [NEW_FILE, FILE].sort());
+  assert.deepEqual(h.errors, []);
+});
+
+void test('切面的 I/O 有上限：列檔卡住，等到上限後下一輪照常', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdList(memory);
+  const h = await open(t, memory);
+  assert.equal(hold.held(), true);
+  memory.write(SCOPE, newScope());
+  await h.pump();
+  await h.pump(STUCK);
+  await h.pump(0);
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), [NEW_FILE]);
+});
+
+void test('切面的 I/O 有上限：寫入卡住報 write、當天不重試；晚到的回呼不建檔；別場考試不受影響', async t => {
+  const memory = createMemoryFiles(VAULT);
+  const hold = holdWrite(memory);
+  const h = await open(t, memory);
+  assert.equal(hold.held(), true);
+  await h.pump(STUCK);
+  await h.pump(0);
+  assert.deepEqual(h.errors.map(([, source]) => source), ['write']);
+  hold.release();
+  await h.pump(0);
+  assert.deepEqual(written(memory), []);
+  memory.write(SCOPE, newScope());
+  await h.pump();
+  assert.deepEqual(written(memory), [NEW_FILE]);
+  memory.write(SCOPE, scope());
+  await h.pump();
+  assert.deepEqual(written(memory), [NEW_FILE]);
+});
+
 void test('28 零篇不寫，之後有卡組再寫', async t => {
   const h = await launch(t, { [SCOPE]: scope() });
   assert.deepEqual(written(h.memory), []);

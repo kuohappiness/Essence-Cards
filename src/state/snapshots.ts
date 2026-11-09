@@ -27,6 +27,8 @@ interface SnapshotOptions {
   /** 卡組或範圍檔還有沒有在讀的。 */
   waiting: () => boolean;
   stamp: () => string;
+  /** 一次列檔、讀檔或寫檔最多等多久（毫秒）：iCloud 的佔位檔可能讓它一直不回來。 */
+  stuckAfter: number;
   onError: (error: unknown) => void;
 }
 
@@ -42,6 +44,21 @@ export function createSnapshots(options: SnapshotOptions) {
   const done = new Set<string>();
   const failed = new Map<string, number>();
   let running = false, again = false;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+
+  /** 等到上限就放棄這一步（底層取消不了）：一份卡住的檔不能擋住之後的查核與別場考試（L2 的 R5）。 */
+  function limited<T>(work: Promise<T>): Promise<T> {
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const stuck = new Promise<never>((_, reject) => {
+      id = setTimeout(() => { reject(Error(`考試切面的檔案操作等了 ${String(options.stuckAfter)} ms 沒有回來（逾時）`)); }, options.stuckAfter);
+      timers.add(id);
+    });
+    return Promise.race([work, stuck]).finally(() => {
+      if (id === undefined) return;
+      clearTimeout(id);
+      timers.delete(id);
+    });
+  }
 
   async function once(): Promise<void> {
     const first = options.plan();
@@ -50,13 +67,13 @@ export function createSnapshots(options: SnapshotOptions) {
     if (done.has(id) || failed.get(id) === first.day) return;
     if (!await options.settle()) return;
     const mine: { suffix: number; path: string }[] = [];
-    for (const path of await files.list(SNAPSHOT_FOLDER)) {
+    for (const path of await limited(files.list(SNAPSHOT_FOLDER))) {
       const suffix = snapshotSuffix(path, first.start, key, options.device);
       if (suffix !== null) mine.push({ suffix, path });
     }
     // 這台的檔讀不到：這次不寫，下次再查。
     for (const { path } of mine) {
-      const text = completeText(path, await files.read(path));
+      const text = completeText(path, await limited(files.read(path)));
       if (text !== null && snapshotValid(text, key, first.start)) { done.add(id); return; }
     }
     const taken = new Set(mine.map(each => each.suffix));
@@ -68,17 +85,19 @@ export function createSnapshots(options: SnapshotOptions) {
       // 等待與列檔的時候選定的範圍、日期或卡組變了：這次不寫；變動的那一批會再查。
       if (!known || stale()) return;
       const content = snapshotText({ t: options.stamp(), exam: first.exam, scope: first.scope, start: first.start, end: first.end, units: first.units, decks: first.decks.length }, first.decks);
+      let gaveUp = false;
       try {
-        await files.modify(path, (text, exists) => {
+        await limited(files.modify(path, (text, exists) => {
           if (exists) return text;
           // modify 開始到回呼之間可能讓出執行（排隊、等搬回、建上層資料夾）：丟錯才不會建出空檔。
-          if (stale()) throw new Stale();
+          if (gaveUp || stale()) throw new Stale();
           return content;
-        });
+        }));
         done.add(id);
       } catch (error) {
         // 內容相同的讀取不會觸發下一次查核，所以自己再查一次；要等的都在 settle 與 drain 裡，不會空轉。
         if (error instanceof Stale) { again = true; return; }
+        gaveUp = true;
         failed.set(id, first.day);
         if (!options.closed()) options.onError(error);
       }
@@ -100,6 +119,11 @@ export function createSnapshots(options: SnapshotOptions) {
       if (running) { again = true; return; }
       running = true;
       void loop();
+    },
+    /** 關閉：不等卡住的檔，等待的計時也不留著。 */
+    stop(): void {
+      for (const id of timers) clearTimeout(id);
+      timers.clear();
     },
   };
 }

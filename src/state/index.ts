@@ -595,6 +595,7 @@ export function createState(options: StateOptions): State {
     drain: decide => exam.drain(EXAM_WAIT, decide),
     waiting: () => reads.waiting() || exam.waiting(),
     stamp: () => { const at = now(); return formatTime(at, offsetOf(at)); },
+    stuckAfter,
     onError: error => { report(error, 'write'); },
   });
   /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。輪到它時選定的已經不是畫面打開的那一份（前一筆結束了、被刪、改名、換了另一次考試）：不套上去（§6）。 */
@@ -952,6 +953,7 @@ export function createState(options: StateOptions): State {
     version: () => ({ build: options.build ?? null, own: appState, devices: lastVersions([...sources].map(([path, text]) => ({ path, text })), version) }),
     async close() {
       life.closed = true;
+      snapshots.stop();
       reads.stop();
       exam.stop();
       quiz.stop();
