@@ -8,8 +8,8 @@ import { sha256Hex, stamp } from './prompt.ts';
 // 存草稿與快照的順序（tasks/ai-cards-mvp.md §5）：先存恢復資料 → 原文 → 一篇一篇建卡組 → 準備發布 → 發布（快照寫成＝成功）→ 清理。
 // 中斷之後照恢復資料逐一核對實際的檔再接著做，不再貼一次、不重新配號。
 
-/** 只建立的寫入（state 的寫入佇列）：寫成、讀回核對過是 done；已經有檔是 exists（不蓋掉）；門檻沒過是 blocked；寫不進去是 failed。 */
-export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: string } | { kind: 'failed'; error: unknown };
+/** 只建立的寫入（state 的寫入佇列）：寫成、讀回核對過是 done；已經有檔是 exists（不蓋掉）；門檻沒過是 blocked（還沒寫）；寫不進去是 failed；寫了但讀回失敗或一直沒回來是 unreadable（R3-5）。 */
+export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: string } | { kind: 'failed'; error: unknown } | { kind: 'unreadable'; path: string; error: unknown };
 
 export interface PublishIo {
   /** 存恢復資料（這台電腦）；存不進去丟錯，後面不做。 */

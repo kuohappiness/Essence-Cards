@@ -52,8 +52,11 @@ export interface CreateGuard<Why extends string> {
   atWrite?: () => Why | null;
 }
 
-/** 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。 */
-export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: WriteBlock } | { kind: 'failed'; error: unknown };
+/**
+ * 只建立的寫入的結果（tasks/ai-cards-mvp.md §5；和 core/ai 的 CreateResult 同一個形狀）。blocked：還沒寫。
+ * unreadable：寫出去了，讀回失敗或一直沒回來（R3-5）：不算寫成也不算寫壞，之後重試時照實際的檔核對。
+ */
+export type CreateResult = { kind: 'done' } | { kind: 'exists' } | { kind: 'blocked'; reason: WriteBlock } | { kind: 'failed'; error: unknown } | { kind: 'unreadable'; path: string; error: unknown };
 
 /** 建檔的回呼裡發現不能建（核對沒過，或還有沒讀完的變動）：中止 modify，不建立檔案。 */
 class NotNow extends Error {}
@@ -76,6 +79,8 @@ export interface WritesOptions {
   fillIds: boolean;
   /** 等一次寫進磁碟最多多久（毫秒）。 */
   writeTimeout: number;
+  /** 直接讀一個檔最多等多久（毫秒）；和讀取層判定卡住的時間相同。 */
+  stuckAfter: number;
   /** 離開筆記時的準備：組合那一層對最新的原文做 tracker.fill，觀察到的原文照常採用。 */
   prepare: (path: string, text: string) => Prepared;
   /** 核對讀取確認寫成了：把預期的輸出當成自己的寫回（tracker.wrote）。 */
@@ -91,7 +96,7 @@ export interface WritesOptions {
 }
 
 export function createWrites(options: WritesOptions) {
-  const { files, life, reads, writeTimeout, prepare, blockedText } = options;
+  const { files, life, reads, writeTimeout, stuckAfter, prepare, blockedText } = options;
   /**
    * 寫成、等核對讀取的工作（§4 第 3 點），照路徑。output 是 null 時沒有改字（沒有要補的、或準備時問題已不成立），
    * 只等這次讀取、回傳 fallback。讀不到時先回 saved，核對留著，之後第一次讀到時照同一套規則採用（不重新配號、不重做交易）。
@@ -177,11 +182,19 @@ export function createWrites(options: WritesOptions) {
    * 代價：還原或當成新的在逾時之後才寫成時，可能多出一個待處理問題，要家長再選一次。
    */
   function persist(work: Promise<void>): Promise<void> {
+    return within(work, writeTimeout, `寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`);
+  }
+  function within<T>(work: Promise<T>, ms: number, late: string): Promise<T> {
     let id: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      id = setTimeout(() => { reject(Error(`寫進磁碟超過 ${String(writeTimeout)} ms 沒有回來（逾時），當成失敗`)); }, writeTimeout);
-    });
+    const timeout = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(Error(late)); }, ms); });
     return Promise.race([work, timeout]).finally(() => { clearTimeout(id); });
+  }
+  /**
+   * 直接讀一個檔（AI 製卡的原文、快照、寫好之後的讀回），最多等 stuckAfter（R3-5）：這些檔不在 state 的監看裡，沒有別的地方會判定它卡住。
+   * 沒回來就丟錯，呼叫端當成讀不到，放開工作與寫入的那一列；底層的讀取取消不了，晚回來的結果沒有人用。
+   */
+  function readTimed(path: string): Promise<string | null> {
+    return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`);
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
@@ -241,11 +254,11 @@ export function createWrites(options: WritesOptions) {
       }
       if (exists) return { kind: 'exists' };
       try {
-        const back = await files.read(path);
+        const back = await readTimed(path);
         return back === text ? { kind: 'done' } : { kind: 'failed', error: Error(`讀回來和寫的不同：${path}`) };
       } catch (error) {
-        // 讀不到：不算寫成，交回呼叫端；之後重試時照實際的檔核對（tasks/ai-cards-mvp.md §5〈中斷與重試〉）。
-        return { kind: 'failed', error };
+        // 讀不到或一直沒回來：不算寫成，交回呼叫端；之後重試時照實際的檔核對（tasks/ai-cards-mvp.md §5〈中斷與重試〉）。
+        return { kind: 'unreadable', path, error };
       }
     }
   }
@@ -338,6 +351,7 @@ export function createWrites(options: WritesOptions) {
     edit,
     fillFile,
     create,
+    readTimed,
     blockedNow,
     /**
      * 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、

@@ -246,6 +246,8 @@ export interface State {
   aiWhere(ids: readonly string[]): Promise<ReadonlyMap<string, readonly string[]> | null>;
   /** 只建立新檔（§5）：排進同一列寫入、同樣的門檻；寫好讀回核對。 */
   aiCreate(path: string, text: string): Promise<CreateResult>;
+  /** 直接讀一個檔（§5 第 3～6 步的原文、快照與目的地）：不存在是 null；讀不到或超過 stuckAfter 沒回來就丟錯，不當成不存在（R3-5）。 */
+  aiRead(path: string): Promise<string | null>;
   /** 建卡組（§5 第 4 步）：同 aiCreate，但先讀完已知的變動，這些 ID 已經在某一篇或複習紀錄裡就回 refused、不建；寫入回呼裡再核對一次，並確認整個 vault 沒有同名檔（nameFree，R2-4）。 */
   aiCreateDeck(path: string, text: string, ids: readonly string[], nameFree: () => boolean): Promise<CreateResult | { kind: 'refused'; why: 'ids' | 'name' }>;
   /**
@@ -646,7 +648,7 @@ export function createState(options: StateOptions): State {
   const prepare = (path: string, text: string): Prepared => withNeed(track(path, () => tracker.fill(path, text)), text, version);
   /** 備份的閘門（D-150 第 3 點）：要等備份的（電腦）一開始關著，backupReady(true) 才打開。 */
   let backupPending = options.backup === true;
-  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip });
+  const writes = createWrites({ files, life, reads, fillIds: options.fillIds, writeTimeout, stuckAfter, prepare, wrote: (path, text) => { tracker.wrote(path, text); }, blockedText, backupPending: () => backupPending, version, skip: options.skip });
   function answerLine(entry: NewEntry): QueuedLine | null {
     if (!life.loaded) throw Error('state 還沒 ready');
     if (!permits(entry)) return null;
@@ -730,6 +732,7 @@ export function createState(options: StateOptions): State {
       if (stopped || !life.loaded || unread.size) return null;
       return tracker.where(ids);
     },
+    aiRead: path => writes.readTimed(path),
     aiCreate: (path, text) => writes.enqueue(() => writes.create(path, text)),
     aiCreateDeck: (path, text, ids, nameFree) => writes.enqueue(() => writes.create<'ids' | 'name'>(path, text, { check: () => tracker.where(ids).size || ids.some(id => logIds().has(id)) ? 'ids' : null, atWrite: () => nameFree() ? null : 'name' })),
     aiCreateSnapshot: (path, text, decks, nameFree) => writes.enqueue(() => writes.create<'decks' | 'name'>(path, text, {

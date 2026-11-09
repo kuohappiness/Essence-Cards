@@ -275,7 +275,7 @@ async function waitingForRebuild(t: TestContext) {
   let state: ReturnType<typeof createState>;
   const files = obsidianFiles(app);
   const cards = createAiCards({
-    rules, state: () => state, files,
+    rules, state: () => state,
     names: () => new Set(app.vault.getFiles().filter(file => file.path.endsWith('.md')).map(file => file.path.slice(file.path.lastIndexOf('/') + 1, -3).toLowerCase())),
     store: { jobs: () => jobs, saveJobs(next: CardJob[]) { jobs = JSON.parse(JSON.stringify(next)) as unknown; }, retired: () => retired, retire(ids) { retired = [...retired, ...ids]; }, last: () => ({}), saveLast() {} },
     clipboard: () => Promise.resolve(),

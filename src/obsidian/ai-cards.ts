@@ -1,7 +1,6 @@
 import { abandonJob, beginSave, buildPrompt, inspectReply, planDraft, publish, readJobs, rebuildDeck, reservedIds, RULE_SUBJECTS, sha256Hex, skipDeck, stamp, unitCode } from '../core/ai/index.ts';
 import type { CardForm, CardJob, DeckStop, EmbeddedRules, Inspection, PublishIo, PublishResult, RuleSubject, SavedDeck } from '../core/ai/index.ts';
 import { blockIds, codeKey, newId, parseDeck, termKey } from '../core/deck/index.ts';
-import type { Files } from '../core/files.ts';
 import type { State, WriteBlock } from '../state/index.ts';
 
 // AI 製卡的流程（tasks/ai-cards-mvp.md §2、§3、§5）：複製提示、貼回檢查、存草稿與繼續。畫面在 ai-cards-modal.ts；這裡不碰 Obsidian，測試直接用。
@@ -14,7 +13,6 @@ export interface AiCardsDeps {
   /** 建置嵌進外掛的規則組（CARD_RULES）；表上有、這裡沒有的科目不列。 */
   rules: EmbeddedRules;
   state: () => State | null;
-  files: Pick<Files, 'read'>;
   /** 整個 vault 現在的 Markdown 檔名（小寫、不含 .md）：D-081 檔名整個 vault 不重複。 */
   names: () => Set<string>;
   /** 這台電腦的存放（ui/prefs.ts 的 aiPrefs）。saveJobs 存不進去時丟錯。 */
@@ -94,7 +92,7 @@ export function createAiCards(deps: AiCardsDeps) {
     const io: PublishIo = {
       store(next) { latest = next; put(next); },
       remove(done) { drop(done); },
-      read: path => deps.files.read(path),
+      read: path => state.aiRead(path),
       create: (path, text) => state.aiCreate(path, text),
       createDeck: (path, text, ids) => state.aiCreateDeck(path, text, ids, nameFree(path)),
       createSnapshot: (path, text, decks) => state.aiCreateSnapshot(path, text, decks, nameFree(path)),
@@ -228,8 +226,10 @@ export function createAiCards(deps: AiCardsDeps) {
       const latest = current(job);
       if (!latest) return GONE;
       if (latest.save?.published) {
+        const state = deps.state();
+        if (!state) return { kind: 'stop', message: BLOCKED.loading };
         try {
-          const text = await deps.files.read(latest.save.snapshotPath);
+          const text = await state.aiRead(latest.save.snapshotPath);
           if (text !== null && sha256Hex(text) === latest.save.published.sha256) return run(latest);
         } catch (error) {
           deps.onError(error);

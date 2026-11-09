@@ -34,19 +34,19 @@ function machine() {
   };
   return { saved, store };
 }
-async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>, box: ReturnType<typeof machine>, random = () => 0) {
+async function load(t: TestContext, memory: ReturnType<typeof createMemoryFiles>, box: ReturnType<typeof machine>, random = () => 0, stuckAfter = 20) {
   const clipboard: string[] = [];
   const errors: unknown[] = [];
   // eslint-disable-next-line prefer-const -- state 與流程互相參照
   let state: ReturnType<typeof createState>;
   const cards = createAiCards({
-    rules, state: () => state, files: memory.files, store: box.store, random,
+    rules, state: () => state, store: box.store, random,
     names: () => new Set([...memory.texts.keys()].filter(path => path.endsWith('.md')).map(path => path.slice(path.lastIndexOf('/') + 1, -3).toLowerCase())),
     clipboard: text => { clipboard.push(text); return Promise.resolve(); },
     now: () => ({ ms: Date.parse('2026-11-07T10:02:11+08:00'), offset: 480 }),
     onError: error => { errors.push(error); },
   });
-  state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, stuckAfter: 20, random, reserved: () => cards.reserved(), now: () => Date.parse('2026-11-07T10:02:11+08:00'), offset: () => 480, onError() {} });
+  state = createState({ files: memory.files, device: 'PC-test', delay: 1, fillIds: true, stuckAfter, random, reserved: () => cards.reserved(), now: () => Date.parse('2026-11-07T10:02:11+08:00'), offset: () => 480, onError() {} });
   t.after(() => state.close());
   await state.ready();
   return { cards, state, clipboard, errors };
@@ -370,7 +370,8 @@ void test('§5 快照寫入的當下再確認每一篇還在（R2-3）：最後�
   const SNAP = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
   const start = async () => {
     const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
-    const loaded = await load(t, memory, machine(), Math.random);
+    // 直接讀快照位置也有時限（R3-5）：這裡要停久一點才來得及刪。
+    const loaded = await load(t, memory, machine(), Math.random, 2000);
     const copied = await loaded.cards.copy(form);
     assert.ok('job' in copied);
     return { memory, ...loaded, job: copied.job };
@@ -454,6 +455,88 @@ void test('§5 讀取一直沒回來（R2-5）：判定讀不到就放開寫入�
   const again = await cards.resume(job);
   assert.equal(again.kind, 'done', JSON.stringify(again));
   assert.ok(!memory.texts.has(WORD));
+});
+
+/** 讓某個路徑寫好之後的下一次讀取（讀回核對）掛住。 */
+function holdReadBack(memory: ReturnType<typeof createMemoryFiles>, target: string) {
+  const original = memory.files.modify.bind(memory.files);
+  let held: ReturnType<typeof memory.holdRead> | undefined;
+  memory.files.modify = async (path, edit) => {
+    await original(path, edit);
+    if (path !== target) return;
+    memory.files.modify = original;
+    held = memory.holdRead(path);
+  };
+  return { release: () => { held!.release(); } };
+}
+
+void test('§5 讀回或直接讀檔掛住（R3-5）：判定讀不到就放開工作與寫入佇列，已寫的內容與階段留著，下一次照實際內容確認', async t => {
+  const SNAP = 'Essence Cards/紀錄/AI 輸出/2026-11-07 國二上英文 L3 Sports.md';
+  const start = async () => {
+    const memory = createMemoryFiles({ [OLD]: OLD_TEXT });
+    const loaded = await load(t, memory, machine(), Math.random);
+    const copied = await loaded.cards.copy(form);
+    assert.ok('job' in copied);
+    return { memory, ...loaded, job: copied.job, raw: rawPath(copied.job.parts[0].sha256) };
+  };
+  // 第一份原文寫好、讀回掛住：工作不再忙碌，排在後面的也做得完；原文還在，下一次接著做。
+  {
+    const { memory, cards, state, job, raw } = await start();
+    const held = holdReadBack(memory, raw);
+    const stop = await cards.save(job, reply(), null);
+    assert.match((stop as { message: string }).message, /讀不到/);
+    assert.equal(memory.texts.get(raw), job.parts[0].text);
+    assert.deepEqual(await state.aiCreate('Essence Cards/紀錄/AI 輸出/排在後面.md', 'x'), { kind: 'done' });
+    assert.ok(!memory.texts.has(WORD));
+    held.release();
+    const again = await cards.resume(cards.jobs()[0]);
+    assert.equal(again.kind, 'done', JSON.stringify(again));
+  }
+  // 卡組寫好、讀回掛住：階段留在開始建了，下一次照全文認出來，不再建一份。
+  {
+    const { memory, cards, job } = await start();
+    const held = holdReadBack(memory, WORD);
+    const stop = await cards.save(job, reply(), null);
+    assert.match((stop as { message: string }).message, /讀不到/);
+    assert.equal(cards.jobs()[0].save!.decks[0].stage, 'started');
+    held.release();
+    await settle();
+    const again = await cards.resume(cards.jobs()[0]);
+    assert.equal(again.kind, 'done', JSON.stringify(again));
+    assert.ok(!memory.texts.has(WORD.replace('.md', ' 2.md')));
+  }
+  // 快照寫好、讀回掛住：準備發布的資料留著，下一次只清理，不會有第二份。
+  {
+    const { memory, cards, job } = await start();
+    const held = holdReadBack(memory, SNAP);
+    const stop = await cards.save(job, reply(), null);
+    assert.match((stop as { message: string }).message, /讀不到/);
+    assert.ok(cards.jobs()[0].save!.published);
+    held.release();
+    const again = await cards.resume(cards.jobs()[0]);
+    assert.equal(again.kind, 'done', JSON.stringify(again));
+    assert.ok(!memory.texts.has(SNAP.replace('.md', ' 2.md')));
+  }
+  // 重試時直接讀原文掛住：不算不存在、不寫。
+  {
+    const { memory, cards, job, raw } = await start();
+    const held = memory.holdRead(raw);
+    const stop = await cards.save(job, reply(), null);
+    assert.match((stop as { message: string }).message, /讀不到/);
+    assert.ok(!memory.texts.has(raw));
+    held.release();
+    assert.equal((await cards.resume(cards.jobs()[0])).kind, 'done');
+  }
+  // 放棄前讀快照掛住：不知道是不是已經存好了，不放棄。
+  {
+    const { memory, cards, job } = await snapshotFailed(t);
+    const held = memory.holdRead(SNAP);
+    const stop = await cards.abandon(job);
+    assert.match((stop as { message: string }).message, /讀不到/);
+    assert.equal(cards.jobs().length, 1);
+    held.release();
+    assert.ok('left' in await cards.abandon(job));
+  }
 });
 
 void test('§5 配號避開同一份回覆裡要留著的區塊 ID（L2-12）：題目行的 ID 保留原字，同篇、另一篇都不撞', async t => {
