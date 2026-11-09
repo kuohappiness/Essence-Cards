@@ -1,4 +1,5 @@
 import test from 'node:test';
+import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry, mergeHistory, readHistory } from '../src/core/study/index.ts';
 import type { History } from '../src/core/study/index.ts';
@@ -210,4 +211,53 @@ for (const [name, tail, expected] of [
   assert.deepEqual(state.unread(), []);
   assert.deepEqual(lts(state.history()), expected);
   assert.deepEqual(state.history().problems, []);
+});
+
+const ANSWER = { lt: 'bbbbbb', r: 'good', v: '12345678' } as const;
+const lateTails = [
+  ['結尾是作答', A, ['aaaaaa', 'bbbbbb']],
+  ['結尾是取消', A + '\n' + encodeEntry(T2, { undo: T1 }), ['bbbbbb']],
+] as const;
+async function lateOwn(t: TestContext) {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const memory = createMemoryFiles(await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') }, 'PC-test'));
+  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
+  t.after(() => state.close());
+  await state.ready();
+  assert.equal(memory.texts.has(PC), false);
+  const pump = async (): Promise<void> => {
+    t.mock.timers.tick(DELAY + 1);
+    for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+  };
+  return { memory, state, pump };
+}
+for (const [name, tail, expected] of lateTails) {
+  void test(`月檔啟動時不在、通知到了還沒讀（${name}）：作答另起一行，讀到之後舊的算進來（L2 的 R14）`, async t => {
+    const { memory, state, pump } = await lateOwn(t);
+    memory.write(PC, tail);
+    state.answer(ANSWER);
+    await state.flush();
+    assert.ok((memory.texts.get(PC) ?? '').startsWith(tail + '\n{'));
+    await pump();
+    assert.deepEqual(lts(state.history()), expected);
+    assert.deepEqual(state.history().problems, []);
+  });
+  void test(`月檔啟動時不在、通知到了也讀完了（${name}）：作答另起一行（L2 的 R14）`, async t => {
+    const { memory, state, pump } = await lateOwn(t);
+    memory.write(PC, tail);
+    await pump();
+    state.answer(ANSWER);
+    await state.flush();
+    assert.ok((memory.texts.get(PC) ?? '').startsWith(tail + '\n{'));
+    assert.deepEqual(lts(state.history()), expected);
+  });
+}
+
+void test('當月第一筆自己建檔：開頭沒有空行，也不多讀（相鄰情況）', async t => {
+  const { memory, state, pump } = await lateOwn(t);
+  state.answer(ANSWER);
+  await state.flush();
+  await pump();
+  assert.ok((memory.texts.get(PC) ?? '').startsWith('{'));
+  assert.equal(memory.reads.includes(PC), false);
 });
