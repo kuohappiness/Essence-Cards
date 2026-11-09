@@ -21,6 +21,10 @@
 .essence-cards-backup-info[aria-expanded="true"] {
   color: var(--text-accent);
 }
+.setting-item-name .essence-cards-backup-info {
+  margin-inline-start: var(--size-2-2);
+  vertical-align: middle;
+}
 .essence-cards-backup-info svg {
   width: var(--icon-xs);
   height: var(--icon-xs);

@@ -237,4 +237,13 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 
 ## 結果
 
+**Windows 版 Obsidian 1.15.0 實機（2026-11-09，§8 第 1～7 點，35 項全部通過）**：用獨立的 Obsidian 與暫存 vault，以 CDP 操作設定頁、讀磁碟上的 `data.json`，不碰測試 vault，所以不用還原、也不影響別的 session。
+
+- `loadData` 沒有檔回 `null`，壞的 JSON 回 `undefined`（和 §2 相同）；壞的 JSON 時存檔被擋、原檔逐字不變。
+- 唯讀時 `saveData` 不丟錯、內容沒變，讀回核對擋得住，通知寫「寫不進去」，選單回到實際的值。
+- 檔被刪掉（這次讀到過）時不寫，通知寫「讀不到」，錯誤紀錄有 `where: "ui"`。
+- 自己存檔：`onExternalSettingsChange` 0 次、重排 1 次。外部改值：被呼叫、份跟著變（30 分鐘 42 張，5 分鐘 20 張）。外部寫相同內容：被呼叫 1 次、不重排（`today()` 同一個物件）。
+- 重開外掛後值還在；恢復預設後欄位不見、份回來。備份清單裡 `data.json` 從 `absent` 變成 `files`。目前學期選舊學期時目錄展開它，選 `未設定` 回到最新。
+- 看畫面時的修正：`目標保持率` 旁的 ⓘ 和文字黏在一起，加了間距。Obsidian 的下拉選單另有一個量寬度用的隱藏 `select`，不影響選項。
+
 延後的測試：iPhone 實機（§8 最後一段），記在[技術債表](../docs/backlog.md#技術債)「補測：設定頁的 iPhone 實機」那一列。
