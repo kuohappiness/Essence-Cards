@@ -1,6 +1,6 @@
 # AI 製卡最小版：複製貼上、草稿與啟用（給 Claude，本機執行）
 
-狀態：L2 第七輪通過、待 Windows 實機與合併（2026-11-09，分支 `claude/ai-cards-mvp` 的 `a42f551`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md#第七輪>)，不擋合併的一項記進[技術債](../docs/backlog.md#技術債)）；§8 第 3 點做了 ChatGPT 與 Gemini（真人測試後改了兩次，Claude 網頁等額度），第 4 點（iPhone）使用者同意延後到升正式 vault 之前，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
+狀態：L2 第七輪與 Windows 實機通過、待使用者同意合併（2026-11-09，分支 `claude/ai-cards-mvp` 的 `a42f551`，[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md#第七輪>)，不擋合併的一項記進[技術債](../docs/backlog.md#技術債)）；§8 第 3 點做了 ChatGPT 與 Gemini（真人測試後改了兩次，Claude 網頁等額度），第 4 點（iPhone）使用者同意延後到升正式 vault 之前，見〈結果〉。原本：定稿（2026-11-07，使用者選定稿開工）；§0 的科目五科全開；Codex 格式查核四輪的發現都採用，§3～§6、§8 已照改（[回報與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-format-review.md>)），R4-1 改完沒有再審（D-171），合併前的 L2 照 §8 驗；可以開工
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會新建卡組與 `紀錄/AI 輸出/` 的檔、改 `state` 的 ID 占用與狀態寫入，屬於高風險（寫到使用者的檔、跨模組），合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§4～§6 寫進檔案的格式開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -408,3 +408,5 @@ Windows 實機（開發版 `0.4.0+fc1d57f.dirty`，dirty 是還沒 commit 的查
 **L2 第一輪之後**（[報告與 Claude 回應](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)；十二項都修，一項一個 commit，修法與測試見報告的〈Claude 回應〉）：`1351812` 到 `22bba24`，規格核對 `64fcfb4`、`ad9bc69`。每個 commit 的 `npm run check`（pre-commit）通過；真實回覆（13 份輸出與 Gemini 重測）重跑結果和修之前相同。Windows 實機等第二輪 L2 通過，在最後要合併的 commit 重跑。
 
 **L2 第二輪之後**：九項都修（`2ed664e` 到 `0806cf0`，見[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)〈第二輪的 Claude 回應〉），併入 `main` 的 `f911bf8`（`98d3093`，編輯標記與系統資料夾防呆）。每個 commit 的 `npm run check` 通過；真實回覆重跑結果和修之前相同。Windows 實機等第三輪通過後在最後的 commit 重跑。
+
+**L2 第三～七輪之後**（修法與測試見[報告](<../Claude Codex Discussion/2026-11-07-ai-cards-mvp-l2.md>)各輪的〈Claude 回應〉；第七輪通過，不擋合併的一項記進[技術債](../docs/backlog.md#技術債)）：Windows 實機（Obsidian 1.15.0，開發版 `0.4.0+2608277`，`a42f551` 之後只有文件）。開發命令 `ai-cards`（結果檔 `ai-cards Windows-c50c 2026-11-09 135711.json`，截圖 15 張）：自然與英文都走完填表、複製、擋下、檢查、存成草稿，系統剪貼簿拿到的是提示全文（8,463 字與 28,961 字），草稿與快照建好，原文逐字相同，工作清掉；自然走完預覽與啟用，目標數 0 → 1、狀態變啟用。Files 契約開發命令 `files`（結果檔 `files Windows-c50c 2026-11-09 135750.json`）19 項全過。開發命令收尾後，測試 vault 留下一個它自己寫的回覆原文 `原文/1d496804ffef.md`（722 位元組，修改時間仍是建立當下，不是程式重寫的）。真實同步時序沒有實測；Claude 網頁等額度，iPhone 延後（見〈結果〉）。
