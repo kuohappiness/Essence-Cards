@@ -54,6 +54,6 @@ export function setDeckStatus(text: string, value: keyof typeof READ_AS): string
   }
   // 讀回來要是這個狀態，別的屬性與學習目標都不變（`{科目: 自然}` 這種寫法多一行就壞了；有 BOM、沒有屬性區的檔，第一個目標原本解析不到，加了屬性區會多出來）。
   const before = parseDeck(text), after = parseDeck(result);
-  const others = ({ props, targets }: typeof before): string => JSON.stringify([{ ...props, status: null, issues: null }, targets.map(({ id, name, prompts }) => [id, name, prompts.map(prompt => prompt.fingerprint)])]);
+  const others = ({ props, targets }: typeof before): string => JSON.stringify([{ ...props, status: null, statusRead: null, issues: null }, targets.map(({ id, name, prompts }) => [id, name, prompts.map(prompt => prompt.fingerprint)])]);
   return after.props.status === READ_AS[value] && others(after) === others(before) ? result : null;
 }

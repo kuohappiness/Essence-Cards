@@ -384,3 +384,10 @@ void test('EOCD：中央目錄越界、筆數不一致、註解長度對不到�
   assert.equal(broken(view => { view.setUint16(end + 20, 5, true); }), '找不到 zip 的中央目錄');
   assert.equal(opened(zip.subarray(0, zip.length - 1)), '找不到 zip 的中央目錄');
 });
+
+void test('還原計畫：考試切面不見的補回，同名不同內容列成衝突（tasks/record-gaps.md §6 第 32 條）', () => {
+  const kept = 'Essence Cards/紀錄/考試切面/2026-10-28 3fa9c1d2e4b7 PC-test.jsonl', gone = 'Essence Cards/紀錄/考試切面/2026-10-28 3fa9c1d2e4b7 iPhone-7f3a.jsonl';
+  assert.deepEqual(summary(plan({ [kept]: '舊', [gone]: '切面' }, { [kept]: '新' }).files), [
+    `${kept} changed blocked：紀錄裡的檔只補不見的：同名但內容不同，列成衝突`,
+    `${gone} missing restore`]);
+});

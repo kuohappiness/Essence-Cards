@@ -4,7 +4,7 @@ export const DECK_ROOT = 'Essence Cards';
 /** Essence Cards/ 第一層的系統資料夾：底下的 .md 不是卡組（isDeckPath）。 */
 export const SYSTEM_FOLDERS: readonly string[] = ['考試範圍', '錯題本', '記憶錨點', '製卡規則', '紀錄'];
 /** 外掛用的子資料夾。 */
-const SUB_FOLDERS: readonly string[] = ['紀錄/錯誤', '紀錄/AI 輸出', '考試範圍/小考'];
+const SUB_FOLDERS: readonly string[] = ['紀錄/錯誤', '紀錄/AI 輸出', '紀錄/考試切面', '考試範圍/小考'];
 /** 不能搬、不能改名的資料夾（vault 路徑，D-048 補充）：根資料夾本身、五個系統資料夾與外掛用的子資料夾；上層在前。 */
 const GUARDED: readonly string[] = [DECK_ROOT, ...[...SYSTEM_FOLDERS, ...SUB_FOLDERS].map(name => DECK_ROOT + '/' + name)];
 

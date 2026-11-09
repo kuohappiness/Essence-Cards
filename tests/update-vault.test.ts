@@ -105,6 +105,9 @@ void test('--check 之後的變動：卡組或 data.json 改了、新的卡組�
   assert.deepEqual(changedSince(manifest, backup, now({ [DECK]: goal('aaa111', '改') })), [DECK]);
   assert.deepEqual(changedSince(manifest, backup, now({ [LOG]: 'x\n' })), [LOG]);
   assert.deepEqual(changedSince(manifest, backup, now({ [DATA]: null, 'Essence Cards/B.md': goal('bbb222') })), [DATA, 'Essence Cards/B.md']);
+  // --check 之後才產生的考試切面：不是紀錄檔，要求重跑 --check（tasks/record-gaps.md §6 第 32 條，保守行為不放寬）。
+  const SNAPSHOT = 'Essence Cards/紀錄/考試切面/2026-10-28 4e4ddf5dff5c iPhone-7f3a.jsonl';
+  assert.deepEqual(changedSince(manifest, backup, now({ [SNAPSHOT]: '{}\n' })), [SNAPSHOT]);
 });
 
 void test('更新命令（測試 vault 演練）：--check 備份、比較、記下；--install 在卡組改了時要求重跑、考試期間要 --exam-ok，然後安裝', async t => {

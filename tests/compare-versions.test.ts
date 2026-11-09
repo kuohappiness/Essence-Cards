@@ -317,7 +317,7 @@ void test('接不上就丟錯（比較的一方寫無法比較）：版號不是
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', 'blocked: () =>', 'renamed: () =>'), input), /這個版本沒有 blocked/);
   await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', 'canAnswer: answerable', 'renamed: answerable'), input), /這個版本沒有 canAnswer/);
   await assert.rejects(snapshot(await patched(t, 'src/core/version/index.ts', 'export { canRead, releaseOf }', 'export { canRead }'), input), /releaseOf/);
-  await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'cap', val: 5 }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"cap"/);
+  await assert.rejects(snapshot(await patched(t, 'src/state/index.ts', "record({ set: 'app', val: options.build });", "record({ set: 'exam', val: { id: 'x7f3k2', do: '建立', units: [] } }); record({ set: 'app', val: options.build });"), input), /想寫入.*"set":"exam"/);
 });
 
 void test('回傳的型別不同也是接不上，不能靠真假值往下算：canAnswer 回傳 Promise 時，停掉的目標不能變成新卡（Codex L2 F1）', async t => {
@@ -520,6 +520,12 @@ void test('收尾：只有 Files 拒絕寫版本行是預期的；close 自己�
   assert.ok(!result.ok && result.reason.includes('unsupported close contract'), JSON.stringify(result));
   const writing = await patched(t, 'src/state/index.ts', "onError: error => { report(error, 'write'); }", "onError: () => { report(new TypeError('write contract'), 'write'); }");
   await assert.rejects(snapshot(writing, versionLine), /write contract/);
+});
+
+void test('考試期間比較：切面（tasks/record-gaps.md §2）不妨礙比出結果', async () => {
+  const deck = '---\n年級學期: 國二上\n科目: 自然\n單元: "2-1"\n---\n' + goal('aaa111');
+  const input = { now: NOW, offset: 480, files: { [A]: deck, 'Essence Cards/考試範圍/段考.md': '---\n識別碼: x7f3k2\n考試開始: 2026-10-29\n考試結束: 2026-10-30\n---\n- 國二上 自然 2\n' } };
+  assert.deepEqual(Object.keys((await snapshot(root, input)).due), ['aaa111']);
 });
 
 // 假的版本回傳的每一個值，每個都會換成下面每一種不對的值。

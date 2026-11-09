@@ -319,6 +319,8 @@ void test('§1-8 搬走到搬回之間 state 收不到通知、不寫檔；搬�
     now: () => Date.parse('2026-10-24T19:00:00.000+08:00'), offset: () => 480 });
   t.after(() => state.close());
   await state.ready();
+  await state.flush();
+  appends.length = 0;
   const before = JSON.stringify(state.progress());
   const reads = f.memory.reads.length;
   drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
@@ -422,12 +424,14 @@ for (const outcome of OUTCOMES) {
     const guard = started(f);
     const state = study(f, guard, t);
     await state.ready();
+    await state.flush();
     f.failMoves.push(...outcome.fail);
     drag(f, guard, `${R}/紀錄`, `${R}/英文/紀錄`);
     assert.ok(state.answer({ lt: 'k3m9x2', r: 'good', v: '12345678' }));
     const flushing = state.flush();
     await settle();
-    assert.ok(![...f.memory.texts.keys()].some(path => path.endsWith('2026-10 PC-test.jsonl')), '搬好之前不追加（不在原位建新的紀錄）');
+    assert.equal(f.memory.texts.has(OWN_LOG), false, '搬好之前不在原位建新的紀錄');
+    assert.doesNotMatch(f.memory.texts.get(`${R}/英文/紀錄/2026-10 PC-test.jsonl`) ?? '', /k3m9x2/, '搬好之前不追加');
     await f.run();
     await flushing;
     assert.match(f.memory.texts.get(OWN_LOG) ?? '', /"lt":"k3m9x2","r":"good"/);
@@ -975,7 +979,8 @@ void test('第五輪 F1c 整個 Essence Cards 搬回期間家長自己拖回原�
 void test('第五輪 F1c 搬不回的資料夾被改名成空出來的 Essence Cards 根資料夾：根層的 .md 是卡組，照樣排除、不補 ID', async (t: TestContext) => {
   const f = fake({ [`${WRONG}/草稿.md`]: DRAFT, '其他/筆記.md': 'x' });
   const guard = started(f);
-  const state = study(f, guard, t);
+  // 這個情境要根資料夾空著：這台的紀錄不落地，否則基準行會建出紀錄資料夾。
+  const state = study({ ...f, files: { ...f.files, append: () => Promise.resolve() } }, guard, t);
   await state.ready();
   await strandedAt(f, guard, '其他/草稿資料夾');
   assert.equal(f.host.known(R), null, '根資料夾空出來了');
@@ -1276,4 +1281,14 @@ void test('R3-4 還沒發布時紀錄資料夾沒搬回：不在原位另建一�
   assert.equal(f.memory.texts.has(`${R}/紀錄/AI 輸出/x.md`), false);
   // 別的位置照常。
   assert.deepEqual(await state.aiCreate(`${R}/考試範圍/x.md`, 'x'), { kind: 'done' });
+});
+
+void test('紀錄/考試切面 搬動或改名會搬回（tasks/record-gaps.md §2）', async () => {
+  const path = `${R}/紀錄/考試切面/2026-10-28 3fa9c1d2e4b7 PC-test.jsonl`;
+  const f = fake({ ...VAULT, [path]: 'x\n' });
+  const guard = started(f);
+  drag(f, guard, `${R}/紀錄/考試切面`, `${R}/英文/切面`);
+  await f.run();
+  assert.equal(f.memory.texts.get(path), 'x\n');
+  assert.deepEqual(f.moves, [`${R}/英文/切面 → ${R}/紀錄/考試切面`]);
 });

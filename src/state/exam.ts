@@ -28,6 +28,8 @@ interface ExamFilesOptions {
   onError: (error: unknown) => void;
   /** 內容變了（或第一次讀完）：組合那一層比選定的結果，決定重排或只通知畫面。 */
   changed: () => void;
+  /** 這一刻沒有正在讀的範圍檔了，內容相同也會呼叫。 */
+  readsDone: () => void;
   unreadChanged: () => void;
   /** 寫了有變動的範圍：組合那一層記一行紀錄。 */
   logged: (val: ExamLog) => void;
@@ -40,7 +42,7 @@ class ScopeBlocked extends Error {
 }
 
 /** 紀錄行的欄位（§2-5）：讀得懂的每一行，照檔案的順序，只留年級學期、科目、編號。 */
-const unitsOf = (file: ScopeFile): string[] => file.lines.flatMap(line => line.kind === 'unit' ? [`${line.term} ${line.subject} ${line.code}`] : []);
+export const unitsOf = (file: ScopeFile): string[] => file.lines.flatMap(line => line.kind === 'unit' ? [`${line.term} ${line.subject} ${line.code}`] : []);
 /** 寫入之前的內容：沒寫的日期沒有欄位，看不懂的日期照原字，原本沒有識別碼就沒有 id（§2-5）。 */
 function oldOf(file: ScopeFile): NonNullable<ExamLog['old']> {
   const date = (read: ScopeFile['start']): string | null => read.kind === 'ok' ? read.date : read.kind === 'bad' ? read.raw : null;
@@ -69,6 +71,7 @@ export function createExamFiles(options: ExamFilesOptions) {
     start: folder.start,
     settle: folder.settle,
     drain: folder.drain,
+    waiting: folder.waiting,
     settled: folder.settled,
     revision: folder.revision,
     unread: folder.unread,

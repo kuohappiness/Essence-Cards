@@ -5,6 +5,7 @@ import { encodeEntry } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
+import { isObserved } from './helpers/observed.ts';
 
 // 版本行（任務說明 2-1、syntax.md §5-1、D-149 第 2 點與 2026-10-29 的補充）：每台裝置第一次跑一個新的建置版本時，
 // 在自己的紀錄寫一行 `set: app`。這台是 Windows-2c9e；外部改檔與讀檔的重試用記憶體 Files 加假計時器。
@@ -35,7 +36,7 @@ async function setup(t: TestContext, vault: Record<string, string>, options: Par
   await state.ready();
   return {
     ...memory, state,
-    own: (path = OWN) => (memory.texts.get(path) ?? '').split('\n').filter(Boolean).map(line => {
+    own: (path = OWN) => (memory.texts.get(path) ?? '').split('\n').filter(line => line && !isObserved(line)).map(line => {
       const data = JSON.parse(line) as { set?: string; val?: string; lt?: string };
       return data.set === 'app' ? 'app:' + String(data.val) : data.lt ?? String(data.set);
     }),

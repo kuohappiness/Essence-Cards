@@ -5,6 +5,7 @@ import type { CardView, PickView, Session } from '../../src/review/index.ts';
 import { createState } from '../../src/state/index.ts';
 import type { State, StudyPick } from '../../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './memory-files.ts';
+import { isObserved } from './observed.ts';
 
 // 比較卡的 session 測試共用（tests/pick-*.test.ts）：createSession 接真的 createState。
 const DELAY = 30;
@@ -69,7 +70,7 @@ export async function setup(t: TestContext, texts: Record<string, string> = { [D
   return {
     ...memory, state, clock,
     settle: async () => { t.mock.timers.tick(DELAY + 1); await new Promise<void>(resolve => setImmediate(resolve)); },
-    log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>),
+    log: () => (memory.texts.get(PC) ?? '').split('\n').filter(line => line && !isObserved(line)).map(line => JSON.parse(line) as Record<string, unknown>),
     async open(pick) {
       const session = createSession({ state, pick, now: () => clock.now });
       sessions.push(session);

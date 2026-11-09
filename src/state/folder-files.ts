@@ -16,6 +16,8 @@ export interface FolderFilesOptions<F> {
   onError: (error: unknown) => void;
   /** 內容變了（或第一次讀完）：組合那一層決定怎麼通知。 */
   changed: () => void;
+  /** 這一刻沒有正在讀的了，內容相同也會呼叫：等過這些檔的人靠它再查一次（考試切面，L2 的 R9）。 */
+  readsDone?: () => void;
   unreadChanged: () => void;
   folder: string;
   /** 這個路徑是不是這個資料夾要讀的檔。 */
@@ -63,7 +65,9 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
     unsent = true;
     unsentTimer ??= setTimeout(sendChanged, options.delay);
   }
-  let wakeDrain: (() => void) | null = null;
+  /** 正在等待者：範圍檔的存檔與切面會同時等，一個位置會有人永遠等不到（L2 的 R3）。 */
+  const drainWakes = new Set<() => void>();
+  const wakeDrains = (): void => { for (const wake of drainWakes) wake(); };
   const reads = createReads({
     files,
     life,
@@ -73,7 +77,8 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
     alone: true,
     quiet() {
       sendChanged();
-      wakeDrain?.();
+      wakeDrains();
+      options.readsDone?.();
     },
     list: async () => [(await files.list(options.folder)).filter(options.isFile), []],
     // 讀取層把卡組以外的放在第二份。
@@ -128,15 +133,17 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
    * decide 收到 true 是都有結果了（讀不到的在 unread）；它和最後一次查待讀在同一個同步區段，中間不會再插進通知（Codex L2 的 R17）。
    */
   async function drain<T>(ms: number, decide: (known: boolean) => T | Promise<T>): Promise<T> {
-    let late = false;
-    const id = setTimeout(() => { late = true; wakeDrain?.(); }, ms);
+    let late = false, wake = (): void => { /* 開始等的時候才換成真的。 */ };
+    const id = setTimeout(() => { late = true; wake(); }, ms);
     const going = (): boolean => !late && !life.closed && reads.waiting();
     while (going()) {
       await reads.readNow();
-      if (going()) await new Promise<void>(resolve => { wakeDrain = resolve; });
+      if (going()) {
+        await new Promise<void>(resolve => { wake = resolve; drainWakes.add(resolve); });
+        drainWakes.delete(wake);
+      }
     }
     clearTimeout(id);
-    wakeDrain = null;
     return decide(!reads.waiting());
   }
 
@@ -210,7 +217,7 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
       reads.stop();
       sendChanged();
       firstDone();
-      wakeDrain?.();
+      wakeDrains();
     },
   };
 }

@@ -14,6 +14,10 @@ export function createLogWriter(files: Files, options: {
   now?: () => number;
   offset?: (ms: number) => number;
   onError?: (error: unknown) => void;
+  /** 這個 t 字串已經有紀錄用來認人（作答、變更、被取消的）：undo 用 t 認人，新的一行要避開（tasks/record-gaps.md §4）。 */
+  taken?: (t: string) => boolean;
+  /** 這個檔已知的內容最後沒有換行：新行先補一個換行，舊版（0.3.0）遇到黏在一起的兩筆只救得回最後一段（L2 的 R1）。 */
+  unterminated?: (path: string) => boolean;
 }): LogWriter {
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
@@ -57,14 +61,20 @@ export function createLogWriter(files: Files, options: {
   }
 
   return {
-    write(entry: NewEntry): QueuedLine {
-      const at = Math.max(Math.trunc(now()), last + 1);
-      const offset = offsetOf(at);
-      const t = formatTime(at, offset);
+    write(entry: NewEntry, near?: number): QueuedLine {
+      let at = near ?? Math.max(Math.trunc(now()), last + 1);
+      let offset = offsetOf(at);
+      let t = formatTime(at, offset);
+      // 只避開完全相同的時間，不用舊紀錄的最大時間當下限：曾經把時鐘調到未來的裝置，之後每一行都會被推到未來（§4）。
+      while (options.taken?.(t)) {
+        at++;
+        offset = offsetOf(at);
+        t = formatTime(at, offset);
+      }
       const line = encodeNew(t, entry);
       const path = logPath(options.device, at, offset);
-      last = at;
-      pending.push({ path, line });
+      last = Math.max(last, at);
+      pending.push({ path, line: options.unterminated?.(path) ? '\n' + line : line });
       writeVersion++;
       // 失敗已經交給 onError（呼叫端記下），那一行留在佇列，下一次 write／flush 重試。
       void start().catch(() => {});

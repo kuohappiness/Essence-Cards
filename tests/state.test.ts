@@ -8,6 +8,7 @@ import type { Files } from '../src/core/files.ts';
 import { createState } from '../src/state/index.ts';
 import type { LoadTimings, State, StateOptions } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
+import { withBaseline, withoutObserved } from './helpers/observed.ts';
 
 // W5 說明 §7：+08:00、now 由測試控制、delay 很小；只透過公開介面測。
 // 技術債 A9：用記憶體 Files（契約 C1～C16 驗過，通知在寫入當下同步送出）加 node:test 的假計時器：
@@ -68,6 +69,7 @@ async function setup(t: TestContext, options: Partial<StateOptions> & { vault?: 
   t.after(() => state.close());
   return Promise.resolve({ ...memory, state, changed: () => changes, clock, errors, ...timers });
 }
+const OBSERVED_SETS: string[] = ['status', 'cap', 'retention', 'filter', 'semester'];
 const ids = (items: { lt: string }[]) => items.map(item => item.lt);
 const cardOf = (next: Next) => next.kind === 'card' ? next.card.lt : next.kind;
 
@@ -96,6 +98,7 @@ void test('T6 讀取：只讀卡組與紀錄資料夾正下方的紀錄，today 
   for (const key of ['decks', 'history', 'plan', 'total'] as const) assert.ok(typeof timings[key] === 'number' && timings[key] >= 0, key);
   assert.ok(timings.total >= Math.max(timings.decks, timings.history, timings.plan));
   assert.deepEqual(state.decks().map(entry => entry.path), [NATURAL, TRANSCRIPT, ENGLISH]);
+  await state.flush();
   assert.deepEqual(state.history(), await readHistory(files));
   assert.deepEqual(state.history().reviews.map(entry => entry.lt), ['b', 'e1', 'zzzzz2']);
   const input = state.input();
@@ -109,14 +112,14 @@ void test('T6 讀取：只讀卡組與紀錄資料夾正下方的紀錄，today 
 });
 
 void test('不合契約的紀錄：answer 丟錯，不寫進檔、不併進 history、之後 flush 不多寫；下一筆照常（技術債「紀錄的時間跨啟動會撞」的 (a)）', async t => {
-  const { state, texts } = await setup(t, { vault: { [NATURAL]: naturalText } });
+  const { state, texts } = await setup(t, { vault: await withBaseline({ [NATURAL]: naturalText }, 'PC-test') });
   await state.ready();
   const before = state.history();
   const invalid = [{ lt: '', r: 'good', v: '12345678' }, { undo: '' }, { set: 'cap', val: NaN }, { set: 'status', deck: ' ', val: '暫停' }];
   for (const entry of invalid) assert.throws(() => state.answer(entry as NewEntry), /這筆紀錄不能寫/, JSON.stringify(entry));
   assert.equal(state.history(), before);
   await state.flush();
-  assert.equal(texts.has(PC), false);
+  assert.equal(withoutObserved(texts.get(PC) ?? ''), '');
   assert.equal(state.answer({ lt: 'a', r: 'good', v: '12345678' }), '2026-10-24T19:00:00.000+08:00');
   await state.flush();
   assert.equal(texts.get(PC), '{"t":"2026-10-24T19:00:00.000+08:00","lt":"a","r":"good","v":"12345678"}\n');
@@ -124,7 +127,7 @@ void test('不合契約的紀錄：answer 丟錯，不寫進檔、不併進 hist
 });
 
 void test('answerLine 回傳排進寫入的那一行與路徑，和檔案、history 同一行；不能寫時是 null（技術債「紀錄的時間跨啟動會撞」的 (b)）', async t => {
-  const { state, texts } = await setup(t, { vault: { [NATURAL]: naturalText, [PHONE]: '{"t":"2026-10-24T08:00:00.000+08:00","need":"99.0.0","lt":"b","r":"good","v":"12345678"}\n' } });
+  const { state, texts } = await setup(t, { vault: await withBaseline({ [NATURAL]: naturalText, [PHONE]: '{"t":"2026-10-24T08:00:00.000+08:00","need":"99.0.0","lt":"b","r":"good","v":"12345678"}\n' }, 'PC-test') });
   await state.ready();
   const line = '{"t":"2026-10-24T19:00:00.000+08:00","lt":"a","r":"good","v":"12345678"}';
   assert.deepEqual(state.answerLine({ lt: 'a', r: 'good', v: '12345678' }), { t: '2026-10-24T19:00:00.000+08:00', line, path: PC });
@@ -136,7 +139,7 @@ void test('answerLine 回傳排進寫入的那一行與路徑，和檔案、hist
 });
 
 void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔、不重排；取消與跨月', async t => {
-  const { state, texts, reads, changed, clock, settle } = await setup(t, { vault: { [NATURAL]: naturalText } });
+  const { state, texts, reads, changed, clock, settle } = await setup(t, { vault: await withBaseline({ [NATURAL]: naturalText }, 'PC-test') });
   await state.ready();
   reads.length = 0;
   const v = state.decks()[0].deck.targets[0].prompts[0].fingerprint;
@@ -174,15 +177,17 @@ void test('T7 作答：寫進自己的紀錄、併進 history、不讀紀錄檔�
   assert.equal(changed(), 0);
 });
 
-// Codex 審查 W5 的 F2：別台裝置已經取消某個 t，這台的時鐘剛好寫出同一個 t；記憶中和重新讀檔要相同。
-void test('T7 作答：別台裝置先取消了同一個 t，作答後 history 仍和 readHistory 相同', async t => {
+// Codex 審查 W5 的 F2：別台裝置已經取消某個 t，這台的時鐘剛好走到同一個 t；記憶中和重新讀檔要相同。
+// tasks/record-gaps.md §4 之後新作答避開那個 t，不會被舊的取消吃掉。
+void test('T7 作答：別台裝置先取消了同一個 t，作答避開它，history 仍和 readHistory 相同', async t => {
   const t0 = '2026-10-24T19:00:00.000+08:00';
-  const { state, files } = await setup(t, { vault: { [NATURAL]: naturalText, [PHONE]: encodeEntry('2026-10-24T18:00:00.000+08:00', { undo: t0 }) + '\n' } });
+  const t1 = '2026-10-24T19:00:00.001+08:00';
+  const { state, files } = await setup(t, { vault: await withBaseline({ [NATURAL]: naturalText, [PHONE]: encodeEntry('2026-10-24T18:00:00.000+08:00', { undo: t0 }) + '\n' }, 'PC-test') });
   await state.ready();
   const v = state.decks()[0].deck.targets[0].prompts[0].fingerprint;
-  assert.equal(state.answer({ lt: 'a', r: 'good', v }), t0);
+  assert.equal(state.answer({ lt: 'a', r: 'good', v }), t1);
   await state.flush();
-  assert.deepEqual(state.history().reviews, []);
+  assert.deepEqual(state.history().reviews.map(review => review.t), [t1]);
   assert.deepEqual(state.history(), await readHistory(files));
 });
 
@@ -612,7 +617,9 @@ for (const path of [ENGLISH, PHONE]) void test('S6 第一次載入和之後的�
     samePlan(h);
   }
   assert.deepEqual(later.state.decks(), first.state.decks());
-  assert.deepEqual(later.state.history(), first.state.history());
+  // 基準行照各自看到的先後寫（後來才讀到的卡組排在設定之後），這兩條路本來就不同；其他逐項相同。
+  const recorded = (h: Harness) => ({ ...h.state.history(), changes: h.state.history().changes.filter(change => !OBSERVED_SETS.includes(change.set)) });
+  assert.deepEqual(recorded(later), recorded(first));
   assert.deepEqual(later.state.today(), first.state.today());
   assert.deepEqual(sources(later), sources(first));
 });

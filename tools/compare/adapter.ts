@@ -94,8 +94,11 @@ function frozen(texts: Record<string, string>) {
     },
   };
 }
-const isVersionLine = (line: string): boolean => {
-  try { return (JSON.parse(line) as { set?: unknown }).set === 'app'; } catch { return false; }
+/** 載入時本來就會寫的：版本行、狀態與設定的基準、考試切面（tasks/record-gaps.md §1、§2）。比較時 Files 拒絕這些是預期的。 */
+const LOADING = new Set(['app', 'status', 'cap', 'retention', 'filter', 'semester']);
+const isLoadingLine = (line: string): boolean => {
+  if (line.startsWith('改 Essence Cards/紀錄/考試切面/')) return true;
+  try { return LOADING.has(String((JSON.parse(line) as { set?: unknown }).set)); } catch { return false; }
 };
 
 interface TargetLike { id: string | null; name: string; line: number; ok: boolean; prompts: unknown;
@@ -238,7 +241,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
     await state.close().catch(failed);
   }
   if (failures.length) throw Error('這個版本讀的時候出錯：' + String(failures[0]));
-  const write = refused.find(line => !isVersionLine(line));
+  const write = refused.find(line => !isLoadingLine(line));
   if (write !== undefined) throw Error('這個版本比較的時候想寫入：' + write);
   return result;
 }

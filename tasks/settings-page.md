@@ -179,7 +179,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 16. `ready` 之前呼叫 `applySettings`：不丟錯，第一次排程用它，之後才完成的 `settingsFirst` 不蓋掉它。`close()` 之後呼叫：不通知；遲到的 `settingsFirst` 也不理。
 17. `known` 由 `false` 變 `true`、值相同：不重排，`currentSettings().known` 變 `true`。
 18. 外部改了 `data.json`（呼叫 store 的重讀）：值真的變了才 `applySettings` 重排；內容相同不重排。外部只補上和預設相同的欄位：畫面多恢復預設，`today()` 同一個物件。
-19. `applySettings` 不寫任何紀錄行、不寫任何卡組（`Files` 的寫入次數為零）。
+19. `applySettings` 不寫任何紀錄行、不寫任何卡組（`Files` 的寫入次數為零）。（補紀錄缺口合併之後：§3 的交接接上了，設定真的變了會排入 `set` 的紀錄行，見 [`record-gaps.md`](record-gaps.md) §1；仍不寫卡組。）
 32. 晚到的舊讀不蓋新值：重讀還在等時存檔，隊伍依序，最後的值是存檔的值。第一筆失敗後第二筆照常。寫入逾時回報失敗，第二筆等它結束才開始。
 33. 這次執行讀到過檔（包括只有寫前讀到過，核對時回 `null` 算失敗）、之後 `load` 回 `null`：不寫。還有別的讀沒回來時回 `null`：不寫、不採用，內容晚到也不會已經寫出去。合法 JSON 的 `null`（沒讀到過檔）：當空物件。確認沒有檔時 `known` 是 `true`，暫時讀不到才是 `false`。
 34. 同一時段換日、範圍變動、設定變動，最後一次排程同時用到新的日子、範圍與設定。

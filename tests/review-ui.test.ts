@@ -13,6 +13,7 @@ const NO_OWNER = { term: null, subject: null, unit: null };
 import { renderReview, type ReviewUi } from './helpers/review-ui.ts';
 import type { ReviewProps } from '../src/ui/Review.tsx';
 import { resolveSource } from '../src/ui/sources.ts';
+import { isObserved } from './helpers/observed.ts';
 
 // 複習畫面元件（src/ui/Review.tsx）的時序：Codex L2 審查的 F1（動畫期間的按鍵）、F3（自動朗讀被換卡停掉）、F7（第 2 步拼對的打勾）；
 // 最後是 F5（出處的子圖，src/ui/sources.ts）。
@@ -54,7 +55,7 @@ async function open(t: TestContext, pick: Pick, options: { autoRead?: boolean; t
     ...options.props,
   });
   t.after(() => { ui.unmount(); session.close(); });
-  return { ui, session, clock, speech, saved, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean), flush: () => state.flush() };
+  return { ui, session, clock, speech, saved, log: () => (memory.texts.get(PC) ?? '').split('\n').filter(line => line && !isObserved(line)), flush: () => state.flush() };
 }
 const lt = (session: Session): string | null => { const view = session.view(); return view.kind === 'card' ? view.card.card.lt : null; };
 /** 翻面（Space），過 0.3 秒按數字鍵自評。 */

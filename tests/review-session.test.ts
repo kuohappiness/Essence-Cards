@@ -8,6 +8,7 @@ import type { Session, TypedView, View } from '../src/review/index.ts';
 import { createState } from '../src/state/index.ts';
 import type { State } from '../src/state/index.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
+import { isObserved } from './helpers/observed.ts';
 
 // W6 §5 R5（打字三步）與 R10（一次複習）：createSession 接真的 createState（記憶體 Files、假計時器、now 由測試控制）。
 const DELAY = 30;
@@ -56,7 +57,7 @@ async function setup(t: TestContext, texts: Record<string, string> = vault, star
   return {
     ...memory, state, clock,
     settle: async () => { t.mock.timers.tick(DELAY + 1); await new Promise<void>(resolve => setImmediate(resolve)); },
-    log: () => (memory.texts.get(PC) ?? '').split('\n').filter(Boolean),
+    log: () => (memory.texts.get(PC) ?? '').split('\n').filter(line => line && !isObserved(line)),
     async open(pick) {
       const session = createSession({ state, pick, now: () => clock.now });
       sessions.push(session);

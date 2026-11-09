@@ -11,6 +11,11 @@ export interface DeckProps {
   unit: { code: string; name: string } | null;
   materials: string[];
   status: 'draft' | 'active' | 'paused';
+  /**
+   * 屬性 `狀態` 寫得怎樣（tasks/record-gaps.md §1）：沒寫、合法，或無效（值認不得、空值、屬性區寫壞或沒有結束）。
+   * status 無效時照舊當啟用（顯示與排程的預設）；紀錄端照這一欄判斷，無效的不比，不把預設值當成看到的值。
+   */
+  statusRead: 'missing' | 'valid' | 'invalid';
   categories: string[];
   isTranscript: boolean;
   /**
@@ -50,6 +55,8 @@ export interface Fields {
   type: string | null;
   importance: 'high' | 'medium' | 'low';
   paused: boolean;
+  /** `狀態` 的第一個值認不得（tasks/record-gaps.md §1）：paused 照舊是 false，紀錄端不比。只有這種情況才有這一欄。 */
+  statusInvalid?: true;
   remarks: string[];
   mistakes: string[];
 }

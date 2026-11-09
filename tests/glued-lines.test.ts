@@ -1,4 +1,5 @@
 import test from 'node:test';
+import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeEntry, mergeHistory, readHistory } from '../src/core/study/index.ts';
 import type { History } from '../src/core/study/index.ts';
@@ -6,6 +7,7 @@ import { createState } from '../src/state/index.ts';
 import type { State } from '../src/state/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { seeded } from './helpers/seeded.ts';
+import { withBaseline } from './helpers/observed.ts';
 
 // S6（外掛架構檢查環節 3 結論第 6 條、syntax §5-2）：完整的一筆只缺換行，下一筆接在同一行時，兩筆都要算。
 // 這台的版本是 0.1.0；標記用 9.0.0 代表比這台新。
@@ -150,10 +152,12 @@ const goal = (id: string) => `- 能說明 ${id} ^${id}\n    - 題目 ${id} :: �
 const DECK = 'Essence Cards/國二上/自然/2-2（卡片）.md';
 const DELAY = 50;
 
-void test('S6 原例：同一次執行中別台的紀錄到了之後、重開之後，兩筆都在；state 當下與重開相同；原檔不改', async t => {
+void test('S6 原例：磁碟上已經黏住的兩筆，別台的紀錄到了之後、重開之後都在；state 當下與重開相同；原檔不改', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const flush = () => new Promise<void>(resolve => setImmediate(resolve));
-  const memory = createMemoryFiles({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') + goal('zzzzzz'), [PC]: A });
+  // 舊版寫的：現在的 writer 知道檔尾沒有換行時會另起一行（L2 的 R1），已經黏住的只能靠讀取端。
+  const glued = A + review('2026-10-30T19:00:00.000+08:00', 'bbbbbb') + '\n';
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') + goal('zzzzzz') }, 'PC-test'), [PC]: glued });
   const open = (): State => {
     const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
     t.after(() => state.close());
@@ -161,14 +165,7 @@ void test('S6 原例：同一次執行中別台的紀錄到了之後、重開之
   };
   const state = open();
   await state.ready();
-  assert.deepEqual(lts(state.history()), ['aaaaaa']);
-
-  const target = state.decks()[0].deck.targets.find(item => item.id === 'bbbbbb');
-  assert.ok(target);
-  const written = state.answer({ lt: 'bbbbbb', r: 'good', v: target.prompts[0].fingerprint });
-  assert.ok(written);
   await state.flush();
-  const glued = A + encodeEntry(written, { lt: 'bbbbbb', r: 'good', v: target.prompts[0].fingerprint }) + '\n';
   assert.equal(memory.texts.get(PC), glued);
   assert.deepEqual(lts(state.history()), ['aaaaaa', 'bbbbbb']);
 
@@ -187,4 +184,80 @@ void test('S6 原例：同一次執行中別台的紀錄到了之後、重開之
   assert.deepEqual(reopened.today(), state.today());
   assert.deepEqual(state.history(), await readHistory(memory.files));
   assert.equal(memory.texts.get(PC), glued);
+});
+
+for (const [name, tail, expected] of [
+  ['結尾是作答', A, ['aaaaaa', 'bbbbbb', 'bbbbbb']],
+  ['結尾是取消', A + '\n' + encodeEntry(T2, { undo: T1 }), ['bbbbbb', 'bbbbbb']],
+] as const) void test(`月檔結尾沒換行、第一次又讀不到（${name}）：補讀前的作答另起一行，連續兩筆不多空行（L2 的 R12）`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') }, 'PC-test'), [PC]: tail });
+  memory.failing.add(PC);
+  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
+  t.after(() => state.close());
+  await state.ready();
+  assert.deepEqual(state.unread(), [PC]);
+  memory.failing.delete(PC);
+  const answer = { lt: 'bbbbbb', r: 'good', v: '12345678' } as const;
+  state.answer(answer);
+  state.answer(answer);
+  await state.flush();
+  const text = memory.texts.get(PC) ?? '';
+  assert.ok(text.startsWith(tail + '\n{'), text);
+  assert.equal(text.trimEnd().split('\n').length, tail.split('\n').length + 2, '每筆一行，沒有多的空行');
+  for (const line of text.trimEnd().split('\n')) JSON.parse(line);
+  t.mock.timers.tick(1000);
+  for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(state.unread(), []);
+  assert.deepEqual(lts(state.history()), expected);
+  assert.deepEqual(state.history().problems, []);
+});
+
+const ANSWER = { lt: 'bbbbbb', r: 'good', v: '12345678' } as const;
+const lateTails = [
+  ['結尾是作答', A, ['aaaaaa', 'bbbbbb']],
+  ['結尾是取消', A + '\n' + encodeEntry(T2, { undo: T1 }), ['bbbbbb']],
+] as const;
+async function lateOwn(t: TestContext) {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const memory = createMemoryFiles(await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') }, 'PC-test'));
+  const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
+  t.after(() => state.close());
+  await state.ready();
+  assert.equal(memory.texts.has(PC), false);
+  const pump = async (): Promise<void> => {
+    t.mock.timers.tick(DELAY + 1);
+    for (let i = 0; i < 15; i++) await new Promise<void>(resolve => setImmediate(resolve));
+  };
+  return { memory, state, pump };
+}
+for (const [name, tail, expected] of lateTails) {
+  void test(`月檔啟動時不在、通知到了還沒讀（${name}）：作答另起一行，讀到之後舊的算進來（L2 的 R14）`, async t => {
+    const { memory, state, pump } = await lateOwn(t);
+    memory.write(PC, tail);
+    state.answer(ANSWER);
+    await state.flush();
+    assert.ok((memory.texts.get(PC) ?? '').startsWith(tail + '\n{'));
+    await pump();
+    assert.deepEqual(lts(state.history()), expected);
+    assert.deepEqual(state.history().problems, []);
+  });
+  void test(`月檔啟動時不在、通知到了也讀完了（${name}）：作答另起一行（L2 的 R14）`, async t => {
+    const { memory, state, pump } = await lateOwn(t);
+    memory.write(PC, tail);
+    await pump();
+    state.answer(ANSWER);
+    await state.flush();
+    assert.ok((memory.texts.get(PC) ?? '').startsWith(tail + '\n{'));
+    assert.deepEqual(lts(state.history()), expected);
+  });
+}
+
+void test('當月第一筆自己建檔：開頭沒有空行，也不多讀（相鄰情況）', async t => {
+  const { memory, state, pump } = await lateOwn(t);
+  state.answer(ANSWER);
+  await state.flush();
+  await pump();
+  assert.ok((memory.texts.get(PC) ?? '').startsWith('{'));
+  assert.equal(memory.reads.includes(PC), false);
 });

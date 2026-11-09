@@ -10,6 +10,7 @@ import type { ReviewEvent, ReviewProps } from '../src/ui/Review.tsx';
 import type { OpenOptions, ReviewHandle } from '../src/ui/host.tsx';
 import type { Speech } from '../src/ui/speech.ts';
 import { createMemoryFiles, type MemoryFiles } from './helpers/memory-files.ts';
+import { withoutObserved } from './helpers/observed.ts';
 
 // 全螢幕那一層（src/ui/host.tsx 的 openReview）的接線：Codex 第二次再審的 R1（背景重設不能靠量測的 callback）與
 // R2（關閉之後不再回報已經排好的鍵盤量測）。esbuild 把 host.tsx 包成 CommonJS，Review、react-dom、obsidian 換成不畫東西的
@@ -132,7 +133,7 @@ for (const measured of [false, true]) {
     assert.deepEqual(card(), { lt: 'a1', revealed: false, shown: 1 }, '超過 60 秒從正面重來');
     assert.equal(h.speech.stopped, 3, '每次切到背景都停朗讀');
     assert.deepEqual(events.flatMap(event => event.kind === 'away' ? [event.restarted] : []), measured ? [false, false, true] : []);
-    assert.equal(h.memory.texts.get(PC), undefined, '重設不寫紀錄');
+    assert.equal(withoutObserved(h.memory.texts.get(PC) ?? ''), '', '重設不寫紀錄');
   });
 }
 

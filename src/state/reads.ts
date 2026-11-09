@@ -15,6 +15,36 @@ export class Closed extends Error {
   constructor(options?: { cause?: unknown }) { super('state 已關閉，沒有讀完', options); }
 }
 
+/** 這個讀取結果不完整（D-154 第 4 點）：iCloud 重新下載途中，read 可能成功回傳原本的長度，後段全是 0。不是文字（程式的錯）不算，照舊由解析丟錯、讓 ready() 拒絕。 */
+export const incomplete = (value: unknown): boolean => typeof value === 'string' && value.includes('\0');
+/** 讀到不完整的內容：不是寫入失敗，呼叫的一方分得出來（考試切面的 modify 這次不寫、下次再查）。 */
+export class IncompleteRead extends Error {}
+const incompleteError = (path: string): Error => new IncompleteRead('讀到的內容不完整（含 NUL），當成讀不到：' + path);
+/** 月檔的讀取等到上限還沒回來，這一批先不等它（L2 的 R15）。 */
+class ReadStuck extends Error {}
+/** 直接讀一個檔的結果（不經過讀取層的）：不完整就丟錯。 */
+export function completeText(path: string, text: string | null): string | null {
+  if (incomplete(text)) throw incompleteError(path);
+  return text;
+}
+/**
+ * state 用的 files（tasks/record-gaps.md §3）：modify 拿到不完整的內容不呼叫 edit、不寫回。讀取在 read 拿到結果之後檢查（下面的 read），
+ * 不包在 files.read 上：多一個 then 會改變讀取與寫入的先後。append、list、watch、readBytes 不動（備份要原樣）。
+ */
+export function refuseIncomplete(files: Files): Files {
+  return {
+    list: folder => files.list(folder),
+    read: path => files.read(path),
+    readBytes: path => files.readBytes(path),
+    modify: (path, edit) => files.modify(path, (text, exists) => {
+      if (incomplete(text)) throw incompleteError(path);
+      return edit(text, exists);
+    }),
+    append: (path, line) => files.append(path, line),
+    watch: onChange => files.watch(onChange),
+  };
+}
+
 /** 第一次載入完成了沒有、關閉了沒有。由 index.ts 建立並改值，讀取層與寫入只讀。 */
 export interface Life { loaded: boolean; closed: boolean }
 /** 一批讀到的結果：路徑 → 文字；null 是不存在。 */
@@ -71,6 +101,8 @@ export function createReads(options: ReadsOptions) {
   const busy = new Set<string>();
   /** 正在讀的批數（0 或 1：一次只讀一批）。 */
   let reading = 0;
+  /** 正在讀的這一批有哪些路徑。 */
+  let readingNow: readonly string[] = [];
   /** alone 正在讀的路徑：同一份一次讀一個，晚到的舊內容才不會蓋掉新的。 */
   const flying = new Set<string>();
   let unwatch: (() => void) | null = null;
@@ -131,7 +163,8 @@ export function createReads(options: ReadsOptions) {
       return;
     }
     reading++;
-    try { await read(paths); } finally { reading--; }
+    readingNow = paths;
+    try { await read(paths); } finally { reading--; readingNow = []; }
   }
   function readAlone(path: string): void {
     flying.add(path);
@@ -163,25 +196,38 @@ export function createReads(options: ReadsOptions) {
     const at = paths.map(path => marks.get(path));
     // 一直沒回來的讀取也算讀不到（D-154、任務說明 §8）：iCloud 的佔位檔可能讓 read 一直不回來，unread() 不能只看讀失敗的。
     const settled = new Set<string>();
+    let abandon = (): void => { /* 下面換成真的。 */ };
+    const abandoned = new Promise<never>((_, reject) => { abandon = () => { reject(new ReadStuck()); }; });
+    abandoned.catch(() => { /* 只給月檔的讀取用；這一批沒有月檔時沒有人接。 */ });
+    let overdue = false;
+    // 載入完成之後，過了上限、卡住的只剩月檔：照讀不到處理，讀到的卡組先用，後面的讀取也不排在它後面（L2 的 R15）。卡組不放，不知道 ID 用過沒（D-134）；卡組過了上限才回來時，回來的那一刻再問一次（L2 的 R18）。
+    const release = (): void => {
+      if (overdue && life.loaded && !options.alone && paths.every(path => settled.has(path) || isLogPath(path))) abandon();
+    };
     const stuck = setTimeout(() => {
       stuckTimers.delete(stuck);
+      overdue = true;
       for (const path of paths) if (!settled.has(path)) unread.add(path);
       unreadCheck();
       for (const wake of stuckWakes) wake();
       stuckWakes.clear();
+      release();
     }, options.stuckAfter);
     stuckTimers.add(stuck);
-    const reading = paths.map(path => files.read(path));
+    const started = paths.map(path => files.read(path));
     // 另外接，不串在讀取上：讀完之後的先後不能因為多了這個計時而改變。
-    reading.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); }; each.then(done, done); });
+    started.forEach((each, i) => { const done = (): void => { settled.add(paths[i]); release(); }; each.then(done, done); });
+    // 同樣的理由，只有載入之後的月檔多包一層，卡組的先後不變。
+    const reading = started.map((each, i) => life.loaded && isLogPath(paths[i]) ? Promise.race([each, abandoned]) : each);
     const results = await Promise.allSettled(reading);
     clearTimeout(stuck);
     stuckTimers.delete(stuck);
     if (life.closed) return;
-    let failure: { error: unknown } | null = null;
+    let failure: { error: unknown } | null = null, retry = false;
     const texts: Texts = new Map(), logs: Texts = new Map();
     for (const [i, path] of paths.entries()) {
-      const result = results[i];
+      // 讀到不完整的內容當成讀不到（§3）：走下面的 unread 與重試，不採用、不解析。
+      const result: PromiseSettledResult<string | null> = results[i].status === 'fulfilled' && incomplete(results[i].value) ? { status: 'rejected', reason: incompleteError(path) } : results[i];
       // 跨過這篇的 I/O（§2 第 3 點）：文字、null、reject 都不用，放回 pending；I/O 結束時已經（或會）排一批讀取。
       if (marks.get(path) !== at[i] || busy.has(path)) {
         pending.add(path);
@@ -193,16 +239,18 @@ export function createReads(options: ReadsOptions) {
         pending.add(path);
         unread.add(path);
         options.unreadable(path);
-        failure ??= { error: result.reason };
+        retry = true;
+        // 卡住不是錯誤（unread() 已經列著）：和一直沒回來的讀取一樣不報。
+        if (!(result.reason instanceof ReadStuck)) failure ??= { error: result.reason };
         continue;
       }
       unread.delete(path);
       (isDeckPath(path) ? texts : logs).set(path, result.value);
     }
     const finish = options.batch(texts, logs);
-    if (failure) {
+    if (retry) {
       failures++;
-      onError(failure.error);
+      if (failure) onError(failure.error);
       // 等待中已經有新的通知排好時，就跟著那一次重讀。
       if (timer === null) schedule(retryDelay());
     } else if (!unread.size) failures = 0;
@@ -247,6 +295,8 @@ export function createReads(options: ReadsOptions) {
     catchUp(): void { if (noticed) schedule(); },
     /** 有已知還沒讀完的變動：一批讀取正在進行，或 pending、正在讀的裡面有不在 unread 的路徑（except 那一篇除外）。 */
     waiting: (except?: string): boolean => reading > 0 || [...pending, ...flying].some(path => path !== except && !unread.has(path)),
+    /** 同 waiting，只看 relevant 的路徑：考試切面不等別台的月檔（L2 的 R9）。同一批裡有 relevant 的路徑時照樣算在等。 */
+    waitingFor: (relevant: (path: string) => boolean): boolean => [...readingNow, ...pending, ...flying].some(path => relevant(path) && !unread.has(path)),
     /** 這篇的 Cards I/O 開始（§2 第 1 點）：不開始讀，序號前進。 */
     hold(path: string): void {
       busy.add(path);

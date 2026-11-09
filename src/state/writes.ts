@@ -2,6 +2,7 @@ import type { Files } from '../core/files.ts';
 import { isDeckPath } from '../core/deck/index.ts';
 import { confirmed } from './ids.ts';
 import type { Prepared } from './ids.ts';
+import { completeText, incomplete } from './reads.ts';
 import type { Life, Reads } from './reads.ts';
 
 /**
@@ -152,9 +153,10 @@ export function createWrites(options: WritesOptions) {
   /**
    * 先讀完已知的待讀（最多 DRAIN_ROUNDS 輪，rounds 由呼叫端累計）：讀完是 null；關閉了或讀不完回傳原因。
    * giveUp（AI 製卡）：讀取被判定卡住就停，回受阻的原因，放開寫入的那一列（R2-5，iCloud 佔位檔的讀取可能一直不回來）。
+   * relevant：只等這些路徑（考試切面不等月檔）。讀取在同一列排隊，卡住的那一批沒結束前後面的讀不了，所以「判定卡住就停」仍看全部的 unread。
    */
-  async function drain(rounds: { count: number }, giveUp = false): Promise<WriteResult | null> {
-    while (waiting()) {
+  async function drain(rounds: { count: number }, giveUp = false, relevant?: (path: string) => boolean): Promise<WriteResult | null> {
+    while (relevant ? reads.waitingFor(relevant) : waiting()) {
       if (life.closed) return { kind: 'blocked', reason: 'closed' };
       if (giveUp && reads.unread.size) return { kind: 'blocked', reason: 'unread' };
       if (rounds.count >= DRAIN_ROUNDS) return { kind: 'stale' };
@@ -198,7 +200,7 @@ export function createWrites(options: WritesOptions) {
    * 沒回來就丟錯，呼叫端當成讀不到，放開工作與寫入的那一列；底層的讀取取消不了，晚回來的結果沒有人用。
    */
   function readTimed(path: string): Promise<string | null> {
-    return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`);
+    return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`).then(text => completeText(path, text));
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
@@ -329,6 +331,8 @@ export function createWrites(options: WritesOptions) {
     try {
       const text = editor.text();
       if (text === null) return { kind: 'stale' };
+      // 編輯器開著讀到不完整的檔時，文字不經過 Files（L2 待釐清的第一項）：和讀到的一樣不採用、不寫回。
+      if (incomplete(text)) return { kind: 'blocked', reason: 'unread' };
       // 編輯器最新的文字也過一次門檻：需要新版（state 還沒讀到）就不寫（§2-1）。
       const gate = writable(path, text);
       if (gate) return gate;

@@ -1,18 +1,18 @@
 import type { Files } from '../core/files.ts';
 import { isDeckPath, parseDeck, setDeckStatus as setStatusLine } from '../core/deck/index.ts';
 import type { Deck, Target } from '../core/deck/index.ts';
-import { buildIndex, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
+import { buildIndex, deckInScope, editScope, newScopeText, paintCatalog, parseScope, scopeCheck, scopeDate, scopeDay, scopePeriod, scopeUnitKeys, targetsInScope } from '../core/catalog/index.ts';
 import type { Catalog, CatalogIndex, QuizInput, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit } from '../core/catalog/index.ts';
 export type { Catalog, QuizInput, QuizProblem, QuizRef, QuizResolved, QuizRow, ScopeCheck, ScopeFile, ScopePeriod, ScopeUnit, TermView, UnitProblem, UnitView } from '../core/catalog/index.ts';
 export type { DuplicateId, DuplicateTarget } from '../core/study/index.ts';
-import { createExamFiles } from './exam.ts';
+import { createExamFiles, unitsOf } from './exam.ts';
 import type { ExamBlocked, ExamChange, ExamResult } from './exam.ts';
 export type { ExamChange, ExamResult } from './exam.ts';
 import { createQuizFiles } from './quiz.ts';
 import type { QuizOpened, QuizResult } from './quiz.ts';
 export type { QuizOpened, QuizResult } from './quiz.ts';
 import { createIdTracker } from './ids.ts';
-import { Closed, createReads } from './reads.ts';
+import { Closed, createReads, refuseIncomplete } from './reads.ts';
 import type { Life, Texts } from './reads.ts';
 import { createWrites } from './writes.ts';
 import type { CreateResult, EditorHandle, WriteBlock, WriteResult } from './writes.ts';
@@ -21,8 +21,12 @@ import { existingTargets } from '../core/ai/index.ts';
 import type { ExistingNow, ExistingTarget } from '../core/ai/index.ts';
 import type { IdIssue, Malformed, Prepared } from './ids.ts';
 import { markOf, withNeed } from './need.ts';
+import { createObserver } from './observe.ts';
+import { createSnapshots } from './snapshots.ts';
+import type { SnapshotPlan } from './snapshots.ts';
+import type { Observation } from './observe.ts';
 export type { IdIssue, IdIssueKind, Malformed } from './ids.ts';
-import { appendLine, createLogWriter, dayOf, dayStart, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
+import { appendLine, createLogWriter, dayOf, dayStart, formatTime, isLogPath, LOG_FOLDER, memoryColors, mergeHistory, nextCard, parseTime, planToday, progress, scopeCount, todayLeft } from '../core/study/index.ts';
 import type { DeckEntry, DuplicateId, ExamScope, History, NewEntry, Next, Pick, Progress, QueuedLine, ScopeCount, Settings, Today, TodayInput } from '../core/study/index.ts';
 import { DEFAULT_SETTINGS, semesterOn } from '../core/settings/index.ts';
 import type { SemesterPick, SettingsValue } from '../core/settings/index.ts';
@@ -235,11 +239,11 @@ export interface State {
   fillIds(path: string): Promise<boolean>;
   /**
    * 目錄的暫停／恢復（D-183 第 6 點、tasks/quiz-practice.md §5）：只改屬性區的 `狀態`，和補 ID 走同一條寫入（同一列、同樣的門檻，手機回 blocked phone）；editor 是開著那篇的編輯器，沒開著是 null。
-   * 改了字（done、saved）才記一行 `set: status`；已經是這個值、草稿、檔不見了是 unchanged；屬性區讀不懂、只改一行讀不回來是 unwritable，都不寫。寫不進去回 failed，不丟錯。
+   * `set: status` 由偵測的出口在讀回來採用之後記，一次變更一行（tasks/record-gaps.md §1），saved 要等之後讀到；已經是這個值、草稿、檔不見了是 unchanged；屬性區讀不懂、只改一行讀不回來是 unwritable，都不寫。寫不進去回 failed，不丟錯。
    */
   setDeckStatus(path: string, value: DeckStatusValue, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
   /**
-   * 草稿 → 啟用（tasks/ai-cards-mvp.md §7）：和 setDeckStatus 同一條寫入、同樣的門檻，只改這一篇的 `狀態: 啟用`；寫成才記一行 `set: status`（`val: 啟用`）。
+   * 草稿 → 啟用（tasks/ai-cards-mvp.md §7）：和 setDeckStatus 同一條寫入、同樣的門檻，只改這一篇的 `狀態: 啟用`；寫成後一樣由偵測的出口記一行 `set: status`（`val: 啟用`）。
    * 不是草稿（啟用、暫停）是 unchanged；需要新版、屬性區讀不懂的照 setDeckStatus。
    */
   activateDraft(path: string, editor: EditorHandle | null): Promise<WriteResult | { kind: 'unwritable' }>;
@@ -282,7 +286,9 @@ const EMPTY_HISTORY: History = { reviews: [], changes: [], problems: [], cancell
 const byPath = (a: DeckEntry, b: DeckEntry): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
 export function createState(options: StateOptions): State {
-  const { files, device } = options;
+  const { device } = options;
+  /** 卡組、紀錄、範圍檔與小考檔都經過它（tasks/record-gaps.md §3）。 */
+  const files = refuseIncomplete(options.files);
   /** 這台的正式版號（syntax.md §0-1）；null 是版本不明。 */
   const version = options.build === undefined ? null : releaseOf(options.build);
   /** 「需要版本」讀不懂（§2-1）：整篇不出題，Cards 也不寫它。 */
@@ -311,7 +317,14 @@ export function createState(options: StateOptions): State {
   const report = (error: unknown, source: ErrorSource): void => {
     try { options.onError?.(error, source); } catch { /* 回呼的錯誤不影響狀態。 */ }
   };
-  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); } });
+  /** 舊紀錄裡用來認人的 t（tasks/record-gaps.md §4）：reviews 已濾掉被取消的，所以 cancelled 要另外看；取消行自己的 t 沒有東西用它認人。 */
+  const taken = (t: string): boolean => history.cancelled.includes(t) || history.reviews.some(review => review.t === t) || history.changes.some(change => change.t === t);
+  /** 這個檔已知的內容最後沒有換行。知道檔在、還不知道結尾（第一次讀不到，或啟動之後才出現、還沒讀完）：當成沒有，多一個空行讀得回來，黏住的舊版救不回來（L2 的 R12、R14）。 */
+  const unterminated = (path: string): boolean => {
+    const text = sources.get(path);
+    return text === undefined ? unread.has(path) || reads.waitingFor(each => each === path) : text !== '' && !text.endsWith('\n');
+  };
+  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); }, taken, unterminated });
   // 自己的紀錄：`YYYY-MM <device>.jsonl`；衝突副本（例如 `… 2.jsonl`）算別台裝置的。
   const ownName = new RegExp('^\\d{4}-\\d{2} ' + device.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.jsonl$');
   const own = (path: string): boolean => path.startsWith(LOG_FOLDER + '/') && ownName.test(path.slice(LOG_FOLDER.length + 1));
@@ -329,6 +342,7 @@ export function createState(options: StateOptions): State {
   const stuckAfter = options.stuckAfter ?? 30_000;
   function unreadChanged(): void {
     if (life.closed) return;
+    if (life.loaded) snapshots.check();
     for (const listener of [...unreadListeners]) {
       try { listener(); } catch (error) { report(error, 'listener'); }
     }
@@ -337,7 +351,8 @@ export function createState(options: StateOptions): State {
     files,
     life,
     delay,
-    watched: path => isDeckPath(path) || (isLogPath(path) && !own(path)),
+    // 自己的紀錄只有還沒讀過的才要讀：啟動之後才出現的（同步、還原）不讀就不知道檔尾和裡面的舊紀錄（L2 的 R14）。
+    watched: path => isDeckPath(path) || (isLogPath(path) && (!own(path) || !sources.has(path))),
     onError: error => { report(error, 'read'); },
     batch,
     unreadable: path => { writes.unreadable(path); },
@@ -349,6 +364,8 @@ export function createState(options: StateOptions): State {
     files, delay, stuckAfter, writeTimeout, random: options.random,
     onError: error => { report(error, 'read'); },
     changed: examChanged,
+    // 內容相同的讀回不會到 examChanged，等過它的切面要在這裡再查一次（L2 的 R9）。
+    readsDone: () => { if (life.loaded) snapshots.check(); },
     unreadChanged,
     logged: val => { record({ set: 'exam', val }); },
   });
@@ -380,10 +397,32 @@ export function createState(options: StateOptions): State {
   }
   const tracker = createIdTracker({ random: options.random, logIds, partial: () => unread.size > 0, readable: deck => !needsUpdate(deck), reserved: options.reserved });
 
+  /** 月檔還讀不到時記下的作答：t 可能撞到看不到的舊 undo（tasks/record-gaps.md §4、L2 的 R4），讀到之後才知道。 */
+  const blind = new Map<string, { path: string; entry: Extract<NewEntry, { r: unknown }> }>();
+  /**
+   * 讀到了的月檔：這次的作答被舊 undo 取消的，補寫一筆。時間是原本的下一個沒人用過的毫秒，先後、月檔與複習日都不變（L2 的 R13）；
+   * 比較卡的其他行指著原本的 t，補寫的這一行也帶著，還算同一張卡。暫時不能寫的留著，門檻解除後再補。回傳有沒有補寫。
+   */
+  function rescueBlind(): boolean {
+    let rescued = false;
+    for (const [t, { path, entry }] of [...blind]) {
+      if (unread.has(path)) continue;
+      if (history.cancelled.includes(t) && !permits(entry)) continue;
+      blind.delete(t);
+      if (!history.cancelled.includes(t)) continue;
+      record('v' in entry && !entry.with && history.reviews.some(review => review.with === t) ? { ...entry, with: t } : entry, Date.parse(t));
+      rescued = true;
+    }
+    // 增量併進去的排在最後，這幾筆的時間比較早：重算一次，和重讀相同。
+    if (rescued) history = mergeHistory([...sources].map(([each, text]) => ({ path: each, text })), version);
+    return rescued;
+  }
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
-  function record(entry: NewEntry): QueuedLine {
-    const queued = writer.write(entry);
-    sources.set(queued.path, (sources.get(queued.path) ?? '') + queued.line + '\n');
+  function record(entry: NewEntry, near?: number): QueuedLine {
+    const queued = writer.write(entry, near);
+    if ('undo' in entry) blind.delete(entry.undo);
+    else if ('r' in entry && unread.has(queued.path)) blind.set(queued.t, { path: queued.path, entry });
+    sources.set(queued.path, (sources.get(queued.path) ?? '') + (unterminated(queued.path) ? '\n' : '') + queued.line + '\n');
     history = appendLine(history, queued.line);
     return queued;
   }
@@ -402,6 +441,39 @@ export function createState(options: StateOptions): State {
     if (last?.build === options.build) { appState = 'same'; return; }
     record({ set: 'app', val: options.build });
     appState = 'queued';
+  }
+  const observer = createObserver({ version, own: () => [...sources].filter(([path]) => own(path)), write: entry => { record(entry); } });
+  const STATUS_TEXT = { draft: '草稿', active: '啟用', paused: '暫停' } as const;
+  /** 這台現在看到的狀態與設定（tasks/record-gaps.md §1 的表）；無效的、不確定身分的不在裡面，上次的值不動。 */
+  function observations(): Observation[] {
+    const list: Observation[] = [];
+    // deckList 已經不含需要新版的卡組；裡面和需要新版的卡組同 ID 的目標由 permits 擋。
+    for (const { path, deck } of deckList) {
+      const { props, targets } = deck;
+      if (!props.isTranscript && props.statusRead !== 'invalid' && (props.statusRead === 'valid' || targets.length)) {
+        list.push({ entry: { set: 'status', deck: path, val: STATUS_TEXT[props.status] }, baseline: true });
+      }
+      const skip = tracker.lines(path);
+      for (const target of targets) {
+        if (target.id === null || skip.has(target.line) || target.fields.statusInvalid) continue;
+        const entry = { set: 'status', lt: target.id, val: target.fields.paused ? '暫停' : '啟用' } as const;
+        if (permits(entry)) list.push({ entry, baseline: target.fields.paused });
+      }
+    }
+    // data.json 還沒讀到時手上是預設值，不是使用者的設定：不比（tasks/settings-page.md §3）。
+    if (settingsKnown) {
+      list.push({ entry: { set: 'cap', val: settings.capMinutes }, baseline: true });
+      list.push({ entry: { set: 'retention', val: settings.retention }, baseline: true });
+      list.push({ entry: { set: 'filter', val: [...settings.filter] }, baseline: true });
+      const term = currentTerm();
+      if (term !== null) list.push({ entry: { set: 'semester', val: term }, baseline: true });
+    }
+    return list;
+  }
+  /** 偵測的唯一出口（§1）：第一次載入、每一批讀完的收尾、自己寫回被採用時都比一次。有讀不到的、紀錄不完整時不比，補齊後一定再比。 */
+  function observe(): void {
+    if (life.closed || unread.size || history.incomplete) return;
+    observer.compare(observations());
   }
   /** 給 planToday 的卡組：拿掉待處理與用了重複 ID 的目標（W5 §8-5、D-157：不出題）。 */
   let planList: DeckEntry[] = [];
@@ -448,7 +520,9 @@ export function createState(options: StateOptions): State {
     const day = dayOf(value.now, value.offset);
     plannedKey = examPlanKey(day);
     viewedKey = examViewKey(day);
-    return planToday(value);
+    const today = planToday(value);
+    snapshots.check();
+    return today;
   }
   function replan(): void {
     current = plan(input());
@@ -460,6 +534,8 @@ export function createState(options: StateOptions): State {
     if (text === undefined) return;
     deckMap.set(path, parseDeck(text));
     rebuild();
+    // 先排入紀錄，再通知會讀新排程的畫面。
+    observe();
     replan();
   }
 
@@ -521,8 +597,38 @@ export function createState(options: StateOptions): State {
       viewedKey = examViewKey(day);
       notifyChange();
     }
+    // 內容一樣的兩份範圍，換了選定不用重排，切面還是另一份（§2）。
+    snapshots.check();
   }
   const unitList = (): ScopeUnit[] => catalogIndex().units.map(({ term, subject, code }) => ({ term: term ?? '', subject: subject ?? '', code: code ?? '' }));
+  /** 這一刻該留下的考試切面（tasks/record-gaps.md §2）；條件都在這裡，等待之後再算一次，結果不同就不寫。紀錄檔讀不到不擋，切面用不到紀錄。 */
+  function snapshotPlan(): SnapshotPlan | null {
+    if (!life.loaded || life.closed || !exam.settled() || exam.unread.size || [...unread].some(path => !isLogPath(path))) return null;
+    const at = now(), day = dayOf(at, offsetOf(at));
+    const { chosen, usable } = selection(day);
+    if (!chosen || !usable) return null;
+    const period = scopePeriod(chosen.file);
+    if (period.kind !== 'ok' || day < scopeDay(period.start) || day > scopeDay(period.end)) return null;
+    const decks = [...deckMap].filter(([, deck]) => deckInScope(chosen.file, deck)).flatMap(([path]) => {
+      const text = tracker.text(path);
+      return text === undefined ? [] : [{ path, text }];
+    }).sort((a, b) => a.path < b.path ? -1 : 1);
+    if (!decks.length) return null;
+    return { day, exam: chosen.file.id, scope: chosen.path, start: period.start, end: period.end, units: unitsOf(chosen.file), decks };
+  }
+  /** 切面用不到紀錄，別台的月檔卡住不能擋它（§2 第 3 項）。 */
+  const notLog = (path: string): boolean => !isLogPath(path);
+  const snapshots = createSnapshots({
+    files, device,
+    closed: () => life.closed,
+    plan: snapshotPlan,
+    settle: async () => await writes.enqueue(() => writes.drain({ count: 0 }, true, notLog)) === null,
+    drain: decide => exam.drain(EXAM_WAIT, decide),
+    waiting: () => reads.waitingFor(notLog) || exam.waiting(),
+    stamp: () => { const at = now(); return formatTime(at, offsetOf(at)); },
+    stuckAfter,
+    onError: error => { report(error, 'write'); },
+  });
   /** 範圍檔一次寫一件；還在讀、讀不到時不寫（§4）。輪到它時選定的已經不是畫面打開的那一份（前一筆結束了、被刪、改名、換了另一次考試）：不套上去（§6）。 */
   let examWrites: Promise<unknown> = Promise.resolve();
   function examWrite(opened: ExamTarget, work: (chosen: ReturnType<typeof exam.choose>['chosen'], day: number, admit: () => ExamBlocked | null) => Promise<ExamResult>): Promise<ExamResult> {
@@ -556,7 +662,11 @@ export function createState(options: StateOptions): State {
   /** 換日或換時區就重排（W4 的 F3：日編號相同、時區不同也要重排）。 */
   function fresh(): { today: Today; input: TodayInput } {
     const value = input();
-    if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) current = plan(value);
+    if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) {
+      // 過了 2/1、8/1 學期自己變，data.json 沒變也不會有 applySettings（tasks/settings-page.md §3）。
+      observe();
+      current = plan(value);
+    }
     return { today: current, input: value };
   }
 
@@ -626,9 +736,16 @@ export function createState(options: StateOptions): State {
       if (!unread.size) tracker.confirm();
       if (tracker.revision() !== revision) decksChanged = true;
       if (decksChanged) rebuild();
+      if (rescueBlind()) logsChanged = true;
       // 第一次載入時由 load() 在紀錄那一批之後比；之後是讀不到的自己的紀錄終於讀到了。
-      if (life.loaded) checkApp();
+      if (life.loaded) {
+        checkApp();
+        // 內容和快取相同也要比：這一批可能正好補齊了讀不到的。
+        observe();
+      }
       if (life.loaded && (decksChanged || logsChanged)) replan();
+      // 內容和快取相同也要查：這一批可能正好補齊了讀不到的。
+      if (life.loaded) snapshots.check();
     };
   }
 
@@ -657,6 +774,7 @@ export function createState(options: StateOptions): State {
     if (life.closed) throw new Closed();
     // 自己的紀錄都讀到時，版本行排在這次第一筆作答前：answer 要等 loaded 才能寫。
     checkApp();
+    observe();
     life.loaded = true;
     current = plan(input());
     const end = performance.now();
@@ -700,7 +818,6 @@ export function createState(options: StateOptions): State {
     };
     const result = await writes.enqueue(() => editor ? writes.edit(editor, plan, { kind: 'unchanged' }) : writes.fillFile(path, plan));
     if (unwritable) return { kind: 'unwritable' };
-    if (result.kind === 'done' || result.kind === 'saved') record({ set: 'status', deck: path, val: value });
     return result;
   }
 
@@ -845,7 +962,8 @@ export function createState(options: StateOptions): State {
       const shows = JSON.stringify([semester, examCountdown]) !== JSON.stringify([value.semester, value.examCountdown]);
       takeSettings(value);
       if (!life.loaded) return;
-      // 補紀錄缺口（tasks/record-gaps.md §1）的偵測出口接在這裡：先採用、排入紀錄，再通知會讀新排程的畫面；值變了或 known 由 false 變 true 都會走到。
+      // 先採用、排入紀錄，再通知會讀新排程的畫面（tasks/record-gaps.md §1）；值變了或 known 由 false 變 true 都會走到。
+      observe();
       if (replans) replan();
       else if (shows) notifyChange();
     },
@@ -867,6 +985,7 @@ export function createState(options: StateOptions): State {
     version: () => ({ build: options.build ?? null, own: appState, devices: lastVersions([...sources].map(([path, text]) => ({ path, text })), version) }),
     async close() {
       life.closed = true;
+      snapshots.stop();
       reads.stop();
       exam.stop();
       quiz.stop();
