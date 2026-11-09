@@ -1,6 +1,6 @@
 # 設定頁：每日時間上限、目標保持率、目前學期（給 Claude，本機執行）
 
-狀態：草稿，等使用者看過（2026-11-09）；§1～§3 同意後先做格式查核，查核核對完才開始寫程式。
+狀態：使用者 2026-11-09 同意；§1～§3 等格式查核（[請求](settings-page-format-review.md)），查核核對完才開始寫程式。
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。新增外掛會寫的檔案格式（`data.json`）、改 `state` 與排程的輸入，屬於高風險，合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）；§1～§3 開工前做格式查核（[D-140](../docs/decisions.md#d-140-fable-規劃opus-執行codex-查核) 第 4 點）。
 
@@ -24,25 +24,19 @@
 
 | 步驟 | 內容 | 誰 |
 |---|---|---|
-| 0 | 使用者看過這份，決定下面兩題 | 使用者 |
-| 1 | §1～§3 格式查核（請求另寫 `tasks/settings-page-format-review.md`），Claude 核對回報、改這份說明 | Codex → Claude |
+| 0 | 使用者看過這份，決定下面兩題：完成 | 使用者 |
+| 1 | §1～§3 格式查核（[請求](settings-page-format-review.md)），Claude 核對回報、改這份說明 | Codex → Claude |
 | 2 | 程式與測試：§4 → §1、§2 → §3 → §5 | Claude |
 | 3 | merge 最新的 `main`（AI 製卡最小版先合併，兩邊都改 `src/main.ts` 的 `createState` 那一行）；§8 Windows 實機（先確認測試 vault 沒有別的 session 在用） | Claude |
 | 4 | Codex L2，通過後請使用者同意合併 | Codex → Claude → 使用者 |
 
 和[補紀錄缺口](record-gaps.md)誰先合併都可以，正式資料要到升版才開始收。不動 `src/state/writes.ts`、`reads.ts`、`ids.ts`、`src/core/deck/parse.ts`。
 
-## 請使用者決定
+## 使用者的決定（2026-11-09，都照建議）
 
-**題一：考試倒數的開關要不要一起做？** D-104、D-156 把它列在「複習」一區，開工的任務沒寫到。
+**考試倒數的開關一起做**：D-104、D-156 把它列在「複習」一區，開工的任務沒寫到。多一列開關、`data.json` 多一個欄位、入口多一個判斷；存法和其他三項相同，不用再開一次任務。
 
-- 一起做（建議）：多一列開關、`data.json` 多一個欄位、入口多一個判斷；存法和其他三項相同，不用再開一次任務。
-- 不做：這次範圍最小，開關留在 backlog；代價是設定頁之後還要再動一次，功能上目前沒人反映倒數礙眼。
-
-**題二：考試範圍檔的檔名要不要改用「目前學期」？** D-104 寫目前學期用在檔名，但程式與 [syntax §4](../docs/syntax.md#4-考試範圍) 現在取「勾選單元裡最新的年級學期」（[任務說明](exam-scope.md) 當時是因為設定頁還沒做）。
-
-- 維持現狀（建議）：檔名描述的是這份範圍的內容。跨 2/1 的考試或會考跨好幾冊時，勾選的單元比「今天是第幾學期」準；檔名只用來排序，改了也沒有功能上的好處，又要動已上線的行為。同意的話在 D-104 補一句，目前學期只用在目錄與考試範圍預設展開的學期。
-- 照 D-104 改：和決定的字面一致；代價是上面的不準，再多一個行為改動與測試。
+**考試範圍檔的檔名維持現狀**：D-104 寫目前學期用在檔名，但程式與 [syntax §4](../docs/syntax.md#4-考試範圍) 取「勾選單元裡最新的年級學期」（[任務說明](exam-scope.md) 當時是因為設定頁還沒做）。檔名描述的是這份範圍的內容，跨 2/1 的考試或會考跨好幾冊時，勾選的單元比「今天是第幾學期」準；檔名只用來排序，改了沒有功能上的好處。D-104 補一句：目前學期只用在目錄與考試範圍預設展開的學期（§6）。
 
 ## 1. `data.json` 的格式（要格式查核）
 
@@ -63,7 +57,7 @@
 | `retention` | 0.7、0.75、0.8、0.85、0.9、0.95 其中一個 | 0.8 |
 | `semester` | `小一上`～`高三下` 其中一個（小一～小六、國一～國三、高一～高三，各有上下，和 [syntax §2](../docs/syntax.md#2-卡組筆記) 認得的正式寫法相同） | 沒有設定 |
 | `semesterSetOn` | 使用者選這個學期的那一天，`YYYY-MM-DD`，清晨 4 點換日 | 和 `semester` 一組：兩個都合法才算有設定 |
-| `examCountdown`（題一選做才有） | `true`、`false` | `true` |
+| `examCountdown` | `true`、`false` | `true` |
 
 - **平的欄位，不包物件**：「只改這次的欄位、保留不認得的欄位」在每一層都成立，不用處理物件裡面的未知欄位。
 - **讀不懂的值不動**：型別不對或不在選項裡，當成沒有設定，檔案裡的原值留著，使用者改那一項或按恢復預設時才換掉。
@@ -96,16 +90,17 @@
 interface SettingsValue {
   settings: Settings;                  // capMinutes、retention、filter（現在一律 []）
   semester: { value: string; setOn: string } | null;
+  examCountdown: boolean;
   known: boolean;                      // false：data.json 還沒讀到，上面是預設值
 }
 StateOptions.settingsFirst?: Promise<SettingsValue>;   // 第一次載入等它（最多 2 秒）
 State.applySettings(value: SettingsValue): void;       // 設定頁、別台裝置改了都走這裡
-State.currentSettings(): { settings: Settings; semester: string | null; known: boolean };
+State.currentSettings(): { settings: Settings; semester: string | null; examCountdown: boolean; known: boolean };
 ```
 
 - **不晚一步**：`state` 的第一次載入本來就在等範圍檔（`EXAM_WAIT`），`settingsFirst` 併進同一段等待，不增加載入時間，第一次排今天的份就用對的值。`createState` 維持同步呼叫，`src/main.ts` 只多一個選項；`StateOptions.settings` 保留給測試。
 - **第一次沒等到**（2 秒內沒回來）：先用預設值、`known: false`，等讀到時由 `applySettings` 更新。
-- **`applySettings`**：`capMinutes`、`retention`、`filter` 真的變了才重排並通知 `onChange`（`replan`）；只有學期變了只通知，不重排；全部相同什麼都不做。還沒 ready 時只記下；`close()` 之後不理。
+- **`applySettings`**：`capMinutes`、`retention`、`filter` 真的變了才重排並通知 `onChange`（`replan`）；只有學期或考試倒數變了只通知，不重排；全部相同什麼都不做。還沒 ready 時只記下；`close()` 之後不理。
 - **`currentSettings().semester`** 是照 `state` 的時鐘算好的今天的學期（`國二下`），沒設定是 `null`。
 
 **給補紀錄缺口的介面**：`set: cap`、`retention`、`filter`、`semester` 由它寫，設定頁不寫紀錄行。
@@ -135,22 +130,23 @@ State.currentSettings(): { settings: Settings; semester: string | null; known: b
 |---|---|---|---|
 | 複習（最上面） | 每日時間上限 | 下拉選單 `5 分鐘`～`90 分鐘` | 全部科目加起來的時間。 |
 | 複習 | 目標保持率 | 下拉選單 `70%`～`95%` | 旁邊 ⓘ，點開是 D-078 那段說明 |
-| 複習 | 考試倒數（題一選做才有） | 開關 | 無 |
+| 複習 | 考試倒數 | 開關，預設打開 | 入口的科目底下顯示距離考試幾天。 |
 | 複習 | 預覽、小考標記 | 不動 | 不動 |
 | 學期（複習之後、備份之前） | 目前學期 | 一個下拉選單：`未設定`、`小一上`～`高三下` | 每年 2/1 自動換成下學期，8/1 換成下一個年級的上學期，也能手動改。 |
 
-- **恢復預設**：上限、保持率已經存過時，那一列多一個小圖示（`addExtraButton`，提示「恢復預設」），沒存過不顯示。學期選 `未設定` 就是刪掉。
+- **恢復預設**：上限、保持率、考試倒數已經存過時，那一列多一個小圖示（`addExtraButton`，提示「恢復預設」），沒存過不顯示。學期選 `未設定` 就是刪掉。
+- **考試倒數只管入口**：關掉時 `src/review/entry.ts` 的 `countdownOf` 回 `null`。目錄科目標題旁的倒數不受影響（[D-097](../docs/decisions.md#d-097-目錄畫面)），排程、考前提高、「考試範圍與日期」那一列都不變。
 - **小選擇**：學期用一個選單，不拆年級和上下：少一種「只選了一半」的狀態（D-179）。ⓘ 用點的，和備份那一列相同，電腦和 iPhone 一套，不做 D-078 寫的滑鼠移過去。
 - 選單顯示的是今天算出來的學期；旁邊不顯示積了幾張（D-071）。
 - 打開設定頁先用手上的值畫，同時重讀，值不同才重畫。
-- iPhone 同樣顯示這三列；備份那一區照舊。
+- iPhone 同樣顯示這四列；備份那一區照舊。
 
 ## 6. 文件（和程式同一個分支合併）
 
 - `docs/syntax.md` 新增一節寫 `data.json`；`docs/architecture.md` 的資料存放若沒寫到就補一句。
 - `docs/backlog.md`：刪掉「今天的份只在換日、換時區時重排」那一列；iPhone 的「補測：」加一列。
 - `docs/progress-map.md`：每日時間上限、目標保持率、設定頁改符號；濾網照舊。roadmap 的已完成。
-- D-104：照題二的結果補一句。
+- D-104 補一句（照 `essence-decision`）：目前學期不用在考試範圍的檔名（〈使用者的決定〉）。
 
 ## 7. 驗收（寫成測試：純函式、`createSettingsStore` 配假的 `load`／`save`、`createState` 配假的 `Files`）
 
@@ -163,7 +159,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; known: b
 5. 寫前 `load` 回 `undefined`、回 `[1]`、回 `3`、5 秒沒回來：`save` 沒被呼叫，回傳失敗，手上的值不變。
 6. `save` 完成但讀回的不是新值（模擬 `saveData` 吞掉錯誤）：回傳失敗，手上的值是讀回的值。
 7. 連按三次（45、60、75）排隊：`load`／`save` 依序不重疊，最後磁碟是 75，每次都以前一次的結果為底。
-8. 讀不懂的值：`capMinutes` 是 `7`、`"45"`、`null`，`retention` 是 `0.8001`，`semester` 是 `國二`，`semesterSetOn` 是 `2026-13-40`：都當沒設定、用預設；存別的欄位時這些原值逐字不動。只有 `semester` 或只有 `semesterSetOn`：沒有學期。
+8. 讀不懂的值：`capMinutes` 是 `7`、`"45"`、`null`，`retention` 是 `0.8001`，`semester` 是 `國二`，`semesterSetOn` 是 `2026-13-40`，`examCountdown` 是 `"no"`：都當沒設定、用預設；存別的欄位時這些原值逐字不動。只有 `semester` 或只有 `semesterSetOn`：沒有學期。
 9. 第一次 `load` 回 `undefined` 或 2 秒內沒回來：預設值、`known: false`；之後重讀成功變 `known: true`。
 
 **§3 `state`**
@@ -173,7 +169,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; known: b
 12. `applySettings` 上限 30 → 5：`onChange` 通知一次，`today()` 的份變少；上限調回 30：回到原本的份。今天已答的目標，改上限前後都算完成（`progress` 的完成數相同）。
 13. `retention` 0.8 → 0.95：到期日變早的目標出現在今天的份裡（字面的例子，用手算的時間）；考前提高（D-078）的 `max(設定, 0.9)` 照舊：設定 0.95 時範圍內用 0.95。
 14. 值完全相同再呼叫十次：不重排（`today()` 回同一個物件）、`onChange` 零次、不多寫任何紀錄行。
-15. 只有學期變：`onChange` 一次，`today()` 同一個物件。
+15. 只有學期或考試倒數變：`onChange` 一次，`today()` 同一個物件。
 16. `ready` 之前呼叫 `applySettings`：不丟錯，第一次排程用它。`close()` 之後呼叫：不通知。
 17. `known` 由 `false` 變 `true`、值相同：不重排，`settingsChanged` 呼叫一次（給補紀錄缺口；用 `currentSettings().known` 看得到）。
 18. 外部改了 `data.json`（呼叫 store 的重讀）：值真的變了才 `applySettings` 重排；內容相同不重排。
@@ -205,16 +201,17 @@ State.currentSettings(): { settings: Settings; semester: string | null; known: b
 
 **§5 畫面**（`tests/helpers/obsidian.ts` 的替身補上 `loadData`、`saveData` 與會記錄控制項的 `Setting`，只測接線）
 
-24. 選項與 D-104 逐項相同（上限 9 項、保持率 6 項、學期 25 項含未設定），預設選中 30、80%、未設定。
+24. 選項與 D-104 逐項相同（上限 9 項、保持率 6 項、學期 25 項含未設定），預設選中 30、80%、未設定，考試倒數打開。
 25. 沒存過時沒有恢復預設，存過才有；按了欄位不見、選單回到預設。
 26. 存檔失敗：有通知，選單回到實際的值。
 27. 設定頁的文字沒有「給家長」「學生」（D-156）。
 28. 外掛載入到 layout ready 之前沒有呼叫 `loadData`（T12）。
 29. 手機：`visibilitychange` 回到前景時重讀；電腦不多讀。
+30. 考試倒數關掉：有生效範圍時，入口每一列的 `countdown` 是 `null`，`examSubject`（目錄）照舊有字，`today()` 同一個物件；打開後入口的倒數回來。
 
 ## 8. Windows 實機（Claude 用開發版跑，先確認測試 vault 沒有別的 session 在用；結束後把 `data.json` 還原）
 
-1. 設定頁三列看得到、選項正確；只操作自己分頁裡的控制項。
+1. 設定頁四列看得到、選項正確；只操作自己分頁裡的控制項。
 2. 改上限：`data.json` 寫出、入口的份馬上變；重開還在。恢復預設：欄位不見。
 3. 對照 §2：把 `data.json` 改成壞的 JSON，`loadData` 回 `undefined`（不是 `null`）、存檔被擋、原檔逐字不變；刪掉檔回 `null`。把 `data.json` 設成唯讀，看 `saveData` 是不是真的吞掉錯誤、核對擋得住。
 4. 在 Obsidian 以外改 `data.json`：`onExternalSettingsChange` 被呼叫，入口跟著變；改成一樣的內容不重排。
@@ -226,7 +223,7 @@ State.currentSettings(): { settings: Settings; semester: string | null; known: b
 
 ## 9. commit 的切法
 
-一個決定一個 commit：`core/settings` 的讀與改；學期的計算；排隊存檔與核對；`state` 的 `applySettings` 與第一次載入；`latest` 接目前學期；設定頁的三列；重讀的時機（`onExternalSettingsChange`、前景）；文件。
+一個決定一個 commit：`core/settings` 的讀與改；學期的計算；排隊存檔與核對；`state` 的 `applySettings` 與第一次載入；`latest` 接目前學期；設定頁的四列與入口的倒數開關；重讀的時機（`onExternalSettingsChange`、前景）；文件。
 
 ## 結果
 
