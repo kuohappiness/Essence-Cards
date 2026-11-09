@@ -151,10 +151,12 @@ const goal = (id: string) => `- 能說明 ${id} ^${id}\n    - 題目 ${id} :: �
 const DECK = 'Essence Cards/國二上/自然/2-2（卡片）.md';
 const DELAY = 50;
 
-void test('S6 原例：同一次執行中別台的紀錄到了之後、重開之後，兩筆都在；state 當下與重開相同；原檔不改', async t => {
+void test('S6 原例：磁碟上已經黏住的兩筆，別台的紀錄到了之後、重開之後都在；state 當下與重開相同；原檔不改', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const flush = () => new Promise<void>(resolve => setImmediate(resolve));
-  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') + goal('zzzzzz') }, 'PC-test'), [PC]: A });
+  // 舊版寫的：現在的 writer 知道檔尾沒有換行時會另起一行（L2 的 R1），已經黏住的只能靠讀取端。
+  const glued = A + review('2026-10-30T19:00:00.000+08:00', 'bbbbbb') + '\n';
+  const memory = createMemoryFiles({ ...await withBaseline({ [DECK]: '---\n科目: 自然\n---\n' + goal('aaaaaa') + goal('bbbbbb') + goal('zzzzzz') }, 'PC-test'), [PC]: glued });
   const open = (): State => {
     const state = createState({ files: memory.files, device: 'PC-test', delay: DELAY, fillIds: false, now: () => Date.parse('2026-10-30T19:00:00.000+08:00'), offset: () => 480 });
     t.after(() => state.close());
@@ -162,14 +164,7 @@ void test('S6 原例：同一次執行中別台的紀錄到了之後、重開之
   };
   const state = open();
   await state.ready();
-  assert.deepEqual(lts(state.history()), ['aaaaaa']);
-
-  const target = state.decks()[0].deck.targets.find(item => item.id === 'bbbbbb');
-  assert.ok(target);
-  const written = state.answer({ lt: 'bbbbbb', r: 'good', v: target.prompts[0].fingerprint });
-  assert.ok(written);
   await state.flush();
-  const glued = A + encodeEntry(written, { lt: 'bbbbbb', r: 'good', v: target.prompts[0].fingerprint }) + '\n';
   assert.equal(memory.texts.get(PC), glued);
   assert.deepEqual(lts(state.history()), ['aaaaaa', 'bbbbbb']);
 

@@ -16,6 +16,8 @@ export function createLogWriter(files: Files, options: {
   onError?: (error: unknown) => void;
   /** 這個 t 字串已經有紀錄用來認人（作答、變更、被取消的）：undo 用 t 認人，新的一行要避開（tasks/record-gaps.md §4）。 */
   taken?: (t: string) => boolean;
+  /** 這個檔已知的內容最後沒有換行：新行先補一個換行，舊版（0.3.0）遇到黏在一起的兩筆只救得回最後一段（L2 的 R1）。 */
+  unterminated?: (path: string) => boolean;
 }): LogWriter {
   const now = options.now ?? Date.now;
   const offsetOf = options.offset ?? (ms => -new Date(ms).getTimezoneOffset());
@@ -72,7 +74,7 @@ export function createLogWriter(files: Files, options: {
       const line = encodeNew(t, entry);
       const path = logPath(options.device, at, offset);
       last = at;
-      pending.push({ path, line });
+      pending.push({ path, line: options.unterminated?.(path) ? '\n' + line : line });
       writeVersion++;
       // 失敗已經交給 onError（呼叫端記下），那一行留在佇列，下一次 write／flush 重試。
       void start().catch(() => {});

@@ -383,20 +383,41 @@ void test('§1-17 舊版的第一行是按鈕記的暫停、卡組仍暫停：�
   assert.equal(shorts(memory).length, before);
 });
 
-void test('§1-18 自己的檔最後一行沒有換行：新行不吃掉原本的作答與 undo', async t => {
+void test('§1-18 自己的檔最後一行沒有換行：新行另起一行，一行一筆，原本的作答與 undo 都在', async t => {
   const answer = review(T(1)), undone = review(T(2), 'bbbbbb'), undo = line(T(3), { undo: T(2) });
   for (const [tail, count] of [[answer, 1], [undone + '\n' + undo, 0]] as const) {
     const memory = createMemoryFiles({ [A]: deck('啟用'), [OWN]: tail });
     const first = await open(t, memory);
     await first.state.close();
-    const history = mergeHistory([{ path: OWN, text: memory.texts.get(OWN) as string }]);
+    const text = memory.texts.get(OWN) as string;
+    assert.ok(text.startsWith(tail + '\n{'));
+    // 舊版（0.3.0）遇到黏在一起的兩筆只救得回最後一段，所以每一行都要自己是一筆完整的 JSON（L2 的 R1）。
+    for (const raw of text.split('\n').filter(Boolean)) assert.doesNotThrow(() => JSON.parse(raw) as unknown);
+    const history = mergeHistory([{ path: OWN, text }]);
     assert.equal(history.reviews.length, count);
-    assert.equal(history.problems.length, 1);
+    assert.equal(history.problems.length, 0);
     assert.equal(history.changes.length, 4);
-    const size = (memory.texts.get(OWN) as string).length;
     const second = await open(t, memory, { now: () => NOW + 60_000 });
     await second.state.close();
-    assert.equal((memory.texts.get(OWN) as string).length, size);
+    assert.equal(memory.texts.get(OWN), text);
+  }
+});
+
+void test('§1-18 沒有換行的檔：作答也另起一行、只補一次；寫到一半的那行不影響新行', async t => {
+  const settled = SETTLED + statusLine(T(1), { deck: A }, '啟用');
+  for (const [tail, problems] of [[settled, 0], [settled + '\n{"t":"2026-10-20T19:0', 1]] as const) {
+    const memory = createMemoryFiles({ [A]: deck('啟用'), [OWN]: tail });
+    const { state } = await open(t, memory);
+    state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
+    state.answer({ lt: 'aaaaaa', r: 'good', v: '12345678' });
+    await state.flush();
+    await state.close();
+    const text = memory.texts.get(OWN) as string;
+    assert.ok(text.startsWith(tail + '\n{'));
+    assert.ok(!text.includes('\n\n'));
+    const history = mergeHistory([{ path: OWN, text }]);
+    assert.equal(history.reviews.length, 2);
+    assert.equal(history.problems.length, problems);
   }
 });
 

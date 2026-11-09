@@ -319,7 +319,8 @@ export function createState(options: StateOptions): State {
   };
   /** 舊紀錄裡用來認人的 t（tasks/record-gaps.md §4）：reviews 已濾掉被取消的，所以 cancelled 要另外看；取消行自己的 t 沒有東西用它認人。 */
   const taken = (t: string): boolean => history.cancelled.includes(t) || history.reviews.some(review => review.t === t) || history.changes.some(change => change.t === t);
-  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); }, taken });
+  const unterminated = (path: string): boolean => { const text = sources.get(path); return !!text && !text.endsWith('\n'); };
+  const writer = createLogWriter(files, { device, now, offset: offsetOf, onError: error => { report(error, 'write'); }, taken, unterminated });
   // 自己的紀錄：`YYYY-MM <device>.jsonl`；衝突副本（例如 `… 2.jsonl`）算別台裝置的。
   const ownName = new RegExp('^\\d{4}-\\d{2} ' + device.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.jsonl$');
   const own = (path: string): boolean => path.startsWith(LOG_FOLDER + '/') && ownName.test(path.slice(LOG_FOLDER.length + 1));
@@ -392,7 +393,7 @@ export function createState(options: StateOptions): State {
   /** 寫一行紀錄到這台當月的檔、併進 history；作答與版本行共用同一個有序寫入（syntax.md §5-1）。 */
   function record(entry: NewEntry): QueuedLine {
     const queued = writer.write(entry);
-    sources.set(queued.path, (sources.get(queued.path) ?? '') + queued.line + '\n');
+    sources.set(queued.path, (sources.get(queued.path) ?? '') + (unterminated(queued.path) ? '\n' : '') + queued.line + '\n');
     history = appendLine(history, queued.line);
     return queued;
   }
