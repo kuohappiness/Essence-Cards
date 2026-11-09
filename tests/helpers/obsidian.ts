@@ -13,24 +13,77 @@ class TAbstractFile { path: string; constructor(path: string) { this.path = path
 class TFile extends TAbstractFile {}
 class TFolder extends TAbstractFile { children: TAbstractFile[] = []; }
 
-/** Modal 用的最小元素：empty、createDiv、createEl、setText、click、照標籤找的 querySelectorAll、disabled。 */
-class FakeEl {
+/** Modal 與設定分頁用的最小元素：empty、createDiv、createEl、setText、click、照標籤找的 querySelectorAll、disabled。 */
+export class FakeEl {
   readonly tag: string;
   text: string;
   disabled = false;
   readonly children: FakeEl[] = [];
+  /** 這個容器裡的 Setting（設定分頁）。 */
+  readonly rows: FakeSetting[] = [];
+  /** 設定分頁開著沒：預設沒開，測試要重畫時自己設。 */
+  shown = false;
+  hidden = false;
   private readonly clicks: (() => void)[] = [];
   constructor(tag = 'div', options?: { text?: string }) { this.tag = tag; this.text = options?.text ?? ''; }
-  empty() { this.children.length = 0; }
+  empty() { this.children.length = 0; this.rows.length = 0; }
   setText(text: string) { this.text = text; }
   createDiv(options?: { text?: string }) { return this.createEl('div', options); }
+  createSpan(options?: { text?: string }) { return this.createEl('span', options); }
   createEl(tag: string, options?: { text?: string }) { const el = new FakeEl(tag, options); this.children.push(el); return el; }
+  addClass() {}
+  setAttribute() {}
+  toggle(show: boolean) { this.hidden = !show; }
   addEventListener(type: string, callback: () => void) { if (type === 'click') this.clicks.push(callback); }
   /** 照瀏覽器：停用的按鈕不送 click。 */
   click() { if (!this.disabled) for (const callback of this.clicks) callback(); }
-  /** 設定分頁開著沒：替身裡一律沒開。 */
-  isShown() { return false; }
+  isShown() { return this.shown; }
   querySelectorAll(tag: string): FakeEl[] { return this.children.flatMap(child => [...child.tag === tag ? [child] : [], ...child.querySelectorAll(tag)]); }
+}
+
+/** 設定分頁的控制項：記下選項與現在的值，choose() 照使用者改了值的樣子呼叫 onChange。 */
+class FakeDropdown {
+  readonly options: { value: string; label: string }[] = [];
+  value = '';
+  private changed: (value: string) => unknown = () => {};
+  addOption(value: string, label: string) { this.options.push({ value, label }); return this; }
+  setValue(value: string) { this.value = value; return this; }
+  onChange(callback: (value: string) => unknown) { this.changed = callback; return this; }
+  choose(value: string) { this.value = value; this.changed(value); }
+}
+class FakeToggle {
+  value = false;
+  private changed: (value: boolean) => unknown = () => {};
+  setValue(value: boolean) { this.value = value; return this; }
+  onChange(callback: (value: boolean) => unknown) { this.changed = callback; return this; }
+  choose(value: boolean) { this.value = value; this.changed(value); }
+}
+class FakeButton {
+  text = ''; icon = ''; tooltip = '';
+  private clicked: () => unknown = () => {};
+  setButtonText(text: string) { this.text = text; return this; }
+  setIcon(icon: string) { this.icon = icon; return this; }
+  setTooltip(tooltip: string) { this.tooltip = tooltip; return this; }
+  setCta() { return this; }
+  setDisabled() { return this; }
+  onClick(callback: () => unknown) { this.clicked = callback; return this; }
+  click() { this.clicked(); }
+}
+export class FakeSetting {
+  name = ''; desc = ''; heading = false;
+  settingEl = new FakeEl(); nameEl = new FakeEl(); descEl = new FakeEl();
+  dropdown: FakeDropdown | null = null;
+  toggle: FakeToggle | null = null;
+  readonly extras: FakeButton[] = [];
+  constructor(container: FakeEl) { container.rows.push(this); }
+  setName(name: string) { this.name = name; return this; }
+  setDesc(desc: string) { this.desc = desc; return this; }
+  setHeading() { this.heading = true; return this; }
+  addDropdown(build: (dropdown: FakeDropdown) => unknown) { build(this.dropdown = new FakeDropdown()); return this; }
+  addToggle(build: (toggle: FakeToggle) => unknown) { build(this.toggle = new FakeToggle()); return this; }
+  addExtraButton(build: (button: FakeButton) => unknown) { const button = new FakeButton(); this.extras.push(button); build(button); return this; }
+  addButton(build: (button: FakeButton) => unknown) { build(new FakeButton()); return this; }
+  addText(build: (text: { setPlaceholder(): unknown; onChange(): unknown }) => unknown) { const text = { setPlaceholder: () => text, onChange: () => text }; build(text); return this; }
 }
 
 export interface StubOptions {
@@ -53,6 +106,10 @@ export interface StubOptions {
   vaultPath?: string;
   /** 這個 vault 的 localStorage 一開始的值（例如備份位置）。 */
   localStorage?: Record<string, unknown>;
+  /** data.json 一開始的內容；預設 null（沒有檔）。undefined 是讀不到（照 Obsidian 1.15 的 loadData）。 */
+  data?: unknown;
+  /** saveData 寫不進去：照 Obsidian 1.15 吞掉錯誤、照常完成。 */
+  failSave?: boolean;
 }
 
 interface Leaf { view: unknown; getViewState(): { state?: { file?: string } } }
@@ -99,6 +156,10 @@ export interface ObsidianStub {
   layoutReady: () => void;
   /** document.visibilityState 變成 hidden 並送事件。 */
   hide: () => void;
+  /** document.visibilityState 變成 visible 並送事件。 */
+  show: () => void;
+  /** data.json：現在的內容，loadData、saveData 被呼叫的次數。 */
+  data: { content: unknown; loads: number; saves: number };
   document: EventTarget & { visibilityState: string };
   window: EventTarget & { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout; setInterval: (callback: () => void, ms?: number) => number; clearInterval: () => void };
   /** registerInterval 登記的回呼：tick() 全部跑一次。 */
@@ -141,6 +202,7 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   const timers = { setInterval: 0, registerInterval: 0 };
   const required: string[] = [];
   const settingTabs: unknown[] = [];
+  const data = { content: 'data' in options ? options.data : null as unknown, loads: 0, saves: 0 };
   let calls = 0, ready = false, before = 0;
   const texts = new Map(Object.entries(options.texts ?? {}));
   const count = (): void => { if (!ready) calls++; };
@@ -248,6 +310,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     register(cleanup: () => void) { this.cleanups.push(cleanup); }
     registerInterval(id: number) { timers.registerInterval++; return id; }
     addSettingTab(tab: unknown) { settingTabs.push(tab); }
+    loadData(): Promise<unknown> { data.loads++; return Promise.resolve(data.content === undefined ? undefined : JSON.parse(JSON.stringify(data.content))); }
+    saveData(next: unknown): Promise<void> { data.saves++; if (!options.failSave) data.content = next; return Promise.resolve(); }
     registerObsidianProtocolHandler(action: string, handler: (params: Record<string, string>) => void) { protocol.set(action, handler); }
     registerDomEvent(target: EventTarget, type: string, callback: () => void) {
       target.addEventListener(type, callback);
@@ -272,9 +336,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     app: unknown; plugin: unknown; containerEl = new FakeEl();
     constructor(app: unknown, plugin: unknown) { this.app = app; this.plugin = plugin; }
   }
-  class Setting {}
   const obsidian = {
-    Plugin, Notice, Component, Modal, SuggestModal, PluginSettingTab, Setting, FileSystemAdapter, TFile, TFolder, TAbstractFile,
+    Plugin, Notice, Component, Modal, SuggestModal, PluginSettingTab, Setting: FakeSetting, FileSystemAdapter, TFile, TFolder, TAbstractFile,
     MarkdownView: FakeMarkdownView,
     MarkdownRenderer: { render: (_app: unknown, markdown: string, el: { textContent: string }) => { el.textContent = markdown; return Promise.resolve(); } },
     setIcon: () => {}, editorInfoField: {}, apiVersion: 'test',
@@ -303,6 +366,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     callsBeforeReady: () => before,
     layoutReady: () => { before = calls; ready = true; for (const callback of layout.splice(0)) callback(); },
     hide: () => { document.visibilityState = 'hidden'; document.dispatchEvent(new Event('visibilitychange')); },
+    show: () => { document.visibilityState = 'visible'; document.dispatchEvent(new Event('visibilitychange')); },
+    data,
     document, window,
     tick: () => { for (const callback of intervals) callback(); },
     leaves, leaf,
