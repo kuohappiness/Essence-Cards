@@ -99,7 +99,8 @@ export function createReads(options: ReadsOptions) {
   const marks = new Map<string, number>();
   const bump = (path: string): void => { marks.set(path, ++sequence); };
   /** 正在做 Cards I/O 的卡組（寫進磁碟還沒有結果）：不開始讀，留在 pending，I/O 結束時立刻讀。 */
-  const busy = new Set<string>();
+  /** 正在 I/O 的路徑與筆數：逾時的舊工作和新工作可能同時占著同一篇，只有全部結束才放開（L2 的 R15）。 */
+  const busy = new Map<string, number>();
   /** 正在讀的批數（0 或 1：一次只讀一批）。 */
   let reading = 0;
   /** 正在讀的這一批有哪些路徑。 */
@@ -300,12 +301,13 @@ export function createReads(options: ReadsOptions) {
     waitingFor: (relevant: (path: string) => boolean): boolean => [...readingNow, ...pending, ...flying].some(path => relevant(path) && !unread.has(path)),
     /** 這篇的 Cards I/O 開始（§2 第 1 點）：不開始讀，序號前進。 */
     hold(path: string): void {
-      busy.add(path);
+      busy.set(path, (busy.get(path) ?? 0) + 1);
       bump(path);
     },
     /** 這篇的 I/O 結束：序號前進。 */
     unhold(path: string): void {
-      busy.delete(path);
+      const left = (busy.get(path) ?? 0) - 1;
+      if (left > 0) busy.set(path, left); else busy.delete(path);
       bump(path);
     },
     /** 把這幾篇放進 pending、立刻讀（不等 delay）。 */

@@ -445,6 +445,27 @@ void test('逾時（R2）：晚回來的卡組寫入不清掉別的工作的等�
   await closing;
 });
 
+void test('逾時（R15）：晚回來的卡組寫入不解開同一篇新寫入的讀取保護', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  let one = (): void => {};
+  const first = new Promise<boolean>(resolve => { one = () => { resolve(false); }; });
+  let late: Promise<boolean> | undefined;
+  await h.state.restore(writer => { late = writer.deck(A, () => first); return Promise.resolve(); });
+  // 閘門放開之後，同一篇開始一般的補 ID：卡在寫入的回呼之前，讀取保護是它的。
+  const held = h.holdModify(A);
+  const filling = h.state.fillIds(A);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  const reads: string[] = [];
+  const read = h.files.read.bind(h.files);
+  h.files.read = path => { reads.push(path); return read(path); };
+  one();
+  await late;
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(reads.filter(path => path === A), []);
+  held.release();
+  await filling;
+});
+
 void test('卡住（R6）：別的讀取已判定卡住時，重讀不讓閘門一直關著', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
   const backup = await snapshot(h);
