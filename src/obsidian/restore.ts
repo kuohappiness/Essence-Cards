@@ -224,9 +224,11 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                 const fields = parseData(bytes);
                 if (fields === null) return Promise.resolve('failed');
                 return host.settings.restore(fields, async () => {
-                  const now = await reader.read(dataTarget);
-                  // 排隊與讀檔的這段時間路徑可能換成連結，內容還一模一樣（L2 的 R13）：算比對之後改過，重新比對會寫出是連結。
+                  // 排隊的這段時間路徑可能換成連結，內容還一模一樣（L2 的 R13）：算比對之後改過，重新比對會寫出是連結。
                   try { await desktop.noLinks(dataTarget); } catch { return null; }
+                  if (!live()) throw Error('逾時，不寫');
+                  // 比對雜湊、當底稿的內容一定是寫之前最後一次 I/O（L2 的 R18）：查連結的等待裡同步進來的新內容才看得到。
+                  const now = await reader.read(dataTarget);
                   if (!live()) throw Error('逾時，不寫');
                   if ((now === null ? null : hashBytes(now)) !== expected) return null;
                   return (now === null ? null : parseData(now)) ?? {};

@@ -966,6 +966,25 @@ void test('還原接線：設定排進隊伍之後路徑才換成連結（內容
   assert.equal(h.text(DATA), '{"capMinutes":60}');
 });
 
+void test('還原接線：查連結的時候同步進來新的設定：不蓋掉，跳過（L2 的 R18）', async t => {
+  const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+  h.texts.set(DATA, '{"capMinutes":60}');
+  const comparison = await flow.compare(row);
+  const plugin = h.plugin as unknown as { store: { restore: (...args: unknown[]) => unknown }; backup: { desktop: { noLinks: (path: string) => Promise<void> } } };
+  let queued = false;
+  const restoreNow = plugin.store.restore.bind(plugin.store);
+  plugin.store.restore = (...args) => { queued = true; return restoreNow(...args); };
+  const noLinks = plugin.backup.desktop.noLinks.bind(plugin.backup.desktop);
+  const newer = '{"capMinutes":90,"later":true}';
+  // 路徑一直是一般檔案，只是內容在查連結的時候換了。
+  plugin.backup.desktop.noLinks = async path => { await noLinks(path); if (queued && path === DATA) h.texts.set(DATA, newer); };
+  const saves = h.data.saves;
+  const result = await flow.apply(comparison, new Set([DATA]));
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
+  assert.equal(h.data.saves, saves);
+  assert.equal(h.text(DATA), newer);
+});
+
 /**
  * 逐一卡住還原期間的每一次 I/O（L2 的 R6、R11、R12，D-197 的重整）：不論卡在哪一次，閘門都要放開、結果交回；
  * 放開之後沒有新的寫入；卡住的是寫入時，它回來之前不能比對。新增的等待只要經過這些介面，自動算進來。
