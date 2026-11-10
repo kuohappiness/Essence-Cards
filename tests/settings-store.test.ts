@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettingsStore } from '../src/core/settings/index.ts';
+import { createSettingsStore, savedDiff } from '../src/core/settings/index.ts';
 import type { SettingsChange, SettingsStoreOptions } from '../src/core/settings/index.ts';
 
 // 讀與存的順序（tasks/settings-page.md §2、§7）。load、save 是替身，照 Obsidian 1.15 的行為：null 是沒有檔，undefined 是讀不到；saveData 吞掉寫入錯誤。
@@ -610,4 +610,53 @@ void test('過了 2/1 不寫檔，畫面看到的是今天的學期', async () =
   const store = await started({ ...options, today: () => '2027-02-01' });
   assert.equal(store.semester(), '國二下');
   assert.equal(state.saves.length, 0);
+});
+
+// 還原（tasks/plugin-restore.md §4）
+const yes = () => Promise.resolve(true);
+
+void test('還原：寫前重讀，五個欄位換成備份的值，備份沒有的拿掉，不認得的保留；立刻生效、通知一次', async () => {
+  const { state, options } = disk({ capMinutes: 45, retention: 0.9, newField: 'keep' });
+  const store = await started(options);
+  state.content = { capMinutes: 50, retention: 0.9, other: 1, newField: 'keep' };
+  let told = 0;
+  store.onChange(() => { told++; });
+  assert.equal(await store.restore({ capMinutes: 20, unknownInBackup: true }, yes, false), 'saved');
+  assert.deepEqual(state.saves, [{ capMinutes: 20, other: 1, newField: 'keep' }]);
+  assert.equal(store.value().settings.capMinutes, 20);
+  assert.equal(store.value().settings.retention, 0.8);
+  assert.equal(told, 1);
+});
+
+void test('還原：輪到時現在的檔不是比對時那一份：changed，不寫；核對失敗算 unreadable', async () => {
+  const { state, options } = disk({ capMinutes: 45 });
+  const store = await started(options);
+  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.resolve(false), false), 'changed');
+  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.reject(Error('讀不到')), false), 'unreadable');
+  assert.deepEqual(state.saves, []);
+});
+
+void test('還原：現在的檔讀不懂（empty）以空的當底救回來；不是 empty 而讀不懂就不寫', async () => {
+  const first = disk('壞掉的值');
+  const rescued = await started(first.options);
+  assert.equal(await rescued.restore({ capMinutes: 20 }, yes, true), 'saved');
+  assert.deepEqual(first.state.saves, [{ capMinutes: 20 }]);
+  const second = disk('壞掉的值');
+  const refused = await started(second.options);
+  assert.equal(await refused.restore({ capMinutes: 20 }, yes, false), 'unreadable');
+  assert.deepEqual(second.state.saves, []);
+});
+
+void test('還原：first() 之前回 unreadable；讀回和備份不同算 failed', async () => {
+  const early = disk({ capMinutes: 45 });
+  assert.equal(await createSettingsStore(early.options).restore({ capMinutes: 20 }, yes, false), 'unreadable');
+  const lying = disk({ capMinutes: 45 });
+  const store = await started({ ...lying.options, save: () => Promise.resolve() });
+  assert.equal(await store.restore({ capMinutes: 20 }, yes, false), 'failed');
+});
+
+void test('還原的差異寫給家長看：一樣的不列；現在讀不懂寫「讀不懂」', () => {
+  assert.deepEqual(savedDiff({ capMinutes: 30, retention: 0.8 }, { capMinutes: 45, retention: 0.8 }), ['每日時間上限 30 分鐘 → 45 分鐘']);
+  assert.deepEqual(savedDiff({ capMinutes: 30 }, { capMinutes: 30 }), []);
+  assert.deepEqual(savedDiff(null, { capMinutes: 30 })[0], '每日時間上限 讀不懂 → 30 分鐘');
 });
