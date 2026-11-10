@@ -74,6 +74,8 @@ const byText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
  * 家長看不懂它的衝突與「備份後才有」，舊的錯誤仍在備份 zip 裡。這個例外只寫在這裡，不擴大 isLogPath。
  */
 const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(path);
+/** 這個檔還原時算不算卡組：備份的路徑或現在實際會寫的路徑，任何一邊是卡組就算（只差副檔名大小寫時兩邊不同，L2 的 R5）。 */
+const isDeckWrite = (target: string, found: string | null | undefined): boolean => isDeckPath(target) || (found != null && isDeckPath(found));
 
 /**
  * 還原計畫（D-150 第 7、8 點；syntax §5-3、§8）。不寫任何檔。
@@ -118,7 +120,7 @@ export function planRestore(input: PlanInput): RestorePlan {
     const reasons: string[] = [];
     const refused = input.refuse?.({ path, target, backup: bytes });
     if (refused) reasons.push(refused);
-    if (isDeckPath(target)) {
+    if (isDeckWrite(target, found)) {
       // 含 NUL 的卡組還原了也讀不回來（D-154 第 4 點）；需要新版的 Cards 不寫（備份那份或現在那份讀不懂都一樣）。
       if (bytes.includes(0)) reasons.push('備份裡這一篇的內容不完整（有 NUL）');
       else if (input.needsUpdate?.(parseDeck(text(bytes))) || (found !== undefined && input.needsUpdate?.(parseDeck(text(current.get(found)!))))) reasons.push('需要新版的外掛才讀得懂，這一版不寫它');
@@ -160,7 +162,7 @@ export function planRestore(input: PlanInput): RestorePlan {
 function orderWrites(files: PlannedFile[], { backup, current }: PlanInput): { order: string[]; stuck: { file: PlannedFile; waits: string[] }[] } {
   for (const file of files) file.after = [];
   const restoring = files.filter(file => file.action === 'restore');
-  const decks = restoring.filter(file => file.target !== null && isDeckPath(file.target));
+  const decks = restoring.filter(file => file.target !== null && isDeckWrite(file.target, file.current?.path));
   const now = new Map(decks.map(file => [file, new Set(file.current ? deckIds(current.get(file.current.path)!) : [])]));
   for (const file of restoring) {
     const mine = now.get(file);
@@ -201,7 +203,7 @@ function checkIds(files: PlannedFile[], { backup, current, sameFile }: PlanInput
     const decks = new Map<string, { shown: string; ids: string[]; restored: PlannedFile | null }>();
     for (const [path, bytes] of current) if (isDeckPath(path)) decks.set(sameFile(path), { shown: path, ids: idsOf('now:' + path, bytes), restored: null });
     for (const file of files) {
-      if (file.action !== 'restore' || file.target === null || !isDeckPath(file.target)) continue;
+      if (file.action !== 'restore' || file.target === null || !isDeckWrite(file.target, file.current?.path)) continue;
       decks.set(sameFile(file.target), { shown: file.current?.path ?? file.target, ids: idsOf('backup:' + file.path, backup.get(file.path)!), restored: file });
     }
     const where = new Map<string, Occurrence[]>();
