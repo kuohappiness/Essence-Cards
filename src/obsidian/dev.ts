@@ -24,6 +24,8 @@ import { CLOUD_ROOT, cloudLate, cloudRead, cloudState, cloudWrite, saveBlocked, 
 import { versionCheck } from './dev-version.ts';
 import { errorProbe } from './dev-errors.ts';
 import { backupDev } from './dev-backup.ts';
+import { restoreDev } from './dev-restore.ts';
+import type { RestoreFlow } from './restore.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
@@ -39,6 +41,7 @@ interface Host extends Plugin {
   state: State | null;
   ids: IdsWiring | null;
   backup: BackupWiring | null;
+  restoreFlow: RestoreFlow | null;
   lockAlso: string[];
   startReview(pick: Pick): ReviewHandle | null;
   review: ReviewHandle | null;
@@ -127,6 +130,8 @@ const commands: Record<string, DevCommand> = {
   'error-probe': { name: 'Essence 開發：錯誤紀錄實測', run: errorProbe },
   // 外掛內的備份（tasks/plugin-backup.md §1-2、§1-10）：URI 的 do 參數選要做的事，截圖寫在 Essence W5/結果/備份 …/。
   backup: { name: 'Essence 開發：備份', run: (host, ids, params) => backupDev({ app: host.app, backup: host.backup, state: host.state, notices: ids.devLog.notices, refresh: () => { host.ids?.saver.refresh(); } }, params, `${root}/結果/備份 ${host.device} ${stampOf(new Date())}`), desktop: true },
+  // 外掛內的還原（tasks/plugin-restore.md §8）：走真的視窗，每一步截圖，寫在 Essence W5/結果/還原 …/。
+  restore: { name: 'Essence 開發：還原', run: (host, _ids, params) => restoreDev(host, params, `${root}/結果/還原 ${host.device} ${stampOf(new Date())}`), desktop: true },
   // tasks/edit-markup.md §6-3：編輯畫面的標示、填出處的圖示與表單、300 個目標的速度。
   markup: { name: 'Essence 開發：編輯畫面標示（截圖）', run: host => markupCheck(host.app, host.ids, `${root}/結果/標示 ${stampOf(new Date())}`), desktop: true },
   version: { name: 'Essence 開發：版本行與讀取閘門', run: async host => versionCheck(host, await ready(host), `${root}/結果/版本 ${host.device} ${stampOf(new Date())}`), desktop: true },

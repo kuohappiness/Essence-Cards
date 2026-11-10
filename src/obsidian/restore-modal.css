@@ -1,0 +1,7 @@
+/* 還原的視窗（tasks/plugin-restore.md §1）。 */
+.essence-cards-restore .modal-content { display: flex; flex-direction: column; gap: var(--size-4-2); }
+.essence-cards-restore-list { display: flex; flex-direction: column; gap: var(--size-2-3); max-height: 50vh; overflow-y: auto; }
+.essence-cards-restore-row { display: flex; gap: var(--size-4-2); justify-content: flex-start; height: auto; }
+.essence-cards-restore-head { display: flex; align-items: baseline; gap: var(--size-4-2); }
+.essence-cards-restore-diff { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--font-ui-smaller); margin: var(--size-2-2) 0 0; }
+.essence-cards-restore-footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--size-4-2); }

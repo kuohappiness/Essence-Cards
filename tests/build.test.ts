@@ -167,7 +167,7 @@ void test('W5 正式建置不含 src/dev/ 與開發命令的任何程式（包�
     assert.deepEqual(inputs.filter(path => path.includes('node_modules/@codemirror/')), []);
     assert.ok(inputs.includes('src/obsidian/lock.ts') && inputs.includes('src/obsidian/save.ts'));
   }
-  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/move.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-ai.ts', 'src/obsidian/dev-backup.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-duplicates.ts', 'src/obsidian/dev-entry.ts', 'src/obsidian/dev-errors.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-exam-files.ts', 'src/obsidian/dev-exam.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-markup.ts', 'src/obsidian/dev-practice.ts', 'src/obsidian/dev-quiz.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
+  assert.deepEqual((await included(true)).filter(devOnly).sort(), ['src/dev/cleanup.ts', 'src/dev/compare.ts', 'src/dev/files-contract.ts', 'src/dev/marks.ts', 'src/dev/move.ts', 'src/dev/wrap-files.ts', 'src/obsidian/dev-ai.ts', 'src/obsidian/dev-backup.ts', 'src/obsidian/dev-cloud.ts', 'src/obsidian/dev-duplicates.ts', 'src/obsidian/dev-entry.ts', 'src/obsidian/dev-errors.ts', 'src/obsidian/dev-events.ts', 'src/obsidian/dev-exam-files.ts', 'src/obsidian/dev-exam.ts', 'src/obsidian/dev-ids.ts', 'src/obsidian/dev-markdown.ts', 'src/obsidian/dev-markup.ts', 'src/obsidian/dev-practice.ts', 'src/obsidian/dev-quiz.ts', 'src/obsidian/dev-restore.ts', 'src/obsidian/dev-review.ts', 'src/obsidian/dev-temp.ts', 'src/obsidian/dev-version.ts', 'src/obsidian/dev.ts']);
 });
 
 void test('W6 R14 真的建置：styles.css 第一段是 src/ui/tokens.css，畫面與 ID 標記的 CSS 都在裡面', async t => {
@@ -248,7 +248,7 @@ void test('D-148 手機替身載入正式的 main.js：不 require Node 或 Elec
   const deck = { 'Essence Cards/a.md': '- 目標 ^aaaaaa\n    - Q :: A\n', '.obsidian/plugins/essence-cards/manifest.json': '{}' };
   async function loaded(options: StubOptions) {
     const stub = createObsidianStub({ ...options, texts: deck });
-    const { default: Plugin } = stub.load<{ default: new (app: unknown, manifest: unknown) => { onload(): void; onunload(): void; state: { ready(): Promise<unknown> } | null; backup: { runner: { status(): { ready: boolean } } } | null } }>(code);
+    const { default: Plugin } = stub.load<{ default: new (app: unknown, manifest: unknown) => { onload(): void; onunload(): void; state: { ready(): Promise<unknown> } | null; backup: { runner: { status(): { ready: boolean } } } | null; restoreFlow: unknown } }>(code);
     const plugin = new Plugin(stub.app, { id: 'essence-cards', version: '0.1.0' });
     t.after(() => { plugin.onunload(); });
     plugin.onload();
@@ -262,12 +262,14 @@ void test('D-148 手機替身載入正式的 main.js：不 require Node 或 Elec
   assert.deepEqual([...new Set(phone.stub.required)].sort(), ['@codemirror/state', '@codemirror/view', 'obsidian']);
   assert.deepEqual(phone.stub.timers(), { setInterval: 0, registerInterval: 0 });
   assert.equal(phone.plugin.backup, null);
+  assert.equal(phone.plugin.restoreFlow, null);
   const vaultPath = await mkdtemp(join(tmpdir(), 'essence-vault-')), folder = await mkdtemp(join(tmpdir(), 'essence-backup-'));
   t.after(async () => { await rm(vaultPath, { recursive: true, force: true }); await rm(folder, { recursive: true, force: true }); });
   const desktop = await loaded({ desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': folder } });
   assert.ok(desktop.stub.required.includes('node:fs/promises'));
   assert.equal(desktop.stub.timers().registerInterval, 1);
   assert.equal(desktop.plugin.backup?.runner.status().ready, true);
+  assert.notEqual(desktop.plugin.restoreFlow, null);
 });
 
 void test('字標（D-095）：只留用到的字，放進 styles.css 不超過 20 KB；OFL 授權文字在 repo', async () => {
