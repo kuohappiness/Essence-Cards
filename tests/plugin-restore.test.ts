@@ -152,6 +152,19 @@ void test('§2 只差副檔名大小寫：照實際會寫的檔擋住需要新�
   assert.deepEqual(broken.files.filter(file => file.path === upper).map(file => file.reasons), [['備份裡這一篇的內容不完整（有 NUL）']]);
 });
 
+void test('§2 只差副檔名大小寫（反方向）：備份是 .md、現況是 .MD，一樣擋需要新版與 NUL（L2 的 R5）', async t => {
+  const upper = A.replace(/\.md$/, '.MD');
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  const { opened } = await snapshot(h);
+  h.remove(A);
+  h.write(upper, '---\n需要版本: 9.0.0\n---\n' + goal('aaaaaa', '新版'));
+  const needsUpdate = (deck: Parameters<NonNullable<PlanOptions['needsUpdate']>>[0]): boolean => deck.props.need !== null;
+  const need = planRestore({ manifest: opened.manifest, backup: opened.files, current: await readCurrent(h.reader, DATA), ...OPTIONS, needsUpdate, selection: new Set([A]) });
+  assert.deepEqual(need.files.filter(file => file.path === A).map(file => [file.action, file.reasons]), [['blocked', ['需要新版的外掛才讀得懂，這一版不寫它']]]);
+  h.write(upper, goal('aaaaaa') + '\0');
+  await assert.rejects(readCurrent(h.reader, DATA), /內容不完整/);
+});
+
 void test('§2 紀錄裡只補不見的：快照、原文、考試切面不見會補（不用勾），同名不同內容衝突不動，錯誤紀錄不列', async t => {
   const snap = LOGS + 'AI 輸出/快照.md', exam = LOGS + '考試/2026-11-08.json', err = LOGS + '錯誤/2026-11 PC-test.jsonl';
   const h = await setup(t, { [A]: goal('aaaaaa'), [snap]: '快照', [exam]: '{"a":1}', [err]: '{"t":"x"}\n' });
