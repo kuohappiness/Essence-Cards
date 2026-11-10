@@ -1,17 +1,53 @@
 # 外掛內的還原畫面（Codex L2 審查請求）
 
-狀態：待審（第一輪，2026-11-10）
+狀態：待審（第二輪，2026-11-10）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
 [任務說明](plugin-restore.md)會改寫使用者資料（卡組、圖片、`data.json`、新增還原檔），又動 `state` 的寫入閘門與 `Files` 的契約，屬於[高風險範圍](../docs/agents/quality.md#高風險範圍要做-l2)，合併前做 L2。
+
+## 第二輪（2026-11-10）
+
+**這一輪只讀**：本節、〈審查對象〉、[報告](../Claude%20Codex%20Discussion/2026-11-10-plugin-restore-l2.md)最後的〈Claude 回應（第一輪）〉，和回應提到的程式。第一輪的其他段落、已經過的部分不用重審。
+
+**待審差異**：`git diff 08c8e40ad300e446f98f992fc782796b229fada2..01743fd45564d40a607937dea5fb1f7f890ea90e`。主要在 `src/core/backup/restore.ts`、`src/core/backup/plan.ts`、`src/core/backup/logs.ts`、`src/core/backup/runner.ts`、`src/core/settings/store.ts`、`src/core/settings/saved.ts`、`src/obsidian/restore.ts`、`src/state/index.ts`、`src/state/writes.ts`、`src/main.ts`、`tools/build.mjs` 與對應的測試。
+
+修正 commit，一項一個（R2、R6 共用同一條逾時路徑）：
+
+- R5：`9338439539bfedee797e8b6209b9a75d6801266f`（反方向的測試：`01743fd45564d40a607937dea5fb1f7f890ea90e`）
+- R3：`added2563194fbd9db20d71205dbe0a3e2841d07`
+- R4：`590846f0830fd365f6c8af2a1c7dc843be6e8c70`
+- R1：`b0c5aa04d1ad8e686d0e2cef2b6384ef6c7b456c`
+- R2、R6：`a50402ccb9f5a5b29a4d1d04571a6c5c5864ece5`
+- R7：`4958df2fc1bcbc4a13c1db37fe26ea9dbbc10d19`
+- R8：`fa39848f604fb49aa2da7999b44286c3a0754732`
+- R9：`3909419e7ee8be2fb4627f7bf59b956f30b8d6d3`
+- R10：`fb4845d0606c7fd0ac675244ec877a8461ab9b28`
+
+**請看**：每個修法有沒有真的蓋住回應寫的共同原因，以及修法帶進的新問題（發現鏈照 D-197 標代數）。特別是逾時路徑：`halted`、`landed`、`createUnsettled`、`restoreDeck` 的所有權、`writes.atMost`、`restoreLimit` 之間的交錯。
+
+**這一輪實作者自己選的做法（請先看）**：
+
+1. **備份行的 NUL 去掉再補，只有 NUL 的行不算**（`logs.ts`，記進 `docs/syntax.md` §5-3）：第一輪報告指出的規格衝突，理由在回應的 R3。
+2. **現況的卡組或月檔一直含 NUL，比對就一直停著**：訊息請使用者等下載完；一般的筆記一直這樣的話，把檔刪掉就能從備份補回。月檔不建議刪，所以訊息沒有這一句。
+3. **任何一個檔逾時，後面的檔、紀錄、設定都不做**（`halted`）：後面的檔可能依賴它；代價是沒有依賴的檔也要重新比對才會做。
+4. **已送出和未送出分開**：回呼還沒通過的算確定沒寫，不進 `unsettled`；已送出的才算結果未定。
+5. **逾時後閘門照樣放開**，下一輪比對或還原被 `createUnsettled` 擋到回來為止：不讓卡住的寫入關住整個外掛（R6）；代價是那段時間一般寫入可以進行，只有還原被擋。
+6. **設定逾時一律算結果未定**：設定隊伍裡排著的寫入拒絕不了。
+7. **`beforeRestore` 的整體上限 5 分鐘**（`restoreLimit`）：現況備份在大 vault 上要跑一段時間，不能用讀檔的 30 秒；逾時丟錯、不寫任何檔。
+8. **`busy` 只跳過，不替使用者存檔**：還原期間才打開的分頁，結果列請家長關掉再重新比對。
+9. **還原期間的通知只補一次**，在閘門放開之後。
+10. **「選定學期的日期」一列只在算出來的學期相同時出現**：學期不同時，看學期那一列就夠了。
+11. **Mac、Linux 的 `restoreFlow` 是 `null`**，開發命令也走不到。
+
+**驗證**：每個 commit 都過完整的 `npm run check`（`01743fd` 那次 2522 個測試全過）。Windows 實機在 `fb4845d` 重跑過，結果與沒走到的項目在回應的〈實機〉。報告接在同一份檔案後面，標題下的狀態行跟著改。
 
 ## 審查對象
 
 - 分支 `claude/competent-driscoll-58f746`（worktree 在 `.claude/worktrees/musing-kowalevski-696591`），工作區乾淨。
 - **共同祖先**：`origin/main` 的 `a33c7d5fc136abbe173470c11f1c1f2dfaae7c2f`。整包差異用 `git diff a33c7d5...0452a3b576df1260120d702b1f1762b00257611e`。
 - **規格基準**：`1859de7319018958d66b60ebc86fafb8f14f06db`（使用者同意的版本）。之後對規格只動〈狀態〉與〈結果〉（§8 第 1 點的實測也記在〈結果〉）。
-- **待審 commit**（第一輪，整包）：
+- **待審 commit**（第一輪，整包；第二輪的範圍見上一節）：
   - `14522ada4d8c7f02b0e3e8fcc06cf4971e1a9544`：`Files.replace`（§3-3 第 4 點）
   - `259a0c0b64c87c53fcec7a0178771676597c1ba9`：`SettingsStore.restore`（§4）
   - `7ff3cd2fc63f96d92c7f09ff65a23904bb50ad6e`：`applyRestore` 與 `state.restore`（§2、§3、§5、§6）

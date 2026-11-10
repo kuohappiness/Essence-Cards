@@ -1,6 +1,6 @@
 # 外掛內的還原畫面（給 Claude，本機執行）
 
-狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面，等 Codex L2（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
+狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面；Codex L2 第一輪的十項都修了，等第二輪（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會改寫使用者資料，又動 `state` 的寫入閘門與 `Files` 的契約，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -213,8 +213,12 @@ Mac 與 Linux；整庫回到某時點（D-150 明定不做）；還原 iPhone �
 
 **版面**：使用者 2026-11-10 看過三步與擋住、失敗的截圖：「這些用 Obsidian 的樣式與色調我覺得都很醜，不過可以未來做好再整體一起修」。這次不改，記進 [backlog](../docs/backlog.md#待決問題)。
 
-**實機沒有走到的**：「先備份現況失敗」的畫面只有單元測試；未存的文字先存下來只有 API 實測與接線測試，沒有在真的還原裡打字再按；Windows 以外的平台。
+**實機沒有走到的**：「先備份現況失敗」的畫面只有單元測試；未存的文字先存下來只有 API 實測與接線測試，沒有在真的還原裡打字再按；Windows 以外的平台；寫入與讀取逾時、還原途中關掉或切換分頁、設定頁「還原…」按鈕的動態載入只有替身測試。
 
-**沒有合併之前還沒做**：Codex L2、使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
+**Codex L2 第一輪**：[報告](../Claude%20Codex%20Discussion/2026-11-10-plugin-restore-l2.md)十項發現（R1～R6 擋合併）都接受並修正，一項一個 commit（R2、R6 共用同一條逾時路徑，同一個 commit）：`9338439`、`added25`、`590846f`、`b0c5aa0`、`a50402c`、`4958df2`、`fa39848`、`3909419`、`fb4845d`，`01743fd` 補一個測試。每個 commit 都過完整的 `npm run check`，`01743fd` 那次 2522 個測試全過。
+
+**修完之後重跑 Windows 實機**：建置字串 `0.4.0+fb4845d`（`01743fd` 只多測試），同樣的 vault 與 Obsidian 1.15.0。完整演練、寫入失敗、ID 擋住三種和上面的表一致；還原之後 A 的分頁開回來（`workspace.json` 裡是 `markdown` 和 A）。演練的檔已清掉，設定回到原本沒有 `data.json` 的樣子。
+
+**沒有合併之前還沒做**：Codex L2 第二輪、使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
 
 延後的測試：Mac 與 Linux 的檔名規則實測（入口先關住，技術債表已有一列）；還原之後 iPhone 看到還原的卡組與還原檔（技術債表「補測：」，併進下一次 iPhone 實機測試）；幾百個差異檔時的版面（可捲動，資料沒有風險，使用者同意的第 2 類）。
