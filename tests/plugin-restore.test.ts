@@ -638,6 +638,20 @@ void test('原始位元組（Node 的 vault）：圖片、BOM、CRLF、不合法
 
 // ---- §5 state ----
 
+void test('§5 還原兩篇：訂閱者只收到一次通知，那時兩篇都還原了、閘門放開（L2 的 R7）', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
+  const backup = await snapshot(h);
+  h.write(A, goal('aaaaaa', '改過'));
+  h.write(B, goal('bbbbbb', '改過'));
+  await settled(h);
+  const seen: [string | null, boolean][] = [];
+  h.state.onChange(() => { seen.push([h.state.writeBlock(), JSON.stringify(h.state.decks()).includes('改過')]); });
+  const result = await restore(h, backup, [A, B], { timeout: 1000 });
+  assert.deepEqual(outcomes(result), [[A, '已還原'], [B, '已還原']]);
+  await settled(h);
+  assert.deepEqual(seen, [[null, false]]);
+});
+
 void test('state：還原拿掉的 ID 不跳待處理的問題；之後再出現也不算沒見過', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa') });
   const backup = await snapshot(h);

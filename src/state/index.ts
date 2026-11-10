@@ -523,8 +523,11 @@ export function createState(options: StateOptions): State {
   }
   /** 這一篇（state 最近讀到的內容，或給了的這份文字）需要新版：Cards 不寫它（§2-1）。 */
   const blockedText = (path: string, text?: string): boolean => gated.includes(path) || (text !== undefined && needsUpdate(parseDeck(text)));
+  /** 還原的時段：還原到一半的樣子不給訂閱者看，放開時補通知一次（tasks/plugin-restore.md §5，L2 的 R7）。 */
+  let restoringNow = 0, notifyHeld = false;
   function notifyChange(): void {
     if (life.closed) return;
+    if (restoringNow > 0) { notifyHeld = true; return; }
     for (const listener of [...listeners]) {
       try { listener(); } catch (error) { report(error, 'listener'); }
     }
@@ -907,6 +910,7 @@ export function createState(options: StateOptions): State {
       const gate = new Promise<void>(resolve => { open = resolve; });
       const examBefore = examWrites, quizBefore = quiz.after(gate);
       examWrites = examWrites.then(() => gate);
+      restoringNow++;
       return writes.exclusive(async () => {
         await Promise.allSettled([examBefore, quizBefore]);
         return work({
@@ -921,7 +925,11 @@ export function createState(options: StateOptions): State {
           },
           closed: () => life.closed,
         });
-      }).finally(open);
+      }).finally(() => {
+        open();
+        restoringNow--;
+        if (restoringNow === 0 && notifyHeld) { notifyHeld = false; notifyChange(); }
+      });
     },
     backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(path, ids) { tracker.removed(path, ids); },
