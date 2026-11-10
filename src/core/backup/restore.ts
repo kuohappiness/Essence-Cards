@@ -24,6 +24,8 @@ export interface RestoreResult {
   stopped: { step: string; message: string } | null;
   /** 實際寫過的路徑（vault 相對）：外層排重讀用。 */
   written: string[];
+  /** 已經送出、超過時間還沒回來的寫入：可能之後才寫成（L2 的 R2）。settled 是它結束的時候。 */
+  unsettled: { path: string; settled: Promise<unknown> }[];
 }
 /** 設定的結果（§4）：changed 是比對之後改過，跳過；unreadable 是現在讀不到；failed 是寫不進去。 */
 type SettingsOutcome = 'saved' | 'changed' | 'unreadable' | 'failed';
@@ -46,8 +48,8 @@ export interface RestoreRun {
   busy: (path: string) => boolean;
   /** 路徑上有連結就丟錯（§3-3 第 3 點）。 */
   noLinks: (path: string) => Promise<void>;
-  /** 寫 data.json（§4）；expected 是畫面比對時現在的 sha（不存在是 null）。 */
-  settings: (backup: Uint8Array, expected: string | null) => Promise<SettingsOutcome>;
+  /** 寫 data.json（§4）；expected 是畫面比對時現在的 sha（不存在是 null）；live 是 false 時已經逾時，不要再寫。 */
+  settings: (backup: Uint8Array, expected: string | null, live: () => boolean) => Promise<SettingsOutcome>;
   device: string;
   now: () => number;
   offset: (ms: number) => number;
@@ -55,11 +57,13 @@ export interface RestoreRun {
   closed: () => boolean;
   /** 記進錯誤紀錄（syntax §9 的 where: restore）。 */
   fail: (step: string, error: unknown, path?: string) => void;
-  /** 一次寫入或掃描最多等多久（毫秒），預設 30 秒：卡住時閘門不能一直關著。 */
+  /** 一次寫入或掃描最多等多久（毫秒），預設 30 秒：卡住時閘門不能一直關著，後面的檔也不再做。 */
   timeout?: number;
 }
 
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error);
+/** 等太久（§3-1 第 6 點）：和寫不進去不同，後面的檔不再做。 */
+class Overdue extends Error {}
 const CHANGED = '比對之後改過，重新比對看新的差異';
 const STOPPED = '外掛停用了，這次沒有做；重新比對可以接著做';
 const REOPENED = '還原期間這一篇又被打開了，沒有還原；關掉它再重新比對';
@@ -81,9 +85,25 @@ export async function readCurrent(reader: BackupReader, data: string | null): Pr
 /** 這個檔還原之後要不要算「有差異要處理」：畫面列給家長勾的檔。紀錄裡的只補不見的、不用勾。 */
 export const tickable = (file: PlannedFile): boolean => file.action !== 'keep' && !(file.kind === 'missing' && file.path.startsWith(LOG_FOLDER + '/'));
 
+/** 上一輪逾時、還沒回來的寫入（L2 的 R2）：它們結束之前不開下一輪，否則比對看不到它、之後才落地就會重複。 */
+export function createUnsettled(): { add(result: RestoreResult): void; check(): void } {
+  const waiting = new Set<string>();
+  return {
+    add(result) {
+      for (const { path, settled } of result.unsettled) {
+        waiting.add(path);
+        void settled.finally(() => { waiting.delete(path); });
+      }
+    },
+    check() {
+      if (waiting.size) throw Error(`上一次還原有寫入還沒回來（${[...waiting].join('、')}）；等一下再試，一直這樣的話重新開啟 Obsidian`);
+    },
+  };
+}
+
 export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   const { opened, files, closed } = run;
-  const result: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [] };
+  const result: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], unsettled: [] };
   const limit = run.timeout ?? 30_000;
   const dataPath = opened.manifest.vault.config + '/' + PLUGIN_DATA;
   const plan = (current: ReadonlyMap<string, Uint8Array>, selection: ReadonlySet<string>): RestorePlan =>
@@ -96,11 +116,27 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   const outcome = (file: { path: string; target: string | null }, kind: Outcome, reason: string): void => {
     result.files.push({ path: file.path, target: file.target, outcome: kind, reason });
   };
-  /** 卡住的寫入或掃描不能讓閘門一直關著（§3-1 第 6 點）：逾時算失敗。 */
+  /** 有東西卡住之後，還沒做的檔都不做（一個卡住的檔不該讓閘門關幾十分鐘）。 */
+  let halted: string | null = null;
+  /** 卡住的寫入或掃描不能讓閘門一直關著（§3-1 第 6 點）：逾時算失敗，後面的不再做。 */
   function timed<T>(work: Promise<T>, what: string): Promise<T> {
     let id: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<never>((_, reject) => { id = setTimeout(() => { reject(Error(`${what}超過 ${String(Math.round(limit / 1000))} 秒沒有回來`)); }, limit); });
+    const late = new Promise<never>((_, reject) => {
+      id = setTimeout(() => {
+        const text = `${what}超過 ${String(Math.round(limit / 1000))} 秒沒有回來`;
+        halted = `前面有一步${text}，這一篇先不做；重新比對可以接著做`;
+        reject(new Overdue(text));
+      }, limit);
+    });
     return Promise.race([work, late]).finally(() => { clearTimeout(id); });
+  }
+  /** 等一次寫入。sent：確認已過、已經送出去了；逾時的話可能之後才寫成，交給外層等它回來再開下一輪（L2 的 R2）。 */
+  async function landed<T>(path: string, work: Promise<T>, what: string, sent: () => boolean): Promise<T> {
+    try { return await timed(work, what); } catch (error) {
+      if (!(error instanceof Overdue) || !sent()) throw error;
+      result.unsettled.push({ path, settled: work.catch(() => {}) });
+      throw Error(`${error.message}，結果未定；等它回來之後重新比對`, { cause: error });
+    }
   }
 
   let before: Awaited<ReturnType<RestoreRun['before']>>;
@@ -149,6 +185,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     const file = byPath.get(path)!;
     if (path === dataPath) continue;
     if (closed()) { outcome(file, '跳過', STOPPED); continue; }
+    if (halted !== null) { outcome(file, '跳過', halted); continue; }
     const waiting = file.after.filter(other => !written.has(other));
     if (waiting.length) { outcome(file, '跳過', `要先還原「${waiting.join('」、「')}」才不會讓學習目標 ID 重複，它這次沒有還原成`); continue; }
     const rel = file.current?.path ?? file.target!;
@@ -161,13 +198,14 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
       }
       await run.noLinks(rel);
       const expected = file.current?.sha256 ?? null;
-      let live = true, reopened = false;
+      let live = true, reopened = false, sent = false;
       const write = async (): Promise<boolean> => {
         // 最後一次確認在 replace 的回呼裡，和寫入只隔一次讀（§3-2）；逾時之後才輪到它就不寫。
         const done = await files.replace(rel, now => {
           if (!live) return false;
           reopened = run.busy(rel);
-          return !reopened && (now === null ? null : hashBytes(now)) === expected;
+          sent = !reopened && (now === null ? null : hashBytes(now)) === expected;
+          return sent;
         }, bytes);
         if (!done) return false;
         const back = await files.readBytes(rel);
@@ -176,7 +214,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
       };
       const work = deck ? run.deck(rel, write) : write();
       let done: boolean;
-      try { done = await timed(work, '寫入'); } finally { live = false; }
+      try { done = await landed(rel, work, '寫入', () => sent); } finally { live = false; }
       if (!done) { outcome(file, '跳過', reopened ? REOPENED : CHANGED); continue; }
       written.add(path);
       result.written.push(rel);
@@ -193,6 +231,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   for (const log of fresh.logs) {
     const lines = log.lines.length;
     if (closed()) { result.logs.push({ source: log.source, path: null, lines, outcome: '跳過', reason: STOPPED }); continue; }
+    if (halted !== null) { result.logs.push({ source: log.source, path: null, lines, outcome: '跳過', reason: halted }); continue; }
     const refused = run.plan.refuse?.({ path: LOG_FOLDER + '/x.jsonl', target: LOG_FOLDER + '/x.jsonl', backup: new Uint8Array() });
     if (refused) { result.logs.push({ source: log.source, path: null, lines, outcome: '擋住', reason: refused }); continue; }
     const bytes = new TextEncoder().encode(log.lines.join('\n') + '\n');
@@ -203,7 +242,10 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
       for (let i = 0; i < 20 && path === null; i++) {
         const candidate = LOG_FOLDER + '/' + restoreLogName(log.source, date, run.device, name => names.has(run.plan.sameFile(LOG_FOLDER + '/' + name)));
         names.add(run.plan.sameFile(candidate));
-        if (await timed(files.replace(candidate, now => now === null, bytes), '補紀錄')) path = candidate;
+        let live = true, sent = false;
+        try {
+          if (await landed(candidate, files.replace(candidate, now => { sent = live && now === null; return sent; }, bytes), '補紀錄', () => sent)) path = candidate;
+        } finally { live = false; }
       }
       if (path === null) throw Error('找不到沒用過的還原檔名');
       const back = await files.readBytes(path);
@@ -219,10 +261,12 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   const data = byPath.get(dataPath);
   if (data?.action === 'restore') {
     if (closed()) outcome(data, '跳過', STOPPED);
+    else if (halted !== null) outcome(data, '跳過', halted);
     else {
+      let live = true;
       try {
         await run.noLinks(data.current?.path ?? data.target!);
-        const saved = await run.settings(opened.files.get(dataPath)!, run.screen.get(dataPath) ?? null);
+        const saved = await landed(data.target!, run.settings(opened.files.get(dataPath)!, run.screen.get(dataPath) ?? null, () => live), '寫設定', () => true).finally(() => { live = false; });
         if (saved === 'saved') outcome(data, '已還原', '');
         else if (saved === 'changed') outcome(data, '跳過', CHANGED);
         else outcome(data, '失敗', saved === 'unreadable' ? '設定暫時讀不到，這次沒有寫' : '設定寫不進去');

@@ -913,7 +913,7 @@ export function createState(options: StateOptions): State {
           deck: writes.restoreDeck,
           async reread(paths) {
             const mine = paths.filter(path => isDeckPath(path) || isLogPath(path));
-            if (mine.length) { reads.reread(...mine); await reads.readOrStuck(); }
+            if (mine.length) { reads.reread(...mine); await writes.atMost(reads.readOrStuck()); }
             exam.reread(...paths);
             quiz.reread(...paths);
             await exam.drain(EXAM_WAIT, () => undefined);

@@ -70,6 +70,8 @@ export interface RunnerOptions {
   offset: (ms: number) => number;
   /** 狀態變了：外掛更新 state 的閘門、存檔按鈕、設定頁與通知。 */
   onStatus: (status: BackupStatus) => void;
+  /** 還原前的備份（含等別份做完）最多等多久（毫秒），預設 5 分鐘（L2 的 R6）。 */
+  restoreLimit?: number;
 }
 
 export interface BackupRunner {
@@ -92,6 +94,7 @@ export interface BackupRunner {
 
 /** 每月：距離上次成功備份超過 30 天（恰好 30 天不做）。 */
 const MONTH = 30 * 24 * 60 * 60 * 1000;
+const RESTORE_LIMIT = 5 * 60 * 1000;
 class Cancelled extends Error {}
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
@@ -210,14 +213,23 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     },
     backup: () => run('manual'),
     async beforeRestore(keep, source) {
-      // 另做一份，不共用；輪到時才開始，那時閘門已經關了（§3-1）。
-      while (current) await current;
-      let snapshot: RestoreSnapshot | null = null;
-      const guarded: BackupReader = { list: () => { stop(); return source.list(); }, read: path => { stop(); return source.read(path); } };
-      current = take('restore', keep, guarded).then(done => { snapshot = done; }).finally(() => { current = null; });
-      await current;
-      if (snapshot === null) throw Error(status.failure ? `${status.failure.step}：${status.failure.message}` : '外掛停用了，這次備份沒有做完');
-      return snapshot;
+      // 等別份或自己做到一半卡住時，閘門不能一直關著（L2 的 R6）：超過上限就放棄，什麼都還沒寫。放棄之後不再開始新的、也不再讀。
+      let gaveUp = false;
+      const stopNow = (): void => { stop(); if (gaveUp) throw Error('這次還原已經放棄'); };
+      const work = async (): Promise<RestoreSnapshot> => {
+        // 另做一份，不共用；輪到時才開始，那時閘門已經關了（§3-1）。
+        while (current) await current;
+        stopNow();
+        let snapshot: RestoreSnapshot | null = null;
+        const guarded: BackupReader = { list: () => { stopNow(); return source.list(); }, read: path => { stopNow(); return source.read(path); } };
+        current = take('restore', keep, guarded).then(done => { snapshot = done; }).finally(() => { current = null; });
+        await current;
+        if (snapshot === null) throw Error(status.failure ? `${status.failure.step}：${status.failure.message}` : '外掛停用了，這次備份沒有做完');
+        return snapshot;
+      };
+      let id: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<never>((_, reject) => { id = setTimeout(() => { gaveUp = true; reject(Error('備份超過時間還沒做完（可能有檔案卡在 iCloud），這次沒有還原；等一下再試')); }, options.restoreLimit ?? RESTORE_LIMIT); });
+      return Promise.race([work(), late]).finally(() => { clearTimeout(id); });
     },
     status: () => status,
     cancel() { cancelled = true; },

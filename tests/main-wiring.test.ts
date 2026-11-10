@@ -861,3 +861,32 @@ void test('還原接線：存檔的等待期間分頁換了別篇：不換成空
   await flow.apply(comparison, new Set([STILL]));
   assert.deepEqual(tab.history, []);
 });
+
+void test('還原接線：寫入逾時、結果未定時，回來之前不能比對或還原；回來之後內容對（L2 的 R2）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  h.texts.set(STILL, brokenDeck);
+  const comparison = await flow.compare(row);
+  let release = (): void => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const vault = h.app.vault as { modifyBinary: (file: unknown, data: ArrayBuffer) => Promise<void> };
+  const write = vault.modifyBinary;
+  let called = false;
+  vault.modifyBinary = async (file, data) => { called = true; await gate; await write(file, data); };
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const turn = (): Promise<void> => new Promise(resolve => { setImmediate(resolve); });
+  let finished = false;
+  const running = flow.apply(comparison, new Set([STILL])).finally(() => { finished = true; });
+  for (let i = 0; i < 20000 && !called; i++) await turn();
+  assert.ok(called);
+  for (let i = 0; i < 2000 && !finished; i++) { t.mock.timers.tick(30_000); await turn(); }
+  const result = await running;
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[STILL, '失敗']]);
+  assert.equal(h.plugin.state?.writeBlock(), null);
+  await assert.rejects(flow.compare(row), /還沒回來/);
+  await assert.rejects(flow.apply(comparison, new Set([STILL])), /還沒回來/);
+  release();
+  for (let i = 0; i < 200; i++) { t.mock.timers.tick(100); await turn(); }
+  t.mock.timers.reset();
+  assert.equal(h.text(STILL), deck[STILL]);
+  await flow.compare(row);
+});

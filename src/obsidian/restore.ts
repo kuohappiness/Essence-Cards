@@ -1,6 +1,6 @@
 import { MarkdownView } from 'obsidian';
 import type { App, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
-import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, textDiff } from '../core/backup/index.ts';
+import { applyRestore, createUnsettled, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, textDiff } from '../core/backup/index.ts';
 import type { BackupReader, OpenedBackup, PlannedFile, RestorePlan, RestoreResult, StoredBackup } from '../core/backup/index.ts';
 import type { Deck } from '../core/deck/index.ts';
 import { parseData, sameSaved, savedDiff } from '../core/settings/index.ts';
@@ -61,16 +61,16 @@ function byTime(a: BackupRow, b: BackupRow): number {
   return a.stored.manifest.started < b.stored.manifest.started ? 1 : a.stored.manifest.started > b.stored.manifest.started ? -1 : 0;
 }
 
+/** 等一件事最多 READ_WAIT，沒回來就丟錯（§3-1 第 6 點）。 */
+function limited<T>(work: Promise<T>, text: string): Promise<T> {
+  let id: number | undefined;
+  const late = new Promise<never>((_, reject) => { id = window.setTimeout(() => { reject(Error(text)); }, READ_WAIT); });
+  return Promise.race([work, late]).finally(() => { window.clearTimeout(id); });
+}
+
 /** 讀一個檔不能卡住（§3-1 第 6 點）。 */
 function timedReader(reader: BackupReader): BackupReader {
-  return {
-    list: () => reader.list(),
-    read(path) {
-      let id: number | undefined;
-      const late = new Promise<never>((_, reject) => { id = window.setTimeout(() => { reject(Error(`讀 ${path} 超過 30 秒沒有回來（可能還在從 iCloud 下載）`)); }, READ_WAIT); });
-      return Promise.race([reader.read(path), late]).finally(() => { window.clearTimeout(id); });
-    },
-  };
+  return { list: () => reader.list(), read: path => limited(reader.read(path), `讀 ${path} 超過 30 秒沒有回來（可能還在從 iCloud 下載）`) };
 }
 
 /** 開著這些檔、已經載入的分頁（§3-2）。延後載入的分頁還沒讀檔，不用動；getLeavesOfType 才找得到背景分頁（§8 第 1 點實測）。 */
@@ -93,6 +93,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
   const folder = (): string => backup.custom() ?? desktop.defaultFolder;
   const dataOf = (bytes: Uint8Array | undefined): Record<string, unknown> | null => bytes === undefined ? null : parseData(bytes);
   let running = false;
+  const unsettled = createUnsettled();
 
   /** 計畫要的規則（§2）：links 是事先查好的路徑上的連結。 */
   function planOptions(links: ReadonlyMap<string, string>) {
@@ -125,6 +126,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       return { rows: rows.sort(byTime), unreadable: skipped.length };
     },
     async compare(row) {
+      unsettled.check();
       const bytes = await desktop.host.read(folder(), row.stored.name);
       if (!bytes) throw Error('讀不到備份：' + row.stored.name);
       const opened = openBackup(bytes);
@@ -155,6 +157,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       const state = host.state();
       if (!state) throw Error('還沒讀完，等一下再還原');
       if (running) throw Error('已經在還原');
+      unsettled.check();
       const { opened, row } = comparison;
       running = true;
       host.running(true);
@@ -165,7 +168,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
           const screen = new Map(screenPlan.files.filter(file => chosen.has(file.path)).map(file => [file.path, file.current?.sha256 ?? null] as const));
           const targets = new Set(screenPlan.files.filter(file => chosen.has(file.path) || file.action === 'restore').map(file => file.current?.path ?? file.target ?? ''));
           const swapped: Opened[] = [];
-          const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [] };
+          const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], unsettled: [] };
           try {
             // 開著的那幾篇先存檔、換成空白分頁（§3-2）：存不進去就什麼都不寫。
             for (const leaf of openLeaves(app, targets)) {
@@ -173,7 +176,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               const path = view.file?.path;
               const eState: unknown = view.getEphemeralState();
               const viewState = leaf.getViewState();
-              try { await view.save(); } catch (error) {
+              try { await limited(view.save(), '存檔超過 30 秒沒有回來'); } catch (error) {
                 host.fail('存檔', error, view.file?.path);
                 return { ...empty, stopped: { step: '存檔 ' + (view.file?.path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
@@ -196,11 +199,12 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               deck: (path, write) => writer.deck(path, write),
               busy: path => openLeaves(app, new Set([path])).length > 0,
               noLinks: path => desktop.noLinks(path),
-              settings(bytes, expected) {
+              settings(bytes, expected, live) {
                 const fields = parseData(bytes);
                 if (fields === null) return Promise.resolve('failed');
                 return host.settings.restore(fields, async () => {
                   const now = await reader.read(dataTarget);
+                  if (!live()) throw Error('逾時，不寫');
                   if ((now === null ? null : hashBytes(now)) !== expected) return null;
                   return (now === null ? null : parseData(now)) ?? {};
                 });
@@ -211,6 +215,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               closed: () => writer.closed(),
               fail: host.fail,
             });
+            unsettled.add(result);
             await writer.reread(result.written);
             return result;
           } finally {

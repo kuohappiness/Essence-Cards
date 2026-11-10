@@ -209,6 +209,12 @@ export function createWrites(options: WritesOptions) {
    * 還原的獨占時段（§3-2）：呼叫的當下就關閘門，正在跑的那一份做完才輪到 work。還沒開始的、還原期間才排進來的，輪到時都回受阻；
    * 放開排在它們後面，不論成敗。
    */
+  /** 等 work，最多等 stuckAfter（L2 的 R6）：底層的讀取可能一直不回來，等不到的之後照一般的讀取處理。 */
+  function atMost(work: Promise<void>): Promise<void> {
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<void>(resolve => { id = setTimeout(resolve, stuckAfter); });
+    return Promise.race([work, late]).finally(() => { clearTimeout(id); });
+  }
   async function exclusive<T>(work: () => Promise<T>): Promise<T> {
     if (restoring) throw Error('已經在還原');
     restoring = true;
@@ -220,6 +226,7 @@ export function createWrites(options: WritesOptions) {
    */
   async function restoreDeck(path: string, write: () => Promise<boolean>): Promise<boolean> {
     begin(path);
+    const mine = finish;
     try {
       const done = await write();
       if (done) {
@@ -228,7 +235,9 @@ export function createWrites(options: WritesOptions) {
       }
       return done;
     } finally {
-      end(path);
+      // 逾時之後才回來時別的工作可能已經開始（L2 的 R2）：只收自己的，不清掉別人的 active。
+      if (finish === mine) end(path);
+      else { mine?.(); reads.unhold(path); reads.reread(path); }
     }
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
@@ -425,5 +434,6 @@ export function createWrites(options: WritesOptions) {
     },
     /** 正在 I/O 的那一份工作；close() 等它結束，最多 writeTimeout（§5）。 */
     idle: (): Promise<void> | null => active,
+    atMost,
   };
 }
