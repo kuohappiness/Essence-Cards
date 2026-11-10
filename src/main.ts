@@ -486,7 +486,7 @@ export default class EssenceCardsPlugin extends Plugin {
         failed: error => { this.fail('backup', error); },
       });
       this.restoreFlow = createRestore({
-        app: this.app, backup: this.backup, files, state: () => this.state, settings: this.store, build: BUILD, device: this.device,
+        app: this.app, backup: this.backup, files, state: () => this.state, settings: this.store, build: BUILD, device: this.device, today: todayText,
         displaced: path => this.guard?.displaced(path) ?? false,
         leaving: () => { this.review?.close(); this.entry?.close(); },
         running: on => { this.restoring = on; this.ids?.saver.refresh(); },

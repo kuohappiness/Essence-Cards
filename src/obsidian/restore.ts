@@ -23,6 +23,8 @@ export interface RestoreHost {
   settings: SettingsStore;
   build: string;
   device: string;
+  /** 今天（`YYYY-MM-DD`，清晨 4 點換日）：設定的差異要算出今天的學期。 */
+  today: () => string;
   /** 系統資料夾不在原位、也沒搬回（§2）。 */
   displaced: (path: string) => boolean;
   /** 開始時關掉開著的複習畫面與入口（§5）。 */
@@ -149,7 +151,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
         settings(file) {
           if (file.target !== dataTarget) return null;
           const after = dataOf(opened.value.files.get(file.path));
-          return after === null ? [] : savedDiff(file.current ? dataOf(current.get(file.current.path)) : null, after);
+          return after === null ? [] : savedDiff(file.current ? dataOf(current.get(file.current.path)) : null, after, host.today());
         },
       };
     },

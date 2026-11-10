@@ -614,6 +614,7 @@ void test('過了 2/1 不寫檔，畫面看到的是今天的學期', async () =
 
 // 還原（tasks/plugin-restore.md §4）
 const from = (raw: Record<string, unknown>) => () => Promise.resolve(raw);
+const TODAY = '2026-11-10';
 
 void test('還原：以輪到時讀到、核對過的內容當底，五個欄位換成備份的值，備份沒有的拿掉，不認得的保留；立刻生效、通知一次', async () => {
   const { state, options } = disk({ capMinutes: 45, retention: 0.9, newField: 'keep' });
@@ -654,7 +655,15 @@ void test('還原：first() 之前回 unreadable；讀回和備份不同算 fail
 });
 
 void test('還原的差異寫給家長看：一樣的不列；現在讀不懂寫「讀不懂」', () => {
-  assert.deepEqual(savedDiff({ capMinutes: 30, retention: 0.8 }, { capMinutes: 45, retention: 0.8 }), ['每日時間上限 30 分鐘 → 45 分鐘']);
-  assert.deepEqual(savedDiff({ capMinutes: 30 }, { capMinutes: 30 }), []);
-  assert.deepEqual(savedDiff(null, { capMinutes: 30 })[0], '每日時間上限 讀不懂 → 30 分鐘');
+  assert.deepEqual(savedDiff({ capMinutes: 30, retention: 0.8 }, { capMinutes: 45, retention: 0.8 }, TODAY), ['每日時間上限 30 分鐘 → 45 分鐘']);
+  assert.deepEqual(savedDiff({ capMinutes: 30 }, { capMinutes: 30 }, TODAY), []);
+  assert.deepEqual(savedDiff(null, { capMinutes: 30 }, TODAY)[0], '每日時間上限 讀不懂 → 30 分鐘');
+});
+
+void test('還原的差異：學期看今天算出來的；算出來相同、只差選的日子時列日期（L2 的 R8）', () => {
+  const on = (semester: string, semesterSetOn: string) => ({ semester, semesterSetOn });
+  assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2025-09-01'), TODAY), ['目前學期 國一上 → 國二上']);
+  assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2026-09-02'), TODAY), ['選定學期的日期 2026-09-01 → 2026-09-02']);
+  assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2026-09-01'), TODAY), []);
+  assert.deepEqual(savedDiff({}, on('國一上', '2026-09-01'), TODAY), ['目前學期 未設定 → 國一上']);
 });

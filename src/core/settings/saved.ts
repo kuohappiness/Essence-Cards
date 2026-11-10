@@ -104,15 +104,18 @@ export function restoreSaved(raw: Readonly<Record<string, unknown>>, backup: Rea
   }
   return next;
 }
-/** 給人看的差異（§1）：「每日時間上限 30 分鐘 → 45 分鐘」；相同的不列。now 是 null 時現在讀不懂。 */
-export function savedDiff(now: Readonly<Record<string, unknown>> | null, backup: Readonly<Record<string, unknown>>): string[] {
+/** 給人看的差異（§1）：「每日時間上限 30 分鐘 → 45 分鐘」；相同的不列。now 是 null 時現在讀不懂。學期看 today 算出來的，不看存的那個值（L2 的 R8）。 */
+export function savedDiff(now: Readonly<Record<string, unknown>> | null, backup: Readonly<Record<string, unknown>>, today: string): string[] {
   const after = valueOf(readSaved(backup), true);
   const before = now === null ? null : valueOf(readSaved(now), true);
   const lines: string[] = [];
   const row = (name: string, a: string | null, b: string): void => { if (a !== b) lines.push(`${name} ${a ?? '讀不懂'} → ${b}`); };
   row('每日時間上限', before && `${String(before.settings.capMinutes)} 分鐘`, `${String(after.settings.capMinutes)} 分鐘`);
   row('目標保持率', before && `${String(Math.round(before.settings.retention * 100))}%`, `${String(Math.round(after.settings.retention * 100))}%`);
-  row('目前學期', before && (before.semester?.value ?? '未設定'), after.semester?.value ?? '未設定');
+  const term = (value: SettingsValue): string => value.semester ? semesterOn(value.semester, today) : '未設定';
+  row('目前學期', before && term(before), term(after));
+  // 算出來的學期相同、只差選的那一天：一列都不寫的話，家長看不出這一項為什麼要還原。
+  if (before && term(before) === term(after)) row('選定學期的日期', before.semester?.setOn ?? '未設定', after.semester?.setOn ?? '未設定');
   row('考試倒數', before && (before.examCountdown ? '開' : '關'), after.examCountdown ? '開' : '關');
   return lines;
 }
