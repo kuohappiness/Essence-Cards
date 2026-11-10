@@ -10,6 +10,7 @@ import { build, type Plugin as BuildPlugin } from 'esbuild';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 import { desktopOnly, embedRules } from '../tools/build.mjs';
 import { isObserved } from './helpers/observed.ts';
+import { onPlatform } from './helpers/platform.ts';
 
 // src/main.ts 的接線（W5 §4-1）：用共用的 obsidian 替身（tests/helpers/obsidian.ts）在 Node 跑正式建置的程式碼，不是 Obsidian 實機。
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -735,6 +736,7 @@ for (const [name, message, shown] of [
 void test('還原接線：開始就關掉複習與入口、期間不開新的；開著的那篇先存、換空白、寫完開回；內容回到備份', async t => {
   quiet(t);
   const path = 'Essence Cards/a.md', original = deck[path], broken = original.replace('Q :: A', 'Q :: 改壞');
+  onPlatform(t, 'win32');
   const h = host(deck, { desktop: true }, devNoScreen);
   t.after(() => { h.plugin.onunload(); });
   h.plugin.onload();
@@ -774,6 +776,7 @@ const DATA = '.obsidian/plugins/essence-cards/data.json';
 /** 外掛載入、第一份備份做好，回傳那一份在清單裡的列（之後才改的內容都是「備份之後」）。 */
 async function restoreReady(t: test.TestContext, texts: Record<string, string>, options: Omit<StubOptions, 'texts'> = {}) {
   quiet(t);
+  onPlatform(t, 'win32');
   const h = host(texts, { desktop: true, ...options }, devNoScreen);
   t.after(() => { h.plugin.onunload(); });
   h.plugin.onload();
@@ -918,9 +921,7 @@ void test('還原接線：設定頁的按鈕打開還原視窗', async t => {
 });
 
 void test('還原接線：Mac 與 Linux 沒有還原的流程，開發命令也走不到（L2 的 R9）', async t => {
-  const real = Object.getOwnPropertyDescriptor(process, 'platform')!;
-  Object.defineProperty(process, 'platform', { ...real, value: 'darwin' });
-  t.after(() => { Object.defineProperty(process, 'platform', real); });
+  onPlatform(t, 'darwin');
   const h = host(deck, { desktop: true }, devNoScreen);
   t.after(() => { h.plugin.onunload(); });
   quiet(t);

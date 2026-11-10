@@ -10,6 +10,7 @@ import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
 import { desktopViolations, ruleFiles } from '../tools/build.mjs';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
+import { onPlatform } from './helpers/platform.ts';
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -265,6 +266,7 @@ void test('D-148 手機替身載入正式的 main.js：不 require Node 或 Elec
   assert.equal(phone.plugin.restoreFlow, null);
   const vaultPath = await mkdtemp(join(tmpdir(), 'essence-vault-')), folder = await mkdtemp(join(tmpdir(), 'essence-backup-'));
   t.after(async () => { await rm(vaultPath, { recursive: true, force: true }); await rm(folder, { recursive: true, force: true }); });
+  onPlatform(t, 'win32');
   const desktop = await loaded({ desktop: true, vaultPath, localStorage: { 'essence-cards-backup-folder': folder } });
   assert.ok(desktop.stub.required.includes('node:fs/promises'));
   assert.equal(desktop.stub.timers().registerInterval, 1);
