@@ -45,7 +45,7 @@ function objectEnd(text: string, start: number): number {
  * `{"t":` 的尾段。括號對得上但不是 JSON 的不算完整，從那裡起都是餘段。不把每個字面的 `{"t":` 都當成一筆的開頭：
  * 物件裡巢狀的也長這樣。
  */
-function readablePieces(line: string): string[] {
+export function readablePieces(line: string): string[] {
   const pieces: string[] = [];
   let at = 0;
   for (;;) {

@@ -851,6 +851,22 @@ void test('備份行的 NUL 當成斷行（R14）：不會拼出備份裡沒有�
   assert.deepEqual((await planned(inside)).logs, []);
 });
 
+void test('現況壞行裡看得到字面、重播卻讀不到的作答要補（R22）；讀得到的不補', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
+  const { opened } = await snapshot(h);
+  const planned = async (backup: ReadonlyMap<string, Uint8Array>) => planRestore({ manifest: opened.manifest, backup, current: await readCurrent(h.reader, DATA), ...OPTIONS, selection: new Set() });
+  const first = review(T2, 'bbbbbb'), second = review(T2.replace('10:', '11:'), 'cccccc');
+  const backup = new Map(opened.files).set(LOG, encode(first + '\0' + second + '\n'));
+  // 寫入中斷的開頭接著兩筆：重播只救回最後一筆，前一筆只是字面上看得到。
+  h.write(LOG, first.slice(0, 12) + first + second + '\n');
+  assert.deepEqual((await planned(backup)).logs, [{ source: '2026-11 iPhone-7f3a', lines: [first] }]);
+  // 兩筆完整地黏在同一行，或各自一行：重播都讀得到，不補。
+  h.write(LOG, first + second + '\n');
+  assert.deepEqual((await planned(backup)).logs, []);
+  h.write(LOG, first + '\n' + second + '\n');
+  assert.deepEqual((await planned(backup)).logs, []);
+});
+
 void test('只有 NUL 的行不算（R3），最後一行的開頭規則照切開之後的段算', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
   const { opened } = await snapshot(h);
