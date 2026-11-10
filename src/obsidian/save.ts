@@ -42,6 +42,7 @@ export const TIPS = {
   needsUpdate: '這篇筆記需要新版的外掛才讀得懂；筆記已自動儲存，更新外掛之前不會加入複習',
   /** 受阻：這台電腦還沒有一份成功的備份（D-150 第 3 點，外掛內備份任務說明 §1-6）；按鈕說明與小視窗也用這一句。 */
   backup: '筆記已自動儲存；備份還沒成功，先不把新目標加入複習，到設定頁看原因',
+  restore: '筆記已自動儲存；正在還原，先不把新目標加入複習，還原完再按一次',
   /** 離開筆記時那一篇有重複的編號（D-157）；deck 是卡組的名稱。 */
   duplicates: (deck: string, n: number) => `〈${deck}〉有 ${n} 個學習目標和別的目標用了同一個編號，先都不出題；打開這篇按存檔，選哪一個是新加的`,
 };
@@ -109,7 +110,7 @@ export function editorOf(view: MarkdownView, path: string): EditorHandle {
  * 受阻的原因對到的說明（技術債「存檔按鈕的受阻原因各自判斷」：按鈕的說明看 state.writeBlock()，按下的結果看 save 回的原因，
  * 兩邊用這一張表、state 用同一個順序）。還沒讀完、有檔案讀不到（D-154）、還沒有成功的備份（D-150）；phone、closed 不提示。
  */
-const BLOCKED: Partial<Record<WriteBlock, string>> = { loading: TIPS.blocked, unread: TIPS.blocked, backup: TIPS.backup };
+const BLOCKED: Partial<Record<WriteBlock, string>> = { loading: TIPS.blocked, unread: TIPS.blocked, backup: TIPS.backup, restore: TIPS.restore };
 /** 受阻的說明；不是受阻或不提示的原因是 null。 */
 const blockedTip = (result: WriteResult): string | null => result.kind === 'blocked' && result.reason !== 'needs-update' ? BLOCKED[result.reason] ?? null : null;
 

@@ -13,10 +13,11 @@ const STATUS_TIPS = {
   unwritable: '這篇筆記的屬性區寫法有問題，狀態沒有改；先打開筆記修好',
   blocked: '還有檔案沒讀到，狀態先不改；讀取完成後請再按一次',
   backup: '備份還沒成功，狀態先不改；到設定頁看原因',
+  restore: '正在還原，狀態先不改；還原完再按一次',
   needsUpdate: '這篇筆記需要新版的外掛才讀得懂，更新外掛之前不能改狀態',
 };
 /** phone、closed 不提示：手機上沒有這個按鈕，關閉時畫面也不在了。 */
-const BLOCKED: Partial<Record<WriteBlock | 'needs-update', string>> = { loading: STATUS_TIPS.blocked, unread: STATUS_TIPS.blocked, backup: STATUS_TIPS.backup, 'needs-update': STATUS_TIPS.needsUpdate };
+const BLOCKED: Partial<Record<WriteBlock | 'needs-update', string>> = { loading: STATUS_TIPS.blocked, unread: STATUS_TIPS.blocked, backup: STATUS_TIPS.backup, restore: STATUS_TIPS.restore, 'needs-update': STATUS_TIPS.needsUpdate };
 
 function tipOf(result: WriteResult | { kind: 'unwritable' }): string | null {
   if (result.kind === 'blocked') return BLOCKED[result.reason] ?? null;

@@ -128,6 +128,7 @@ export function createExamFiles(options: ExamFilesOptions) {
         }
       } catch (error) { return failure(error); }
     },
+    reread: folder.reread,
     stop: (): void => { folder.stop(); },
   };
 }

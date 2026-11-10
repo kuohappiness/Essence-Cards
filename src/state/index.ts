@@ -115,6 +115,15 @@ export interface ExamView {
   /** 上一份範圍的結束日（§6 的預先勾選）；沒有上一份是 null。 */
   previousEnd: string | null;
 }
+/** 還原的獨占時段裡可以用的（tasks/plugin-restore.md §3）。 */
+export interface RestoreWriter {
+  /** 寫一篇卡組：讀取不跨過這次 I/O，寫成之後當成自己的寫回（不算弄丟 ID）；回傳 write 的結果。 */
+  deck(path: string, write: () => Promise<boolean>): Promise<boolean>;
+  /** 寫過的卡組、紀錄、範圍檔與小考檔明確重讀，等讀完（§5）；不靠 Obsidian 的檔案通知。 */
+  reread(paths: readonly string[]): Promise<void>;
+  /** 外掛停用了：停在下一個檔之前。 */
+  closed(): boolean;
+}
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
 
@@ -272,6 +281,11 @@ export interface State {
    * 存檔按鈕的說明用它（技術債「存檔按鈕的受阻原因各自判斷」）；null 不是寫入許可，按下時 save 照樣重查，需要新版看 deckStatus。
    */
   writeBlock(): WriteBlock | null;
+  /**
+   * 還原的獨占時段（tasks/plugin-restore.md §3-2）：呼叫的當下就關寫入的閘門（writeBlock 回 restore），等正在跑的寫入與範圍檔、小考檔的隊伍，再跑 work。
+   * 排隊中的寫入回受阻，範圍檔、小考檔排在後面、輪到時照舊核對；閘門不論成敗都放開。已經在還原時丟錯。
+   */
+  restore<T>(work: (writer: RestoreWriter) => Promise<T>): Promise<T>;
   /** 外掛內的備份（StateOptions.backup）：有一份成功的備份時 true，失敗或還沒有時 false。沒傳 backup 時不作用。 */
   backupReady(ready: boolean): void;
   /** 這台電腦的編輯器裡刪掉或剪下了整個目標：這些 ID 是刻意拿掉的，重讀時不算弄丟。 */
@@ -888,6 +902,27 @@ export function createState(options: StateOptions): State {
       atWrite: () => nameFree() ? null : 'name',
     })),
     writeBlock: () => writes.blockedNow(),
+    restore(work) {
+      let open = (): void => {};
+      const gate = new Promise<void>(resolve => { open = resolve; });
+      const examBefore = examWrites, quizBefore = quiz.after(gate);
+      examWrites = examWrites.then(() => gate);
+      return writes.exclusive(async () => {
+        await Promise.allSettled([examBefore, quizBefore]);
+        return work({
+          deck: writes.restoreDeck,
+          async reread(paths) {
+            const mine = paths.filter(path => isDeckPath(path) || isLogPath(path));
+            if (mine.length) { reads.reread(...mine); await reads.readOrStuck(); }
+            exam.reread(...paths);
+            quiz.reread(...paths);
+            await exam.drain(EXAM_WAIT, () => undefined);
+            await quiz.drain(EXAM_WAIT, () => undefined);
+          },
+          closed: () => life.closed,
+        });
+      }).finally(open);
+    },
     backupReady(ready) { if (options.backup) backupPending = !ready; },
     removedInEditor(path, ids) { tracker.removed(path, ids); },
     restoredInEditor(_path, ids) { tracker.restored(ids); },

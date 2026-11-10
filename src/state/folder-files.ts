@@ -205,6 +205,8 @@ export function createFolderFiles<F>(options: FolderFilesOptions<F>) {
     settled: (): boolean => settled,
     revision: (): number => revision,
     unread: reads.unread,
+    /** 把這幾份排進重讀（還原寫過的，不靠 Obsidian 的通知，tasks/plugin-restore.md §5）。 */
+    reread: (...paths: string[]): void => { reads.reread(...paths.filter(options.isFile)); },
     /** 除了 except 那一份，還有已知還沒讀完的變動。 */
     waiting: reads.waiting,
     /** 列出來或通知過、從來沒讀到的份數（§4）。 */

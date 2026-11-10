@@ -66,6 +66,23 @@ export function readError(path: string, error: unknown): Error {
   return Error(`${path}：${reason}（${code ?? (error instanceof Error ? error.message : String(error))}）`, { cause: error });
 }
 
+/**
+ * vault 相對路徑 rel 的每一段（含 rel 本身）都不是符號連結或 junction；還不存在的部分不用看。不跟著連結走：
+ * 不然會備份或改寫到 vault 外（Codex 中途查核 F3）。是連結就丟錯。
+ */
+export async function assertNoLinks(vault: string, rel: string): Promise<void> {
+  const parts = rel.split('/');
+  for (let i = 1; i <= parts.length; i++) {
+    const prefix = parts.slice(0, i).join('/');
+    let info;
+    try { info = await lstat(join(vault, prefix)); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw readError(prefix, error);
+    }
+    if (info.isSymbolicLink()) throw Error(`${prefix}：是連結（符號連結或 junction），不跟著連結讀寫`);
+  }
+}
+
 /** 檔案的身分（磁碟與 inode）：確認要動的還是這次建立的那個檔。 */
 export interface Identity { dev: bigint; ino: bigint }
 /** 把內容寫進剛建立的檔（path 是它的位置）；測試用替身模擬寫壞、空間不足、寫的時候資料夾被換掉。 */

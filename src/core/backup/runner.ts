@@ -2,10 +2,13 @@ import { staleBackups } from './retention.ts';
 import type { StoredBackup } from './retention.ts';
 import { takeBackup } from './take.ts';
 import type { BackupReader, Taken } from './take.ts';
+import type { BackupManifest } from './manifest.ts';
 import { hashBytes, openBackup } from './zip.ts';
 
 /** 外掛自己做備份的原因（syntax §8 的 by）。 */
 export type PluginBy = 'new-version' | 'monthly' | 'manual';
+/** 還原前的那一份（tasks/plugin-restore.md §3-1）：檔名與清單。 */
+interface RestoreSnapshot { name: string; manifest: BackupManifest }
 
 /** 這台電腦記的上次成功備份（localStorage，任務說明 §1-4）：建置版本、開始時間、檔名、zip 的雜湊、備份資料夾的實際路徑。 */
 export interface LastBackup { build: string; time: number; name: string; sha256: string; folder: string }
@@ -38,14 +41,14 @@ interface BackupStore {
 }
 
 /** error 是原本的錯（記進錯誤紀錄用，D-155 補充）；畫面只用 step 與 message。 */
-interface BackupFailure { by: PluginBy; step: string; message: string; time: number; error: unknown }
+interface BackupFailure { by: PluginBy | 'restore'; step: string; message: string; time: number; error: unknown }
 export interface BackupStatus {
   /** 寫入閘門：這個建置版本有一份對得到的成功備份，而且這次載入之後沒有失敗過（失敗了要再成功一次）。 */
   ready: boolean;
   /** 這次載入確認過了沒（check 第一次做完之前是 false）。 */
   checked: boolean;
   /** 正在做的那一份。 */
-  running: PluginBy | null;
+  running: PluginBy | 'restore' | null;
   /** 這台電腦記的上次成功備份。 */
   last: LastBackup | null;
   /** 最近一次失敗：哪一步、原因（D-154）；之後成功就清掉。 */
@@ -77,6 +80,11 @@ export interface BackupRunner {
   check(): Promise<void>;
   /** 設定頁的「立即備份」。 */
   backup(): Promise<void>;
+  /**
+   * 還原前的備份（by: restore，§3-1 第 3 步）：正在做別份就等它做完再另做一份，不共用（那份可能早於閘門關上）；keep 是清理不能刪的備份（正在用的那一份）。
+   * 失敗就丟錯（和其他備份一樣讓閘門關著）。reader 是這次用的讀法，讀卡住時要算失敗。
+   */
+  beforeRestore(keep: readonly string[], reader: BackupReader): Promise<RestoreSnapshot>;
   status(): BackupStatus;
   /** 外掛卸載：進行中的備份停在下一步之前，之後不再通知。 */
   cancel(): void;
@@ -128,7 +136,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
    * 新備份成功後清理（任務說明 §1-7）：回傳沒做完的。外掛停用之後不開始新的刪除（列檔回來後、每次刪之前都看一次，Codex L2 B2）；
    * 已經送出的那一次刪除不中斷。
    */
-  async function clean(folder: string, keep: string): Promise<string[]> {
+  async function clean(folder: string, keep: ReadonlySet<string>): Promise<string[]> {
     let stale: StoredBackup[];
     try { stale = staleBackups(await host.list(folder), host.vault, host.key, keep); } catch (error) {
       return ['列出備份資料夾：' + message(error)];
@@ -141,9 +149,9 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     return left;
   }
 
-  /** 做一份備份；同一時間只做一份，等著的拿同一個結果（失敗就是失敗）。 */
-  function run(by: PluginBy): Promise<void> {
-    current ??= (async () => {
+  /** 做一份備份：回傳檔名與清單，失敗或停用是 null（原因在 status）。 */
+  function take(by: PluginBy | 'restore', keep: readonly string[], source: BackupReader): Promise<RestoreSnapshot | null> {
+    return (async () => {
       started++;
       set({ running: by });
       let step = '準備備份位置';
@@ -153,7 +161,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
         const real = await host.prepare(store.folder() ?? options.defaultFolder);
         stop();
         step = '讀 vault';
-        const taken = await takeBackup({ reader, vault: { ...host.vault, config: options.config }, build, tool: build, by, now: options.now, offset: options.offset });
+        const taken = await takeBackup({ reader: source, vault: { ...host.vault, config: options.config }, build, tool: build, by, now: options.now, offset: options.offset });
         stop();
         step = '寫進備份資料夾';
         const name = await host.write(real, taken);
@@ -161,13 +169,18 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
         store.saveLast(last);
         set({ ready: true, checked: true, running: null, last, failure: null, cleanup: [] });
         stop();
-        const cleanup = await clean(real, name);
+        const cleanup = await clean(real, new Set([name, ...keep]));
         if (cleanup.length) set({ cleanup });
+        return { name, manifest: taken.manifest };
       } catch (error) {
-        if (error instanceof Cancelled) return;
-        set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now(), error } });
+        if (!(error instanceof Cancelled)) set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now(), error } });
+        return null;
       }
-    })().finally(() => { current = null; });
+    })();
+  }
+  /** 同一時間只做一份，等著的拿同一個結果（失敗就是失敗）。 */
+  function run(by: PluginBy): Promise<void> {
+    current ??= take(by, [], reader).then(() => {}).finally(() => { current = null; });
     return current;
   }
 
@@ -196,6 +209,16 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
       return checking;
     },
     backup: () => run('manual'),
+    async beforeRestore(keep, source) {
+      // 另做一份，不共用；輪到時才開始，那時閘門已經關了（§3-1）。
+      while (current) await current;
+      let snapshot: RestoreSnapshot | null = null;
+      const guarded: BackupReader = { list: () => { stop(); return source.list(); }, read: path => { stop(); return source.read(path); } };
+      current = take('restore', keep, guarded).then(done => { snapshot = done; }).finally(() => { current = null; });
+      await current;
+      if (snapshot === null) throw Error(status.failure ? `${status.failure.step}：${status.failure.message}` : '外掛停用了，這次備份沒有做完');
+      return snapshot;
+    },
     status: () => status,
     cancel() { cancelled = true; },
   };

@@ -34,6 +34,7 @@ const BLOCKED: Record<WriteBlock | 'displaced' | 'changing', string> = {
   phone: 'AI 製卡只在電腦上做',
   loading: '正在讀取卡組，先不存；讀完再按「繼續」',
   closed: '外掛關閉了，這次沒有存完；重開之後按「繼續」',
+  restore: '正在還原，先不存；還原完再按「繼續」',
   backup: '備份還沒成功，先不存；到設定頁看原因，成功後再按「繼續」',
   unread: '還有卡組或紀錄沒讀到（可能還在從 iCloud 下載），先不存；等一下再按「繼續」',
   displaced: '外掛用的資料夾不在原位，先不存；照提醒把它放回原位，再按「繼續」',

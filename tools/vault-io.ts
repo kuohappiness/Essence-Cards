@@ -1,32 +1,15 @@
-import { lstat, readdir, stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isPlainPath, PLUGIN_MANIFEST } from '../src/core/backup/index.ts';
-import { readError } from '../src/desktop/io.ts';
+import { assertNoLinks, readError } from '../src/desktop/io.ts';
 
 // 和外掛共用的檔案操作在 src/desktop/io.ts（D-148），這裡重新匯出，工具照舊從這個檔拿。
-export { defaultBackupFolder, isOwn, leftBehind, makeFolder, readError, removeFolders, removeOwn, sameFileKey, virtualizedReason, writeNew } from '../src/desktop/io.ts';
+export { assertNoLinks, defaultBackupFolder, isOwn, leftBehind, makeFolder, readError, removeFolders, removeOwn, sameFileKey, virtualizedReason, writeNew } from '../src/desktop/io.ts';
 export type { Identity, WriteNew } from '../src/desktop/io.ts';
 
 /** 這台電腦的平台名稱，寫法同 state/device.ts 的裝置碼（過渡的還原工具讀不到 Obsidian 存的裝置碼，syntax §5-3）。 */
 export function platformName(platform: NodeJS.Platform = process.platform): 'Windows' | 'Mac' | 'Linux' {
   return platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'Mac' : 'Linux';
-}
-
-/**
- * vault 相對路徑 rel 的每一段（含 rel 本身）都不是符號連結或 junction；還不存在的部分不用看。過渡工具不跟著連結走：
- * 不然會備份或改寫到 vault 外（Codex 中途查核 F3）。是連結就丟錯。
- */
-export async function assertNoLinks(vault: string, rel: string): Promise<void> {
-  const parts = rel.split('/');
-  for (let i = 1; i <= parts.length; i++) {
-    const prefix = parts.slice(0, i).join('/');
-    let info;
-    try { info = await lstat(join(vault, prefix)); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-      throw readError(prefix, error);
-    }
-    if (info.isSymbolicLink()) throw Error(`${prefix}：是連結（符號連結或 junction），過渡工具不跟著連結讀寫`);
-  }
 }
 
 /**
