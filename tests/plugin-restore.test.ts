@@ -528,11 +528,48 @@ void test('data.json：最後寫，帶比對時的 sha；changed 記成跳過，
   assert.equal(h.texts.has(DATA), false);
 });
 
-void test('NUL 的備份行不補（讀回來也丟）', async t => {
+void test('備份行的 NUL 先去掉再補（R3）：只有 NUL 的行不算，最後一行的開頭規則照去掉之後的行算', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
   const { opened } = await snapshot(h);
-  const dirty = new Map(opened.files).set(LOG, encode(review(T, 'aaaaaa') + '\n' + review(T2, 'bbbbbb') + '\0\n'));
+  const whole = review(T2, 'bbbbbb');
+  const half = whole.slice(0, 30);
+  const dirty = new Map(opened.files).set(LOG, encode(review(T, 'aaaaaa') + '\n' + half + '\0\0\n\0\0\n'));
   h.remove(LOG);
-  const plan = planRestore({ manifest: opened.manifest, backup: dirty, current: await readCurrent(h.reader, DATA), ...OPTIONS, selection: new Set() });
-  assert.deepEqual(plan.logs, [{ source: '2026-11 iPhone-7f3a', lines: [review(T, 'aaaaaa')] }]);
+  const planned = async (backup: ReadonlyMap<string, Uint8Array>) => planRestore({ manifest: opened.manifest, backup, current: await readCurrent(h.reader, DATA), ...OPTIONS, selection: new Set() });
+  assert.deepEqual((await planned(dirty)).logs, [{ source: '2026-11 iPhone-7f3a', lines: [review(T, 'aaaaaa'), half] }]);
+  // 去掉 NUL 之後的最後一行是現在某一行的開頭：備份時正在寫那一行，不算缺。
+  h.write(LOG, review(T, 'aaaaaa') + '\n' + whole + '\n');
+  assert.deepEqual((await planned(dirty)).logs, []);
+});
+
+void test('現況不完整（R3）：筆記或月檔含 NUL 算讀不到，比對與寫前都停；圖片可以有 0', async t => {
+  const png = 'Essence Cards/圖/x.png';
+  const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb'), [LOG]: review(T, 'aaaaaa') + '\n', [png]: 'a\0b' });
+  const backup = await snapshot(h);
+  await readCurrent(h.reader, DATA);
+  h.write(B, '\0'.repeat(20));
+  await assert.rejects(readCurrent(h.reader, DATA), new RegExp(B + ' 的內容不完整.*把這個檔刪掉'));
+  h.write(B, goal('bbbbbb'));
+  h.write(LOG, review(T, 'aaaaaa') + '\n\0\0');
+  await assert.rejects(readCurrent(h.reader, DATA), /的內容不完整/);
+  h.write(LOG, review(T, 'aaaaaa') + '\n');
+  await settled(h);
+  h.write(A, goal('aaaaaa', '改過'));
+  const gate = await restore(h, backup, [A], {}, () => { h.write(B, '\0'.repeat(20)); });
+  assert.equal(gate.stopped?.step, '讀 vault');
+  assert.match(gate.stopped.message, /內容不完整/);
+  assert.equal(h.texts.get(A), goal('aaaaaa', '改過'));
+  h.write(B, goal('bbbbbb'));
+  h.remove(A);
+  await settled(h);
+  const scanned = await restore(h, backup, [A], { current: async () => { const now = await readCurrent(h.reader, DATA); h.write(B, '\0'.repeat(20)); return now; } });
+  assert.deepEqual(outcomes(scanned), [[A, '跳過']]);
+  assert.match(scanned.files[0].reason, /確定不了/);
+  assert.equal(h.texts.has(A), false);
+  h.write(B, goal('bbbbbb'));
+  await settled(h);
+  const ghost = 'Essence Cards/國二上/鬼.md';
+  const listed = await restore(h, backup, [A], { files: { ...h.files, list: async folder => [...await h.files.list(folder), ghost] } });
+  assert.deepEqual(outcomes(listed), [[A, '跳過']]);
+  assert.match(listed.files[0].reason, /鬼\.md.*確定不了/);
 });

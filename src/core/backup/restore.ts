@@ -1,6 +1,6 @@
 import { isDeckPath } from '../deck/index.ts';
 import type { Files } from '../files.ts';
-import { formatTime, LOG_FOLDER } from '../study/index.ts';
+import { formatTime, isLogPath, LOG_FOLDER } from '../study/index.ts';
 import { ESSENCE_ROOT, PLUGIN_DATA } from './manifest.ts';
 import type { BackupManifest } from './manifest.ts';
 import { restoreLogName } from './names.ts';
@@ -61,11 +61,14 @@ const message = (error: unknown): string => error instanceof Error ? error.messa
 const CHANGED = '比對之後改過，重新比對看新的差異';
 const STOPPED = '外掛停用了，這次沒有做；重新比對可以接著做';
 
-/** 現況：`Essence Cards/` 全部，加上 data.json（有的話）。讀不到就丟錯，寫出是哪個檔（D-154）。 */
+/** 現況：`Essence Cards/` 全部，加上 data.json（有的話）。讀不到就丟錯，寫出是哪個檔；筆記與紀錄含 NUL 也算讀不到，圖片可以有 0（D-154）。 */
 export async function readCurrent(reader: BackupReader, data: string | null): Promise<Map<string, Uint8Array>> {
   const current = new Map<string, Uint8Array>();
   for (const path of [...await reader.list(), ...data === null ? [] : [data]]) {
     const bytes = await reader.read(path);
+    if (bytes && (isLogPath(path) || path.toLowerCase().endsWith('.md')) && bytes.includes(0)) {
+      throw Error(`${path} 的內容不完整（可能還在從 iCloud 下載）；等它下載完再比對` + (isLogPath(path) ? '' : '，一直這樣的話把這個檔刪掉，就能從備份補回'));
+    }
     if (bytes) current.set(path, bytes);
     else if (path !== data) throw Error(`讀不到 ${path}（讀的時候檔案不見了）`);
   }
@@ -128,9 +131,11 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     const same = run.plan.sameFile;
     for (const path of (await files.list(ESSENCE_ROOT)).filter(isDeckPath)) {
       if (same(path) === same(rel)) continue;
+      const unknown = `讀不到「${path}」，確定不了學習目標 ID 有沒有重複；重新比對`;
       let other: Uint8Array | null;
-      try { other = await files.readBytes(path); } catch { return `讀不到「${path}」，確定不了學習目標 ID 有沒有重複；重新比對`; }
-      if (other === null) continue;
+      try { other = await files.readBytes(path); } catch { return unknown; }
+      // 清單列得出來卻讀不到、內容不完整：都可能占著 ID（R3）。
+      if (other === null || other.includes(0)) return unknown;
       for (const id of deckIds(other)) if (mine.has(id)) return `學習目標 ID ${id} 現在在「${path}」（比對之後才出現的）；重新比對`;
     }
     return null;

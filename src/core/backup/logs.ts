@@ -7,11 +7,12 @@ export interface MissingLines { source: string; lines: string[] }
 
 const byPath = (a: LogText, b: LogText): number => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 const nameOf = (path: string): string => path.slice(LOG_FOLDER.length + 1);
-const linesOf = (text: string): string[] => text.split('\n').map(line => line.trim()).filter(line => line !== '');
+// NUL 是沒下載完的內容（D-154 第 4 點）：寫進還原檔會讓整個檔變成讀不到；去掉之後仍是壞行，照舊救回讀得出來的部分。
+const linesOf = (text: string): string[] => text.split('\0').join('').split('\n').map(line => line.trim()).filter(line => line !== '');
 
 /**
  * 每個來源缺的行（syntax §5-3）：備份有、現在的來源檔與這個來源先前的還原檔都沒有的行；兩邊都先去掉前後空白再比，
- * 空行與含 NUL 的行不算，其他壞行也算。備份那份的最後一行是現在某一行的開頭時（備份時正在寫那一行），不算缺。
+ * 空行不算，其他壞行也算；NUL 先去掉（syntax §5-3）。備份那份的最後一行是現在某一行的開頭時（備份時正在寫那一行），不算缺。
  * 只看 `紀錄/` 直接底下的 .jsonl（isLogPath）；備份裡的還原檔，行算回它原來的來源。
  */
 export function missingLogLines(backup: readonly LogText[], current: readonly LogText[]): MissingLines[] {
@@ -27,8 +28,7 @@ export function missingLogLines(backup: readonly LogText[], current: readonly Lo
     const source = logSource(nameOf(file.path));
     const present = now.get(source) ?? [];
     const known = new Set(present);
-    // 含 NUL 的行是沒下載完的內容（D-154 第 4 點），寫進還原檔會讓整個檔變成讀不到。
-    const lines = linesOf(file.text).filter(line => !line.includes('\0'));
+    const lines = linesOf(file.text);
     const list = missing.get(source) ?? new Set<string>();
     lines.forEach((line, index) => {
       if (known.has(line)) return;
