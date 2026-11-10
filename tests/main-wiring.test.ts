@@ -890,3 +890,29 @@ void test('還原接線：寫入逾時、結果未定時，回來之前不能比
   assert.equal(h.text(STILL), deck[STILL]);
   await flow.compare(row);
 });
+
+void test('還原接線：設定頁的按鈕打開還原視窗', async t => {
+  const { h } = await restoreReady(t, deck);
+  (h.settingTabs[0] as { host: { openRestore(): void } }).host.openRestore();
+  for (let i = 0; i < 100 && !h.modals.length; i++) await wait(5);
+  assert.equal(h.modals.length, 1);
+  assert.equal(h.modals[0].titleEl.text, '還原');
+  await wait(20);
+  h.modals[0].close();
+});
+
+void test('還原接線：Mac 與 Linux 沒有還原的流程，開發命令也走不到（L2 的 R9）', async t => {
+  const real = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { ...real, value: 'darwin' });
+  t.after(() => { Object.defineProperty(process, 'platform', real); });
+  const h = host(deck, { desktop: true }, devNoScreen);
+  t.after(() => { h.plugin.onunload(); });
+  quiet(t);
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  for (let i = 0; i < 300 && !h.plugin.backup; i++) await wait(10);
+  await wait(20);
+  assert.ok(h.plugin.backup);
+  assert.equal(h.plugin.restoreFlow, null);
+});

@@ -336,6 +336,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     app: unknown;
     titleEl = new FakeEl();
     contentEl = new FakeEl();
+    modalEl = new FakeEl();
+    containerEl = { isConnected: true };
     onOpen?(): void;
     onClose?(): void;
     isOpen = false;

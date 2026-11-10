@@ -13,8 +13,7 @@ import { dayOf } from './core/study/index.ts';
 import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
-import { createRestore, type RestoreFlow } from './obsidian/restore.ts';
-import { RestoreModal } from './obsidian/restore-modal.ts';
+import type { RestoreFlow } from './obsidian/restore.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
 import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
@@ -167,7 +166,7 @@ export default class EssenceCardsPlugin extends Plugin {
     this.settingTab = wireSettings({
       plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
       settings: this.store, today: todayText,
-      openRestore: () => { if (this.restoreFlow) new RestoreModal(this.app, this.restoreFlow).open(); },
+      openRestore: () => { void this.openRestore(); },
       saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
     });
     // 這裡只訂閱；data.json 要到 layout ready 才讀（T12），第一次由 start() 開始。
@@ -472,6 +471,11 @@ export default class EssenceCardsPlugin extends Plugin {
    * 電腦上的備份（D-150、D-148）：判斷是電腦之後才動態載入電腦專用的資料夾（不經共用的重新匯出檔）；state 讀完再看要不要備份。
    * 載入失敗時閘門照樣關著（沒有成功的備份就不改寫卡組），設定頁寫出原因。
    */
+  private async openRestore(): Promise<void> {
+    const { RestoreModal } = await import('./obsidian/restore-modal.ts');
+    if (this.restoreFlow && !this.unloaded) new RestoreModal(this.app, this.restoreFlow).open();
+  }
+
   private async startBackup(files: Files): Promise<void> {
     try {
       const adapter = this.app.vault.adapter;
@@ -485,7 +489,10 @@ export default class EssenceCardsPlugin extends Plugin {
         notify: message => { new Notice(message); this.emit('notice', message); },
         failed: error => { this.fail('backup', error); },
       });
-      this.restoreFlow = createRestore({
+      // 只有電腦才載入（§7、D-148）；Mac 與 Linux 的檔名規則還沒實測，入口關住，開發命令也走不到（L2 的 R9）。
+      const { createRestore } = await import('./obsidian/restore.ts');
+      if (this.unloaded) return;
+      this.restoreFlow = !desktop.restorable ? null : createRestore({
         app: this.app, backup: this.backup, files, state: () => this.state, settings: this.store, build: BUILD, device: this.device, today: todayText,
         displaced: path => this.guard?.displaced(path) ?? false,
         leaving: () => { this.review?.close(); this.entry?.close(); },

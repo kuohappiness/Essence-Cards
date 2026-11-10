@@ -8,7 +8,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, type Metafile } from 'esbuild';
 import { installVault, registerTestVault } from '../tools/install.ts';
-import { ruleFiles } from '../tools/build.mjs';
+import { desktopViolations, ruleFiles } from '../tools/build.mjs';
 import { createObsidianStub, type StubOptions } from './helpers/obsidian.ts';
 
 const run = promisify(execFile);
@@ -270,6 +270,13 @@ void test('D-148 手機替身載入正式的 main.js：不 require Node 或 Elec
   assert.equal(desktop.stub.timers().registerInterval, 1);
   assert.equal(desktop.plugin.backup?.runner.status().ready, true);
   assert.notEqual(desktop.plugin.restoreFlow, null);
+});
+
+void test('還原的接線只能動態載入：main.ts 靜態 import 就算違規（§7）', () => {
+  const metafile = (kind: string, from = 'src/main.ts') => ({ inputs: { [from]: { imports: [{ path: 'src/obsidian/restore-modal.ts', kind }] } } } as unknown as Metafile);
+  assert.deepEqual(desktopViolations(metafile('dynamic-import')), []);
+  assert.deepEqual(desktopViolations(metafile('import-statement')), ['src/main.ts → src/obsidian/restore-modal.ts']);
+  assert.deepEqual(desktopViolations(metafile('import-statement', 'src/obsidian/dev-restore.ts')), []);
 });
 
 void test('字標（D-095）：只留用到的字，放進 styles.css 不超過 20 KB；OFL 授權文字在 repo', async () => {

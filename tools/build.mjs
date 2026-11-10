@@ -34,6 +34,7 @@ export function desktopOnly(root = defaultRoot) {
  * metafile 的第二道檢查（D-148 第 3 點）：每個外部模組由哪個檔引入。Obsidian 提供的那幾個哪裡都能用；DESKTOP_ONLY 只能由 src/desktop/
  * 的檔引入；src/desktop/ 只能由 src/main.ts 動態 import（不經共用的重新匯出檔）。回傳違規的「檔 → 模組」。
  */
+const RESTORE_WIRING = ['src/obsidian/restore.ts', 'src/obsidian/restore-modal.ts'];
 export function desktopViolations(metafile) {
   const bad = [];
   for (const [file, input] of Object.entries(metafile.inputs)) {
@@ -42,6 +43,8 @@ export function desktopViolations(metafile) {
       const to = item.path.replaceAll('\\', '/');
       if (item.external && !external.includes(to) && !(DESKTOP_ONLY.includes(to) && from.startsWith(DESKTOP))) bad.push(`${from} → ${to}`);
       if (!item.external && to.startsWith(DESKTOP) && !from.startsWith(DESKTOP) && !(from === 'src/main.ts' && item.kind === 'dynamic-import')) bad.push(`${from} → ${to}`);
+      // 還原的接線只給電腦（tasks/plugin-restore.md §7）：手機載入時不執行。開發版的 dev-restore.ts 本身就是動態載入的。
+      if (!item.external && RESTORE_WIRING.includes(to) && item.kind !== 'dynamic-import' && !/^src\/obsidian\/dev-/.test(from)) bad.push(`${from} → ${to}`);
     }
   }
   return bad;
