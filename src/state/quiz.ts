@@ -139,6 +139,14 @@ export function createQuizFiles(options: QuizFilesOptions) {
         } catch (error) { return failure(error); }
       });
     },
+    drain: folder.drain,
+    reread: folder.reread,
+    /** 還原期間（tasks/plugin-restore.md §3-2）：後面的寫入排在 gate 之後；回傳的 Promise 等排在前面的寫完。 */
+    after(gate: Promise<void>): Promise<unknown> {
+      const before = writes;
+      writes = writes.then(() => gate);
+      return before;
+    },
     /** 等已經排隊的寫入（close 用）。 */
     idle: (): Promise<unknown> => writes,
     stop: (): void => { folder.stop(); },

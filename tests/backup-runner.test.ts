@@ -226,7 +226,7 @@ function stored(started: string, options: { build?: string | null; code?: string
   const known = build !== null && /^\d+\.\d+\.\d+(\+[0-9a-f]{4,40}(\.dirty)?)?$/.test(build) ? build : '未知';
   return { name: options.name ?? `Essence Cards 備份 ${time[1]} ${time[2]}${time[3]}${time[4]} ${known} ${code}.zip`, size: 1, sha256: '0'.repeat(64), manifest };
 }
-const stale = (backups: StoredBackup[], keep = 'x'): string[] => staleBackups(backups, VAULT, path => path.toLowerCase(), keep).map(backup => backup.manifest.started).sort();
+const stale = (backups: StoredBackup[], keep = 'x'): string[] => staleBackups(backups, VAULT, path => path.toLowerCase(), new Set([keep])).map(backup => backup.manifest.started).sort();
 
 void test('保留：同一個月 12 份留最新 10 份；每月一份的 15 個月全部留下', () => {
   const sameMonth = Array.from({ length: 12 }, (_, i) => stored(`2026-10-${String(i + 1).padStart(2, '0')}T10:00:00.000+08:00`));
@@ -251,7 +251,7 @@ void test('保留：照絕對時間排序，不照字串；同一毫秒照檔名
   assert.deepEqual(stale([...recent, late, early]), ['2026-11-01T01:00:00.000+00:00']);
   const tie = Array.from({ length: 9 }, (_, i) => stored(`2026-11-${String(i + 10).padStart(2, '0')}T10:00:00.000+00:00`));
   const a = stored('2026-11-01T01:00:00.000+00:00', { code: 'aaaa' }), b = stored('2026-11-01T01:00:00.000+00:00', { code: 'bbbb' });
-  assert.deepEqual(staleBackups([...tie, a, b], VAULT, path => path.toLowerCase(), 'x').map(backup => backup.name), [a.name]);
+  assert.deepEqual(staleBackups([...tie, a, b], VAULT, path => path.toLowerCase(), new Set(['x'])).map(backup => backup.name), [a.name]);
 });
 
 void test('保留：別的 vault、同名不同路徑、檔名和清單對不上、BUILD 寫法不對的都不刪；同路徑不同 config、路徑大小寫不同算同一個', () => {

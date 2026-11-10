@@ -1,9 +1,11 @@
-import { changeSaved, hasChange, readSaved, savedKeys, semesterOn, valueOf } from './saved.ts';
+import { changeSaved, hasChange, readSaved, restoreSaved, sameSaved, savedKeys, semesterOn, valueOf } from './saved.ts';
 import type { Saved, SettingsChange, SettingsKey, SettingsValue } from './saved.ts';
 
 // 讀與存的順序（tasks/settings-page.md §2）。load、save 由外層傳入：Obsidian 的 loadData 讀不到時吞掉錯誤、回 undefined，saveData 寫不進去也照常完成。
 
 export type SaveResult = 'saved' | 'unreadable' | 'failed';
+/** 還原設定的結果（tasks/plugin-restore.md §4）：changed 是比對之後改過，沒有寫。 */
+type RestoreSettings = SaveResult | 'changed';
 export interface SettingsStoreOptions {
   /** 沒有檔回 null，讀不到回 undefined。 */
   load: () => Promise<unknown>;
@@ -25,6 +27,11 @@ export interface SettingsStore {
   reload(): Promise<void>;
   /** first() 之前不讀不寫，回 unreadable。 */
   change(change: SettingsChange): Promise<SaveResult>;
+  /**
+   * 還原（tasks/plugin-restore.md §4）：同一條隊伍，認得的欄位換成 backup 的值，不認得的保留。base 在輪到時讀一次並核對：
+   * 回傳當底的內容（比對時檔不在或讀不懂是空物件）；回 null 是比對之後改過，不寫；丟錯是讀不到。核對和當底是同一次讀到的（L2 的 R4）。first() 之前回 unreadable。
+   */
+  restore(backup: Readonly<Record<string, unknown>>, base: () => Promise<Record<string, unknown> | null>): Promise<RestoreSettings>;
   /** 外掛停用：還沒開始的讀寫不做，已經送出的寫入做完但不核對；存檔都回 failed，也不再通知。 */
   close(): void;
   /** 值或存過的項目變了（包括 known 由 false 變 true）。 */
@@ -165,6 +172,28 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           if (closed || !back.ok || back.absent) { report('failed'); return; }
           adopt(back);
           report(hasChange(back.raw, change) ? 'saved' : 'failed');
+        });
+      });
+    },
+    restore(backup, base) {
+      if (!started) return Promise.resolve('unreadable');
+      return new Promise<RestoreSettings>(report => {
+        void queued(async () => {
+          if (closed) { report('failed'); return; }
+          let now: Record<string, unknown> | null;
+          try { now = await base(); } catch { report('unreadable'); return; }
+          if (closed) { report('failed'); return; }
+          if (now === null) { report('changed'); return; }
+          // 不在這裡限時（L2 的 R11）：這裡回 failed 之後寫入還在路上，外面會以為確定沒寫。逾時由 applyRestore 判定，算結果未定。
+          try { await options.save(restoreSaved(now, backup)); } catch {
+            report('failed');
+            return;
+          }
+          if (closed) { report('failed'); return; }
+          const back = await read();
+          if (closed || !back.ok || back.absent) { report('failed'); return; }
+          adopt(back);
+          report(sameSaved(back.raw, backup) ? 'saved' : 'failed');
         });
       });
     },

@@ -1,7 +1,7 @@
 export { formatTime, dayOf, dayStart, parseTime } from './time.ts';
 export { encodeEntry, parseLine } from './entries.ts';
 export { LOG_FOLDER, logPath, createLogWriter } from './log.ts';
-export { appendLine, changesInOrder, isLogPath, mergeHistory, readHistory } from './history.ts';
+export { appendLine, changesInOrder, isLogPath, mergeHistory, readablePieces, readHistory } from './history.ts';
 export { review, replay, intervalDays, dueAt, recall } from './fsrs.ts';
 export { planToday } from './plan.ts';
 export { findDuplicateIds } from './duplicates.ts';

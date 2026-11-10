@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { filesReader, openBackup, takeBackup } from '../src/core/backup/index.ts';
 import type { Taken } from '../src/core/backup/index.ts';
 import { checkFolder, listBackups, prepareFolder, readBackup, removeBackup, writeBackup } from '../src/desktop/backup.ts';
+import { restorableOn } from '../src/desktop/index.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 import { goal, tempFolder } from './helpers/vault.ts';
 
@@ -126,4 +127,10 @@ void test('位置：所在的磁碟找不到（例如外接硬碟的磁碟代號
   const folder = letter + ':\\Essence 備份';
   await assert.rejects(checkFolder(folder, vault), (error: Error) => error.message === `備份位置 ${folder} 所在的磁碟找不到（ENOENT）`);
   await assert.rejects(prepareFolder(folder, vault), /所在的磁碟找不到/);
+});
+
+void test('還原的入口：只在 Windows 開放（tasks/plugin-restore.md〈小選擇〉第 2 項）', () => {
+  assert.equal(restorableOn('win32'), true);
+  assert.equal(restorableOn('darwin'), false);
+  assert.equal(restorableOn('linux'), false);
 });

@@ -83,6 +83,43 @@ export function hasChange(raw: Readonly<Record<string, unknown>>, change: Settin
   return raw.semester === change.value.value && raw.semesterSetOn === change.value.setOn;
 }
 
+/** data.json 裡設定頁管的欄位；其他欄位不動（D-149 第 7 點）。 */
+const FIELDS = ['capMinutes', 'retention', 'semester', 'semesterSetOn', 'examCountdown'] as const;
+/** 這個檔的內容；不是合法的 JSON 物件是 null。 */
+export function parseData(bytes: Uint8Array): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch { return null; }
+}
+/** 認得的欄位都相同（tasks/plugin-restore.md §2）。 */
+export const sameSaved = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>): boolean =>
+  FIELDS.every(key => JSON.stringify(a[key]) === JSON.stringify(b[key]));
+/** 還原（§4）：以 raw 為底，認得的欄位換成 backup 的值（backup 沒有的就拿掉，回到預設），不認得的欄位保留。 */
+export function restoreSaved(raw: Readonly<Record<string, unknown>>, backup: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const next = { ...raw };
+  for (const key of FIELDS) {
+    delete next[key];
+    if (key in backup) next[key] = backup[key];
+  }
+  return next;
+}
+/** 給人看的差異（§1）：「每日時間上限 30 分鐘 → 45 分鐘」；相同的不列。now 是 null 時現在讀不懂。學期看 today 算出來的，不看存的那個值（L2 的 R8）。 */
+export function savedDiff(now: Readonly<Record<string, unknown>> | null, backup: Readonly<Record<string, unknown>>, today: string): string[] {
+  const after = valueOf(readSaved(backup), true);
+  const before = now === null ? null : valueOf(readSaved(now), true);
+  const lines: string[] = [];
+  const row = (name: string, a: string | null, b: string): void => { if (a !== b) lines.push(`${name} ${a ?? '讀不懂'} → ${b}`); };
+  row('每日時間上限', before && `${String(before.settings.capMinutes)} 分鐘`, `${String(after.settings.capMinutes)} 分鐘`);
+  row('目標保持率', before && `${String(Math.round(before.settings.retention * 100))}%`, `${String(Math.round(after.settings.retention * 100))}%`);
+  const term = (value: SettingsValue): string => value.semester ? semesterOn(value.semester, today) : '未設定';
+  row('目前學期', before && term(before), term(after));
+  // 算出來的學期相同、只差選的那一天：一列都不寫的話，家長看不出這一項為什麼要還原。
+  if (before && term(before) === term(after)) row('選定學期的日期', before.semester?.setOn ?? '未設定', after.semester?.setOn ?? '未設定');
+  row('考試倒數', before && (before.examCountdown ? '開' : '關'), after.examCountdown ? '開' : '關');
+  return lines;
+}
+
 /**
  * 今天（`YYYY-MM-DD`，清晨 4 點換日）是哪個學期（§4）：從選的那天之後走過每個 2/1 與 8/1。
  * 2/1 換成同年級的下學期；8/1 下學期換成下一個年級的上學期，已經是上學期就不動；高三下不動。

@@ -3,7 +3,8 @@ import { lstat, realpath, rmdir } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import type { BackupHost } from '../core/backup/index.ts';
 import { checkFolder, listBackups, prepareFolder, readBackup, removeBackup, writeBackup } from './backup.ts';
-import { defaultBackupFolder, isInside, realTarget, sameFileKey } from './io.ts';
+import type { StoredBackup } from '../core/backup/index.ts';
+import { assertNoLinks, defaultBackupFolder, isInside, realTarget, sameFileKey } from './io.ts';
 
 // 外掛的電腦專用接點（D-148）：main.ts 在 Platform.isDesktopApp 成立後才動態 import 這個檔，不經共用的重新匯出檔。
 // 載入時沒有副作用；對外只給具體的動作，不交出 fs。
@@ -22,7 +23,16 @@ export interface Desktop {
   open(folder: string): Promise<string | null>;
   /** 系統的選資料夾對話框；取消是 null。叫不到對話框就丟錯（設定頁改用文字欄位）。 */
   choose(start: string): Promise<string | null>;
+  /** 備份資料夾裡讀得懂的與讀不懂的（還原的選單，tasks/plugin-restore.md §1）。 */
+  listing(folder: string): Promise<{ backups: StoredBackup[]; skipped: { name: string; reason: string }[] }>;
+  /** vault 相對路徑上有連結就丟錯（§3-3）。 */
+  noLinks(path: string): Promise<void>;
+  /** 這個平台開放還原：檔名規則只在 Windows 驗過（tasks/plugin-restore.md〈小選擇〉第 2 項）。 */
+  restorable: boolean;
 }
+
+/** 開放還原的平台。 */
+export const restorableOn = (platform: NodeJS.Platform): boolean => platform === 'win32';
 
 /**
  * 刪掉 vault 裡一個空的資料夾（系統資料夾的防呆 §1-5，tasks/system-folder-guard.md）。用非遞迴的 rmdir：有東西就由系統
@@ -69,5 +79,8 @@ export async function createDesktop(basePath: string): Promise<Desktop> {
     check: folder => checkFolder(folder, vault, FIX),
     open: async folder => (await import('./shell.ts')).openFolder(folder),
     choose: async start => (await import('./shell.ts')).chooseFolder(start),
+    listing: folder => listBackups(folder),
+    noLinks: path => assertNoLinks(vault, path),
+    restorable: restorableOn(process.platform),
   };
 }

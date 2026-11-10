@@ -460,6 +460,7 @@ export function createFolderGuard(host: GuardHost): FolderGuard {
         readBytes: path => when(onPath(path), () => hidden(path) ? Promise.resolve(null) : files.readBytes(path)),
         modify: (path, edit) => when(onPath(path), () => files.modify(path, edit)),
         append: (path, line) => when(onPath(path), () => files.append(path, line)),
+        replace: (path, check, bytes) => when(onPath(path), () => files.replace(path, check, bytes)),
         watch(onChange) {
           watchers.add(onChange);
           const stop = files.watch(path => { if (holding(path)) held.push(path); else onChange(path); });

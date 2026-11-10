@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettingsStore } from '../src/core/settings/index.ts';
+import { createSettingsStore, savedDiff } from '../src/core/settings/index.ts';
 import type { SettingsChange, SettingsStoreOptions } from '../src/core/settings/index.ts';
 
 // 讀與存的順序（tasks/settings-page.md §2、§7）。load、save 是替身，照 Obsidian 1.15 的行為：null 是沒有檔，undefined 是讀不到；saveData 吞掉寫入錯誤。
@@ -610,4 +610,80 @@ void test('過了 2/1 不寫檔，畫面看到的是今天的學期', async () =
   const store = await started({ ...options, today: () => '2027-02-01' });
   assert.equal(store.semester(), '國二下');
   assert.equal(state.saves.length, 0);
+});
+
+// 還原（tasks/plugin-restore.md §4）
+const from = (raw: Record<string, unknown>) => () => Promise.resolve(raw);
+const TODAY = '2026-11-10';
+
+void test('還原：以輪到時讀到、核對過的內容當底，五個欄位換成備份的值，備份沒有的拿掉，不認得的保留；立刻生效、通知一次', async () => {
+  const { state, options } = disk({ capMinutes: 45, retention: 0.9, newField: 'keep' });
+  const store = await started(options);
+  let told = 0;
+  store.onChange(() => { told++; });
+  state.log.length = 0;
+  assert.equal(await store.restore({ capMinutes: 20, unknownInBackup: true }, from({ capMinutes: 50, retention: 0.9, other: 1, newField: 'keep' })), 'saved');
+  assert.deepEqual(state.saves, [{ capMinutes: 20, other: 1, newField: 'keep' }]);
+  // 當底的就是核對過的那一份，寫之前不再讀一次（L2 的 R4）。
+  assert.deepEqual(state.log, ['save', 'load']);
+  assert.equal(store.value().settings.capMinutes, 20);
+  assert.equal(store.value().settings.retention, 0.8);
+  assert.equal(told, 1);
+});
+
+void test('還原：輪到時現在的檔不是比對時那一份：changed，不寫；核對失敗算 unreadable', async () => {
+  const { state, options } = disk({ capMinutes: 45 });
+  const store = await started(options);
+  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.resolve(null)), 'changed');
+  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.reject(Error('讀不到'))), 'unreadable');
+  assert.deepEqual(state.saves, []);
+});
+
+void test('還原：現在的檔讀不懂，以空的當底救回來', async () => {
+  const first = disk('壞掉的值');
+  const rescued = await started(first.options);
+  assert.equal(await rescued.restore({ capMinutes: 20 }, from({})), 'saved');
+  assert.deepEqual(first.state.saves, [{ capMinutes: 20 }]);
+});
+
+void test('還原：first() 之前回 unreadable；讀回和備份不同算 failed', async () => {
+  const early = disk({ capMinutes: 45 });
+  assert.equal(await createSettingsStore(early.options).restore({ capMinutes: 20 }, from({})), 'unreadable');
+  const lying = disk({ capMinutes: 45 });
+  const store = await started({ ...lying.options, save: () => Promise.resolve() });
+  assert.equal(await store.restore({ capMinutes: 20 }, from({ capMinutes: 45 })), 'failed');
+});
+
+void test('還原的差異寫給家長看：一樣的不列；現在讀不懂寫「讀不懂」', () => {
+  assert.deepEqual(savedDiff({ capMinutes: 30, retention: 0.8 }, { capMinutes: 45, retention: 0.8 }, TODAY), ['每日時間上限 30 分鐘 → 45 分鐘']);
+  assert.deepEqual(savedDiff({ capMinutes: 30 }, { capMinutes: 30 }, TODAY), []);
+  assert.deepEqual(savedDiff(null, { capMinutes: 30 }, TODAY)[0], '每日時間上限 讀不懂 → 30 分鐘');
+});
+
+void test('還原的差異：學期看今天算出來的；算出來相同、只差選的日子時列日期（L2 的 R8）', () => {
+  const on = (semester: string, semesterSetOn: string) => ({ semester, semesterSetOn });
+  assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2025-09-01'), TODAY), ['目前學期 國一上 → 國二上']);
+  assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2026-09-02'), TODAY), ['選定學期的日期 2026-09-01 → 2026-09-02']);
+  assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2026-09-01'), TODAY), []);
+  assert.deepEqual(savedDiff({}, on('國一上', '2026-09-01'), TODAY), ['目前學期 未設定 → 國一上']);
+});
+
+void test('還原：寫入超過 10 秒不先回 failed，等真的結束（L2 的 R11）', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  let box: Record<string, unknown> = { capMinutes: 60 };
+  const store = createSettingsStore({ load: () => Promise.resolve(box), save: async data => { await hold; box = data as Record<string, unknown>; }, today: () => TODAY });
+  const first = store.first();
+  await new Promise(resolve => { setImmediate(resolve); });
+  t.mock.timers.tick(2000);
+  await first;
+  let outcome: string | null = null;
+  const running = store.restore({ capMinutes: 45 }, () => Promise.resolve({ capMinutes: 60 })).then(result => { outcome = result; });
+  for (let i = 0; i < 6; i++) { await new Promise(resolve => { setImmediate(resolve); }); t.mock.timers.tick(10_000); }
+  assert.equal(outcome, null);
+  release();
+  for (let i = 0; i < 6 && outcome === null; i++) { await new Promise(resolve => { setImmediate(resolve); }); t.mock.timers.tick(5000); }
+  await running;
+  assert.equal(outcome, 'saved');
 });

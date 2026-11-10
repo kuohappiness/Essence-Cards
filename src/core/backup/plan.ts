@@ -1,4 +1,5 @@
 import { isDeckPath, parseDeck } from '../deck/index.ts';
+import type { Deck } from '../deck/index.ts';
 import { isErrorLogPath } from '../errors/index.ts';
 import { isLogPath, LOG_FOLDER } from '../study/index.ts';
 import { missingLogLines } from './logs.ts';
@@ -41,16 +42,27 @@ export interface RestorePlan {
   /** action 是 restore 的檔，照寫入的順序（每個檔的 after 都排在它前面）。 */
   order: string[];
 }
-interface PlanInput {
-  manifest: BackupManifest;
-  backup: ReadonlyMap<string, Uint8Array>;
-  /** 現在 vault 裡的 `Essence Cards/` 全部，加上現在的設定資料夾裡的 data.json（有的話）。 */
-  current: ReadonlyMap<string, Uint8Array>;
+/** 呼叫的一方才知道的規則（tasks/plugin-restore.md §2）。 */
+export interface PlanOptions {
   /** 這個 vault 現在的設定資料夾；確定不了是 null，data.json 擋住、不推定成 .obsidian（syntax §8）。 */
   config: string | null;
   /** 目的地那台電腦的檔名規則：會寫到同一個檔的兩個路徑得到相同的值（例如 Windows 不分大小寫）。 */
   sameFile: (path: string) => string;
-  /** 要還原的檔（備份裡的路徑）；沒給就是全部能還原的。 */
+  /** 平台才知道的不能還原的原因（以點開頭的檔、路徑上有連結、系統資料夾不在原位、設定讀不懂）；可以還原是 null。 */
+  refuse?: (file: { path: string; target: string; backup: Uint8Array }) => string | null;
+  /** data.json 兩邊認得的欄位都相同（§2）：當成相同，不列。 */
+  sameData?: (backup: Uint8Array, current: Uint8Array) => boolean;
+  /** 這份卡組這一版讀不懂（需要版本）：擋住（D-149 第 3 點）。 */
+  needsUpdate?: (deck: Deck) => boolean;
+}
+interface PlanInput extends PlanOptions {
+  manifest: BackupManifest;
+  backup: ReadonlyMap<string, Uint8Array>;
+  /** 現在 vault 裡的 `Essence Cards/` 全部，加上現在的設定資料夾裡的 data.json（有的話）。 */
+  current: ReadonlyMap<string, Uint8Array>;
+  /**
+   * 要還原的檔（備份裡的路徑）；沒給就是全部能還原的。`紀錄/` 裡不是複習 JSONL、現在不見的檔一律算進去（syntax §5-4、§6：只補不刪，不用勾）。
+   */
   selection?: ReadonlySet<string>;
 }
 
@@ -62,6 +74,8 @@ const byText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
  * 家長看不懂它的衝突與「備份後才有」，舊的錯誤仍在備份 zip 裡。這個例外只寫在這裡，不擴大 isLogPath。
  */
 const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(path);
+/** 這個檔還原時算不算卡組：備份的路徑或現在實際會寫的路徑，任何一邊是卡組就算（只差副檔名大小寫時兩邊不同，L2 的 R5）。 */
+const isDeckWrite = (target: string, found: string | null | undefined): boolean => isDeckPath(target) || (found != null && isDeckPath(found));
 
 /**
  * 還原計畫（D-150 第 7、8 點；syntax §5-3、§8）。不寫任何檔。
@@ -100,9 +114,17 @@ export function planRestore(input: PlanInput): RestorePlan {
     const now = found === undefined ? null : { path: found, ...info(current.get(found)!) };
     const mine = info(bytes);
     const others = writers.get(key)!.filter(other => other !== path);
-    const kind: FileKind = now === null ? 'missing' : now.sha256 === mine.sha256 ? 'same' : 'changed';
+    const sameData = path === dataSource && found !== undefined && input.sameData?.(bytes, current.get(found)!) === true;
+    const kind: FileKind = now === null ? 'missing' : now.sha256 === mine.sha256 || sameData ? 'same' : 'changed';
     if (kind === 'same' && others.length === 0) continue;
     const reasons: string[] = [];
+    const refused = input.refuse?.({ path, target, backup: bytes });
+    if (refused) reasons.push(refused);
+    if (isDeckWrite(target, found)) {
+      // 含 NUL 的卡組還原了也讀不回來（D-154 第 4 點）；需要新版的 Cards 不寫（備份那份或現在那份讀不懂都一樣）。
+      if (bytes.includes(0)) reasons.push('備份裡這一篇的內容不完整（有 NUL）');
+      else if (input.needsUpdate?.(parseDeck(text(bytes))) || (found !== undefined && input.needsUpdate?.(parseDeck(text(current.get(found)!))))) reasons.push('需要新版的外掛才讀得懂，這一版不寫它');
+    }
     if (others.length) reasons.push('和「' + others.join('」、「') + '」在這台電腦會寫到同一個檔，兩個都不還原');
     if (kind === 'changed' && path.startsWith(LOG_FOLDER + '/')) reasons.push('紀錄裡的檔只補不見的：同名但內容不同，列成衝突');
     files.push({ path, target, kind, action: reasons.length ? 'blocked' : 'restore', reasons, backup: mine, current: now, after: [] });
@@ -112,7 +134,8 @@ export function planRestore(input: PlanInput): RestorePlan {
     files.push({ path, target: path, kind: 'added', action: 'keep', reasons: [], backup: null, current: { path, ...info(current.get(path)!) }, after: [] });
   }
   for (const file of files) {
-    if (file.action === 'restore' && input.selection && !input.selection.has(file.path)) file.action = 'skip';
+    const always = file.kind === 'missing' && file.path.startsWith(LOG_FOLDER + '/');
+    if (file.action === 'restore' && input.selection && !input.selection.has(file.path) && !always) file.action = 'skip';
   }
   // 擋住交換 ID 這類排不出順序的檔之後，還原的集合變了，ID 要再查一次。
   let order: string[];
@@ -139,7 +162,7 @@ export function planRestore(input: PlanInput): RestorePlan {
 function orderWrites(files: PlannedFile[], { backup, current }: PlanInput): { order: string[]; stuck: { file: PlannedFile; waits: string[] }[] } {
   for (const file of files) file.after = [];
   const restoring = files.filter(file => file.action === 'restore');
-  const decks = restoring.filter(file => file.target !== null && isDeckPath(file.target));
+  const decks = restoring.filter(file => file.target !== null && isDeckWrite(file.target, file.current?.path));
   const now = new Map(decks.map(file => [file, new Set(file.current ? deckIds(current.get(file.current.path)!) : [])]));
   for (const file of restoring) {
     const mine = now.get(file);
@@ -180,7 +203,7 @@ function checkIds(files: PlannedFile[], { backup, current, sameFile }: PlanInput
     const decks = new Map<string, { shown: string; ids: string[]; restored: PlannedFile | null }>();
     for (const [path, bytes] of current) if (isDeckPath(path)) decks.set(sameFile(path), { shown: path, ids: idsOf('now:' + path, bytes), restored: null });
     for (const file of files) {
-      if (file.action !== 'restore' || file.target === null || !isDeckPath(file.target)) continue;
+      if (file.action !== 'restore' || file.target === null || !isDeckWrite(file.target, file.current?.path)) continue;
       decks.set(sameFile(file.target), { shown: file.current?.path ?? file.target, ids: idsOf('backup:' + file.path, backup.get(file.path)!), restored: file });
     }
     const where = new Map<string, Occurrence[]>();

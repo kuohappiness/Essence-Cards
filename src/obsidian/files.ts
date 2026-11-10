@@ -9,7 +9,7 @@ import type { Files } from '../core/files.ts';
 export function createObsidianFiles(app: App, options: { pause?: (path: string, folder?: boolean) => Promise<void> | null } = {}): Files {
   const { vault } = app;
   const pause = (path: string, folder = false): Promise<void> | null => options.pause?.(path, folder) ?? null;
-  const pending = new Map<string, Promise<void>>();
+  const pending = new Map<string, Promise<unknown>>();
   // vault 的路徑本來就是相對的；擋掉絕對路徑與任何一段是 ..，不讓它碰 vault 以外。
   function location(path: string): string {
     if (path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path) || path.split('/').includes('..')) {
@@ -18,7 +18,7 @@ export function createObsidianFiles(app: App, options: { pause?: (path: string, 
     return path;
   }
   // 同一個路徑的 modify / append 排隊，和 Node 版相同（大小寫不同視為同一個檔，頂多多排隊）。
-  function serial(path: string, action: () => Promise<void>): Promise<void> {
+  function serial<T>(path: string, action: () => Promise<T>): Promise<T> {
     const key = path.normalize('NFC').toLowerCase();
     // 前一份的失敗已經由 next 交回它自己的呼叫端：這裡與下面清掉排隊的 .catch 只是不讓它擋住下一份、不留下沒人接的拒絕。
     const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
@@ -111,6 +111,23 @@ export function createObsidianFiles(app: App, options: { pause?: (path: string, 
         const found = file(path);
         if (found) await vault.append(found, line + '\n');
         else await create(path, line + '\n');
+      });
+    },
+    replace(path, check, bytes) {
+      location(path);
+      return serial(path, async () => {
+        // 同 modify：建上層資料夾與讀都要等，回到這裡重問；最後一次的 check 到寫入中間只隔一次讀（§3-2 的空檔），讀完先確認還是同一個檔。
+        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        for (let made = false; ; made = true) {
+          for (let wait = pause(path); wait; wait = pause(path)) await wait;
+          const found = file(path);
+          const now = found ? new Uint8Array(await vault.readBinary(found)) : null;
+          if (found && file(path) !== found) continue;
+          if (!check(now)) return false;
+          if (found) { await vault.modifyBinary(found, data); return true; }
+          if (made || parents(path).every(folder => vault.getAbstractFileByPath(folder))) { await vault.createBinary(path, data); return true; }
+          await makeParents(path);
+        }
       });
     },
     watch(onChange) {

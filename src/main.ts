@@ -13,6 +13,7 @@ import { dayOf } from './core/study/index.ts';
 import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
 import { BACKUP_NOTICE, wireBackup, type BackupWiring } from './obsidian/backup.ts';
+import type { RestoreFlow } from './obsidian/restore.ts';
 import { loadDeviceCode } from './obsidian/device.ts';
 import { createAiCards, type AiCards } from './obsidian/ai-cards.ts';
 import { wireAiCards } from './obsidian/ai-cards-modal.ts';
@@ -122,9 +123,13 @@ export default class EssenceCardsPlugin extends Plugin {
   backup: BackupWiring | null = null;
   /** 電腦專用的功能載入失敗的原因（設定頁顯示）。 */
   private backupError: string | null = null;
+  /** 還原（tasks/plugin-restore.md）；電腦的備份接上之後才有。 */
+  restoreFlow: RestoreFlow | null = null;
+  /** 正在還原：這段時間不開複習與入口（§5）。 */
+  private restoring = false;
   private settingTab: { refresh: () => void } | null = null;
   /** data.json 的設定（tasks/settings-page.md）。 */
-  private readonly store = createSettingsStore({
+  readonly store = createSettingsStore({
     load: () => this.loadData() as Promise<unknown>,
     save: data => this.saveData(data),
     today: todayText,
@@ -161,6 +166,7 @@ export default class EssenceCardsPlugin extends Plugin {
     this.settingTab = wireSettings({
       plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
       settings: this.store, today: todayText,
+      openRestore: () => { void this.openRestore(); },
       saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
     });
     // 這裡只訂閱；data.json 要到 layout ready 才讀（T12），第一次由 start() 開始。
@@ -236,10 +242,16 @@ export default class EssenceCardsPlugin extends Plugin {
     this.state?.close().catch((error: unknown) => { this.fail('close', error); });
   }
 
+  /** 還原期間不開新的複習與入口（tasks/plugin-restore.md §5）。 */
+  private refuseWhileRestoring(): boolean {
+    if (this.restoring) new Notice('Essence Cards：正在還原，等它做完再開');
+    return this.restoring;
+  }
+
   /** 打開全螢幕的複習畫面（W6）：同時只有一個，再開就先關掉上一個。 */
   startReview(pick: StudyPick): ReviewHandle | null {
     // 停用之後不開畫面，也就不會記錄作答（什麼都不寫，D-074）。
-    if (!this.state || this.unloaded) return null;
+    if (!this.state || this.unloaded || this.refuseWhileRestoring()) return null;
     const pickedAt = performance.now();
     this.review?.close();
     this.review = openReview({
@@ -256,7 +268,7 @@ export default class EssenceCardsPlugin extends Plugin {
 
   /** 預覽（D-161）：不記錄，沒有回報的旗子；結束時回筆記。 */
   private startPreview(session: Session): void {
-    if (!this.state || this.unloaded) return;
+    if (!this.state || this.unloaded || this.refuseWhileRestoring()) return;
     this.review?.close();
     this.review = openPreview({
       app: this.app, state: this.state,
@@ -268,7 +280,7 @@ export default class EssenceCardsPlugin extends Plugin {
 
   /** 打開入口或目錄：全螢幕，還沒讀完也能開（寫「正在讀取卡組…」）。已經開著就換畫面。 */
   openEntry(screen: 'entry' | 'catalog' = 'entry'): EntryHandle | null {
-    if (this.unloaded) return null;
+    if (this.unloaded || this.refuseWhileRestoring()) return null;
     if (this.entry) { this.entry.show(screen); return this.entry; }
     this.entry = openEntry({
       app: this.app, state: () => this.state, screen,
@@ -459,6 +471,11 @@ export default class EssenceCardsPlugin extends Plugin {
    * 電腦上的備份（D-150、D-148）：判斷是電腦之後才動態載入電腦專用的資料夾（不經共用的重新匯出檔）；state 讀完再看要不要備份。
    * 載入失敗時閘門照樣關著（沒有成功的備份就不改寫卡組），設定頁寫出原因。
    */
+  private async openRestore(): Promise<void> {
+    const { RestoreModal } = await import('./obsidian/restore-modal.ts');
+    if (this.restoreFlow && !this.unloaded) new RestoreModal(this.app, this.restoreFlow).open();
+  }
+
   private async startBackup(files: Files): Promise<void> {
     try {
       const adapter = this.app.vault.adapter;
@@ -471,6 +488,16 @@ export default class EssenceCardsPlugin extends Plugin {
         changed: status => { this.state?.backupReady(status.ready); this.ids?.saver.refresh(); this.settingTab?.refresh(); },
         notify: message => { new Notice(message); this.emit('notice', message); },
         failed: error => { this.fail('backup', error); },
+      });
+      // 只有電腦才載入（§7、D-148）；Mac 與 Linux 的檔名規則還沒實測，入口關住，開發命令也走不到（L2 的 R9）。
+      const { createRestore } = await import('./obsidian/restore.ts');
+      if (this.unloaded) return;
+      this.restoreFlow = !desktop.restorable ? null : createRestore({
+        app: this.app, backup: this.backup, files, state: () => this.state, settings: this.store, build: BUILD, device: this.device, today: todayText,
+        displaced: path => this.guard?.displaced(path) ?? false,
+        leaving: () => { this.review?.close(); this.entry?.close(); },
+        running: on => { this.restoring = on; this.ids?.saver.refresh(); },
+        fail: (step, error, path) => { this.fail('restore', Error(`${step}：${error instanceof Error ? error.message : String(error)}`, { cause: error }), path); },
       });
       this.settingTab?.refresh();
       // ready() 的拒絕已經經過 onError（state 的 init 或 read）記下，或是停用：下面不再記一次。

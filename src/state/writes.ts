@@ -23,7 +23,7 @@ export interface EditorHandle {
 }
 
 /** 不看是哪一篇的受阻原因，照門檻檢查的順序（writable）。 */
-export type WriteBlock = 'phone' | 'loading' | 'closed' | 'backup' | 'unread';
+export type WriteBlock = 'phone' | 'loading' | 'closed' | 'restore' | 'restoreStuck' | 'backup' | 'unread';
 
 /** Cards 改卡組的結果。 */
 export type WriteResult =
@@ -109,6 +109,10 @@ export function createWrites(options: WritesOptions) {
   const checks = new Map<string, { output: string | null; prepared: Prepared | null; fallback: WriteResult; settle: (result: WriteResult) => void }>();
   /** Cards 改卡組的那一列（§3）：一次只做一份；卡住的寫入只擋後面的寫入，不擋讀檔與複習。 */
   let writes: Promise<unknown> = Promise.resolve();
+  /** 外掛內的還原正在做（tasks/plugin-restore.md §3-2）：這段時間排到的寫入都回受阻。 */
+  let restoring = false;
+  /** 還原卡住（tasks/plugin-restore.md §3-1 第 6 點）：閘門留著關，重新開啟才放開。 */
+  let sealed = false;
   /**
    * 正在 I/O 的那一份工作，從 begin 到 end：close() 等它結束（§5）。從 begin 就開始算，不是從呼叫 persist 才算：
    * editor.apply()、editor.persist() 裡可能同步 close()（Codex L2 再審的 R2 續）。中間只有寫進磁碟那一步會等，那一步有 writeTimeout。
@@ -125,6 +129,7 @@ export function createWrites(options: WritesOptions) {
     if (!options.fillIds) return 'phone';
     if (!life.loaded) return 'loading';
     if (life.closed) return 'closed';
+    if (restoring) return sealed ? 'restoreStuck' : 'restore';
     if (options.backupPending()) return 'backup';
     if (reads.unread.size) return 'unread';
     return null;
@@ -201,6 +206,61 @@ export function createWrites(options: WritesOptions) {
    */
   function readTimed(path: string): Promise<string | null> {
     return within(files.read(path), stuckAfter, `讀 ${path} 超過 ${String(stuckAfter)} ms 沒有回來`).then(text => completeText(path, text));
+  }
+  /**
+   * 還原的獨占時段（§3-2）：呼叫的當下就關閘門，正在跑的那一份做完才輪到 work。還沒開始的、還原期間才排進來的，輪到時都回受阻；
+   * 放開排在它們後面，不論成敗。
+   */
+  /** 等 work，最多等 stuckAfter（L2 的 R6）：底層的讀取可能一直不回來，等不到的之後照一般的讀取處理。 */
+  function atMost(work: Promise<void>): Promise<void> {
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<void>(resolve => { id = setTimeout(resolve, stuckAfter); });
+    return Promise.race([work, late]).finally(() => { clearTimeout(id); });
+  }
+  async function exclusive<T>(before: () => Promise<unknown>, work: () => Promise<T>): Promise<T> {
+    if (restoring) throw Error('已經在還原');
+    restoring = true;
+    // 排在前面的存檔或範圍檔可能卡在 iCloud（L2 的 R12）：等太久就放棄，排著的這一份之後輪到也不做。
+    let begun = false, gaveUp = false;
+    const job = enqueue(async () => {
+      await before();
+      if (gaveUp) throw Error('這次還原已經放棄');
+      begun = true;
+      return work();
+    });
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      id = setTimeout(() => {
+        if (begun) return;
+        gaveUp = true;
+        reject(Error('前面還有存檔沒做完（可能有檔案卡在 iCloud），這次沒有還原；等一下再試'));
+      }, stuckAfter);
+    });
+    try { return await Promise.race([job, late]); } finally {
+      clearTimeout(id);
+      if (gaveUp) { job.catch(() => {}); restoring = false; }
+      else await enqueue(() => { restoring = sealed; return Promise.resolve(); });
+    }
+  }
+  /**
+   * 還原寫一篇卡組（§3-3 第 6 點）：I/O 期間讀取不跨過，寫成之後把讀回的文字當成自己的寫回（tracker.wrote），
+   * 舊版本有、備份沒有的 ID 不算弄丟，不多出待處理的問題。
+   */
+  async function restoreDeck(path: string, write: () => Promise<boolean>): Promise<boolean> {
+    begin(path);
+    const mine = finish;
+    try {
+      const done = await write();
+      if (done) {
+        const text = await readTimed(path);
+        if (text !== null) options.wrote(path, text);
+      }
+      return done;
+    } finally {
+      // 逾時之後才回來時別的工作可能已經開始（L2 的 R2）：只收自己的，不清掉別人的 active。
+      if (finish === mine) end(path);
+      else { mine?.(); reads.unhold(path); reads.reread(path); }
+    }
   }
   /** 第 6 步（finally，不論結果）：I/O 結束，序號前進，把這篇放進 pending、立刻讀（不等 delay）。 */
   function end(path: string): void {
@@ -362,6 +422,9 @@ export function createWrites(options: WritesOptions) {
     create,
     readTimed,
     blockedNow,
+    exclusive,
+    seal(): void { sealed = true; },
+    restoreDeck,
     /**
      * 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、
      * 把預期的輸出當成自己的寫回，讀到的文字再照組合那一層一般的重讀比對；預期不成立、讀到 null（不見了或改名，不跟著 A2 的改名配對寫到別篇）
@@ -394,5 +457,6 @@ export function createWrites(options: WritesOptions) {
     },
     /** 正在 I/O 的那一份工作；close() 等它結束，最多 writeTimeout（§5）。 */
     idle: (): Promise<void> | null => active,
+    atMost,
   };
 }

@@ -11,6 +11,7 @@ export function countFiles(files: Files): { files: Files; calls: () => number } 
       readBytes: path => { calls++; return files.readBytes(path); },
       modify: (path, edit) => { calls++; return files.modify(path, edit); },
       append: (path, line) => { calls++; return files.append(path, line); },
+      replace: (path, check, bytes) => { calls++; return files.replace(path, check, bytes); },
       watch: onChange => { calls++; return files.watch(onChange); },
     },
   };
@@ -29,6 +30,7 @@ export function scopedFiles(files: Files, root: string): Files {
     readBytes: path => files.readBytes(inner(path)),
     modify: (path, edit) => files.modify(inner(path), edit),
     append: (path, line) => files.append(inner(path), line),
+    replace: (path, check, bytes) => files.replace(inner(path), check, bytes),
     watch: onChange => files.watch(path => { if (path.startsWith(prefix)) onChange(path.slice(prefix.length)); }),
   };
 }

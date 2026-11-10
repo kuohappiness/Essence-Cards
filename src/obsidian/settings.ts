@@ -51,8 +51,12 @@ const TEXTS = {
   now: '立即備份',
   open: '打開備份資料夾',
   loading: '準備中…',
+  restore: '還原',
+  restoreNote: '選一份備份，逐檔比對之後勾選要還原的。',
+  restoreNotYet: '還原目前只在 Windows 驗過。',
+  restoreOpen: '還原…',
 };
-const BY: Record<PluginBy, string> = { 'new-version': '新版第一次', monthly: '每月', manual: '手動' };
+const BY: Record<PluginBy | 'restore', string> = { 'new-version': '新版第一次', monthly: '每月', manual: '手動', restore: '還原前' };
 
 /** 這台電腦的當地時間，到分。 */
 function local(ms: number): string {
@@ -84,6 +88,8 @@ export interface SettingsHost {
   settings: SettingsStore;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）：選學期時記下選的那一天。 */
   today: () => string;
+  /** 打開還原的視窗（tasks/plugin-restore.md §1）。 */
+  openRestore: () => void;
   /** 這次沒有存下：提示並記下（tasks/settings-page.md §2-6）。 */
   saveFailed: (result: Exclude<SaveResult, 'saved'>) => void;
 }
@@ -139,6 +145,8 @@ class EssenceSettingTab extends PluginSettingTab {
     }
     this.location(containerEl, backup);
     this.status(containerEl, backup);
+    new Setting(containerEl).setName(TEXTS.restore).setDesc(backup.desktop.restorable ? TEXTS.restoreNote : TEXTS.restoreNotYet)
+      .addButton(button => button.setButtonText(TEXTS.restoreOpen).setDisabled(!backup.desktop.restorable).onClick(() => { this.host.openRestore(); }));
   }
 
   /** 存一項；沒存下時提示，畫面回到實際的值。存成功時由 store 的通知重畫。 */

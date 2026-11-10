@@ -15,7 +15,7 @@ export interface MemoryFiles {
   /** 放進來的路徑 read 會失敗（模擬 iCloud 還沒同步好之類的暫時錯誤）。 */
   failing: Set<string>;
   /** failList：list 一律失敗（模擬整個資料夾暫時列不出來）。 */
-  control: { failModify: boolean; failAppend: boolean; failList: boolean };
+  control: { failModify: boolean; failAppend: boolean; failList: boolean; failReplace?: (path: string) => boolean };
   /**
    * 這個路徑下一次的 read 停在半路（tasks/state-writes.md §8 的測試替身）：開始讀時記下內容，release 時才回傳；
    * release 可以改成回傳別的內容、null，或傳 Error 讓它 reject。started：那次 read 開始了。
@@ -47,19 +47,28 @@ export function createMemoryFiles(initial: Record<string, string> = {}): MemoryF
   const watchers = new Set<(path: string) => void>();
   const reads: string[] = [];
   const failing = new Set<string>();
-  const control = { failModify: false, failAppend: false, failList: false };
-  const pending = new Map<string, Promise<void>>();
+  const control: MemoryFiles['control'] = { failModify: false, failAppend: false, failList: false };
+  const pending = new Map<string, Promise<unknown>>();
   const heldReads = new Map<string, { begin: () => void; wait: Promise<string | null | Error | undefined> }>();
   const heldModifies = new Map<string, Promise<void>>();
   const notify = (...paths: string[]): void => { for (const path of paths) for (const watcher of [...watchers]) watcher(path); };
   const set = (path: string, text: string): void => { texts.set(path, text); notify(path); };
   // 同一個路徑的 modify / append 排隊，和 Node 版、Obsidian 版相同。
-  function serial(path: string, action: () => void | Promise<void>): Promise<void> {
+  function serial<T>(path: string, action: () => T | Promise<T>): Promise<T> {
     const key = path.normalize('NFC').toLowerCase();
     const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
     pending.set(key, next);
     void next.finally(() => { if (pending.get(key) === next) pending.delete(key); }).catch(() => {});
     return next;
+  }
+  // replace 寫的原始位元組：文字解不回同樣的位元組時（不合法的 UTF-8）讀回這一份；內容被別的寫入換掉就不算數。
+  const raw = new Map<string, Uint8Array>();
+  const decode = (bytes: Uint8Array): string => new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+  function bytesOf(path: string): Uint8Array | null {
+    const text = texts.get(path);
+    if (text === undefined) return null;
+    const held = raw.get(path);
+    return held && decode(held) === text ? held : new TextEncoder().encode(text);
   }
   const under = (folder: string): string[] => {
     const prefix = folder === '' ? '' : folder.replace(/\/$/, '') + '/';
@@ -89,8 +98,7 @@ export function createMemoryFiles(initial: Record<string, string> = {}): MemoryF
     readBytes(path) {
       location(path);
       if (failing.has(path)) return Promise.reject(Error('讀不到：' + path));
-      const text = texts.get(path);
-      return Promise.resolve(text === undefined ? null : new TextEncoder().encode(text));
+      return Promise.resolve(bytesOf(path));
     },
     modify(path, edit) {
       location(path);
@@ -109,6 +117,16 @@ export function createMemoryFiles(initial: Record<string, string> = {}): MemoryF
       return serial(path, () => {
         if (control.failAppend) throw Error('寫不進去');
         set(path, (texts.get(path) ?? '') + line + '\n');
+      });
+    },
+    replace(path, check, bytes) {
+      location(path);
+      return serial(path, () => {
+        if (control.failReplace?.(path)) throw Error('寫不進去：' + path);
+        if (!check(bytesOf(path))) return false;
+        set(path, decode(bytes));
+        raw.set(path, bytes);
+        return true;
       });
     },
     watch(onChange) {
