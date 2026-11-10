@@ -28,10 +28,10 @@ export interface SettingsStore {
   /** first() 之前不讀不寫，回 unreadable。 */
   change(change: SettingsChange): Promise<SaveResult>;
   /**
-   * 還原（tasks/plugin-restore.md §4）：同一條隊伍，寫前重讀，以讀到的為底，認得的欄位換成 backup 的值，不認得的保留。
-   * unchanged 在輪到時問（現在的檔還是比對時那一份），否則不寫。empty：比對時檔不在或讀不懂，以空的當底。first() 之前回 unreadable。
+   * 還原（tasks/plugin-restore.md §4）：同一條隊伍，認得的欄位換成 backup 的值，不認得的保留。base 在輪到時讀一次並核對：
+   * 回傳當底的內容（比對時檔不在或讀不懂是空物件）；回 null 是比對之後改過，不寫；丟錯是讀不到。核對和當底是同一次讀到的（L2 的 R4）。first() 之前回 unreadable。
    */
-  restore(backup: Readonly<Record<string, unknown>>, unchanged: () => Promise<boolean>, empty: boolean): Promise<RestoreSettings>;
+  restore(backup: Readonly<Record<string, unknown>>, base: () => Promise<Record<string, unknown> | null>): Promise<RestoreSettings>;
   /** 外掛停用：還沒開始的讀寫不做，已經送出的寫入做完但不核對；存檔都回 failed，也不再通知。 */
   close(): void;
   /** 值或存過的項目變了（包括 known 由 false 變 true）。 */
@@ -175,19 +175,17 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
         });
       });
     },
-    restore(backup, unchanged, empty) {
+    restore(backup, base) {
       if (!started) return Promise.resolve('unreadable');
       return new Promise<RestoreSettings>(report => {
         void queued(async () => {
           if (closed) { report('failed'); return; }
-          let same: boolean;
-          try { same = await unchanged(); } catch { report('unreadable'); return; }
-          if (!same) { report('changed'); return; }
-          const base: Read = empty ? { ok: true, raw: {}, absent: false } : await read();
+          let now: Record<string, unknown> | null;
+          try { now = await base(); } catch { report('unreadable'); return; }
           if (closed) { report('failed'); return; }
-          if (!base.ok || (!empty && !usable(base))) { report('unreadable'); return; }
+          if (now === null) { report('changed'); return; }
           const timer = setTimeout(() => { report('failed'); }, WRITE_WAIT);
-          try { await options.save(restoreSaved(base.raw, backup)); } catch {
+          try { await options.save(restoreSaved(now, backup)); } catch {
             clearTimeout(timer);
             report('failed');
             return;

@@ -155,7 +155,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       const state = host.state();
       if (!state) throw Error('還沒讀完，等一下再還原');
       if (running) throw Error('已經在還原');
-      const { opened, current: screenNow, row } = comparison;
+      const { opened, row } = comparison;
       running = true;
       host.running(true);
       try {
@@ -195,12 +195,11 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               settings(bytes, expected) {
                 const fields = parseData(bytes);
                 if (fields === null) return Promise.resolve('failed');
-                const unchanged = async (): Promise<boolean> => {
-                  const now = await readData();
-                  return (now === null ? null : hashBytes(now)) === expected;
-                };
-                const was = screenPlan.files.find(file => file.target === dataTarget)?.current?.path;
-                return host.settings.restore(fields, unchanged, was === undefined || parseData(screenNow.get(was)!) === null);
+                return host.settings.restore(fields, async () => {
+                  const now = await reader.read(dataTarget);
+                  if ((now === null ? null : hashBytes(now)) !== expected) return null;
+                  return (now === null ? null : parseData(now)) ?? {};
+                });
               },
               device: host.device,
               now: Date.now,

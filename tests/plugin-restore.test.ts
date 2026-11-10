@@ -528,6 +528,20 @@ void test('data.json：最後寫，帶比對時的 sha；changed 記成跳過，
   assert.equal(h.texts.has(DATA), false);
 });
 
+void test('data.json：寫之前再查路徑上的連結，有連結就不寫（L2 的 R4）', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') }, '{"capMinutes":30}');
+  const backup = await snapshot(h);
+  h.data.bytes = encode('{"capMinutes":45}');
+  let wrote = false;
+  const result = await restore(h, backup, [DATA], {
+    noLinks: path => path === DATA ? Promise.reject(Error('路徑上有連結')) : Promise.resolve(),
+    settings: () => { wrote = true; return Promise.resolve('saved'); },
+  });
+  assert.deepEqual(outcomes(result), [[DATA, '失敗']]);
+  assert.equal(wrote, false);
+  assert.match(h.failures[0], /寫設定：路徑上有連結/);
+});
+
 void test('備份行的 NUL 先去掉再補（R3）：只有 NUL 的行不算，最後一行的開頭規則照去掉之後的行算', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
   const { opened } = await snapshot(h);

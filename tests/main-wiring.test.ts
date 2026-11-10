@@ -768,3 +768,46 @@ void test('還原接線：開始就關掉複習與入口、期間不開新的；
   assert.ok(h.plugin.startReview({ subject: '自然' }));
   assert.deepEqual(h.writes.filter(write => write.includes(path) && !write.startsWith('rename')), ['modifyBinary ' + path]);
 });
+
+const DATA = '.obsidian/plugins/essence-cards/data.json';
+/** 外掛載入、第一份備份做好，回傳那一份在清單裡的列（之後才改的內容都是「備份之後」）。 */
+async function restoreReady(t: test.TestContext, texts: Record<string, string>, options: Omit<StubOptions, 'texts'> = {}) {
+  quiet(t);
+  const h = host(texts, { desktop: true, ...options }, devNoScreen);
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await h.backedUp();
+  const flow = h.plugin.restoreFlow;
+  assert.ok(flow);
+  const { rows } = await flow.list();
+  assert.equal(rows.length, 1);
+  return { h, flow, row: rows[0] };
+}
+
+for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉的 JSON', '壞掉'], ['沒有檔', null]] as const) {
+  void test(`還原接線：設定是${name}時，比對之後才同步來的新內容不蓋掉，也不拿來當底（L2 的 R4）`, async t => {
+    const path = 'Essence Cards/a.md';
+    const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+    h.texts.set(path, deck[path].replace('Q :: A', 'Q :: 改壞'));
+    if (before === null) h.texts.delete(DATA); else h.texts.set(DATA, before);
+    const comparison = await flow.compare(row);
+    const vault = h.app.vault as { modifyBinary: (file: unknown, data: ArrayBuffer) => Promise<void> };
+    const write = vault.modifyBinary;
+    vault.modifyBinary = (file, data) => { h.texts.set(DATA, '{"capMinutes":75,"fresh":1}'); return write(file, data); };
+    const saves = h.data.saves;
+    const result = await flow.apply(comparison, new Set([path, DATA]));
+    assert.deepEqual(result.files.map(file => [file.path, file.outcome]).sort(), [[DATA, '跳過'], [path, '已還原']].sort());
+    assert.equal(h.data.saves, saves);
+    assert.equal(h.text(DATA), '{"capMinutes":75,"fresh":1}');
+  });
+  void test(`還原接線：設定是${name}、沒有人改時，寫回備份的值`, async t => {
+    const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+    if (before === null) h.texts.delete(DATA); else h.texts.set(DATA, before);
+    const comparison = await flow.compare(row);
+    const result = await flow.apply(comparison, new Set([DATA]));
+    assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '已還原']]);
+    assert.equal((h.data.content as { capMinutes: number }).capMinutes, 45);
+  });
+}

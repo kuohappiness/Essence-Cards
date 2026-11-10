@@ -214,6 +214,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     if (closed()) outcome(data, '跳過', STOPPED);
     else {
       try {
+        await run.noLinks(data.current?.path ?? data.target!);
         const saved = await run.settings(opened.files.get(dataPath)!, run.screen.get(dataPath) ?? null);
         if (saved === 'saved') outcome(data, '已還原', '');
         else if (saved === 'changed') outcome(data, '跳過', CHANGED);
