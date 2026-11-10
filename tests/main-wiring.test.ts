@@ -1065,11 +1065,13 @@ void test('還原接線：一個分頁存檔卡住、另一個開回也卡住：
 
 /**
  * 逐一卡住還原期間的每一次 I/O（L2 的 R6、R11、R12，D-197 的重整）：不論卡在哪一次，閘門都要放開、結果交回；
- * 放開之後沒有新的寫入；卡住的是寫入時，它回來之前不能比對。新增的等待只要經過這些介面，自動算進來。
+ * 放開之後沒有新的寫入；卡住的是回來還會生效的事（寫入、存檔、換分頁），它回來之前不能比對；晚回來成功或失敗都不關上一般寫入（L2 的 R19、R20）。
+ * 新增的等待只要經過這些介面，自動算進來。
  */
 const RESTORE_WRITES = new Set(['modifyBinary', 'createBinary', 'saveData']);
+const RESTORE_LANDS = new Set([...RESTORE_WRITES, 'save', 'setViewState']);
 
-function stallEachCall(h: Awaited<ReturnType<typeof restoreReady>>['h'], at: number) {
+function stallEachCall(h: Awaited<ReturnType<typeof restoreReady>>['h'], at: number, late: 'ok' | 'error') {
   type Fn = (...args: unknown[]) => unknown;
   const box = { calls: 0, stalled: null as string | null, release: (): void => {}, finished: false, writesAfter: [] as string[] };
   const hook = (owner: Record<string, unknown>, key: string, label: string): void => {
@@ -1080,7 +1082,7 @@ function stallEachCall(h: Awaited<ReturnType<typeof restoreReady>>['h'], at: num
       if (box.finished && RESTORE_WRITES.has(key)) box.writesAfter.push(label);
       if (n !== at) return (real as Fn).apply(owner, args);
       box.stalled = label;
-      return new Promise<void>(resolve => { box.release = resolve; }).then(() => (real as Fn).apply(owner, args));
+      return new Promise<void>((resolve, reject) => { box.release = () => { if (late === 'ok') resolve(); else reject(Error('晚回來的錯')); }; }).then(() => (real as Fn).apply(owner, args));
     };
   };
   const hookAll = (owner: unknown, prefix: string, keys: readonly string[]): void => { for (const key of keys) hook(owner as Record<string, unknown>, key, prefix + key); };
@@ -1097,7 +1099,7 @@ function stallEachCall(h: Awaited<ReturnType<typeof restoreReady>>['h'], at: num
   return box;
 }
 
-void test('還原接線：不論卡在哪一次 I/O，閘門都放開、結果交回，放開之後沒有新的寫入（D-197 的重整）', async t => {
+for (const late of ['ok', 'error'] as const) void test(`還原接線：不論卡在哪一次 I/O，閘門都放開、結果交回，放開之後沒有新的寫入，${late === 'ok' ? '晚回來成功' : '晚回來失敗'}也一樣（D-197 的重整）`, async t => {
   const failures: string[] = [];
   const reached: string[] = [];
   for (let at = 0; at < 400; at++) {
@@ -1108,7 +1110,8 @@ void test('還原接線：不論卡在哪一次 I/O，閘門都放開、結果�
     h.texts.delete('Essence Cards/紀錄/2026-11 iPhone-dead.jsonl');
     const comparison = await flow.compare(row);
     h.openTab(STILL);
-    const box = stallEachCall(h, at);
+    const box = stallEachCall(h, at, late);
+    const blockBefore = h.plugin.state?.writeBlock() ?? null;
     // 真的 I/O（備份的 zip）要真的時間：卡住之前照真實時間走，卡住之後才一次推 30 秒。
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const turn = (): Promise<void> => new Promise(resolve => { setImmediate(resolve); });
@@ -1127,14 +1130,16 @@ void test('還原接線：不論卡在哪一次 I/O，閘門都放開、結果�
     else {
       await running;
       if (h.plugin.state?.writeBlock() === 'restore') failures.push(label + '：閘門沒放開');
-      if (box.stalled && RESTORE_WRITES.has(box.stalled.split('.')[1]) && !failed) {
+      if (box.stalled && RESTORE_LANDS.has(box.stalled.split('.')[1]) && !failed) {
         const refused = await flow.compare(row).then(() => false, () => true);
-        if (!refused) failures.push(label + '：寫入還沒回來就能比對');
+        if (!refused) failures.push(label + '：回來還會生效的事還沒回來，就能比對');
       }
     }
     box.release();
     for (let i = 0; i < 40; i++) { tick(); await turn(); }
     if (box.writesAfter.length) failures.push(`${label}：放開之後又寫了 ${box.writesAfter.join('、')}`);
+    // 讀 vault 卡住 30 秒就算備份失敗，閘門本來就要關著；備份主機的等待是放棄之後才回來，不算失敗（L2 的 R20）。
+    if (box.finished && box.stalled?.startsWith('host.') && (h.plugin.state?.writeBlock() ?? null) !== blockBefore) failures.push(`${label}：晚回來之後一般寫入被關上（${String(h.plugin.state?.writeBlock())}）`);
     t.mock.timers.reset();
     h.plugin.onunload();
     if (box.stalled === null) break;
