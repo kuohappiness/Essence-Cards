@@ -130,7 +130,7 @@ export default class EssenceCardsPlugin extends Plugin {
   private restoring = false;
   private settingTab: { refresh: () => void } | null = null;
   /** data.json 的設定（tasks/settings-page.md）。 */
-  private readonly store = createSettingsStore({
+  readonly store = createSettingsStore({
     load: () => this.loadData() as Promise<unknown>,
     save: data => this.saveData(data),
     today: todayText,

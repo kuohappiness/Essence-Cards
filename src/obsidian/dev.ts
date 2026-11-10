@@ -26,6 +26,7 @@ import { errorProbe } from './dev-errors.ts';
 import { backupDev } from './dev-backup.ts';
 import { restoreDev } from './dev-restore.ts';
 import type { RestoreFlow } from './restore.ts';
+import type { SettingsStore } from '../core/settings/index.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 只在開發版建置（tools/build.mjs --dev）；AI 在 Windows 版 Obsidian 用 URI 執行，iPhone 用命令面板（W5 說明 §4-4）。
@@ -42,6 +43,7 @@ interface Host extends Plugin {
   ids: IdsWiring | null;
   backup: BackupWiring | null;
   restoreFlow: RestoreFlow | null;
+  store: SettingsStore;
   lockAlso: string[];
   startReview(pick: Pick): ReviewHandle | null;
   review: ReviewHandle | null;

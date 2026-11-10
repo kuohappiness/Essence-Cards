@@ -1,13 +1,16 @@
 import type { App } from 'obsidian';
 import { capturePng, keepRendering } from './dev-review.ts';
+import type { SettingsStore } from '../core/settings/index.ts';
+import type { State } from '../state/index.ts';
 import type { Params } from './dev-cloud.ts';
 import { RestoreModal } from './restore-modal.ts';
 import type { RestoreFlow } from './restore.ts';
 
 // 外掛內還原的 Windows 實機（tasks/plugin-restore.md §8），只在開發版。走真的視窗：開、選一份、勾、按還原，每一步截圖。
-// URI 參數：do=status（列備份）、do=run；run 的 pick=第幾份（0 是最新）、name=檔名（優先於 pick）、tick=要勾的列（文字含這段，用 | 分開；all 按全選）、apply=1 才按還原。
+// URI 參數：do=status（列備份）、do=cap（value=每日時間上限）、do=check（target=資料夾：state 看到的那幾篇與作答）、do=run；run 的 pick=第幾份（0 是最新）、use=檔名（優先於 pick）、
+// tick=要勾的列（文字含這段，用 | 分開；all 按全選）、apply=1 才按還原。URI 參數不能叫 name、path。
 
-export interface RestoreDevHost { app: App; restoreFlow: RestoreFlow | null }
+export interface RestoreDevHost { app: App; restoreFlow: RestoreFlow | null; state: State | null; store: SettingsStore }
 
 const sleep = (ms: number) => new Promise<void>(resolve => { window.setTimeout(resolve, ms); });
 const text = (el: Element | null | undefined): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -26,10 +29,19 @@ export async function restoreDev(host: RestoreDevHost, params: Params, folder: s
     const list = await flow.list();
     return { unreadable: list.unreadable, rows: list.rows.map(row => ({ name: row.stored.name, by: row.stored.manifest.by, started: row.stored.manifest.started, foreign: row.foreign })) };
   }
+  if (params.do === 'cap') return { saved: await host.store.change({ key: 'capMinutes', value: Number(params.value) }), now: host.store.value().settings.capMinutes };
+  if (params.do === 'check') {
+    if (!host.state) throw Error('state 還沒建立');
+    await host.state.ready();
+    const prefix = (params.target ?? '') + '/';
+    const decks = host.state.decks().filter(entry => entry.path.startsWith(prefix)).map(entry => ({ path: entry.path, targets: host.state?.deckTargets(entry.path), issues: host.state?.deckStatus(entry.path).issues }));
+    const ids = new Set(decks.flatMap(deck => deck.targets ?? []));
+    return { decks, reviews: host.state.history().reviews.filter(entry => ids.has(entry.lt)), conflicts: host.state.conflicts(), block: host.state.writeBlock(), cap: host.store.value().settings.capMinutes };
+  }
   if (params.do !== 'run') throw Error('不認得的 do：' + params.do);
   await app.vault.adapter.mkdir(folder);
   const list = await flow.list();
-  const index = params.name ? list.rows.findIndex(row => row.stored.name === params.name) : Number(params.pick ?? '0');
+  const index = params.use ? list.rows.findIndex(row => row.stored.name === params.use) : Number(params.pick ?? '0');
   if (index < 0 || index >= list.rows.length) throw Error('沒有這一份備份');
   const rendering = keepRendering();
   const modal = new RestoreModal(app, flow);
