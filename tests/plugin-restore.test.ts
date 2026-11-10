@@ -580,6 +580,27 @@ void test('卡住（R23）：掃描卡組逾時之後，晚回來的舊掃描不
   assert.equal(reads.length, 1);
 });
 
+for (const step of ['prepare', 'write'] as const) void test(`卡住（R20）：現況備份放棄之後 ${step} 才回報失敗：算放棄，不關上一般寫入；期限內的失敗照舊算失敗`, async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  const backup = await snapshot(h);
+  const statusBefore = h.runner.status();
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  (h.backups.host[step] as unknown) = async () => { await hold; throw Error('EPERM'); };
+  const result = await restore(h, backup, [A]);
+  assert.match(result.stopped?.message ?? '', /超過時間/);
+  release();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(h.runner.status().ready, statusBefore.ready);
+  assert.equal(h.runner.status().failure, statusBefore.failure);
+  assert.equal(h.runner.status().running, null);
+  // 期限內的失敗：還是失敗，閘門關上。
+  (h.backups.host[step] as unknown) = () => Promise.reject(Error('EPERM'));
+  const failed = await restore(h, backup, [A]);
+  assert.match(failed.stopped?.message ?? '', /EPERM/);
+  assert.equal(h.runner.status().ready, false);
+});
+
 void test('交錯：掃描之前別篇剛出現同一個 ID：跳過，不造成重複；沒有內容的檔不用掃', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
   const backup = await snapshot(h);

@@ -152,6 +152,12 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     return left;
   }
 
+  /** 這個錯是放棄造成的，或放棄之後才回來的。 */
+  function abandoned(error: unknown, halt: () => void): boolean {
+    if (error instanceof Cancelled) return true;
+    try { halt(); return false; } catch { return true; }
+  }
+
   /** 做一份備份：回傳檔名與清單，失敗或停用是 null（原因在 status）。halt：每個會動到磁碟的步驟之前問一次（還原放棄了也要停，L2 的 R16）。 */
   function take(by: PluginBy | 'restore', keep: readonly string[], source: BackupReader, halt: () => void = stop): Promise<RestoreSnapshot | null> {
     return (async () => {
@@ -177,8 +183,8 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
         if (cleanup.length) set({ cleanup });
         return { name, manifest: taken.manifest };
       } catch (error) {
-        if (!(error instanceof Cancelled)) set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now(), error } });
-        // 還原放棄的這一份不算備份失敗，備份的狀態照舊（外掛停用時不再更新）。
+        // 還原放棄的這一份不算備份失敗，備份的狀態照舊（外掛停用時不再更新）；放棄之後才回來的錯也一樣（L2 的 R20）。
+        if (!abandoned(error, halt)) set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now(), error } });
         else if (!cancelled) set({ running: null });
         return null;
       }
