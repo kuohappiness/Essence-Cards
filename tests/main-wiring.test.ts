@@ -931,3 +931,20 @@ void test('還原接線：比對時讀不到備份或 vault：丟錯給畫面，
   }
   assert.deepEqual(lines.map(line => line.msg.split('：')[0]), ['讀備份', '讀 vault']);
 });
+
+void test('還原接線：等第一個分頁存檔時第二個分頁換了別篇：不存它、不換成空白（L2 的 R17）', async t => {
+  const other = 'Essence Cards/b.md';
+  const both = { ...deck, [other]: deck[STILL].replace('aaaaaa', 'bbbbbb') };
+  const { h, flow, row } = await restoreReady(t, both);
+  h.texts.set(STILL, brokenDeck);
+  h.texts.set(other, both[other].replace('Q :: A', 'Q :: 改壞'));
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  h.openTab(other);
+  const [first, second] = h.leaves as unknown as { view: { save(): Promise<void>; saves: number; file: { path: string } }; history: unknown[] }[];
+  const realSave = first.view.save.bind(first.view);
+  first.view.save = () => { second.view.file = { path: 'Essence Cards/unrelated.md' }; return realSave(); };
+  await flow.apply(comparison, new Set([STILL, other]));
+  assert.equal(second.view.saves, 0);
+  assert.deepEqual(second.history, []);
+});

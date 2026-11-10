@@ -183,17 +183,18 @@ export function createRestore(host: RestoreHost): RestoreFlow {
           const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], unsettled: [] };
           try {
             // 開著的那幾篇先存檔、換成空白分頁（§3-2）：存不進去就什麼都不寫。
-            for (const leaf of openLeaves(app, targets)) {
-              const view = leaf.view as MarkdownView;
-              const path = view.file?.path;
+            const tabs = openLeaves(app, targets).map(leaf => ({ leaf, view: leaf.view as MarkdownView, path: (leaf.view as MarkdownView).file?.path }));
+            for (const { leaf, view, path } of tabs) {
+              // 存檔要等，這段時間分頁可能關掉或換了別篇（L2 的 R1、R17）：不是原來的樣子就不動它，還開著這篇的話 busy 會擋住寫入。
+              const same = (): boolean => leaf.view === view && view.file?.path === path && app.workspace.getLeavesOfType('markdown').includes(leaf);
+              if (!same()) continue;
               const eState: unknown = view.getEphemeralState();
               const viewState = leaf.getViewState();
               try { await limited(view.save(), '存檔超過 30 秒沒有回來'); } catch (error) {
                 host.fail('存檔', error, view.file?.path);
                 return { ...empty, stopped: { step: '存檔 ' + (view.file?.path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
-              // 存檔要等，這段時間分頁可能關掉或換了別篇（L2 的 R1）：不是原來的樣子就不動它，還開著這篇的話 busy 會擋住寫入。
-              if (leaf.view !== view || view.file?.path !== path || !app.workspace.getLeavesOfType('markdown').includes(leaf)) continue;
+              if (!same()) continue;
               await leaf.setViewState({ type: 'empty' });
               swapped.push({ leaf, state: viewState, eState });
             }
