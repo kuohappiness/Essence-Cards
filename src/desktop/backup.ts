@@ -55,6 +55,8 @@ async function exists(path: string): Promise<boolean> {
 export interface WriteOptions {
   /** 檔名的隨機 4 碼（0-9a-f）。 */
   random: () => string;
+  /** 這次備份放棄了就丟錯：寫暫存檔之前、讀回之前、提交之前各問一次（L2 的 R21）。 */
+  halt?: () => void;
   /** 測試用：把 zip 寫進剛建立的暫存檔的替身（模擬寫壞）、建硬連結的替身（模擬不支援）。 */
   write?: WriteNew;
   link?: Link;
@@ -70,14 +72,17 @@ export async function writeBackup(folder: string, taken: Taken, options: WriteOp
     const path = join(folder, backupName(taken.started, taken.offset, taken.manifest.build, options.random()));
     const temporary = path + '.tmp';
     if (await exists(path)) continue;
+    options.halt?.();
     let identity: Identity;
     try { identity = await writeNew(temporary, taken.zip, options.write); } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
       throw error;
     }
     try {
+      options.halt?.();
       const problem = checkWritten(new Uint8Array(await readFile(temporary)), taken);
       if (problem) throw Error(problem);
+      options.halt?.();
       await commitNew(temporary, path, identity, taken.zip, { link: options.link });
       return path;
     } catch (error) {
@@ -126,8 +131,9 @@ export async function readBackup(folder: string, name: string): Promise<Uint8Arr
 /**
  * 刪一份舊備份（只給清理用，任務說明 §1-7）：刪之前再確認備份資料夾的實際路徑還是 real、還是一般檔、大小與雜湊還是剛才驗過的；
  * 對不上就丟錯、不刪。確認到刪之間沒有鎖：別的程序剛好在這段很短的空檔換掉這個檔，仍可能刪到新的內容（照實記下）。
+ * halt：這次放棄了就丟錯；確認要讀整份，卡住之後才回來的不該再刪（L2 的 R21）。
  */
-export async function removeBackup(folder: string, real: string, backup: Pick<StoredBackup, 'name' | 'size' | 'sha256'>): Promise<void> {
+export async function removeBackup(folder: string, real: string, backup: Pick<StoredBackup, 'name' | 'size' | 'sha256'>, halt?: () => void): Promise<void> {
   if (await realpath(folder) !== real) throw Error(`備份資料夾 ${folder} 的實際位置換了，不刪 ${backup.name}`);
   const path = join(folder, backup.name);
   const before = await lstat(path, { bigint: true });
@@ -137,5 +143,6 @@ export async function removeBackup(folder: string, real: string, backup: Pick<St
   if (after.ino !== before.ino || after.dev !== before.dev || bytes.length !== backup.size || hashBytes(bytes) !== backup.sha256) {
     throw Error(path + ' 和剛才驗過的不同，不刪');
   }
+  halt?.();
   await unlink(path);
 }

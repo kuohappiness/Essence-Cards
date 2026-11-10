@@ -601,6 +601,45 @@ for (const step of ['prepare', 'write'] as const) void test(`卡住（R20）：�
   assert.equal(h.runner.status().ready, false);
 });
 
+void test('卡住（R21）：清理卡在刪除前的確認，放棄之後不發出刪除，也不算清理失敗', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  for (let i = 0; i < 10; i++) await h.runner.backup();
+  const backup = await snapshot(h);
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const remove = h.backups.host.remove.bind(h.backups.host);
+  let removes = 0;
+  h.backups.host.remove = async (folder, stored, halt) => { removes++; await hold; halt?.(); return remove(folder, stored, halt); };
+  const result = await restore(h, backup, [A]);
+  assert.match(result.stopped?.message ?? '', /超過時間/);
+  const size = h.backups.folder.size;
+  release();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(removes, 1);
+  assert.equal(h.backups.folder.size, size);
+  assert.deepEqual(h.runner.status().cleanup, []);
+});
+
+void test('卡住（R21）：備份主機裡的寫入與刪除也會問放棄了沒，放棄算放棄，不算清理失敗', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  const backup = await snapshot(h);
+  const statusBefore = h.runner.status();
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const write = h.backups.host.write.bind(h.backups.host);
+  let asked: (() => void) | undefined;
+  h.backups.host.write = async (folder, taken, halt) => { asked = halt; await hold; halt?.(); return write(folder, taken, halt); };
+  const size = h.backups.folder.size;
+  const result = await restore(h, backup, [A]);
+  assert.match(result.stopped?.message ?? '', /超過時間/);
+  release();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(typeof asked, 'function');
+  assert.equal(h.backups.folder.size, size);
+  assert.equal(h.runner.status().ready, statusBefore.ready);
+  assert.deepEqual(h.runner.status().cleanup, []);
+});
+
 void test('交錯：掃描之前別篇剛出現同一個 ID：跳過，不造成重複；沒有內容的檔不用掃', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
   const backup = await snapshot(h);

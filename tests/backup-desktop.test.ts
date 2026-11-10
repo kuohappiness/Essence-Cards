@@ -108,6 +108,23 @@ void test('列出備份：只列直接底下、整份讀得懂的 .zip；壞掉�
   assert.deepEqual(await listBackups(join(to, '沒有')), { backups: [], skipped: [] });
 });
 
+void test('放棄之後（R21）：刪舊備份驗證完不發出刪除；寫備份讀回之後不提交、暫存檔收掉', async t => {
+  const to = await tempFolder(t);
+  await writeBackup(to, await taken(), { random: names('aaaa') });
+  const [listed] = (await listBackups(to)).backups;
+  await assert.rejects(removeBackup(to, to, listed, () => { throw Error('放棄了'); }), /放棄了/);
+  assert.deepEqual(await readdir(to), [listed.name]);
+  // 第一次問（寫暫存檔之前）還沒放棄，寫完暫存檔之後才放棄。
+  let asks = 0;
+  await assert.rejects(writeBackup(to, await taken(), { random: names('bbbb'), halt() { if (++asks > 1) throw Error('放棄了'); } }), /放棄了/);
+  assert.deepEqual(await readdir(to), [listed.name]);
+  assert.equal(asks, 2);
+  // 讀回之後才放棄：一樣不提交。
+  asks = 0;
+  await assert.rejects(writeBackup(to, await taken(), { random: names('cccc'), halt() { if (++asks > 2) throw Error('放棄了'); } }), /放棄了/);
+  assert.deepEqual(await readdir(to), [listed.name]);
+});
+
 void test('刪舊備份：內容和剛才驗過的不同、資料夾的實際位置換了都不刪；對得上才刪', async t => {
   const to = await tempFolder(t);
   const path = await writeBackup(to, await taken(), { random: names('aaaa') });
