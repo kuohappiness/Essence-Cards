@@ -1,10 +1,40 @@
 # 外掛內的還原畫面（Codex L2 審查請求）
 
-狀態：待審（第二輪，2026-11-10）
+狀態：待審（第三輪，2026-11-10）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查、不改產品程式，可以在隔離環境重現。
 
 [任務說明](plugin-restore.md)會改寫使用者資料（卡組、圖片、`data.json`、新增還原檔），又動 `state` 的寫入閘門與 `Files` 的契約，屬於[高風險範圍](../docs/agents/quality.md#高風險範圍要做-l2)，合併前做 L2。
+
+## 第三輪（2026-11-10）
+
+**這一輪只讀**：本節、〈審查對象〉、[報告](../Claude%20Codex%20Discussion/2026-11-10-plugin-restore-l2.md)最後的〈Claude 回應（第二輪）〉，和回應提到的程式。前兩輪其他已經過的部分不用重審。
+
+**待審差異**：`git diff 01743fd45564d40a607937dea5fb1f7f890ea90e..378bcbbc167c4c53a898af5072d9790ee341355b`（中間的 `5b7f1fc` 只有文件）。主要在 `src/core/backup/restore.ts`、`src/core/backup/runner.ts`、`src/core/backup/logs.ts`、`src/core/settings/store.ts`、`src/obsidian/restore.ts`、`src/state/index.ts`、`src/state/reads.ts`、`src/state/writes.ts`、`docs/syntax.md` §5-3 與對應的測試。
+
+修正 commit：
+
+- R14：`234248175e4423579dee9794bde91d7e3fae6a7a`
+- R15：`f7c98c4ba7afd2ded740f5c39b0c88691c192f04`
+- R16：`09abfd04c5f7c67dd3b3f636314d2b093cf44f56`
+- R17：`fbe75ddd6b2b4f68467b9cf3f8aa464206090beb`
+- R13：`e1bdd2f7affe3505019f447fe1281bd9c83ebbf0`
+- R11、R12：`378bcbbc167c4c53a898af5072d9790ee341355b`（逾時路徑的重整，同一個測試驗兩項）
+
+**請看**：第二輪回應〈重整〉寫的行為與前提有沒有錯；逐一卡住每次 I/O 的測試（`tests/main-wiring.test.ts`）有沒有漏掉哪類等待，例如不經過這些介面的等待、同時卡住兩個的組合。這是 R2、R6 這條鏈的第 3 代檢查，再有延續的話照 D-197 標代數。
+
+**這一輪實作者自己選的做法（請先看）**：
+
+1. **NUL 當斷行，切出來的一段在現在某一行裡就不算缺**（`logs.ts`，`docs/syntax.md` §5-3）：取代第一輪的「去掉 NUL」。
+2. **`SettingsStore.restore` 不自己限時**：只由 `landed` 判定，算結果未定。一般的 `change` 維持 10 秒。
+3. **起跑前的上限用 `stuckAfter`（30 秒）**：放棄時丟錯，畫面顯示，排著的工作輪到也不做。
+4. **放棄的現況備份算 `Cancelled`，不算備份失敗**：不把備份狀態改成失敗、不關住一般寫入。
+5. **已送出的 `host.write` 收不回來**：晚回的 zip 留在資料夾，不記成最後一次、不清理，之後由保留期清掉。
+6. **`noLinks` 或關分頁卡住時整次停下來**，什麼都還沒寫；查連結的逾時不再逐篇列為擋住。
+7. **寫設定前發現連結算「比對之後改過」**，重新比對時畫面會寫出是連結。
+8. **`busy` 改成計數**，一個路徑全部的工作結束才放開。
+
+**驗證**：每個 commit 都過完整的 `npm run check`（`378bcbb` 那次 2531 個測試全過）。Windows 實機在 `378bcbb` 重跑過，結果與沒走到的項目在回應的〈實機〉。報告接在同一份檔案後面，標題下的狀態行跟著改。
 
 ## 第二輪（2026-11-10）
 

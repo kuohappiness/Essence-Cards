@@ -1,6 +1,6 @@
 # 外掛內的還原畫面（給 Claude，本機執行）
 
-狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面；Codex L2 第一輪的十項都修了，等第二輪（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
+狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面；Codex L2 第一、二輪的十七項都修了，等第三輪（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會改寫使用者資料，又動 `state` 的寫入閘門與 `Files` 的契約，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -219,6 +219,10 @@ Mac 與 Linux；整庫回到某時點（D-150 明定不做）；還原 iPhone �
 
 **修完之後重跑 Windows 實機**：建置字串 `0.4.0+fb4845d`（`01743fd` 只多測試），同樣的 vault 與 Obsidian 1.15.0。完整演練、寫入失敗、ID 擋住三種和上面的表一致；還原之後 A 的分頁開回來（`workspace.json` 裡是 `markdown` 和 A）。演練的檔已清掉，設定回到原本沒有 `data.json` 的樣子。
 
-**沒有合併之前還沒做**：Codex L2 第二輪、使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
+**Codex L2 第二輪**：七項發現（R11～R14 P1）都接受並修正：`2342481`、`f7c98c4`、`09abfd0`、`fbe75dd`、`e1bdd2f`、`378bcbb`。逾時這條照 D-197 第 2 代就重整，改成只留一個計時來源，加上一個逐一卡住還原期間每次 I/O 的測試（39 個點，修之前 9 個失敗）。`378bcbb` 的 pre-commit 跑過完整的 `npm run check`，2531 個測試全過。
+
+**修完之後再重跑 Windows 實機**：建置字串 `0.4.0+378bcbb.dirty`（工作區唯一的差異是 Codex 的報告），結果同上面的表；還原之後 A 的分頁開回來。演練的檔已清掉，設定回到原本沒有 `data.json` 的樣子。
+
+**沒有合併之前還沒做**：Codex L2 第三輪、使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
 
 延後的測試：Mac 與 Linux 的檔名規則實測（入口先關住，技術債表已有一列）；還原之後 iPhone 看到還原的卡組與還原檔（技術債表「補測：」，併進下一次 iPhone 實機測試）；幾百個差異檔時的版面（可捲動，資料沒有風險，使用者同意的第 2 類）。
