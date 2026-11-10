@@ -38,6 +38,14 @@ interface PluginLike {
   onload(): void; onunload(): void; startReview(pick: { subject: string }): { close(): void } | null;
   state: { ready(): Promise<unknown>; answer(entry: unknown): string; fillIds(path: string): Promise<boolean>; writeBlock(): string | null; onChange(listener: () => void): () => void } | null;
   backup: BackupLike | null;
+  restoreFlow: RestoreFlowLike | null;
+  review: unknown;
+  openEntry(): unknown;
+}
+interface RestoreFlowLike {
+  list(): Promise<{ rows: unknown[] }>;
+  compare(row: unknown): Promise<unknown>;
+  apply(comparison: unknown, chosen: ReadonlySet<string>): Promise<{ stopped: unknown; backup: string | null; files: { path: string; outcome: string }[] }>;
 }
 
 /** 電腦的替身用的暫存資料夾：vault 的位置與備份位置（外掛內的備份真的寫在這裡，D-150）。 */
@@ -720,4 +728,43 @@ for (const [name, message, shown] of [
   assert.deepEqual(h.notices, ['Essence Cards：備份失敗，暫停修改卡組；複習照常。到設定頁看原因']);
   assert.equal((h.plugin as unknown as { backupError: string | null }).backupError, shown);
   assert.deepEqual(unhandled, []);
+});
+
+// 外掛內的還原（tasks/plugin-restore.md §3-2、§5）：從外掛物件走到底，Obsidian 的那一層（開著的分頁、入口、舊畫面）是真的程式。
+void test('還原接線：開始就關掉複習與入口、期間不開新的；開著的那篇先存、換空白、寫完開回；內容回到備份', async t => {
+  quiet(t);
+  const path = 'Essence Cards/a.md', original = deck[path], broken = original.replace('Q :: A', 'Q :: 改壞');
+  const h = host(deck, { desktop: true }, devNoScreen);
+  t.after(() => { h.plugin.onunload(); });
+  h.plugin.onload();
+  h.layoutReady();
+  await h.plugin.state?.ready();
+  await h.backedUp();
+  const flow = h.plugin.restoreFlow;
+  assert.ok(flow);
+  const { rows } = await flow.list();
+  assert.equal(rows.length, 1);
+  h.texts.set(path, broken);
+  const comparison = await flow.compare(rows[0]);
+  h.openTab(path);
+  const tab = h.leaves[h.leaves.length - 1];
+  const view = tab.view as { saves: number };
+  assert.ok(h.plugin.startReview({ subject: '自然' }));
+  assert.ok(h.plugin.review);
+  const running = flow.apply(comparison, new Set([path]));
+  assert.equal(h.plugin.review, null);
+  assert.equal(h.plugin.openEntry(), null);
+  assert.equal(h.plugin.startReview({ subject: '自然' }), null);
+  assert.ok(h.notices.includes('Essence Cards：正在還原，等它做完再開'));
+  assert.equal(h.plugin.state?.writeBlock(), 'restore');
+  const result = await running;
+  assert.equal(result.stopped, null);
+  assert.ok(result.backup);
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[path, '已還原']]);
+  assert.equal(h.text(path), original);
+  assert.equal(view.saves, 1);
+  assert.deepEqual(tab.history, [{ type: 'empty' }, { state: { file: path } }, { cursor: 7 }]);
+  assert.equal(h.plugin.state?.writeBlock(), null);
+  assert.ok(h.plugin.startReview({ subject: '自然' }));
+  assert.deepEqual(h.writes.filter(write => write.includes(path) && !write.startsWith('rename')), ['modifyBinary ' + path]);
 });

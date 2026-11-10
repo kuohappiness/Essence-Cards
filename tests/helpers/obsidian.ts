@@ -112,7 +112,7 @@ export interface StubOptions {
   failSave?: boolean;
 }
 
-interface Leaf { view: unknown; getViewState(): { state?: { file?: string } } }
+interface Leaf { view: unknown; getViewState(): { state?: { file?: string } }; setViewState?(state: unknown): Promise<void>; setEphemeralState?(state: unknown): void; history?: unknown[] }
 interface Command { id: string; name?: string; callback?: () => void; checkCallback?: (checking: boolean) => boolean | void }
 
 class FakeMarkdownView {
@@ -126,6 +126,7 @@ class FakeMarkdownView {
   actions: { icon: string; label: string; click: () => void }[] = [];
   constructor(path: string | null) { this.file = path ? { path } : null; }
   save() { this.saves++; return Promise.resolve(); }
+  getEphemeralState() { return { cursor: 7 }; }
   addAction(icon: string, label: string, click: () => void) {
     const action = { icon, label, click };
     this.actions.push(action);
@@ -245,6 +246,13 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
       texts.set(file.path, edit(texts.get(file.path) ?? '')); return Promise.resolve('');
     },
     modify: (file: TFile, text: string) => { writes.push('modify ' + file.path); texts.set(file.path, text); return Promise.resolve(); },
+    modifyBinary: (file: TFile, data: ArrayBuffer) => { writes.push('modifyBinary ' + file.path); texts.set(file.path, new TextDecoder().decode(data)); return Promise.resolve(); },
+    createBinary: (path: string, data: ArrayBuffer) => {
+      writes.push('createBinary ' + path);
+      if (texts.has(path)) return Promise.reject(Error('File already exists.'));
+      texts.set(path, new TextDecoder().decode(data)); nodes.delete(path);
+      return Promise.resolve(node(path));
+    },
     delete: (file: TFile) => { writes.push('delete ' + file.path); texts.delete(file.path); nodes.delete(file.path); return Promise.resolve(); },
     rename: (file: TFile, to: string) => {
       writes.push('rename ' + file.path + ' → ' + to);
@@ -358,7 +366,10 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     }, module, module.exports, document, window);
     return module.exports;
   }
-  const leaf = (path: string | null): Leaf => ({ view: new FakeMarkdownView(path), getViewState: () => ({ state: path ? { file: path } : {} }) });
+  const leaf = (path: string | null): Leaf => {
+    const history: unknown[] = [];
+    return { view: new FakeMarkdownView(path), getViewState: () => ({ state: path ? { file: path } : {} }), history, setViewState(state) { history.push(state); return Promise.resolve(); }, setEphemeralState(state) { history.push(state); } };
+  };
   return {
     obsidian, app, notices, commands, ribbons, extensions: () => extensions, modals, protocol, writes, texts,
     timers: () => ({ ...timers }), required, settingTabs, statusBar, storage: key => storage.get(key) ?? null,
