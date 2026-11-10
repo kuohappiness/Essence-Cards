@@ -1018,6 +1018,27 @@ function stallOne(owner: unknown, key: string, nth = 1): () => void {
   return () => { release(); };
 }
 
+for (const [step, pick, key] of [['讀備份', 'host', 'read'], ['查連結', 'desktop', 'noLinks']] as const) void test(`還原接線：比對時${step}卡住：限時交回，不鎖住，放行之後可以再比對（L2 的 R26）`, async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  const desktop = (h.plugin as unknown as { backup: { desktop: { host: unknown } } }).backup.desktop;
+  const owner = (pick === 'host' ? desktop.host : desktop) as Record<string, (...args: unknown[]) => unknown>;
+  const release = stallOne(owner, key);
+  const stalled = owner[key].bind(owner);
+  let reached = false;
+  owner[key] = (...args) => { reached = true; return stalled(...args); };
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const comparing = flow.compare(row);
+  void comparing.catch(() => {});
+  // 讀 zip 是真的 I/O，推時間之前要先等它走到卡住的那一步。
+  while (!reached) await new Promise(resolve => { setImmediate(resolve); });
+  await assert.rejects(pastLimit(t, comparing), /超過 30 秒/);
+  assert.equal(h.plugin.state?.writeBlock(), null);
+  release();
+  await turns();
+  t.mock.timers.reset();
+  await flow.compare(row);
+});
+
 void test('還原接線：存檔卡住：鎖住，舊存檔回來之後也沒有下一輪可以被它蓋掉（L2 的 R19）', async t => {
   const { h, flow, row } = await restoreReady(t, deck);
   h.texts.set(STILL, brokenDeck);

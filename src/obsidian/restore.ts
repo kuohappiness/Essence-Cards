@@ -157,7 +157,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       let opened: Extract<ReturnType<typeof openBackup>, { ok: true }>;
       let current: Map<string, Uint8Array>;
       try {
-        const bytes = await desktop.host.read(folder(), row.stored.name);
+        const bytes = await limited(desktop.host.read(folder(), row.stored.name), '讀備份超過 30 秒沒有回來');
         if (!bytes) throw Error('讀不到備份：' + row.stored.name);
         const unpacked = openBackup(bytes);
         if (!unpacked.ok) throw Error('這份備份不能用：' + unpacked.error);
@@ -169,7 +169,11 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       const source = opened.value.manifest.vault.config + '/' + PLUGIN_DATA;
       for (const path of opened.value.files.keys()) {
         const target = path === source ? dataTarget : path;
-        try { await desktop.noLinks(target); } catch (error) { links.set(target, error instanceof Error ? error.message : String(error)); }
+        try { await limited(desktop.noLinks(target), LINKS_LATE); } catch (error) {
+          // 卡住不是「路徑上有連結」：這次比對不算，什麼都還沒寫，可以再比對一次（L2 的 R26）。
+          if (error instanceof Late) { host.fail('查連結', error, target); throw error; }
+          links.set(target, error instanceof Error ? error.message : String(error));
+        }
       }
       const options = planOptions(links);
       return {
