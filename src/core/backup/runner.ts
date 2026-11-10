@@ -139,44 +139,47 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
    * 新備份成功後清理（任務說明 §1-7）：回傳沒做完的。外掛停用之後不開始新的刪除（列檔回來後、每次刪之前都看一次，Codex L2 B2）；
    * 已經送出的那一次刪除不中斷。
    */
-  async function clean(folder: string, keep: ReadonlySet<string>): Promise<string[]> {
+  async function clean(folder: string, keep: ReadonlySet<string>, halt: () => void): Promise<string[]> {
     let stale: StoredBackup[];
     try { stale = staleBackups(await host.list(folder), host.vault, host.key, keep); } catch (error) {
       return ['列出備份資料夾：' + message(error)];
     }
     const left: string[] = [];
     for (const backup of stale) {
-      stop();
+      halt();
       try { await host.remove(folder, backup); } catch (error) { left.push(backup.name + '：' + message(error)); }
     }
     return left;
   }
 
-  /** 做一份備份：回傳檔名與清單，失敗或停用是 null（原因在 status）。 */
-  function take(by: PluginBy | 'restore', keep: readonly string[], source: BackupReader): Promise<RestoreSnapshot | null> {
+  /** 做一份備份：回傳檔名與清單，失敗或停用是 null（原因在 status）。halt：每個會動到磁碟的步驟之前問一次（還原放棄了也要停，L2 的 R16）。 */
+  function take(by: PluginBy | 'restore', keep: readonly string[], source: BackupReader, halt: () => void = stop): Promise<RestoreSnapshot | null> {
     return (async () => {
       started++;
       set({ running: by });
       let step = '準備備份位置';
       try {
         // 停用之後不開始第一個會動到磁碟的步驟（建資料夾），不是做完才停（Codex 第二次再審 D1）。
-        stop();
+        halt();
         const real = await host.prepare(store.folder() ?? options.defaultFolder);
-        stop();
+        halt();
         step = '讀 vault';
         const taken = await takeBackup({ reader: source, vault: { ...host.vault, config: options.config }, build, tool: build, by, now: options.now, offset: options.offset });
-        stop();
+        halt();
         step = '寫進備份資料夾';
         const name = await host.write(real, taken);
+        halt();
         const last: LastBackup = { build, time: taken.started, name, sha256: hashBytes(taken.zip), folder: real };
         store.saveLast(last);
         set({ ready: true, checked: true, running: null, last, failure: null, cleanup: [] });
-        stop();
-        const cleanup = await clean(real, new Set([name, ...keep]));
+        halt();
+        const cleanup = await clean(real, new Set([name, ...keep]), halt);
         if (cleanup.length) set({ cleanup });
         return { name, manifest: taken.manifest };
       } catch (error) {
         if (!(error instanceof Cancelled)) set({ ready: false, checked: true, running: null, failure: { by, step, message: message(error), time: options.now(), error } });
+        // 還原放棄的這一份不算備份失敗，備份的狀態照舊（外掛停用時不再更新）。
+        else if (!cancelled) set({ running: null });
         return null;
       }
     })();
@@ -215,14 +218,14 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     async beforeRestore(keep, source) {
       // 等別份或自己做到一半卡住時，閘門不能一直關著（L2 的 R6）：超過上限就放棄，什麼都還沒寫。放棄之後不再開始新的、也不再讀。
       let gaveUp = false;
-      const stopNow = (): void => { stop(); if (gaveUp) throw Error('這次還原已經放棄'); };
+      const stopNow = (): void => { stop(); if (gaveUp) throw new Cancelled('這次還原已經放棄'); };
       const work = async (): Promise<RestoreSnapshot> => {
         // 另做一份，不共用；輪到時才開始，那時閘門已經關了（§3-1）。
         while (current) await current;
         stopNow();
         let snapshot: RestoreSnapshot | null = null;
         const guarded: BackupReader = { list: () => { stopNow(); return source.list(); }, read: path => { stopNow(); return source.read(path); } };
-        current = take('restore', keep, guarded).then(done => { snapshot = done; }).finally(() => { current = null; });
+        current = take('restore', keep, guarded, stopNow).then(done => { snapshot = done; }).finally(() => { current = null; });
         await current;
         if (snapshot === null) throw Error(status.failure ? `${status.failure.step}：${status.failure.message}` : '外掛停用了，這次備份沒有做完');
         return snapshot;

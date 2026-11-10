@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { applyRestore, backupName, createBackupRunner, createUnsettled, deckIds, filesReader, hashBytes, openBackup, planRestore, readCurrent, tickable } from '../src/core/backup/index.ts';
-import type { BackupHost, OpenedBackup, PlanOptions, RestoreResult, RestoreRun } from '../src/core/backup/index.ts';
+import type { BackupHost, BackupReader, OpenedBackup, PlanOptions, RestoreResult, RestoreRun } from '../src/core/backup/index.ts';
 import { parseData, sameSaved } from '../src/core/settings/index.ts';
 import { dueAt, replay } from '../src/core/study/index.ts';
 import { createState } from '../src/state/index.ts';
@@ -502,6 +502,32 @@ void test('卡住（R6）：前一份備份一直沒做完：什麼都不寫，�
   await other;
   await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(h.backups.folder.size, count + 1);
+});
+
+void test('卡住（R16）：現況備份放棄之後，晚回來的讀取不寫 zip、不記最後一次、不清理；備份的狀態不變', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  const backup = await snapshot(h);
+  h.write(A, goal('aaaaaa', '改過'));
+  await settled(h);
+  const before = h.backups.folder.size;
+  const statusBefore = h.runner.status();
+  // 第二次快照的最後一讀（data.json）卡住：之後已經沒有下一次讀取會攔住它。
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  let dataReads = 0;
+  const reader: BackupReader = {
+    list: () => h.reader.list(),
+    read: async path => { if (path === DATA && ++dataReads === 2) await hold; return h.reader.read(path); },
+  };
+  const result = await restore(h, backup, [A], { before: () => h.runner.beforeRestore([backup.name], reader) });
+  assert.match(result.stopped?.message ?? '', /超過時間/);
+  release();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(h.backups.folder.size, before);
+  assert.equal(h.runner.status().last, statusBefore.last);
+  assert.equal(h.runner.status().failure, statusBefore.failure);
+  assert.equal(h.runner.status().ready, statusBefore.ready);
+  assert.equal(h.runner.status().running, null);
 });
 
 void test('交錯：掃描之前別篇剛出現同一個 ID：跳過，不造成重複；沒有內容的檔不用掃', async t => {
