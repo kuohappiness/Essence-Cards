@@ -1,6 +1,6 @@
 # 外掛內的還原畫面（給 Claude，本機執行）
 
-狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面；Codex L2 第一到三輪的二十三項都處理了（逾時那條 2026-11-10 改成寫入階段卡住就鎖住這次載入，使用者同意）；第四輪照使用者的決定處理（修 R26、改規格、其餘記技術債），不再送第五輪（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；等使用者同意合併
+狀態：已合併進 `main`（2026-11-10）；Windows 實機通過，使用者看過版面；[Codex L2](plugin-restore-l2.md) 四輪結束，第四輪使用者決定修 R26、改規格、其餘記技術債，不開第五輪；還沒升版
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會改寫使用者資料，又動 `state` 的寫入閘門與 `Files` 的契約，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -235,6 +235,6 @@ Mac 與 Linux；整庫回到某時點（D-150 明定不做）；還原 iPhone �
 
 **修完之後再重跑 Windows 實機**：建置字串 `0.4.0+371180a.dirty`（工作區唯一的差異是 Codex 的報告），結果同上面的表；還原之後閘門放開。演練的檔已清掉，設定回到原本沒有 `data.json` 的樣子。
 
-**沒有合併之前還沒做**：使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
+**合併**：使用者 2026-11-10 同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`、`docs/plans/updates.md` 的狀態跟著更新。升版要另外問使用者，正式使用的 vault 沒有動。
 
 延後的測試：Mac 與 Linux 的檔名規則實測（入口先關住，技術債表已有一列）；還原之後 iPhone 看到還原的卡組與還原檔（技術債表「補測：」，併進下一次 iPhone 實機測試）；幾百個差異檔時的版面（可捲動，資料沒有風險，使用者同意的第 2 類）。
