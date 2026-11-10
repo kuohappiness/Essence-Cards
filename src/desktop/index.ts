@@ -62,7 +62,7 @@ export async function createDesktop(basePath: string): Promise<Desktop> {
     key,
     prepare: folder => prepareFolder(folder, vault, FIX),
     // runner 記的是檔名（和 folder 分開記，§1-4）；writeBackup 回傳完整路徑。
-    write: async (folder, taken, halt) => basename(await writeBackup(folder, taken, { random: () => randomBytes(2).toString('hex'), halt })),
+    write: async (folder, taken) => basename(await writeBackup(folder, taken, { random: () => randomBytes(2).toString('hex') })),
     list: async folder => (await listBackups(folder)).backups,
     async read(folder, name) {
       try { return await readBackup(folder, name); } catch (error) {
@@ -70,7 +70,7 @@ export async function createDesktop(basePath: string): Promise<Desktop> {
         throw error;
       }
     },
-    remove: (folder, backup, halt) => removeBackup(folder, folder, backup, halt),
+    remove: (folder, backup) => removeBackup(folder, folder, backup),
   };
   return {
     host,

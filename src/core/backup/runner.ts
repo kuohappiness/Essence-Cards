@@ -21,14 +21,14 @@ export interface BackupHost {
   key: (path: string) => string;
   /** 建好並檢查備份位置，回傳實際路徑；不能用就丟錯（原因寫在錯誤裡）。 */
   prepare(folder: string): Promise<string>;
-  /** 寫一份備份（暫存名、讀回檢查、不覆寫地提交），回傳檔名。halt：一次寫有好幾步，每步之前問，放棄了就丟它的錯（L2 的 R21）。 */
-  write(folder: string, taken: Taken, halt?: () => void): Promise<string>;
+  /** 寫一份備份（暫存名、讀回檢查、不覆寫地提交），回傳檔名。 */
+  write(folder: string, taken: Taken): Promise<string>;
   /** folder 直接底下整份讀得懂的備份。 */
   list(folder: string): Promise<StoredBackup[]>;
   /** 一份備份的位元組；不存在是 null。 */
   read(folder: string, name: string): Promise<Uint8Array | null>;
-  /** 刪一份舊備份：刪之前再確認資料夾的實際路徑與內容，對不上就丟錯。halt：確認完、真的刪之前問（L2 的 R21）。 */
-  remove(folder: string, backup: StoredBackup, halt?: () => void): Promise<void>;
+  /** 刪一份舊備份：刪之前再確認資料夾的實際路徑與內容，對不上就丟錯。 */
+  remove(folder: string, backup: StoredBackup): Promise<void>;
 }
 
 /** 只屬於這台電腦的設定（這個 vault 專用的 localStorage，D-149 第 7 點）。 */
@@ -147,10 +147,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
     const left: string[] = [];
     for (const backup of stale) {
       halt();
-      try { await host.remove(folder, backup, halt); } catch (error) {
-        if (error instanceof Cancelled) throw error;
-        left.push(backup.name + '：' + message(error));
-      }
+      try { await host.remove(folder, backup); } catch (error) { left.push(backup.name + '：' + message(error)); }
     }
     return left;
   }
@@ -176,7 +173,7 @@ export function createBackupRunner(options: RunnerOptions): BackupRunner {
         const taken = await takeBackup({ reader: source, vault: { ...host.vault, config: options.config }, build, tool: build, by, now: options.now, offset: options.offset });
         halt();
         step = '寫進備份資料夾';
-        const name = await host.write(real, taken, halt);
+        const name = await host.write(real, taken);
         halt();
         const last: LastBackup = { build, time: taken.started, name, sha256: hashBytes(taken.zip), folder: real };
         store.saveLast(last);
