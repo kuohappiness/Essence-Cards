@@ -1,6 +1,6 @@
 # 外掛內的還原畫面（給 Claude，本機執行）
 
-狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面；Codex L2 第一到三輪的二十三項都修了，等第四輪（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
+狀態：2026-11-10 程式、測試與 Windows 實機完成，使用者看過版面；Codex L2 第一到三輪的二十三項都處理了（逾時那條 2026-11-10 改成寫入階段卡住就鎖住這次載入，使用者同意），等第四輪（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會改寫使用者資料，又動 `state` 的寫入閘門與 `Files` 的契約，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -226,6 +226,10 @@ Mac 與 Linux；整庫回到某時點（D-150 明定不做）；還原 iPhone �
 **Codex L2 第三輪**：六項發現（R18、R19 P1）都接受並修正：`83f3ac3`、`cb616c0`、`e588f2f`、`a7e780a`、`713e87d`、`fdb2a0a`。四條鏈都到第 3 代，照 D-197 先重整，逐次卡住的測試改成兩種放行、78 個情境（`b61bdda`），修之前 8 個失敗。`b61bdda` 的 pre-commit 跑過完整的 `npm run check`，2,543 個測試全過。
 
 **修完之後再重跑 Windows 實機**：建置字串 `0.4.0+b61bdda.dirty`（工作區唯一的差異是 Codex 的報告），結果同上面的表；還原之後 A 的分頁開回來。
+
+**第三輪之後改了做法**：使用者請 Fable 評估機率之後同意，寫入階段卡住就鎖住這次載入（§3-1 第 6 點的例外，[理由](../Claude%20Codex%20Discussion/2026-11-10-plugin-restore-l2.md)〈第三輪之後改了做法〉）。`b7ff36e` 撤回 R21，`fc56c3e` 改成鎖住；pre-commit 跑過完整的 `npm run check`，2,542 個測試全過。
+
+**修完之後再重跑 Windows 實機**：建置字串 `0.4.0+fc56c3e`。打字沒存就按還原：打的字在「還原前」那份備份裡，還原結果同上面的表。存檔真的卡住（開發命令讓 `view.save` 不回來）：33 秒交回，畫面請家長重開，閘門留著關，再比對被拒絕；重新開啟之後閘門放開，接著還原成功。寫入失敗（EPERM）不鎖。演練的檔已清掉，設定回到原本沒有 `data.json` 的樣子。沒有走到：iCloud 真的卡住、還原途中關掉或切換分頁、設定頁「還原…」按鈕的動態載入、Windows 以外的平台。
 
 **沒有合併之前還沒做**：Codex L2 第四輪、使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
 
