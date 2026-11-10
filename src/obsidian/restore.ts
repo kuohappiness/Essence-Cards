@@ -119,7 +119,9 @@ export function createRestore(host: RestoreHost): RestoreFlow {
   return {
     active: () => running,
     async list() {
-      const { backups, skipped } = await desktop.listing(folder());
+      let listing: Awaited<ReturnType<typeof desktop.listing>>;
+      try { listing = await desktop.listing(folder()); } catch (error) { host.fail('讀備份', error); throw error; }
+      const { backups, skipped } = listing;
       const { key, vault } = desktop.host;
       const rows = backups.map(stored => {
         const from = stored.manifest.vault;
@@ -129,11 +131,19 @@ export function createRestore(host: RestoreHost): RestoreFlow {
     },
     async compare(row) {
       unsettled.check();
-      const bytes = await desktop.host.read(folder(), row.stored.name);
-      if (!bytes) throw Error('讀不到備份：' + row.stored.name);
-      const opened = openBackup(bytes);
-      if (!opened.ok) throw Error('這份備份不能用：' + opened.error);
-      const current = await readCurrent(reader, dataTarget);
+      // D-154：畫面寫清楚之外，也記進錯誤紀錄（§6）。
+      let step = '讀備份';
+      let opened: Extract<ReturnType<typeof openBackup>, { ok: true }>;
+      let current: Map<string, Uint8Array>;
+      try {
+        const bytes = await desktop.host.read(folder(), row.stored.name);
+        if (!bytes) throw Error('讀不到備份：' + row.stored.name);
+        const unpacked = openBackup(bytes);
+        if (!unpacked.ok) throw Error('這份備份不能用：' + unpacked.error);
+        opened = unpacked;
+        step = '讀 vault';
+        current = await readCurrent(reader, dataTarget);
+      } catch (error) { host.fail(step, error); throw error; }
       const links = new Map<string, string>();
       const source = opened.value.manifest.vault.config + '/' + PLUGIN_DATA;
       for (const path of opened.value.files.keys()) {

@@ -916,3 +916,18 @@ void test('還原接線：Mac 與 Linux 沒有還原的流程，開發命令也�
   assert.ok(h.plugin.backup);
   assert.equal(h.plugin.restoreFlow, null);
 });
+
+void test('還原接線：比對時讀不到備份或 vault：丟錯給畫面，也記進錯誤紀錄（L2 的 R10）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  const gone = { ...(row as { stored: object }), stored: { ...(row as { stored: object }).stored, name: '不存在.zip' } };
+  await assert.rejects(flow.compare(gone), /讀不到備份/);
+  h.texts.set(STILL, '\0\0');
+  await assert.rejects(flow.compare(row), /內容不完整/);
+  await h.plugin.state?.ready();
+  let lines: { where: string; msg: string }[] = [];
+  for (let i = 0; i < 200 && lines.length < 2; i++) {
+    await wait(10);
+    lines = [...h.texts].filter(([path]) => path.startsWith('Essence Cards/紀錄/錯誤/')).flatMap(([, text]) => text.split('\n').filter(Boolean).map(line => JSON.parse(line) as { where: string; msg: string })).filter(line => line.where === 'restore');
+  }
+  assert.deepEqual(lines.map(line => line.msg.split('：')[0]), ['讀備份', '讀 vault']);
+});

@@ -269,7 +269,11 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
         const saved = await landed(data.target!, run.settings(opened.files.get(dataPath)!, run.screen.get(dataPath) ?? null, () => live), '寫設定', () => true).finally(() => { live = false; });
         if (saved === 'saved') outcome(data, '已還原', '');
         else if (saved === 'changed') outcome(data, '跳過', CHANGED);
-        else outcome(data, '失敗', saved === 'unreadable' ? '設定暫時讀不到，這次沒有寫' : '設定寫不進去');
+        else {
+          const reason = saved === 'unreadable' ? '設定暫時讀不到，這次沒有寫' : '設定寫不進去';
+          outcome(data, '失敗', reason);
+          run.fail('寫設定', Error(reason));
+        }
       } catch (error) {
         outcome(data, '失敗', message(error));
         run.fail('寫設定', error);

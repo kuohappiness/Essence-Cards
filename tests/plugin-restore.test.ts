@@ -713,6 +713,17 @@ void test('data.json：最後寫，帶比對時的 sha；changed 記成跳過，
   assert.equal(h.texts.has(DATA), false);
 });
 
+void test('設定寫不進去、讀不到：記進錯誤紀錄（L2 的 R10）', async t => {
+  for (const [saved, text] of [['failed', '設定寫不進去'], ['unreadable', '設定暫時讀不到']] as const) {
+    const h = await setup(t, { [A]: goal('aaaaaa') }, '{"capMinutes":30}');
+    const backup = await snapshot(h);
+    h.data.bytes = encode('{"capMinutes":45}');
+    const result = await restore(h, backup, [DATA], { settings: () => Promise.resolve(saved) });
+    assert.deepEqual(outcomes(result), [[DATA, '失敗']]);
+    assert.match(h.failures[0], new RegExp('寫設定：' + text));
+  }
+});
+
 void test('data.json：寫之前再查路徑上的連結，有連結就不寫（L2 的 R4）', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa') }, '{"capMinutes":30}');
   const backup = await snapshot(h);
