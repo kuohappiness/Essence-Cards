@@ -217,6 +217,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                 if (fields === null) return Promise.resolve('failed');
                 return host.settings.restore(fields, async () => {
                   const now = await reader.read(dataTarget);
+                  // 排隊與讀檔的這段時間路徑可能換成連結，內容還一模一樣（L2 的 R13）：算比對之後改過，重新比對會寫出是連結。
+                  try { await desktop.noLinks(dataTarget); } catch { return null; }
                   if (!live()) throw Error('逾時，不寫');
                   if ((now === null ? null : hashBytes(now)) !== expected) return null;
                   return (now === null ? null : parseData(now)) ?? {};

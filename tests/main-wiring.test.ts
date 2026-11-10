@@ -948,3 +948,20 @@ void test('還原接線：等第一個分頁存檔時第二個分頁換了別篇
   assert.equal(second.view.saves, 0);
   assert.deepEqual(second.history, []);
 });
+
+void test('還原接線：設定排進隊伍之後路徑才換成連結（內容相同）：不寫（L2 的 R13）', async t => {
+  const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+  h.texts.set(DATA, '{"capMinutes":60}');
+  const comparison = await flow.compare(row);
+  const plugin = h.plugin as unknown as { store: { restore: (...args: unknown[]) => unknown }; backup: { desktop: { noLinks: (path: string) => Promise<void> } } };
+  let queued = false;
+  const restoreNow = plugin.store.restore.bind(plugin.store);
+  plugin.store.restore = (...args) => { queued = true; return restoreNow(...args); };
+  const noLinks = plugin.backup.desktop.noLinks.bind(plugin.backup.desktop);
+  plugin.backup.desktop.noLinks = path => queued && path === DATA ? Promise.reject(Error('路徑上有連結')) : noLinks(path);
+  const saves = h.data.saves;
+  const result = await flow.apply(comparison, new Set([DATA]));
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
+  assert.equal(h.data.saves, saves);
+  assert.equal(h.text(DATA), '{"capMinutes":60}');
+});
