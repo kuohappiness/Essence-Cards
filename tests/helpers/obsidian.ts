@@ -86,6 +86,9 @@ export class FakeSetting {
   addText(build: (text: { setPlaceholder(): unknown; onChange(): unknown }) => unknown) { const text = { setPlaceholder: () => text, onChange: () => text }; build(text); return this; }
 }
 
+const EMPTY = { empty: true };
+const isEmpty = (leaf: { view: unknown }): boolean => leaf.view === EMPTY;
+
 export interface StubOptions {
   /** vault 裡一開始有的檔案。 */
   texts?: Record<string, string>;
@@ -282,7 +285,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     workspace: {
       onLayoutReady: (callback: () => void) => { if (ready) callback(); else layout.push(callback); },
       on: (name: string, callback: (...args: unknown[]) => void) => { handlers.set(name, [...handlers.get(name) ?? [], callback]); return name; },
-      getLeavesOfType: () => leaves,
+      // 換成空白的分頁算 empty，其他都算 markdown（延後載入的也是）。
+      getLeavesOfType: (type: string) => leaves.filter(leaf => (type === 'empty') === isEmpty(leaf)),
       iterateAllLeaves: (callback: (leaf: Leaf) => void) => { leaves.forEach(callback); },
       getActiveViewOfType: () => null,
       openLinkText: () => Promise.resolve(),
@@ -368,7 +372,9 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   }
   const leaf = (path: string | null): Leaf => {
     const history: unknown[] = [];
-    return { view: new FakeMarkdownView(path), getViewState: () => ({ state: path ? { file: path } : {} }), history, setViewState(state) { history.push(state); return Promise.resolve(); }, setEphemeralState(state) { history.push(state); } };
+    const view = new FakeMarkdownView(path);
+    const made: Leaf = { view, getViewState: () => ({ state: path ? { file: path } : {} }), history, setViewState(state) { history.push(state); made.view = (state as { type?: string }).type === 'empty' ? EMPTY : view; return Promise.resolve(); }, setEphemeralState(state) { history.push(state); } };
+    return made;
   };
   return {
     obsidian, app, notices, commands, ribbons, extensions: () => extensions, modals, protocol, writes, texts,

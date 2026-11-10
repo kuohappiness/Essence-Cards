@@ -170,12 +170,15 @@ export function createRestore(host: RestoreHost): RestoreFlow {
             // 開著的那幾篇先存檔、換成空白分頁（§3-2）：存不進去就什麼都不寫。
             for (const leaf of openLeaves(app, targets)) {
               const view = leaf.view as MarkdownView;
+              const path = view.file?.path;
               const eState: unknown = view.getEphemeralState();
               const viewState = leaf.getViewState();
               try { await view.save(); } catch (error) {
                 host.fail('存檔', error, view.file?.path);
                 return { ...empty, stopped: { step: '存檔 ' + (view.file?.path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
+              // 存檔要等，這段時間分頁可能關掉或換了別篇（L2 的 R1）：不是原來的樣子就不動它，還開著這篇的話 busy 會擋住寫入。
+              if (leaf.view !== view || view.file?.path !== path || !app.workspace.getLeavesOfType('markdown').includes(leaf)) continue;
               await leaf.setViewState({ type: 'empty' });
               swapped.push({ leaf, state: viewState, eState });
             }
@@ -191,6 +194,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               current: () => readCurrent(reader, dataTarget),
               files,
               deck: (path, write) => writer.deck(path, write),
+              busy: path => openLeaves(app, new Set([path])).length > 0,
               noLinks: path => desktop.noLinks(path),
               settings(bytes, expected) {
                 const fields = parseData(bytes);
@@ -212,6 +216,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
           } finally {
             for (const { leaf, state: viewState, eState } of swapped) {
               try {
+                // 空白分頁在這段時間被關掉或拿去開別篇：不把它換回來（L2 的 R1）。
+                if (!app.workspace.getLeavesOfType('empty').includes(leaf)) continue;
                 await leaf.setViewState(viewState);
                 leaf.setEphemeralState(eState);
               } catch (error) { host.fail('開回分頁', error); }

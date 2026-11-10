@@ -42,6 +42,8 @@ export interface RestoreRun {
   files: Pick<Files, 'list' | 'readBytes' | 'replace'>;
   /** 寫一篇卡組：外層在 write 前後讓 state 知道這是自己的寫入（§3-3 第 6 點）。 */
   deck: (path: string, write: () => Promise<boolean>) => Promise<boolean>;
+  /** 這個檔現在開在編輯器裡（還原期間才打開的）：寫進去會換掉編輯器裡還沒存的字，不寫（L2 的 R1）。 */
+  busy: (path: string) => boolean;
   /** 路徑上有連結就丟錯（§3-3 第 3 點）。 */
   noLinks: (path: string) => Promise<void>;
   /** 寫 data.json（§4）；expected 是畫面比對時現在的 sha（不存在是 null）。 */
@@ -60,6 +62,7 @@ export interface RestoreRun {
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error);
 const CHANGED = '比對之後改過，重新比對看新的差異';
 const STOPPED = '外掛停用了，這次沒有做；重新比對可以接著做';
+const REOPENED = '還原期間這一篇又被打開了，沒有還原；關掉它再重新比對';
 
 /** 現況：`Essence Cards/` 全部，加上 data.json（有的話）。讀不到就丟錯，寫出是哪個檔；筆記與紀錄含 NUL 也算讀不到，圖片可以有 0（D-154）。 */
 export async function readCurrent(reader: BackupReader, data: string | null): Promise<Map<string, Uint8Array>> {
@@ -158,10 +161,14 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
       }
       await run.noLinks(rel);
       const expected = file.current?.sha256 ?? null;
-      let live = true;
+      let live = true, reopened = false;
       const write = async (): Promise<boolean> => {
         // 最後一次確認在 replace 的回呼裡，和寫入只隔一次讀（§3-2）；逾時之後才輪到它就不寫。
-        const done = await files.replace(rel, now => live && (now === null ? null : hashBytes(now)) === expected, bytes);
+        const done = await files.replace(rel, now => {
+          if (!live) return false;
+          reopened = run.busy(rel);
+          return !reopened && (now === null ? null : hashBytes(now)) === expected;
+        }, bytes);
         if (!done) return false;
         const back = await files.readBytes(rel);
         if (back === null || hashBytes(back) !== file.backup!.sha256) throw Error('寫進去之後讀回來的內容不同');
@@ -170,7 +177,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
       const work = deck ? run.deck(rel, write) : write();
       let done: boolean;
       try { done = await timed(work, '寫入'); } finally { live = false; }
-      if (!done) { outcome(file, '跳過', CHANGED); continue; }
+      if (!done) { outcome(file, '跳過', reopened ? REOPENED : CHANGED); continue; }
       written.add(path);
       result.written.push(rel);
       outcome(file, '已還原', '');

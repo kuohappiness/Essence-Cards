@@ -101,7 +101,7 @@ async function restore(h: Harness, backup: { name: string; opened: OpenedBackup 
       opened: backup.opened, chosen, screen, plan: OPTIONS,
       before: () => h.runner.beforeRestore([backup.name], h.reader),
       current: () => readCurrent(h.reader, DATA),
-      files: h.files, deck: (path, write) => writer.deck(path, write), noLinks: () => Promise.resolve(),
+      files: h.files, deck: (path, write) => writer.deck(path, write), busy: () => false, noLinks: () => Promise.resolve(),
       settings: bytes => { h.data.bytes = bytes; return Promise.resolve('saved'); },
       device: DEVICE, now: () => NOW, offset: () => 480, closed: () => writer.closed(),
       fail: (step, error) => { h.failures.push(`${step}：${error instanceof Error ? error.message : String(error)}`); },
@@ -297,6 +297,17 @@ void test('交錯：掃描之後、最後確認之前改的不蓋掉；回呼裡
   assert.deepEqual(outcomes(result), [[A, '跳過']]);
   assert.equal(h.texts.get(A), goal('aaaaaa', '最後一刻改'));
   assert.deepEqual(result.written, []);
+});
+
+void test('交錯：還原期間又打開的那一篇不寫，別篇照常（L2 的 R1）', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
+  const backup = await snapshot(h);
+  h.write(A, goal('aaaaaa', '改過'));
+  h.write(B, goal('bbbbbb', '改過'));
+  const result = await restore(h, backup, [A, B], { busy: path => path === A });
+  assert.deepEqual(outcomes(result), [[A, '跳過'], [B, '已還原']]);
+  assert.match(result.files[0].reason, /又被打開了/);
+  assert.equal(h.texts.get(A), goal('aaaaaa', '改過'));
 });
 
 void test('交錯：掃描之前別篇剛出現同一個 ID：跳過，不造成重複；沒有內容的檔不用掃', async t => {

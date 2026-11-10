@@ -811,3 +811,53 @@ for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉
     assert.equal((h.data.content as { capMinutes: number }).capMinutes, 45);
   });
 }
+
+/** 還原前的備份讀到這篇時呼叫一次：這時分頁已經換成空白、還沒開始寫。 */
+function duringBackup(h: Awaited<ReturnType<typeof restoreReady>>['h'], path: string, act: () => void): void {
+  const vault = h.app.vault as { readBinary: (file: { path: string }) => Promise<ArrayBuffer> };
+  const read = vault.readBinary;
+  let done = false;
+  vault.readBinary = file => { if (!done && file.path === path) { done = true; act(); } return read(file); };
+}
+const STILL = 'Essence Cards/a.md';
+const brokenDeck = deck[STILL].replace('Q :: A', 'Q :: 改壞');
+
+void test('還原接線：備份期間又打開那一篇：不寫、內容不動，原本的分頁照樣開回（L2 的 R1）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  h.texts.set(STILL, brokenDeck);
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  const tab = h.leaves[0];
+  duringBackup(h, STILL, () => { h.openTab(STILL); });
+  const result = await flow.apply(comparison, new Set([STILL]));
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[STILL, '跳過']]);
+  assert.match((result.files[0] as unknown as { reason: string }).reason, /又被打開了/);
+  assert.equal(h.text(STILL), brokenDeck);
+  assert.deepEqual(h.writes.filter(write => write.startsWith('modifyBinary')), []);
+  assert.deepEqual(tab.history, [{ type: 'empty' }, { state: { file: STILL } }, { cursor: 7 }]);
+});
+
+void test('還原接線：空白分頁在還原期間被關掉或拿去開別篇：不換回來（L2 的 R1）', async t => {
+  for (const act of ['關掉', '開別篇'] as const) {
+    const { h, flow, row } = await restoreReady(t, deck);
+    h.texts.set(STILL, brokenDeck);
+    const comparison = await flow.compare(row);
+    h.openTab(STILL);
+    const tab = h.leaves[0];
+    duringBackup(h, STILL, () => { if (act === '關掉') h.leaves.length = 0; else tab.view = {}; });
+    const result = await flow.apply(comparison, new Set([STILL]));
+    assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[STILL, '已還原']], act);
+    assert.deepEqual(tab.history, [{ type: 'empty' }], act);
+  }
+});
+
+void test('還原接線：存檔的等待期間分頁換了別篇：不換成空白（L2 的 R1）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  h.texts.set(STILL, brokenDeck);
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  const tab = h.leaves[0];
+  (tab.view as { save(): Promise<void> }).save = () => { tab.view = {}; return Promise.resolve(); };
+  await flow.apply(comparison, new Set([STILL]));
+  assert.deepEqual(tab.history, []);
+});
