@@ -563,6 +563,23 @@ void test('卡住（R16）：現況備份放棄之後，晚回來的讀取不寫
   assert.equal(h.runner.status().running, null);
 });
 
+void test('卡住（R23）：掃描卡組逾時之後，晚回來的舊掃描不再讀下一篇', async t => {
+  const third = A.replace(/[^/]+$/, 'z-第三篇.md');
+  const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb'), [third]: goal('cccccc') });
+  const backup = await snapshot(h);
+  h.remove(A);
+  await settled(h);
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const reads: string[] = [];
+  const files = { ...h.files, readBytes: async (path: string) => { reads.push(path); if (reads.length === 1) await hold; return h.files.readBytes(path); } };
+  const result = await restore(h, backup, [A], { files, timeout: 30 });
+  assert.deepEqual(outcomes(result), [[A, '失敗']]);
+  release();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(reads.length, 1);
+});
+
 void test('交錯：掃描之前別篇剛出現同一個 ID：跳過，不造成重複；沒有內容的檔不用掃', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
   const backup = await snapshot(h);

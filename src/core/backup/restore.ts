@@ -170,6 +170,8 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     const same = run.plan.sameFile;
     for (const path of (await files.list(ESSENCE_ROOT)).filter(isDeckPath)) {
       if (same(path) === same(rel)) continue;
+      // 逾時之後這次掃描的結果沒人要了，不再讀下一篇（L2 的 R23）。
+      if (halted !== null) return null;
       const unknown = `讀不到「${path}」，確定不了學習目標 ID 有沒有重複；重新比對`;
       let other: Uint8Array | null;
       try { other = await files.readBytes(path); } catch { return unknown; }
