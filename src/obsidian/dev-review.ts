@@ -95,6 +95,7 @@ function onlyExamples(files: Files): Files {
     readBytes: path => files.readBytes(path),
     modify: (path, edit) => files.modify(path, edit),
     append: (path, line) => files.append(path, line),
+    replace: (path, check, bytes) => files.replace(path, check, bytes),
     watch: onChange => files.watch(path => { if (keep(path)) onChange(path); }),
   };
 }
@@ -157,6 +158,7 @@ function blankHistory(files: Files): Files {
       if (!isLogPath(path)) return files.append(path, line);
       logs.set(path, (logs.get(path) ?? '') + line + '\n');
     },
+    replace: (path, check, bytes) => isLogPath(path) ? Promise.resolve(false) : files.replace(path, check, bytes),
     watch: onChange => files.watch(path => { if (!isLogPath(path)) onChange(path); }),
   };
 }

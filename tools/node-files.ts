@@ -12,7 +12,7 @@ const missing = (error: unknown): boolean => (error as NodeJS.ErrnoException).co
 export function createNodeFiles(root: string, seams: { readdirSync?: typeof readdirSync; watch?: typeof watchFs } = {}): Files {
   const { readdirSync: listSync = readdirSync, watch: watchTree = watchFs } = seams;
   const base = resolve(root);
-  const pending = new Map<string, Promise<void>>();
+  const pending = new Map<string, Promise<unknown>>();
   function location(path: string): string {
     const absolute = resolve(base, path);
     const rel = relative(base, absolute);
@@ -27,7 +27,7 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
     catch (error) { if (missing(error)) return null; throw error; }
   }
   // 同一個實作中的 modify / append 共用佇列，避免相互蓋掉尚未寫完的內容。
-  function serial(path: string, action: () => Promise<void>): Promise<void> {
+  function serial<T>(path: string, action: () => Promise<T>): Promise<T> {
     // 只正規化排隊的身分，實際開檔路徑不動；不同檔案頂多多排隊。
     const key = path.normalize('NFC').toLowerCase();
     const next = (pending.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
@@ -71,6 +71,17 @@ export function createNodeFiles(root: string, seams: { readdirSync?: typeof read
       return serial(file, async () => {
         await mkdir(dirname(file), { recursive: true });
         await appendFile(file, line + '\n', 'utf8');
+      });
+    },
+    replace(path, check, bytes) {
+      const file = location(path);
+      return serial(file, async () => {
+        let now: Uint8Array | null = null;
+        try { now = new Uint8Array(await readFile(file)); } catch (error) { if (!missing(error)) throw error; }
+        if (!check(now)) return false;
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, bytes);
+        return true;
       });
     },
     watch(onChange) {

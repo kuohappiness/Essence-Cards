@@ -8,7 +8,7 @@ import type { Files } from '../src/core/files.ts';
 import { createNodeFiles } from '../tools/node-files.ts';
 import { createMemoryFiles } from './helpers/memory-files.ts';
 
-// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C17；每個例子一個新的暫存 vault。
+// W5 說明 §2：Node 版跑和 Obsidian 開發命令 files 同一份 C1～C21；每個例子一個新的暫存 vault。
 for (const item of contractCases) {
   void test(`Files 契約 ${item.code}：${item.title}`, async t => {
     const root = await mkdtemp(join(tmpdir(), 'essence-contract-'));
@@ -45,6 +45,10 @@ void test('Files 契約抓得到壞掉的實作', async t => {
     C15: { ...good, watch: onChange => good.watch(path => { if (!path.includes('/sub/')) onChange(path); }) },
     // 讀成文字再編碼回去，換行被轉換。
     C16: { ...good, readBytes: async path => { const text = await good.read(path); return text === null ? null : new TextEncoder().encode(text.replaceAll('\r\n', '\n')); } },
+    // 當成文字寫回：不合法的 UTF-8 變成替換字元、BOM 可能不見。
+    C20: { ...good, replace: async (path, check, bytes) => { const now = await good.readBytes(path); if (!check(now)) return false; await good.modify(path, () => new TextDecoder().decode(bytes)); return true; } },
+    // 另開一條路，不排在同一個檔的隊伍裡。
+    C21: { ...good, replace: async (path, check, bytes) => { const now = await good.readBytes(path); if (!check(now)) return false; await writeFile(join(root, path), bytes); return true; } },
   };
   let run = 0;
   for (const [code, files] of Object.entries(broken)) {

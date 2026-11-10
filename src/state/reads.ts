@@ -41,6 +41,7 @@ export function refuseIncomplete(files: Files): Files {
       return edit(text, exists);
     }),
     append: (path, line) => files.append(path, line),
+    replace: (path, check, bytes) => files.replace(path, check, bytes),
     watch: onChange => files.watch(onChange),
   };
 }

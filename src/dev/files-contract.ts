@@ -1,7 +1,7 @@
 import type { Files } from '../core/files.ts';
 
 /**
- * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4；C18 是 tasks/exam-scope.md §2-4；C19 是 tasks/quiz-mark.md 的 L2 R2）。Node 的測試與 Obsidian 的開發命令跑同一份；
+ * Files 的契約檢查（W5 說明 §2 的 C1～C14；C15 是外掛架構檢查環節 1 的 T3；C16 是外掛內的備份 §1-2；C17 是 tasks/error-log.md §4；C18 是 tasks/exam-scope.md §2-4；C19 是 tasks/quiz-mark.md 的 L2 R2；C20、C21 是 tasks/plugin-restore.md §3-3）。Node 的測試與 Obsidian 的開發命令跑同一份；
  * 改名與刪除不在 Files 介面裡，由兩邊各自提供（Node 用 node:fs，Obsidian 用 vault.rename、vault.delete）。
  */
 export interface ContractOps {
@@ -216,6 +216,7 @@ export const contractCases: readonly ContractCase[] = [
         await rejects(() => files.list(path), `list(${show(path)})`);
         await rejects(() => files.modify(path, () => 'x'), `modify(${show(path)})`);
         await rejects(() => files.append(path, 'x'), `append(${show(path)})`);
+        await rejects(() => files.replace(path, () => true, new Uint8Array(1)), `replace(${show(path)})`);
       }
     },
   },
@@ -244,6 +245,48 @@ export const contractCases: readonly ContractCase[] = [
     },
   },
   {
+    // 還原（tasks/plugin-restore.md §3-3）：不可以動到任何一個位元組，圖片與 BOM、壞掉的編碼才還得回去。
+    code: 'C20', title: 'replace 逐位元寫入（BOM、CRLF、不合法的 UTF-8、NUL），建立上層資料夾；check 拿到現在的位元組，不通過不寫',
+    async run({ files, dir, wait }) {
+      const path = `${dir}/深/層/c20.md`;
+      const first = new Uint8Array([0xEF, 0xBB, 0xBF, 0x61, 0x0D, 0x0A, 0xFF, 0xFE, 0x80, 0x00, 0x62]);
+      const seen: (number[] | null)[] = [];
+      const log = (now: Uint8Array | null): void => { seen.push(now && [...now]); };
+      same(await files.replace(path, now => { log(now); return true; }, first), true, '第一次 replace');
+      same([...new Set(seen.map(show))], ['null'], '不存在時 check 拿到');
+      same([...await files.readBytes(path) ?? []], [...first], '寫進去的位元組');
+      seen.length = 0;
+      const second = new Uint8Array([0x89, 0x50, 0x0A]);
+      same(await files.replace(path, now => { log(now); return false; }, second), false, 'check 不通過');
+      same(seen, [[...first]], '存在時 check 拿到');
+      same([...await files.readBytes(path) ?? []], [...first], 'check 不通過之後');
+      const watch = record(files, wait);
+      try {
+        same(await files.replace(path, () => true, second), true, '第二次 replace');
+        await watch.until([path], '修改');
+      } finally { watch.stop(); }
+      same([...await files.readBytes(path) ?? []], [...second], '蓋過去的位元組');
+      same(await files.replace(path, () => true, new Uint8Array(0)), true, '寫空檔');
+      same([...await files.readBytes(path) ?? []], [], '空檔');
+    },
+  },
+  {
+    // 和 modify、append 同一列（§3-3）：排在前面的寫完才讀現在的內容。
+    code: 'C21', title: 'replace 和 modify、append 同一個隊伍：check 看得到排在前面的寫入',
+    async run({ files, dir }) {
+      const path = `${dir}/c21.md`;
+      await files.modify(path, () => 'a');
+      let seen: number[] | null = null;
+      await Promise.all([
+        files.append(path, 'b'),
+        files.replace(path, now => { seen = now && [...now]; return true; }, new TextEncoder().encode('z')),
+        files.append(path, 'c'),
+      ]);
+      same(seen, [...new TextEncoder().encode('ab\n')], 'check 拿到');
+      same(await files.read(path), 'zc\n', '最後的內容');
+    },
+  },
+  {
     // tasks/error-log.md §4：錯誤紀錄與複習紀錄同時第一次寫，會一起建 `紀錄/`（Codex 用替身重現，D-155 第 4 點）。
     code: 'C17', title: '不存在的資料夾裡同時 append 兩個不同的檔，兩個都成功、各一行',
     async run({ files, dir }) {
@@ -266,7 +309,7 @@ export async function runContractCase(item: ContractCase, files: Files, ops: Con
   }
 }
 
-/** 依序跑 C1～C17；dir 要是空的（或不存在）。 */
+/** 依序跑 C1～C21；dir 要是空的（或不存在）。 */
 export async function runFilesContract(files: Files, ops: ContractOps, dir: string, wait: ContractWait): Promise<ContractResult[]> {
   const results: ContractResult[] = [];
   for (const item of contractCases) results.push(await runContractCase(item, files, ops, dir, wait));

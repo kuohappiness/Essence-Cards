@@ -15,6 +15,7 @@ function fake(append: Files['append']): Files {
     read: () => Promise.resolve(null),
     readBytes: () => Promise.reject(Error('沒有用到 readBytes')),
     modify: () => Promise.reject(Error('沒有用到 modify')),
+    replace: () => Promise.reject(Error('沒有用到 replace')),
     watch: () => { throw Error('沒有用到 watch'); },
   };
 }

@@ -16,6 +16,11 @@ export interface Files {
   modify(path: string, edit: (text: string, exists: boolean) => string): Promise<void>;
   /** 追加 line 與換行；不存在時建立含上層資料夾。 */
   append(path: string, line: string): Promise<void>;
+  /**
+   * 原樣寫入位元組（還原用，tasks/plugin-restore.md §3-3）：和 modify、append 同一個同路徑的隊伍。讀現在的原始位元組交給 check（不存在是 null），
+   * 不通過回 false、不寫；通過就寫入 bytes，不轉換編碼與換行，不存在時建立含上層資料夾，回 true。讀與寫之間沒有鎖（只有這兩步之間的空檔）。
+   */
+  replace(path: string, check: (now: Uint8Array | null) => boolean, bytes: Uint8Array): Promise<boolean>;
   /** 新增、修改、刪除、改名通知；改名通知舊新路徑；回傳取消監看的函式。 */
   watch(onChange: (path: string) => void): () => void;
 }

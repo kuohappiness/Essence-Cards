@@ -255,6 +255,7 @@ void test('§1 寫不進去：append 拒絕或永遠不回來，record 照樣立
     list: () => Promise.resolve([]),
     read: () => { reads++; return Promise.resolve(null); },
     readBytes: () => Promise.resolve(null),
+    replace: () => Promise.resolve(false),
     modify: () => new Promise(() => {}),
     append: () => { appends++; return new Promise(() => {}); },
     watch: () => () => {},
