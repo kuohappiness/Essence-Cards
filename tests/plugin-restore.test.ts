@@ -751,7 +751,27 @@ void test('data.json：寫之前再查路徑上的連結，有連結就不寫（
   assert.match(h.failures[0], /寫設定：路徑上有連結/);
 });
 
-void test('備份行的 NUL 先去掉再補（R3）：只有 NUL 的行不算，最後一行的開頭規則照去掉之後的行算', async t => {
+void test('備份行的 NUL 當成斷行（R14）：不會拼出備份裡沒有的作答，完整的物件救回來', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
+  const { opened } = await snapshot(h);
+  const planned = async (backup: ReadonlyMap<string, Uint8Array>) => planRestore({ manifest: opened.manifest, backup, current: await readCurrent(h.reader, DATA), ...OPTIONS, selection: new Set() });
+  const whole = review(T2, 'abcdef');
+  const [head, tail] = whole.replace('abcdef', 'abc\0def').split('\0');
+  const inside = new Map(opened.files).set(LOG, encode(review(T, 'aaaaaa') + '\n' + head + '\0' + tail + '\n'));
+  h.remove(LOG);
+  const cut = (await planned(inside)).logs[0].lines;
+  assert.deepEqual(cut, [review(T, 'aaaaaa'), head, tail]);
+  for (const piece of cut.slice(1)) assert.throws(() => JSON.parse(piece) as unknown);
+  // 中間一段 0：兩邊完整的物件都救得回來。
+  const two = review(T2, 'bbbbbb', 'miss');
+  const block = new Map(opened.files).set(LOG, encode(review(T, 'aaaaaa') + '\0\0\0' + two + '\n'));
+  assert.deepEqual((await planned(block)).logs[0].lines, [review(T, 'aaaaaa'), two]);
+  // 檔案之後下載完了：切出來的片段都在現在的行裡，不算缺。
+  h.write(LOG, review(T, 'aaaaaa') + '\n' + whole + '\n');
+  assert.deepEqual((await planned(inside)).logs, []);
+});
+
+void test('只有 NUL 的行不算（R3），最後一行的開頭規則照切開之後的段算', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
   const { opened } = await snapshot(h);
   const whole = review(T2, 'bbbbbb');
@@ -760,7 +780,7 @@ void test('備份行的 NUL 先去掉再補（R3）：只有 NUL 的行不算，
   h.remove(LOG);
   const planned = async (backup: ReadonlyMap<string, Uint8Array>) => planRestore({ manifest: opened.manifest, backup, current: await readCurrent(h.reader, DATA), ...OPTIONS, selection: new Set() });
   assert.deepEqual((await planned(dirty)).logs, [{ source: '2026-11 iPhone-7f3a', lines: [review(T, 'aaaaaa'), half] }]);
-  // 去掉 NUL 之後的最後一行是現在某一行的開頭：備份時正在寫那一行，不算缺。
+  // 切開之後的最後一段是現在某一行的開頭：備份時正在寫那一行，不算缺。
   h.write(LOG, review(T, 'aaaaaa') + '\n' + whole + '\n');
   assert.deepEqual((await planned(dirty)).logs, []);
 });
