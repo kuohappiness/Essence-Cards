@@ -1,6 +1,6 @@
 # 外掛內的還原畫面（給 Claude，本機執行）
 
-狀態：2026-11-10 使用者同意這份說明與三個小選擇，實作中（分支 `claude/competent-driscoll-58f746`）
+狀態：2026-11-10 程式、測試與 Windows 實機完成，等使用者看版面與 Codex L2（分支 `claude/competent-driscoll-58f746`，[審查請求](plugin-restore-l2.md)）；還沒合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。會改寫使用者資料，又動 `state` 的寫入閘門與 `Files` 的契約，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -192,4 +192,29 @@ Mac 與 Linux；整庫回到某時點（D-150 明定不做）；還原 iPhone �
 
 ## 結果
 
-延後的測試：（實作後填）
+**程式**：`14522ad`（`Files.replace`）、`259a0c0`（設定）、`7ff3cd2`（`applyRestore` 與閘門）、`d2b3d78`（畫面與接線）、`69dfe35`（結果列與開發命令）、`0452a3b`（接線測試）。`0452a3b` 的 pre-commit 跑過完整的 `npm run check`，2,493 個測試全過。
+
+**§8 第 1 點，API 實測**（Windows、Obsidian 1.15.0）：
+
+- `createBinary`、`modifyBinary` 對 BOM 加 CRLF、不合法的 UTF-8、NUL、PNG、空檔都逐位元相同，各送出 `create`、`modify` 一次；內容相同的 `modifyBinary` 仍會送 `modify`。
+- `createBinary` 遇到已存在的檔丟 `File already exists.`，沒有上層資料夾時丟 ENOENT，所以 `replace` 自己建資料夾。`getAbstractFileByPath` 分大小寫。
+- `view.save()` 會寫下未存的文字；`getViewState` 加 `getEphemeralState` 能開回內容、游標與使用中的分頁。
+- 編輯器開著、有未存文字時，`modifyBinary` 會讓它馬上換成磁碟的新內容，所以〈小選擇〉第 1 項要先存再換空白。
+- `iterateAllLeaves` 漏背景分頁，`getLeavesOfType('markdown')` 全部列得出來；延後載入的分頁沒有未存內容。
+
+**§8 第 2～4 點，Windows 實機**：測試 vault（經 iCloud 資料夾）、Obsidian 1.15.0，走真的視窗。建置字串是 `0.4.0+d2b3d78.dirty`，把版本字串拿掉之後，和 `0452a3b` 的開發建置逐字相同。
+
+| 情境 | 結果 |
+|---|---|
+| 完整演練：備份之後改壞 A（BOM 加 CRLF）、刪 B、動圖片、加 C、設定改成 60，A 開在編輯器 | A、B、圖片逐位元回到備份；C 不動；設定回到備份的 45；紀錄補 1 行進新的還原檔，來源檔不動；A 的分頁開回來；再比對沒有要補的；狀態沒有問題、3 筆作答都在；這台的月檔只多一行 `set: cap 45` |
+| 寫入失敗（檔案唯讀，EPERM） | 結果列「失敗」與原因，「重新比對」可以按；A 失敗時沒有相依的 B 照樣還原 |
+| 勾了會造成 ID 重複的 B | 馬上列在擋住，寫出 ID 與現在在哪一篇，按鈕變成「還原 0 篇」 |
+| 修好之後重新載入外掛 | 比對沒有要補的，狀態沒有問題，閘門已放開 |
+
+**版面**：三步與擋住、失敗的截圖還在等使用者看（完成條件）。
+
+**實機沒有走到的**：「先備份現況失敗」的畫面只有單元測試；未存的文字先存下來只有 API 實測與接線測試，沒有在真的還原裡打字再按；Windows 以外的平台。
+
+**沒有合併之前還沒做**：Codex L2、使用者同意合併；`docs/progress-map.md`、`docs/roadmap.md`、`docs/backlog.md`（「還原只考慮一個程序在跑」那一列與更新與相容那一列）、`docs/plans/updates.md` 的狀態等合併時更新。
+
+延後的測試：Mac 與 Linux 的檔名規則實測（入口先關住，技術債表已有一列）；還原之後 iPhone 看到還原的卡組與還原檔（技術債表「補測：」，併進下一次 iPhone 實機測試）；幾百個差異檔時的版面（可捲動，資料沒有風險，使用者同意的第 2 類）。
