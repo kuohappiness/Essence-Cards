@@ -1,6 +1,6 @@
 import { MarkdownView } from 'obsidian';
 import type { App, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
-import { applyRestore, createUnsettled, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, textDiff } from '../core/backup/index.ts';
+import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, textDiff } from '../core/backup/index.ts';
 import type { BackupReader, OpenedBackup, PlannedFile, RestorePlan, RestoreResult, StoredBackup } from '../core/backup/index.ts';
 import type { Deck } from '../core/deck/index.ts';
 import { parseData, sameSaved, savedDiff } from '../core/settings/index.ts';
@@ -58,16 +58,18 @@ export interface RestoreFlow {
   active(): boolean;
 }
 
-interface Opened { leaf: WorkspaceLeaf; state: ViewState; eState: unknown; closing: Promise<unknown> }
+interface Opened { leaf: WorkspaceLeaf; state: ViewState; eState: unknown }
 
 function byTime(a: BackupRow, b: BackupRow): number {
   return a.stored.manifest.started < b.stored.manifest.started ? 1 : a.stored.manifest.started > b.stored.manifest.started ? -1 : 0;
 }
 
+/** 超過時間，和立刻失敗（例如 EPERM）不同。 */
+class Late extends Error {}
 /** 等一件事最多 READ_WAIT，沒回來就丟錯（§3-1 第 6 點）。 */
 function limited<T>(work: Promise<T>, text: string): Promise<T> {
   let id: number | undefined;
-  const late = new Promise<never>((_, reject) => { id = window.setTimeout(() => { reject(Error(text)); }, READ_WAIT); });
+  const late = new Promise<never>((_, reject) => { id = window.setTimeout(() => { reject(new Late(text)); }, READ_WAIT); });
   return Promise.race([work, late]).finally(() => { window.clearTimeout(id); });
 }
 
@@ -96,13 +98,23 @@ export function createRestore(host: RestoreHost): RestoreFlow {
   const folder = (): string => backup.custom() ?? desktop.defaultFolder;
   const dataOf = (bytes: Uint8Array | undefined): Record<string, unknown> | null => bytes === undefined ? null : parseData(bytes);
   let running = false;
-  const unsettled = createUnsettled();
-  /** 限時等一件回來還會生效的事（存檔、換分頁）：逾時之後原呼叫還可能落地，記著，回來之前不開下一輪（L2 的 R19）。 */
-  const landing = <T>(what: string, work: Promise<T>, late: string): Promise<T> => { unsettled.track(what, work); return limited(work, late); };
+  /** 卡住的那一步（§3-1 第 6 點）：這次載入不再比對或還原，重新開啟 Obsidian 才放開。 */
+  let locked: string | null = null;
+  const unlocked = (): void => { if (locked !== null) throw Error(`上一次還原有一步卡住（${locked}），結果未定；重新開啟 Obsidian，再比對就會接著做`); };
+  /**
+   * 等一件碰 vault 或編輯器的事：超過時間就鎖住。Promise 結束不代表寫完（Obsidian 中止時底下的寫入還在路上，saveData 還會吞掉錯誤），
+   * 所以看碼表不看結果，也不開下一輪（L2 的 R19）。
+   */
+  async function step<T>(work: Promise<T>, late: string): Promise<T> {
+    try { return await limited(work, late); } catch (error) {
+      if (error instanceof Late) locked ??= late;
+      throw error;
+    }
+  }
   /** 分頁還是空白的就開回原來那篇；被關掉或拿去開別篇就不動（L2 的 R1）。 */
   async function reopen({ leaf, state, eState }: Opened): Promise<void> {
     if (!app.workspace.getLeavesOfType('empty').includes(leaf)) return;
-    await landing('開回分頁', leaf.setViewState(state), '開回分頁超過 30 秒沒有回來');
+    await step(leaf.setViewState(state), '開回分頁超過 30 秒沒有回來');
     leaf.setEphemeralState(eState);
   }
 
@@ -139,7 +151,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       return { rows: rows.sort(byTime), unreadable: skipped.length };
     },
     async compare(row) {
-      unsettled.check();
+      unlocked();
       // D-154：畫面寫清楚之外，也記進錯誤紀錄（§6）。
       let step = '讀備份';
       let opened: Extract<ReturnType<typeof openBackup>, { ok: true }>;
@@ -178,20 +190,18 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       const state = host.state();
       if (!state) throw Error('還沒讀完，等一下再還原');
       if (running) throw Error('已經在還原');
-      unsettled.check();
+      unlocked();
       const { opened, row } = comparison;
       running = true;
       host.running(true);
       try {
         host.leaving();
-        return await state.restore(async writer => {
+        const result = await state.restore(async writer => {
           const screenPlan = comparison.plan(chosen);
           const screen = new Map(screenPlan.files.filter(file => chosen.has(file.path)).map(file => [file.path, file.current?.sha256 ?? null] as const));
           const targets = new Set(screenPlan.files.filter(file => chosen.has(file.path) || file.action === 'restore').map(file => file.current?.path ?? file.target ?? ''));
           const swapped: Opened[] = [];
-          /** 關分頁沒有等到結果的那一個：現在還不是空白，要等它回來才開回去。 */
-          let closingLate: Opened | null = null;
-          const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], unsettled: [] };
+          const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], stuck: null };
           try {
             // 開著的那幾篇先存檔、換成空白分頁（§3-2）：存不進去就什麼都不寫。
             const tabs = openLeaves(app, targets).map(leaf => ({ leaf, view: leaf.view as MarkdownView, path: (leaf.view as MarkdownView).file?.path }));
@@ -201,15 +211,13 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               if (!same()) continue;
               const eState: unknown = view.getEphemeralState();
               const viewState = leaf.getViewState();
-              try { await landing('存檔 ' + (path ?? ''), view.save(), '存檔超過 30 秒沒有回來'); } catch (error) {
+              try { await step(view.save(), '存檔超過 30 秒沒有回來'); } catch (error) {
                 host.fail('存檔', error, view.file?.path);
                 return { ...empty, stopped: { step: '存檔 ' + (view.file?.path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
               if (!same()) continue;
-              const tab: Opened = { leaf, state: viewState, eState, closing: leaf.setViewState({ type: 'empty' }) };
-              swapped.push(tab);
-              try { await landing('關分頁 ' + (path ?? ''), tab.closing, '關分頁超過 30 秒沒有回來'); } catch (error) {
-                closingLate = tab;
+              swapped.push({ leaf, state: viewState, eState });
+              try { await step(leaf.setViewState({ type: 'empty' }), '關分頁超過 30 秒沒有回來'); } catch (error) {
                 host.fail('關分頁', error, path);
                 return { ...empty, stopped: { step: '關分頁 ' + (path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
@@ -219,7 +227,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               if (file.target === null) continue;
               try { await limited(desktop.noLinks(file.target), LINKS_LATE); } catch (error) {
                 // 查連結卡住：一篇一篇等太久，整次停下來，什麼都還沒寫（L2 的 R12）。
-                if (error instanceof Error && error.message === LINKS_LATE) { host.fail('查連結', error, file.target); return { ...empty, stopped: { step: '查連結', message: LINKS_LATE } }; }
+                if (error instanceof Late) { host.fail('查連結', error, file.target); return { ...empty, stopped: { step: '查連結', message: LINKS_LATE } }; }
                 links.set(file.target, error instanceof Error ? error.message : String(error));
               }
             }
@@ -252,18 +260,17 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               closed: () => writer.closed(),
               fail: host.fail,
             });
-            unsettled.add(result);
+            if (result.stuck !== null) locked = result.stuck;
             await writer.reread(result.written);
             return result;
           } finally {
             for (const tab of swapped) {
-              const failed = (error: unknown): void => { host.fail('開回分頁', error); };
-              // 這時候還不是空白，晚一點才會變：等它回來再開回去，不留一個空白分頁（L2 的 R19）。下一輪照樣要等這件事。
-              if (tab === closingLate) { unsettled.track('開回分頁', tab.closing.catch(() => {}).then(() => reopen(tab)).catch(failed)); continue; }
-              try { await reopen(tab); } catch (error) { failed(error); }
+              try { await reopen(tab); } catch (error) { host.fail('開回分頁', error); }
             }
+            if (locked !== null) writer.seal();
           }
         });
+        return locked !== null && result.stuck === null ? { ...result, stuck: locked } : result;
       } finally {
         running = false;
         host.running(false);

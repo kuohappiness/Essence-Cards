@@ -23,7 +23,7 @@ export interface EditorHandle {
 }
 
 /** 不看是哪一篇的受阻原因，照門檻檢查的順序（writable）。 */
-export type WriteBlock = 'phone' | 'loading' | 'closed' | 'restore' | 'backup' | 'unread';
+export type WriteBlock = 'phone' | 'loading' | 'closed' | 'restore' | 'restoreStuck' | 'backup' | 'unread';
 
 /** Cards 改卡組的結果。 */
 export type WriteResult =
@@ -111,6 +111,8 @@ export function createWrites(options: WritesOptions) {
   let writes: Promise<unknown> = Promise.resolve();
   /** 外掛內的還原正在做（tasks/plugin-restore.md §3-2）：這段時間排到的寫入都回受阻。 */
   let restoring = false;
+  /** 還原卡住（tasks/plugin-restore.md §3-1 第 6 點）：閘門留著關，重新開啟才放開。 */
+  let sealed = false;
   /**
    * 正在 I/O 的那一份工作，從 begin 到 end：close() 等它結束（§5）。從 begin 就開始算，不是從呼叫 persist 才算：
    * editor.apply()、editor.persist() 裡可能同步 close()（Codex L2 再審的 R2 續）。中間只有寫進磁碟那一步會等，那一步有 writeTimeout。
@@ -127,7 +129,7 @@ export function createWrites(options: WritesOptions) {
     if (!options.fillIds) return 'phone';
     if (!life.loaded) return 'loading';
     if (life.closed) return 'closed';
-    if (restoring) return 'restore';
+    if (restoring) return sealed ? 'restoreStuck' : 'restore';
     if (options.backupPending()) return 'backup';
     if (reads.unread.size) return 'unread';
     return null;
@@ -237,7 +239,7 @@ export function createWrites(options: WritesOptions) {
     try { return await Promise.race([job, late]); } finally {
       clearTimeout(id);
       if (gaveUp) { job.catch(() => {}); restoring = false; }
-      else await enqueue(() => { restoring = false; return Promise.resolve(); });
+      else await enqueue(() => { restoring = sealed; return Promise.resolve(); });
     }
   }
   /**
@@ -421,6 +423,7 @@ export function createWrites(options: WritesOptions) {
     readTimed,
     blockedNow,
     exclusive,
+    seal(): void { sealed = true; },
     restoreDeck,
     /**
      * 核對讀取（§4 第 3 點）：讀到的和預期的輸出一字不差，或預期的變更都在（家長在這段時間又打了別的字），先套用延後的記錄、

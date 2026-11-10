@@ -123,6 +123,8 @@ export interface RestoreWriter {
   reread(paths: readonly string[]): Promise<void>;
   /** 外掛停用了：停在下一個檔之前。 */
   closed(): boolean;
+  /** 有一步卡住、結果未定（§3-1 第 6 點）：還原結束之後閘門留著關，範圍檔與小考檔的隊伍照放，close() 才走得到底。 */
+  seal(): void;
 }
 /** 毫秒。 */
 export interface LoadTimings { decks: number; history: number; plan: number; total: number }
@@ -283,7 +285,7 @@ export interface State {
   writeBlock(): WriteBlock | null;
   /**
    * 還原的獨占時段（tasks/plugin-restore.md §3-2）：呼叫的當下就關寫入的閘門（writeBlock 回 restore），等正在跑的寫入與範圍檔、小考檔的隊伍，再跑 work。
-   * 排隊中的寫入回受阻，範圍檔、小考檔排在後面、輪到時照舊核對；閘門不論成敗都放開。已經在還原時丟錯。
+   * 排隊中的寫入回受阻，範圍檔、小考檔排在後面、輪到時照舊核對；閘門不論成敗都放開，只有 work 呼叫過 seal 時留著關（writeBlock 回 restoreStuck）。已經在還原時丟錯。
    */
   restore<T>(work: (writer: RestoreWriter) => Promise<T>): Promise<T>;
   /** 外掛內的備份（StateOptions.backup）：有一份成功的備份時 true，失敗或還沒有時 false。沒傳 backup 時不作用。 */
@@ -923,6 +925,7 @@ export function createState(options: StateOptions): State {
             await quiz.drain(EXAM_WAIT, () => undefined);
           },
           closed: () => life.closed,
+          seal: () => { writes.seal(); },
         });
       }).finally(() => {
         open();

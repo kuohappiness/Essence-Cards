@@ -163,13 +163,14 @@ export class RestoreModal extends Modal {
     }
     this.working = false;
     if (this.containerEl.isConnected) this.drawResult(result, comparison);
-    else new Notice(`還原完成：${String(result.files.filter(file => file.outcome === '已還原').length)} 個檔`);
+    else new Notice(result.stuck === null ? `還原完成：${String(result.files.filter(file => file.outcome === '已還原').length)} 個檔` : '還原有一步卡住，結果未定；重新開啟 Obsidian，再比對就會接著做');
   }
 
   private drawResult(result: RestoreResult, comparison: Comparison): void {
     const { contentEl } = this;
     contentEl.empty();
-    if (result.stopped) contentEl.createDiv({ cls: 'essence-cards-backup-problem', text: `${result.stopped.step}：${result.stopped.message}。什麼都沒有寫。` });
+    if (result.stuck !== null) contentEl.createDiv({ cls: 'essence-cards-backup-problem', text: `有一步卡住（${result.stuck}），結果未定。重新開啟 Obsidian，再比對就會接著做。` });
+    else if (result.stopped) contentEl.createDiv({ cls: 'essence-cards-backup-problem', text: `${result.stopped.step}：${result.stopped.message}。什麼都沒有寫。` });
     if (result.backup) contentEl.createDiv({ cls: 'setting-item-description', text: '還原前的備份：' + result.backup });
     const list = contentEl.createDiv({ cls: 'essence-cards-restore-list' });
     const sorted = [...result.files].sort((a, b) => OUTCOME_ORDER.indexOf(a.outcome) - OUTCOME_ORDER.indexOf(b.outcome));
@@ -183,7 +184,8 @@ export class RestoreModal extends Modal {
       row.createSpan({ text: `${log.outcome}　補回 ${String(log.lines)} 行紀錄（${log.source}）` });
       if (log.reason) row.createDiv({ cls: 'setting-item-description', text: log.reason });
     }
-    if (!result.files.length && !result.logs.length && !result.stopped) list.createDiv({ text: '沒有要寫的檔' });
+    if (!result.files.length && !result.logs.length && !result.stopped && result.stuck === null) list.createDiv({ text: '沒有要寫的檔' });
+    if (result.stuck !== null) return;
     const footer = contentEl.createDiv({ cls: 'essence-cards-restore-footer' });
     footer.createEl('button', { text: '重新比對' }).addEventListener('click', () => { void this.compare(comparison.row); });
   }

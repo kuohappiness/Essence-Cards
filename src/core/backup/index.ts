@@ -7,7 +7,7 @@ export { missingLogLines } from './logs.ts';
 export { deckIds, planRestore } from './plan.ts';
 export type { PlannedFile, PlanOptions, RestorePlan } from './plan.ts';
 export { textDiff } from './diff.ts';
-export { applyRestore, createUnsettled, readCurrent, tickable } from './restore.ts';
+export { applyRestore, readCurrent, tickable } from './restore.ts';
 export type { RestoreResult, RestoreRun } from './restore.ts';
 export { lastVersions } from './versions.ts';
 export { checkWritten, filesReader, takeBackup } from './take.ts';

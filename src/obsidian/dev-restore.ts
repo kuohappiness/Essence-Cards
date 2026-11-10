@@ -1,4 +1,4 @@
-import type { App } from 'obsidian';
+import { MarkdownView, TFile, type App } from 'obsidian';
 import { capturePng, keepRendering } from './dev-review.ts';
 import type { SettingsStore } from '../core/settings/index.ts';
 import type { State } from '../state/index.ts';
@@ -8,7 +8,7 @@ import type { RestoreFlow } from './restore.ts';
 
 // 外掛內還原的 Windows 實機（tasks/plugin-restore.md §8），只在開發版。走真的視窗：開、選一份、勾、按還原，每一步截圖。
 // URI 參數：do=status（列備份）、do=cap（value=每日時間上限）、do=check（target=資料夾：state 看到的那幾篇與作答）、do=run；run 的 pick=第幾份（0 是最新）、use=檔名（優先於 pick）、
-// tick=要勾的列（文字含這段，用 | 分開；all 按全選）、apply=1 才按還原。URI 參數不能叫 name、path。
+// tick=要勾的列（文字含這段，用 | 分開；all 按全選）、apply=1 才按還原；tab=開著這篇、typed=在開著的那篇打字不存、stall=save 讓它的存檔卡住（§3-1 第 6 點）。URI 參數不能叫 name、path。
 
 export interface RestoreDevHost { app: App; restoreFlow: RestoreFlow | null; state: State | null; store: SettingsStore }
 
@@ -45,6 +45,21 @@ export async function restoreDev(host: RestoreDevHost, params: Params, folder: s
   if (index < 0 || index >= list.rows.length) throw Error('沒有這一份備份');
   const rendering = keepRendering();
   const modal = new RestoreModal(app, flow);
+  let unstall = (): void => {};
+  if (params.tab) {
+    const file = app.vault.getAbstractFileByPath(params.tab);
+    if (!(file instanceof TFile)) throw Error('沒有這一篇：' + params.tab);
+    const leaf = app.workspace.getLeaf('tab');
+    await leaf.openFile(file);
+    if (!(leaf.view instanceof MarkdownView)) throw Error('不是筆記分頁');
+    const view = leaf.view;
+    if (params.typed) view.editor.replaceRange(params.typed, { line: 0, ch: 0 });
+    if (params.stall === 'save') {
+      const real = view.save.bind(view);
+      view.save = () => new Promise<void>(() => {});
+      unstall = () => { view.save = real; };
+    }
+  }
   const steps: Record<string, unknown> = {};
   const body = (): HTMLElement => modal.contentEl;
   const shot = async (name: string): Promise<void> => {
@@ -69,14 +84,17 @@ export async function restoreDev(host: RestoreDevHost, params: Params, folder: s
       const start = body().querySelector<HTMLButtonElement>('.mod-cta');
       if (!start || start.disabled) throw Error('還原的按鈕不能按：' + text(start));
       start.click();
-      await until(() => Array.from(body().querySelectorAll('button')).some(button => button.textContent === '重新比對'), '結果', 120_000);
+      const again = (): HTMLButtonElement | undefined => Array.from(body().querySelectorAll('button')).find(button => button.textContent === '重新比對');
+      await until(() => again() !== undefined || text(body()).includes('卡住'), '結果', 120_000);
       await shot('4 結果');
-      Array.from(body().querySelectorAll('button')).find(button => button.textContent === '重新比對')!.click();
+      if (!again()) return { ...steps, block: host.state?.writeBlock(), compare: await flow.compare(list.rows[index]).then(() => '比對成功', (error: unknown) => (error as Error).message) };
+      again()!.click();
       await until(() => body().querySelector('.essence-cards-restore-footer .mod-cta') !== null, '重新比對');
       await shot('5 重新比對');
     }
     return steps;
   } finally {
+    unstall();
     modal.close();
     rendering.restore();
   }

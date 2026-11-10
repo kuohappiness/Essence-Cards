@@ -45,7 +45,8 @@ interface PluginLike {
 interface RestoreFlowLike {
   list(): Promise<{ rows: unknown[] }>;
   compare(row: unknown): Promise<unknown>;
-  apply(comparison: unknown, chosen: ReadonlySet<string>): Promise<{ stopped: unknown; backup: string | null; files: { path: string; outcome: string }[] }>;
+  apply(comparison: unknown, chosen: ReadonlySet<string>): Promise<{ stopped: unknown; stuck: string | null; backup: string | null; files: { path: string; outcome: string }[] }>;
+  active(): boolean;
 }
 
 /** 電腦的替身用的暫存資料夾：vault 的位置與備份位置（外掛內的備份真的寫在這裡，D-150）。 */
@@ -862,7 +863,7 @@ void test('還原接線：存檔的等待期間分頁換了別篇：不換成空
   assert.deepEqual(tab.history, []);
 });
 
-void test('還原接線：寫入逾時、結果未定時，回來之前不能比對或還原；回來之後內容對（L2 的 R2）', async t => {
+void test('還原接線：寫入卡住：交回結果、鎖住這次載入、閘門留著關、複習放開；晚回來內容對，還是要重開（§3-1 第 6 點）', async t => {
   const { h, flow, row } = await restoreReady(t, deck);
   h.texts.set(STILL, brokenDeck);
   const comparison = await flow.compare(row);
@@ -881,14 +882,29 @@ void test('還原接線：寫入逾時、結果未定時，回來之前不能比
   for (let i = 0; i < 2000 && !finished; i++) { t.mock.timers.tick(30_000); await turn(); }
   const result = await running;
   assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[STILL, '失敗']]);
-  assert.equal(h.plugin.state?.writeBlock(), null);
-  await assert.rejects(flow.compare(row), /還沒回來/);
-  await assert.rejects(flow.apply(comparison, new Set([STILL])), /還沒回來/);
+  assert.match(result.stuck ?? '', /寫入超過/);
+  assert.equal(h.plugin.state?.writeBlock(), 'restoreStuck');
+  assert.equal(flow.active(), false);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
+  await assert.rejects(flow.apply(comparison, new Set([STILL])), /重新開啟 Obsidian/);
   release();
   for (let i = 0; i < 200; i++) { t.mock.timers.tick(100); await turn(); }
   t.mock.timers.reset();
   assert.equal(h.text(STILL), deck[STILL]);
-  await flow.compare(row);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
+});
+
+void test('還原接線：鎖住之後 close 走得到底，排隊的作答寫得出去（§3-1 第 6 點）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  h.texts.set(STILL, brokenDeck);
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  stallOne(h.leaves[0].view, 'save');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const result = await pastLimit(t, flow.apply(comparison, new Set([STILL])));
+  assert.match(result.stuck ?? '', /存檔超過/);
+  await pastLimit(t, (h.plugin.state as unknown as { close(): Promise<void> }).close());
+  t.mock.timers.reset();
 });
 
 void test('還原接線：設定頁的按鈕打開還原視窗', async t => {
@@ -1002,7 +1018,7 @@ function stallOne(owner: unknown, key: string, nth = 1): () => void {
   return () => { release(); };
 }
 
-void test('還原接線：存檔逾時之後，舊存檔回來之前不能比對，下一輪不會被它蓋掉（L2 的 R19）', async t => {
+void test('還原接線：存檔卡住：鎖住，舊存檔回來之後也沒有下一輪可以被它蓋掉（L2 的 R19）', async t => {
   const { h, flow, row } = await restoreReady(t, deck);
   h.texts.set(STILL, brokenDeck);
   const comparison = await flow.compare(row);
@@ -1011,35 +1027,33 @@ void test('還原接線：存檔逾時之後，舊存檔回來之前不能比對
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const result = await pastLimit(t, flow.apply(comparison, new Set([STILL])));
   assert.match((result.stopped as { step: string }).step, /存檔/);
-  await assert.rejects(flow.compare(row), /還沒回來/);
-  await assert.rejects(flow.apply(comparison, new Set([STILL])), /還沒回來/);
+  assert.match(result.stuck ?? '', /存檔超過/);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
+  await assert.rejects(flow.apply(comparison, new Set([STILL])), /重新開啟 Obsidian/);
   release();
   await turns();
   t.mock.timers.reset();
-  await flow.compare(row);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
 });
 
-void test('還原接線：關分頁逾時、晚一點才變成空白：回來之前不能比對，回來之後開回原來那篇（L2 的 R19）', async t => {
+void test('還原接線：關分頁卡住：鎖住，晚回來也沒有下一輪（L2 的 R19）', async t => {
   const { h, flow, row } = await restoreReady(t, deck);
   h.texts.set(STILL, brokenDeck);
   const comparison = await flow.compare(row);
   h.openTab(STILL);
-  const tab = h.leaves[0] as unknown as { view: unknown; history: unknown[] };
-  const view = tab.view;
-  const release = stallOne(tab, 'setViewState');
+  const release = stallOne(h.leaves[0], 'setViewState');
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const result = await pastLimit(t, flow.apply(comparison, new Set([STILL])));
   assert.match((result.stopped as { step: string }).step, /關分頁/);
-  await assert.rejects(flow.compare(row), /還沒回來/);
+  assert.match(result.stuck ?? '', /關分頁超過/);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
   release();
   await turns();
-  assert.equal(tab.view, view);
-  assert.equal(tab.history.length, 3);
   t.mock.timers.reset();
-  await flow.compare(row);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
 });
 
-void test('還原接線：一個分頁存檔卡住、另一個開回也卡住：兩件都回來才能比對（L2 的 R19）', async t => {
+void test('還原接線：一個分頁存檔卡住、另一個開回也卡住：有界交回、鎖住（L2 的 R19）', async t => {
   const other = 'Essence Cards/b.md';
   const both = { ...deck, [other]: deck[STILL].replace('aaaaaa', 'bbbbbb') };
   const { h, flow, row } = await restoreReady(t, both);
@@ -1053,19 +1067,18 @@ void test('還原接線：一個分頁存檔卡住、另一個開回也卡住：
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const result = await pastLimit(t, flow.apply(comparison, new Set([STILL, other])));
   assert.match((result.stopped as { step: string }).step, /存檔/);
-  await assert.rejects(flow.compare(row), /還沒回來/);
+  assert.match(result.stuck ?? '', /存檔超過/);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
   save();
-  await turns();
-  await assert.rejects(flow.compare(row), /還沒回來/);
   reopen();
   await turns();
   t.mock.timers.reset();
-  await flow.compare(row);
+  await assert.rejects(flow.compare(row), /重新開啟 Obsidian/);
 });
 
 /**
- * 逐一卡住還原期間的每一次 I/O（L2 的 R6、R11、R12，D-197 的重整）：不論卡在哪一次，閘門都要放開、結果交回；
- * 放開之後沒有新的寫入；卡住的是回來還會生效的事（寫入、存檔、換分頁），它回來之前不能比對；晚回來成功或失敗都不關上一般寫入（L2 的 R19、R20）。
+ * 逐一卡住還原期間的每一次 I/O（L2 的 R6、R11、R12，D-197 的重整，§3-1 第 6 點）：不論卡在哪一次，結果都有界交回、之後沒有新的寫入。
+ * 卡住的是碰 vault 或編輯器的事（寫入、存檔、換分頁）就鎖住：閘門留著關、不能再比對；其他照舊放開。備份主機晚回來成功或失敗都不關上一般寫入（L2 的 R20）。
  * 新增的等待只要經過這些介面，自動算進來。
  */
 const RESTORE_WRITES = new Set(['modifyBinary', 'createBinary', 'saveData']);
@@ -1099,7 +1112,7 @@ function stallEachCall(h: Awaited<ReturnType<typeof restoreReady>>['h'], at: num
   return box;
 }
 
-for (const late of ['ok', 'error'] as const) void test(`還原接線：不論卡在哪一次 I/O，閘門都放開、結果交回，放開之後沒有新的寫入，${late === 'ok' ? '晚回來成功' : '晚回來失敗'}也一樣（D-197 的重整）`, async t => {
+for (const late of ['ok', 'error'] as const) void test(`還原接線：不論卡在哪一次 I/O，結果都有界交回，之後沒有新的寫入，${late === 'ok' ? '晚回來成功' : '晚回來失敗'}也一樣（D-197 的重整）`, async t => {
   const failures: string[] = [];
   const reached: string[] = [];
   for (let at = 0; at < 400; at++) {
@@ -1123,17 +1136,19 @@ for (const late of ['ok', 'error'] as const) void test(`還原接線：不論卡
       if (box.stalled || now - last >= 1) last = now;
     };
     let failed: unknown = null;
-    const running = flow.apply(comparison, new Set([STILL, DATA])).catch((error: unknown) => { failed = error; return null; }).finally(() => { box.finished = true; });
+    const running = flow.apply(comparison, new Set([STILL, DATA])).catch((error: unknown): null => { failed = error; return null; }).finally(() => { box.finished = true; });
     while (!box.finished && overdue < 60) { tick(); await turn(); await turn(); }
     const label = `第 ${String(at)} 次（${box.stalled ?? '沒卡到'}）`;
     if (!box.finished) failures.push(label + '：一直沒有交回結果');
     else {
-      await running;
-      if (h.plugin.state?.writeBlock() === 'restore') failures.push(label + '：閘門沒放開');
-      if (box.stalled && RESTORE_LANDS.has(box.stalled.split('.')[1]) && !failed) {
-        const refused = await flow.compare(row).then(() => false, () => true);
-        if (!refused) failures.push(label + '：回來還會生效的事還沒回來，就能比對');
-      }
+      const stuck = (await running)?.stuck ?? null;
+      const block = h.plugin.state?.writeBlock() ?? null;
+      if (flow.active()) failures.push(label + '：這台電腦的複習沒放開');
+      if (box.stalled && RESTORE_LANDS.has(box.stalled.split('.')[1]) && !failed && stuck === null) failures.push(label + '：碰 vault 或編輯器的事超過時間卻沒有鎖住');
+      if (box.stalled?.startsWith('host.') && stuck !== null) failures.push(label + '：備份主機卡住不該鎖住');
+      if (stuck === null && (block === 'restore' || block === 'restoreStuck')) failures.push(`${label}：閘門沒放開（${block}）`);
+      if (stuck !== null && block !== 'restoreStuck') failures.push(`${label}：鎖住之後閘門沒有留著關（${String(block)}）`);
+      if (stuck !== null && !await flow.compare(row).then(() => false, () => true)) failures.push(label + '：鎖住之後還能比對');
     }
     box.release();
     for (let i = 0; i < 40; i++) { tick(); await turn(); }

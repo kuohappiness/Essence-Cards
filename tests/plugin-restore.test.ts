@@ -3,7 +3,7 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { applyRestore, backupName, createBackupRunner, createUnsettled, deckIds, filesReader, hashBytes, openBackup, planRestore, readCurrent, tickable } from '../src/core/backup/index.ts';
+import { applyRestore, backupName, createBackupRunner, deckIds, filesReader, hashBytes, openBackup, planRestore, readCurrent, tickable } from '../src/core/backup/index.ts';
 import type { BackupHost, BackupReader, OpenedBackup, PlanOptions, RestoreResult, RestoreRun } from '../src/core/backup/index.ts';
 import { parseData, sameSaved } from '../src/core/settings/index.ts';
 import { dueAt, replay } from '../src/core/study/index.ts';
@@ -341,7 +341,7 @@ function heldAfterCheck(h: Harness, match: (path: string) => boolean) {
   return { files, release };
 }
 
-void test('逾時（R2）：已送出的卡組寫入結果未定：後面的不做、閘門放開；回來之前不開下一輪，回來之後內容對', async t => {
+void test('卡住（§3-1 第 6 點）：已送出的卡組寫入超過時間：交回結果、後面的不做；晚回來內容對', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb'), [LOG]: review(T, 'aaaaaa') + '\n' });
   const backup = await snapshot(h);
   h.write(A, goal('aaaaaa', '改過'));
@@ -351,23 +351,17 @@ void test('逾時（R2）：已送出的卡組寫入結果未定：後面的不�
   const { files, release } = heldAfterCheck(h, path => path === A);
   const result = await restore(h, backup, [A, B], { files, timeout: 20 });
   assert.deepEqual(outcomes(result), [[A, '失敗'], [B, '跳過']]);
-  assert.match(result.files[0].reason, /結果未定/);
-  assert.match(result.files[1].reason, /前面有一步/);
+  assert.match(result.stuck ?? '', /寫入超過/);
+  assert.match(result.files[1].reason, /重新開啟 Obsidian/);
   assert.deepEqual(result.logs.map(log => log.outcome), ['跳過']);
-  assert.deepEqual(result.unsettled.map(item => item.path), [A]);
-  assert.equal(h.state.writeBlock(), null);
-  const guard = createUnsettled();
-  guard.add(result);
-  assert.throws(() => { guard.check(); }, /還沒回來.*a\.md/);
   release();
-  await result.unsettled[0].settled;
   await settled(h);
-  guard.check();
   assert.equal(h.texts.get(A), goal('aaaaaa'));
+  assert.equal(h.texts.get(B), goal('bbbbbb', '改過'));
   assert.deepEqual(issues(h, A), []);
 });
 
-void test('逾時（R2）：還沒輪到確認的寫入之後不寫，結果確定；不算未定', async t => {
+void test('卡住（§3-1 第 6 點）：卡住之後才輪到確認的寫入不寫', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa') });
   const backup = await snapshot(h);
   h.write(A, goal('aaaaaa', '改過'));
@@ -377,15 +371,14 @@ void test('逾時（R2）：還沒輪到確認的寫入之後不寫，結果確�
   const files = { ...h.files, async replace(path: string, check: (now: Uint8Array | null) => boolean, bytes: Uint8Array) { await gate; const done = await h.files.replace(path, check, bytes); answer = done; return done; } };
   const result = await restore(h, backup, [A], { files, timeout: 20 });
   assert.deepEqual(outcomes(result), [[A, '失敗']]);
-  assert.doesNotMatch(result.files[0].reason, /結果未定/);
-  assert.deepEqual(result.unsettled, []);
+  assert.match(result.stuck ?? '', /寫入超過/);
   release();
   await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(answer, false);
   assert.equal(h.texts.get(A), goal('aaaaaa', '改過'));
 });
 
-void test('逾時（R2）：補紀錄結果未定，等它回來之後再比對沒有要補的，只有一個還原檔', async t => {
+void test('卡住（§3-1 第 6 點）：補紀錄超過時間，晚回來之後再比對沒有要補的，只有一個還原檔', async t => {
   const line = review(T, 'aaaaaa');
   const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: line + '\n' });
   const backup = await snapshot(h);
@@ -394,17 +387,15 @@ void test('逾時（R2）：補紀錄結果未定，等它回來之後再比對�
   const { files, release } = heldAfterCheck(h, path => path.includes(' 還原 '));
   const result = await restore(h, backup, [], { files, timeout: 20 });
   assert.deepEqual(result.logs.map(log => log.outcome), ['失敗']);
-  assert.match(result.logs[0].reason, /結果未定/);
-  assert.equal(result.unsettled.length, 1);
+  assert.match(result.stuck ?? '', /補紀錄超過/);
   release();
-  await result.unsettled[0].settled;
   await settled(h);
   assert.deepEqual((await planNow(h, backup.opened, new Set())).logs, []);
   await restore(h, backup, []);
   assert.equal([...h.texts.keys()].filter(path => path.includes(' 還原 ')).length, 1);
 });
 
-void test('逾時（R2、R6）：設定卡住算結果未定、不再寫；掃描卡住後面的不做', async t => {
+void test('卡住（§3-1 第 6 點）：設定卡住之後不再寫；掃描卡住後面的不做', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') }, '{"capMinutes":30}');
   const backup = await snapshot(h);
   h.data.bytes = encode('{"capMinutes":45}');
@@ -412,7 +403,7 @@ void test('逾時（R2、R6）：設定卡住算結果未定、不再寫；掃�
   const hung = new Promise<'saved'>(() => {});
   const result = await restore(h, backup, [DATA], { timeout: 20, settings: (_, __, alive) => { live = alive; return hung; } });
   assert.deepEqual(outcomes(result), [[DATA, '失敗']]);
-  assert.deepEqual(result.unsettled.map(item => item.path), [DATA]);
+  assert.match(result.stuck ?? '', /寫設定超過/);
   assert.equal(live?.(), false);
   h.write(A, goal('aaaaaa', '改過'));
   h.write(B, goal('bbbbbb', '改過'));
@@ -420,7 +411,7 @@ void test('逾時（R2、R6）：設定卡住算結果未定、不再寫；掃�
   const list = (): Promise<string[]> => new Promise(() => {});
   const scan = await restore(h, backup, [A, B], { timeout: 20, current: () => readCurrent(h.reader, DATA), files: { ...h.files, list } });
   assert.deepEqual(outcomes(scan), [[A, '失敗'], [B, '跳過']]);
-  assert.deepEqual(scan.unsettled, []);
+  assert.match(scan.stuck ?? '', /掃描卡組超過/);
 });
 
 void test('逾時（R2）：晚回來的卡組寫入不清掉別的工作的等待', async t => {
@@ -481,7 +472,7 @@ void test('卡住（R12）：前面的存檔卡住時放棄，還原的工作之
   assert.equal(ran, false);
 });
 
-void test('逾時（R12）：補紀錄建好之後卡在讀回：算結果未定，閘門放開，回來之前不開下一輪', async t => {
+void test('卡住（R12）：補紀錄建好之後卡在讀回：一樣算卡住', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
   const backup = await snapshot(h);
   h.remove(LOG);
@@ -492,11 +483,16 @@ void test('逾時（R12）：補紀錄建好之後卡在讀回：算結果未定
   const files = { ...h.files, readBytes: async (path: string) => { if (path.includes('還原')) await hold; return readBytes(path); } };
   const result = await restore(h, backup, [], { files, timeout: 20 });
   assert.deepEqual(result.logs.map(log => log.outcome), ['失敗']);
-  assert.match(result.logs[0].reason, /結果未定/);
-  assert.equal(result.unsettled.length, 1);
-  assert.equal(h.state.writeBlock(), null);
+  assert.match(result.stuck ?? '', /補紀錄超過/);
   release();
-  await result.unsettled[0].settled;
+});
+
+void test('卡住（§3-1 第 6 點）：seal 之後閘門留著關、不能再還原，close 走得到底', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa') });
+  await h.state.restore(writer => { writer.seal(); return Promise.resolve(); });
+  assert.equal(h.state.writeBlock(), 'restoreStuck');
+  await assert.rejects(h.state.restore(() => Promise.resolve()), /已經在還原/);
+  await h.state.close();
 });
 
 void test('卡住（R6）：別的讀取已判定卡住時，重讀不讓閘門一直關著', async t => {
