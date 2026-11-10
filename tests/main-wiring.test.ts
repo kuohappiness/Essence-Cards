@@ -985,6 +985,84 @@ void test('還原接線：查連結的時候同步進來新的設定：不蓋掉
   assert.equal(h.text(DATA), newer);
 });
 
+/** 卡住之後把還原推過每一個時間上限。 */
+async function pastLimit<T>(t: test.TestContext, work: Promise<T>): Promise<T> {
+  let done = false;
+  void work.finally(() => { done = true; }).catch(() => {});
+  for (let i = 0; i < 30; i++) await new Promise(resolve => { setImmediate(resolve); }); // 先走到卡住的地方，閘門的起跑上限才不會先到
+  for (let i = 0; i < 40 && !done; i++) { t.mock.timers.tick(30_000); await new Promise(resolve => { setImmediate(resolve); }); }
+  return work;
+}
+const turns = async (): Promise<void> => { for (let i = 0; i < 10; i++) await new Promise(resolve => { setImmediate(resolve); }); };
+function stallOne(owner: unknown, key: string, nth = 1): () => void {
+  const object = owner as Record<string, (...args: unknown[]) => unknown>;
+  const real = object[key].bind(object);
+  let calls = 0, release = (): void => {};
+  object[key] = (...args) => ++calls === nth ? new Promise<void>(resolve => { release = resolve; }).then(() => real(...args)) : real(...args);
+  return () => { release(); };
+}
+
+void test('還原接線：存檔逾時之後，舊存檔回來之前不能比對，下一輪不會被它蓋掉（L2 的 R19）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  h.texts.set(STILL, brokenDeck);
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  const release = stallOne(h.leaves[0].view, 'save');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const result = await pastLimit(t, flow.apply(comparison, new Set([STILL])));
+  assert.match((result.stopped as { step: string }).step, /存檔/);
+  await assert.rejects(flow.compare(row), /還沒回來/);
+  await assert.rejects(flow.apply(comparison, new Set([STILL])), /還沒回來/);
+  release();
+  await turns();
+  t.mock.timers.reset();
+  await flow.compare(row);
+});
+
+void test('還原接線：關分頁逾時、晚一點才變成空白：回來之前不能比對，回來之後開回原來那篇（L2 的 R19）', async t => {
+  const { h, flow, row } = await restoreReady(t, deck);
+  h.texts.set(STILL, brokenDeck);
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  const tab = h.leaves[0] as unknown as { view: unknown; history: unknown[] };
+  const view = tab.view;
+  const release = stallOne(tab, 'setViewState');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const result = await pastLimit(t, flow.apply(comparison, new Set([STILL])));
+  assert.match((result.stopped as { step: string }).step, /關分頁/);
+  await assert.rejects(flow.compare(row), /還沒回來/);
+  release();
+  await turns();
+  assert.equal(tab.view, view);
+  assert.equal(tab.history.length, 3);
+  t.mock.timers.reset();
+  await flow.compare(row);
+});
+
+void test('還原接線：一個分頁存檔卡住、另一個開回也卡住：兩件都回來才能比對（L2 的 R19）', async t => {
+  const other = 'Essence Cards/b.md';
+  const both = { ...deck, [other]: deck[STILL].replace('aaaaaa', 'bbbbbb') };
+  const { h, flow, row } = await restoreReady(t, both);
+  h.texts.set(STILL, brokenDeck);
+  h.texts.set(other, both[other].replace('Q :: A', 'Q :: 改壞'));
+  const comparison = await flow.compare(row);
+  h.openTab(STILL);
+  h.openTab(other);
+  const reopen = stallOne(h.leaves[0], 'setViewState', 2);
+  const save = stallOne(h.leaves[1].view, 'save');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const result = await pastLimit(t, flow.apply(comparison, new Set([STILL, other])));
+  assert.match((result.stopped as { step: string }).step, /存檔/);
+  await assert.rejects(flow.compare(row), /還沒回來/);
+  save();
+  await turns();
+  await assert.rejects(flow.compare(row), /還沒回來/);
+  reopen();
+  await turns();
+  t.mock.timers.reset();
+  await flow.compare(row);
+});
+
 /**
  * 逐一卡住還原期間的每一次 I/O（L2 的 R6、R11、R12，D-197 的重整）：不論卡在哪一次，閘門都要放開、結果交回；
  * 放開之後沒有新的寫入；卡住的是寫入時，它回來之前不能比對。新增的等待只要經過這些介面，自動算進來。

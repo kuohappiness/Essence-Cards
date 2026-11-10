@@ -85,18 +85,19 @@ export async function readCurrent(reader: BackupReader, data: string | null): Pr
 /** 這個檔還原之後要不要算「有差異要處理」：畫面列給家長勾的檔。紀錄裡的只補不見的、不用勾。 */
 export const tickable = (file: PlannedFile): boolean => file.action !== 'keep' && !(file.kind === 'missing' && file.path.startsWith(LOG_FOLDER + '/'));
 
-/** 上一輪逾時、還沒回來的寫入（L2 的 R2）：它們結束之前不開下一輪，否則比對看不到它、之後才落地就會重複。 */
-export function createUnsettled(): { add(result: RestoreResult): void; check(): void } {
-  const waiting = new Set<string>();
+/** 上一輪逾時、回來還會生效的事（寫入 L2 的 R2；存檔與換分頁 R19）：它們結束之前不開下一輪，否則比對看不到它、之後才落地就會蓋掉或重複。 */
+export function createUnsettled(): { track(what: string, work: Promise<unknown>): void; add(result: RestoreResult): void; check(): void } {
+  const waiting = new Set<{ what: string }>();
+  function track(what: string, work: Promise<unknown>): void {
+    const entry = { what };
+    waiting.add(entry);
+    void work.catch(() => {}).finally(() => { waiting.delete(entry); });
+  }
   return {
-    add(result) {
-      for (const { path, settled } of result.unsettled) {
-        waiting.add(path);
-        void settled.finally(() => { waiting.delete(path); });
-      }
-    },
+    track,
+    add(result) { for (const { path, settled } of result.unsettled) track(path, settled); },
     check() {
-      if (waiting.size) throw Error(`上一次還原有寫入還沒回來（${[...waiting].join('、')}）；等一下再試，一直這樣的話重新開啟 Obsidian`);
+      if (waiting.size) throw Error(`上一次還原有動作還沒回來（${[...new Set([...waiting].map(entry => entry.what))].join('、')}）；等一下再試，一直這樣的話重新開啟 Obsidian`);
     },
   };
 }

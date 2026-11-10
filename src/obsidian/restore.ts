@@ -58,7 +58,7 @@ export interface RestoreFlow {
   active(): boolean;
 }
 
-interface Opened { leaf: WorkspaceLeaf; state: ViewState; eState: unknown }
+interface Opened { leaf: WorkspaceLeaf; state: ViewState; eState: unknown; closing: Promise<unknown> }
 
 function byTime(a: BackupRow, b: BackupRow): number {
   return a.stored.manifest.started < b.stored.manifest.started ? 1 : a.stored.manifest.started > b.stored.manifest.started ? -1 : 0;
@@ -97,6 +97,14 @@ export function createRestore(host: RestoreHost): RestoreFlow {
   const dataOf = (bytes: Uint8Array | undefined): Record<string, unknown> | null => bytes === undefined ? null : parseData(bytes);
   let running = false;
   const unsettled = createUnsettled();
+  /** 限時等一件回來還會生效的事（存檔、換分頁）：逾時之後原呼叫還可能落地，記著，回來之前不開下一輪（L2 的 R19）。 */
+  const landing = <T>(what: string, work: Promise<T>, late: string): Promise<T> => { unsettled.track(what, work); return limited(work, late); };
+  /** 分頁還是空白的就開回原來那篇；被關掉或拿去開別篇就不動（L2 的 R1）。 */
+  async function reopen({ leaf, state, eState }: Opened): Promise<void> {
+    if (!app.workspace.getLeavesOfType('empty').includes(leaf)) return;
+    await landing('開回分頁', leaf.setViewState(state), '開回分頁超過 30 秒沒有回來');
+    leaf.setEphemeralState(eState);
+  }
 
   /** 計畫要的規則（§2）：links 是事先查好的路徑上的連結。 */
   function planOptions(links: ReadonlyMap<string, string>) {
@@ -181,6 +189,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
           const screen = new Map(screenPlan.files.filter(file => chosen.has(file.path)).map(file => [file.path, file.current?.sha256 ?? null] as const));
           const targets = new Set(screenPlan.files.filter(file => chosen.has(file.path) || file.action === 'restore').map(file => file.current?.path ?? file.target ?? ''));
           const swapped: Opened[] = [];
+          /** 關分頁沒有等到結果的那一個：現在還不是空白，要等它回來才開回去。 */
+          let closingLate: Opened | null = null;
           const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], unsettled: [] };
           try {
             // 開著的那幾篇先存檔、換成空白分頁（§3-2）：存不進去就什麼都不寫。
@@ -191,13 +201,15 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               if (!same()) continue;
               const eState: unknown = view.getEphemeralState();
               const viewState = leaf.getViewState();
-              try { await limited(view.save(), '存檔超過 30 秒沒有回來'); } catch (error) {
+              try { await landing('存檔 ' + (path ?? ''), view.save(), '存檔超過 30 秒沒有回來'); } catch (error) {
                 host.fail('存檔', error, view.file?.path);
                 return { ...empty, stopped: { step: '存檔 ' + (view.file?.path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
               if (!same()) continue;
-              swapped.push({ leaf, state: viewState, eState });
-              try { await limited(leaf.setViewState({ type: 'empty' }), '關分頁超過 30 秒沒有回來'); } catch (error) {
+              const tab: Opened = { leaf, state: viewState, eState, closing: leaf.setViewState({ type: 'empty' }) };
+              swapped.push(tab);
+              try { await landing('關分頁 ' + (path ?? ''), tab.closing, '關分頁超過 30 秒沒有回來'); } catch (error) {
+                closingLate = tab;
                 host.fail('關分頁', error, path);
                 return { ...empty, stopped: { step: '關分頁 ' + (path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
@@ -244,13 +256,11 @@ export function createRestore(host: RestoreHost): RestoreFlow {
             await writer.reread(result.written);
             return result;
           } finally {
-            for (const { leaf, state: viewState, eState } of swapped) {
-              try {
-                // 空白分頁在這段時間被關掉或拿去開別篇：不把它換回來（L2 的 R1）。
-                if (!app.workspace.getLeavesOfType('empty').includes(leaf)) continue;
-                await limited(leaf.setViewState(viewState), '開回分頁超過 30 秒沒有回來');
-                leaf.setEphemeralState(eState);
-              } catch (error) { host.fail('開回分頁', error); }
+            for (const tab of swapped) {
+              const failed = (error: unknown): void => { host.fail('開回分頁', error); };
+              // 這時候還不是空白，晚一點才會變：等它回來再開回去，不留一個空白分頁（L2 的 R19）。下一輪照樣要等這件事。
+              if (tab === closingLate) { unsettled.track('開回分頁', tab.closing.catch(() => {}).then(() => reopen(tab)).catch(failed)); continue; }
+              try { await reopen(tab); } catch (error) { failed(error); }
             }
           }
         });
