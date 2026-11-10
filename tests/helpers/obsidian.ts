@@ -298,7 +298,9 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   };
   const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const window = Object.assign(new EventTarget(), {
-    setTimeout, clearTimeout,
+    // 呼叫當下才查全域的計時器：t.mock.timers 也管得到 window.setTimeout。
+    setTimeout: ((callback: () => void, ms?: number) => setTimeout(callback, ms)) as unknown as typeof setTimeout,
+    clearTimeout: (id?: Parameters<typeof clearTimeout>[0]) => { clearTimeout(id); },
     setInterval: (callback: () => void) => { timers.setInterval++; intervals.push(callback); return intervals.length; },
     clearInterval: () => {},
   });

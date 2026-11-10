@@ -14,6 +14,7 @@ import type { BackupWiring } from './backup.ts';
 
 /** 讀一個檔最多等多久：iCloud 佔位檔可能一直不回來，還原的閘門不能一直關著（§3-1）。 */
 const READ_WAIT = 30_000;
+const LINKS_LATE = '查路徑上的連結超過 30 秒沒有回來';
 
 export interface RestoreHost {
   app: App;
@@ -72,7 +73,7 @@ function limited<T>(work: Promise<T>, text: string): Promise<T> {
 
 /** 讀一個檔不能卡住（§3-1 第 6 點）。 */
 function timedReader(reader: BackupReader): BackupReader {
-  return { list: () => reader.list(), read: path => limited(reader.read(path), `讀 ${path} 超過 30 秒沒有回來（可能還在從 iCloud 下載）`) };
+  return { list: () => limited(reader.list(), '列出 vault 的檔案超過 30 秒沒有回來'), read: path => limited(reader.read(path), `讀 ${path} 超過 30 秒沒有回來（可能還在從 iCloud 下載）`) };
 }
 
 /** 開著這些檔、已經載入的分頁（§3-2）。延後載入的分頁還沒讀檔，不用動；getLeavesOfType 才找得到背景分頁（§8 第 1 點實測）。 */
@@ -195,13 +196,20 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                 return { ...empty, stopped: { step: '存檔 ' + (view.file?.path ?? ''), message: error instanceof Error ? error.message : String(error) } };
               }
               if (!same()) continue;
-              await leaf.setViewState({ type: 'empty' });
               swapped.push({ leaf, state: viewState, eState });
+              try { await limited(leaf.setViewState({ type: 'empty' }), '關分頁超過 30 秒沒有回來'); } catch (error) {
+                host.fail('關分頁', error, path);
+                return { ...empty, stopped: { step: '關分頁 ' + (path ?? ''), message: error instanceof Error ? error.message : String(error) } };
+              }
             }
             const links = new Map<string, string>();
             for (const file of screenPlan.files) {
               if (file.target === null) continue;
-              try { await desktop.noLinks(file.target); } catch (error) { links.set(file.target, error instanceof Error ? error.message : String(error)); }
+              try { await limited(desktop.noLinks(file.target), LINKS_LATE); } catch (error) {
+                // 查連結卡住：一篇一篇等太久，整次停下來，什麼都還沒寫（L2 的 R12）。
+                if (error instanceof Error && error.message === LINKS_LATE) { host.fail('查連結', error, file.target); return { ...empty, stopped: { step: '查連結', message: LINKS_LATE } }; }
+                links.set(file.target, error instanceof Error ? error.message : String(error));
+              }
             }
             const result = await applyRestore({
               opened, chosen, screen,
@@ -238,7 +246,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               try {
                 // 空白分頁在這段時間被關掉或拿去開別篇：不把它換回來（L2 的 R1）。
                 if (!app.workspace.getLeavesOfType('empty').includes(leaf)) continue;
-                await leaf.setViewState(viewState);
+                await limited(leaf.setViewState(viewState), '開回分頁超過 30 秒沒有回來');
                 leaf.setEphemeralState(eState);
               } catch (error) { host.fail('開回分頁', error); }
             }

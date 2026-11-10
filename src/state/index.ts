@@ -911,8 +911,7 @@ export function createState(options: StateOptions): State {
       const examBefore = examWrites, quizBefore = quiz.after(gate);
       examWrites = examWrites.then(() => gate);
       restoringNow++;
-      return writes.exclusive(async () => {
-        await Promise.allSettled([examBefore, quizBefore]);
+      return writes.exclusive(() => Promise.allSettled([examBefore, quizBefore]), () => {
         return work({
           deck: writes.restoreDeck,
           async reread(paths) {

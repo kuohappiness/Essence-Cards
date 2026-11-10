@@ -466,6 +466,39 @@ void test('逾時（R15）：晚回來的卡組寫入不解開同一篇新寫入
   await filling;
 });
 
+void test('卡住（R12）：前面的存檔卡住時放棄，還原的工作之後輪到也不做，閘門放開', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
+  const held = h.holdRead(B);
+  h.write(B, goal('bbbbbb', '改過'));
+  const queued = h.state.fillIds(A);
+  await held.started;
+  let ran = false;
+  await assert.rejects(h.state.restore(() => { ran = true; return Promise.resolve(); }), /前面還有存檔沒做完/);
+  assert.equal(h.state.writeBlock() === 'restore', false);
+  held.release();
+  await queued;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(ran, false);
+});
+
+void test('逾時（R12）：補紀錄建好之後卡在讀回：算結果未定，閘門放開，回來之前不開下一輪', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [LOG]: review(T, 'aaaaaa') + '\n' });
+  const backup = await snapshot(h);
+  h.remove(LOG);
+  await settled(h);
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const readBytes = h.files.readBytes.bind(h.files);
+  const files = { ...h.files, readBytes: async (path: string) => { if (path.includes('還原')) await hold; return readBytes(path); } };
+  const result = await restore(h, backup, [], { files, timeout: 20 });
+  assert.deepEqual(result.logs.map(log => log.outcome), ['失敗']);
+  assert.match(result.logs[0].reason, /結果未定/);
+  assert.equal(result.unsettled.length, 1);
+  assert.equal(h.state.writeBlock(), null);
+  release();
+  await result.unsettled[0].settled;
+});
+
 void test('卡住（R6）：別的讀取已判定卡住時，重讀不讓閘門一直關著', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa'), [B]: goal('bbbbbb') });
   const backup = await snapshot(h);

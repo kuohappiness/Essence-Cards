@@ -184,13 +184,11 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           try { now = await base(); } catch { report('unreadable'); return; }
           if (closed) { report('failed'); return; }
           if (now === null) { report('changed'); return; }
-          const timer = setTimeout(() => { report('failed'); }, WRITE_WAIT);
+          // 不在這裡限時（L2 的 R11）：這裡回 failed 之後寫入還在路上，外面會以為確定沒寫。逾時由 applyRestore 判定，算結果未定。
           try { await options.save(restoreSaved(now, backup)); } catch {
-            clearTimeout(timer);
             report('failed');
             return;
           }
-          clearTimeout(timer);
           if (closed) { report('failed'); return; }
           const back = await read();
           if (closed || !back.ok || back.absent) { report('failed'); return; }

@@ -215,10 +215,30 @@ export function createWrites(options: WritesOptions) {
     const late = new Promise<void>(resolve => { id = setTimeout(resolve, stuckAfter); });
     return Promise.race([work, late]).finally(() => { clearTimeout(id); });
   }
-  async function exclusive<T>(work: () => Promise<T>): Promise<T> {
+  async function exclusive<T>(before: () => Promise<unknown>, work: () => Promise<T>): Promise<T> {
     if (restoring) throw Error('已經在還原');
     restoring = true;
-    try { return await enqueue(work); } finally { await enqueue(() => { restoring = false; return Promise.resolve(); }); }
+    // 排在前面的存檔或範圍檔可能卡在 iCloud（L2 的 R12）：等太久就放棄，排著的這一份之後輪到也不做。
+    let begun = false, gaveUp = false;
+    const job = enqueue(async () => {
+      await before();
+      if (gaveUp) throw Error('這次還原已經放棄');
+      begun = true;
+      return work();
+    });
+    let id: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      id = setTimeout(() => {
+        if (begun) return;
+        gaveUp = true;
+        reject(Error('前面還有存檔沒做完（可能有檔案卡在 iCloud），這次沒有還原；等一下再試'));
+      }, stuckAfter);
+    });
+    try { return await Promise.race([job, late]); } finally {
+      clearTimeout(id);
+      if (gaveUp) { job.catch(() => {}); restoring = false; }
+      else await enqueue(() => { restoring = false; return Promise.resolve(); });
+    }
   }
   /**
    * 還原寫一篇卡組（§3-3 第 6 點）：I/O 期間讀取不跨過，寫成之後把讀回的文字當成自己的寫回（tracker.wrote），

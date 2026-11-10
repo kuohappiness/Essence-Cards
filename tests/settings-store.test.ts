@@ -667,3 +667,23 @@ void test('還原的差異：學期看今天算出來的；算出來相同、只
   assert.deepEqual(savedDiff(on('國一上', '2026-09-01'), on('國一上', '2026-09-01'), TODAY), []);
   assert.deepEqual(savedDiff({}, on('國一上', '2026-09-01'), TODAY), ['目前學期 未設定 → 國一上']);
 });
+
+void test('還原：寫入超過 10 秒不先回 failed，等真的結束（L2 的 R11）', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release = (): void => {};
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  let box: Record<string, unknown> = { capMinutes: 60 };
+  const store = createSettingsStore({ load: () => Promise.resolve(box), save: async data => { await hold; box = data as Record<string, unknown>; }, today: () => TODAY });
+  const first = store.first();
+  await new Promise(resolve => { setImmediate(resolve); });
+  t.mock.timers.tick(2000);
+  await first;
+  let outcome: string | null = null;
+  const running = store.restore({ capMinutes: 45 }, () => Promise.resolve({ capMinutes: 60 })).then(result => { outcome = result; });
+  for (let i = 0; i < 6; i++) { await new Promise(resolve => { setImmediate(resolve); }); t.mock.timers.tick(10_000); }
+  assert.equal(outcome, null);
+  release();
+  for (let i = 0; i < 6 && outcome === null; i++) { await new Promise(resolve => { setImmediate(resolve); }); t.mock.timers.tick(5000); }
+  await running;
+  assert.equal(outcome, 'saved');
+});

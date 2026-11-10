@@ -965,3 +965,84 @@ void test('還原接線：設定排進隊伍之後路徑才換成連結（內容
   assert.equal(h.data.saves, saves);
   assert.equal(h.text(DATA), '{"capMinutes":60}');
 });
+
+/**
+ * 逐一卡住還原期間的每一次 I/O（L2 的 R6、R11、R12，D-197 的重整）：不論卡在哪一次，閘門都要放開、結果交回；
+ * 放開之後沒有新的寫入；卡住的是寫入時，它回來之前不能比對。新增的等待只要經過這些介面，自動算進來。
+ */
+const RESTORE_WRITES = new Set(['modifyBinary', 'createBinary', 'saveData']);
+
+function stallEachCall(h: Awaited<ReturnType<typeof restoreReady>>['h'], at: number) {
+  type Fn = (...args: unknown[]) => unknown;
+  const box = { calls: 0, stalled: null as string | null, release: (): void => {}, finished: false, writesAfter: [] as string[] };
+  const hook = (owner: Record<string, unknown>, key: string, label: string): void => {
+    const real = owner[key];
+    if (typeof real !== 'function') return;
+    owner[key] = (...args: unknown[]) => {
+      const n = box.calls++;
+      if (box.finished && RESTORE_WRITES.has(key)) box.writesAfter.push(label);
+      if (n !== at) return (real as Fn).apply(owner, args);
+      box.stalled = label;
+      return new Promise<void>(resolve => { box.release = resolve; }).then(() => (real as Fn).apply(owner, args));
+    };
+  };
+  const hookAll = (owner: unknown, prefix: string, keys: readonly string[]): void => { for (const key of keys) hook(owner as Record<string, unknown>, key, prefix + key); };
+  hookAll(h.app.vault, 'vault.', ['read', 'cachedRead', 'readBinary', 'modify', 'modifyBinary', 'create', 'createBinary', 'createFolder']);
+  hookAll((h.app.vault as { adapter: unknown }).adapter, 'adapter.', ['exists', 'read', 'readBinary', 'list', 'write', 'writeBinary', 'mkdir', 'stat']);
+  const plugin = h.plugin as unknown as { saveData: Fn; loadData: Fn; backup: { desktop: { noLinks: Fn; host: Record<string, unknown> } } };
+  hookAll(plugin, 'plugin.', ['saveData', 'loadData']);
+  hookAll(plugin.backup.desktop, 'desktop.', ['noLinks']);
+  hookAll(plugin.backup.desktop.host, 'host.', ['prepare', 'write', 'list', 'read', 'remove']);
+  for (const leaf of h.leaves) {
+    hookAll(leaf, 'leaf.', ['setViewState']);
+    hookAll(leaf.view, 'view.', ['save']);
+  }
+  return box;
+}
+
+void test('還原接線：不論卡在哪一次 I/O，閘門都放開、結果交回，放開之後沒有新的寫入（D-197 的重整）', async t => {
+  const failures: string[] = [];
+  const reached: string[] = [];
+  for (let at = 0; at < 400; at++) {
+    const texts = { ...deck, [DATA]: '{"capMinutes":45}', 'Essence Cards/紀錄/2026-11 iPhone-dead.jsonl': '{"t":"2026-11-08T10:00:00.000+08:00","lt":"aaaaaa","r":"good","v":"12345678"}\n' };
+    const { h, flow, row } = await restoreReady(t, texts, { data: { capMinutes: 45 } });
+    h.texts.set(STILL, brokenDeck);
+    h.texts.set(DATA, '{"capMinutes":60}');
+    h.texts.delete('Essence Cards/紀錄/2026-11 iPhone-dead.jsonl');
+    const comparison = await flow.compare(row);
+    h.openTab(STILL);
+    const box = stallEachCall(h, at);
+    // 真的 I/O（備份的 zip）要真的時間：卡住之前照真實時間走，卡住之後才一次推 30 秒。
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const turn = (): Promise<void> => new Promise(resolve => { setImmediate(resolve); });
+    let last = performance.now(), overdue = 0;
+    const tick = (): void => {
+      const now = performance.now();
+      t.mock.timers.tick(box.stalled ? 30_000 : Math.floor(now - last));
+      if (box.stalled) overdue++;
+      if (box.stalled || now - last >= 1) last = now;
+    };
+    let failed: unknown = null;
+    const running = flow.apply(comparison, new Set([STILL, DATA])).catch((error: unknown) => { failed = error; return null; }).finally(() => { box.finished = true; });
+    while (!box.finished && overdue < 60) { tick(); await turn(); await turn(); }
+    const label = `第 ${String(at)} 次（${box.stalled ?? '沒卡到'}）`;
+    if (!box.finished) failures.push(label + '：一直沒有交回結果');
+    else {
+      await running;
+      if (h.plugin.state?.writeBlock() === 'restore') failures.push(label + '：閘門沒放開');
+      if (box.stalled && RESTORE_WRITES.has(box.stalled.split('.')[1]) && !failed) {
+        const refused = await flow.compare(row).then(() => false, () => true);
+        if (!refused) failures.push(label + '：寫入還沒回來就能比對');
+      }
+    }
+    box.release();
+    for (let i = 0; i < 40; i++) { tick(); await turn(); }
+    if (box.writesAfter.length) failures.push(`${label}：放開之後又寫了 ${box.writesAfter.join('、')}`);
+    t.mock.timers.reset();
+    h.plugin.onunload();
+    if (box.stalled === null) break;
+    reached.push(box.stalled);
+  }
+  assert.ok(reached.length > 20, '卡得到的點太少：' + String(reached.length));
+  assert.deepEqual(failures, []);
+});

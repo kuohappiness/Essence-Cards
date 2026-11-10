@@ -196,7 +196,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
         const taken = await timed(occupied(rel, bytes), '掃描卡組');
         if (taken) { outcome(file, '跳過', taken); continue; }
       }
-      await run.noLinks(rel);
+      await timed(run.noLinks(rel), '查連結');
       const expected = file.current?.sha256 ?? null;
       let live = true, reopened = false, sent = false;
       const write = async (): Promise<boolean> => {
@@ -236,20 +236,25 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     if (refused) { result.logs.push({ source: log.source, path: null, lines, outcome: '擋住', reason: refused }); continue; }
     const bytes = new TextEncoder().encode(log.lines.join('\n') + '\n');
     try {
-      await run.noLinks(LOG_FOLDER);
+      await timed(run.noLinks(LOG_FOLDER), '查連結');
       let path: string | null = null;
       // 只建新檔：撞到別的程序剛建的就換下一個編號，不動它（§3-4）。
       for (let i = 0; i < 20 && path === null; i++) {
         const candidate = LOG_FOLDER + '/' + restoreLogName(log.source, date, run.device, name => names.has(run.plan.sameFile(LOG_FOLDER + '/' + name)));
         names.add(run.plan.sameFile(candidate));
         let live = true, sent = false;
+        // 讀回核對也算在同一次等待裡（L2 的 R12）：建好之後卡在讀回，一樣是結果未定。
+        const write = async (): Promise<boolean> => {
+          if (!await files.replace(candidate, now => { sent = live && now === null; return sent; }, bytes)) return false;
+          const back = await files.readBytes(candidate);
+          if (back === null || hashBytes(back) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的內容不同');
+          return true;
+        };
         try {
-          if (await landed(candidate, files.replace(candidate, now => { sent = live && now === null; return sent; }, bytes), '補紀錄', () => sent)) path = candidate;
+          if (await landed(candidate, write(), '補紀錄', () => sent)) path = candidate;
         } finally { live = false; }
       }
       if (path === null) throw Error('找不到沒用過的還原檔名');
-      const back = await files.readBytes(path);
-      if (back === null || hashBytes(back) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的內容不同');
       result.written.push(path);
       result.logs.push({ source: log.source, path, lines, outcome: '已還原', reason: '' });
     } catch (error) {
@@ -265,7 +270,7 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     else {
       let live = true;
       try {
-        await run.noLinks(data.current?.path ?? data.target!);
+        await timed(run.noLinks(data.current?.path ?? data.target!), '查連結');
         const saved = await landed(data.target!, run.settings(opened.files.get(dataPath)!, run.screen.get(dataPath) ?? null, () => live), '寫設定', () => true).finally(() => { live = false; });
         if (saved === 'saved') outcome(data, '已還原', '');
         else if (saved === 'changed') outcome(data, '跳過', CHANGED);
