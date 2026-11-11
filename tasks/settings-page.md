@@ -246,4 +246,4 @@ State.currentSettings(): { settings: Settings; semester: string | null; examCoun
 - 重開外掛後值還在；恢復預設後欄位不見、份回來。備份清單裡 `data.json` 從 `absent` 變成 `files`。目前學期選舊學期時目錄展開它，選 `未設定` 回到最新。
 - 看畫面時的修正：`目標保持率` 旁的 ⓘ 和文字黏在一起，加了間距。Obsidian 的下拉選單另有一個量寬度用的隱藏 `select`，不影響選項。
 
-延後的測試：iPhone 實機（§8 最後一段），記在[技術債表](../docs/backlog.md#技術債)「補測：設定頁的 iPhone 實機」那一列。
+延後的測試：無（§8 最後一段的 iPhone 實機在 2026-11-11 的 0.4.0 上線前測試逐項做完，見[上線前清單](release-0.4.0.md) A5：回到前景與不切走都會跟著變，`onExternalSettingsChange` 在 iPhone 有被呼叫，下拉選單能選，`loadData` 沒有不回來；電腦寫 `data.json` 會被 iCloud 改成衝突副本，另記在技術債表，D-199）
