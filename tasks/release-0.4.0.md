@@ -1,6 +1,6 @@
 # 上線前清單：升正式版 0.4.0
 
-狀態：iPhone 測完（2026-11-12）：必測 A1～A14 通過、A15 沒測到；手感 B3、B6 做完，B8 記成補測；第四項 D1～D3 做完；待打 tag `v0.4.0` 與裝到正式 vault（各先問使用者）
+狀態：已完成（2026-11-12）：`0.4.0+2fd72d4`（tag `v0.4.0`）裝到正式 vault，電腦與 iPhone 都換成這一版；必測 A1～A14 通過、A15 沒測到；手感 B8 記成補測；測試找到的問題下一版修，第一件是電腦設定檔的衝突（D-199）
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**。這份是[第二次里程碑檢查](<../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R3 的內容，把散在 backlog、roadmap、D-149 與各任務〈結果〉的上線前工作收成一份。
 
@@ -144,7 +144,18 @@ A14 的結果要回寫：D-154 第 1 點的 iOS 做法改寫，技術債那一�
 
 待測 commit：`ff4914c`（2026-11-11 凍結，`main` 的 CI 通過；`src/` 與建置相關檔案和 `4132b94` 相同）。
 
-`git diff` 核對：`git diff --stat ff4914c 5de8e47 -- src tools/build.mjs package.json package-lock.json manifest.json` 是空的（2026-11-12）；打 tag 前對要打 tag 的 commit 再核對一次
+`git diff` 核對：`git diff --stat ff4914c 2fd72d4 -- src tools/build.mjs package.json package-lock.json manifest.json` 是空的（2026-11-12，打 tag 前；`2fd72d4` 是要打 tag 的 commit）。
+
+第五項（2026-11-12）：
+
+- 第 1 步：第 0～5 關都過（第 4 關的 B8 照 D-195 記成補測）；D-176 第 1 點的兩批（`c4affa2`、`f911bf8`）與段考讀法（`3ab6f9f`）都在 `main`。
+- 第 2 步：使用者同意升版。考前提醒：正式 vault 沒有 `Essence Cards/考試範圍/`，沒有考試。正式 vault 還沒開始用（使用者 2026-11-12 當下回答；裡面只有 `紀錄/`，沒有卡組）。
+- 第 3 步：版號不用改：`package.json`、`manifest.json`、`package-lock.json`、`PICK_NEEDS` 都是 `0.4.0`，前一個 tag 是 `v0.3.0`。
+- 第 4 步：附註 tag `v0.4.0` 打在 `main` 的 `2fd72d4`（那個 commit 的 `check.yml` 通過），已推上去。更新說明列這一版的改變，另寫兩個已知問題：設定請在 iPhone 改（D-199）、比較卡對照的詞被拆成一字一行（下一版修）。
+- 第 5、6 步：tag 的乾淨 worktree，`npm ci` 後仍然乾淨。`update-vault --check`：`npm run check` 通過；沒有生效的考試範圍；備份 `0.3.0+5b3dc94`；發布前比較 `0.3.0+5b3dc94` 到 `0.4.0+2fd72d4` 差異 0 項，兩版的讀取閘門都沒有擋下東西（正式 vault 沒有卡組與作答，0 項是預期的）。報告只在本機。
+- 第 7 步：使用者看過摘要後同意，`--install` 印出「已安裝 0.4.0+2fd72d4（release）」。vault 裡 `main.js` 的 SHA-256 和 `.local/releases/0.4.0/release.json` 記的相同，沒有開發命令。
+- 第 8 步：電腦 01:14 重開後寫了版本行 `0.4.0+2fd72d4` 與設定基準三行，外掛做了 `new-version` 備份（放在備份資料夾），電腦沒有寫 `data.json`。iPhone 完全關掉再開後，「版本」命令顯示 `0.4.0+2fd72d4`（使用者回報）；紀錄裡 iPhone 的版本行到 11-12 07:20 還沒同步到電腦（電腦的 iCloud 每小時都有下載、沒有錯誤，看起來是 iPhone 還沒上傳），沒有核對，下一版開工時先看。
+- 第 9 步：worktree 先唯讀掃過沒有連結，用不加 `--force` 的 `git worktree remove` 移除；roadmap、進度地圖與技術債表已更新，通過的「補測：」列在 `2fd72d4` 刪掉。
 
 做完之後：backlog「下一次 iPhone 實機測試」那一列改成這次沒測的；通過的「補測：」列照 D-195 刪掉，roadmap 的已完成寫一句。
 
