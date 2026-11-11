@@ -65,6 +65,8 @@ function crossModule(path, name, typeOnly) {
   if (from === 'deck' && to === 'study') return 'deck 不能 import study。';
   // 範圍與目錄（D-142）：deck、study 不知道它；它從 study 只拿型別。
   if ((from === 'deck' || from === 'study') && to === 'catalog') return from + ' 不能 import catalog。';
+  // AI 製卡與備份建在 deck、study 之上（第二次里程碑檢查 R8），型別也不拿。
+  if ((from === 'deck' || from === 'study') && (to === 'ai' || to === 'backup')) return from + ' 不能 import ' + to + '。';
   if (from === 'catalog' && to === 'study' && !typeOnly) return 'catalog 從 study 只能 import 型別（import type）。';
   if (!target.endsWith('/src/core/' + to + '/index.ts')) return '核心的模組之間只能 import 對方的 index.ts。';
   if (from === 'study' && to === 'deck' && !typeOnly) return 'study 從 deck 只能 import 型別（import type）。';
@@ -102,6 +104,19 @@ const moduleBoundaries = {
       if (!editorSide && (name === '@codemirror' || name.startsWith('@codemirror/'))) return codemirrorMessage;
       return undefined;
     }
+    /**
+     * 第二次里程碑檢查 R8：依賴方向是 ui → review → state，state、review 不碰畫面（型別也不拿）；
+     * ui 從 core 的 backup、ai、settings 只拿型別，執行期的動作由 main.ts 交進來。行內 type 的 import 仍會載入那個檔，不算型別。
+     */
+    const inBelowUi = /\/src\/(state|review)\//.test(path);
+    const inUi = path.includes('/src/ui/');
+    function layerBoundary(name, typeOnly) {
+      if (typeof name !== 'string' || !name.startsWith('.')) return undefined;
+      const target = posix.normalize(posix.join(posix.dirname(path), name));
+      if (inBelowUi && target.includes('/src/ui/')) return 'state 與 review 不能 import 畫面（ui）：依賴方向是 ui → review → state。';
+      if (inUi && !typeOnly && /\/src\/core\/(backup|ai|settings)\//.test(target)) return 'ui 從 core 的 backup、ai、settings 只能 import 型別（import type）：執行期的動作由 main.ts 交進來。';
+      return undefined;
+    }
     function check(node, source, dynamic) {
       const literal = source?.type === 'TSLiteralType' ? source.literal : source;
       const name = literal?.value;
@@ -114,12 +129,12 @@ const moduleBoundaries = {
       else if (!inState && privateState.test(name)) message = stateEntry.message;
       else if (inView && filesEntry.test(name)) message = viewFiles.message;
       else if (inCore) message = crossModule(path, name, typeOnly);
-      message ??= srcBoundary(name, { dynamic, typeOnly });
+      message ??= layerBoundary(name, typeOnly) ?? srcBoundary(name, { dynamic, typeOnly });
       if (message) context.report({ node, message });
     }
     function checkStatic(node, typeOnly) {
       if (!node.source) return;
-      const message = (inCore ? crossModule(path, node.source.value, typeOnly) : undefined) ?? srcBoundary(node.source.value, { typeOnly });
+      const message = (inCore ? crossModule(path, node.source.value, typeOnly) : undefined) ?? layerBoundary(node.source.value, typeOnly) ?? srcBoundary(node.source.value, { typeOnly });
       if (message) context.report({ node, message });
     }
     /**

@@ -456,6 +456,54 @@ void test('W6 src/review/ 不能依賴畫面、Obsidian 或 Node；ui 與 review
 // D-148 第 3 點與技術債「D-148 的檢查會漏掉別的 require 寫法」：整個 src/ 禁用 Node 與 Electron，只有 src/desktop/ 能用明列的；
 // require 的各種寫法都擋（開發命令 src/obsidian/dev*.ts 是放行清單，正式建置不含它們）；src/desktop/ 只能由 main.ts 動態載入；
 // @codemirror 只有 src/obsidian/ 與 main.ts。
+// 第二次里程碑檢查 R8：依賴方向是 ui → review → state，ui 拿備份、AI、設定的動作由 main.ts 交進來；deck、study 不知道 AI 與備份。
+void test('R8 state、review 不能 import ui；deck、study 不能 import ai、backup；ui 從 backup、ai、settings 只拿型別', async () => {
+  const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
+  const toUi = /state 與 review 不能 import 畫面/;
+  const toAi = /不能 import (ai|backup)。/;
+  const runtime = /ui 從 core 的 backup、ai、settings 只能 import 型別/;
+  for (const [path, code, message] of [
+    ['src/state/index.ts', "import { x } from '../ui/prefs.ts';", toUi],
+    ['src/state/reads.ts', "import type { X } from '../ui/Review.tsx';", toUi],
+    ['src/review/session.ts', "void import('../ui/index.ts');", toUi],
+    ['src/review/session.ts', "export { x } from '../ui/speech.ts';", toUi],
+    ['src/review/nested/a.ts', "import '../../ui/screen.tsx';", toUi],
+    ['src/review/session.ts', "type T = import('../ui/index.ts').T;", toUi],
+    ['src/core/deck/parse.ts', "import { x } from '../ai/index.ts';", toAi],
+    ['src/core/deck/parse.ts', "import type { X } from '../backup/index.ts';", toAi],
+    ['src/core/study/plan.ts', "void import('../ai/index.ts');", toAi],
+    ['src/core/study/plan.ts', "export * from '../backup/index.ts';", toAi],
+    ['src/ui/Entry.tsx', "import { takeBackup } from '../core/backup/index.ts';", runtime],
+    ['src/ui/Entry.tsx', "import { type Settings, readSettings } from '../core/settings/index.ts';", runtime],
+    // 只有行內 type 的 import 編譯後還會留下載入那個檔（同 W4 study 從 deck 只拿型別）。
+    ['src/ui/Entry.tsx', "import { type Settings } from '../core/settings/index.ts';", runtime],
+    ['src/ui/Entry.tsx', "import '../core/backup/index.ts';", runtime],
+    ['src/ui/Entry.tsx', "export { x } from '../core/ai/index.ts';", runtime],
+    ['src/ui/nested/a.tsx', "void import('../../core/ai/index.ts');", runtime],
+    // 不誤擋：反方向、別的模組、型別、不在範圍的資料夾。
+    ['src/ui/Review.tsx', "import { createSession } from '../review/index.ts';", null],
+    ['src/ui/Review.tsx', "import type { State } from '../state/index.ts';", null],
+    ['src/main.ts', "import { x } from './ui/index.ts';", null],
+    ['src/obsidian/view.ts', "import { x } from '../ui/index.ts';", null],
+    ['src/state/index.ts', "import { x } from './ui-helpers.ts';", null],
+    ['src/state/index.ts', "import { x } from '../core/ai/index.ts';", null],
+    ['src/core/deck/parse.ts', "import { x } from '../errors/index.ts';", null],
+    ['src/core/ai/cards.ts', "import type { Deck } from '../deck/index.ts';", null],
+    ['src/ui/Entry.tsx', "import type { Settings } from '../core/settings/index.ts';", null],
+    ['src/ui/Entry.tsx', "export type { Settings } from '../core/settings/index.ts';", null],
+    ['src/ui/Entry.tsx', "type S = import('../core/backup/index.ts').Result;", null],
+    ['src/ui/Entry.tsx', "import { checkTyped } from '../core/study/index.ts';", null],
+    ['src/ui/Entry.tsx', "import { x } from '../core/errors/index.ts';", null],
+    ['src/obsidian/settings-tab.ts', "import { readSettings } from '../core/settings/index.ts';", null],
+    ['src/main.ts', "import { takeBackup } from './core/backup/index.ts';", null],
+  ] as const) {
+    const [result] = await lint.lintText(code, { filePath: path });
+    const found = result.messages.filter(isBoundary);
+    if (message) assert.ok(found.some(m => message.test(m.message)), path + ': ' + code + ' → ' + JSON.stringify(found.map(m => m.message)));
+    else assert.deepEqual(found, [], path + ': ' + code);
+  }
+});
+
 void test('D-148 Node 與 Electron 只在 src/desktop/，require 的各種寫法都擋，src/desktop/ 只能由 main.ts 動態載入', async () => {
   const lint = new ESLint({ overrideConfig: tseslint.configs.disableTypeChecked });
   const cases: [string, string, boolean][] = [
