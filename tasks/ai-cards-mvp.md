@@ -319,7 +319,7 @@ R3 四份＝`experiments/t4/arch/第二輪/格式.md`、`experiments/t4/arch/短
 
 2026-11-07，Claude（Opus 5.5，high）。分支 `claude/ai-cards-mvp`，從 `main` 的 `9c803ba` 開；開工時 `git diff 9c803ba -- docs/syntax.md docs/decisions.md docs/card-rules/ experiments/t4/arch/ src/state/ src/core/deck/` 沒有變動。
 
-延後的測試：「補測：iPhone 草稿不出題、啟用後才出題」（使用者 2026-11-08 同意延後到升正式 vault 之前）
+延後的測試：無（iPhone 草稿不出題、啟用後才出題已在 2026-11-11 的 0.4.0 上線前測試補完，見[上線前清單](release-0.4.0.md) A2）
 
 **commit**
 
