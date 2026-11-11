@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 
 let runs;
 try {
-  const out = execFileSync('gh', ['run', 'list', '--branch', 'main', '--status', 'completed', '--limit', '1', '--json', 'conclusion,headSha,displayTitle,url,createdAt'], {
+  // 只看 Check：同一次 push 也會跑 Progress board，沒指定時可能拿到它的結果而漏報（第二次里程碑檢查 R2）。
+  const out = execFileSync('gh', ['run', 'list', '--branch', 'main', '--workflow', 'check.yml', '--status', 'completed', '--limit', '1', '--json', 'conclusion,headSha,displayTitle,url,createdAt'], {
     cwd: process.env.CLAUDE_PROJECT_DIR || process.cwd(), encoding: 'utf8', timeout: 10000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
   });
   runs = JSON.parse(out);

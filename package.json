@@ -22,7 +22,7 @@
     "skills": "node tools/check-skill-mirror.ts",
     "docs": "node tools/check-docs.ts",
     "check": "npm run typecheck && npm run lint && npm run knip && npm run secretlint && npm run skills && npm run docs && npm test",
-    "preprepare": "node -e \"const fs=require('node:fs'),p='.githooks/pre-commit';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll('\\r\\n','\\n'));\"",
+    "preprepare": "node -e \"const fs=require('node:fs');for(const n of fs.readdirSync('.githooks')){const p='.githooks/'+n;fs.writeFileSync(p,fs.readFileSync(p,'utf8').replaceAll('\\r\\n','\\n'));}\"",
     "prepare": "git config core.hooksPath .githooks",
     "bench": "node tools/bench-study.ts",
     "export-compare": "node tools/export-compare.ts",

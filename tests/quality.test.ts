@@ -148,6 +148,66 @@ for (const scenario of ['中文新增', '移出 src 的改名'] as const) void t
   await assert.rejects(run('git', commit, isolated), /先執行 npm install/);
 });
 
+// 第二次里程碑檢查 R2：還原分支沒 push 過就合併，Linux 上的失敗合併後才看到。合併進 main 之前，要合併的 commit 的 Check 要綠。
+void test('R2 合併進 main 前查 CI：綠燈才放行；沒紀錄、紅燈、還在跑都擋；gh 不能用時警告放行；只改文件與不在 main 不查', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'essence-hook-merge-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const run = promisify(execFile);
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toUpperCase().startsWith('GIT_')) delete env[key];
+  // 假的 gh：照 FAKE_GH 印出「status conclusion」，fail 就當成 gh 不能用。
+  const bin = join(root, '.bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'gh'), '#!/bin/sh\n[ "$FAKE_GH" = fail ] && exit 1\nprintf \'%s\\n\' "$FAKE_GH"\n');
+  await chmod(join(bin, 'gh'), 0o755);
+  const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') ?? 'PATH';
+  env[pathKey] = bin + (process.platform === 'win32' ? ';' : ':') + (env[pathKey] ?? '');
+  const repo = join(root, 'repo');
+  await mkdir(repo);
+  const git = (args: string[], fake = '') => run('git', ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', ...args], { cwd: repo, env: { ...env, FAKE_GH: fake } });
+  await git(['init', '-q', '-b', 'main']);
+  await mkdir(join(repo, '.githooks'));
+  const hook = join(repo, '.githooks/pre-merge-commit');
+  await writeFile(hook, (await readFile(new URL('../.githooks/pre-merge-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+  await chmod(hook, 0o755);
+  await writeFile(join(repo, 'README.md'), '# R\n');
+  await git(['add', '--', 'README.md']);
+  await git(['commit', '-q', '-m', 'base']);
+  await git(['config', 'core.hooksPath', '.githooks']);
+  await git(['checkout', '-q', '-b', 'code']);
+  await mkdir(join(repo, 'src'));
+  await writeFile(join(repo, 'src/x.ts'), 'export {};\n');
+  await git(['add', '--', 'src/x.ts']);
+  await git(['commit', '-q', '-m', 'code']);
+  await git(['checkout', '-q', '-b', 'docs', 'main']);
+  await writeFile(join(repo, 'notes.md'), '# N\n');
+  await git(['add', '--', 'notes.md']);
+  await git(['commit', '-q', '-m', 'docs']);
+  await git(['checkout', '-q', 'main']);
+  const merged = async (branch: string, fake: string) => {
+    const { stderr } = await git(['merge', '-q', '--no-ff', '-m', 'merge', branch], fake);
+    await git(['reset', '-q', '--keep', 'HEAD~1']);
+    return stderr;
+  };
+  const blocked = async (branch: string, fake: string, message: RegExp) => {
+    await assert.rejects(git(['merge', '-q', '--no-ff', '-m', 'merge', branch], fake), message);
+    await git(['merge', '--abort']);
+  };
+  assert.doesNotMatch(await merged('code', 'completed success'), /警告/);
+  await blocked('code', '', /已擋下合併進 main.*沒有 CI 紀錄/);
+  await blocked('code', 'completed failure', /已擋下合併進 main.*CI 沒通過/);
+  await blocked('code', 'in_progress ', /已擋下合併進 main.*CI 還沒跑完/);
+  assert.match(await merged('code', 'fail'), /警告：查不到 GitHub Actions/);
+  await merged('docs', '');
+  await git(['checkout', '-q', 'docs']);
+  await merged('code', '');
+  // 改到程式的路徑和 pre-commit 同一份。
+  const paths = (text: string) => /grep -Eq '([^']+)'/.exec(text)?.[1];
+  const preCommit = await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8');
+  assert.ok(paths(preCommit));
+  assert.equal(paths(await readFile(hook, 'utf8')), paths(preCommit));
+});
+
 // 外掛架構檢查環節 9 結論第 2 條（Q2）：改到程式時跑同一份 npm run check，只是測試改用 dot reporter。
 void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留原本的 NODE_OPTIONS；失敗時擋下並印出錯誤', async t => {
   const root = await mkdtemp(join(tmpdir(), 'essence-hook-check-'));
