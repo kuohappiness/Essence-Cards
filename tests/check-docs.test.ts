@@ -194,6 +194,10 @@ void test('D-195：結束的任務〈結果〉要有恰好一行填好的「延�
   await add('tasks/part.md', task('已完成第一部分，第二部分進行中', '合併了一半。'));
   await add('tasks/not-yet.md', task('完成條件還沒達成，實作中', '還沒。'));
   await add('tasks/none.md', task('已合併（2026-11-08）', '延後的測試：無'));
+  // 「已合併進 `main`」也是結束（第二次里程碑檢查 R1：這樣寫的 5 份任務原本都沒被查）；「無」後面接說明可以，「無法測」不算無。
+  await add('tasks/into.md', task('已合併進 `main`（2026-11-10）', '合併了。'));
+  await add('tasks/into-ok.md', task('已合併進 `main`', '延後的測試：無（全部在 Node 測過）'));
+  await add('tasks/no-way.md', task('已完成', '延後的測試：無法測'));
   await add('tasks/bold.md', task('已結案｜備註', '- **延後的測試**：「補測：存到一半中斷」、「補做：重貼」'));
   await add('tasks/sub.md', task('已完成', '### Windows\n\n延後的測試：無', '結果（2026-11-08）'));
   await add('tasks/missing.md', task('已結案', '合併了。'));
@@ -213,9 +217,11 @@ void test('D-195：結束的任務〈結果〉要有恰好一行填好的「延�
     'tasks/empty-bold.md:11  延後的測試：  還沒填：寫「無」或技術債表的列名（D-195）',
     'tasks/fenced.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
     'tasks/h3.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/into.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
     'tasks/missing.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
     'tasks/no-quote.md:11  延後的測試：  寫「無」，或用「」括住技術債表的列名，例如「補測：……」（D-195）',
     'tasks/no-result.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
+    'tasks/no-way.md:11  延後的測試：  寫「無」，或用「」括住技術債表的列名，例如「補測：……」（D-195）',
     'tasks/quoted.md:3  延後的測試：  任務已結束，〈結果〉沒有「延後的測試：」一行（D-195）',
     'tasks/todo.md:11  延後的測試：  還沒填：寫「無」或技術債表的列名（D-195）',
     'tasks/twice.md:13  延後的測試：  「延後的測試：」有 2 行，只能有一行（D-195）',

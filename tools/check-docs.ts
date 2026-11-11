@@ -217,8 +217,11 @@ function checkStatus(doc: Doc): Problem[] {
   return [{ file: doc.file, line: index !== undefined ? index + 1 : heading.map![0] + 1, target: '狀態：', reason: '標題下第一個非空行沒有狀態' }];
 }
 
-// 狀態值後面要是分隔符號：「已完成第一部分」不算結束（Codex 查核 D-195 第 4 節）。
-const FINISHED = /狀態：\s*(?:已完成|已合併|已結案|完成)(?=$|[\s（(：:，,、；;｜|→—])/;
+// 狀態值後面要是分隔符號：「已完成第一部分」不算結束（Codex 查核 D-195 第 4 節）。「已合併進 `main`」是結束
+// （第二次里程碑檢查 R1：這樣寫的 5 份任務原本都沒被查）。
+const FINISHED = /狀態：\s*(?:已完成|已合併進?|已結案|完成)(?=$|[\s（(：:，,、；;｜|→—])/;
+// 「無」後面只能接說明的分隔符號：「無法測」不算無。
+const NONE = /^無(?=$|[\s（(：:，,、；;。.｜|—])/;
 const FIELD = /^延後的測試：(.*)$/;
 const ROW_REF = /「((?:補測|補做)：[^」]+)」/g;
 
@@ -281,7 +284,7 @@ function checkDeferred(doc: Doc, rows?: string[]): Problem[] {
   if (found.length > 1) return problem(found[1].line, `「延後的測試：」有 ${found.length} 行，只能有一行`);
   const { line, value } = found[0];
   if (!value || value.includes('實作後填')) return problem(line, '還沒填：寫「無」或技術債表的列名');
-  if (value.startsWith('無')) return [];
+  if (NONE.test(value)) return [];
   const refs = [...value.matchAll(ROW_REF)].map(m => m[1].trim());
   if (!refs.length) return problem(line, '寫「無」，或用「」括住技術債表的列名，例如「補測：……」');
   if (!rows) return [];
