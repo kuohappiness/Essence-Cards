@@ -60,6 +60,7 @@ v1 任務與第二階段候選的[統一入口](../backlog.md)已整理；細項
 
 | 日期 | 工作 |
 |---|---|
+| 2026-11-08 | 系統資料夾的防呆合併：在 Obsidian 裡搬動或改名立刻搬回並通知，在 Obsidian 以外搬動由入口的提醒一區寫出位置；Windows 實機通過，iPhone 併入下一次實機測試；審查最後剩下的罕見情形記成限制與技術債（[任務說明](../../tasks/system-folder-guard.md)） |
 | 2026-11-07 | 複習畫面的兩個圖示：記憶錨點不寫這四個字，改成燈泡，有一個冒號時在冒號後面換行（[D-184](../decisions.md#d-184-複習畫面不寫記憶錨點四個字改成圖示)）；英文的自動朗讀改成上方的喇叭，點一下停、之後不念，並修好關掉後重開又變成開的舊問題（[D-188](../decisions.md#d-188-朗讀統一成複習畫面的喇叭圖示)）；Windows 實機通過，iPhone 併入下一次實機測試（[任務說明](../../tasks/review-icons.md)） |
 | 2026-11-06 | 開發進度畫板上線：[開發進度地圖](../progress-map.md)是唯一來源，`main` 上改了就由 GitHub Actions 產生畫板網頁、發布到 <https://kuohappiness.github.io/Essence-Cards/>，網頁不進 repo；功能做完時改地圖裡的符號（[PR #3](https://github.com/kuohappiness/Essence-Cards/pull/3)） |
 | 2026-11-06 | 小考標記合併：目錄替一篇或一個單元設小考日期，寫成 `考試範圍/小考/` 的小考檔；入口最上面列出哪天考，全部卡只練那幾篇；連結找不到或重名時寫出怎麼修；Windows 實機通過，iPhone 還沒測（[D-189](../decisions.md#d-189-小考前的密集複習成對的卡隔開單篇練習與小考標記)，[任務說明](../../tasks/quiz-mark.md)、[Codex L2](<../../Claude Codex Discussion/2026-11-06-quiz-mark-review.md>)） |
