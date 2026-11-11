@@ -82,6 +82,7 @@
 
 - 寫回筆記的函式，往返與冪等測試登錄進共用的範例清單：`tests/deck.test.ts` 的 `deckCases`。
 - 只在 Node 驗過的檔案存取，接上 Obsidian 前要在 Windows 版 Obsidian 對照一次（D-110）。
+- 規格的平台事實表（code-quality〈寫規格〉，[第二次里程碑檢查](<../../Claude Codex Discussion/2026-11-10-milestone-2-review.md>) R7）在本專案常見的列：iPhone（例如 `stack` 沒有位置，[D-173](../decisions.md#d-173-iphone-的-stack-沒有位置沒接住的錯誤一律收)）、CI 的 Linux、Obsidian 的渲染器（和 markdown-it 不同）、Obsidian 的檔案操作與計時器（例如底層的操作不會因為外掛的上限停下）。探針用 Windows 版 Obsidian 的開發命令；iPhone 的項目集中成一次實機測試。
 - 測試只用 syntax.md 的例子或自編的內容。
 - Obsidian 畫面的截圖用開發版的 `ui` 命令（Electron 的 `capturePage()`），不要用 computer-use：它會截到舊畫面，還會讓 Obsidian 被當成隱藏而停止繪製，計時器和 `requestAnimationFrame` 也跟著變慢（W6 的 Windows 實測）。
 - 測試不改全域的 `node:fs` 等 Node 內建模組：Node 自己的實作也會呼叫它們，換掉之後結果會隨 Node 的版本改變。要模擬失敗，就把替身直接交給要測的函式（例如 `createNodeFiles` 的 `seams`）。
