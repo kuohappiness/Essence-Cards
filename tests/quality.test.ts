@@ -89,6 +89,8 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   const emptied = checker.replace(/^export const EXCEPTIONS: Exception\[\] = \[[\s\S]*?^\];\r?$/m, 'export const EXCEPTIONS: Exception[] = [];');
   assert.notEqual(emptied, checker);
   await writeFile(join(root, 'tools/check-docs.ts'), emptied);
+  await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../tools/secretlint.mjs', import.meta.url), 'utf8'));
+  await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../.secretlintrc.json', import.meta.url), 'utf8'));
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
@@ -107,6 +109,14 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   // stage 了就擋。
   await run('git', ['add', '--', 'a.md'], isolated);
   await assert.rejects(run('git', commit, isolated), /a\.md:3 {2}missing\.md {2}找不到檔案/);
+  // 只改文件也掃金鑰（第二次里程碑檢查 R4）：repo 公開，規劃文件直接推上 main。假的 GitHub token 拆開寫，本檔才不會被掃到。
+  await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)\n');
+  await writeFile(join(root, 'c.md'), '# C\n\n' + 'gh' + 'p_' + 'x7Kq2'.repeat(7) + 'Z\n');
+  await run('git', ['add', '--', 'a.md', 'c.md'], isolated);
+  await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/);
+  await writeFile(join(root, 'c.md'), '# C\n');
+  await run('git', ['add', '--', 'c.md'], isolated);
+  await run('git', commit, isolated);
 });
 
 for (const scenario of ['中文新增', '移出 src 的改名'] as const) void test('L2-3 hook 擋下缺相依的' + scenario, async t => {
@@ -151,10 +161,11 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   const isolated = { cwd: root, env };
   const commit = ['-c', 'user.name=QualityTest', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'probe'];
   await run('git', ['init', '-q'], isolated);
-  // hook 只看 node_modules 在不在；文件檢查換成什麼都不做的替身，不 stage。
+  // hook 只看 node_modules 在不在；文件檢查與金鑰掃描換成什麼都不做的替身，不 stage。
   await mkdir(join(root, 'node_modules'));
   await mkdir(join(root, 'tools'));
   await writeFile(join(root, 'tools/check-docs.ts'), 'export {};\n');
+  await writeFile(join(root, 'tools/secretlint.mjs'), 'export {};\n');
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));

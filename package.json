@@ -18,7 +18,7 @@
     "locate": "node tools/locate.ts",
     "lint": "eslint src tools tests",
     "knip": "node tools/knip.mjs",
-    "secretlint": "node --input-type=module -e \"import {execFileSync} from 'node:child_process'; import {runSecretLint} from 'secretlint'; const files=execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\\0').filter(p=>p&&!p.split('/').includes('node_modules')&&p!=='main.js'); const r=await runSecretLint({cliOptions:{cwd:process.cwd(),filePathOrGlobList:files,noGlob:true},engineOptions:{formatter:'stylish',color:false,maskSecrets:true}}); if(r.stdout) console.log(r.stdout); if(r.stderr) console.error(r.stderr); process.exitCode=r.exitStatus;\"",
+    "secretlint": "node tools/secretlint.mjs",
     "skills": "node tools/check-skill-mirror.ts",
     "docs": "node tools/check-docs.ts",
     "check": "npm run typecheck && npm run lint && npm run knip && npm run secretlint && npm run skills && npm run docs && npm test",
