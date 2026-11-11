@@ -91,10 +91,13 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await writeFile(join(root, 'tools/check-docs.ts'), emptied);
   await writeFile(join(root, 'tools/secretlint.mjs'), await readFile(new URL('../tools/secretlint.mjs', import.meta.url), 'utf8'));
   await writeFile(join(root, '.secretlintrc.json'), await readFile(new URL('../.secretlintrc.json', import.meta.url), 'utf8'));
+  await writeFile(join(root, 'tools/check-local-paths.ts'), await readFile(new URL('../tools/check-local-paths.ts', import.meta.url), 'utf8'));
   await mkdir(join(root, '.githooks'));
-  const hook = join(root, '.githooks/pre-commit');
-  await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
-  await chmod(hook, 0o755);
+  for (const name of ['pre-commit', 'commit-msg']) {
+    const hook = join(root, '.githooks', name);
+    await writeFile(hook, (await readFile(new URL('../.githooks/' + name, import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));
+    await chmod(hook, 0o755);
+  }
   await run('git', ['config', 'core.hooksPath', '.githooks'], isolated);
   // 只改文件：沒有 package.json，跑到程式檢查就會失敗，所以通過表示只跑了文件檢查。
   await writeFile(join(root, 'a.md'), '# A\n\n[b](b.md)\n');
@@ -116,6 +119,15 @@ void test('D-141 每次 commit 都跑文件檢查且讀暫存區：只改文件�
   await assert.rejects(run('git', commit, isolated), /secretlint-rule-github/);
   await writeFile(join(root, 'c.md'), '# C\n');
   await run('git', ['add', '--', 'c.md'], isolated);
+  await run('git', commit, isolated);
+  // 本機路徑也每次都掃，檔案內容與 commit 訊息都擋（第二次里程碑檢查 R5）。帳號名是自編的，拆開寫本檔才不會被掃到。
+  const local = 'C:' + String.raw`\Users\alice\AppData`;
+  await writeFile(join(root, 'c.md'), '# C\n\n' + local + '\n');
+  await run('git', ['add', '--', 'c.md'], isolated);
+  await assert.rejects(run('git', commit, isolated), /c\.md:3:1 {2}Windows 使用者資料夾/);
+  await writeFile(join(root, 'c.md'), '# C\n\n' + String.raw`C:\Users\<帳號>\AppData` + '\n');
+  await run('git', ['add', '--', 'c.md'], isolated);
+  await assert.rejects(run('git', [...commit.slice(0, -1), 'probe ' + local], isolated), /commit 訊息:1:7 {2}Windows 使用者資料夾/);
   await run('git', commit, isolated);
 });
 
@@ -226,6 +238,7 @@ void test('Q2 改到程式時 hook 跑 npm run check：測試只印點、保留�
   await mkdir(join(root, 'tools'));
   await writeFile(join(root, 'tools/check-docs.ts'), 'export {};\n');
   await writeFile(join(root, 'tools/secretlint.mjs'), 'export {};\n');
+  await writeFile(join(root, 'tools/check-local-paths.ts'), 'export {};\n');
   await mkdir(join(root, '.githooks'));
   const hook = join(root, '.githooks/pre-commit');
   await writeFile(hook, (await readFile(new URL('../.githooks/pre-commit', import.meta.url), 'utf8')).replaceAll('\r\n', '\n'));

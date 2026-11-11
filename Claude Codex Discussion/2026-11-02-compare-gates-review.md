@@ -75,7 +75,7 @@
 - 額外探針均用自編資料與暫存複本／clone，未讀正式 vault。探針初次在沙箱內因建立 node_modules junction 得到 EPERM，尚未執行到行為斷言；改在沙箱外重跑後取得上列結果，未把該次環境失敗算成通過。
 - `checkUpdate → compareVersions → 兩個真實轉接器程序`：用暫存且登錄於暫存 local 的測試 vault，舊版真正 `v0.2.0`（`74637e5e8d8638fc5208a497682a9a336dcd45b2`）、新版 `fb823eb`；回傳 differences 1，報告列兩側閘門與 D-157 衝突。`check` seam 不重跑整包檢查；`compare` seam 僅轉交真實 compareVersions 並以 node_modules junction 取代 npm ci，沒有回傳假比較結果；未呼叫 install。
 - 真正 `v0.1.0`（`a4922fa8842db68a0acd88de2bf8ba3679a43fde`）另開暫存 clone，以 need 固定輸入直接跑 snapshot：held 與 stopped 正確、conflicts null；這不是完整的 v0.1.0 發布流程驗收。
-- F1 的 CLI 輸入／輸出與探針結果暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-0QzRiY`（`async-input.json`、`async-output.json`、`results.json`）；重現所需變更與輸入已完整寫在 F1，無須依賴暫存資料長期存在。
+- F1 的 CLI 輸入／輸出與探針結果暫存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-0QzRiY`（`async-input.json`、`async-output.json`、`results.json`）；重現所需變更與輸入已完整寫在 F1，無須依賴暫存資料長期存在。
 - 本輪只新增這份審查報告，未改產品程式、測試、任務或 roadmap，未 commit／push。
 
 未測項目與原因：未執行 GitHub Actions（分支未 push，無法據本機結果宣稱 fetch-depth 改動已在 CI 驗過）；未以各版 lockfile 重新 npm ci（隔離接線探針重用現有 node_modules，完整檢查也使用現有安裝）；未操作正式 vault、Obsidian、iPhone 或安裝流程（本輪只審查）；未測明確延後的 exam 與真實完整複習的取題順序（報告已列限制）；未重跑實作者的 12 處改壞測試（本輪自行補不相容回傳值與跨閘門組合）。
@@ -168,7 +168,7 @@
 
 - Windows、Node `v24.13.0`；在指定 worktree、沙箱外執行 `npm run check`：exit 0，**1059／1059 通過**，fail／cancelled／skipped 均為 0，約 139 秒；包含型別、ESLint、knip、secretlint、skill 一致性、文件與 compare 測試 12 項。
 - 以上隔離探針只用自編內容、暫存複本／clone。舊版相依套件以 node_modules junction 重用現有安裝；未動正式 vault 或使用中工作樹的程式。
-- F2 的完整非空輸入、CLI 輸出、正常／變更快照與三版正例結果暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r2-LYFmDi`（`input.json`、`output.json`、`results.json`、`string-reviews-results.json`）；上文已保留不依賴暫存路徑的改法與輸入條件。11 種刪改的狀態在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-mutations-sljtWj\mutation-results.json`。
+- F2 的完整非空輸入、CLI 輸出、正常／變更快照與三版正例結果暫存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-r2-LYFmDi`（`input.json`、`output.json`、`results.json`、`string-reviews-results.json`）；上文已保留不依賴暫存路徑的改法與輸入條件。11 種刪改的狀態在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-mutations-sljtWj\mutation-results.json`。
 - 本輪僅在同一份報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
 
 未測項目與原因：未重審第一輪未改的功能；未跑 CI、各版重新 npm ci、正式 vault／Obsidian／iPhone、安裝或升版（本輪只做聚焦再審）；未重跑 update-vault 接線（本輪未改 compareVersions 接線，第一輪的隔離接線結果仍在前文）；未涵蓋未實作的 exam 行為或任意未來版的所有資料形狀。
@@ -268,7 +268,7 @@ F2 的字串 gates 與字串 reviews，在有內容、完全空白的輸入下�
 - 真正 `v0.1.0`、`v0.2.0` 與目前程式，各跑「非空卡組＋紀錄」「完全空白」「只有卡組」「只有紀錄」共 **12 組正例**，全通過。非空舊紀錄的到期固定斷言為 `2026-10-27T20:00:00Z`；新卡為 null；無卡組時 decks／today 空、30 天全為 0。
 - 原 F2 的兩個改法另跑有內容與空輸入共 4 次，全部拒絕。缺 conflicts 方法的隔離例子確認輸出 null，報告限制文字仍存在。
 - F3 例 A 有直接 snapshot 及 CLI 證據；例 B 有 snapshot、記憶體 diff 與 JSON 往返後 diff 的證據。F4 已以直接 state 驗證零 append 且 close 拒絕，再經 CLI 證實仍回成功。
-- 探針皆使用自編輸入與隔離複本／clone，node_modules junction 重用現有安裝；未讀正式 vault。資料暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r3-RmmKqD`：`input.json`、`nan-output.json`、`close-input.json`、`close-output.json`、`results.json`、`typed-decks-results.json`；重現所需改法及輸入條件已寫在上文，不依賴暫存檔長期保存。
+- 探針皆使用自編輸入與隔離複本／clone，node_modules junction 重用現有安裝；未讀正式 vault。資料暫存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-r3-RmmKqD`：`input.json`、`nan-output.json`、`close-input.json`、`close-output.json`、`results.json`、`typed-decks-results.json`；重現所需改法及輸入條件已寫在上文，不依賴暫存檔長期保存。
 - 本輪僅在原報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
 
 未測項目與原因：未重審前兩輪未改的功能；未重跑實作者的 19 處改壞測試（本輪以原 F2 與新取值表反例查核）；未跑 CI、各版重新 npm ci、update-vault 接線、正式 vault／Obsidian／iPhone、安裝或升版（本輪只做第三次審查）；未驗證明確延後的 exam 或任意未來版的全部行為。
@@ -346,7 +346,7 @@ F3 的 NaN term 與空 typed array、F4 的無版本行寫入卻 close 拒絕，
 - 指定 worktree、Windows、Node `v24.13.0`，沙箱外 `npm run check`：exit 0，**1061／1061 通過**，fail／cancelled／skipped 均為 0，約 197 秒；compare 測試 14 項。新增正例有獨立字面預期與 JSON 往返斷言，但尚未涵蓋 F5 空洞。
 - 真正 v0.1.0、v0.2.0 與目前版本，各跑 5 篇自編卡組、完全空輸入、已有 compare 版本行三種輸入，共 9 組正例全過；正常輸出的 JSON 往返相同。另以 10/20 good 的獨立字面值核對下次到期 `2026-10-27T20:00:00Z`。
 - 原 F3 兩例及 F4 無寫入的 close 拒絕另行重跑，全被擋下。三版 refusal 物件身分另以公開 createState 驗證，沒有靠本版型別宣告推斷舊版行為。
-- 隔離資料暫存在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r4-1lyI9Q`：`input.json`、`hole-output.json`、`results.json`、`hole-conflicts-results.json`。上文已有重現條件，不依賴暫存檔長期存在。全部使用自編資料及暫存複本／clone，node_modules junction 重用現有安裝，未讀正式 vault。
+- 隔離資料暫存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-r4-1lyI9Q`：`input.json`、`hole-output.json`、`results.json`、`hole-conflicts-results.json`。上文已有重現條件，不依賴暫存檔長期存在。全部使用自編資料及暫存複本／clone，node_modules junction 重用現有安裝，未讀正式 vault。
 - 本輪只在同一份報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
 
 未測項目與原因：未重審前三輪未改的功能；未重跑實作者的 58 處改壞測試（本輪核對原重現、投影及新陣列邊界）；未跑 CI、各版重新 npm ci、update-vault 接線、正式 vault／Obsidian／iPhone、安裝或升版（只做第四次審查）；未驗證未來版本的拒絕包裝方式、明確延後的 exam 或任意未來版全部行為。
@@ -444,7 +444,7 @@ F5 的三個原重現都已拒絕；逐格複製、特殊物件 key、跨 share�
 - 真正 v0.1.0、v0.2.0 與目前版本，各跑 123 個自編新目標、完全空輸入、合法 constructor ID 共 9 組；全部通過。每版的 123 個目標都是 share 120、more 3、lt 不重複，成功快照 JSON 往返相同；兩個舊版與目前版本的比較差異為 0，未因新 unique 誤擋。
 - F5 三個原重現另行重跑，全拒絕；跨 share／more 的同 lt 重複另行重現，拒絕。真正相同目標 ID 重複的備份仍保留兩個目標並將 due 記 stopped。
 - F6 兩個假版本均經 CLI；F7 兩個假版本均經公開 snapshot。反例只用自編內容、隔離資料夾，未動正式 vault。
-- 暫存證據：F6 在 `C:\Users\kuo\AppData\Local\Packages\sandbox.{87173b02-c895-4a48-8416-cc3dd338c799}\AC\Temp\essence-l2-gates-r5-KAeH1e`（before.json、after.json、results.json 與兩份假版本）；F7 在 `C:\Users\kuo\AppData\Local\Packages\sandbox.{777f6586-4880-4163-807e-022c1208c4c3}\AC\Temp\essence-l2-key-alias-iLPIg6`（results.json 與假版本）。正例與去重證據在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r5-positive-ijkKb6\results.json`。上文已保留重現條件，不依賴暫存檔長期存在。
+- 暫存證據：F6 在 `C:\Users\<帳號>\AppData\Local\Packages\sandbox.{87173b02-c895-4a48-8416-cc3dd338c799}\AC\Temp\essence-l2-gates-r5-KAeH1e`（before.json、after.json、results.json 與兩份假版本）；F7 在 `C:\Users\<帳號>\AppData\Local\Packages\sandbox.{777f6586-4880-4163-807e-022c1208c4c3}\AC\Temp\essence-l2-key-alias-iLPIg6`（results.json 與假版本）。正例與去重證據在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-r5-positive-ijkKb6\results.json`。上文已保留重現條件，不依賴暫存檔長期存在。
 - 本輪只在同一份報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
 
 未測項目與原因：未重審前幾輪未改的功能；未重跑實作者的 68 處改壞測試（本輪跑完整檢查及新的成對比較反例）；未跑 CI、各版重新 npm ci、update-vault 接線、正式 vault／Obsidian／iPhone、安裝或升版（只做第五次審查）；未驗證請求已列出的多變 getter／Proxy、任意 Map 子類別或明確延後的 exam。
@@ -503,7 +503,7 @@ F5 的三個原重現都已拒絕；逐格複製、特殊物件 key、跨 share�
 - 真正 v0.1.0、v0.2.0 與目前版本，各跑「5 篇自編卡組與紀錄」「完全空輸入」「需要新版卡組與可讀篇同 ID」三組，共 **9 組正例全過**；兩個舊版分別與目前版本比較，這三組均為 0 差異。這是內容確實相同的固定輸入，不是以正式 vault 的空卡組結果取代非空驗證。
 - 正例具體斷言包含：單元 `{ code: 'L1', name: '' }`；missing-answer 的 line／level／code；10/20 good 的下次到期 `2026-10-27T20:00:00Z`；需要新版的 C.md 不進 decks，可讀 A.md 同 ID 的 gat111 為 stopped，today 只保留 aaa111。正常非空快照的 JSON 往返相同。
 - 額外在隔離複本把 A.md 同時列為 blocked 與可讀，A.md 只有無 ID 目標，snapshot 仍拒絕並指出被擋卡組矛盾。
-- 探針結果在 `C:\Users\kuo\AppData\Local\Temp\essence-l2-gates-r6-VL7wCg\results.json`。全部使用自編內容及隔離複本／舊版 clone，沿用已安裝的 node_modules；未讀正式 vault。
+- 探針結果在 `C:\Users\<帳號>\AppData\Local\Temp\essence-l2-gates-r6-VL7wCg\results.json`。全部使用自編內容及隔離複本／舊版 clone，沿用已安裝的 node_modules；未讀正式 vault。
 - 本輪只在同一份報告後追加本節，未改產品程式、測試、任務或 roadmap，未 commit／push。
 
 未測項目與原因：未重審前幾輪未改的功能；未逐項重跑實作者的 90 處改壞測試（本輪重跑完整檢查與原成對反例）；未跑 CI、各版重新 npm ci、update-vault 接線、正式 vault／Obsidian／iPhone、安裝或升版（本輪只做第六次審查）；未驗證前述多變 getter／Proxy、任意 Map 子類別或明確延後的 exam。

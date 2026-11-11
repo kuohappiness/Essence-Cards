@@ -151,13 +151,13 @@ void test('備份：設定資料夾照 --config；沒有外掛資料夾時整份
 });
 
 void test('備份位置的實際路徑落在封裝 App 的私有資料夾（MSIX 把 %LOCALAPPDATA% 導過去）時拒絕，要用 --to 指定別處（使用者 2026-10-29）', () => {
-  assert.match(virtualizedReason('預設位置', String.raw`C:\Users\kuo\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Essence Cards\備份\V`) ?? '',
+  assert.match(virtualizedReason('預設位置', String.raw`C:\Users\someone\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\Essence Cards\備份\V`) ?? '',
     /實際在 .*Packages.*解除安裝那個 App 時會一起刪掉。用 --to 指定 App 以外的資料夾/);
-  assert.notEqual(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache`), null);
-  assert.equal(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Essence Cards\備份\V`), null);
+  assert.notEqual(virtualizedReason('x', String.raw`C:\Users\someone\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache`), null);
+  assert.equal(virtualizedReason('x', String.raw`C:\Users\someone\AppData\Local\Essence Cards\備份\V`), null);
   // %TEMP% 不會被導走（2026-10-29 實測），測試的暫存資料夾照常。
-  assert.equal(virtualizedReason('x', String.raw`C:\Users\kuo\AppData\Local\Temp\essence-abc`), null);
-  assert.equal(virtualizedReason('x', '/home/kuo/.local/share/Essence Cards/備份/V'), null);
+  assert.equal(virtualizedReason('x', String.raw`C:\Users\someone\AppData\Local\Temp\essence-abc`), null);
+  assert.equal(virtualizedReason('x', '/home/someone/.local/share/Essence Cards/備份/V'), null);
 });
 
 void test('備份位置已經看得出在封裝 App 的私有資料夾（直接指到或經過連結）時，不建任何資料夾就拒絕，原有的資料夾不動', async t => {

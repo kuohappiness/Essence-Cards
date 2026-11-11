@@ -119,7 +119,7 @@
 - `59c4b96` 合併交界逐段核對：`ready/fresh` 長度與 `early`、`answeredAfter` 依不同目標計間隔（符合 D-189，不改成按畫面張數）、`firstTry` 接每個實際寫入目標、改評分重建 `with` 與取消預檢、`encodeNew` 與正式 writer 呼叫、`setDeckStatus` 的 `need: null`／狀態核對、目錄單篇及小考範圍。本輪未在這些組合另確認缺陷；R2 是完整對照資料與 State 候選集合的交界。
 - 翻面／打字第一步行為不整包重審；依請求比對基準，`review-session.test.ts`、`review-ui.test.ts`、`preview.test.ts` 無差異，`review.test.ts` 只新增 `englishBeside` 的 import 與一個測試。既有測試隨完整檢查通過。
 - 20 個標記原文案例、成功例冪等、五種額外分隔線案例，以及 R1／R2 的目前版／修法對照，皆用自編內容與記憶體 Files；候選修法只存在暫存 bundle，未將任何修法寫回產品。候選沒有跑完整 check，不能替代 Claude 修正後在最終 commit 的回歸與 L2。
-- 可重跑探針：在本 worktree 執行 `node C:\Users\kuo\AppData\Local\Temp\question-type-seam-l2-probe.mjs`。它讀該目錄目前原始碼，使用 esbuild 在作業系統暫存區套候選差異並執行斷言，不改 repo；暫存被清除後，本報告的原文、入口與對照值仍可重建案例。完整檢查與指定測試輸出分別在同目錄的 `question-type-seam-l2-check.txt`、`question-type-seam-l2-targeted.txt`。
+- 可重跑探針：在本 worktree 執行 `node C:\Users\<帳號>\AppData\Local\Temp\question-type-seam-l2-probe.mjs`。它讀該目錄目前原始碼，使用 esbuild 在作業系統暫存區套候選差異並執行斷言，不改 repo；暫存被清除後，本報告的原文、入口與對照值仍可重建案例。完整檢查與指定測試輸出分別在同目錄的 `question-type-seam-l2-check.txt`、`question-type-seam-l2-targeted.txt`。
 - `PICK_NEEDS` 的最終正式版號、syntax／題型專區與新 syntax 範例照第 4 步處理，本輪沒有把尚未完成的發布步驟當成缺陷。
 
 未測：本輪未操作 Windows／iPhone Obsidian、未實測 iCloud 同步、未讀寫測試或正式 vault、未安裝／發布、未另跑 `npm run build`；iPhone 與輸入法組字中途 Enter 仍依請求列為延後，Windows 既有實機紀錄只作來源資料，沒有冒充本輪獨立重測。
@@ -253,7 +253,7 @@
 - 首次指定測試與完整 check 有重疊；後來量到可用實體記憶體約 **563 MiB**、可用提交量約 **1.38 GiB**，近 15 分鐘 Application 1000／1001 沒查到 node.exe 的對應事件。這是事後狀態，**不能據此斷定記憶體就是根因**。完整 check 結束後，以完全相同的指定測試重跑，全過約 60 秒。本輪沒有根因證據，沒有宣稱修好偶發退出；已補齊可追查的名稱、退出碼和原始輸出。
 - `node experiments/t4/check-syntax.mjs --selftest`：退出 0；範例 0 個不符，錯誤案例 **25／25**，比較卡 **12／12**。
 
-本輪完整輸出存於 `C:\Users\kuo\AppData\Local\Temp\`：`question-type-seam-l2-r2-check.txt`、`question-type-seam-l2-r2-targeted.txt`、`question-type-seam-l2-r2-targeted-retry.txt`。隔離探針為同目錄的 `question-type-seam-l2-r2-probe.mjs`、`question-type-seam-l2-r2-boundary-probe.mjs`、`question-type-seam-l2-r2-seam-probe.mjs`，前者完整結果另在 `question-type-seam-l2-r2-probe.txt`；均用自編資料、記憶體 Files 與暫存 bundle，沒有碰使用者 vault。
+本輪完整輸出存於 `C:\Users\<帳號>\AppData\Local\Temp\`：`question-type-seam-l2-r2-check.txt`、`question-type-seam-l2-r2-targeted.txt`、`question-type-seam-l2-r2-targeted-retry.txt`。隔離探針為同目錄的 `question-type-seam-l2-r2-probe.mjs`、`question-type-seam-l2-r2-boundary-probe.mjs`、`question-type-seam-l2-r2-seam-probe.mjs`，前者完整結果另在 `question-type-seam-l2-r2-probe.txt`；均用自編資料、記憶體 Files 與暫存 bundle，沒有碰使用者 vault。
 
 未測：本輪未操作 Windows／iPhone Obsidian、未實測 iCloud 同步、未操作輸入法組字中途 Enter、未安裝或發布、未另執行獨立 `npm run build`；Windows `0.4.0+4d6c518` 的實機結果僅核對實作者回報，不算本輪獨立重測。最終 `PICK_NEEDS`、syntax 與題型專區仍留在任務第 4 步。
 

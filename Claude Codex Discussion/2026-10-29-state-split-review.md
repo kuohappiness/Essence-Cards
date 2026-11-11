@@ -87,7 +87,7 @@
 
 四類情境各掃第 0～30 個 microtask：另一篇含已占用 ID 的通知、本篇變成需要新版的通知、連續兩份 save 途中 close、fillIds 途中 close，共 124 組；另加讀取失敗時 onError 同步 close、只有編輯器最新文字帶新版門檻、待讀卡組解除新版門檻後再 save，共 3 組。後兩組另斷言新版文字不 apply／persist，以及解除門檻後確實補上一個 ID；失敗關閉案例另斷言回 blocked closed。
 
-臨時差分腳本與基準模組留在本次隔離暫存目錄，未加入 repo：`C:\Users\kuo\AppData\Local\Packages\sandbox.{bded446b-7b11-4612-8ed8-064243a5a1cb}\AC\Temp\essence-state-split-l2-8fe927a158fb4f9698751ddf6e1b307d\audit.mjs`。需重跑時，在本 worktree 執行 `node <audit.mjs 的完整路徑> <其所在目錄>`；這是審查輔助資料，暫存目錄不保證永久保留。
+臨時差分腳本與基準模組留在本次隔離暫存目錄，未加入 repo：`C:\Users\<帳號>\AppData\Local\Packages\sandbox.{bded446b-7b11-4612-8ed8-064243a5a1cb}\AC\Temp\essence-state-split-l2-8fe927a158fb4f9698751ddf6e1b307d\audit.mjs`。需重跑時，在本 worktree 執行 `node <audit.mjs 的完整路徑> <其所在目錄>`；這是審查輔助資料，暫存目錄不保證永久保留。
 
 未完成／未測：完整 `npm run check` 的單次成功執行（主機記憶體不足）；Windows Obsidian 的 save-flow、save、lock、a3check（任務 §4 列為建議非必要，審查請求仍記載測試 vault 被其他 session 使用且未取得可用確認，本次未安裝或借用）；iPhone 實機（不屬本次純拆檔與整合審查）。
 

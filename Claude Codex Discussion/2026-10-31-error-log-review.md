@@ -46,7 +46,7 @@ Tab × 4：activeElement = .ec-input
 輸入 z：dialog = true，input = "z"
 ```
 
-隔離 HTML 留在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-dom-l2-wxC5JA\case.html`；沒有使用 Obsidian 或真實 vault。現有 `tests/helpers/review-ui.ts` 明列不模擬真實焦點，因此其 §8 測試通過不能排除此問題。
+隔離 HTML 留在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-dom-l2-wxC5JA\case.html`；沒有使用 Obsidian 或真實 vault。現有 `tests/helpers/review-ui.ts` 明列不模擬真實焦點，因此其 §8 測試通過不能排除此問題。
 
 **建議處理：合併前修。** 選單開著時，把 Tab／Shift+Tab 的範圍限制在選單，讓背景控制項不可互動；關閉後還原適當焦點。用真實 DOM 驗證至少「Tab 不離開選單、不能改字、不能結束複習」，並保留原有的卡片狀態測試。
 
@@ -122,7 +122,7 @@ locate('9.9.9', ['2:999999999'], local)
 → node_modules/yaml/browser/dist/doc/directives.js:170:27
 ```
 
-產物留在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-LpoXcZ\releases\9.9.9\`。這是自編的測試版本，不是安裝紀錄。
+產物留在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-l2-LpoXcZ\releases\9.9.9\`。這是自編的測試版本，不是安裝紀錄。
 
 **建議處理：可登錄技術債，尚未代為登錄。** 觸發點：第一次用 locate 維修真實回報，或下一次修改 locate，以先到者為準。完成條件：依已核對雜湊的產物確認行欄是有效整數且在範圍內，超出行數／行長的輸入明確拒絕，合法位置與完整 frame 的定位維持通過。若本輪修，補兩個越界案例即可。
 
@@ -149,7 +149,7 @@ locate('9.9.9', ['2:999999999'], local)
 ## 驗證紀錄
 
 - Windows、Node `v24.13.0`，在上述完整 SHA 上執行 `npm run check`。**exit 0；typecheck、ESLint、knip、secretlint、skill 副本、文件與測試全部通過；858 tests、858 pass、0 fail、0 skipped。** 測試階段約 144 秒。
-- 完整檢查依 quality.md 在沙箱外執行，輸出留在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-check.txt`。一開始沙箱內的 Git status 出現工作樹／權限錯誤；沙箱外已確認乾淨，這不是產品測試失敗。本輪沒有用環境失敗抵作通過。
+- 完整檢查依 quality.md 在沙箱外執行，輸出留在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-l2-check.txt`。一開始沙箱內的 Git status 出現工作樹／權限錯誤；沙箱外已確認乾淨，這不是產品測試失敗。本輪沒有用環境失敗抵作通過。
 - 另外執行本報告 R1～R4 的隔離探針；R1 使用真實瀏覽器焦點與輸入，其餘使用公開介面與自編資料。R2 的讀取失敗加首次排程失敗、正常 close 也另行核對。
 - `npm run check` 包含真實建置／安裝／定位測試；另外給 R4 建置到暫存資料夾的一次產物為 557,765 bytes，BUILD `0.1.0+5018f18`，require 仍為原三個 Obsidian／CodeMirror 模組，加上 D-148 限定的桌面模組。
 - 本報告新增後另外做文件格式檢查；原工作樹及隔離 Git fixture 中的本報告均通過。報告保留為未提交新檔，交 Claude 核對與後續處理。
@@ -298,9 +298,9 @@ CRLF 1:10 → 拒絕
 ### 基準更正、驗證與限制
 
 - 已核對 f1eb85d 的第二個 parent 確為 `ece35faa75702f7b1ada62d23cc960441fe91ea9`。同意 Claude 更正初審差異基準為 ece35fa；不再把那四個獨立 App 規劃 commit 視為本次 error-log 施工額外混入的修改。本輪仍維持使用者指定的 5018f18..3e040b6 範圍。
-- 在 HEAD `8215aecb173ea607f97e8307465d6c7cb68139ef`（產品、工具與測試同 3e040b6）於沙箱外執行 **npm run check：exit 0，862 tests／862 pass／0 fail／0 skipped**；型別、ESLint、knip、secretlint、skill 副本、文件檢查均通過，測試階段約 123 秒。輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-rereview-check.txt`。
-- R1 隔離測試用真實 Chrome 156.0.8078.76、React、openReview、Review、state／session；Obsidian Notice、Markdown 與朗讀是替身。HTML 與 evidence.json 在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-rereview-dom-sb1asl\`。
-- R2／R3 探針使用公開介面與 Node 真實 V8；證據在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-rereview-probes-i0Mt5P\evidence.json`。R4 隔離產物在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-rereview-locate-Arsd7Q\`。
+- 在 HEAD `8215aecb173ea607f97e8307465d6c7cb68139ef`（產品、工具與測試同 3e040b6）於沙箱外執行 **npm run check：exit 0，862 tests／862 pass／0 fail／0 skipped**；型別、ESLint、knip、secretlint、skill 副本、文件檢查均通過，測試階段約 123 秒。輸出：`C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-l2-rereview-check.txt`。
+- R1 隔離測試用真實 Chrome 156.0.8078.76、React、openReview、Review、state／session；Obsidian Notice、Markdown 與朗讀是替身。HTML 與 evidence.json 在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-rereview-dom-sb1asl\`。
+- R2／R3 探針使用公開介面與 Node 真實 V8；證據在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-rereview-probes-i0Mt5P\evidence.json`。R4 隔離產物在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-rereview-locate-Arsd7Q\`。
 - 本輪只在本報告末尾追加內容；追加後文件檢查通過。未改產品、未 stage、commit、push 或操作 vault。備份錯誤的接線仍留待使用者決定，未擴大本輪範圍。
 
 未測：Windows Obsidian 的 files／error-probe 未重跑，實機結果沿用 Claude 回報；iPhone WebKit、觸控、實機鍵盤與 iCloud 持久化仍按原任務延後，隔離 Chrome 的通過不代表 iPhone 實測通過。
@@ -419,8 +419,8 @@ notices：[]
 
 ### 驗證紀錄與限制
 
-- Windows、Node 24.13.0，在 HEAD `82a056222c8421ba94b83c40ad77805f69dbff71`（產品／工具／測試同 cad0ee5）於沙箱外執行 **npm run check：exit 0；868 tests、868 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過；測試階段約 144 秒。輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-third-check.txt`。
-- F1～F4 與備份去重／取消的獨立探針、G1 證據保存在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-third-probes-Vigdcz\evidence.json`。G2 的完整接線證據保存在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-third-wiring-JgmZzJ\evidence.json`；使用者實際 vault 未被讀寫。
+- Windows、Node 24.13.0，在 HEAD `82a056222c8421ba94b83c40ad77805f69dbff71`（產品／工具／測試同 cad0ee5）於沙箱外執行 **npm run check：exit 0；868 tests、868 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過；測試階段約 144 秒。輸出：`C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-l2-third-check.txt`。
+- F1～F4 與備份去重／取消的獨立探針、G1 證據保存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-third-probes-Vigdcz\evidence.json`。G2 的完整接線證據保存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-third-wiring-JgmZzJ\evidence.json`；使用者實際 vault 未被讀寫。
 - 本輪只追加本報告末尾，原文完整保留；追加後文件檢查通過。未改產品、測試、任務或決定，未 stage、commit、push 或操作實機 vault。
 - R1 的畫面本輪沒有程式變更，因此沿用上一輪的瀏覽器驗證，未重做無關畫面檢查；本輪沒有把 Node 的 WebKit 格式探針當作手機實測。
 
@@ -506,8 +506,8 @@ objectMessage.message = {
 
 ### 驗證紀錄與限制
 
-- Windows、Node 24.13.0，在 HEAD `4a8643c184e5b34558141681dd64348166764c00`（產品／測試同 16fcf9b）於沙箱外執行 **npm run check：exit 0；870 tests、870 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過，測試階段約 135 秒。完整輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-fourth-check.txt`。
-- G1 的 frame-evidence.json、G2 五個完整接線案例的 evidence.json 留在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-fourth-wiring-hmwZuv\`；只使用自編內容與隔離資料，未操作使用者實際 vault。
+- Windows、Node 24.13.0，在 HEAD `4a8643c184e5b34558141681dd64348166764c00`（產品／測試同 16fcf9b）於沙箱外執行 **npm run check：exit 0；870 tests、870 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過，測試階段約 135 秒。完整輸出：`C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-l2-fourth-check.txt`。
+- G1 的 frame-evidence.json、G2 五個完整接線案例的 evidence.json 留在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-fourth-wiring-hmwZuv\`；只使用自編內容與隔離資料，未操作使用者實際 vault。
 - 本輪只在本報告末尾追加結果；原文完整保留，追加後文件檢查通過。未修改產品、測試、任務或決定，未 stage、commit 或 push。
 - G1 是 Node 中的 WebKit 格式探針，G2 是共用 Obsidian 替身的完整主機接線；沒有把它們寫成 iPhone 或 Obsidian 實機測試。
 
@@ -557,11 +557,11 @@ objectMessage.message = {
 | 一般錯誤與值 | 普通 Error、null、undefined、Symbol、字串、數字，以及 Error.message 是數字或可正常轉文字的物件，原因文字均符合各自的字面預期。 |
 | 備份載入本身失敗 | 不經 ReadyFailed 的載入支線，分別拋出 message 是 Symbol、message 物件轉文字會拋錯的 Error，也都完成原因與通知。 |
 
-14 個 state.ready 拒絕案例均保留原拒絕值，錯誤紀錄恰好一行 init、console 恰好一次、備份受阻通知恰好一次；另兩個備份載入案例中 state 正常 ready，備份支線也各只記一次 init。全部 16 個案例都沒有未處理拒絕。證據保存在 `C:\Users\kuo\AppData\Local\Temp\essence-error-log-h1-wiring-BtseTm\evidence.json`。
+14 個 state.ready 拒絕案例均保留原拒絕值，錯誤紀錄恰好一行 init、console 恰好一次、備份受阻通知恰好一次；另兩個備份載入案例中 state 正常 ready，備份支線也各只記一次 init。全部 16 個案例都沒有未處理拒絕。證據保存在 `C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-h1-wiring-BtseTm\evidence.json`。
 
 ### 完整檢查與限制
 
-- Windows、Node 24.13.0，在 HEAD `71ac9c201551b7cdad3d6c3da5a6f76cc3ef61ea`（產品／測試同 8a1e3c7）於沙箱外執行 **npm run check：exit 0；872 tests、872 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過；測試階段約 137 秒。完整輸出：`C:\Users\kuo\AppData\Local\Temp\essence-error-log-l2-h1-check.txt`。
+- Windows、Node 24.13.0，在 HEAD `71ac9c201551b7cdad3d6c3da5a6f76cc3ef61ea`（產品／測試同 8a1e3c7）於沙箱外執行 **npm run check：exit 0；872 tests、872 pass、0 fail、0 skipped**。型別、ESLint、knip、secretlint、skill 副本與文件檢查均通過；測試階段約 137 秒。完整輸出：`C:\Users\<帳號>\AppData\Local\Temp\essence-error-log-l2-h1-check.txt`。
 - 這次通過涵蓋 H1 的備份載入錯誤處理與相鄰支線；Claude 提到其他模組中未修改的同形寫法，沒有擴大成另一輪審查。
 - 只在本報告末尾追加結果，原文完整保留；追加後文件檢查通過。未改產品、測試、任務或決定，未 stage、commit、push 或操作使用者實際 vault。
 

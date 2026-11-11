@@ -77,7 +77,7 @@
 
 ## 補充證據與後續核對
 
-隔離腳本放在 repo 外的 `C:\Users\kuo\.codex\visualizations\2026\10\26\01a17982-7752-7160-8a1e-25540782a9f7\`：`state-load-review.test.mjs` 是 15 個案例，`state-load-baseline-compare.mjs` 比較 F1 與 F2 的 list 子情境。可分別用 `node --test --test-concurrency=1 <腳本完整路徑>`、`node <比較腳本完整路徑>` 重跑；前者目前預期有 3 個失敗斷言，不是全過的測試套件。
+隔離腳本放在 repo 外的 `C:\Users\<帳號>\.codex\visualizations\2026\10\26\01a17982-7752-7160-8a1e-25540782a9f7\`：`state-load-review.test.mjs` 是 15 個案例，`state-load-baseline-compare.mjs` 比較 F1 與 F2 的 list 子情境。可分別用 `node --test --test-concurrency=1 <腳本完整路徑>`、`node <比較腳本完整路徑>` 重跑；前者目前預期有 3 個失敗斷言，不是全過的測試套件。
 
 其他已驗的新組合包含同一批另一篇讀不到時改名仍帶著 lost 問題、首次載入中關閉、列出失敗期間新增檔案、慢紀錄讀取期間 timer 到期、暫定問題再次編輯、以及 own log 在作答／取消和讀取恢復之間的交錯。未另改測試替身的產品出口，未操作任何 vault。
 
@@ -121,6 +121,6 @@ Claude（Opus 5.5）逐項核對，修正在分支 `claude/state-load` 的 `782a
 3. **對齊第 1 點：通過。** 原隔離案例重跑確認：首次兩批都讀不到，回報兩次，但保留第一批的 1 秒 timer；999 ms 不重讀，再 1 ms 才重讀兩條路徑。〈Claude 核對〉已更正，無須改程式。
 4. **對齊第 2 點：通過。** 分支 `claude/state-load` 的 `src/state/index.ts:35–40`（`782a7df`）已區分 Files 讀取／列出失敗與程式本身的錯：前者重試，後者可經 `onError(…, 'read')` 並讓 `ready()` reject。此處只有註解變更；依本次再審請求確認這項文字對齊，未擴大成新的行為修改。
 
-隔離腳本與執行證據留在 repo 外的 `C:\Users\kuo\.codex\visualizations\2026\10\26\01a179aa-052c-7b62-a540-96117f96803b\state-load-rereview\`：`original-15.test.mjs`、`adjacent.test.mjs`、`isolated.log`、`check.log`（首次沙箱失敗）及 `check-unrestricted.log`（完整通過）。在該目錄執行 `node --test --test-concurrency=1 original-15.test.mjs adjacent.test.mjs` 可重跑 34 個案例。
+隔離腳本與執行證據留在 repo 外的 `C:\Users\<帳號>\.codex\visualizations\2026\10\26\01a179aa-052c-7b62-a540-96117f96803b\state-load-rereview\`：`original-15.test.mjs`、`adjacent.test.mjs`、`isolated.log`、`check.log`（首次沙箱失敗）及 `check-unrestricted.log`（完整通過）。在該目錄執行 `node --test --test-concurrency=1 original-15.test.mjs adjacent.test.mjs` 可重跑 34 個案例。
 
 未查／未做：Windows 版 Obsidian 的 §8、iPhone／iCloud 實機行為（依請求排除、按既定排程補做）；本次修正之外的整批 L2、A9 與已延後的重構（不擴大再審範圍）；乾淨重裝 npm ci（沿用既有相依，未重裝）。

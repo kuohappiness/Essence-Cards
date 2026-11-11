@@ -150,10 +150,10 @@ B5 official buildPlugin passed
 
 1. Windows、Node `v24.13.0`，在受查 worktree **沙箱外**執行 `npm run check`，exit 0。型別、ESLint、knip、secretlint、skill 副本、文件及測試全部通過；800 passed、0 failed、0 cancelled、0 skipped。測試段耗時約 114 秒。
 2. 用新建的隔離資料與記憶體替身，經 `createBackupRunner`、`State`、`takeBackup`、`openBackup`、ESLint 與真正的 `buildPlugin` 公開介面重現 B1～B5；沒有改 Node 全域內建模組，沒有碰真實 vault 或既有備份。
-3. 重現腳本只放在本機：`C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\plugin-backup-1-review.mjs`，不進 repo。執行方式：
+3. 重現腳本只放在本機：`C:\Users\<帳號>\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\plugin-backup-1-review.mjs`，不進 repo。執行方式：
 
    ```powershell
-   node 'C:/Users/kuo/.codex/visualizations/2026/10/30/01a18b64-0866-71f1-b6a3-9343e37f0dd0/plugin-backup-1-review.mjs' 'D:/程式開發/Essence-Cards-plugin-backup-1'
+   node 'C:/Users/<帳號>/.codex/visualizations/2026/10/30/01a18b64-0866-71f1-b6a3-9343e37f0dd0/plugin-backup-1-review.mjs' 'D:/程式開發/Essence-Cards-plugin-backup-1'
    ```
 
    腳本的斷言確認本報告描述的錯誤確實存在，因此目前 exit 0 表示重現成立，不能當成修正通過。修正者應把預期改成正確行為、加入正式回歸測試。
@@ -252,7 +252,7 @@ export const text = `require`;
 
 - Windows、Node `v24.13.0`，在受查 worktree 沙箱外跑 `npm run check`：**exit 0，806 passed、0 failed、0 cancelled、0 skipped**；測試段約 113 秒。驗證 SHA 為 `6bf966a1583be22ad789ec12e0eb3d3a0b640264`。
 - 上次的本機腳本另存為 `plugin-backup-1-rereview.mjs`，將 B1～B5 的斷言改為正確行為後重跑，全數通過；保留原腳本不改。B1 的預期為不改字，B2 為不刪除，B3 為不重試，B4 為讀得到，B5 為 lint 拒絕。
-- 相鄰腳本 `plugin-backup-1-adjacent.mjs` 驗 C1 的兩個時機、B1＋B3、B2 的提交後取消、B5 的正常語法及 B6 的真實 junction。兩份腳本均在本機目錄 `C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，不進 repo；只用隔離資料與自編內容，沒有修改 Node 的全域內建模組。
+- 相鄰腳本 `plugin-backup-1-adjacent.mjs` 驗 C1 的兩個時機、B1＋B3、B2 的提交後取消、B5 的正常語法及 B6 的真實 junction。兩份腳本均在本機目錄 `C:\Users\<帳號>\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，不進 repo；只用隔離資料與自編內容，沒有修改 Node 的全域內建模組。
 - 相鄰腳本對 C1／C2 的斷言是在確認本報告描述的錯誤存在；它的 exit 0 不能解讀成這兩項通過。修正者應改成正確行為的預期並補正式回歸測試。
 - `node tools/check-docs.ts` 通過（223 個 Markdown、4,021 個連結），`git diff --check` 通過；差異只有末尾追加 77 行、0 行刪除。只提交本報告，未修改架構討論稿。
 
@@ -313,7 +313,7 @@ D1 {"by":"monthly","preparesAfterCancel":1,"folderCreatedAfterCancel":true,"addi
 
 - Windows、Node `v24.13.0`，在受查 worktree **沙箱外**跑 `npm run check`：exit 0，**808 passed、0 failed、0 cancelled、0 skipped**；測試段約 113 秒。驗證 SHA 為 `825cadc8eb1b8fd4e1141a5ac57e5e43f56157cf`。
 - 上次相鄰腳本另存為 `plugin-backup-1-second-rereview.mjs`，把 C1 的兩個時機與 C2 改成正確行為的預期，重跑通過，保留舊腳本不改。
-- 本輪相鄰腳本 `plugin-backup-1-second-adjacent.mjs` 驗上述 13 個備份交錯、18 個 ESLint 正負例與 2 個取消反例。兩份腳本都在本機目錄 `C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，可用 `node '<腳本完整路徑>' 'D:/程式開發/Essence-Cards-plugin-backup-1'` 重跑；不進 repo。
+- 本輪相鄰腳本 `plugin-backup-1-second-adjacent.mjs` 驗上述 13 個備份交錯、18 個 ESLint 正負例與 2 個取消反例。兩份腳本都在本機目錄 `C:\Users\<帳號>\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，可用 `node '<腳本完整路徑>' 'D:/程式開發/Essence-Cards-plugin-backup-1'` 重跑；不進 repo。
 - 相鄰腳本對 D1 的斷言是在確認本報告描述的錯誤存在；exit 0 不代表取消案例通過。修正者應改成正確預期並補正式回歸。
 - 全程使用記憶體與新建暫存資料；D1 的目錄建立由真正的 `prepareFolder` 完成，未接觸真實 vault 或既有備份，沒有改 Node 全域內建模組。`node tools/check-docs.ts` 通過（工作樹：223 個 Markdown、4,072 個連結），本報告的 `git diff --check` 通過，差異為末尾追加 50 行、0 行刪除。主工作樹另有文件與決策索引修改，均不納入本次提交。
 
@@ -365,7 +365,7 @@ D1 {"by":"monthly","preparesAfterCancel":0,"folderCreatedAfterCancel":false,"add
 ### 驗證紀錄
 
 - Windows、Node `v24.13.0`，在受查 worktree **沙箱外**執行 `npm run check`：exit 0，**810 passed、0 failed、0 cancelled、0 skipped**；測試段約 112 秒。驗證 SHA：`d3d20b7eb997f680f152be117da2594e2e804e8d`。
-- D1 的正確預期腳本為 `plugin-backup-1-third-rereview.mjs`；5 個取消時機腳本為 `plugin-backup-1-third-cancel.mjs`。本機目錄同前：`C:\Users\kuo\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，執行方式為 `node --unhandled-rejections=strict '<腳本完整路徑>' 'D:/程式開發/Essence-Cards-plugin-backup-1'`。兩份腳本的斷言都是正確行為的預期，exit 0 表示這次驗證通過；舊反例腳本保留不改。
+- D1 的正確預期腳本為 `plugin-backup-1-third-rereview.mjs`；5 個取消時機腳本為 `plugin-backup-1-third-cancel.mjs`。本機目錄同前：`C:\Users\<帳號>\.codex\visualizations\2026\10\30\01a18b64-0866-71f1-b6a3-9343e37f0dd0\`，執行方式為 `node --unhandled-rejections=strict '<腳本完整路徑>' 'D:/程式開發/Essence-Cards-plugin-backup-1'`。兩份腳本的斷言都是正確行為的預期，exit 0 表示這次驗證通過；舊反例腳本保留不改。
 - B1～B6、C1、C2 的回歸重跑使用先前的 `plugin-backup-1-rereview.mjs`、`plugin-backup-1-second-rereview.mjs`，同樣開啟 strict 模式。全程只用隔離暫存目錄及自編資料，沒有碰真實 vault／既有備份，也沒有修改 Node 的全域內建模組。`node tools/check-docs.ts` 通過（工作樹：223 個 Markdown、4,105 個連結），本報告的 `git diff --check` 通過；差異只有末尾追加 41 行、0 行刪除。
 
 **未測：** 依請求未重做 Obsidian／iCloud／設定頁實機，也未測 Mac、Linux、iPhone、真 exFAT 或外掛與更新命令兩個真實程序並行；本輪結論限於這一個 D1 修正及指定回歸。合併與正式安裝仍由整合者依任務流程處理。

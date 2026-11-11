@@ -19,7 +19,7 @@
 - **觸發**：小考連結是 `[[Essence Cards/學業/English]]`；原本 `Essence Cards/學業/English.md` 已不存在，vault 裡只有 `Essence Cards/備份/Essence Cards/學業/English.md`。後者是已知卡組，並非系統資料夾。
 - **預期／實際**：預期原完整路徑找不到，列待修正、不能開始該篇練習。實際 resolver 回傳備份路徑，真正 state 的小考列為 `problem: null`、`refs: [{ deck: 備份路徑 }]`、`count: 1`，可直接練備份的目標。
 - **原因與影響**：Obsidian 的 `getFirstLinkpathDest` 並不保證有斜線的輸入就是精確 vault 路徑；找不到精確位置時仍會找路徑尾巴。現在的額外檢查只擋多個尾巴匹配，無法區分「短連結唯一」與「完整位置已失效」，可能讓學生練到另一篇或舊備份。
-- **證據**：**隔離重現**。先用假的 metadata 回傳上述備份，執行真正 resolver＋state，得到上述結果；另唯讀抽出本機 `C:/Users/kuo/AppData/Roaming/obsidian/obsidian-1.15.0.asar` 的 `app.js` 中 `getLinkpathDest` 方法，以自編的 vault／`uniqueFileLookup` 執行，確認它確實回傳該備份。抽出方法只適配 basename、dirname、排序與 Obsidian 的 `String.contains`，沒有啟動或操控 Obsidian；不是本輪實機重測。
+- **證據**：**隔離重現**。先用假的 metadata 回傳上述備份，執行真正 resolver＋state，得到上述結果；另唯讀抽出本機 `C:/Users/<帳號>/AppData/Roaming/obsidian/obsidian-1.15.0.asar` 的 `app.js` 中 `getLinkpathDest` 方法，以自編的 vault／`uniqueFileLookup` 執行，確認它確實回傳該備份。抽出方法只適配 basename、dirname、排序與 Obsidian 的 `String.contains`，沒有啟動或操控 Obsidian；不是本輪實機重測。
 - **真實路徑**：**會**。搬檔或刪掉原篇、保留另一層同名卡組，都可由手動檔案整理／同步產生；此例原篇已不存在，當下也沒有兩個同名檔。metadata 的退回行為有本機 1.15.0 程式證據，非任意捏造其回傳。
 - **建議**：合併前修。先分清楚已宣告的完整 vault 路徑、相對路徑和短連結；完整／相對位置須精確存在，短連結才做唯一性判斷。保留「自動更新成短連結」與「精確位置存在時不受整包備份干擾」的成功案例，新增「原篇不存在、只剩尾巴相同卡組」及相對路徑的反例。
 

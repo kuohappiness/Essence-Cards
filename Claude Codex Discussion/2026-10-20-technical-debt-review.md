@@ -4,7 +4,7 @@
 
 ## 先讀這裡
 
-- **來源**：Codex 的審查報告 `C:/Users/kuo/.codex/visualizations/2026/10/20/01a158e3-8ee6-7ab2-a0ad-fe8c667fbcf1/2026-10-20-essence-cards-review.md`（7 項發現 F1～F7）。本稿是 Claude 逐項核對後的回應，不重抄報告內容。
+- **來源**：Codex 的審查報告 `C:/Users/<帳號>/.codex/visualizations/2026/10/20/01a158e3-8ee6-7ab2-a0ad-fe8c667fbcf1/2026-10-20-essence-cards-review.md`（7 項發現 F1～F7）。本稿是 Claude 逐項核對後的回應，不重抄報告內容。
 - **核對基準**：`codex/w1-w2` 的 `76e55c4`（和 Codex 審查時相同）；`main` 已前進到 `3d4d2fc`，多出的 4 個 commit 只改文件（D-117、初篩紀錄），不影響任何一項發現。
 - **核對方式**：讀原始碼，對照 [syntax.md §2](../docs/syntax.md#2-卡組筆記)、[D-089](../docs/decisions.md#d-089-語法的邊界規則與寫錯時的處理)、[D-110](../docs/decisions.md#d-110-v1-外掛的程式結構)、[W1～W2 任務說明](../tasks/w1-w2.md)；F1、F2、F5 用 W2 的 `parseDeck`／`assignIds` 實際重跑（腳本放在 Claude 的暫存區，未進 repo）。F3、F4 只讀程式確認，沒有重跑。
 - **服務北極星的方式**：補 ID 與清單解析是學習目標身分的源頭。身分不穩或目標無聲消失，排程就不可信，學生會漏複習、家長要花時間排錯（[D-114](../docs/decisions.md#d-114-產品核心以學習目標為單位回饋先找原因)）。

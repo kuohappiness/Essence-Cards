@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+# commit 訊息也會公開：擋本機路徑（帳號名、iCloud 雲碟、vault 名稱；第二次里程碑檢查 R5）。檔案內容由 pre-commit 掃。
+node tools/check-local-paths.ts --message "$1"

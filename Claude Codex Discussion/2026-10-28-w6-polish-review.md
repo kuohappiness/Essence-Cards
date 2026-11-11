@@ -126,7 +126,7 @@
 - 在受審 worktree、Node `v24.13.0`、沙箱外自行執行 `npm run check`：型別、ESLint、knip、secretlint、skill 一致性、文件檢查皆通過，**556 tests passed，0 failed，0 skipped**。沿用 worktree 已安裝的相依，沒有執行會重建 node_modules 與 prepare 的 `npm ci`；不把它記成已跑。
 - 隔離目錄保存 `git archive 2ad863b` 的快照；用真 React／ReactDOM、原 Review／Markdown／host／Session／State／Speech 跑無頭 Chrome。Obsidian 的 Markdown renderer 用 markdown-it 及最小渲染結果替身，語音用可控制事件的引擎，檔案用既有 MemoryFiles。這比原 UI 替身多驗到了真 portal、DOM、ResizeObserver 及 host 關閉順序；仍不是 Obsidian／iOS 實機結果。
 - 額外確認的正常組合：三個答案中照打第二個、列其餘答案、逐字 input 不換 DOM、第 1 步快照回看、手動評分先於 idle 不重複記、沒有英文語音立即回報 idle。瀏覽器補測沒有未攔截例外。
-- 本機重現程式與結構化結果保存在 `C:\Users\kuo\.codex\visualizations\2026\10\28\01a18191-3a70-7bb3-a9d0-a7460458d289\w6-review\` 的 `harness.tsx`、`build.mjs`、`run-live.mjs`、`result.json`；報告中的觸發步驟與關鍵結果已足以重建案例，不必把整份執行紀錄貼進 repo。
+- 本機重現程式與結構化結果保存在 `C:\Users\<帳號>\.codex\visualizations\2026\10\28\01a18191-3a70-7bb3-a9d0-a7460458d289\w6-review\` 的 `harness.tsx`、`build.mjs`、`run-live.mjs`、`result.json`；報告中的觸發步驟與關鍵結果已足以重建案例，不必把整份執行紀錄貼進 repo。
 - 修正後至少重跑 F1～F5 的案例及完整檢查；F1／F2 的檢查要涵蓋真正 `createSpeech.stop()` 會喚醒 callback 的語意。只改 UI 測試裡的字串計數，不足以證明修好。
 
 未查／未測：A3 帶入的 save／events 實作（已有另一輪審查、任務排除）；未重新執行 Windows Obsidian 的 ui 劇本或讀取測試 vault（不在本次隔離重現範圍）；iPhone 實際鍵盤、觸控按鈕樣式、iOS 語音事件及第四輪出處細框（目前無 iPhone 控制環境）；Obsidian 真實 MathJax／各類嵌入的完整渲染（替身不代表宿主輸出），以及作業系統直接殺掉 App（未作破壞性實機操作）。
@@ -237,7 +237,7 @@
 - 在指定 worktree、Node `v24.13.0`、沙箱外自行重跑完整 `npm run check`：型別、ESLint、knip、secretlint、skill 一致性與文件檢查通過；**559 個測試通過，0 失敗、0 skipped**。沿用既有 node_modules，沒有重跑 npm ci。
 - 以 `git archive 888075a` 的獨立快照重跑前輪案例並補邊界：使用真 React／ReactDOM、Motion、host、Session、State、createSpeech、postProcess 及分支 CSS；只替換 Obsidian 渲染器、系統語音事件與記憶體 Files。正常動畫使用真實瀏覽器時間，沒有用直接 Session 返回冒充按鈕操作。
 - 新案例用自編的文字、最小嵌入 DOM、連結及一像素 data 圖片，不讀寫私人 vault。未攔截的瀏覽器例外為 0；ui-phone 的列檔失敗是刻意注入的預期錯誤。
-- 本機證據位於 `C:\Users\kuo\.codex\visualizations\2026\10\28\01a18191-3a70-7bb3-a9d0-a7460458d289\w6-recheck-888075a\` 的 `harness.tsx`、`build.mjs`、`run-live.mjs`、`result.json`。本輪只在此文件追加結果，沒有改動既有報告或〈Claude 回應〉。
+- 本機證據位於 `C:\Users\<帳號>\.codex\visualizations\2026\10\28\01a18191-3a70-7bb3-a9d0-a7460458d289\w6-recheck-888075a\` 的 `harness.tsx`、`build.mjs`、`run-live.mjs`、`result.json`。本輪只在此文件追加結果，沒有改動既有報告或〈Claude 回應〉。
 
 未查／未測：A3 及本輪差異之外的實作（任務排除）；Windows Obsidian 真 vault 的 md-cases／ui-phone 整套劇本、真實 MathJax 與嵌入渲染完成時序（本輪使用隔離渲染結果，不能當作宿主實測）；iPhone 鍵盤、觸控樣式、iOS 語音與切換 App 的實際事件（沒有 iPhone 控制環境）。
 

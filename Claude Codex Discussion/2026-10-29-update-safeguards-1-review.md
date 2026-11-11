@@ -12,7 +12,7 @@
 - Windows、Node `v24.13.0`；在沙箱外執行 `npm ci`、`npm run check`，兩者退出碼皆為 0。型別、ESLint、knip、secretlint、skill 一致性與文件檢查通過；測試 **590／590 通過，0 失敗、0 跳過**。其中本輪三個測試檔各 10 項，共 30 項，已包含在完整檢查內。
 - 額外透過公開介面執行自編探針：純邏輯在記憶體；檔案流程使用獨立暫存 vault。時機與故障注入使用現有 `seams`，沒有修改 Node 全域模組；注入的檔案變更實際寫入暫存檔案系統。
 - 所有學習內容、外部目錄與 ZIP 均自編；沒有讀寫任何真實 vault、私人教材或實際備份。探針結束後清除自行建立的暫存資料，沒有修改產品程式、既有測試或 commit。
-- 報告寫入後，主資料夾的 `node tools/check-docs.ts` 通過。審查 worktree 的 Git 狀態乾淨；app 將它視為此 chat 的 primary checkout，拒絕 `archive_worktree`，而原資料夾不是 managed worktree、無法用 `attach_worktree` 切回，因此暫留 `C:\Users\kuo\.codex\worktrees\review-update-safeguards-1\Essence Cards`。測試 vault 與探針資料已清除。
+- 報告寫入後，主資料夾的 `node tools/check-docs.ts` 通過。審查 worktree 的 Git 狀態乾淨；app 將它視為此 chat 的 primary checkout，拒絕 `archive_worktree`，而原資料夾不是 managed worktree、無法用 `attach_worktree` 切回，因此暫留 `C:\Users\<帳號>\.codex\worktrees\review-update-safeguards-1\Essence Cards`。測試 vault 與探針資料已清除。
 - 下文所有程式與測試位置都指**分支 `claude/update-safeguards-1` 的相應路徑（commit `4dbb395`）**；僅以文字列出，不連到 `main` 尚不存在的檔案。
 
 ## 合併前要修

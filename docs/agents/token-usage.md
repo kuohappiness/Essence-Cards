@@ -6,7 +6,7 @@
 
 ## 怎麼量
 
-- **來源**：使用者電腦上的用量紀錄。Claude 是 `%USERPROFILE%\.claude\projects\**\*.jsonl` 的 `message.usage`（用 `message.id` 去重，含 subagent）；Codex 是 `C:\Users\kuo\.codex\sessions` 與 `archived_sessions` 的 `token_count` 事件（`last_token_usage`），`codex-auto-review` 另計。只讀 token 數、模型、推理等級、時間與工具名稱，不讀對話內容；只有數字的統計結果放 [`token-usage/`](token-usage/)。
+- **來源**：使用者電腦上的用量紀錄。Claude 是 `%USERPROFILE%\.claude\projects\**\*.jsonl` 的 `message.usage`（用 `message.id` 去重，含 subagent）；Codex 是 `%USERPROFILE%\.codex\sessions` 與 `archived_sessions` 的 `token_count` 事件（`last_token_usage`），`codex-auto-review` 另計。只讀 token 數、模型、推理等級、時間與工具名稱，不讀對話內容；只有數字的統計結果放 [`token-usage/`](token-usage/)。
 - **怎麼跑**：雲端討論串讀不到電腦，要開 Remote Control 由電腦上的 session 統計。統計腳本放在使用者電腦的 `%TEMP%\essence-claude-usage\`，可能被系統清掉。
 - **範圍**：整台電腦所有專案的合計（這段時間主要是 Essence）；雲端討論串沒有紀錄。
 - **加權成本**：照 Anthropic API 定價折成 Opus 的一般輸入：快取讀 ×0.05、1 小時快取寫 ×2、輸出 ×5；Fable、Sonnet 也照 Opus 算。方案額度怎麼扣沒有公布，所以只是近似，原始 token 一起列。

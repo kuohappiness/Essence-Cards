@@ -9,6 +9,8 @@ fi
 node tools/check-docs.ts --staged
 # 金鑰也每次都掃，只掃這次暫存的檔：repo 公開，只改文件的 commit 也會直接推上 main（第二次里程碑檢查 R4）。
 node tools/secretlint.mjs --staged
+# 本機路徑也每次都掃（帳號名、iCloud 雲碟、vault 名稱；第二次里程碑檢查 R5），commit 訊息由 commit-msg 掃。
+node tools/check-local-paths.ts --staged
 staged=$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=ACMRD)
 # 暫存區上面讀完了。測試與工具會在暫存資料夾跑 git，hook 繼承的 GIT_DIR、GIT_INDEX_FILE 等會讓它們改到這個 repo
 # （2026-10-29：測試的 git init 把共用 .git/config 的 core.bare 改成 true，所有 worktree 都不能用）。

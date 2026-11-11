@@ -26,7 +26,7 @@
 
 ## 已經跑過的（新版 commit 上重跑過，輸出在腳本資料夾）
 
-腳本不進 repo，在 `C:\Users\kuo\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_e21e2729-1472-4be8-a408-683f6816e1c6\seam-diff\`，用法寫在 `README.txt`：
+腳本不進 repo，在 `C:\Users\<帳號>\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_e21e2729-1472-4be8-a408-683f6816e1c6\seam-diff\`，用法寫在 `README.txt`：
 
 | 腳本 | 比什麼 | 規模 | 結果 |
 |---|---|---|---|

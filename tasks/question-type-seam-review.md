@@ -82,7 +82,7 @@ node experiments/t4/check-syntax.mjs --selftest
 
 **實作者跑過的**（結果在[任務說明 §10 的 Windows 實機結果](question-type-seam.md#windows-實機的結果2026-11-05)）：`npm run check`（pre-commit，每個 commit）；`npm run build`；§10 列的 Windows 項目，建置 `0.4.0+59c4b96`；`md-cases` 在隔離環境與測試 vault 各一次。第一輪之後 R1、R2 改了程式，碰到的部分用 `0.4.0+4d6c518` 重跑（§10 結果的最後一段）；R3 只有測試與註解。這組指定測試有一次偶發失敗，查不出是哪一個，見報告〈跑過與沒跑的〉。
 
-截圖與腳本不進 repo：`C:\Users\kuo\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_fa1934dd-c734-4953-974e-eef1a0a4b88a\question-type-seam-real-run-59c4b96\`，用法寫在 `README.txt`。第一輪修正後的重驗在旁邊的 `question-type-seam-real-run-4d6c518\`。
+截圖與腳本不進 repo：`C:\Users\<帳號>\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\side-session-notes\local_fa1934dd-c734-4953-974e-eef1a0a4b88a\question-type-seam-real-run-59c4b96\`，用法寫在 `README.txt`。第一輪修正後的重驗在旁邊的 `question-type-seam-real-run-4d6c518\`。
 
 **沒跑的**：
 
