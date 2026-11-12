@@ -96,12 +96,13 @@
 
 - **待審**：`dcbfa09` 到這一節所在的 commit（`git log -1 --format=%H -- tasks/settings-vault-file-l2.md`），hash 寫進報告。
   - 程式：`94975a4`（R11）。
-  - 文件：這一節所在的 commit（L2 報告的〈Claude 回應（第三輪）〉、任務說明 §3 的 R9 已知限制、狀態）。
+  - 文件：`fa2b78c`（L2 報告的〈Claude 回應（第三輪）〉、任務說明 §3 的 R9 已知限制、狀態）。這一節最後所在的 commit 加了 D-202 與下面的〈發生機率〉，改的是流程文件（`docs/decisions.md`、code-quality 的 `review.md`、`quality.md`、backlog），不必審。
 - **先讀**：[L2 報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-l2.md>)最後的〈Claude 回應（第三輪）〉。
 - **請確認**：
   1. R11 擋住第三輪重現的順序；改名後的重讀與核對有沒有帶進新的問題，例如沒有人改時也回「失敗」（設定資料夾確定不了、`data.json` 讀不懂或不存在、備份的值有讀不懂的欄位）、重讀時的連結檢查。
   2. 「失敗」的說明與 exit code 對操作者是否清楚：設定檔已經寫了，要重跑 `--plan`。
   3. 任務說明 §3 的已知限制是否照實寫出 R9。
+- **發生機率**（[D-202](../docs/decisions.md#d-202-l2-的發現先估發生機率極低的記成已知的限制)）：每項發現另寫要同時成立的條件（哪個版本、哪個操作、多短的時間差）與估計多常碰到；機率極低的請建議記成已知的限制（[backlog〈已知的限制〉](../docs/backlog.md#已知的限制)），不擋合併。
 - **驗證方式**：`94975a4` 的 pre-commit 跑完整的 `npm run check` 並通過；兩個新測試都在修正前跑過一次、確認會失敗。沙箱裡的 `npm run check` 有環境造成的固定失敗，完整的要在沙箱外跑。
 - **沒跑的**：Windows Obsidian、iPhone、iCloud 的實機都沒重跑。
 - **回報**：寫在同一份 L2 報告最後，加〈第四輪〉一節，標題下第一行的狀態一起改。
