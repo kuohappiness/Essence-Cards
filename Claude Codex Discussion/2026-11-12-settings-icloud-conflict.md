@@ -35,6 +35,8 @@
 | B. Obsidian 開著，外掛的存檔改上限（`restore do=cap`，和設定頁同一條 `saveData`），修改的是 iPhone 建的那份 `data.json` | 看 11 分鐘：沒被改名 |
 | C. 刪掉 `data.json`，等刪除同步，重新載入外掛再存（新建，同 15:43） | 看 1 分鐘以上：沒被改名 |
 | D. 同一個 Obsidian 開一篇筆記，讓它重寫 `workspace.json` | **每次都被改名**：08:00:10、08:00:44、08:14:19 新建的 `workspace.json`，7 秒內變成 `workspace 653.json`～`655.json`；現在 `.obsidian` 裡沒有 `workspace.json` |
+| E. C 之後 6 分鐘，Obsidian 開著，用 Node 原地改 `data.json`（08:25:30，外掛收到 `onExternalSettingsChange` 會重讀） | **中了**：08:27:00 變成 `data [conflicted 4].json`，`data.json` 不見。iPhone 沒有活動（iPhone 的紀錄最後一行 00:32，`workspace-mobile.json` 00:31） |
+| F. 對照：Obsidian 開著，在 `.obsidian/plugins/essence-cards/` 和 vault 的一般資料夾各新建一個沒人讀的檔，6 分鐘後各改一次，再看 7 分鐘 | 兩個都沒被改名 |
 
 另外兩項現有的檔：
 
@@ -52,15 +54,15 @@
 |---|---|---|---|
 | Obsidian 的 `saveData` 是原地寫入，不是寫暫存檔再改名 | 讀 `obsidian-1.15.0.asar` 的 `app.js`：`saveData` → `writePluginData` → `writeJson` → `adapter.write` = `fs.writeFile` 再 `utimes(mtime)` | Windows、Obsidian 1.15.0 | 確認 |
 | `workspace.json` 也是原地寫 | 同上：`saveLayout` → `adapter.write` | 同上 | 確認；所以 ` N` 的改名不是 Obsidian 做的 |
-| 單純在 `.obsidian` 寫檔就會被改名 | 實測 A | Windows、iCloud for Windows 15.10、Obsidian 關著 | 否（25 分鐘 0 份） |
-| 電腦單獨就能讓 `data.json` 被改名 | 實測 B、C | Windows、Obsidian 開著、iPhone 沒有參與 | 三次都沒有重現（樣本小，不能說永遠不會） |
+| 單純在 `.obsidian` 寫檔就會被改名 | 實測 A、F | Windows、iCloud for Windows 15.10、Obsidian 關著（A）或開著（F） | 否（A 25 分鐘 0 份；F 0 份） |
+| 電腦單獨就能讓 `data.json` 被改名 | 實測 B、C、E | Windows、Obsidian 開著、iPhone 沒有活動 | **是**，但不是每次：4 次中 1 次（E） |
 | 每台只追加自己的檔不會撞出衝突副本 | 現有紀錄檔：測試 vault 兩台 11 月共 468 行，含 11-11 兩台同時在用 | 兩台 | 0 份衝突副本 |
-| iPhone 在場時，電腦改 `data.json` 會被改名 | 11-11 三次 | 兩台 | 三次都是；**待驗**：沒有在 iPhone 開著時做對照實驗 |
+| 兩台都在用時，電腦改 `data.json` 會被改名 | 11-11 三次 | 兩台 | 三次都是 |
 
 ## 2. 原因：能說到哪裡
 
-- **能確定的**：iCloud for Windows 會把電腦寫的 `.obsidian` 設定檔改名成副本，`workspace.json` 每次重現，`data.json` 在 11-11 兩台都在用的時候三次都中；改名會同步到 iPhone，變成刪除。外掛的寫法沒有特別之處，和 Obsidian 自己寫設定檔同一條路。
-- **不能確定的**：`data.json` 要什麼條件才會中。只有電腦時三次實測都沒重現，可能要 iPhone 在場（iPhone 收到之後讀檔、或 iCloud 在 iPhone 那邊動了紀錄），也可能是伺服器上留著一筆電腦看不到的同名紀錄（`workspace.json` 的 653 份副本像是這種：每次新建都撞到同一個名字）。查清楚要 iPhone 配合做對照實驗，而且是 iCloud 的內部行為，查清楚也修不了它。
+- **能確定的**：iCloud for Windows 會把電腦寫的 `.obsidian` 設定檔改名成副本，`workspace.json` 每次重現，`data.json` 在 11-11 兩台都在用時三次都中，只有電腦時 4 次中 1 次；改名會同步到 iPhone，變成刪除。不需要 iPhone 在場。外掛的寫法沒有特別之處，和 Obsidian 自己寫設定檔同一條路。
+- **不能確定的**：哪一次會中。同一個資料夾、同樣「新建後修改」的探針檔沒中（F），中的都是 Obsidian 或外掛會讀的檔（`data.json` 改了會觸發重讀，`workspace.json` 是 Obsidian 自己的）；`workspace.json` 的 655 份副本又像是伺服器上留著一筆電腦看不到的同名紀錄，每次新建都撞到同一個名字。這是 iCloud 的內部行為，查清楚也修不了它，也不保證下一版 iCloud 不變。
 - **對選修法的意思**：修法不能押在「找到條件、避開它」上；要選不管條件是什麼都不會掉資料的做法。
 
 ## 3. 修法選項
@@ -74,7 +76,7 @@
 ### A. 換到 vault 裡的一般檔（例如 `Essence Cards/設定.json`），寫法不變
 
 - 優勢：避開 `.obsidian`；資料顯示一般資料夾 0 份衝突副本。改動小：讀寫的路徑換掉、備份與還原的目的地跟著換、舊的 `data.json` 讀一次搬過來。
-- 代價：還是**兩台共用、會被重寫的一個檔**。一般資料夾沒事是觀察到的，不知道原因，不能保證；兩台在同步之前各改一項，iCloud 只留一份（syntax §10 已經寫明接受，但在 iCloud for Windows 上「留一份」可能變成改名、刪除）。解法：沒有，只能觀察。
+- 代價：還是**兩台共用、會被重寫的一個檔**。一般資料夾沒事是觀察到的，不知道原因，不能保證；§2 看起來中的都是會被讀的檔，搬到一般資料夾之後外掛照樣會在它改了時重讀，條件可能一起帶過去；兩台在同步之前各改一項，iCloud 只留一份（syntax §10 已經寫明接受，但在 iCloud for Windows 上「留一份」可能變成改名、刪除）。解法：沒有，只能觀察。
 - 多一個使用者在檔案列看得到的檔（`.json` 預設不顯示，但「檔案」App 看得到），可能被手改。
 
 ### B. 每台裝置把「使用者選的設定」追加到自己的紀錄檔（建議）
@@ -122,7 +124,7 @@
 
 ## 5. 待驗
 
-- iPhone 在場時，電腦改 `data.json` 一定會中嗎：選 B 就不用驗；選 A 或 D 才需要。
+- 一般資料夾裡、外掛會在改了時重讀的設定檔，被電腦改會不會中：選 B 就不用驗；選 A 才需要，而且要做很多次才說得出「不會」。
 - 新做法的 iPhone 實機：上面那三項，放進修好之後那一次。
 
 ## 請 Codex 回應：第一輪（2026-11-12）
