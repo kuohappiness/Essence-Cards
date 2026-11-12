@@ -85,12 +85,22 @@ export function hasChange(raw: Readonly<Record<string, unknown>>, change: Settin
 
 /** data.json 裡設定頁管的欄位；其他欄位不動（D-149 第 7 點）。 */
 const FIELDS = ['capMinutes', 'retention', 'semester', 'semesterSetOn', 'examCountdown'] as const;
-/** 這個檔的內容；不是合法的 JSON 物件是 null。 */
-export function parseData(bytes: Uint8Array): Record<string, unknown> | null {
+function parseObject(text: string): Record<string, unknown> | null {
   try {
-    const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    const value: unknown = JSON.parse(text);
     return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
   } catch { return null; }
+}
+/** 這個檔的內容；不是合法的 JSON 物件是 null。開頭的 BOM 拿掉（設定檔是外掛自己讀位元組，讀法和這裡相同）。 */
+export function parseData(bytes: Uint8Array): Record<string, unknown> | null {
+  return parseObject(new TextDecoder().decode(bytes));
+}
+/**
+ * 舊版的 data.json 的內容，和電腦上 Obsidian 的 loadData 一樣：開頭的 BOM 留著，JSON.parse 讀不懂，是 null
+ * （設定頁 L2 的 F5；設定檔 L2 的 R5：還原算的值要和外掛疊的時候一樣）。
+ */
+export function parseLoadData(bytes: Uint8Array): Record<string, unknown> | null {
+  return parseObject(new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes));
 }
 /** 認得的欄位都相同（tasks/plugin-restore.md §2）。 */
 export const sameSaved = (a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>>): boolean =>

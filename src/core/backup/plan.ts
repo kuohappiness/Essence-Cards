@@ -1,7 +1,7 @@
 import { isDeckPath, parseDeck } from '../deck/index.ts';
 import type { Deck } from '../deck/index.ts';
 import { isErrorLogPath } from '../errors/index.ts';
-import { SETTINGS_FILE, decodeSettings, overlayLegacy, parseData, sameSaved } from '../settings/index.ts';
+import { SETTINGS_FILE, decodeSettings, overlayLegacy, parseLoadData, sameSaved } from '../settings/index.ts';
 import { isLogPath, LOG_FOLDER } from '../study/index.ts';
 import { missingLogLines } from './logs.ts';
 import type { MissingLines } from './logs.ts';
@@ -82,14 +82,15 @@ const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(pa
 const isDeckWrite = (target: string, found: string | null | undefined): boolean => isDeckPath(target) || (found != null && isDeckPath(found));
 /**
  * 一邊的設定值（tasks/settings-vault-file.md §4）：設定檔疊上同一邊的 data.json（和外掛讀的時候一樣，§2）；沒有設定檔就是 data.json。
+ * data.json 照電腦上 Obsidian 的 loadData 讀：開頭有 BOM 就是讀不懂（L2 的 R5）。
  * 讀不懂是 null；兩個都沒有是 undefined。
  */
 function settingsValue(file: Uint8Array | undefined, data: Uint8Array | undefined): Record<string, unknown> | null | undefined {
   if (file !== undefined) {
     const raw = decodeSettings(file);
-    return raw ? overlayLegacy(raw, data === undefined ? undefined : parseData(data) ?? undefined) : null;
+    return raw ? overlayLegacy(raw, data === undefined ? undefined : parseLoadData(data) ?? undefined) : null;
   }
-  return data === undefined ? undefined : parseData(data);
+  return data === undefined ? undefined : parseLoadData(data);
 }
 
 /**

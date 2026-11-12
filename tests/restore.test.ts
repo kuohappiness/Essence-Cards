@@ -4,6 +4,7 @@ import { appendFile, lstat, readdir, readFile, rename, symlink, unlink, writeFil
 import type { FileHandle } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { readDecks } from '../src/core/deck/index.ts';
+import { createSettingsFile } from '../src/core/settings/index.ts';
 import { dueAt, readHistory, replay } from '../src/core/study/index.ts';
 import type { History } from '../src/core/study/index.ts';
 import { backupVault } from '../tools/backup.ts';
@@ -350,6 +351,41 @@ void test('還原：寫入期間 data.json 才變（舊版那台改了設定）�
     assert.equal(await read(vault, SETTINGS), before, during);
     assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), [], during);
   }
+});
+
+// L2 的 R5：data.json 開頭有 BOM 時，電腦上 Obsidian 的 loadData 讀不懂（外掛不疊；沒有設定檔時是讀不到）。還原兩邊的值、寫進去的 legacy 要和外掛一樣。
+/** 外掛重讀：設定檔照 createSettingsFile；data.json 照電腦上 Obsidian 的 loadData（utf8 讀、BOM 留著，JSON.parse 失敗回 undefined）。沒確認過的一台。 */
+function pluginReads(vault: string, data: string): Promise<unknown> {
+  return createSettingsFile({
+    readBytes: async path => { try { return new Uint8Array(await readFile(join(vault, path))); } catch { return null; } },
+    modify: () => Promise.reject(Error('只讀')),
+    loadData: async () => { try { return JSON.parse(await readFile(join(vault, data), 'utf8')) as unknown; } catch { return undefined; } },
+    confirmed: () => null,
+    confirm: () => undefined,
+  }).load();
+}
+void test('還原：data.json 開頭有 BOM，和外掛一樣讀不懂：備份的值、現在的值、寫進去的 legacy 都不用它；備份只有它就擋住', async t => {
+  const DATA = '.obsidian/plugins/essence-cards/data.json';
+  const BOM_DATA = '﻿{"capMinutes":15}';
+  const capOf = async (vault: string): Promise<unknown> => (await pluginReads(vault, DATA) as { capMinutes?: unknown }).capMinutes;
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 45, legacy: { capMinutes: 30 } }), [DATA]: BOM_DATA });
+  assert.equal(await capOf(source), 45, '外掛在備份那時用的是 45');
+  const zip = await backup(t, source);
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 60, legacy: { capMinutes: 30 } }), [DATA]: BOM_DATA });
+  assert.equal(await capOf(vault), 60);
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path, report } = await makePlan(options);
+  assert.match(await readFile(report, 'utf8'), /- 每日時間上限 60 分鐘 → 45 分鐘/);
+  const result = await applyPlan({ ...options, plan: path });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[SETTINGS, '已還原']]);
+  assert.deepEqual(JSON.parse(await read(vault, SETTINGS)), { capMinutes: 45, legacy: null });
+  assert.equal(await capOf(vault), 45, '外掛重讀是還原的值');
+  // 備份只有 data.json、開頭有 BOM：外掛那時讀不到，備份的設定讀不懂，擋住。
+  const old = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [DATA]: BOM_DATA });
+  const { plan } = await makePlan({ vault, backup: await backup(t, old), ...fixed, random: counter() });
+  const row = plan.files.find(file => file.target === SETTINGS);
+  assert.equal(row?.action, 'blocked');
+  assert.ok(row.reasons.includes('備份裡的設定讀不懂'), row.reasons.join('、'));
 });
 
 // legacy 是寫入當下的 data.json，不沿用設定檔原本的（沿用的話，現在疊上的 15 之後會把剛還原的 20 蓋掉）；寫完再做計畫，「設定」沒有差異。

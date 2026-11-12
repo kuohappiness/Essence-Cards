@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName, sameSettingsNow, settingsNow, textDiff } from '../src/core/backup/index.ts';
 import { isDeckPath } from '../src/core/deck/index.ts';
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
-import { decodeSettings, dropLegacy, encodeSettings, parseData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
+import { decodeSettings, dropLegacy, encodeSettings, parseLoadData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
 import { assertNoLinks, isOwn, leftBehind, listTree, platformName, pluginConfig, readError, removeOwn, sameFileKey, writeNew } from './vault-io.ts';
@@ -300,7 +300,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
  */
 function settingsBytes(file: Uint8Array | null, data: Uint8Array | null | undefined, values: Record<string, unknown>): Uint8Array {
   const now = file === null ? {} : decodeSettings(file) ?? {};
-  return new TextEncoder().encode(encodeSettings(restoreSaved(dropLegacy(now), values), data == null ? null : parseData(data)));
+  return new TextEncoder().encode(encodeSettings(restoreSaved(dropLegacy(now), values), data == null ? null : parseLoadData(data)));
 }
 
 /**
