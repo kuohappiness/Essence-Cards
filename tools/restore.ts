@@ -258,6 +258,14 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       await rename(temporary.path, target);
       temporary = null;
       if (await shaOf(target) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的雜湊不同');
+      // 「設定」寫完重讀兩個檔算現在的值（L2 第三輪的 R11）：最後一次讀 data.json 之後舊版那台才改，寫進去的 legacy 是舊的那份，
+      // 讀的時候疊上舊版的新值。兩個檔各自同步，寫之前再怎麼排都有先讀的那一檔的空檔，所以寫完核對，和外掛的讀回核對一樣。
+      if (values !== null) {
+        const back = await settingsAt(vault, rel, loaded.config, scan).catch((error: unknown) => {
+          throw Error('設定檔寫進去了，但重讀確定不了現在的值（' + (error as Error).message + '）；重跑 --plan 看新的差異');
+        });
+        if (!sameSettingsNow(settingsNow(back.file, back.data), values)) throw Error('設定檔寫進去了，但重讀時現在的值和備份不同（舊版那台在還原期間改了設定）；重跑 --plan 看新的差異');
+      }
       written.add(path);
       outcome(file, '已還原', '');
     } catch (error) {
