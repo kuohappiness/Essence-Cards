@@ -25,7 +25,7 @@
 - knip 報 `RangeError: Array buffer allocation failed` 是電腦可用的記憶體不夠（它的解析器一次預留 6 GB），不是程式的問題：`npm run knip`（`tools/knip.mjs`）已經自動加上 `KNIP_DISABLE_RAW_TRANSFER=1`，檢查項目不變；直接跑 `npx knip` 時要自己加（2026-10-27 W6 合併時遇到）。
 - Codex 審查時：完整的 `npm run check` 要在沙箱外跑。沙箱裡會有 10～11 項環境造成的固定失敗（symlink、改名的 EPERM、git config；W5 第二部分三輪都是這樣）；沒辦法解除沙箱時，回報裡逐項列出失敗的測試，並說明哪些是環境造成的。跑的時候一次等到結束或出錯（設足夠且有上限的等待），不要短間隔反覆查進度：2026-11-04 那次 L2，這種輪詢約佔 Codex 輸入的 43%（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 7 點，試行）。審查請求的「驗證方式」連到這一點。
 - 建置：`npm run build`，`main.js` 只能 require Obsidian 提供的 `obsidian`、`@codemirror/state`、`@codemirror/view`（[D-134](../decisions.md#d-134-學習目標-id-的補上時機與保護) 的編輯器鎖定），不能把另一份 CodeMirror 打包進去（`tools/build.mjs` 會擋）。
-- 安裝：`npm run install-vault -- <vault> [--dev]`（[D-149](../decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 4 點，擋法在 `tools/install.ts`）。開發版只裝登錄過的測試 vault：登錄存在主資料夾的 `.local/test-vaults.json`（各 worktree 共用、不進 repo），第一次先 `npm run install-vault -- <測試 vault> --register-test`。裝到測試 vault（含 `--dev`）是在專案根目錄建置、再從根目錄複製（`tools/install.ts:176–177`），中間有別的程序寫了 `main.js` 就會裝到那一份；裝完用開發命令結果檔的 `BUILD` 核對是不是這次的建置（[外掛架構檢查](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 N2：照實記下，不改）。其他 vault 一律當正式使用的：要工作樹乾淨、HEAD 是 `v<版號>` 的 tag、`package.json` 版號相同、DEV 關閉，產物與雜湊存到 `.local/releases/<版號>/`；退回用 `--release <版號>`，現有資料的 `需要版本`、`need` 比那一版新就拒絕。
+- 安裝：`npm run install-vault -- <vault> [--dev]`（[D-149](../decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 4 點，擋法在 `tools/install.ts`）。開發版只裝登錄過的測試 vault：登錄存在主資料夾的 `.local/test-vaults.json`（各 worktree 共用、不進 repo），第一次先 `npm run install-vault -- <測試 vault> --register-test`。裝到測試 vault（含 `--dev`）是在專案根目錄建置、再從根目錄複製（`tools/install.ts` 的 `install` 裡測試 vault 那一段：`build({ root, … })` 之後 `deploy(root, …)`），中間有別的程序寫了 `main.js` 就會裝到那一份；裝完用開發命令結果檔的 `BUILD` 核對是不是這次的建置（[外掛架構檢查](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md>)環節 9 的 N2：照實記下，不改）。其他 vault 一律當正式使用的：要工作樹乾淨、HEAD 是 `v<版號>` 的 tag、`package.json` 版號相同、DEV 關閉，產物與雜湊存到 `.local/releases/<版號>/`；退回用 `--release <版號>`，現有資料的 `需要版本`、`need` 比那一版新就拒絕。
 
 ## 規格來源
 
@@ -43,7 +43,7 @@
 
 再審與討論稿的下一輪，那一節的開頭寫「這一輪只讀：本節、〈審查對象〉、上一輪的〈Claude 回應〉」（討論稿寫〈先讀這裡〉與這一輪的那一節），另外列出還沒結的發現 ID，以及這一輪可能碰到的已結發現與它們的驗收證據在哪一節；前幾輪預設不讀，需要時審查者照標題或發現 ID 只查相關的段落。新開的對話不記得前幾輪，沒寫就容易整份從頭讀（[D-171](../decisions.md#d-171-省-token-靠縮短上下文不靠少審或換模型) 第 2 點）。
 
-同一條發現鏈到第 3 代先重整（[D-197](../decisions.md#d-197-同一條發現鏈到第-3-代先重整換模型時重驗依舊行為寫的規則) 第 1 點，試行一件）：第一次報出算第 1 代，前一次修正仍沒守住同一項性質、或帶出退步，接下一代（標法照 code-quality 的 `review.md`〈審查請求範本〉）。到第 3 代（修了兩次）整合者先不修，在當輪的〈Claude 回應〉寫：要守的一個行為、兩次修法依賴的前提與反證、最可能改變修法的待驗問題；用公開入口做一個能分辨兩種解釋的探針，再把相鄰的輸入或事件順序加進回歸。第 2 代照 `review.md` 的「整類一次修」；證據已推翻修法依賴的前提，或碰到寫回、搬動使用者資料的路徑，第 2 代就先做。驗不了又會左右安全的修法時，照〈[卡關時的升級](#卡關時的升級)〉。第四輪交給使用者、工作留在原對話照舊（D-171 第 3、7 點）。第一件觸發的 L2，在報告的〈Claude 回應〉記下：重整花的時間、之後還有沒有報出同一類失守、總輪數、那一輪是不是本來就因為別的發現要再審；使用者看了再決定要不要搬進 `review.md`。
+同一條發現鏈（[D-200](../decisions.md#d-200-l2-的發現鏈待驗問題連兩輪沒驗先讀宿主程式整類修過仍失守就換前提)，改寫 D-197 第 1 點）：照 code-quality 的 `review.md`〈修正後收尾〉，整類修過仍同類失守就換前提；修法依賴的宿主行為連兩輪沒驗，先讀宿主程式或做探針。本專案的宿主是 Obsidian：讀法照〈[Obsidian 相容性檢查](#obsidian-相容性檢查)〉第一層的 `obsidian-<版本>.asar`（只讀不執行），探針用 Windows 版 Obsidian 的開發命令；驗不了照〈[卡關時的升級](#卡關時的升級)〉。代數的標法照 `review.md`〈審查請求範本〉；第四輪交給使用者、工作留在原對話照舊（D-171 第 3、7 點）。
 
 ## 測試分兩類
 
@@ -105,13 +105,17 @@
 - **怎麼發現新版**：開發命令的結果檔會記 Obsidian 的版本（`obsidian` 欄位），AI 在 Windows 版 Obsidian 跑開發命令時看到比上面新的次版本就做；每個里程碑結束時也查一次 Obsidian 的改版說明。
 - **三層**：
   1. 比對新舊版 `obsidian` 套件的 `obsidian.d.ts` 與 `peerDependencies`（CodeMirror 的版本）：本專案用到的 API 有沒有改、標成不建議使用；CodeMirror 版本變了就把 `package.json` 的開發相依改成一樣，跑 `npm run check`。npm 常比 app 晚：還沒有新版時，先讀 `%APPDATA%\obsidian\obsidian-<版本>.asar` 裡的 `app.js`（只讀不執行），查用到的匯出還在、用 CodeMirror 新舊版的差異推定版本，型別檔的比對記進技術債；安裝資料夾的 `resources\obsidian.asar` 是安裝當時的舊版，不能當上一版比。
-  2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（`npm run install-vault -- <測試 vault> --dev`；`lock`、`save` 在 W5 第二部分合併後才有），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 會假通過的情境已修（`b9309ca`，外掛架構討論稿環節 9 結論第 5 條）：`save` 的 `checks.clicked` 也要是 true。
+  2. 在 Windows 版 Obsidian 用開發版重跑 `files`、`compare`、`lock`、`save`、`today`、`answer`、`events`、`a3check`（`npm run install-vault -- <測試 vault> --dev`），結果和上一次比。`events` 比對[外掛架構討論稿環節 1 的 A3 表](<../../Claude Codex Discussion/2026-10-26-plugin-architecture.md#實機記錄t3-與-a32026-10-27opus-55>)。`a3check` 的每個情境都要 `ok`；`skipped` 列的是未測的子項，不算通過，要和上一次相同；`cleanupLeft` 要是空的（iCloud 偶爾會把剛刪的測試卡組放回來）。開發命令的結果拿來當驗收（這一層與任務的完成條件）時都一樣：必要的操作沒做到不算通過，未驗的子項另外列；「完成」的通知或結果檔存在不算通過。`lock`、`save` 會假通過的情境已修（`b9309ca`，外掛架構討論稿環節 9 結論第 5 條）：`save` 的 `checks.clicked` 也要是 true。
   3. 讀改版說明裡和這幾點有關的條目：編輯器與 CodeMirror、Markdown 解析與閱讀模式（清單、區塊 ID）、檔案與 vault 的事件、iOS 與同步；每一點寫一句結論。
 - **結果**：寫進 roadmap 的已完成，通過就更新上面的版本；有不相容先寫失敗測試再修（高風險範圍做 L2）。iPhone 的部分記進下一次 iPhone 實機測試的清單。
 
 ## 里程碑
 
-見 [roadmap](../roadmap.md)。第一個是 W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（[D-111](../decisions.md#d-111-v1-的開發順序capture-延後)）。
+見 [roadmap](../roadmap.md)。
+
+1. W1～W6 打通「手寫卡組 → iPhone 複習 → 自評 → 排程」（[D-111](../decisions.md#d-111-v1-的開發順序capture-延後)），2026-10-27 達成；[檢查](<../../Claude Codex Discussion/2026-10-27-milestone-1-review.md>)。
+2. 上線前：第一次升正式版前（`0.4.0`，考試範圍、小考、點選填空、AI 製卡最小版、設定頁、補紀錄缺口、外掛內還原），2026-11-10 檢查、2026-11-12 裝到正式 vault；[檢查](<../../Claude Codex Discussion/2026-11-10-milestone-2-review.md>)。
+3. 還沒定。💡 v1 功能做完、開始真實使用驗證之前（roadmap 路線圖 v1 的完成條件）。
 
 ## 共用的 skill
 
