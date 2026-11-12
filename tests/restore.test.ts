@@ -353,6 +353,27 @@ void test('還原：寫入期間 data.json 才變（舊版那台改了設定）�
   }
 });
 
+// L2 第二輪的 R6：改名之前最後比的是設定檔，比完到改名之間不再等 data.json 的讀；比 data.json 的那段時間設定檔被改了也要擋。
+void test('還原：改名前讀 data.json 的時候設定檔被改（另一台新版存了設定）→ 跳過，新的設定檔留著', async t => {
+  const DATA = '.obsidian/plugins/essence-cards/data.json';
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 60, legacy: null }) });
+  const zip = await backup(t, source);
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 45, legacy: { capMinutes: 30 } }), [DATA]: '{"capMinutes":30}' });
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path } = await makePlan(options);
+  const synced = JSON.stringify({ capMinutes: 75, foo: 1, legacy: null });
+  let written = false;
+  const write = async (handle: FileHandle, bytes: Uint8Array): Promise<void> => { await handle.writeFile(bytes); written = true; };
+  const scan = async (file: string): Promise<Uint8Array> => {
+    if (written && file.endsWith('data.json')) await put(vault, SETTINGS, synced);
+    return new Uint8Array(await readFile(file));
+  };
+  const result = await applyPlan({ ...options, plan: path, seams: { write, scan } });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome, file.reason]), [[SETTINGS, '跳過', '還原期間改過；重跑 --plan 看新的差異']]);
+  assert.equal(await read(vault, SETTINGS), synced);
+  assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), []);
+});
+
 // L2 的 R5：data.json 開頭有 BOM 時，電腦上 Obsidian 的 loadData 讀不懂（外掛不疊；沒有設定檔時是讀不到）。還原兩邊的值、寫進去的 legacy 要和外掛一樣。
 /** 外掛重讀：設定檔照 createSettingsFile；data.json 照電腦上 Obsidian 的 loadData（utf8 讀、BOM 留著，JSON.parse 失敗回 undefined）。沒確認過的一台。 */
 function pluginReads(vault: string, data: string): Promise<unknown> {

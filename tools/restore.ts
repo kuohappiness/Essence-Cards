@@ -29,6 +29,7 @@ export interface RestoreOptions {
    * 測試用：把內容寫進剛建立的暫存檔或還原檔的替身（模擬空間不足、寫的時候資料夾被換掉）；
    * 寫入前全庫掃描讀卡組的替身（模擬掃描期間才到的修改）。
    */
+  /** 測試用的替身：write 寫暫存檔與還原檔；scan 是改名前的重讀（全庫卡組、「設定」的 data.json），讀不到丟錯。 */
   seams?: { write?: WriteNew; scan?: (path: string) => Promise<Uint8Array> };
 }
 
@@ -217,7 +218,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       if (values !== null) {
         // 「設定」寫之前重讀設定檔與 data.json（L2 的 R3）：loaded 是開始時讀的，舊版那台之後才改的 data.json 看不到。
         // 現在的值和計畫裡的比，要寫的內容與 legacy 都用這一次讀到的。
-        const now = await settingsAt(vault, rel, loaded.config);
+        const now = await settingsAt(vault, rel, loaded.config, scan);
         if ((now.file === null ? null : hashBytes(now.file)) !== expected || !sameSettingsNow(settingsNow(now.file, now.data), saved.settings?.current ?? null)) {
           outcome(file, '跳過', '還原期間改過；重跑 --plan 看新的差異');
           continue;
@@ -246,11 +247,12 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
         const taken = await occupied(vault, rel, bytes, same, scan);
         if (taken) { await giveUp('跳過', taken); continue; }
       }
+      // 「設定」另外比 data.json：寫暫存檔的這段時間舊版那台改了設定，現在的值就不是寫之前比的那一份（L2 的 R3）。
+      // 放在比目標之前：讀 data.json 的等待裡目標也可能被改，比完目標之後不能再等（L2 第二輪的 R6）。
+      if (values !== null && (await settingsAt(vault, rel, loaded.config, scan, false)).dataSha !== dataSeen) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 掃描完才最後一次確認目標：寫暫存檔與全庫掃描都要時間，這段期間才到的修改也不能蓋掉（Codex 第三次查核 T2）。
       await assertNoLinks(vault, folder);
       if (await shaOf(target) !== expected) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
-      // 「設定」另外比 data.json：寫暫存檔的這段時間舊版那台改了設定，現在的值就不是寫之前比的那一份（L2 的 R3）。
-      if (values !== null && (await settingsAt(vault, rel, loaded.config, false)).dataSha !== dataSeen) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 資料夾在這段時間被換掉時，那個位置是別人的檔，不能拿來蓋目標（Codex 第三次查核 T1）。
       if (!await isOwn(temporary.path, temporary.identity)) throw Error(temporary.path + ' 已經不是這次寫的暫存檔');
       await rename(temporary.path, target);
@@ -307,11 +309,11 @@ function settingsBytes(file: Uint8Array | null, data: Uint8Array | null | undefi
  * 「設定」寫入當下的現況（L2 的 R3）：設定檔（rel）與 data.json 各讀一次；不存在是 null，設定資料夾確定不了時 data.json 是 undefined。
  * 照 load 的做法，data.json 的路徑上有連結就不跟著讀（丟錯，這個檔算失敗）。withFile 是 false 時只讀 data.json。
  */
-async function settingsAt(vault: string, rel: string, config: string | null, withFile = true): Promise<{ file: Uint8Array | null; data: Uint8Array | null | undefined; dataSha: string | null | undefined }> {
+async function settingsAt(vault: string, rel: string, config: string | null, read: (path: string) => Promise<Uint8Array>, withFile = true): Promise<{ file: Uint8Array | null; data: Uint8Array | null | undefined; dataSha: string | null | undefined }> {
   const file = withFile ? await bytesOf(join(vault, rel)) : null;
   if (config === null) return { file, data: undefined, dataSha: undefined };
   await assertNoLinks(vault, config + '/' + PLUGIN_DATA);
-  const data = await bytesOf(join(vault, config, PLUGIN_DATA));
+  const data = await bytesOf(join(vault, config, PLUGIN_DATA), read);
   return { file, data, dataSha: data === null ? null : hashBytes(data) };
 }
 
@@ -329,8 +331,8 @@ async function occupied(vault: string, rel: string, bytes: Uint8Array, same: (pa
 }
 
 /** 檔案內容；不存在是 null。 */
-async function bytesOf(path: string): Promise<Uint8Array | null> {
-  try { return new Uint8Array(await readFile(path)); } catch (error) {
+async function bytesOf(path: string, read: (at: string) => Promise<Uint8Array> = async at => new Uint8Array(await readFile(at))): Promise<Uint8Array | null> {
+  try { return await read(path); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
