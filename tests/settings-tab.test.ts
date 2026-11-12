@@ -49,6 +49,9 @@ async function open(t: TestContext, options: Omit<StubOptions, 'texts'> = {}) {
   return { ...stub, plugin, tab, row, beforeReady };
 }
 const CAP = '每日時間上限', RETENTION = '目標保持率', COUNTDOWN = '考試倒數', SEMESTER = '目前學期';
+/** 設定檔（tasks/settings-vault-file.md §1）：設定存在這裡，data.json 只讀不寫。 */
+const SETTINGS = 'Essence Cards/設定.json';
+const saved = (h: { text: (path: string) => string | undefined }): unknown => { const text = h.text(SETTINGS); return text === undefined ? undefined : JSON.parse(text); };
 
 void test('選項與預設（D-104）', async t => {
   const { row } = await open(t);
@@ -74,11 +77,14 @@ void test('分區的順序：複習、學期、備份；文字不寫角色（D-1
   assert.match(words(row(RETENTION).descEl), /預計還記得的比例/);
 });
 
-void test('改上限：存進 data.json、排程馬上照新的值；重開也是', async t => {
+void test('改上限：存進設定檔、data.json 不動，排程馬上照新的值', async t => {
   const h = await open(t, { data: { foo: 1 } });
+  assert.equal(saved(h), undefined, '載入時不建立');
   h.row(CAP).dropdown?.choose('5');
   await settle();
-  assert.deepEqual(h.data.content, { foo: 1, capMinutes: 5 });
+  assert.deepEqual(saved(h), { foo: 1, capMinutes: 5, legacy: {} });
+  assert.deepEqual(h.data.content, { foo: 1 });
+  assert.equal(h.data.saves, 0);
   assert.equal(h.plugin.state?.currentSettings().settings.capMinutes, 5);
   assert.equal(h.row(CAP).dropdown?.value, '5');
 });
@@ -94,7 +100,7 @@ void test('存過才有恢復預設；按了欄位不見、選單回到預設', 
   assert.equal(h.row(COUNTDOWN).toggle?.value, false);
   h.row(COUNTDOWN).extras[0].click();
   await settle();
-  assert.deepEqual(h.data.content, { capMinutes: 45 });
+  assert.deepEqual(saved(h), { capMinutes: 45, legacy: { capMinutes: 45, examCountdown: false } });
   assert.equal(h.row(COUNTDOWN).toggle?.value, true);
   assert.equal(h.row(COUNTDOWN).extras.length, 0);
 });
@@ -103,17 +109,17 @@ void test('選學期記下選的那一天；選未設定就刪掉', async t => {
   const h = await open(t);
   h.row(SEMESTER).dropdown?.choose('國二上');
   await settle();
-  const saved = h.data.content as { semester: string; semesterSetOn: string };
-  assert.equal(saved.semester, '國二上');
-  assert.match(saved.semesterSetOn, /^\d{4}-\d{2}-\d{2}$/);
+  const picked = saved(h) as { semester: string; semesterSetOn: string };
+  assert.equal(picked.semester, '國二上');
+  assert.match(picked.semesterSetOn, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(h.row(SEMESTER).dropdown?.value, '國二上');
   h.row(SEMESTER).dropdown?.choose('');
   await settle();
-  assert.deepEqual(h.data.content, {});
+  assert.deepEqual(saved(h), { legacy: null });
 });
 
-void test('寫不進去（saveData 吞掉錯誤）：有通知、選單回到實際的值', async t => {
-  const h = await open(t, { data: { capMinutes: 45 }, failSave: true });
+void test('寫不進去：有通知、選單回到實際的值', async t => {
+  const h = await open(t, { data: { capMinutes: 45 }, failWrite: path => path === SETTINGS });
   const dropdown = h.row(CAP).dropdown;
   dropdown?.choose('60');
   await settle();
@@ -168,8 +174,8 @@ void test('外掛停用之後：還沒開始的存檔不做，不跳通知（L2 
   h.plugin.onunload();
   const before = h.notices.length;
   await settle();
-  assert.equal(h.data.saves <= 1, true, '最多是停用前已經開始的那一筆');
-  assert.notEqual((h.data.content as { capMinutes: number }).capMinutes, 75);
+  assert.notEqual((saved(h) as { capMinutes: number } | undefined)?.capMinutes, 75, '最多是停用前已經開始的那一筆');
+  assert.equal(h.data.saves, 0);
   assert.equal(h.notices.length, before);
 });
 
@@ -185,6 +191,34 @@ void test('手機回到前景時重讀，電腦不多讀', async t => {
   desktop.show();
   await settle();
   assert.equal(desktop.data.loads, loads);
+});
+
+void test('設定檔新增、修改、改名、刪除（vault 的事件）：重讀；別的檔不算（tasks/settings-vault-file.md §6-9）', async t => {
+  const h = await open(t, { desktop: true });
+  const cap = (): number | undefined => h.plugin.state?.currentSettings().settings.capMinutes;
+  h.texts.set(SETTINGS, JSON.stringify({ capMinutes: 60, legacy: null }));
+  h.vaultEvent('create', SETTINGS);
+  await settle();
+  assert.equal(cap(), 60);
+  assert.equal(h.row(CAP).dropdown?.value, '60', '開著的設定頁跟著變');
+  h.texts.set(SETTINGS, JSON.stringify({ capMinutes: 75, legacy: null }));
+  h.vaultEvent('modify', 'Essence Cards/a.md');
+  h.vaultEvent('rename', 'Essence Cards/設定 2.json', 'Essence Cards/b.json');
+  await settle();
+  assert.equal(cap(), 60, '別的檔不重讀設定');
+  h.vaultEvent('modify', SETTINGS);
+  await settle();
+  assert.equal(cap(), 75);
+  h.texts.set(SETTINGS, JSON.stringify({ capMinutes: 90, legacy: null }));
+  h.vaultEvent('rename', 'Essence Cards/設定 2.json', SETTINGS);
+  await settle();
+  assert.equal(cap(), 90, '改名的舊路徑是設定檔');
+  // 見過設定檔之後不見了：維持手上的值（store 的 usable，tasks/settings-page.md §2-2）。
+  h.texts.delete(SETTINGS);
+  h.vaultEvent('delete', SETTINGS);
+  await settle();
+  assert.equal(cap(), 90);
+  assert.equal(h.data.saves, 0);
 });
 
 void test('外部改了 data.json：值變了才重排，內容相同不重排；打開設定頁也重讀', async t => {

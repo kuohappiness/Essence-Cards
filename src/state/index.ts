@@ -48,7 +48,7 @@ export interface StateOptions {
   offset?: (ms: number) => number;
   /** 預設 { capMinutes: 30, retention: 0.8, filter: [] }（D-104、D-078）；有傳 settingsFirst 時用不到。 */
   settings?: Settings;
-  /** data.json 第一次讀到的設定（tasks/settings-page.md §3）：第一次載入等它，和範圍檔同一段等待；一定會完成，讀不到時是 known 為 false 的預設值。 */
+  /** 第一次讀到的設定（tasks/settings-page.md §3）：第一次載入等它，和範圍檔同一段等待；一定會完成，讀不到時是 known 為 false 的預設值。 */
   settingsFirst?: Promise<SettingsValue>;
   /** 收到檔案變動後等多久才處理（毫秒），預設 500。 */
   delay?: number;
@@ -220,7 +220,7 @@ export interface State {
   cancelQuiz(opened: QuizOpened): Promise<QuizResult>;
   /** 設定頁或別台裝置改了設定（tasks/settings-page.md §3）：上限、保持率、濾網真的變了才重排並通知，只有學期或考試倒數變了只通知，相同什麼都不做。 */
   applySettings(value: SettingsValue): void;
-  /** 現在生效的設定；semester 是今天算出來的學期，沒設定是 null；known 是 false 時 data.json 還沒讀到，不能當成使用者的設定。 */
+  /** 現在生效的設定；semester 是今天算出來的學期，沒設定是 null；known 是 false 時設定還沒讀到，不能當成使用者的設定。 */
   currentSettings(): { settings: Settings; semester: string | null; examCountdown: boolean; known: boolean };
   /** 今天的份因為卡組或別台裝置的紀錄重排之後呼叫；考試範圍只改了看不懂的行數這類只影響畫面的，也會呼叫但不重排。 */
   onChange(listener: () => void): () => void;
@@ -476,7 +476,7 @@ export function createState(options: StateOptions): State {
         if (permits(entry)) list.push({ entry, baseline: target.fields.paused });
       }
     }
-    // data.json 還沒讀到時手上是預設值，不是使用者的設定：不比（tasks/settings-page.md §3）。
+    // 設定還沒讀到時手上是預設值，不是使用者的設定：不比（tasks/settings-page.md §3）。
     if (settingsKnown) {
       list.push({ entry: { set: 'cap', val: settings.capMinutes }, baseline: true });
       list.push({ entry: { set: 'retention', val: settings.retention }, baseline: true });
@@ -682,7 +682,7 @@ export function createState(options: StateOptions): State {
   function fresh(): { today: Today; input: TodayInput } {
     const value = input();
     if (!current || current.offset !== value.offset || current.day !== dayOf(value.now, value.offset)) {
-      // 過了 2/1、8/1 學期自己變，data.json 沒變也不會有 applySettings（tasks/settings-page.md §3）。
+      // 過了 2/1、8/1 學期自己變，設定沒變也不會有 applySettings（tasks/settings-page.md §3）。
       observe();
       current = plan(value);
     }

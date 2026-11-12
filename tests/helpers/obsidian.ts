@@ -188,6 +188,8 @@ export interface ObsidianStub {
   closeTabs: () => void;
   /** 送 workspace 的事件（layout-change、file-open、active-leaf-change、editor-change…）。 */
   fire: (name: string, ...args: unknown[]) => void;
+  /** 送 vault 的事件（create、modify、delete、rename）：照 Obsidian 傳那個檔，rename 多傳舊路徑。不動 vault 的內容。 */
+  vaultEvent: (name: 'create' | 'modify' | 'delete' | 'rename', path: string, oldPath?: string) => void;
   /**
    * 執行 esbuild 建好的 CommonJS 程式碼：require 只認 obsidian 與 CodeMirror（電腦而且給了 vaultPath 時加上 node: 的模組）；document 與 window 由替身提供，不動 Node 的全域。
    * 回傳 module.exports。
@@ -218,6 +220,8 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
   /** 替身的 vault.adapter：給了 vaultPath 才是 FileSystemAdapter（電腦專用的備份在其他情況載入失敗，照實提示）。 */
   class FileSystemAdapter { getBasePath() { return options.vaultPath ?? ''; } }
   const bytes = (path: string): ArrayBuffer => new TextEncoder().encode(texts.get(path) ?? '').buffer;
+  /** vault.on 登記的監聽（offref 拿掉）。 */
+  const vaultHandlers = new Set<{ name: string; callback: (...args: unknown[]) => void }>();
   const adapter = {
     write: (path: string, text: string) => { writes.push('adapter ' + path); texts.set(path, text); return Promise.resolve(); },
     read: (path: string) => Promise.resolve(texts.get(path) ?? ''),
@@ -265,14 +269,16 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     },
     createFolder: (path: string) => { count(); writes.push('folder ' + path); return Promise.resolve(); },
     adapter: options.vaultPath ? Object.assign(new FileSystemAdapter(), adapter) : adapter,
-    on: () => {
+    on: (name: string, callback: (...args: unknown[]) => void) => {
       count();
       // 測試要能拋出不是 Error 的值（例如不准查原型的 Proxy）。
       if (typeof options.failWatch === 'function') throw options.failWatch();
       if (options.failWatch) throw Error('監看不了');
-      return {};
+      const ref = { name, callback };
+      vaultHandlers.add(ref);
+      return ref;
     },
-    offref: () => {},
+    offref: (ref: unknown) => { vaultHandlers.delete(ref as { name: string; callback: (...args: unknown[]) => void }); },
   };
   const storage = new Map(Object.entries(options.localStorage ?? {}));
   const layout: (() => void)[] = [];
@@ -396,6 +402,10 @@ export function createObsidianStub(options: StubOptions = {}): ObsidianStub {
     openTab: path => { leaves.push(leaf(path)); },
     closeTabs: () => { leaves.length = 0; for (const callback of handlers.get('layout-change') ?? []) callback(); },
     fire: (name, ...args) => { for (const callback of handlers.get(name) ?? []) callback(...args); },
+    vaultEvent: (name, path, oldPath) => {
+      const file = new TFile(path);
+      for (const ref of [...vaultHandlers]) if (ref.name === name) ref.callback(...name === 'rename' ? [file, oldPath] : [file]);
+    },
     load,
   };
 }

@@ -23,7 +23,7 @@ export interface SettingsStore {
   semester(): string | null;
   /** 存過的項目（讀不懂的值也算）：有存過才能恢復預設。 */
   saved(): SettingsKey[];
-  /** 重讀 data.json；讀不到維持手上的值。first() 之前什麼都不做。 */
+  /** 重讀設定；讀不到維持手上的值。first() 之前什麼都不做。 */
   reload(): Promise<void>;
   /** first() 之前不讀不寫，回 unreadable。 */
   change(change: SettingsChange): Promise<SaveResult>;
@@ -145,7 +145,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     },
     reload: () => started ? reread() : Promise.resolve(),
     change(change) {
-      // layout ready 之前不碰 data.json（T12）：設定頁在那之前就註冊好了，所有存檔都從這裡擋。
+      // layout ready 之前不碰設定（T12）：設定頁在那之前就註冊好了，所有存檔都從這裡擋。
       if (!started) return Promise.resolve('unreadable');
       return new Promise<SaveResult>(report => {
         // 工作結束才放行隊伍：寫入逾時時畫面先知道失敗，下一筆仍等這一筆真的結束（§2-1）。

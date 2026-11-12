@@ -7,7 +7,7 @@ import { previewButton, previewReveal, quizMark } from '../ui/prefs.ts';
 import type { BackupWiring } from './backup.ts';
 
 // 外掛的設定分頁（D-104：用 Obsidian 內建的設定分頁）。依功能分區、不寫「給家長」這類角色（D-156：學生也可能自己用）。
-// 「複習」的上限、保持率、倒數與「學期」存在 data.json、跟著同步（tasks/settings-page.md）；預覽與小考的開關只存在這台裝置（D-161、D-163 第 6 點）；「備份」見 tasks/plugin-backup.md §1-5；AI 製卡之後的任務再加。
+// 「複習」的上限、保持率、倒數與「學期」存在設定檔 `Essence Cards/設定.json`、跟著同步（tasks/settings-page.md、tasks/settings-vault-file.md）；預覽與小考的開關只存在這台裝置（D-161、D-163 第 6 點）；「備份」見 tasks/plugin-backup.md §1-5；AI 製卡之後的任務再加。
 
 const REVIEW = {
   section: '複習',
@@ -84,7 +84,7 @@ export interface SettingsHost {
   backupError: () => string | null;
   /** 預覽的開關變了：按鈕與命令立刻跟著，不用重開。 */
   previewChanged: () => void;
-  /** data.json 的設定。 */
+  /** 同步的設定（設定檔）。 */
   settings: SettingsStore;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）：選學期時記下選的那一天。 */
   today: () => string;

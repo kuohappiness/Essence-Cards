@@ -49,3 +49,45 @@ export function decodeSettings(bytes: Uint8Array): Record<string, unknown> | und
   if (bytes.includes(0)) return undefined;
   return parseData(bytes) ?? undefined;
 }
+
+/** Files.watch 通知的路徑是不是設定檔（含改名的舊路徑）：大小寫與 Unicode 正規化不同也算，和 Files 同路徑排隊的比法相同。 */
+export function isSettingsPath(path: string): boolean {
+  const key = (text: string): string => text.normalize('NFC').toLowerCase();
+  return key(path) === key(SETTINGS_FILE);
+}
+
+export interface SettingsFileIo {
+  /** Files.readBytes：不存在回 null，讀不到丟錯。 */
+  readBytes(path: string): Promise<Uint8Array | null>;
+  /** Files.modify：原地寫，不存在時建立含上層資料夾。 */
+  modify(path: string, edit: (text: string, exists: boolean) => string): Promise<void>;
+  /** 舊版的 data.json（Obsidian 的 loadData）：沒有回 null，讀不到回 undefined。新版只讀不寫（§1）。 */
+  loadData(): Promise<unknown>;
+}
+export interface SettingsFile {
+  /** 給 store 的 load（§2）：設定檔疊完 legacy 的內容；設定檔不存在時照舊交出 data.json（物件、null、undefined）；設定檔讀不到回 undefined。 */
+  load(): Promise<unknown>;
+  /** 給 store 的 save（§2）：加上 legacy 寫進設定檔，不碰 data.json。 */
+  save(data: unknown): Promise<void>;
+}
+
+/** 設定檔的讀寫（tasks/settings-vault-file.md §2）：store 的隊伍、核對、known 的規則不變，只換讀寫的對象。 */
+export function createSettingsFile(io: SettingsFileIo): SettingsFile {
+  /** loadData 拒絕和讀不到一樣（Obsidian 自己會吞掉錯誤，這裡只是不讓它變成程式的錯）。 */
+  const data = (): Promise<unknown> => new Promise<unknown>(resolve => { resolve(io.loadData()); }).catch(() => undefined);
+  return {
+    async load() {
+      let bytes: Uint8Array | null;
+      try { bytes = await io.readBytes(SETTINGS_FILE); } catch { return undefined; }
+      if (bytes === null) return data();
+      const file = decodeSettings(bytes);
+      if (!file) return undefined;
+      return overlayLegacy(file, await data());
+    },
+    async save(next) {
+      if (!isObject(next)) throw Error('設定要是 JSON 物件');
+      const text = encodeSettings(next, await data());
+      await io.modify(SETTINGS_FILE, () => text);
+    },
+  };
+}

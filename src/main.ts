@@ -8,7 +8,7 @@ import { scopeDate } from './core/catalog/index.ts';
 import { isDeckPath, parseDeck } from './core/deck/index.ts';
 import { createErrorLog, maybeOwn, type ErrorLog, type ErrorWhere } from './core/errors/index.ts';
 import type { Files } from './core/files.ts';
-import { createSettingsStore, type SaveResult } from './core/settings/index.ts';
+import { createSettingsFile, createSettingsStore, isSettingsPath, type SaveResult, type SettingsFile } from './core/settings/index.ts';
 import { dayOf } from './core/study/index.ts';
 import { releaseOf } from './core/version/index.ts';
 import { countFiles } from './dev/wrap-files.ts';
@@ -128,10 +128,12 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 正在還原：這段時間不開複習與入口（§5）。 */
   private restoring = false;
   private settingTab: { refresh: () => void } | null = null;
-  /** data.json 的設定（tasks/settings-page.md）。 */
+  /** 設定檔 `Essence Cards/設定.json` 的讀寫（tasks/settings-vault-file.md §2）：onload 裡 files 建好之後才有；store 在 layout ready 之前不讀不寫。 */
+  private settingsFile: SettingsFile | null = null;
+  /** 設定（tasks/settings-page.md）：存在設定檔，data.json 只讀不寫（tasks/settings-vault-file.md）。 */
   readonly store = createSettingsStore({
-    load: () => this.loadData() as Promise<unknown>,
-    save: data => this.saveData(data),
+    load: () => this.settingsFile ? this.settingsFile.load() : Promise.resolve(undefined),
+    save: data => this.settingsFile ? this.settingsFile.save(data) : Promise.reject(Error('設定檔還沒接上')),
     today: todayText,
     onError: error => { this.fail('ui', error); },
   });
@@ -148,6 +150,12 @@ export default class EssenceCardsPlugin extends Plugin {
     this.device = loadDeviceCode(this.app);
     // 系統資料夾正在搬回時，碰那兩處的讀寫在真正開始之前等（tasks/system-folder-guard.md §1-8）；防呆在 layout ready 才建立。
     let files: Files = createObsidianFiles(this.app, { pause: (path, folder) => this.guard?.pause(path, folder) ?? null });
+    // 每次都拿當下的 files：開發版在下面換成計數的那一份。舊的 data.json 只讀，不寫（tasks/settings-vault-file.md §1）。
+    this.settingsFile = createSettingsFile({
+      readBytes: path => files.readBytes(path),
+      modify: (path, edit) => files.modify(path, edit),
+      loadData: () => this.loadData() as Promise<unknown>,
+    });
     // 錯誤紀錄等 layout ready 才讀寫：之前 vault 的索引還不完整，數不到當月的行數（D-155 第 3 點）。
     const layoutReady = new Promise<void>(resolve => { this.app.workspace.onLayoutReady(resolve); });
     const nameStacks = Platform.isIosApp;
@@ -169,7 +177,7 @@ export default class EssenceCardsPlugin extends Plugin {
       openRestore: () => { void this.openRestore(); },
       saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
     });
-    // 這裡只訂閱；data.json 要到 layout ready 才讀（T12），第一次由 start() 開始。
+    // 這裡只訂閱；設定要到 layout ready 才讀（T12），第一次由 start() 開始。
     this.store.onChange(value => { this.state?.applySettings(value); this.settingTab?.refresh(); });
     // 圖示和「打開入口」都開入口，「目錄」直接開目錄；Obsidian 啟動時不自動打開（D-057）。
     this.addRibbonIcon('graduation-cap', 'Essence Cards：打開入口', () => { this.openEntry(); });
@@ -228,7 +236,7 @@ export default class EssenceCardsPlugin extends Plugin {
     }
   }
 
-  /** Obsidian 發現 data.json 被外部改了（同步或手動）：只當成「該重讀了」的提示（§2）。 */
+  /** Obsidian 發現 data.json 被外部改了（同步或手動）：只當成「該重讀了」的提示（§2）；設定檔疊 legacy 的結果跟著它變（tasks/settings-vault-file.md §2）。 */
   onExternalSettingsChange(): void {
     void this.store.reload();
   }
@@ -537,6 +545,12 @@ export default class EssenceCardsPlugin extends Plugin {
     });
     guard.onChange(() => { this.updateReminders(); this.entry?.refresh(); });
     guard.check();
+    // 設定檔新增、修改、刪除、改名（舊或新路徑）：別台同步來的或手動改的，重讀（tasks/settings-vault-file.md §2）。自己寫的也會通知，多讀一次無妨。
+    // vault 監看不了時，state 的監看是同一個 vault.on，也會失敗並記成 init（tasks/error-log.md §2-3）：這裡不再記一次、不擋住啟動；
+    // 設定照樣在打開設定頁、iPhone 回到前景、data.json 變了時重讀。
+    try {
+      this.register(files.watch(path => { if (isSettingsPath(path)) void this.store.reload(); }));
+    } catch { /* 見上 */ }
     this.state = createState({ files: guard.wrap(files), skip: path => guard.misplaced(path), displaced: path => guard.displaced(path), device: this.device, build: BUILD, fillIds: Platform.isDesktopApp, backup: Platform.isDesktopApp, settingsFirst: this.store.first(), resolveLink: quizLinkResolver(this.app), reserved: () => this.ai?.reserved() ?? [], onError: (error, source) => { this.report(error, source); } });
     if (Platform.isDesktopApp) void this.startBackup(files);
     // 離開筆記的備援：記下現在開著哪些（只記，不補）。
