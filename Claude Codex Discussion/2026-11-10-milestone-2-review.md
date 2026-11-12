@@ -138,7 +138,7 @@
 
 - ✅ R6：回看評分的按鈕不修，技術債的觸發點改成「真實遇到」（使用者 2026-11-11，`ff4914c`，[上線前清單](../tasks/release-0.4.0.md)第一項）。
 - ✅ R9：照 Claude 的建議改寫 D-197 第 1 點後搬進 `review.md`：同一個待驗問題連兩輪沒驗就先讀宿主程式或升級；整類修過仍同類失守就換前提（使用者 2026-11-12 選定，[D-200](../docs/decisions.md#d-200-l2-的發現鏈待驗問題連兩輪沒驗先讀宿主程式整類修過仍失守就換前提)）。
-- ✅ R5 的後半：commit 的作者信箱改用 GitHub 的 noreply（使用者 2026-11-12）。設在這個 repo 的 `.git/config`（各 worktree 共用，不動全域設定）；只對之後的 commit 有效，舊的 commit 不改寫（專案不 force push）。GitHub 的 Settings → Emails 勾「Keep my email addresses private」由使用者自己做。
+- ✅ R5 的後半：commit 的作者信箱改用 GitHub 的 noreply（使用者 2026-11-12）。設在這個 repo 的 `.git/config`（各 worktree 共用，不動全域設定）；只對之後的 commit 有效，舊的 commit 不改寫（專案不 force push）。GitHub 的 Settings → Emails 勾「Keep my email addresses private」由使用者自己做，2026-11-12 做完。
 
 ## 處理紀錄（2026-11-12）
 
