@@ -1,0 +1,145 @@
+# 設定換到 vault 裡的一般檔（給 Claude，本機執行）
+
+狀態：草稿（2026-11-12）：使用者同意先做 A 的開發版並驗證；格式查核與 V1 還沒做
+
+遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（這份說明是規劃，xhigh）。改的是寫進使用者檔案的格式、更新與備份還原、跨模組的接線，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
+
+依據：[D-199](../docs/decisions.md#d-199-040-帶著電腦設定檔的衝突上線下一版先修)、[討論稿](<../Claude Codex Discussion/2026-11-12-settings-icloud-conflict.md>)〈Claude 回應 Codex 第二輪〉（使用者 2026-11-12 同意「先做 A」）、[D-104](../docs/decisions.md#d-104-設定頁)、[D-149](../docs/decisions.md#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 3、7 點、[D-150](../docs/decisions.md#d-150-備份與還原)、[D-154](../docs/decisions.md#d-154-雲端佔位檔讀不到時預防當下說清楚先實測)、[D-195](../docs/decisions.md#d-195-測試分兩類改不回來的做足其餘延後但不漏)；格式照 [syntax §8](../docs/syntax.md#8-備份檔)、[§10](../docs/syntax.md#10-設定)。先前的做法見 [settings-page.md](settings-page.md)、[plugin-restore.md](plugin-restore.md) §4。
+
+**格式查核：要**（[quality.md](../docs/agents/quality.md#開工前的格式查核)），範圍是 §1、§4、§5，請求在 [settings-vault-file-format-review.md](settings-vault-file-format-review.md)。
+
+**D-ID 等驗證結果再寫**：§8 的 V1～V4 都過才選 A，寫 D-ID（補充 D-104、D-149 第 7 點、D-150）並改 syntax §10、§8；有一項沒過就停，討論稿記結果，改做 B2。
+
+## 和「不做」比較（D-153、D-177）
+
+- **不做會怎樣**：維持 D-199。在電腦改設定、還原時勾「設定」，幾分鐘後兩台的設定可能一起回預設，沒有提示；其他家長一直被 D-199 第 4 點擋住。測試 vault 的 `data.json` 已經卡住：電腦寫出來約 40 秒就變成副本（討論稿 H）。
+- **做的代價**：store 換讀寫的對象、還原的「設定」那一列換來源、設定頁多一個缺檔時的提示與按鈕；一輪 L2；iPhone 測兩項。學生的畫面不變。
+- **更小的做法**：
+  - 只在 iPhone 改（D）：同上，只能暫行。
+  - 先只換路徑，不做 `legacy` 與缺檔保護：混用期間舊版那台改的設定會被新版默默蓋掉（討論稿第二輪第 1 節第 2 項）；設定檔不見時兩台照樣回預設，A 失敗時也看不出來。這兩項是 A 唯一的安全網，一起做。
+  - B2、C：見討論稿；B2 是 A 沒過時的備案。
+
+**第 1 類（合併前做足）**：設定不再寫 `data.json`；新檔的讀、寫、讀回核對；舊版那台改的項目新版會採用；設定檔不見時不回預設、不寫觀察行；還原「設定」的來源、目的與比對；舊版外掛讀不到新檔、不受影響；V1～V4。
+
+**第 2 類（可以延後）**：無。設定頁的提示文字與按鈕的版面先照現有的列做，使用者看過再調，資料沒有風險。
+
+## 排程與開工條件
+
+| 步驟 | 內容 | 誰 |
+|---|---|---|
+| 0 | 使用者同意先做 A（2026-11-12 完成） | 使用者 |
+| 1 | 格式查核 §1、§4、§5（新開的 Codex 對話）；其他部分不用等 | Codex → Claude |
+| 2 | 分支上寫程式與測試：§2 → §3 → §4 → §5 | Claude |
+| 3 | §8 的 V1（Windows，測試 vault；先確認沒有別的 session 在用） | Claude |
+| 4 | V2、V3 交給使用者，併進修好之後那一次 iPhone 測試；V3 之後做 V4 | 使用者、Claude |
+| 5 | 都過：寫 D-ID、改 syntax、Codex L2、使用者同意後合併；沒過：停，改做 B2 | Claude → Codex → 使用者 |
+
+**和格式查核的先後**（偏離 quality.md 的「查核完再實作那幾節」，理由寫在這裡）：§1 的位置與欄位先用暫定的寫法做到 V1，只在分支、只裝測試 vault。V1 沒過就不做 A，先查核會白做；查核要改名稱或欄位時照改，V1 的結論不受影響。合併前一定照查核的結果改完。
+
+只動測試 vault；正式 vault 不動、不升版。
+
+## 1. 檔案（格式查核）
+
+- **位置**：`Essence Cards/設定.json`（暫定）。不放 `紀錄/`：那裡的檔還原時只補不見的、同名不同內容列成衝突（`plan.ts` 的 `LOG_FOLDER` 規則），設定要能還原；`紀錄/` 直接底下的 `.jsonl` 舊版會當紀錄讀（`src/core/study/history.ts:24`）。根資料夾已在系統資料夾的防呆裡（`src/core/deck/folders.ts` 的 `GUARDED`），搬走會被搬回。不是 `.md`，不算卡組，Obsidian 的檔案列預設不顯示 `.json`。
+- **內容**：和 §10 現在的 `data.json` 同樣五個欄位、同樣的值與讀法，平的 JSON 物件，兩格縮排加結尾換行；不認得的欄位存檔時保留（D-149 第 3 點）。多一個欄位：
+  - `legacy`：寫這份檔的那一刻讀到的 `data.json` 裡那五個欄位（照原樣，含讀不懂的值；沒有的欄位就不列）。那一刻讀不到 `data.json`（不存在、讀不到、不是物件）就沿用這份檔原本的 `legacy`；原本也沒有是 `null`。
+- **誰寫、什麼時候建立**：只有外掛寫。使用者第一次在設定頁改一項、按「重新建立」（§3）或還原時勾「設定」，才建立；載入時不建立，也不從 `data.json` 自動搬過來。
+- **讀不懂的檔**（不是 JSON 物件、含 NUL）：當成讀不到，和現在 `data.json` 讀不懂一樣：不寫、不採用；還原勾「設定」時以空的當底（plugin-restore.md §4）。
+- **`data.json` 不刪**：留給舊版讀，新版只讀不寫。
+
+## 2. 讀與寫
+
+store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不變，只換交給它的 `load`／`save`（現在是 `loadData`／`saveData`，`src/main.ts:132`）。疊 `legacy` 的規則寫成純函式放在 `src/core/settings/`，接線在 `src/obsidian/`。
+
+- **load**：
+  1. 讀 `Essence Cards/設定.json`（`Files.readBytes`）。丟錯、含 NUL、不是 JSON 物件：回「讀不到」。
+  2. 是物件：讀 `data.json`（`loadData`）來疊（下一點），回疊完的內容。
+  3. 不存在：這台確認過設定檔（§3）就回「讀不到」；沒確認過就照現在讀 `data.json`（物件、不存在、讀不到三種照原樣交給 store）。
+- **疊 `legacy`**：設定檔的 `legacy` 是物件、`data.json` 也讀到物件時，五個欄位逐一比（JSON 相同才算相同，有沒有這個欄位也算），不同的那幾項換成 `data.json` 的（它有就換成它的值，沒有就刪掉）；`semester` 與 `semesterSetOn` 算一項，一起換。其他情況不疊。意思是：舊版那台在新檔建立之後改的項目，新版採用；新版改的項目不被 `data.json` 的舊值蓋掉。
+- **save**：讀 `data.json` 決定 `legacy`（§1），把 store 交來的內容加上 `legacy` 寫進設定檔（`Files.modify`，原地寫，不存在時建立）。不呼叫 `saveData`。
+- **重讀**：`Files.watch` 通知到設定檔的路徑（新增、修改、刪除、改名的舊或新路徑）就 `store.reload()`；`onExternalSettingsChange`（`data.json` 變了）照舊重讀，因為疊的結果跟著它變；iPhone 回到前景照舊重讀。
+- 讀回核對：寫完重讀時 `legacy` 已等於當下的 `data.json`，不會再疊，核對照 `hasChange` 不變。
+
+## 3. 設定檔不見時
+
+- **確認過**：load 讀到設定檔（第 2 步）就把疊完的五個欄位存進這個 vault 專用的 localStorage（`app.saveLocalStorage`，和裝置碼同一種，`src/obsidian/device.ts`）。有這筆就是「這台確認過設定檔」。
+- **之後不見了**（不存在，或這次執行見過、之後不見）：
+  - store 一開始就用這筆當手上的值（`known` 是 false）：排程用它，不用預設值；`known` 是 false，不寫觀察行（現在的規則）。
+  - 改設定照現在回「讀不到」，不寫。
+  - 設定頁最上面多一列：「設定檔讀不到：先用這台上次確認的設定。」和一個「重新建立」按鈕。按下去走 store 的隊伍：再讀一次，還是不存在才寫，內容是這筆加上 `legacy`；寫完讀回核對、通知。設定檔回來了（重讀讀到）這一列就消失。
+- **沒確認過**（新裝置、還沒建立過）：和現在一樣，設定檔與 `data.json` 都沒有就是預設值，`known` 是 true。
+- 理由：A 失敗時（設定檔被 iCloud 改名）兩台不會默默回預設，畫面看得出來，就知道要改做 B2。iPhone 的佔位檔會回報成不存在（store.ts 的 `usable` 註解），所以不自動重建，要家長按。
+
+## 4. 還原與備份（格式查核）
+
+- **備份**：設定檔在 `Essence Cards/` 底下，照現在的規則進備份；`data.json` 照舊也備（`take.ts` 不改），舊版的還原讀得到它。
+- **計畫**（`src/core/backup/plan.ts`）：
+  - 「設定」那一列的來源：備份裡有 `Essence Cards/設定.json` 就用它，沒有才用備份的 `<vault.config>/plugins/essence-cards/data.json`；兩個都有時 `data.json` 不列。目的地一律是 `Essence Cards/設定.json`，不再需要現在的設定資料夾。
+  - 現在的值：設定檔有就用它，沒有才用現在的 `data.json`；現在的 `data.json` 不列成「備份後才有」。
+  - 五個欄位都相同（`sameSaved`，不看 `legacy` 與不認得的欄位）就當相同、不列。
+  - 設定檔不套用一般檔案的規則（卡組、ID、紀錄）。
+- **寫入**：照現在走 `store.restore`（plugin-restore.md §4）：寫前重讀，以讀到的為底，五個欄位換成備份的值，備份沒有的就拿掉，不認得的與 `legacy` 照 save 的規則；寫前核對的 sha 是設定檔的（不存在是 null）。
+- **畫面**：還原視窗的「設定」那一列改用目的地是設定檔來認（現在是 `endsWith('/' + PLUGIN_DATA)`，`src/obsidian/restore-modal.ts:179`）。
+- 命令列的工具（`tools/restore.ts`、`tools/backup.ts`、`tools/compare-versions.ts` 用備份裡的 `data.json` 當設定）：實作時查它們對 `data.json` 與設定檔的處理，和外掛的規則不同的寫進〈結果〉，必要時一起改。
+
+## 5. 相容與退版（格式查核）
+
+- **舊版**：只讀寫 `data.json`，讀不到設定檔（不在 `紀錄/` 直接底下，不是卡組）。新版不寫 `data.json`。
+- **混用期間**（一台新版、一台還沒重開）：舊版那台改的項目，新版經 §2 的疊法採用；新版改的，舊版那台重開成新版之前看不到，沒有資料遺失。不加 `need`，不做兩段發布的啟用（討論稿〈Claude 回應 Codex 第二輪〉第 3 節）。
+- **新安裝**：沒有 `data.json`，直接用設定檔。
+- **退版**：最低可退版本是這一版。退回 `0.4.x`，舊版讀 `data.json`，看到的是搬家前或舊版最後寫的值，之後在新版改的設定要重選；複習資料不受影響。不做寫回 `data.json` 的回轉：電腦寫 `data.json` 正是這個錯。寫 D-ID 時補進 D-149 的相容說明。
+- **更新說明**：「兩台都重開一次 Obsidian 再改設定」。
+
+## 6. 測試
+
+只透過公開介面測（store、load／save 的接線函式、`planRestore`、`applyRestore`）；Files 與 `loadData`／`saveData` 用替身。預期值用下面寫死的例子。
+
+1. 改一項：設定檔有那一項與 `legacy`；`saveData` 一次都沒被呼叫。
+2. 沒有設定檔、`data.json` 是 `{"capMinutes":45,"semester":"國二上","semesterSetOn":"2026-09-15"}`：值是 45 與國二上；改保持率成 0.85 之後，設定檔是那三欄加 `retention: 0.85`，`legacy` 是那三欄。
+3. 疊：設定檔 `capMinutes` 45、`retention` 0.9、`legacy` 是 `{"capMinutes":30,"retention":0.8}`；`data.json` 是 `{"capMinutes":15,"retention":0.8}` → 有效值 15 與 0.9。`data.json` 拿掉 `capMinutes` → 有效值回預設 30。學期兩欄一起換。
+4. 不疊：`data.json` 不存在、讀不到、不是物件，或 `legacy` 是 `null`：有效值是設定檔的。
+5. 寫入時 `data.json` 讀不到：`legacy` 沿用原本的；原本沒有是 `null`。
+6. 載入（`first()`）之後沒有任何寫入，不論設定檔與 `data.json` 有沒有。
+7. 確認過、設定檔不見：值是 localStorage 那筆、`known` 是 false；改設定回 `unreadable`、設定檔沒被寫；「重新建立」寫出那筆，之後 `known` 是 true；重新建立時檔已經回來就不寫。
+8. 沒確認過、兩個檔都沒有：預設值、`known` 是 true（現在的行為）。
+9. 重讀：`watch` 通知設定檔的路徑（含改名的舊路徑）會重讀；其他路徑不會。
+10. 還原計畫：備份只有 `data.json` → 目的地是設定檔；備份兩個都有 → 用設定檔、`data.json` 不列；現在沒有設定檔 → 和現在的 `data.json` 比；五欄相同、只差 `legacy` → 不列；現在的 `data.json` 不列成「備份後才有」。
+11. 還原寫入：比對之後設定檔改過 → `changed`；寫入不碰 `data.json`。
+12. 舊版：`isLogPath`、`isDeckPath` 都不認設定檔；系統資料夾防呆照常。
+13. 現有的 store、還原、設定頁測試照樣全過（改到的只換路徑與來源）。
+
+## 7. 平台事實表
+
+| 假設 | 探針 | 環境 | 結果 |
+|---|---|---|---|
+| Obsidian 的 vault 索引有 `Essence Cards/` 底下的 `.json`，新增、修改、刪除、改名都會送事件 | 開發命令：建、改、改名、刪一個 `.json`，記 `Files.watch` 收到的 | Windows、Obsidian 1.15.0 | 待驗（V1 之前） |
+| `vault.process` 與 `vault.create` 寫 `.json` 是原地寫，和 `saveData` 同一種 | 讀 `obsidian-1.15.0.asar` 的 `app.js`（只讀不執行） | 同上 | 待驗 |
+| `app.loadLocalStorage` 每個 vault 分開、重開 Obsidian 還在 | 現有證據：裝置碼存在同一處，重開後不變（`src/obsidian/device.ts`，2026-11 兩台的紀錄檔名一直沒換） | Windows、iPhone | 確認 |
+| 一般資料夾裡電腦原地重寫的檔不會被改名 | 討論稿 H（`.md`，10 次 0 次）；`.json` 由 V1 驗 | Windows | `.md` 確認；`.json` 待驗 |
+| iPhone 的 vault 索引有 `.json`、會送事件 | V2 | iPhone、Obsidian 1.15.0 | 待驗 |
+
+## 8. 驗證：決定 A 或 B2
+
+| 步驟 | 誰做 | 做什麼 | 沒過的樣子 |
+|---|---|---|---|
+| V1 | Claude（Windows） | 開發版裝進測試 vault，Obsidian 開著：設定頁同一條存檔改上限 10 次、間隔 4 分鐘；外部改設定檔讓外掛重讀；還原勾「設定」 | 出現副本、原路徑不見 |
+| V2 | 使用者（iPhone） | iPhone 開著，電腦改一項 | iPhone 沒採用、原路徑不見 |
+| V3 | 使用者（iPhone） | iPhone 開飛航模式改一項，電腦改另一項，iPhone 再連線 | 有副本、原路徑不見、兩台回預設（只丟一項可以接受，syntax §10） |
+| V4 | Claude（Windows，V3 之後） | 電腦再改 10 次、間隔 4 分鐘 | 有任何一次被改名 |
+
+都過也不代表永遠不會出事；§3 讓出事時看得出來。
+
+## 這次不做
+
+- B2、C（討論稿）。
+- 啟動時自動從 `data.json` 搬家；寫回 `data.json` 的退版路徑；刪掉舊的 `data.json`。
+- 測試 vault 卡住的 `data.json`：不修，它只剩舊版讀。
+
+## 完成條件
+
+- 格式查核的發現已處理；§6 測試與 `npm run check` 全過；§7 待驗的列都有結果；V1～V4 通過；Codex L2 通過或發現都已處理；使用者同意合併。
+- 寫 D-ID，改 syntax §8、§10、architecture 的資料存放；`docs/roadmap.md`、`docs/backlog.md`（技術債的 D-199 那一列）、`docs/progress-map.md` 照實際狀態更新；下一版的更新說明拿掉「設定請在 iPhone 改」。
+
+## 結果
+
+延後的測試：（實作後填）
