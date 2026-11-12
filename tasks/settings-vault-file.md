@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔（給 Claude，本機執行）
 
-狀態：等 L2 第二輪（2026-11-13）：分支上做完，格式查核已處理，V1～V4 通過，選 A，寫成 [D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)；L2 第一輪的 5 項已修，[第二輪](settings-vault-file-l2.md#第二輪只審修正)等 Codex，之後使用者同意才合併
+狀態：等 L2 第三輪（2026-11-13）：分支上做完，格式查核已處理，V1～V4 通過，選 A，寫成 [D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)；L2 第一輪的 5 項、第二輪的 R6～R8、R10 已修，R9 不修（理由在 L2 報告），[第三輪](settings-vault-file-l2.md#第三輪只審第二輪的修正)等 Codex，之後使用者同意才合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（這份說明是規劃，xhigh）。改的是寫進使用者檔案的格式、更新與備份還原、跨模組的接線，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -53,9 +53,9 @@
 store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不變，只換交給它的 `load`／`save`（現在是 `loadData`／`saveData`，`src/main.ts:132`）。疊 `legacy` 的規則寫成純函式放在 `src/core/settings/`，接線在 `src/obsidian/`。
 
 - **load**：
-  1. 讀 `Essence Cards/設定.json`（`Files.readBytes`）。丟錯、含 NUL、不是 JSON 物件：回「讀不到」。
+  1. 讀 `Essence Cards/設定.json`（`Files.readBytes`）。丟錯、含 NUL、不是 JSON 物件：回「讀不到」（`undefined`：store 手上的值與 `known` 都不變，§3 的讀不懂）。
   2. 是物件：讀 `data.json`（`loadData`）來疊（下一點），回疊完的內容，`legacy` 換成這一次讀到的 `data.json` 的五個欄位（讀不到就沿用設定檔原本的）。
-  3. 不存在：這台確認過設定檔（§3）就回「讀不到」；沒確認過就照現在讀 `data.json`（物件時加上它自己的五個欄位當 `legacy`；不存在、讀不到照原樣交給 store）。
+  3. 不存在：這台確認過設定檔（§3）就回「不見」（`MISSING`：手上的值不變、`known` 變 false，§3）；沒確認過就照現在讀 `data.json`（物件時加上它自己的五個欄位當 `legacy`；不存在、讀不到照原樣交給 store）。
 - **疊 `legacy`**：設定檔的 `legacy` 是物件、`data.json` 也讀到物件時，五個欄位逐一比（JSON 相同才算相同，有沒有這個欄位也算）；`semester` 與 `semesterSetOn` 算一項。不同的那幾項：`data.json` 整項都沒有就刪掉（回預設）；讀得懂（設定頁的選項，學期兩欄都對）就換成它的；讀不懂的不採用，留設定檔的（那是壞掉或手改，不是舊版設定頁存的）。其他情況不疊。意思是：舊版那台在新檔建立之後改的項目，新版採用；新版改的項目不被 `data.json` 的舊值蓋掉。
 - **什麼時候算採用**：疊上的值讀到就生效（畫面、排程），下一次存任何一項時和 `legacy` 一起落進設定檔。落進去之前 `data.json` 不見或讀不懂，疊上的值退回設定檔的（§5 第一種情況）。不在載入時寫：討論稿〈Claude 回應 Codex 第二輪〉第 3 節寫的「當成一次修改寫進新檔」改成這樣，理由是載入不寫，電腦少寫一次、`update-vault --check` 與比較工具讀的時候不會改檔；混用期間很短，更新說明要兩台先重開。
 - **save**：把 store 交來的內容寫進設定檔（`Files.modify`，原地寫，不存在時建立）：交來的有 `legacy` 就照寫（讀的時候換好的，和當底的是同一次 `data.json`；當底之後才變的 `data.json` 不算看過，讀回時再疊）；沒有（還原、重新建立）才讀 `data.json`，讀不到是 `null`。不呼叫 `saveData`。
@@ -184,6 +184,9 @@ V1～V4：**都通過**（2026-11-12，細節見〈結果〉），選 A。
 | `d708aeb` | L2 的 R2：重新建立與還原在寫入那一刻再比一次設定檔（§3、§4） |
 | `f759b97` | L2 的 R3：命令列寫「設定」之前重讀設定檔與 `data.json`（§4） |
 | `527ed40` | L2 的 R5：還原計畫照 Obsidian 的 `loadData` 讀 `data.json`（BOM 讀不懂，§4） |
+| `b79314b` | L2 第二輪的 R6：命令列先比 `data.json`、最後比設定檔，比完緊接改名（§4） |
+| `d33bde6` | L2 第二輪的 R7：外掛還原寫 `legacy` 讀到的 `data.json` 和比對時的不同就不寫（§4） |
+| `043c32a` | L2 第二輪的 R8：重新建立輪到時才取這台確認的值（§3） |
 
 延後的測試：無（§6 第 1～17 點都在分支上的測試裡；不寫的一項和理由在 §6 最後）。
 

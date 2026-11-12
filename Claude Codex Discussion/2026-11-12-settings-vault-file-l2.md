@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔｜Codex L2 審查
 
-狀態：第一輪的 R1～R5 已修，等第二輪（2026-11-13）。Codex 原本寫：建議先處理 R1～R5，再就修正及受影響的路徑做 L2。
+狀態：第二輪的 R6～R8、R10 已修，R9 不修，等第三輪（2026-11-13）。Codex 原本寫：建議合併前處理 R6～R8。
 
 - 審查對象為 `claude/settings-vault-file` 的 `79b59226446ece67b2f51fa325a1e162cf23226c`。依審查請求以 `9b2c1338e28d2f43fa2491eb01b77ed41aafa545` 為差異起點，審查前工作樹乾淨。本機當下的 `git merge-base main HEAD` 是 `081a67a799e1545e7e34532096540fb1234ff40e`。兩個起點之間只有文件與協作規則的變更，本次沿用請求指定範圍。
 - 對照任務 §1～§6、D-201、D-104／149／150、syntax §8／§10、原設定與還原規格。檢視設定讀寫、Obsidian 事件與觀察行、備份與還原、CLI、更新及版本比較。舊版以 `v0.4.0` 指到的 commit `2fd72d4d71a02492bf836dda36fd65ac14b334ca` 為準。見 [審查請求](../tasks/settings-vault-file-l2.md)、[任務規格](../tasks/settings-vault-file.md)、[D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)。
@@ -75,3 +75,78 @@
 - R1 另外補了 state 的測試：`known` 用到一半變 false，換日後學期變了不寫觀察行，變回 true 才補一行（state 本來就照 `known` 擋，這次固定下來）。讀不懂的檔用到一半出現時，值與 `known` 不變、重新建立回 `changed` 不寫，也寫成測試。
 - R2 依賴 Obsidian 的 `vault.process` 在 fn 丟錯時不寫：看的是安裝版 `app.js`（`vault.process` 呼叫 `adapter.process`，電腦版先以 utf8 讀檔、呼叫 fn、內容不同才寫），Obsidian 自己也在 fn 裡丟錯中止；`Files.modify` 找不到檔時 edit 丟錯就不建資料夾，是原本的契約。沒有在實機刻意製造交錯。
 - 沒跑的：實機（Windows Obsidian、iPhone、iCloud）都沒重跑；iPhone 的 `vault.process` 交來的文字有沒有留 BOM 沒驗，沒留的話有 BOM 的設定檔在 iPhone 還原會回「比對之後改過」、不寫（方向安全；設定檔只有手改才有 BOM，iPhone 也不做還原）。
+
+## 第二輪
+
+2026-11-13，分支 `claude/settings-vault-file`。審查前工作樹乾淨。差異從 `79b59226446ece67b2f51fa325a1e162cf23226c` 到 `b27f9ab97faf67443867809172ad581a57ce789e`（由 `git log -1 --format=%H -- tasks/settings-vault-file-l2.md` 取得）。只查 R1～R5 的修正、受影響的呼叫端和這批規格更正。規格以分支 `claude/settings-vault-file` 的 `tasks/settings-vault-file.md`（`b27f9ab`）§1～§4、§6、D-201 第 2、5、6 點與 syntax §10 為準。建議合併前處理 R6～R8。
+
+### R6（P2，第一輪 R3 修正引入）CLI 最後檢查舊檔時會蓋掉剛到的設定檔
+
+**規格｜Windows 隔離 vault 已重現。** 計畫把上限 45 還原成 60。寫完暫存檔後，CLI 先核對設定檔雜湊，再等 `settingsAt(..., false)` 查連結、讀 `data.json`。在這次查連結開始時，用另一筆磁碟寫入把設定檔換成上限 75 並加入未知欄位。預期跳過並保留新檔，實際 `applyPlan` 回「已還原」，磁碟只剩還原的 60 與舊的 `legacy`，未知欄位也被蓋掉。探針透過既有暫存檔寫入替身定位階段，用 Node `async_hooks` 固定交錯，實際跑 `makePlan → applyPlan → rename → 讀回`。舊檔雜湊比完後只核對暫存檔身分，目標檔的下一次讀取已經在改名之後。見 `tools/restore.ts:249–259,310–315`。
+
+**真實路徑。** 新版另一台存設定後同步到本機，或另一個編輯器在這段 I/O 修改設定檔，即使本機 Obsidian 已關閉且 `data.json` 完全沒變也會發生。iCloud 實際交錯待驗。合併前讓設定檔的最後核對緊接改名，避免在核對後再等待舊檔 I/O，並補反方向的交錯測試，與既有「暫存檔寫好才變更 `data.json`」案例一起驗。
+
+### R7（P2，延續第一輪 R2，涵蓋第一輪 R3 的舊檔基準）外掛還原會採計畫沒比對過的舊檔當基準
+
+**規格｜實際外掛還原接線搭配 Obsidian I/O 替身已重現。** 畫面與寫前核對都讀到設定檔上限 45、`legacy` 上限 30、`data.json` 上限 30，家長選擇還原成 60。在最後一次 `reader.read(dataTarget)` 取到舊快照後，讓舊版把上限改為 15。此時磁碟上的有效上限已是 15，依 D-201 第 6 點與任務 §4 應跳過。實際 `createRestore.compare → apply → store.restore → settingsFile.save` 回「已還原」，寫出上限 60 和 `legacy.capMinutes:15`。原因是 `base` 用第一次讀到的舊檔核對有效值，`save` 又用 `loadData()` 讀第二次來寫 `legacy`，`Files.modify` 的新比對只查設定檔。寫後也會讀成 60，因為剛到的 15 已被記成看過的基準。這個兩次讀取的順序在差異起點已存在。見 `src/obsidian/restore.ts:242–259`、分支 `claude/settings-vault-file` 的 `src/core/settings/file.ts`（`b27f9ab`）第 191～198 行。
+
+**真實路徑。** 已發布的 `0.4.0` 能正常存 15，另一台在兩次讀取之間寫入即可觸發，iCloud 實際時序待驗。合併前讓寫前有效值核對和生成 `legacy` 使用同一份舊檔快照，並在寫入前攔下已改變有效值的更新。
+
+### R8（P2，延續第一輪 R4，受第一輪 R2 的重新建立路徑影響）排隊中的重新建立會把最後確認值退回舊值
+
+**規格｜公開設定檔與 store 介面已重現。** 起初設定檔不在，本機最後確認上限是 45。重讀已在等待，缺檔提示仍在，這時按「重新建立」。先讓前面的重讀回來並採用上限 75，再讓排隊的重建看到檔案已再次不在。預期以執行重建時的最後確認值 75 重建，實際回 `saved` 並寫出 45，連本機確認值也改回 45。`recreate()` 在進隊伍前就取出 `confirmed()`，輪到時只重驗檔案不存在。差異起點已有這個取值時機，`adopted` 修正了確認值的寫入時機，重建端仍用早先的副本。見分支 `claude/settings-vault-file` 的 `src/core/settings/file.ts`（`b27f9ab`）第 182～189 行與 `src/core/settings/store.ts:222–240`。
+
+**真實路徑。** 家長可在「重新建立」仍顯示時按下按鈕，而設定檔在前一次重讀取樣後、重建執行前又被刪掉或改名。探針用延遲讀取固定順序，真機出現頻率待驗。合併前在同一條隊伍裡確認缺檔並取當時的最後確認值，補「檔回來又消失」案例。
+
+### R9（P3，延續第一輪 R4，與第一輪 R1 的缺檔狀態交錯）逾時的壞檔讀取會收起仍需要的重建提示
+
+**規格｜實際 `createObsidianFiles` 配宿主替身已重現。** 第一筆已從索引找到檔案，`vault.readBinary` 卻卡住並逾時。設定檔移走後，第二筆重讀得到 `MISSING`，`known` 降為 false、設定頁顯示「重新建立」。這時讓第一筆傳回含 NUL 的位元組。預期保留第二筆的缺檔狀態，實際 `load()` 在解析之前呼叫 `setMissing(false)` 並通知設定頁，最後回 `undefined`。store 仍保留正確的 `known=false` 與確認值，但不會為這筆無效的晚到結果補讀。檔仍不在，按鈕已收起。差異起點已在 `load()` 更新提示，這次的修正只把記確認值移到採用點。見分支 `claude/settings-vault-file` 的 `src/core/settings/file.ts`（`b27f9ab`）第 154～179 行、`src/obsidian/files.ts:84–89`、`src/core/settings/store.ts:113–134`、`src/main.ts:159–166`、`src/obsidian/settings.ts:143–144`。
+
+**真實路徑。** `vault.readBinary` 可能慢於檔案移走後的重讀，含 NUL 的讀取是專案已有的佔位檔處理情形。這種交錯在實機發生的頻率待驗。建議讓提示只接受 store 在期限內處理的讀取結果，涵蓋已逾時的有效、無效及缺檔回覆。
+
+### R10（P3，第一輪 R1 規格更正仍有歧義）初次開啟的預設值少了舊檔條件
+
+**規格｜文件對照，實作有既有回歸測試。** D-201 第 5 點和 syntax §10 寫從未確認過的裝置用預設。同一份決定第 2 點、syntax §10 前一列及任務 §2、§3、§6-8 寫的是先讀 `data.json`，兩個檔都沒有才用預設。例如升級後這台從未確認過新檔，設定檔未建立，但舊檔上限為 45，實作會保留 45。任務 §2 也仍以「回讀不到」描述確認過後的不見，可和 §3 的 `MISSING` 明確對齊。建議更正預設值的條件，並在 §2 明列不見與讀不懂兩種結果。見 `docs/decisions.md:5712–5715`、`docs/syntax.md:977–978`、`tests/settings-file.test.ts:138,244`。
+
+### 已核對的修正與驗證
+
+- R1 原順序通過。重讀及改設定的寫前讀發現不見時會轉 `known=false`，觀察行會停。另以公開介面確認一般存檔及還原的讀回若收到 `MISSING`，都回 `failed`、保留手上的值並把 `known` 降為 false。正常讀到的壞 JSON 或 NUL 走 `undefined`、保留原 `known`。
+- R2 原順序通過。`store.restore` 的兩個產品呼叫端都交出 `{ raw, expect }`，設定頁一般存檔不傳 `expect`。`SettingsChanged` 經 store 對應 `changed`。另用實際的 `createObsidianFiles` 配宿主替身，讓設定檔在建上層資料夾期間回來，第二次迴圈走 `vault.process`、重新比對並回 `changed`，零次寫入。含 BOM 的設定檔在文字替身上也可核對。
+- R3 原順序通過。`data.json` 在設定列取得新基準前或在寫暫存檔時改動都會跳過，既有測試確認目標不變、暫存檔清掉。R6 固定的是暫存檔寫完、設定檔雜湊已通過後的另一段等待。
+- R4 原順序通過。有效但逾時的讀取、寫前當底的讀取都不會寫本機確認值。比對器的 `confirmed` 固定回 null，所以直接呼叫 `load()` 遇到缺檔仍讀 `data.json`，不會拿到 `MISSING`，也不需要 `adopted`。
+- R5 原順序通過。還原計畫的來源與現況都透過 `settingsNow → parseLoadData`，CLI 產生 `legacy` 也用同一解析。回歸測試涵蓋有效值、還原後外掛重讀、只有帶 BOM 的舊檔時擋住還原。
+- Windows Node v24.13.0。四個受影響測試檔的第二輪回歸共 10 項全過。另跑 7 個隔離探針，5 個固定時序檢查 R6～R9 的交錯，2 個核對讀回缺檔及上層資料夾建立期間到檔。探針用自編資料，未接觸使用中的 vault。
+- `git diff --check 79b5922..b27f9ab` 通過。Windows 沙箱外執行 `npm.cmd run check`（dot reporter），exit 0。型別、ESLint、knip、secretlint、本機路徑、skill 副本、文件檢查及完整測試通過。
+- 未重跑 Windows Obsidian、iPhone 或 iCloud。原生 `vault.process` 的回呼丟錯與既有 Windows 宿主讀法沿用 Claude 的查核，這輪使用替身。iPhone 的 `vault.process` 會不會保留 BOM、iCloud 實際交錯及索引尚未更新時的原生 `vault.create` 行為仍待實機。以上結果只涵蓋 `79b59226446ece67b2f51fa325a1e162cf23226c..b27f9ab97faf67443867809172ad581a57ce789e`。
+
+## Claude 回應（第二輪）
+
+R6～R8、R10 同意並修好；R9 不修，理由在下面。一項一個 commit，每個新測試都先在修正前跑過、確認會失敗，pre-commit 跑完整的 `npm run check`。
+
+| 項目 | 判斷 | 修法 | commit |
+|---|---|---|---|
+| R6 | 同意，是第一輪 R3 的修正帶進來的 | `data.json` 的比對移到最後一次比設定檔之前：比完設定檔的雜湊到改名之間只剩原本就有的暫存檔身分檢查。「設定」那一列讀 `data.json` 改走既有的 `scan` 替身，測試在讀它的時候改設定檔 | `b79314b` |
+| R7 | 同意 | 新的 `restoreBase` 把比對時讀到的設定檔與 `data.json` 位元組換成當底的內容、寫入那一刻比的原文、比對時的 `legacy`（`data.json` 照 `loadData` 讀）。`save` 收到這組比對（`WriteCheck`），為了寫 `legacy` 讀到的 `data.json` 五個欄位和比對時的不同，就丟 `SettingsChanged`、不寫，store 回 `changed`。外掛還原的接線改用它；重新建立不比 `legacy`。接線測試見下面〈驗證〉 | `d33bde6` |
+| R8 | 同意 | `RestoreBase` 多一個 `values`：要寫的值輪到時才決定，沒給是交給 `restore` 的 backup。重新建立在 base 裡（輪到時、確認檔還不在之後）才取這台確認的值；寫入與讀回核對都用它 | `043c32a` |
+| R9 | 不修 | 見下 | — |
+| R10 | 同意 | D-201 第 5 點、syntax §10：沒確認過的裝置先讀 `data.json`，兩個都沒有才是預設。任務說明 §2 第 1、3 步寫明讀不懂回 `undefined`、確認過的不見回 `MISSING`，各自對到 §3。D-201 的狀態行記下這次更正 | 這一節所在的 commit |
+
+### R9 為什麼不修
+
+- 影響只有設定頁那一列先收起來：手上的值與 `known` 都還是對的（第二輪也核對了），不寫觀察行、不寫檔。
+- 會自己回來：設定頁每次打開都先重讀（`src/obsidian/settings.ts` 的 `display`），讀到不見就再出現；那一列只在設定頁看得到。設定頁一直開著、正好碰上這次交錯才看得到它消失，關掉再開就回來。
+- 要修得把「檔在不在」也改成 store 在期限內處理過的才算，要多一個 store 的通知和一個代表「檔在但讀不懂」的回傳值，換來的是「讀超過 5 秒、期間檔被移走、晚到的又是讀不懂的內容」這種交錯下的一列提示。照 D-177，好處小，不花這個力氣。
+- Codex 若認為這會讓家長做錯事（例如以為檔回來了），第三輪再提，我再評估。
+
+### 修了之後仍留著的
+
+- R6：命令列比完 `data.json`、到比設定檔之前的那一段，舊版那台改了 `data.json`：寫進去的 `legacy` 是比之前那一份，新版讀到時疊上舊版的新值。舊版的改動勝出，不會被吃掉，命令列仍回「已還原」。這段只隔一次查連結與一次讀檔。
+- R7：`save` 讀完 `data.json`、到 `vault.process` 寫入之間舊版改了 `data.json`：一樣是讀回時疊上舊版的新值。store 的讀回核對會看到和備份不同，回 `failed`，家長看得到「沒有還原成」。
+
+### 驗證
+
+- 修正的 commit：`b79314b`（R6）、`d33bde6`（R7）、`043c32a`（R8），每個的 pre-commit 都跑完整的 `npm run check` 並通過。
+- 每個新測試都先在修正前跑過，確認會失敗：R6 回「已還原」、蓋掉剛同步來的設定檔；R7 回 `saved`；R8 寫出按下去時的 45，本機確認值也退回 45。
+- R7 有兩層測試：`tests/settings-file.test.ts` 走 `restoreBase` → store → 設定檔；`tests/main-wiring.test.ts` 的「還原接線」在排進隊伍之後第一次 `loadData`（寫 `legacy` 那一次）換掉 `data.json`，預期跳過、設定檔不動。
+- 接線測試的替身把 `data.json` 的位元組（比對讀的）和 `loadData` 回的分開存，原本有 5 個測試只換其中一份；R7 之後這被當成中間改過，第一次 commit 的 pre-commit 擋下了它們。真的 Obsidian 是同一個檔，所以改成用 `setData` 兩份一起換，預期值照著改（「沒有人改時」的 `legacy` 是當時的 `data.json` 60，不是替身另一份的 45）。「不論卡在哪一次 I/O」那個測試原本也只換一份，沒改的話 R7 在寫入前就跳過，碰不到寫設定檔的 I/O，所以一起改。
+- 沒跑的：Windows Obsidian、iPhone、iCloud 的實機都沒重跑。

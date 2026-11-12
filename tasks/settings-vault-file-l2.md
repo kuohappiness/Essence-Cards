@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔（Codex L2 審查請求）
 
-狀態：第二輪待審（2026-11-13）：第一輪 5 項 P2 已修，見下面〈第二輪（只審修正）〉
+狀態：第三輪待審（2026-11-13）：第一輪 5 項 P2、第二輪 R6～R8、R10 已修，R9 不修，見下面〈第三輪（只審第二輪的修正）〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查，不改產品程式與文件；可以在隔離的暫存資料重現，不碰測試 vault 與正式使用的 vault。
 
@@ -73,3 +73,19 @@
 - **驗證方式**：每個程式 commit 的 pre-commit 都跑完整的 `npm run check` 並通過；每個新測試都在修正前跑過一次、確認會失敗（細節在報告的〈Claude 回應〉）。沙箱裡的 `npm run check` 有環境造成的固定失敗，完整的要在沙箱外跑。
 - **沒跑的**：Windows Obsidian、iPhone、iCloud 的實機都沒重跑；R2 依賴 `vault.process` 在 fn 丟錯時不寫，看的是安裝版 `app.js`；iPhone 的 `vault.process` 有沒有留 BOM 沒驗。
 - **回報**：寫在同一份 L2 報告最後，加〈第二輪〉一節，標題下第一行的狀態一起改；格式照上面〈回報〉。
+
+## 第三輪（只審第二輪的修正）
+
+請**新開一個 Codex 對話**，建議推理等級：**高**。和前兩輪一樣只審查、不改產品程式與文件，可以在隔離的暫存資料重現。
+
+- **待審**：`b27f9ab` 到這一節所在的 commit（`git log -1 --format=%H -- tasks/settings-vault-file-l2.md`），hash 寫進報告。
+  - 程式：`b79314b`（R6）、`d33bde6`（R7）、`043c32a`（R8），一項一個 commit。
+  - 文件：這一節所在的 commit（R10 的更正、L2 報告的〈Claude 回應（第二輪）〉、任務說明的狀態）。R6～R8 的任務說明跟著各自的 commit。
+- **先讀**：[L2 報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-l2.md>)最後的〈Claude 回應（第二輪）〉，包括 R9 不修的理由與修了之後仍留著的。
+- **請確認**：
+  1. R6～R8 擋住第二輪重現的順序，也找新的交錯；特別是 `WriteCheck` 的兩個比對（寫之前的 `legacy`、寫入那一刻的原文）和 `RestoreBase.values` 在 store 的寫入與讀回核對裡用得一致。
+  2. 修法帶進的新問題：`restoreBase`、`WriteCheck`、`save(data, check)` 的呼叫端（`src/main.ts`、`src/obsidian/restore.ts`、重新建立、設定頁存檔不帶 check），以及命令列 `scan` 替身多讀 `data.json` 之後的行為。接線測試改用 `setData`（`data.json` 的位元組與 `loadData` 一起換）有沒有改掉原本要測的情境。
+  3. R9 不修的理由是否成立；R10 的文件更正是否還有矛盾。
+- **驗證方式**：每個程式 commit 的 pre-commit 都跑完整的 `npm run check` 並通過；每個新測試都在修正前跑過一次、確認會失敗。沙箱裡的 `npm run check` 有環境造成的固定失敗，完整的要在沙箱外跑。
+- **沒跑的**：Windows Obsidian、iPhone、iCloud 的實機都沒重跑。
+- **回報**：寫在同一份 L2 報告最後，加〈第三輪〉一節，標題下第一行的狀態一起改。
