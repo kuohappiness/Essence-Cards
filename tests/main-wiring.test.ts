@@ -825,6 +825,36 @@ for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉
   });
 }
 
+// 格式查核第 4 節：沒有設定檔時，「設定」現在的值是 data.json，設定檔的雜湊比不出它變了；寫之前另外比現在的值。
+void test('還原接線：沒有設定檔、比對之後 data.json 變了 → 跳過，不建立設定檔', async t => {
+  const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+  h.texts.set(DATA, '{"capMinutes":30}');
+  const comparison = await flow.compare(row);
+  h.texts.set(DATA, '{"capMinutes":60}');
+  const result = await flow.apply(comparison, new Set([DATA]));
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
+  assert.equal(h.texts.has(SETTINGS), false);
+  assert.equal(h.text(DATA), '{"capMinutes":60}');
+});
+
+// 還原寫的 legacy 是寫入當下的 data.json（讀不到是 null），不沿用設定檔原本的：沿用的話 data.json 之後回來，剛還原的值會被蓋掉。
+for (const [name, data, legacy] of [['讀得到', { capMinutes: 15 }, { capMinutes: 15 }], ['讀不到', undefined, null]] as const) {
+  void test(`還原接線：寫入時 data.json ${name} → legacy 是 ${JSON.stringify(legacy)}，之後 data.json 是 15 也不蓋掉還原的 45`, async t => {
+    const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+    h.texts.set(DATA, '{"capMinutes":30}');
+    h.texts.set(SETTINGS, '{"capMinutes":30,"foo":1,"legacy":{"capMinutes":30}}');
+    const comparison = await flow.compare(row);
+    h.data.content = data;
+    const result = await flow.apply(comparison, new Set([DATA]));
+    assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '已還原']]);
+    assert.deepEqual(JSON.parse(h.text(SETTINGS) ?? 'null'), { capMinutes: 45, foo: 1, legacy });
+    h.data.content = { capMinutes: 15 };
+    const store = (h.plugin as unknown as { store: { reload(): Promise<void>; value(): { settings: { capMinutes: number } } } }).store;
+    await store.reload();
+    assert.equal(store.value().settings.capMinutes, 45);
+  });
+}
+
 /** 還原前的備份讀到這篇時呼叫一次：這時分頁已經換成空白、還沒開始寫。 */
 function duringBackup(h: Awaited<ReturnType<typeof restoreReady>>['h'], path: string, act: () => void): void {
   const vault = h.app.vault as { readBinary: (file: { path: string }) => Promise<ArrayBuffer> };

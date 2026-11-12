@@ -316,6 +316,35 @@ void test('還原：備份有設定檔 → 以現在的設定檔為底換五個�
   assert.deepEqual(JSON.parse(await read(vault, SETTINGS)), { capMinutes: 90, legacy: null });
 });
 
+// 格式查核第 4 節：沒有設定檔時，「設定」現在的值是 data.json，設定檔的雜湊比不出它變了；--apply 另外比現在的值。
+void test('還原：沒有設定檔、計畫之後 data.json 變了 → 跳過，不建立設定檔', async t => {
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":20}' });
+  const zip = await backup(t, source);
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":30}' });
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path } = await makePlan(options);
+  await put(vault, '.obsidian/plugins/essence-cards/data.json', '{"capMinutes":45}');
+  const result = await applyPlan({ ...options, plan: path });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [['.obsidian/plugins/essence-cards/data.json', '跳過']]);
+  await assert.rejects(read(vault, SETTINGS));
+});
+
+// legacy 是寫入當下的 data.json，不沿用設定檔原本的（沿用的話，現在疊上的 15 之後會把剛還原的 20 蓋掉）；寫完再做計畫，「設定」沒有差異。
+void test('還原：legacy 換成現在的 data.json；還原後再做計畫，「設定」不再列出', async t => {
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 20, legacy: null }) });
+  const zip = await backup(t, source);
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 30, foo: 1, legacy: { capMinutes: 30 } }), '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":15}' });
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { path, report } = await makePlan(options);
+  assert.match(await readFile(report, 'utf8'), /- 每日時間上限 15 分鐘 → 20 分鐘/);
+  const result = await applyPlan({ ...options, plan: path });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[SETTINGS, '已還原']]);
+  assert.deepEqual(JSON.parse(await read(vault, SETTINGS)), { capMinutes: 20, foo: 1, legacy: { capMinutes: 15 } });
+  assert.equal(await read(vault, '.obsidian/plugins/essence-cards/data.json'), '{"capMinutes":15}');
+  const again = await makePlan(options);
+  assert.deepEqual(again.plan.files.filter(file => file.target === SETTINGS), []);
+});
+
 void test('還原：備份讀不懂（清單壞了）就不出計畫', async t => {
   const vault = await makeVault(t, {});
   const zip = join(await tempFolder(t), 'Essence Cards 備份 2026-10-29 200000 未知 0000.zip');

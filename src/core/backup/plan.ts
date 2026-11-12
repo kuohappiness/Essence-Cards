@@ -93,6 +93,19 @@ function settingsValue(file: Uint8Array | undefined, data: Uint8Array | undefine
 }
 
 /**
+ * 「設定」現在的值，和計畫的 RestorePlan.settings.current 同一種算法（tasks/settings-vault-file.md §4）：設定檔疊上 data.json，
+ * 沒有設定檔是 data.json；讀不懂、兩個都沒有是 null。寫之前拿它和比對時的比（格式查核第 4 節）。
+ */
+export function settingsNow(file: Uint8Array | null | undefined, data: Uint8Array | null | undefined): Record<string, unknown> | null {
+  return settingsValue(file ?? undefined, data ?? undefined) ?? null;
+}
+
+/** 兩個「現在的值」相同：五個欄位相同（sameSaved），或兩個都是 null。 */
+export function sameSettingsNow(a: Readonly<Record<string, unknown>> | null, b: Readonly<Record<string, unknown>> | null): boolean {
+  return a === null || b === null ? a === b : sameSaved(a, b);
+}
+
+/**
  * 還原計畫（D-150 第 7、8 點；syntax §5-3、§8）。不寫任何檔。
  * - 「設定」那一列（tasks/settings-vault-file.md §4）：備份裡有設定檔就用它，沒有才用備份的 data.json（兩個都有時 data.json 不列）；
  *   目的地一律是設定檔，比的是值（五個欄位，不看 legacy 與不認得的），不套用一般檔案的規則。現在的 data.json 不列。

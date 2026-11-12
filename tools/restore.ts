@@ -2,10 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName, textDiff } from '../src/core/backup/index.ts';
+import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName, sameSettingsNow, textDiff } from '../src/core/backup/index.ts';
 import { isDeckPath } from '../src/core/deck/index.ts';
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
-import { decodeSettings, encodeSettings, parseData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
+import { decodeSettings, dropLegacy, encodeSettings, parseData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
 import { assertNoLinks, isOwn, leftBehind, listTree, platformName, pluginConfig, readError, removeOwn, sameFileKey, writeNew } from './vault-io.ts';
@@ -175,8 +175,12 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
   };
   // 計畫之後改過的檔先排除，再用實際要寫的檔重算全庫 ID 檢查與寫入順序（Codex 中途查核 F1）。
   const changed = new Set<string>();
-  for (const file of plan(loaded, chosen).files) {
-    if (chosen.has(file.path) && (planned.get(file.path)!.current?.sha256 ?? null) !== (file.current?.sha256 ?? null)) changed.add(file.path);
+  const again = plan(loaded, chosen);
+  for (const file of again.files) {
+    if (!chosen.has(file.path)) continue;
+    // 「設定」那一列另外比現在的值：沒有設定檔時看的是 data.json，設定檔的雜湊比不出來（格式查核第 4 節）。
+    const settings = file.path === saved.settings?.path && !sameSettingsNow(saved.settings.current, again.settings?.current ?? null);
+    if (settings || (planned.get(file.path)!.current?.sha256 ?? null) !== (file.current?.sha256 ?? null)) changed.add(file.path);
   }
   const fresh = plan(loaded, new Set([...chosen].filter(path => !changed.has(path))));
   const byPath = new Map(fresh.files.map(file => [file.path, file]));
@@ -276,12 +280,13 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
 
 /**
  * 「設定」要寫的內容（tasks/settings-vault-file.md §4），和外掛經 store 寫的相同：以現在的設定檔為底（沒有或讀不懂是空的），
- * 五個欄位換成備份的值（values），legacy 是現在的 data.json 的五個欄位（讀不到就沿用原本的）。
+ * 五個欄位換成備份的值（values），legacy 是現在的 data.json 的五個欄位；讀不到、設定資料夾確定不了是 null，不沿用設定檔原本的
+ * （還原的是家長選的一整份值，格式查核第 4 節）。
  */
 function settingsBytes(loaded: Loaded, file: PlannedFile, values: Record<string, unknown>): Uint8Array {
   const now = file.current === null ? {} : decodeSettings(loaded.current.get(file.current.path)!) ?? {};
   const data = loaded.config === null ? undefined : loaded.current.get(loaded.config + '/' + PLUGIN_DATA);
-  return new TextEncoder().encode(encodeSettings(restoreSaved(now, values), data === undefined ? null : parseData(data)));
+  return new TextEncoder().encode(encodeSettings(restoreSaved(dropLegacy(now), values), data === undefined ? null : parseData(data)));
 }
 
 /** 要寫進 rel 的卡組（bytes）的學習目標 ID，現在有沒有在別篇：重新讀現在全部的卡組。讀不到的卡組也擋住（確定不了）。 */

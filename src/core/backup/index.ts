@@ -4,7 +4,7 @@ export { hashBytes, openBackup, writeZip } from './zip.ts';
 export type { OpenedBackup } from './zip.ts';
 export { backupName, logSource, readBuild, restoreLogName } from './names.ts';
 export { missingLogLines } from './logs.ts';
-export { deckIds, planRestore } from './plan.ts';
+export { deckIds, planRestore, sameSettingsNow, settingsNow } from './plan.ts';
 export type { PlannedFile, PlanOptions, RestorePlan } from './plan.ts';
 export { textDiff } from './diff.ts';
 export { applyRestore, readCurrent, tickable } from './restore.ts';

@@ -1,9 +1,9 @@
 import { MarkdownView } from 'obsidian';
 import type { App, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
-import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, textDiff } from '../core/backup/index.ts';
+import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, sameSettingsNow, settingsNow, textDiff } from '../core/backup/index.ts';
 import type { BackupReader, OpenedBackup, PlannedFile, RestorePlan, RestoreResult, StoredBackup } from '../core/backup/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { SETTINGS_FILE, decodeSettings, savedDiff } from '../core/settings/index.ts';
+import { SETTINGS_FILE, decodeSettings, dropLegacy, savedDiff } from '../core/settings/index.ts';
 import type { SettingsStore } from '../core/settings/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import type { Files } from '../core/files.ts';
@@ -241,6 +241,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               noLinks: path => desktop.noLinks(path),
               settings(fields, expected, live) {
                 // 寫設定檔（tasks/settings-vault-file.md §4）：比對與當底的都是設定檔，data.json 只讀不寫。
+                const seen = screenPlan.settings?.current ?? null;
                 return host.settings.restore(fields, async () => {
                   // 排隊的這段時間路徑可能換成連結，內容還一模一樣（L2 的 R13）：算比對之後改過，重新比對會寫出是連結。
                   try { await desktop.noLinks(SETTINGS_FILE); } catch { return null; }
@@ -249,7 +250,12 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                   const now = await reader.read(SETTINGS_FILE);
                   if (!live()) throw Error('逾時，不寫');
                   if ((now === null ? null : hashBytes(now)) !== expected) return null;
-                  return (now === null ? null : decodeSettings(now)) ?? {};
+                  // 現在的值也看 data.json（沒有設定檔、疊 legacy）：它變了，畫面上的差異已經過期，雜湊比不出來（格式查核第 4 節）。
+                  const data = await reader.read(dataTarget);
+                  if (!live()) throw Error('逾時，不寫');
+                  if (!sameSettingsNow(settingsNow(now, data), seen)) return null;
+                  // 還原的是家長選的一整份值：legacy 換成寫入當下的 data.json（讀不到是 null），不沿用設定檔原本的。
+                  return dropLegacy((now === null ? null : decodeSettings(now)) ?? {});
                 });
               },
               device: host.device,
