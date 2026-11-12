@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, encodeSettings, isSettingsPath, overlayLegacy } from '../src/core/settings/index.ts';
+import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, dropLegacy, encodeSettings, isSettingsPath, overlayLegacy } from '../src/core/settings/index.ts';
 import type { SettingsChange } from '../src/core/settings/index.ts';
 import { guardedMoves, isDeckPath, presentFolders } from '../src/core/deck/index.ts';
 import { isLogPath } from '../src/core/study/index.ts';
@@ -12,8 +12,10 @@ const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 /**
  * 替身：設定檔是文字（null 不存在、Error 讀不到）；data.json 照 Obsidian 的 loadData（null 不存在、undefined 讀不到）；
  * confirmed 是這台的 localStorage 那一筆（§3），missing 是「設定檔讀不到」那一列換了幾次。沒有寫 data.json 的口。
+ * onData：每次讀完 data.json 之後叫（第幾次讀），用來在兩次讀之間換掉 data.json。
  */
-function vault(init: { file?: string | null | Error; data?: unknown; confirmed?: unknown } = {}) {
+function vault(init: { file?: string | null | Error; data?: unknown; confirmed?: unknown; onData?: (n: number) => void } = {}) {
+  let reads = 0;
   const state = { file: init.file ?? null, data: 'data' in init ? init.data : null, writes: 0, confirmed: (init.confirmed ?? null) as unknown, confirms: 0, missing: 0 };
   const settingsFile = createSettingsFile({
     confirmed: () => state.confirmed,
@@ -30,7 +32,11 @@ function vault(init: { file?: string | null | Error; data?: unknown; confirmed?:
       if (next !== state.file) { state.file = next; state.writes++; }
       return Promise.resolve();
     },
-    loadData: () => Promise.resolve(state.data === undefined ? undefined : JSON.parse(JSON.stringify(state.data))),
+    loadData: () => {
+      const value: unknown = state.data === undefined ? undefined : JSON.parse(JSON.stringify(state.data));
+      init.onData?.(++reads);
+      return Promise.resolve(value);
+    },
   });
   const store = createSettingsStore({ load: () => settingsFile.load(), save: data => settingsFile.save(data), seed: () => settingsFile.confirmed(), today: () => '2026-11-12' });
   const json = (): unknown => typeof state.file === 'string' ? JSON.parse(state.file) : state.file;
@@ -57,16 +63,23 @@ void test('疊：data.json 多了一項，設定檔跟著有', () => {
   assert.deepEqual(overlayLegacy(file, { examCountdown: false }), { capMinutes: 45, examCountdown: false, legacy: {} });
 });
 
-void test('疊：學期與設定日是一項，一起換', () => {
+void test('疊：學期與設定日是一項，一起換；兩欄都拿掉才算拿掉', () => {
   const file = { semester: '國二上', semesterSetOn: '2026-09-15', legacy: { semester: '國二上', semesterSetOn: '2026-09-01' } };
-  assert.deepEqual(overlayLegacy(file, { semester: '國一下' }),
-    { semester: '國一下', legacy: { semester: '國二上', semesterSetOn: '2026-09-01' } });
+  assert.deepEqual(overlayLegacy(file, { semester: '國一下', semesterSetOn: '2026-11-01' }),
+    { semester: '國一下', semesterSetOn: '2026-11-01', legacy: { semester: '國二上', semesterSetOn: '2026-09-01' } });
+  assert.deepEqual(overlayLegacy(file, {}), { legacy: { semester: '國二上', semesterSetOn: '2026-09-01' } });
 });
 
-void test('疊：讀不懂的值照原樣比、照原樣換', () => {
+// 格式查核第 3 節：data.json 讀不懂的值是壞掉或手改，不是舊版設定頁存的，不能蓋掉設定檔裡讀得懂的值（之後存檔也不會把它帶進設定檔）。
+void test('疊：data.json 那一項讀不懂（不是設定頁的選項、學期缺一半）就不採用，留設定檔的；比的時候照原樣', () => {
   const file = { capMinutes: 45, legacy: { capMinutes: 'x' } };
   assert.deepEqual(overlayLegacy(file, { capMinutes: 'x' }), file);
-  assert.deepEqual(overlayLegacy(file, { capMinutes: 7 }), { capMinutes: 7, legacy: { capMinutes: 'x' } });
+  for (const bad of [7, 31, '15', null]) assert.deepEqual(overlayLegacy(file, { capMinutes: bad }), file, JSON.stringify(bad));
+  assert.deepEqual(overlayLegacy(file, { capMinutes: 15 }), { capMinutes: 15, legacy: { capMinutes: 'x' } });
+  const term = { semester: '國二上', semesterSetOn: '2026-09-15', legacy: { semester: '國二上', semesterSetOn: '2026-09-01' } };
+  for (const half of [{ semester: '國一下' }, { semesterSetOn: '2026-11-01' }, { semester: '國一下', semesterSetOn: '2027-02-29' }]) {
+    assert.deepEqual(overlayLegacy(term, half), term, JSON.stringify(half));
+  }
 });
 
 void test('不疊：data.json 不是物件、legacy 不是物件', () => {
@@ -86,15 +99,19 @@ void test('疊不改傳進來的物件，不認得的欄位不看', () => {
   assert.deepEqual(file, copy);
 });
 
-void test('寫入：legacy 是 data.json 的五個欄位，兩格縮排加換行', () => {
-  const text = encodeSettings({ capMinutes: 45, foo: 1, legacy: { capMinutes: 1 } }, { capMinutes: 30, retention: 'x', other: true, semesterSetOn: '2026-09-01' });
-  assert.equal(text, JSON.stringify({ capMinutes: 45, foo: 1, legacy: { capMinutes: 30, retention: 'x', semesterSetOn: '2026-09-01' } }, null, 2) + '\n');
+// 格式查核第 3 節：legacy 要和疊出底稿的那一次讀到的 data.json 同一份。讀的時候就換好（load），寫入照交來的寫；
+// 交來的沒有 legacy（還原、重新建立以空的或拿掉 legacy 的內容當底）才用寫入當下的 data.json，讀不到是 null。
+void test('寫入：交來的 legacy 照寫（不是物件是 null），兩格縮排加換行', () => {
+  const text = encodeSettings({ capMinutes: 45, foo: 1, legacy: { capMinutes: 1 } }, { capMinutes: 30 });
+  assert.equal(text, JSON.stringify({ capMinutes: 45, foo: 1, legacy: { capMinutes: 1 } }, null, 2) + '\n');
+  assert.deepEqual(JSON.parse(encodeSettings({ capMinutes: 45, legacy: 'bad' }, { capMinutes: 30 })), { capMinutes: 45, legacy: null });
 });
 
-void test('寫入：data.json 不是物件就沿用原本的 legacy，原本沒有是 null', () => {
-  assert.deepEqual(JSON.parse(encodeSettings({ capMinutes: 45, legacy: { capMinutes: 30 } }, null)), { capMinutes: 45, legacy: { capMinutes: 30 } });
-  assert.deepEqual(JSON.parse(encodeSettings({ capMinutes: 45 }, undefined)), { capMinutes: 45, legacy: null });
-  assert.deepEqual(JSON.parse(encodeSettings({ capMinutes: 45, legacy: 'bad' }, [1])), { capMinutes: 45, legacy: null });
+void test('寫入：交來的沒有 legacy，用 data.json 的五個欄位（照原樣），data.json 不是物件是 null', () => {
+  const text = encodeSettings({ capMinutes: 45, foo: 1 }, { capMinutes: 30, retention: 'x', other: true, semesterSetOn: '2026-09-01' });
+  assert.equal(text, JSON.stringify({ capMinutes: 45, foo: 1, legacy: { capMinutes: 30, retention: 'x', semesterSetOn: '2026-09-01' } }, null, 2) + '\n');
+  for (const data of [null, undefined, [1]]) assert.deepEqual(JSON.parse(encodeSettings({ capMinutes: 45 }, data)), { capMinutes: 45, legacy: null });
+  assert.deepEqual(dropLegacy({ capMinutes: 45, foo: 1, legacy: { capMinutes: 30 } }), { capMinutes: 45, foo: 1 });
 });
 
 void test('讀：JSON 物件才算，含 NUL、不是物件、壞掉都是讀不到', () => {
@@ -170,6 +187,46 @@ void test('寫入時 data.json 讀不到：legacy 沿用原本的；原本沒有
   await none.store.first();
   assert.equal(await none.store.change(cap(60)), 'saved');
   assert.deepEqual(none.json(), { capMinutes: 60, legacy: null });
+});
+
+// 格式查核第 3 節的時序：當底的那一次讀到 data.json 上限 30，寫之前舊版那台改成 15。legacy 要記 30（當底時看到的），
+// 15 才會在讀回時疊上、下一次存檔落進設定檔；記成 15 會把這次沒採用的改動當成已經看過，之後再也不採用。
+void test('疊與寫入同一份 data.json：當底之後才變的 data.json 不算看過，讀回時疊上，下次存檔落進設定檔', async () => {
+  const one = vault({ file: JSON.stringify({ capMinutes: 45, legacy: { capMinutes: 30 } }), data: { capMinutes: 30 }, onData: n => { if (n === 2) one.state.data = { capMinutes: 15 }; } });
+  await one.store.first();
+  assert.equal(one.store.value().settings.capMinutes, 45);
+  assert.equal(await one.store.change({ key: 'retention', value: 0.85 }), 'saved');
+  assert.deepEqual(one.json(), { capMinutes: 45, retention: 0.85, legacy: { capMinutes: 30 } });
+  assert.equal(one.store.value().settings.capMinutes, 15);
+  assert.equal(one.store.value().settings.retention, 0.85);
+  assert.equal(await one.store.change({ key: 'examCountdown', value: false }), 'saved');
+  assert.deepEqual(one.json(), { capMinutes: 15, retention: 0.85, examCountdown: false, legacy: { capMinutes: 15 } });
+  // 沒有設定檔、照 data.json 讀的時候也一樣：當底的是 30，legacy 就是 30。
+  const two = vault({ data: { capMinutes: 30 }, onData: n => { if (n === 2) two.state.data = { capMinutes: 15 }; } });
+  await two.store.first();
+  assert.equal(await two.store.change({ key: 'retention', value: 0.85 }), 'saved');
+  assert.deepEqual(two.json(), { capMinutes: 30, retention: 0.85, legacy: { capMinutes: 30 } });
+  assert.equal(two.store.value().settings.capMinutes, 15);
+});
+
+// 還原與重新建立是家長選的一整份值：寫入當下的 data.json 當成已經看過，讀不到是 null，不沿用設定檔原本的 legacy
+// （格式查核第 4 節的例子：沿用舊的基準，data.json 之後回來就把剛還原的值蓋掉）。
+void test('還原：以拿掉 legacy 的設定檔當底，legacy 是寫入當下的 data.json，讀不到是 null；之後 data.json 回來也不蓋掉還原的值', async () => {
+  const restoreWith = async (data: unknown) => {
+    const one = vault({ file: JSON.stringify({ capMinutes: 30, foo: 1, legacy: { capMinutes: 30 } }), data });
+    await one.store.first();
+    const base = () => Promise.resolve(dropLegacy(decodeSettings(bytes(one.state.file as string)) ?? {}));
+    assert.equal(await one.store.restore({ capMinutes: 60 }, base), 'saved');
+    return one;
+  };
+  const seen = await restoreWith({ capMinutes: 15 });
+  assert.deepEqual(seen.json(), { capMinutes: 60, foo: 1, legacy: { capMinutes: 15 } });
+  assert.equal(seen.store.value().settings.capMinutes, 60);
+  const unread = await restoreWith(undefined);
+  assert.deepEqual(unread.json(), { capMinutes: 60, foo: 1, legacy: null });
+  unread.state.data = { capMinutes: 15 };
+  await unread.store.reload();
+  assert.equal(unread.store.value().settings.capMinutes, 60);
 });
 
 void test('載入之後沒有任何寫入（§6-6）', async () => {

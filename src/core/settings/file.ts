@@ -1,4 +1,5 @@
-import { parseData } from './saved.ts';
+import { parseData, readSaved } from './saved.ts';
+import type { Saved } from './saved.ts';
 import type { SettingsStore } from './store.ts';
 
 // 設定檔 `Essence Cards/設定.json`（tasks/settings-vault-file.md §1～§3）：內容、疊 legacy、讀寫與缺檔保護。不碰 Obsidian；檔案與 localStorage 由外層交進來。
@@ -19,9 +20,18 @@ function fieldsOf(data: Readonly<Record<string, unknown>>): Record<string, unkno
   return picked;
 }
 
+/** data.json 的這一項是設定頁存得出來的值（readSaved 讀得懂；學期要兩欄都對）。 */
+function readable(data: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) if (has(data, key)) picked[key] = data[key];
+  return readSaved(picked)[keys[0] as keyof Saved] !== null;
+}
+
 /**
- * 疊 legacy（§2）：設定檔的 legacy 是物件、data（讀到的 data.json）也是物件時，逐項比，不同的那幾項換成 data 的
- * （它有就換成它的值，沒有就刪掉）：舊版那台在設定檔建立之後改的項目，新版採用。其他情況照設定檔原樣。不改傳進來的物件。
+ * 疊 legacy（§2）：設定檔的 legacy 是物件、data（讀到的 data.json）也是物件時，逐項比（照原樣），不同的那幾項換成 data 的：
+ * 它整項都沒有就刪掉（回預設），讀得懂就換成它的值；讀不懂的（不是設定頁的選項、學期缺一半）不採用，留設定檔的
+ * （格式查核第 3 節：那是壞掉或手改，不是舊版設定頁存的）。舊版那台在設定檔建立之後改的項目，新版採用。
+ * 其他情況照設定檔原樣。不改傳進來的物件；legacy 不在這裡換。
  */
 export function overlayLegacy(file: Readonly<Record<string, unknown>>, data: unknown): Record<string, unknown> {
   const next = { ...file };
@@ -31,6 +41,7 @@ export function overlayLegacy(file: Readonly<Record<string, unknown>>, data: unk
   for (const keys of ITEMS) {
     const same = keys.every(key => has(legacy, key) === has(from, key) && JSON.stringify(legacy[key]) === JSON.stringify(from[key]));
     if (same) continue;
+    if (keys.some(key => has(from, key)) && !readable(from, keys)) continue;
     for (const key of keys) {
       delete next[key];
       if (has(from, key)) next[key] = from[key];
@@ -39,10 +50,28 @@ export function overlayLegacy(file: Readonly<Record<string, unknown>>, data: unk
   return next;
 }
 
-/** 寫進設定檔的文字（§1）：legacy 換成 data 的五個欄位；data 不是物件就沿用原本的 legacy，原本也不是物件是 null。 */
+/**
+ * 讀的時候換好的 legacy（格式查核第 3 節）：和疊出這份內容的同一次 data.json，之後的存檔照寫，
+ * 疊上的值與 legacy 一起落進設定檔；當底之後才變的 data.json 不算看過，下次讀還會疊。data 不是物件就沿用設定檔原本的。
+ */
+function seenLegacy(file: Readonly<Record<string, unknown>>, data: unknown): Record<string, unknown> | null {
+  return isObject(data) ? fieldsOf(data) : isObject(file.legacy) ? file.legacy : null;
+}
+
+/** 拿掉 legacy：還原與重新建立的底稿（§4）。寫入時改用當下的 data.json，讀不到是 null，不沿用設定檔原本的。 */
+export function dropLegacy(raw: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const next = { ...raw };
+  delete next.legacy;
+  return next;
+}
+
+/**
+ * 寫進設定檔的文字（§1）：交來的有 legacy 就照寫（讀時換好的，不是物件寫 null）；沒有（還原、重新建立）才用 data，
+ * data 不是物件是 null。legacy 放最後，兩格縮排加換行。
+ */
 export function encodeSettings(next: Readonly<Record<string, unknown>>, data: unknown): string {
-  const legacy = isObject(data) ? fieldsOf(data) : isObject(next.legacy) ? next.legacy : null;
-  return JSON.stringify({ ...next, legacy }, null, 2) + '\n';
+  const legacy = has(next, 'legacy') ? isObject(next.legacy) ? next.legacy : null : isObject(data) ? fieldsOf(data) : null;
+  return JSON.stringify({ ...dropLegacy(next), legacy }, null, 2) + '\n';
 }
 
 /** 設定檔的內容：含 NUL（iCloud 還沒下載完，D-154）、不是 JSON 物件都算讀不到（undefined）。 */
@@ -74,11 +103,11 @@ export interface SettingsFileIo {
 }
 export interface SettingsFile {
   /**
-   * 給 store 的 load（§2、§3）：設定檔疊完 legacy 的內容，同時記下這台確認過；設定檔不存在時，確認過回 undefined（讀不到），
-   * 沒確認過照舊交出 data.json（物件、null、undefined）；設定檔讀不到回 undefined。
+   * 給 store 的 load（§2、§3）：設定檔疊完 legacy、換好 legacy 的內容，同時記下這台確認過；設定檔不存在時，確認過回 undefined（讀不到），
+   * 沒確認過照舊交出 data.json（物件時加上它自己的五個欄位當 legacy；null、undefined 照原樣）；設定檔讀不到回 undefined。
    */
   load(): Promise<unknown>;
-  /** 給 store 的 save（§2）：加上 legacy 寫進設定檔，不碰 data.json。 */
+  /** 給 store 的 save（§2）：照 encodeSettings 寫進設定檔，不碰 data.json；交來的沒有 legacy 才讀 data.json。 */
   save(data: unknown): Promise<void>;
   /** 這台上次確認的五個欄位；沒有或讀不懂是 null。給 store 的 seed（§3）。 */
   confirmed(): Record<string, unknown> | null;
@@ -116,14 +145,18 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
       try { bytes = await io.readBytes(SETTINGS_FILE); } catch { return undefined; }
       if (bytes === null) {
         // 確認過：不回到 data.json 的舊值，也不當成「沒有檔」的預設值；手上的值不變，等家長重新建立或檔回來（§3）。
-        if (confirmed() === null) return data();
+        if (confirmed() === null) {
+          const content = await data();
+          return isObject(content) ? { ...content, legacy: fieldsOf(content) } : content;
+        }
         setMissing(true);
         return undefined;
       }
       setMissing(false);
       const file = decodeSettings(bytes);
       if (!file) return undefined;
-      const merged = overlayLegacy(file, await data());
+      const seen = await data();
+      const merged = { ...overlayLegacy(file, seen), legacy: seenLegacy(file, seen) };
       remember(fieldsOf(merged));
       return merged;
     },
@@ -135,7 +168,7 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
     },
     async save(next) {
       if (!isObject(next)) throw Error('設定要是 JSON 物件');
-      const text = encodeSettings(next, await data());
+      const text = encodeSettings(next, has(next, 'legacy') ? undefined : await data());
       await io.modify(SETTINGS_FILE, () => text);
     },
   };
