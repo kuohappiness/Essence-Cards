@@ -791,6 +791,13 @@ async function restoreReady(t: test.TestContext, texts: Record<string, string>, 
   assert.equal(rows.length, 1);
   return { h, flow, row: rows[0] };
 }
+/** 換掉 data.json：替身把位元組（比對讀的）和 loadData 回的分開存，真的 Obsidian 是同一個檔，所以一起換；讀不懂的 loadData 回 undefined。 */
+function setData(h: Awaited<ReturnType<typeof restoreReady>>['h'], text: string): void {
+  h.texts.set(DATA, text);
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { value = undefined; }
+  h.data.content = value;
+}
 
 // 備份只有 data.json（這一版之前做的）：「設定」那一列的來源是它，目的地是設定檔；現在的值是設定檔，沒有才是現在的 data.json。
 for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉的 JSON', '壞掉'], ['沒有檔', null]] as const) {
@@ -798,7 +805,7 @@ for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉
     const path = 'Essence Cards/a.md';
     const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
     h.texts.set(path, deck[path].replace('Q :: A', 'Q :: 改壞'));
-    h.texts.set(DATA, '{"capMinutes":60}');
+    setData(h, '{"capMinutes":60}');
     if (before !== null) h.texts.set(SETTINGS, before);
     const comparison = await flow.compare(row);
     const vault = h.app.vault as { modifyBinary: (file: unknown, data: ArrayBuffer) => Promise<void> };
@@ -813,13 +820,13 @@ for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉
   });
   void test(`還原接線：設定檔是${name}、沒有人改時，寫回備份的值；data.json 不動`, async t => {
     const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
-    h.texts.set(DATA, '{"capMinutes":60}');
+    setData(h, '{"capMinutes":60}');
     if (before !== null) h.texts.set(SETTINGS, before);
     const comparison = await flow.compare(row);
     const saves = h.data.saves;
     const result = await flow.apply(comparison, new Set([DATA]));
     assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '已還原']]);
-    assert.deepEqual(JSON.parse(h.text(SETTINGS) ?? 'null'), { capMinutes: 45, legacy: { capMinutes: 45 } });
+    assert.deepEqual(JSON.parse(h.text(SETTINGS) ?? 'null'), { capMinutes: 45, legacy: { capMinutes: 60 } });
     assert.equal(h.data.saves, saves);
     assert.equal(h.text(DATA), '{"capMinutes":60}');
   });
@@ -828,9 +835,9 @@ for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉
 // 格式查核第 4 節：沒有設定檔時，「設定」現在的值是 data.json，設定檔的雜湊比不出它變了；寫之前另外比現在的值。
 void test('還原接線：沒有設定檔、比對之後 data.json 變了 → 跳過，不建立設定檔', async t => {
   const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
-  h.texts.set(DATA, '{"capMinutes":30}');
+  setData(h, '{"capMinutes":30}');
   const comparison = await flow.compare(row);
-  h.texts.set(DATA, '{"capMinutes":60}');
+  setData(h, '{"capMinutes":60}');
   const result = await flow.apply(comparison, new Set([DATA]));
   assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
   assert.equal(h.texts.has(SETTINGS), false);
@@ -838,22 +845,43 @@ void test('還原接線：沒有設定檔、比對之後 data.json 變了 → �
 });
 
 // 還原寫的 legacy 是寫入當下的 data.json（讀不到是 null），不沿用設定檔原本的：沿用的話 data.json 之後回來，剛還原的值會被蓋掉。
-for (const [name, data, legacy] of [['讀得到', { capMinutes: 15 }, { capMinutes: 15 }], ['讀不到', undefined, null]] as const) {
+for (const [name, data, legacy] of [['讀得到', '{"capMinutes":15}', { capMinutes: 15 }], ['讀不到', '壞掉', null]] as const) {
   void test(`還原接線：寫入時 data.json ${name} → legacy 是 ${JSON.stringify(legacy)}，之後 data.json 是 15 也不蓋掉還原的 45`, async t => {
     const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
-    h.texts.set(DATA, '{"capMinutes":30}');
+    setData(h, data);
     h.texts.set(SETTINGS, '{"capMinutes":30,"foo":1,"legacy":{"capMinutes":30}}');
     const comparison = await flow.compare(row);
-    h.data.content = data;
     const result = await flow.apply(comparison, new Set([DATA]));
     assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '已還原']]);
     assert.deepEqual(JSON.parse(h.text(SETTINGS) ?? 'null'), { capMinutes: 45, foo: 1, legacy });
-    h.data.content = { capMinutes: 15 };
+    setData(h, '{"capMinutes":15}');
     const store = (h.plugin as unknown as { store: { reload(): Promise<void>; value(): { settings: { capMinutes: number } } } }).store;
     await store.reload();
     assert.equal(store.value().settings.capMinutes, 45);
   });
 }
+
+// L2 第二輪的 R7：比對（排進隊伍之後讀的）到寫 legacy 讀 data.json 之間，舊版那台改了設定：現在的值已經不是比對時那一份，不寫。
+void test('還原接線：比對之後、寫 legacy 讀 data.json 之前舊版改了設定：不寫，跳過（L2 第二輪的 R7）', async t => {
+  const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
+  setData(h, '{"capMinutes":30}');
+  const before = '{"capMinutes":30,"foo":1,"legacy":{"capMinutes":30}}';
+  h.texts.set(SETTINGS, before);
+  const comparison = await flow.compare(row);
+  const plugin = h.plugin as unknown as { store: { restore: (...args: unknown[]) => unknown }; loadData: () => Promise<unknown> };
+  let queued = false, changed = false;
+  const restoreNow = plugin.store.restore.bind(plugin.store);
+  plugin.store.restore = (...args) => { queued = true; return restoreNow(...args); };
+  const loadData = plugin.loadData.bind(plugin);
+  // 排進隊伍之後第一次 loadData 是寫 legacy 那一次（比對讀的是位元組，不經過 loadData）。
+  plugin.loadData = () => { if (queued && !changed) { changed = true; setData(h, '{"capMinutes":60}'); } return loadData(); };
+  const saves = h.data.saves;
+  const result = await flow.apply(comparison, new Set([DATA]));
+  assert.ok(changed, '寫 legacy 的那一次 loadData 有被叫到');
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
+  assert.equal(h.text(SETTINGS), before);
+  assert.equal(h.data.saves, saves);
+});
 
 /** 還原前的備份讀到這篇時呼叫一次：這時分頁已經換成空白、還沒開始寫。 */
 function duringBackup(h: Awaited<ReturnType<typeof restoreReady>>['h'], path: string, act: () => void): void {
@@ -1180,7 +1208,7 @@ for (const late of ['ok', 'error'] as const) void test(`還原接線：不論卡
     const texts = { ...deck, [DATA]: '{"capMinutes":45}', 'Essence Cards/紀錄/2026-11 iPhone-dead.jsonl': '{"t":"2026-11-08T10:00:00.000+08:00","lt":"aaaaaa","r":"good","v":"12345678"}\n' };
     const { h, flow, row } = await restoreReady(t, texts, { data: { capMinutes: 45 } });
     h.texts.set(STILL, brokenDeck);
-    h.texts.set(DATA, '{"capMinutes":60}');
+    setData(h, '{"capMinutes":60}');
     h.texts.delete('Essence Cards/紀錄/2026-11 iPhone-dead.jsonl');
     const comparison = await flow.compare(row);
     h.openTab(STILL);

@@ -3,7 +3,7 @@ import type { App, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
 import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, sameSettingsNow, settingsNow, textDiff } from '../core/backup/index.ts';
 import type { BackupReader, OpenedBackup, PlannedFile, RestorePlan, RestoreResult, StoredBackup } from '../core/backup/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { SETTINGS_FILE, decodeSettings, dropLegacy, savedDiff, settingsText } from '../core/settings/index.ts';
+import { SETTINGS_FILE, restoreBase, savedDiff } from '../core/settings/index.ts';
 import type { SettingsStore } from '../core/settings/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import type { Files } from '../core/files.ts';
@@ -256,7 +256,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                   if (!live()) throw Error('逾時，不寫');
                   if (!sameSettingsNow(settingsNow(now, data), seen)) return null;
                   // 還原的是家長選的一整份值：legacy 換成寫入當下的 data.json（讀不到是 null），不沿用設定檔原本的。
-                  return { raw: dropLegacy((now === null ? null : decodeSettings(now)) ?? {}), expect: settingsText(now) };
+                  // 比對用的 data.json 也交給寫入：寫 legacy 時讀到的和它不同就不寫（L2 第二輪的 R7）。
+                  return restoreBase(now, data);
                 });
               },
               device: host.device,

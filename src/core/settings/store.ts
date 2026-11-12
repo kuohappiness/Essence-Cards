@@ -16,20 +16,25 @@ export class SettingsChanged extends Error {
   constructor() { super('設定檔在比對之後改過，沒有寫'); }
 }
 /** restore 輪到時讀一次、核對過的結果（tasks/plugin-restore.md §4）。 */
-interface RestoreBase {
+export interface RestoreBase extends WriteCheck {
   /** 當底的內容：比對時檔不在或讀不懂是空物件。 */
   raw: Record<string, unknown>;
-  /** 比對時讀到的原文，null 是不存在：交給 save，寫入那一刻再比一次（L2 的 R2）。 */
+}
+/** restore 交給 save、寫之前要再比的（L2 的 R2、第二輪的 R7）。 */
+export interface WriteCheck {
+  /** 比對時讀到的設定檔原文，null 是不存在：寫入那一刻再比一次。 */
   expect: string | null;
+  /** 比對時算現在的值用的 data.json 的五個欄位（不是物件是 null）：寫之前讀到的這五項不同就不寫。沒給不比（重新建立）。 */
+  legacy?: Record<string, unknown> | null;
 }
 export interface SettingsStoreOptions {
   /** 沒有檔回 null，讀不到回 undefined，確認過的檔不見回 MISSING。 */
   load: () => Promise<unknown>;
   /**
-   * expect（還原、重新建立）：寫入那一刻檔要是這段原文，null 是要不存在；不是就丟 SettingsChanged、不寫。
+   * check（還原、重新建立）：寫之前與寫入那一刻要再比的（WriteCheck），不同就丟 SettingsChanged、不寫。
    * 沒給不比（設定頁的存檔）。
    */
-  save: (data: unknown, expect?: string | null) => Promise<void>;
+  save: (data: unknown, check?: WriteCheck) => Promise<void>;
   /** 這台上次確認的設定（tasks/settings-vault-file.md §3）：first() 時當成一開始手上的值（known 是 false），讀到才換掉；沒有是 null。 */
   seed?: () => Record<string, unknown> | null;
   /**
@@ -229,7 +234,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           if (closed) { report('failed'); return; }
           if (now === null) { report('changed'); return; }
           // 不在這裡限時（L2 的 R11）：這裡回 failed 之後寫入還在路上，外面會以為確定沒寫。逾時由 applyRestore 判定，算結果未定。
-          try { await options.save(restoreSaved(now.raw, backup), now.expect); } catch (error) {
+          try { await options.save(restoreSaved(now.raw, backup), now); } catch (error) {
             report(error instanceof SettingsChanged ? 'changed' : 'failed');
             return;
           }

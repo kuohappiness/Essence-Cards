@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, dropLegacy, encodeSettings, isSettingsPath, overlayLegacy, settingsText } from '../src/core/settings/index.ts';
+import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, dropLegacy, encodeSettings, isSettingsPath, overlayLegacy, restoreBase, settingsText } from '../src/core/settings/index.ts';
 import type { SettingsChange } from '../src/core/settings/index.ts';
 import { guardedMoves, isDeckPath, presentFolders } from '../src/core/deck/index.ts';
 import { isLogPath } from '../src/core/study/index.ts';
@@ -40,7 +40,7 @@ function vault(init: { file?: string | null | Error; data?: unknown; confirmed?:
       return value;
     },
   });
-  const store = createSettingsStore({ load: () => settingsFile.load(), save: (data, expect) => settingsFile.save(data, expect), seed: () => settingsFile.confirmed(), adopted: raw => { settingsFile.adopted(raw); }, today: () => '2026-11-12' });
+  const store = createSettingsStore({ load: () => settingsFile.load(), save: (data, check) => settingsFile.save(data, check), seed: () => settingsFile.confirmed(), adopted: raw => { settingsFile.adopted(raw); }, today: () => '2026-11-12' });
   const json = (): unknown => typeof state.file === 'string' ? JSON.parse(state.file) : state.file;
   return { state, store, json, settingsFile };
 }
@@ -389,6 +389,27 @@ void test('還原：比對之後、寫入之前設定檔被改：不寫，回 ch
     assert.equal(await store.restore({ capMinutes: 60 }, base), 'saved', JSON.stringify(bom));
     assert.deepEqual(one.json(), { capMinutes: 60, legacy: null });
   }
+});
+
+// L2 第二輪的 R7：外掛還原比對時讀的 data.json 和寫 legacy 時讀的是兩次；中間舊版那台改了設定，現在的值已經不是比對時那一份，不寫。
+void test('還原：比對之後、寫之前 data.json 的五項變了（舊版那台改了設定）：不寫，回 changed；只差不相關的欄位照寫', async () => {
+  const seen = JSON.stringify({ capMinutes: 45, legacy: { capMinutes: 30 } });
+  const one = vault({ file: seen, data: { capMinutes: 30 } });
+  const { state, store } = one;
+  await store.first();
+  const base = () => Promise.resolve(restoreBase(bytes(seen), bytes('{"capMinutes":30}')));
+  state.data = { capMinutes: 15 };
+  assert.equal(await store.restore({ capMinutes: 60 }, base), 'changed');
+  assert.equal(state.file, seen);
+  assert.equal(state.writes, 0);
+  state.data = { capMinutes: 30, other: 1 };
+  assert.equal(await store.restore({ capMinutes: 60 }, base), 'saved');
+  assert.deepEqual(one.json(), { capMinutes: 60, legacy: { capMinutes: 30 } });
+  // 比對時 data.json 開頭有 BOM（loadData 讀不懂）、寫之前也讀不懂：兩邊都是 null，照寫。
+  const bom = vault({ file: seen, data: undefined });
+  await bom.store.first();
+  assert.equal(await bom.store.restore({ capMinutes: 60 }, () => Promise.resolve(restoreBase(bytes(seen), bytes('﻿{"capMinutes":15}')))), 'saved');
+  assert.deepEqual(bom.json(), { capMinutes: 60, legacy: null });
 });
 
 void test('這次見過、之後不見：值不變、known 變 false、那一列出現；回來就消失、known 變回 true', async () => {

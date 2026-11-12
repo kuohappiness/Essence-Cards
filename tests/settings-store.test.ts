@@ -665,20 +665,20 @@ void test('還原：輪到時現在的檔不是比對時那一份：changed，�
   assert.deepEqual(state.saves, []);
 });
 
-// 設定檔 L2 的 R2：比對時的原文交給 save，寫入那一刻再比；不是那一份就沒寫，回 changed。其他寫入錯誤照舊是 failed。
-void test('還原：比對時的原文交給 save；save 丟 SettingsChanged 回 changed，其他錯誤回 failed；設定頁的存檔不帶', async () => {
+// 設定檔 L2 的 R2、第二輪的 R7：base 交回的比對結果（原文、data.json 的五項）交給 save 再比；不是那一份就沒寫，回 changed。其他寫入錯誤照舊是 failed。
+void test('還原：比對時的原文與 legacy 交給 save；save 丟 SettingsChanged 回 changed，其他錯誤回 failed；設定頁的存檔不帶', async () => {
   const { state, options } = disk({ capMinutes: 45 });
-  const expects: unknown[] = [];
+  const checks: unknown[] = [];
   let fail: Error | null = null;
-  const store = await started({ ...options, save: (data, expect) => { expects.push(expect); return fail ? Promise.reject(fail) : options.save(data); } });
-  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.resolve({ raw: { capMinutes: 45 }, expect: '{"capMinutes":45}' })), 'saved');
+  const store = await started({ ...options, save: (data, check) => { checks.push(check === undefined ? undefined : [check.expect, check.legacy]); return fail ? Promise.reject(fail) : options.save(data); } });
+  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.resolve({ raw: { capMinutes: 45 }, expect: '{"capMinutes":45}', legacy: { capMinutes: 30 } })), 'saved');
   fail = new SettingsChanged();
   assert.equal(await store.restore({ capMinutes: 30 }, () => Promise.resolve({ raw: {}, expect: null })), 'changed');
   fail = Error('EPERM');
   assert.equal(await store.restore({ capMinutes: 30 }, from({})), 'failed');
   fail = null;
   assert.equal(await store.change(cap(60)), 'saved');
-  assert.deepEqual(expects, ['{"capMinutes":45}', null, null, undefined]);
+  assert.deepEqual(checks, [['{"capMinutes":45}', { capMinutes: 30 }], [null, undefined], [null, undefined], undefined]);
   assert.equal(state.saves.length, 2);
 });
 

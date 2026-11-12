@@ -1,7 +1,7 @@
-import { parseData, readSaved } from './saved.ts';
+import { parseData, parseLoadData, readSaved } from './saved.ts';
 import type { Saved } from './saved.ts';
 import { MISSING, SettingsChanged } from './store.ts';
-import type { SettingsStore } from './store.ts';
+import type { RestoreBase, SettingsStore, WriteCheck } from './store.ts';
 
 // 設定檔 `Essence Cards/設定.json`（tasks/settings-vault-file.md §1～§3）：內容、疊 legacy、讀寫與缺檔保護。不碰 Obsidian；檔案與 localStorage 由外層交進來。
 
@@ -71,8 +71,13 @@ export function dropLegacy(raw: Readonly<Record<string, unknown>>): Record<strin
  * data 不是物件是 null。legacy 放最後，兩格縮排加換行。
  */
 export function encodeSettings(next: Readonly<Record<string, unknown>>, data: unknown): string {
-  const legacy = has(next, 'legacy') ? isObject(next.legacy) ? next.legacy : null : isObject(data) ? fieldsOf(data) : null;
+  const legacy = has(next, 'legacy') ? isObject(next.legacy) ? next.legacy : null : legacyOf(data);
   return JSON.stringify({ ...dropLegacy(next), legacy }, null, 2) + '\n';
+}
+
+/** 讀到的 data.json 寫成 legacy 的樣子：物件取那五個欄位（照原樣），不是物件（不存在、讀不懂）是 null。 */
+function legacyOf(data: unknown): Record<string, unknown> | null {
+  return isObject(data) ? fieldsOf(data) : null;
 }
 
 /** 設定檔的內容：含 NUL（iCloud 還沒下載完，D-154）、不是 JSON 物件都算讀不到（undefined）。 */
@@ -87,6 +92,19 @@ export function decodeSettings(bytes: Uint8Array): Record<string, unknown> | und
  */
 export function settingsText(bytes: Uint8Array | null): string | null {
   return bytes === null ? null : new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+}
+
+/**
+ * 外掛還原「設定」的底（tasks/settings-vault-file.md §4）：比對時讀到的設定檔（file）與 data.json（data）的位元組，不存在是 null。
+ * 當底是拿掉 legacy 的設定檔（沒有或讀不懂是空的）；寫入那一刻比設定檔的原文（L2 的 R2），寫之前比 data.json 的五個欄位，
+ * data.json 照 Obsidian 的 loadData 讀（第二輪的 R7）。
+ */
+export function restoreBase(file: Uint8Array | null, data: Uint8Array | null): RestoreBase {
+  return {
+    raw: dropLegacy((file === null ? null : decodeSettings(file)) ?? {}),
+    expect: settingsText(file),
+    legacy: legacyOf(data === null ? null : parseLoadData(data)),
+  };
 }
 
 /** Files.watch 通知的路徑是不是設定檔（含改名的舊路徑）：大小寫與 Unicode 正規化不同也算，和 Files 同路徑排隊的比法相同。 */
@@ -118,9 +136,10 @@ export interface SettingsFile {
   load(): Promise<unknown>;
   /**
    * 給 store 的 save（§2）：照 encodeSettings 寫進設定檔，不碰 data.json；交來的沒有 legacy 才讀 data.json。
-   * expect（還原、重新建立）：寫入那一刻設定檔不是這段原文（null 是要不存在）就丟 SettingsChanged、不寫（L2 的 R2）。
+   * check（還原、重新建立）：寫入那一刻設定檔不是 expect 這段原文（null 是要不存在，L2 的 R2），或寫 legacy 讀到的 data.json
+   * 五個欄位和 check.legacy 不同（第二輪的 R7），就丟 SettingsChanged、不寫。
    */
-  save(data: unknown, expect?: string | null): Promise<void>;
+  save(data: unknown, check?: WriteCheck): Promise<void>;
   /** 這台上次確認的五個欄位；沒有或讀不懂是 null。給 store 的 seed（§3）。 */
   confirmed(): Record<string, unknown> | null;
   /**
@@ -188,12 +207,15 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
       // 比對時不存在就以空的當底（只寫確認過的五個欄位）；回來了就不寫，寫入那一刻才回來也一樣（L2 的 R2）。讀不到丟錯，store 回 unreadable。
       return store.restore(fields, async () => await io.readBytes(SETTINGS_FILE) === null ? { raw: {}, expect: null } : null);
     },
-    async save(next, expect) {
+    async save(next, check) {
       if (!isObject(next)) throw Error('設定要是 JSON 物件');
-      const text = encodeSettings(next, has(next, 'legacy') ? undefined : await data());
+      const seen = has(next, 'legacy') ? undefined : await data();
+      // 比對時算現在的值用的 data.json 和寫 legacy 的這一次不同：舊版那台在中間改了設定，現在的值已經不是比對時那一份（第二輪的 R7）。
+      if (check?.legacy !== undefined && !has(next, 'legacy') && JSON.stringify(legacyOf(seen)) !== JSON.stringify(check.legacy)) throw new SettingsChanged();
+      const text = encodeSettings(next, seen);
       await io.modify(SETTINGS_FILE, (now, exists) => {
         // 比對之後、這一刻之前同步來的檔不蓋掉（L2 的 R2）：讀 data.json 的等待裡也可能到。
-        if (expect !== undefined && (expect === null ? exists : !exists || now !== expect)) throw new SettingsChanged();
+        if (check && (check.expect === null ? exists : !exists || now !== check.expect)) throw new SettingsChanged();
         return text;
       });
     },
