@@ -1,7 +1,7 @@
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettingsStore, savedDiff } from '../src/core/settings/index.ts';
+import { SettingsChanged, createSettingsStore, savedDiff } from '../src/core/settings/index.ts';
 import type { SettingsChange, SettingsStoreOptions } from '../src/core/settings/index.ts';
 
 // 讀與存的順序（tasks/settings-page.md §2、§7）。load、save 是替身，照 Obsidian 1.15 的行為：null 是沒有檔，undefined 是讀不到；saveData 吞掉寫入錯誤。
@@ -639,7 +639,7 @@ void test('過了 2/1 不寫檔，畫面看到的是今天的學期', async () =
 });
 
 // 還原（tasks/plugin-restore.md §4）
-const from = (raw: Record<string, unknown>) => () => Promise.resolve(raw);
+const from = (raw: Record<string, unknown>) => () => Promise.resolve({ raw, expect: null });
 const TODAY = '2026-11-10';
 
 void test('還原：以輪到時讀到、核對過的內容當底，五個欄位換成備份的值，備份沒有的拿掉，不認得的保留；立刻生效、通知一次', async () => {
@@ -663,6 +663,23 @@ void test('還原：輪到時現在的檔不是比對時那一份：changed，�
   assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.resolve(null)), 'changed');
   assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.reject(Error('讀不到'))), 'unreadable');
   assert.deepEqual(state.saves, []);
+});
+
+// 設定檔 L2 的 R2：比對時的原文交給 save，寫入那一刻再比；不是那一份就沒寫，回 changed。其他寫入錯誤照舊是 failed。
+void test('還原：比對時的原文交給 save；save 丟 SettingsChanged 回 changed，其他錯誤回 failed；設定頁的存檔不帶', async () => {
+  const { state, options } = disk({ capMinutes: 45 });
+  const expects: unknown[] = [];
+  let fail: Error | null = null;
+  const store = await started({ ...options, save: (data, expect) => { expects.push(expect); return fail ? Promise.reject(fail) : options.save(data); } });
+  assert.equal(await store.restore({ capMinutes: 20 }, () => Promise.resolve({ raw: { capMinutes: 45 }, expect: '{"capMinutes":45}' })), 'saved');
+  fail = new SettingsChanged();
+  assert.equal(await store.restore({ capMinutes: 30 }, () => Promise.resolve({ raw: {}, expect: null })), 'changed');
+  fail = Error('EPERM');
+  assert.equal(await store.restore({ capMinutes: 30 }, from({})), 'failed');
+  fail = null;
+  assert.equal(await store.change(cap(60)), 'saved');
+  assert.deepEqual(expects, ['{"capMinutes":45}', null, null, undefined]);
+  assert.equal(state.saves.length, 2);
 });
 
 void test('還原：現在的檔讀不懂，以空的當底救回來', async () => {
@@ -705,7 +722,7 @@ void test('還原：寫入超過 10 秒不先回 failed，等真的結束（L2 �
   t.mock.timers.tick(2000);
   await first;
   let outcome: string | null = null;
-  const running = store.restore({ capMinutes: 45 }, () => Promise.resolve({ capMinutes: 60 })).then(result => { outcome = result; });
+  const running = store.restore({ capMinutes: 45 }, from({ capMinutes: 60 })).then(result => { outcome = result; });
   for (let i = 0; i < 6; i++) { await new Promise(resolve => { setImmediate(resolve); }); t.mock.timers.tick(10_000); }
   assert.equal(outcome, null);
   release();

@@ -11,10 +11,25 @@ type RestoreSettings = SaveResult | 'changed';
  * 另外 known 變 false（不寫設定的觀察行），再讀到檔才變回 true（L2 的 R1）。逾時之後才回來的不算。
  */
 export const MISSING: unique symbol = Symbol('設定檔不見');
+/** 寫入那一刻設定檔已經不是比對時的樣子（L2 的 R2）：save 丟這個就是沒寫，restore 回 changed。 */
+export class SettingsChanged extends Error {
+  constructor() { super('設定檔在比對之後改過，沒有寫'); }
+}
+/** restore 輪到時讀一次、核對過的結果（tasks/plugin-restore.md §4）。 */
+interface RestoreBase {
+  /** 當底的內容：比對時檔不在或讀不懂是空物件。 */
+  raw: Record<string, unknown>;
+  /** 比對時讀到的原文，null 是不存在：交給 save，寫入那一刻再比一次（L2 的 R2）。 */
+  expect: string | null;
+}
 export interface SettingsStoreOptions {
   /** 沒有檔回 null，讀不到回 undefined，確認過的檔不見回 MISSING。 */
   load: () => Promise<unknown>;
-  save: (data: unknown) => Promise<void>;
+  /**
+   * expect（還原、重新建立）：寫入那一刻檔要是這段原文，null 是要不存在；不是就丟 SettingsChanged、不寫。
+   * 沒給不比（設定頁的存檔）。
+   */
+  save: (data: unknown, expect?: string | null) => Promise<void>;
   /** 這台上次確認的設定（tasks/settings-vault-file.md §3）：first() 時當成一開始手上的值（known 是 false），讀到才換掉；沒有是 null。 */
   seed?: () => Record<string, unknown> | null;
   /**
@@ -41,9 +56,10 @@ export interface SettingsStore {
   change(change: SettingsChange): Promise<SaveResult>;
   /**
    * 還原（tasks/plugin-restore.md §4）：同一條隊伍，認得的欄位換成 backup 的值，不認得的保留。base 在輪到時讀一次並核對：
-   * 回傳當底的內容（比對時檔不在或讀不懂是空物件）；回 null 是比對之後改過，不寫；丟錯是讀不到。核對和當底是同一次讀到的（L2 的 R4）。first() 之前回 unreadable。
+   * 回傳當底的內容與比對時的原文；回 null 是比對之後改過，不寫；丟錯是讀不到。核對和當底是同一次讀到的（L2 的 R4）。
+   * 寫入那一刻檔已經不是那段原文也是 changed，沒寫（設定檔 L2 的 R2）。first() 之前回 unreadable。
    */
-  restore(backup: Readonly<Record<string, unknown>>, base: () => Promise<Record<string, unknown> | null>): Promise<RestoreSettings>;
+  restore(backup: Readonly<Record<string, unknown>>, base: () => Promise<RestoreBase | null>): Promise<RestoreSettings>;
   /** 外掛停用：還沒開始的讀寫不做，已經送出的寫入做完但不核對；存檔都回 failed，也不再通知。 */
   close(): void;
   /** 值或存過的項目變了（包括 known 由 false 變 true）。 */
@@ -208,13 +224,13 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
       return new Promise<RestoreSettings>(report => {
         void queued(async () => {
           if (closed) { report('failed'); return; }
-          let now: Record<string, unknown> | null;
+          let now: RestoreBase | null;
           try { now = await base(); } catch { report('unreadable'); return; }
           if (closed) { report('failed'); return; }
           if (now === null) { report('changed'); return; }
           // 不在這裡限時（L2 的 R11）：這裡回 failed 之後寫入還在路上，外面會以為確定沒寫。逾時由 applyRestore 判定，算結果未定。
-          try { await options.save(restoreSaved(now, backup)); } catch {
-            report('failed');
+          try { await options.save(restoreSaved(now.raw, backup), now.expect); } catch (error) {
+            report(error instanceof SettingsChanged ? 'changed' : 'failed');
             return;
           }
           if (closed) { report('failed'); return; }

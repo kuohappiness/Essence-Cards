@@ -135,7 +135,7 @@ export default class EssenceCardsPlugin extends Plugin {
   /** 設定（tasks/settings-page.md）：存在設定檔，data.json 只讀不寫（tasks/settings-vault-file.md）。 */
   readonly store = createSettingsStore({
     load: () => this.settingsFile ? this.settingsFile.load() : Promise.resolve(undefined),
-    save: data => this.settingsFile ? this.settingsFile.save(data) : Promise.reject(Error('設定檔還沒接上')),
+    save: (data, expect) => this.settingsFile ? this.settingsFile.save(data, expect) : Promise.reject(Error('設定檔還沒接上')),
     seed: () => this.settingsFile?.confirmed() ?? null,
     adopted: raw => { this.settingsFile?.adopted(raw); },
     today: todayText,

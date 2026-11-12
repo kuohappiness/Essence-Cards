@@ -1,6 +1,6 @@
 import { parseData, readSaved } from './saved.ts';
 import type { Saved } from './saved.ts';
-import { MISSING } from './store.ts';
+import { MISSING, SettingsChanged } from './store.ts';
 import type { SettingsStore } from './store.ts';
 
 // 設定檔 `Essence Cards/設定.json`（tasks/settings-vault-file.md §1～§3）：內容、疊 legacy、讀寫與缺檔保護。不碰 Obsidian；檔案與 localStorage 由外層交進來。
@@ -81,6 +81,14 @@ export function decodeSettings(bytes: Uint8Array): Record<string, unknown> | und
   return parseData(bytes) ?? undefined;
 }
 
+/**
+ * 比對時讀到的設定檔原文（L2 的 R2）：寫入那一刻拿它和 Files.modify 交來的內容比。開頭的 BOM 留著，
+ * 和電腦上 vault.process 讀到的一樣（Node 以 utf8 讀檔不拿掉 BOM）；不存在是 null。
+ */
+export function settingsText(bytes: Uint8Array | null): string | null {
+  return bytes === null ? null : new TextDecoder('utf-8', { ignoreBOM: true }).decode(bytes);
+}
+
 /** Files.watch 通知的路徑是不是設定檔（含改名的舊路徑）：大小寫與 Unicode 正規化不同也算，和 Files 同路徑排隊的比法相同。 */
 export function isSettingsPath(path: string): boolean {
   const key = (text: string): string => text.normalize('NFC').toLowerCase();
@@ -90,7 +98,7 @@ export function isSettingsPath(path: string): boolean {
 export interface SettingsFileIo {
   /** Files.readBytes：不存在回 null，讀不到丟錯。 */
   readBytes(path: string): Promise<Uint8Array | null>;
-  /** Files.modify：原地寫，不存在時建立含上層資料夾。 */
+  /** Files.modify：原地寫，不存在時建立含上層資料夾。edit 拿到的是寫入那一刻的內容，丟錯就不寫。 */
   modify(path: string, edit: (text: string, exists: boolean) => string): Promise<void>;
   /** 舊版的 data.json（Obsidian 的 loadData）：沒有回 null，讀不到回 undefined。新版只讀不寫（§1）。 */
   loadData(): Promise<unknown>;
@@ -108,8 +116,11 @@ export interface SettingsFile {
    * 沒確認過照舊交出 data.json（物件時加上它自己的五個欄位當 legacy；null、undefined 照原樣）；設定檔讀不到回 undefined。
    */
   load(): Promise<unknown>;
-  /** 給 store 的 save（§2）：照 encodeSettings 寫進設定檔，不碰 data.json；交來的沒有 legacy 才讀 data.json。 */
-  save(data: unknown): Promise<void>;
+  /**
+   * 給 store 的 save（§2）：照 encodeSettings 寫進設定檔，不碰 data.json；交來的沒有 legacy 才讀 data.json。
+   * expect（還原、重新建立）：寫入那一刻設定檔不是這段原文（null 是要不存在）就丟 SettingsChanged、不寫（L2 的 R2）。
+   */
+  save(data: unknown, expect?: string | null): Promise<void>;
   /** 這台上次確認的五個欄位；沒有或讀不懂是 null。給 store 的 seed（§3）。 */
   confirmed(): Record<string, unknown> | null;
   /**
@@ -174,13 +185,17 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
     recreate(store) {
       const fields = confirmed();
       if (fields === null) return Promise.resolve('unreadable');
-      // 比對時不存在就以空的當底（只寫確認過的五個欄位）；回來了就不寫。讀不到丟錯，store 回 unreadable。
-      return store.restore(fields, async () => await io.readBytes(SETTINGS_FILE) === null ? {} : null);
+      // 比對時不存在就以空的當底（只寫確認過的五個欄位）；回來了就不寫，寫入那一刻才回來也一樣（L2 的 R2）。讀不到丟錯，store 回 unreadable。
+      return store.restore(fields, async () => await io.readBytes(SETTINGS_FILE) === null ? { raw: {}, expect: null } : null);
     },
-    async save(next) {
+    async save(next, expect) {
       if (!isObject(next)) throw Error('設定要是 JSON 物件');
       const text = encodeSettings(next, has(next, 'legacy') ? undefined : await data());
-      await io.modify(SETTINGS_FILE, () => text);
+      await io.modify(SETTINGS_FILE, (now, exists) => {
+        // 比對之後、這一刻之前同步來的檔不蓋掉（L2 的 R2）：讀 data.json 的等待裡也可能到。
+        if (expect !== undefined && (expect === null ? exists : !exists || now !== expect)) throw new SettingsChanged();
+        return text;
+      });
     },
   };
 }

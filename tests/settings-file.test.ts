@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, dropLegacy, encodeSettings, isSettingsPath, overlayLegacy } from '../src/core/settings/index.ts';
+import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, dropLegacy, encodeSettings, isSettingsPath, overlayLegacy, settingsText } from '../src/core/settings/index.ts';
 import type { SettingsChange } from '../src/core/settings/index.ts';
 import { guardedMoves, isDeckPath, presentFolders } from '../src/core/deck/index.ts';
 import { isLogPath } from '../src/core/study/index.ts';
@@ -40,7 +40,7 @@ function vault(init: { file?: string | null | Error; data?: unknown; confirmed?:
       return value;
     },
   });
-  const store = createSettingsStore({ load: () => settingsFile.load(), save: data => settingsFile.save(data), seed: () => settingsFile.confirmed(), adopted: raw => { settingsFile.adopted(raw); }, today: () => '2026-11-12' });
+  const store = createSettingsStore({ load: () => settingsFile.load(), save: (data, expect) => settingsFile.save(data, expect), seed: () => settingsFile.confirmed(), adopted: raw => { settingsFile.adopted(raw); }, today: () => '2026-11-12' });
   const json = (): unknown => typeof state.file === 'string' ? JSON.parse(state.file) : state.file;
   return { state, store, json, settingsFile };
 }
@@ -217,7 +217,7 @@ void test('還原：以拿掉 legacy 的設定檔當底，legacy 是寫入當下
   const restoreWith = async (data: unknown) => {
     const one = vault({ file: JSON.stringify({ capMinutes: 30, foo: 1, legacy: { capMinutes: 30 } }), data });
     await one.store.first();
-    const base = () => Promise.resolve(dropLegacy(decodeSettings(bytes(one.state.file as string)) ?? {}));
+    const base = () => Promise.resolve({ raw: dropLegacy(decodeSettings(bytes(one.state.file as string)) ?? {}), expect: one.state.file as string });
     assert.equal(await one.store.restore({ capMinutes: 60 }, base), 'saved');
     return one;
   };
@@ -359,6 +359,38 @@ void test('重新建立時設定檔已經回來：不寫，回 changed（§6-7�
 });
 
 // L2 的 R1：用到一半不見和開啟時就不在一樣，known 是 false（不寫設定的觀察行），回來才變回 true。
+// L2 的 R2：比對（再讀一次還是不存在）之後、真的寫入之前，同步把檔送回來，寫入那一刻要再比一次，不蓋掉它。
+void test('重新建立：比對之後、寫入之前設定檔才回來：不寫，回 changed', async () => {
+  const back = JSON.stringify({ capMinutes: 75, foo: 1, legacy: null });
+  const one = vault({ data: { capMinutes: 15 }, confirmed: { capMinutes: 45 }, onData: () => { one.state.file = back; } });
+  const { state, store, settingsFile } = one;
+  await store.first();
+  assert.equal(await settingsFile.recreate(store), 'changed');
+  assert.equal(state.file, back);
+  assert.equal(state.writes, 0);
+  await store.reload();
+  assert.equal(store.value().settings.capMinutes, 75);
+});
+
+void test('還原：比對之後、寫入之前設定檔被改：不寫，回 changed；開頭有 BOM 的檔照樣比得到相同', async () => {
+  for (const bom of ['', '﻿']) {
+    const seen = bom + JSON.stringify({ capMinutes: 30, legacy: null });
+    const other = JSON.stringify({ capMinutes: 75, foo: 1, legacy: null });
+    let swap = false;
+    const one = vault({ file: seen, onData: () => { if (swap) one.state.file = other; } });
+    const { state, store } = one;
+    await store.first();
+    const base = () => Promise.resolve({ raw: dropLegacy(decodeSettings(bytes(seen)) ?? {}), expect: settingsText(bytes(seen)) });
+    swap = true;
+    assert.equal(await store.restore({ capMinutes: 60 }, base), 'changed', JSON.stringify(bom));
+    assert.equal(state.file, other);
+    swap = false;
+    state.file = seen;
+    assert.equal(await store.restore({ capMinutes: 60 }, base), 'saved', JSON.stringify(bom));
+    assert.deepEqual(one.json(), { capMinutes: 60, legacy: null });
+  }
+});
+
 void test('這次見過、之後不見：值不變、known 變 false、那一列出現；回來就消失、known 變回 true', async () => {
   const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, legacy: null }) });
   const told: boolean[] = [];

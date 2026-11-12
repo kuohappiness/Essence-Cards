@@ -3,7 +3,7 @@ import type { App, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
 import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, sameSettingsNow, settingsNow, textDiff } from '../core/backup/index.ts';
 import type { BackupReader, OpenedBackup, PlannedFile, RestorePlan, RestoreResult, StoredBackup } from '../core/backup/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { SETTINGS_FILE, decodeSettings, dropLegacy, savedDiff } from '../core/settings/index.ts';
+import { SETTINGS_FILE, decodeSettings, dropLegacy, savedDiff, settingsText } from '../core/settings/index.ts';
 import type { SettingsStore } from '../core/settings/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import type { Files } from '../core/files.ts';
@@ -246,7 +246,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                   // 排隊的這段時間路徑可能換成連結，內容還一模一樣（L2 的 R13）：算比對之後改過，重新比對會寫出是連結。
                   try { await desktop.noLinks(SETTINGS_FILE); } catch { return null; }
                   if (!live()) throw Error('逾時，不寫');
-                  // 比對雜湊、當底稿的內容一定是寫之前最後一次 I/O（L2 的 R18）：查連結的等待裡同步進來的新內容才看得到。
+                  // 比對雜湊、當底稿的是查連結之後讀的（L2 的 R18）：查連結的等待裡同步進來的新內容才看得到。之後還要讀 data.json、
+                  // 寫入時再讀一次，這段空檔由寫入那一刻再比原文擋（設定檔 L2 的 R2）。
                   const now = await reader.read(SETTINGS_FILE);
                   if (!live()) throw Error('逾時，不寫');
                   if ((now === null ? null : hashBytes(now)) !== expected) return null;
@@ -255,7 +256,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
                   if (!live()) throw Error('逾時，不寫');
                   if (!sameSettingsNow(settingsNow(now, data), seen)) return null;
                   // 還原的是家長選的一整份值：legacy 換成寫入當下的 data.json（讀不到是 null），不沿用設定檔原本的。
-                  return dropLegacy((now === null ? null : decodeSettings(now)) ?? {});
+                  return { raw: dropLegacy((now === null ? null : decodeSettings(now)) ?? {}), expect: settingsText(now) };
                 });
               },
               device: host.device,
