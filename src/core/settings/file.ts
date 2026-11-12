@@ -103,7 +103,7 @@ export interface SettingsFileIo {
 }
 export interface SettingsFile {
   /**
-   * 給 store 的 load（§2、§3）：設定檔疊完 legacy、換好 legacy 的內容，同時記下這台確認過；設定檔不存在時，確認過回 undefined（讀不到），
+   * 給 store 的 load（§2、§3）：設定檔疊完 legacy、換好 legacy 的內容（store 採用了才記確認，adopted）；設定檔不存在時，確認過回 undefined（讀不到），
    * 沒確認過照舊交出 data.json（物件時加上它自己的五個欄位當 legacy；null、undefined 照原樣）；設定檔讀不到回 undefined。
    */
   load(): Promise<unknown>;
@@ -111,6 +111,11 @@ export interface SettingsFile {
   save(data: unknown): Promise<void>;
   /** 這台上次確認的五個欄位；沒有或讀不懂是 null。給 store 的 seed（§3）。 */
   confirmed(): Record<string, unknown> | null;
+  /**
+   * 給 store 的 adopted（§3）：store 採用的是 load 從設定檔讀出來的內容，才記下這台確認過的五個欄位（疊完的）。
+   * 照 data.json 讀的不算；load 回來了但沒被採用的（逾時之後才到、寫前當底）不記，本機的值和畫面上的一致（L2 的 R4）。
+   */
+  adopted(raw: Readonly<Record<string, unknown>>): void;
   /** 這台確認過設定檔、最近一次讀時它不存在：設定頁顯示「重新建立」（§3）。 */
   missing(): boolean;
   /** 重新建立（§3）：走 store 的隊伍，再讀一次還是不存在才寫，內容是確認過的五個欄位加 legacy；檔已經回來回 changed、不寫。 */
@@ -122,6 +127,8 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
   /** loadData 拒絕和讀不到一樣（Obsidian 自己會吞掉錯誤，這裡只是不讓它變成程式的錯）。 */
   const data = (): Promise<unknown> => new Promise<unknown>(resolve => { resolve(io.loadData()); }).catch(() => undefined);
   let missing = false;
+  /** load 從設定檔讀出來交給 store 的內容（照 data.json 讀的不在裡面）：store 採用了才記確認。 */
+  const fromFile = new WeakSet<object>();
   /** localStorage 丟錯當成沒確認過：這台照舊讀 data.json，和這一版之前一樣。 */
   function confirmed(): Record<string, unknown> | null {
     let value: unknown;
@@ -157,8 +164,11 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
       if (!file) return undefined;
       const seen = await data();
       const merged = { ...overlayLegacy(file, seen), legacy: seenLegacy(file, seen) };
-      remember(fieldsOf(merged));
+      fromFile.add(merged);
       return merged;
+    },
+    adopted(raw) {
+      if (fromFile.has(raw)) remember(fieldsOf(raw));
     },
     recreate(store) {
       const fields = confirmed();

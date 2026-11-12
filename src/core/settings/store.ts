@@ -12,6 +12,11 @@ export interface SettingsStoreOptions {
   save: (data: unknown) => Promise<void>;
   /** 這台上次確認的設定（tasks/settings-vault-file.md §3）：first() 時當成一開始手上的值（known 是 false），讀到才換掉；沒有是 null。 */
   seed?: () => Record<string, unknown> | null;
+  /**
+   * 採用了 load 交回的內容（就是那個物件，不是複本）：外層只在這時記下這台確認過的值（tasks/settings-vault-file.md §3）。
+   * 寫前當底的讀、逾時之後才回來的讀都不採用，也不會叫（L2 的 R4）。丟錯交給 onError，不影響採用。
+   */
+  adopted?: (raw: Record<string, unknown>) => void;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）。 */
   today: () => string;
   /** onChange 的監聽者丟出錯誤（程式的錯）：不能讓隊伍卡住，交給外層記下。 */
@@ -115,6 +120,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     raw = result.raw;
     saved = readSaved(raw);
     known = true;
+    try { options.adopted?.(raw); } catch (error) { options.onError?.(error); }
     announce();
   }
   async function refresh(followUp = false): Promise<void> {

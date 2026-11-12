@@ -12,9 +12,9 @@ const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 /**
  * 替身：設定檔是文字（null 不存在、Error 讀不到）；data.json 照 Obsidian 的 loadData（null 不存在、undefined 讀不到）；
  * confirmed 是這台的 localStorage 那一筆（§3），missing 是「設定檔讀不到」那一列換了幾次。沒有寫 data.json 的口。
- * onData：每次讀完 data.json 之後叫（第幾次讀），用來在兩次讀之間換掉 data.json。
+ * onData：每次讀完 data.json 之後叫（第幾次讀），用來在兩次讀之間換掉 data.json。hold：第幾次讀 data.json 要等它（卡住的讀）。
  */
-function vault(init: { file?: string | null | Error; data?: unknown; confirmed?: unknown; onData?: (n: number) => void } = {}) {
+function vault(init: { file?: string | null | Error; data?: unknown; confirmed?: unknown; onData?: (n: number) => void; hold?: (n: number) => Promise<void> | undefined } = {}) {
   let reads = 0;
   const state = { file: init.file ?? null, data: 'data' in init ? init.data : null, writes: 0, confirmed: (init.confirmed ?? null) as unknown, confirms: 0, missing: 0 };
   const settingsFile = createSettingsFile({
@@ -32,13 +32,15 @@ function vault(init: { file?: string | null | Error; data?: unknown; confirmed?:
       if (next !== state.file) { state.file = next; state.writes++; }
       return Promise.resolve();
     },
-    loadData: () => {
+    loadData: async () => {
+      const n = ++reads;
+      await init.hold?.(n);
       const value: unknown = state.data === undefined ? undefined : JSON.parse(JSON.stringify(state.data));
-      init.onData?.(++reads);
-      return Promise.resolve(value);
+      init.onData?.(n);
+      return value;
     },
   });
-  const store = createSettingsStore({ load: () => settingsFile.load(), save: data => settingsFile.save(data), seed: () => settingsFile.confirmed(), today: () => '2026-11-12' });
+  const store = createSettingsStore({ load: () => settingsFile.load(), save: data => settingsFile.save(data), seed: () => settingsFile.confirmed(), adopted: raw => { settingsFile.adopted(raw); }, today: () => '2026-11-12' });
   const json = (): unknown => typeof state.file === 'string' ? JSON.parse(state.file) : state.file;
   return { state, store, json, settingsFile };
 }
@@ -283,6 +285,34 @@ void test('讀到設定檔就記下這台確認過的五個欄位（疊完的，
   assert.equal(settingsFile.missing(), false);
   await store.reload();
   assert.equal(state.confirms, 1, '內容沒變不再寫一次');
+});
+
+// L2 的 R4：store 不採用逾時之後才回來的讀，這台確認過的值也不能跟著它改回去；檔接著不見時，排程與重新建立用的是畫面上的值。
+void test('逾時之後才回來的讀不改這台確認過的值：只記 store 採用的那一次', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const flush = async (): Promise<void> => { for (let i = 0; i < 8; i++) await new Promise<void>(resolve => { setImmediate(resolve); }); };
+  let release = (): void => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, legacy: null }), hold: n => n === 1 ? held : undefined });
+  const first = store.first();
+  await flush();
+  t.mock.timers.tick(2000);
+  await first;
+  t.mock.timers.tick(3000);
+  await flush();
+  state.file = JSON.stringify({ capMinutes: 75, legacy: null });
+  await store.reload();
+  assert.equal(store.value().settings.capMinutes, 75);
+  assert.deepEqual(state.confirmed, { capMinutes: 75 });
+  release();
+  await flush();
+  assert.equal(store.value().settings.capMinutes, 75);
+  assert.deepEqual(state.confirmed, { capMinutes: 75 }, '晚到的 45 沒被採用，也不記');
+  state.file = null;
+  await store.reload();
+  assert.equal(settingsFile.missing(), true);
+  assert.equal(await settingsFile.recreate(store), 'saved');
+  assert.equal(store.value().settings.capMinutes, 75);
 });
 
 void test('沒有設定檔時照 data.json 讀，不記確認', async () => {

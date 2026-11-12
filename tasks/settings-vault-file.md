@@ -64,7 +64,7 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 
 ## 3. 設定檔不見時
 
-- **確認過**：load 讀到設定檔（第 2 步）就把疊完的五個欄位存進這個 vault 專用的 localStorage（`app.saveLocalStorage`，和裝置碼同一種，`src/obsidian/device.ts`）。有這筆就是「這台確認過設定檔」。
+- **確認過**：store 採用 load 從設定檔讀到的內容（第 2 步）時，把疊完的五個欄位存進這個 vault 專用的 localStorage（`app.saveLocalStorage`，和裝置碼同一種，`src/obsidian/device.ts`）。逾時之後才回來、寫前當底的讀沒被採用，不記（L2 的 R4）。有這筆就是「這台確認過設定檔」。
 - **之後不見了**（不存在，或這次執行見過、之後不見）：
   - store 一開始就用這筆當手上的值（`known` 是 false）：排程用它，不用預設值；`known` 是 false，不寫觀察行（現在的規則）。
   - 改設定照現在回「讀不到」，不寫。
