@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTINGS_FILE, createSettingsFile, createSettingsStore, decodeSettings, encodeSettings, isSettingsPath, overlayLegacy } from '../src/core/settings/index.ts';
 import type { SettingsChange } from '../src/core/settings/index.ts';
+import { guardedMoves, isDeckPath, presentFolders } from '../src/core/deck/index.ts';
+import { isLogPath } from '../src/core/study/index.ts';
 
 // 設定檔 `Essence Cards/設定.json` 的內容與疊 legacy（tasks/settings-vault-file.md §1、§2）。例子照任務說明 §6。
 
@@ -301,4 +303,14 @@ void test('確認過的那一筆讀不懂：當成沒確認過', async () => {
     assert.equal(store.value().settings.capMinutes, 15);
     assert.equal(store.value().known, true);
   }
+});
+
+// §6-12：這三個判斷從 v0.4.0 到這一版都沒改（git diff v0.4.0 -- src/core/deck/read.ts src/core/deck/folders.ts src/core/study/history.ts 是空的），
+// 所以這裡測到的就是舊版的行為：舊版讀不到設定檔，也不會把它當卡組或紀錄。
+void test('舊版不認設定檔（§6-12）：不是卡組、不是紀錄；系統資料夾的防呆照常，設定檔本身不算資料夾', () => {
+  assert.equal(isDeckPath(SETTINGS_FILE), false);
+  assert.equal(isLogPath(SETTINGS_FILE), false);
+  assert.deepEqual(guardedMoves([SETTINGS_FILE]), []);
+  assert.deepEqual(guardedMoves(['Essence Cards', SETTINGS_FILE]), ['Essence Cards']);
+  assert.deepEqual(presentFolders([SETTINGS_FILE]), ['Essence Cards']);
 });
