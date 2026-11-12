@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { SETTINGS_FILE } from '../../src/core/settings/index.ts';
 import type { AdapterResult, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts';
 
 /**
@@ -19,8 +20,11 @@ import type { AdapterResult, DeckSnap, Snapshot, TodaySnap } from './snapshot.ts
  * 所以看得到的是排在最前面的那一行與 modify，不保證抓到版本行之後才排的。
  */
 
-/** 輸入：備份的時間與時區當「現在」，`Essence Cards/` 底下的文字檔，外掛的 data.json 的原文（備份裡沒有就不帶）。 */
-export interface AdapterInput { now: number; offset: number; files: Record<string, string>; data?: string }
+/**
+ * 輸入：備份的時間與時區當「現在」，`Essence Cards/` 底下的文字檔，外掛的 data.json 的原文，
+ * 設定檔（SETTINGS_FILE）的位元組（base64，BOM 和讀不懂的位元組都照實帶）；後兩個備份裡沒有就不帶。
+ */
+export interface AdapterInput { now: number; offset: number; files: Record<string, string>; data?: string; settingsFile?: string }
 
 type Fn = (...args: unknown[]) => unknown;
 function need(module: unknown, name: string): Fn {
@@ -197,15 +201,32 @@ function read(state: StateLike, study: unknown, input: AdapterInput): Snapshot {
   };
 }
 
-/** 那一版有設定（src/core/settings/）就用它自己的讀法讀 data.json；沒有的版本（0.3.0）照用它的預設（tasks/settings-page.md §2-9）。 */
-async function settingsOption(root: string, data: string | undefined): Promise<{ settingsFirst?: Promise<unknown> }> {
+/**
+ * 那一版有設定（src/core/settings/）就用它自己的讀法；沒有的版本（0.3.0）照用它的預設（tasks/settings-page.md §2-9）。
+ * 有設定檔讀法（createSettingsFile）的版本照它讀設定檔、疊上 data.json（tasks/settings-vault-file.md §2）。比較是沒確認過設定檔的一台：
+ * 設定檔沒有就讀 data.json，讀不懂是預設，不寫任何東西。沒有設定檔讀法的版本（0.4.0）只讀 data.json。
+ */
+async function settingsOption(root: string, input: AdapterInput): Promise<{ settingsFirst?: Promise<unknown> }> {
   const path = join(root, 'src/core/settings/index.ts');
   if (!existsSync(path)) return {};
   // eslint-disable-next-line essence/module-boundaries
-  const settings = await import(pathToFileURL(path).href) as unknown;
+  const settings = await import(pathToFileURL(path).href) as Record<string, unknown>;
   let raw: unknown = {};
-  // 壞掉的 data.json：外掛用預設值，比較也是。
-  if (data !== undefined) try { raw = JSON.parse(data); } catch { raw = {}; }
+  if (typeof settings.createSettingsFile === 'function') {
+    const bytes = input.settingsFile === undefined ? null : new Uint8Array(Buffer.from(input.settingsFile, 'base64'));
+    const file = need(settings, 'createSettingsFile')({
+      readBytes: (at: string) => Promise.resolve(at === SETTINGS_FILE ? bytes : null),
+      modify: () => Promise.reject(Error('比較不寫設定檔')),
+      // 和 Obsidian 的 loadData 一樣：沒有檔是 null，讀不懂（含開頭的 BOM）就拒絕。
+      loadData: () => new Promise(resolve => { resolve(input.data === undefined ? null : JSON.parse(input.data) as unknown); }),
+      confirmed: () => null,
+      confirm: () => undefined,
+    });
+    raw = await need(file, 'load').call(file);
+  } else if (input.data !== undefined) {
+    // 壞掉的 data.json：外掛用預設值，比較也是。
+    try { raw = JSON.parse(input.data); } catch { raw = {}; }
+  }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) raw = {};
   return { settingsFirst: Promise.resolve(need(settings, 'valueOf')(need(settings, 'readSaved')(raw), true)) };
 }
@@ -226,7 +247,7 @@ export async function snapshot(root: string, input: AdapterInput): Promise<Snaps
   const failed = (error: unknown): void => { if (error !== refusal) failures.push(error); };
   const state = need(stateModule, 'createState')({
     files, device: 'compare', build: version, fillIds: false, now: () => input.now, offset: () => input.offset,
-    ...await settingsOption(root, input.data),
+    ...await settingsOption(root, input),
     onError: failed,
   }) as StateLike;
   let result: Snapshot;

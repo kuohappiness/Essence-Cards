@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { hashBytes, openBackup, PLUGIN_DATA } from '../src/core/backup/index.ts';
+import { SETTINGS_FILE } from '../src/core/settings/index.ts';
 import { formatTime, parseTime } from '../src/core/study/index.ts';
 import type { AdapterInput } from './compare/adapter.ts';
 import { diffSnapshots, gateLines } from './compare/snapshot.ts';
@@ -16,7 +17,7 @@ const shell = promisify(exec);
 const defaultRoot = fileURLToPath(new URL('../', import.meta.url));
 const ADAPTER = fileURLToPath(new URL('compare/adapter.ts', import.meta.url));
 
-export const LIMITS = '考試範圍照各版本自己的讀法：還沒接上範圍的舊版 `exam` 是 null，有生效的範圍時，和新版的差異會包含考前提高的保持率與考前的排序。設定照備份裡的 data.json，各版本自己的讀法；還沒有設定頁的舊版用預設（每日 30 分鐘、保持率 0.8），改過設定時，和新版的差異會包含設定本身。兩邊都沒有濾網。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
+export const LIMITS = '考試範圍照各版本自己的讀法：還沒接上範圍的舊版 `exam` 是 null，有生效的範圍時，和新版的差異會包含考前提高的保持率與考前的排序。設定照備份裡的設定檔與 data.json，各版本自己的讀法（有設定檔的版本當成沒確認過設定檔的一台：設定檔沒有就讀 data.json；0.4.0 只讀 data.json）；還沒有設定頁的舊版用預設（每日 30 分鐘、保持率 0.8），改過設定時，和新版的差異會包含設定本身。兩邊都沒有濾網。到期日固定現有紀錄，不模擬之後的作答。今天的份裡每張的「題目」是那一張單獨出時的第一題，不是整段複習的出題順序。兩邊各照自己那一版的規則算：舊版沒有的判斷寫在〈讀取閘門〉，不要求舊版跑新版的規則。';
 
 export interface CompareOptions {
   /** 凍結的輸入：1-1 的備份檔。 */
@@ -64,7 +65,7 @@ async function side(root: string, ref: string, input: string, work: string, inst
   }
 }
 
-/** 兩個版本共用的凍結輸入：備份的開始時間當「現在」、`Essence Cards/` 底下的文字檔、外掛的 data.json 的原文。 */
+/** 兩個版本共用的凍結輸入：備份的開始時間當「現在」、`Essence Cards/` 底下的文字檔、外掛的 data.json 的原文、設定檔的位元組。 */
 export function adapterInput(backup: Extract<ReturnType<typeof openBackup>, { ok: true }>['value']): AdapterInput {
   const started = parseTime(backup.manifest.started)!;
   const decoder = new TextDecoder();
@@ -74,7 +75,12 @@ export function adapterInput(backup: Extract<ReturnType<typeof openBackup>, { ok
   }
   const data = backup.files.get(backup.manifest.vault.config + '/' + PLUGIN_DATA);
   // 保留 BOM：Obsidian 讀 data.json 時不拿掉它，JSON.parse 會失敗；交給各版本照實際的讀法（§2-9）。
-  return { now: started.at, offset: started.offset, files, ...data ? { data: new TextDecoder('utf-8', { ignoreBOM: true }).decode(data) } : {} };
+  const settings = backup.files.get(SETTINGS_FILE);
+  return {
+    now: started.at, offset: started.offset, files,
+    ...data ? { data: new TextDecoder('utf-8', { ignoreBOM: true }).decode(data) } : {},
+    ...settings ? { settingsFile: Buffer.from(settings).toString('base64') } : {},
+  };
 }
 
 /**

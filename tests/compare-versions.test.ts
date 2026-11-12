@@ -771,6 +771,40 @@ void test('凍結的輸入：備份裡的 data.json 原文帶過去；沒有就�
   assert.equal('data' in await take({}), false);
 });
 
+// 設定檔（tasks/settings-vault-file.md）：有設定檔讀法的版本照它自己的讀法疊上 data.json；比較是沒確認過設定檔的一台。
+const SETTINGS = 'Essence Cards/設定.json';
+const base64 = (text: string): string => Buffer.from(text).toString('base64');
+
+void test('比較帶設定檔：照那一版的讀法，legacy 和 data.json 不同的項目用 data.json；設定檔讀不懂是預設；0.4.0 只看 data.json', async t => {
+  const input = { now: NOW, offset: 480, files: manyGoals };
+  const plain = shareOf(await snapshot(root, input));
+  const capped = shareOf(await snapshot(root, { ...input, data: '{"capMinutes":5}' }));
+  const withFile = async (settings: string, data: string): Promise<number> => shareOf(await snapshot(root, { ...input, settingsFile: base64(settings), data })).length;
+  assert.equal(await withFile('{"capMinutes":5,"legacy":null}', '{"capMinutes":60}'), capped.length);
+  assert.equal(await withFile('{"capMinutes":5,"legacy":{"capMinutes":30}}', '{"capMinutes":30}'), capped.length);
+  assert.equal(await withFile('{"capMinutes":60,"legacy":{"capMinutes":30}}', '{"capMinutes":5}'), capped.length);
+  assert.equal(await withFile('{壞掉', '{"capMinutes":5}'), plain.length);
+  const old = await deployed(t, 'v0.4.0');
+  const oldPlain = shareOf(await snapshot(old, input)).length;
+  assert.equal(shareOf(await snapshot(old, { ...input, settingsFile: base64('{"capMinutes":5,"legacy":null}') })).length, oldPlain);
+  assert.ok(shareOf(await snapshot(old, { ...input, settingsFile: base64('{"capMinutes":60,"legacy":null}'), data: '{"capMinutes":5}' })).length < oldPlain);
+});
+
+void test('凍結的輸入：備份裡的設定檔照位元組帶過去（base64，BOM 也留著），不算進卡組與紀錄；沒有就不帶', async t => {
+  const body = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('{"capMinutes":5}')]);
+  const take = async (extra: Record<string, string | Uint8Array>): Promise<AdapterInput> => {
+    const vault = await makeVault(t, { ...files, ...extra });
+    const { path } = await backupVault({ vault, to: await tempFolder(t), by: 'backup', now: () => NOW, offset: () => 480 });
+    const opened = openBackup(new Uint8Array(await readFile(path)));
+    assert.ok(opened.ok);
+    return adapterInput(opened.value);
+  };
+  const input = await take({ [SETTINGS]: body });
+  assert.equal(input.settingsFile, Buffer.from(body).toString('base64'));
+  assert.equal(SETTINGS in input.files, false);
+  assert.equal('settingsFile' in await take({}), false);
+});
+
 void test('data.json 開頭有 BOM：和 Obsidian 的 loadData 一樣讀不懂，從備份的位元組走到比較都是預設（L2 F5）', async t => {
   const body = new TextEncoder().encode('{"capMinutes":5}');
   const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...body]);
