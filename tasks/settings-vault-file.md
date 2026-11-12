@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔（給 Claude，本機執行）
 
-狀態：實作中（2026-11-12）：分支上 §2～§4 與格式查核的修正做完、V1 通過；等 iPhone 的 V2、V3，之後 V4、D-ID、L2
+狀態：等 L2（2026-11-12）：分支上做完，格式查核已處理，V1～V4 通過，選 A，寫成 [D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)；[L2 審查請求](settings-vault-file-l2.md)等 Codex，之後使用者同意才合併
 
 遵守 repo 根目錄的 `AGENTS.md`。建議模型與推理等級：**Opus、高**（這份說明是規劃，xhigh）。改的是寫進使用者檔案的格式、更新與備份還原、跨模組的接線，屬於高風險範圍：合併前做 Codex L2（[quality.md](../docs/agents/quality.md#高風險範圍要做-l2)）。
 
@@ -134,8 +134,8 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 | Obsidian 的 vault 索引有 `Essence Cards/` 底下的 `.json`，新增、修改、刪除、改名都會送事件 | 開發命令 `record-start`／`record-stop` 之間，用 Node 與 PowerShell 在 Obsidian 外面建、改、改名、刪 `Essence Cards/探針 *.json`（`0.4.0+f645c66`，2026-11-12 19:48、19:49） | Windows、Obsidian 1.15.0 | **確認**：建、改、刪各有 vault 的 `create`／`modify`／`delete`，`Files.watch` 都通知到那個路徑；外面的改名收到的是新路徑的 `create` 加舊路徑的 `delete`（不是 `rename`），兩個路徑都通知到，§2 的重讀照樣觸發 |
 | `vault.process` 與 `vault.create` 寫 `.json` 是原地寫，和 `saveData` 同一種 | 讀 `obsidian-1.15.0.asar` 的 `app.js`（只讀不執行） | 同上 | **確認**：電腦版的轉接器 `write`（`vault.create` 與 `saveData` 經 `writeJson` 都走這裡）與 `process` 最後都是 `fsPromises.writeFile(路徑, 文字, "utf8")`，沒有暫存檔再改名；手機版的轉接器兩者都是同一個 `fs.write`。差別只有 `saveData` 另外帶 `mtime`，寫完用 `utimes` 設時間，`process` 不設 |
 | `app.loadLocalStorage` 每個 vault 分開、重開 Obsidian 還在 | 現有證據：裝置碼存在同一處，重開後不變（`src/obsidian/device.ts`，2026-11 兩台的紀錄檔名一直沒換） | Windows、iPhone | 確認 |
-| 一般資料夾裡電腦原地重寫的檔不會被改名 | 討論稿 H（`.md`，10 次 0 次）；`.json` 是 V1（每 5 秒看一次 `Essence Cards/` 底下的 `.json`） | Windows、Obsidian 1.15.0 開著 | **確認（Windows）**：設定檔 41 分鐘內寫 14 次，0 次改名、原路徑一直在，之後再看 10 分鐘沒變（〈結果〉）。iPhone 那邊見 V2、V3 |
-| iPhone 的 vault 索引有 `.json`、會送事件 | V2 | iPhone、Obsidian 1.15.0 | 待驗 |
+| 一般資料夾裡電腦原地重寫的檔不會被改名 | 討論稿 H（`.md`，10 次 0 次）；`.json` 是 V1（每 5 秒看一次 `Essence Cards/` 底下的 `.json`） | Windows、Obsidian 1.15.0 開著 | **確認（Windows）**：設定檔 41 分鐘內寫 14 次，0 次改名、原路徑一直在，之後再看 10 分鐘沒變（〈結果〉）。iPhone 寫過之後見 V2～V4 |
+| iPhone 的 vault 索引有 `.json`、會送事件 | V2：iPhone 停在入口不切走，電腦改上限 | iPhone、Obsidian 1.15.0、`0.4.0+e9d2d50` | **確認**：電腦 21:33:37 寫入，iPhone 21:34:00 寫下採用的設定行，入口沒切走就變成上限 5 分鐘的份（〈結果〉） |
 
 ## 8. 驗證：決定 A 或 B2
 
@@ -146,7 +146,7 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 | V3 | 使用者（iPhone） | iPhone 開飛航模式改一項，電腦改另一項，iPhone 再連線 | 有副本、原路徑不見、兩台回預設（只丟一項可以接受，syntax §10）。兩台顯示不同時，先分辨是還沒同步完、讀到舊檔，還是確定丟掉，再判定 |
 | V4 | Claude（Windows，V3 之後） | 電腦再改 10 次、間隔 4 分鐘 | 有任何一次被改名 |
 
-V1：**通過**（2026-11-12，細節見〈結果〉）。
+V1～V4：**都通過**（2026-11-12，細節見〈結果〉），選 A。
 
 都過也不代表永遠不會出事；§3 讓出事時看得出來。
 
@@ -183,10 +183,10 @@ V1：**通過**（2026-11-12，細節見〈結果〉）。
 
 命令列的工具（§4 最後一點）：
 
-- `tools/restore.ts`：和外掛一樣寫到設定檔，內容相同（以現在的設定檔為底換五個欄位，`legacy` 照 save 的規則），報告列五個欄位的差異；現在的設定資料夾確定不了時讀不到 `data.json`，`legacy` 沿用原本的；不寫 `data.json`。
+- `tools/restore.ts`：和外掛一樣寫到設定檔，內容相同（以現在的設定檔為底換五個欄位，`legacy` 是寫入當下的 `data.json`），報告列五個欄位的差異；現在的設定資料夾確定不了時讀不到 `data.json`，`legacy` 是 `null`；不寫 `data.json`。
 - `tools/backup.ts`：不用改，設定檔在 `Essence Cards/` 底下照樣進備份，`data.json` 也照舊備。
 - `tools/compare-versions.ts`：凍結的輸入多帶設定檔的位元組；有設定檔讀法的版本當成沒確認過設定檔的一台去讀，`0.4.0` 只讀 `data.json`。
-- `tools/update-vault.ts`：不用改，`--check` 之後的變動核對本來就包含 `Essence Cards/` 底下的每個檔，設定檔改了也要求重跑；錯誤訊息仍寫「卡組或 data.json」，意思包含在「卡組」那一側，不另改。
+- `tools/update-vault.ts`：不用改，`--check` 之後的變動核對本來就包含 `Essence Cards/` 底下的每個檔，設定檔改了也要求重跑；錯誤訊息原本寫「卡組或 data.json」，格式查核之後改成「卡組、設定檔或 data.json」（`1f5b135`）。
 
 測試 vault 的實測（開發版 `0.4.0+f645c66`，Obsidian 1.15.0，只開著測試 vault）：
 
@@ -196,4 +196,9 @@ V1：**通過**（2026-11-12，細節見〈結果〉）。
   - 外部原地改成 75：外掛收到通知重讀，上限是 75。
   - 立即備份（含上限 75 的設定檔）→ 改成 20 → 還原視窗勾「設定」：差異寫「每日時間上限 20 分鐘 → 75 分鐘」，結果「已還原 設定」，上限回到 75，重新比對沒有差異。
   - V1 的建置在格式查核的修正之前；修正只改 `legacy` 與寫前的核對，沒改寫入的方法與路徑，V1 的結論不受影響。V2 起用修正後的建置。
+- **V2、V3**（開發版 `0.4.0+e9d2d50`，iPhone 與電腦都是 Obsidian 1.15.0；電腦每 5 秒看一次 `Essence Cards/` 底下的 `.json`、設定檔內容、外掛資料夾的 `data.json` 與 iPhone 的月檔）：**通過**。
+  - 換版：iPhone 完全關掉再開，21:32:13 寫了版本行 `0.4.0+e9d2d50`，設定頁是電腦當時的上限 75。
+  - V2：iPhone 停在入口不切走，電腦 21:33:37 用設定頁同一條存檔改成 5 分鐘（原地寫）。iPhone 21:34:00 寫下採用的設定行（上限 5），入口沒切走就變成 0/19（英文 0/5、國語 0/1、自然 0/1、其他 0/12，和電腦同時算的相同），設定頁是 5 分鐘（使用者回報）。
+  - V3：iPhone 開飛航模式，21:36:38 把保持率改成 90%（這台的月檔與設定檔都是這個時間）；電腦 21:38:00 把上限改成 45。iPhone 關掉飛航模式後，電腦的設定檔 21:38:31 前後換成 iPhone 那一份（上限 5、保持率 0.9，檔案時間仍是 21:36:38），電腦的外掛 21:38:31 重讀並寫下上限 5、保持率 0.9。兩台的設定頁都是 5 分鐘、90%；電腦改的 45 丟掉，照 syntax §10 一份勝出，可以接受。勝出的是後上傳的那份，不是後修改的那份。全程沒有副本、原路徑一直在，電腦的外掛資料夾沒有 `data.json`。
+- **V4**（21:39～22:26，同一個建置，V3 之後設定檔是 iPhone 寫的那一份）：**通過**。電腦用設定頁同一條存檔改上限 10 次、間隔 4 分鐘（21:39:54～22:15:55），每次都回 `saved`、原地寫（設定檔的時間跟著每次寫入），最後一次之後再看 10 分鐘。全程 `Essence Cards/` 底下只有 `設定.json`，原路徑一直在，電腦的外掛資料夾沒有 `data.json`。iPhone 前段還開著，21:40:16、21:48:35 各寫下採用的設定行（上限 10、20）。
 - 第一次改設定（19:50:46）建立了 `Essence Cards/設定.json`，內容 `{"capMinutes": 31, "legacy": null}`（測試 vault 的 `data.json` 早已被 iCloud 改名，`legacy` 照規則是 `null`）。31 不是設定頁的選項，讀回是預設的 30，換成選項裡的值重跑 V1；這一筆不影響 V1 的判斷，算多一次寫入。
