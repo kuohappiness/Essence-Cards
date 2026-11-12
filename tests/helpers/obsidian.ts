@@ -75,6 +75,7 @@ export class FakeSetting {
   dropdown: FakeDropdown | null = null;
   toggle: FakeToggle | null = null;
   readonly extras: FakeButton[] = [];
+  readonly buttons: FakeButton[] = [];
   constructor(container: FakeEl) { container.rows.push(this); }
   setName(name: string) { this.name = name; return this; }
   setDesc(desc: string) { this.desc = desc; return this; }
@@ -82,7 +83,7 @@ export class FakeSetting {
   addDropdown(build: (dropdown: FakeDropdown) => unknown) { build(this.dropdown = new FakeDropdown()); return this; }
   addToggle(build: (toggle: FakeToggle) => unknown) { build(this.toggle = new FakeToggle()); return this; }
   addExtraButton(build: (button: FakeButton) => unknown) { const button = new FakeButton(); this.extras.push(button); build(button); return this; }
-  addButton(build: (button: FakeButton) => unknown) { build(new FakeButton()); return this; }
+  addButton(build: (button: FakeButton) => unknown) { const button = new FakeButton(); this.buttons.push(button); build(button); return this; }
   addText(build: (text: { setPlaceholder(): unknown; onChange(): unknown }) => unknown) { const text = { setPlaceholder: () => text, onChange: () => text }; build(text); return this; }
 }
 

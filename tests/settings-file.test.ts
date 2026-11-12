@@ -8,12 +8,15 @@ import type { SettingsChange } from '../src/core/settings/index.ts';
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 /**
- * 替身：設定檔是文字（null 不存在、Error 讀不到）；data.json 照 Obsidian 的 loadData（null 不存在、undefined 讀不到）。
- * 只有 readBytes、modify、loadData 三個口：新版沒有寫 data.json 的路。
+ * 替身：設定檔是文字（null 不存在、Error 讀不到）；data.json 照 Obsidian 的 loadData（null 不存在、undefined 讀不到）；
+ * confirmed 是這台的 localStorage 那一筆（§3），missing 是「設定檔讀不到」那一列換了幾次。沒有寫 data.json 的口。
  */
-function vault(init: { file?: string | null | Error; data?: unknown } = {}) {
-  const state = { file: init.file ?? null, data: 'data' in init ? init.data : null, writes: 0 };
+function vault(init: { file?: string | null | Error; data?: unknown; confirmed?: unknown } = {}) {
+  const state = { file: init.file ?? null, data: 'data' in init ? init.data : null, writes: 0, confirmed: (init.confirmed ?? null) as unknown, confirms: 0, missing: 0 };
   const settingsFile = createSettingsFile({
+    confirmed: () => state.confirmed,
+    confirm: fields => { state.confirmed = JSON.parse(JSON.stringify(fields)) as unknown; state.confirms++; },
+    onMissing: () => { state.missing++; },
     readBytes: path => {
       assert.equal(path, SETTINGS_FILE);
       return state.file instanceof Error ? Promise.reject(state.file) : Promise.resolve(state.file === null ? null : bytes(state.file));
@@ -27,9 +30,9 @@ function vault(init: { file?: string | null | Error; data?: unknown } = {}) {
     },
     loadData: () => Promise.resolve(state.data === undefined ? undefined : JSON.parse(JSON.stringify(state.data))),
   });
-  const store = createSettingsStore({ load: () => settingsFile.load(), save: data => settingsFile.save(data), today: () => '2026-11-12' });
+  const store = createSettingsStore({ load: () => settingsFile.load(), save: data => settingsFile.save(data), seed: () => settingsFile.confirmed(), today: () => '2026-11-12' });
   const json = (): unknown => typeof state.file === 'string' ? JSON.parse(state.file) : state.file;
-  return { state, store, json };
+  return { state, store, json, settingsFile };
 }
 const cap = (value: number | null): SettingsChange => ({ key: 'capMinutes', value });
 
@@ -209,4 +212,93 @@ void test('重讀的路徑：設定檔（含大小寫、正規化不同），其
   assert.equal(isSettingsPath('essence cards/設定.JSON'), true);
   assert.equal(isSettingsPath(SETTINGS_FILE.normalize('NFD')), true);
   for (const path of ['Essence Cards/設定.json.bak', 'Essence Cards/紀錄/設定.json', '設定.json', 'Essence Cards/設定 2.json', '.obsidian/plugins/essence-cards/data.json']) assert.equal(isSettingsPath(path), false, path);
+});
+
+// 設定檔不見時（§3）：用這台上次確認的值，不回預設、不寫；家長按「重新建立」才寫。
+
+void test('讀到設定檔就記下這台確認過的五個欄位（疊完的，不含 legacy 與不認得的）', async () => {
+  const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, retention: 0.9, foo: 1, legacy: { capMinutes: 30, retention: 0.8 } }), data: { capMinutes: 15, retention: 0.8 } });
+  await store.first();
+  assert.deepEqual(state.confirmed, { capMinutes: 15, retention: 0.9 });
+  assert.deepEqual(settingsFile.confirmed(), { capMinutes: 15, retention: 0.9 });
+  assert.equal(settingsFile.missing(), false);
+  await store.reload();
+  assert.equal(state.confirms, 1, '內容沒變不再寫一次');
+});
+
+void test('沒有設定檔時照 data.json 讀，不記確認', async () => {
+  const { state, store, settingsFile } = vault({ data: { capMinutes: 45 } });
+  await store.first();
+  assert.equal(state.confirmed, null);
+  assert.equal(settingsFile.missing(), false);
+});
+
+void test('確認過、設定檔不見：用確認過的值、known 是 false；改設定不寫（§6-7）', async () => {
+  const { state, store, settingsFile } = vault({ data: { capMinutes: 15 }, confirmed: { capMinutes: 45, semester: '國二上', semesterSetOn: '2026-09-15' } });
+  const first = await store.first();
+  assert.equal(first.settings.capMinutes, 45);
+  assert.equal(first.semester?.value, '國二上');
+  assert.equal(first.known, false);
+  assert.equal(settingsFile.missing(), true);
+  assert.equal(state.missing, 1);
+  assert.equal(await store.change(cap(60)), 'unreadable');
+  assert.equal(state.file, null);
+  assert.equal(state.writes, 0);
+});
+
+void test('重新建立：寫出確認過的值加 legacy，之後 known 是 true、那一列消失（§6-7）', async () => {
+  const { state, store, json, settingsFile } = vault({ data: { capMinutes: 15 }, confirmed: { capMinutes: 45, retention: 0.9 } });
+  await store.first();
+  assert.equal(await settingsFile.recreate(store), 'saved');
+  assert.deepEqual(json(), { capMinutes: 45, retention: 0.9, legacy: { capMinutes: 15 } });
+  assert.equal(store.value().known, true);
+  assert.equal(store.value().settings.capMinutes, 45);
+  assert.equal(settingsFile.missing(), false);
+  assert.equal(state.missing, 2);
+  assert.equal(await store.change(cap(60)), 'saved');
+});
+
+void test('重新建立時設定檔已經回來：不寫，回 changed（§6-7）', async () => {
+  const { state, store, settingsFile } = vault({ confirmed: { capMinutes: 45 } });
+  await store.first();
+  state.file = JSON.stringify({ capMinutes: 75, legacy: null });
+  assert.equal(await settingsFile.recreate(store), 'changed');
+  assert.equal(state.writes, 0);
+  await store.reload();
+  assert.equal(store.value().settings.capMinutes, 75);
+  assert.equal(settingsFile.missing(), false);
+});
+
+void test('這次見過、之後不見：值不變、那一列出現；回來就消失', async () => {
+  const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, legacy: null }) });
+  await store.first();
+  const file = state.file;
+  state.file = null;
+  await store.reload();
+  assert.equal(store.value().settings.capMinutes, 45);
+  assert.equal(settingsFile.missing(), true);
+  assert.equal(state.missing, 1);
+  state.file = file;
+  await store.reload();
+  assert.equal(settingsFile.missing(), false);
+  assert.equal(state.missing, 2);
+});
+
+void test('設定檔讀不到（丟錯）：那一列不變', async () => {
+  const { state, store, settingsFile } = vault({ file: Error('EPERM'), confirmed: { capMinutes: 45 } });
+  await store.first();
+  assert.equal(settingsFile.missing(), false);
+  assert.equal(state.missing, 0);
+  assert.equal(store.value().settings.capMinutes, 45, '還是用確認過的值');
+});
+
+void test('確認過的那一筆讀不懂：當成沒確認過', async () => {
+  for (const confirmed of ['x', [1], 3]) {
+    const { store, settingsFile } = vault({ data: { capMinutes: 15 }, confirmed });
+    await store.first();
+    assert.equal(settingsFile.confirmed(), null);
+    assert.equal(settingsFile.missing(), false);
+    assert.equal(store.value().settings.capMinutes, 15);
+    assert.equal(store.value().known, true);
+  }
 });

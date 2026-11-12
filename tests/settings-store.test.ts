@@ -225,6 +225,32 @@ void test('第一次讀不到或 2 秒內沒回來：預設值、known 是 false
   assert.deepEqual(changes, [true]);
 });
 
+void test('seed（這台上次確認的設定）：讀不到或 2 秒內沒回來時用它、known 是 false；讀到就換掉（tasks/settings-vault-file.md §3）', async t => {
+  const bad = disk(null);
+  bad.state.content = undefined;
+  const store = createSettingsStore({ ...bad.options, seed: () => ({ capMinutes: 45, semester: '國二上', semesterSetOn: '2026-09-15' }) });
+  assert.equal(store.value().settings.capMinutes, 30, 'first() 之前不讀 seed');
+  const first = await store.first();
+  assert.equal(first.settings.capMinutes, 45);
+  assert.equal(first.known, false);
+  assert.equal(store.semester(), '國二上');
+  assert.deepEqual(store.saved(), ['capMinutes', 'semester']);
+  assert.equal(await store.change(cap(60)), 'unreadable');
+  assert.equal(bad.state.saves.length, 0);
+
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = deferred<unknown>();
+  const slow = createSettingsStore({ ...bad.options, load: () => pending.promise, seed: () => ({ capMinutes: 45 }) });
+  const first2 = slow.first();
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  t.mock.timers.tick(2000);
+  assert.deepEqual([(await first2).settings.capMinutes, slow.value().known], [45, false]);
+  pending.resolve({ retention: 0.9 });
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  await new Promise<void>(resolve => { setImmediate(resolve); });
+  assert.deepEqual([slow.value().settings.capMinutes, slow.value().settings.retention, slow.value().known], [30, 0.9, true]);
+});
+
 void test('重讀：內容相同不通知；值變了通知；只補上等於預設的欄位也通知（恢復預設要出現）', async () => {
   const { state, options } = disk({ capMinutes: 45 });
   const store = await started(options);

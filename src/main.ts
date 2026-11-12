@@ -64,6 +64,8 @@ function safely<T>(get: () => T, fallback: T): T {
 /** 「版本」命令先等排隊的紀錄寫完（寫入成功以 flush 為準），最多等這麼久。 */
 const VERSION_WAIT = 2000;
 /** 設定沒有存下（tasks/settings-page.md §2-6）。 */
+/** 這台上次確認的設定（tasks/settings-vault-file.md §3）：vault 專用的 localStorage 的鍵。 */
+const SETTINGS_CONFIRMED = 'essence-cards-settings-confirmed';
 const SETTINGS_NOTICE: Record<Exclude<SaveResult, 'saved'>, string> = {
   unreadable: 'Essence Cards：設定暫時讀不到，這次沒有存下，請再試一次',
   failed: 'Essence Cards：設定暫時寫不進去，這次沒有存下，請再試一次',
@@ -134,6 +136,7 @@ export default class EssenceCardsPlugin extends Plugin {
   readonly store = createSettingsStore({
     load: () => this.settingsFile ? this.settingsFile.load() : Promise.resolve(undefined),
     save: data => this.settingsFile ? this.settingsFile.save(data) : Promise.reject(Error('設定檔還沒接上')),
+    seed: () => this.settingsFile?.confirmed() ?? null,
     today: todayText,
     onError: error => { this.fail('ui', error); },
   });
@@ -151,10 +154,15 @@ export default class EssenceCardsPlugin extends Plugin {
     // 系統資料夾正在搬回時，碰那兩處的讀寫在真正開始之前等（tasks/system-folder-guard.md §1-8）；防呆在 layout ready 才建立。
     let files: Files = createObsidianFiles(this.app, { pause: (path, folder) => this.guard?.pause(path, folder) ?? null });
     // 每次都拿當下的 files：開發版在下面換成計數的那一份。舊的 data.json 只讀，不寫（tasks/settings-vault-file.md §1）。
+    // 這台確認過的設定存在 vault 專用的 localStorage，和裝置碼同一種（§3）。
     this.settingsFile = createSettingsFile({
       readBytes: path => files.readBytes(path),
       modify: (path, edit) => files.modify(path, edit),
       loadData: () => this.loadData() as Promise<unknown>,
+      confirmed: () => this.app.loadLocalStorage(SETTINGS_CONFIRMED) as unknown,
+      confirm: fields => { this.app.saveLocalStorage(SETTINGS_CONFIRMED, fields); },
+      onMissing: () => { this.settingTab?.refresh(); },
+      onError: error => { this.fail('ui', error); },
     });
     // 錯誤紀錄等 layout ready 才讀寫：之前 vault 的索引還不完整，數不到當月的行數（D-155 第 3 點）。
     const layoutReady = new Promise<void>(resolve => { this.app.workspace.onLayoutReady(resolve); });
@@ -174,6 +182,8 @@ export default class EssenceCardsPlugin extends Plugin {
     this.settingTab = wireSettings({
       plugin: this, backup: () => this.backup, backupError: () => this.backupError, previewChanged: () => { this.deckActions?.refresh(); },
       settings: this.store, today: todayText,
+      settingsMissing: () => this.settingsFile?.missing() ?? false,
+      recreateSettings: () => this.settingsFile ? this.settingsFile.recreate(this.store) : Promise.resolve('unreadable'),
       openRestore: () => { void this.openRestore(); },
       saveFailed: result => { if (this.unloaded) return; new Notice(SETTINGS_NOTICE[result]); this.fail('ui', Error(SETTINGS_NOTICE[result])); },
     });

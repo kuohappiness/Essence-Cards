@@ -10,6 +10,8 @@ export interface SettingsStoreOptions {
   /** 沒有檔回 null，讀不到回 undefined。 */
   load: () => Promise<unknown>;
   save: (data: unknown) => Promise<void>;
+  /** 這台上次確認的設定（tasks/settings-vault-file.md §3）：first() 時當成一開始手上的值（known 是 false），讀到才換掉；沒有是 null。 */
+  seed?: () => Record<string, unknown> | null;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）。 */
   today: () => string;
   /** onChange 的監聽者丟出錯誤（程式的錯）：不能讓隊伍卡住，交給外層記下。 */
@@ -137,6 +139,13 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     close() { closed = true; },
     async first() {
       started = true;
+      // 設定檔不見或讀得慢時，排程用這台上次確認的值，不用預設值；known 仍是 false，不寫觀察行（§3）。
+      const seed = options.seed?.() ?? null;
+      if (seed) {
+        raw = seed;
+        saved = readSaved(raw);
+        announce();
+      }
       let timer: ReturnType<typeof setTimeout> | undefined;
       const wait = new Promise<void>(resolve => { timer = setTimeout(resolve, FIRST_WAIT); });
       await Promise.race([reread(), wait]);

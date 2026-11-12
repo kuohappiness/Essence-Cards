@@ -221,6 +221,55 @@ void test('設定檔新增、修改、改名、刪除（vault 的事件）：重
   assert.equal(h.data.saves, 0);
 });
 
+/** 這台上次確認的設定（tasks/settings-vault-file.md §3）：vault 專用的 localStorage。 */
+const CONFIRMED = 'essence-cards-settings-confirmed';
+const MISSING = '設定檔讀不到：先用這台上次確認的設定。';
+
+void test('讀到設定檔就記下這台確認過；之後不見：最上面一列出現，值不變、不寫（tasks/settings-vault-file.md §3）', async t => {
+  const h = await open(t, { data: { capMinutes: 15 } });
+  assert.equal(h.storage(CONFIRMED), null, '沒有設定檔時不記');
+  h.texts.set(SETTINGS, JSON.stringify({ capMinutes: 60, foo: 1, legacy: { capMinutes: 15 } }));
+  h.vaultEvent('create', SETTINGS);
+  await settle();
+  assert.deepEqual(h.storage(CONFIRMED), { capMinutes: 60 });
+  assert.ok(!h.tab.containerEl.rows.some(row => row.desc === MISSING));
+  h.texts.delete(SETTINGS);
+  h.vaultEvent('delete', SETTINGS);
+  await settle();
+  assert.equal(h.tab.containerEl.rows[0].desc, MISSING);
+  assert.equal(h.plugin.state?.currentSettings().settings.capMinutes, 60);
+  h.row(CAP).dropdown?.choose('5');
+  await settle();
+  assert.equal(h.text(SETTINGS), undefined);
+  assert.ok(h.notices.includes('Essence Cards：設定暫時讀不到，這次沒有存下，請再試一次'), h.notices.join('、'));
+});
+
+void test('確認過、設定檔不見：用確認過的值；按「重新建立」寫出來，那一列消失（tasks/settings-vault-file.md §3）', async t => {
+  const h = await open(t, { data: { capMinutes: 15 }, localStorage: { [CONFIRMED]: { capMinutes: 45 } } });
+  const row = h.tab.containerEl.rows[0];
+  assert.equal(row.desc, MISSING);
+  assert.deepEqual(row.buttons.map(button => button.text), ['重新建立']);
+  assert.equal(h.row(CAP).dropdown?.value, '45');
+  assert.equal(h.plugin.state?.currentSettings().known, false);
+  row.buttons[0].click();
+  await settle();
+  assert.deepEqual(saved(h), { capMinutes: 45, legacy: { capMinutes: 15 } });
+  assert.equal(h.plugin.state?.currentSettings().known, true);
+  assert.ok(!h.tab.containerEl.rows.some(item => item.desc === MISSING));
+  assert.equal(h.data.saves, 0);
+});
+
+void test('重新建立時設定檔已經回來：不寫，改用回來的', async t => {
+  const h = await open(t, { localStorage: { [CONFIRMED]: { capMinutes: 45 } } });
+  const row = h.tab.containerEl.rows[0];
+  h.texts.set(SETTINGS, JSON.stringify({ capMinutes: 75, legacy: null }));
+  row.buttons[0].click();
+  await settle();
+  assert.deepEqual(saved(h), { capMinutes: 75, legacy: null });
+  assert.equal(h.row(CAP).dropdown?.value, '75');
+  assert.ok(!h.tab.containerEl.rows.some(item => item.desc === MISSING));
+});
+
 void test('外部改了 data.json：值變了才重排，內容相同不重排；打開設定頁也重讀', async t => {
   const h = await open(t, { data: { capMinutes: 45 } });
   const before = h.plugin.state?.today();

@@ -25,6 +25,11 @@ const REVIEW = {
   quiz: '小考標記',
   quizNote: '在目錄替單元或某一篇設小考日期，入口最上面會多一列。不改複習的排程。只影響這台裝置的目錄按鈕。',
 };
+/** 設定檔讀不到（tasks/settings-vault-file.md §3）：設定頁最上面一列。 */
+const MISSING = {
+  note: '設定檔讀不到：先用這台上次確認的設定。',
+  recreate: '重新建立',
+};
 const TERM = {
   section: '學期',
   semester: '目前學期',
@@ -88,6 +93,10 @@ export interface SettingsHost {
   settings: SettingsStore;
   /** 今天（`YYYY-MM-DD`，清晨 4 點換日）：選學期時記下選的那一天。 */
   today: () => string;
+  /** 這台確認過設定檔、現在它不存在（tasks/settings-vault-file.md §3）。 */
+  settingsMissing: () => boolean;
+  /** 重新建立設定檔：寫出這台上次確認的設定；檔已經回來是 changed、不寫。 */
+  recreateSettings: () => Promise<SaveResult | 'changed'>;
   /** 打開還原的視窗（tasks/plugin-restore.md §1）。 */
   openRestore: () => void;
   /** 這次沒有存下：提示並記下（tasks/settings-page.md §2-6）。 */
@@ -131,6 +140,9 @@ class EssenceSettingTab extends PluginSettingTab {
   private draw(): void {
     const { containerEl } = this;
     containerEl.empty();
+    if (this.host.settingsMissing()) {
+      new Setting(containerEl).setDesc(MISSING.note).addButton(button => button.setButtonText(MISSING.recreate).onClick(() => { void this.recreate(); }));
+    }
     this.review(containerEl);
     this.term(containerEl);
     new Setting(containerEl).setName(TEXTS.section).setHeading();
@@ -153,6 +165,15 @@ class EssenceSettingTab extends PluginSettingTab {
   private async save(change: SettingsChange): Promise<void> {
     const result = await this.host.settings.change(change);
     if (result === 'saved') return;
+    this.host.saveFailed(result);
+    this.refresh();
+  }
+
+  /** 重新建立設定檔（tasks/settings-vault-file.md §3）：寫好之後由 store 的通知重畫；檔已經回來就重讀，那一列跟著消失。 */
+  private async recreate(): Promise<void> {
+    const result = await this.host.recreateSettings();
+    if (result === 'saved') return;
+    if (result === 'changed') { await this.host.settings.reload(); return; }
     this.host.saveFailed(result);
     this.refresh();
   }
