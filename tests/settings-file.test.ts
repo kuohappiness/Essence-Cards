@@ -372,6 +372,28 @@ void test('重新建立：比對之後、寫入之前設定檔才回來：不寫
   assert.equal(store.value().settings.capMinutes, 75);
 });
 
+// L2 第二輪的 R8：按下重新建立時前面還有一次重讀在等；它採用了回來的檔、記下新的值，檔接著又不見。輪到重新建立時，寫的是那時這台確認的值。
+void test('重新建立：排隊時前面的重讀記下新的值，輪到時用新的值', async () => {
+  const flush = async (): Promise<void> => { for (let i = 0; i < 8; i++) await new Promise<void>(resolve => { setImmediate(resolve); }); };
+  let release = (): void => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const { state, store, json, settingsFile } = vault({ data: { capMinutes: 15 }, confirmed: { capMinutes: 45 }, hold: n => n === 1 ? held : undefined });
+  await store.first();
+  assert.equal(settingsFile.missing(), true);
+  state.file = JSON.stringify({ capMinutes: 75, legacy: { capMinutes: 15 } });
+  const reread = store.reload();
+  await flush();
+  const recreated = settingsFile.recreate(store);
+  state.file = null;
+  release();
+  await reread;
+  assert.deepEqual(state.confirmed, { capMinutes: 75 }, '前面的重讀採用了回來的檔');
+  assert.equal(await recreated, 'saved');
+  assert.deepEqual(json(), { capMinutes: 75, legacy: { capMinutes: 15 } });
+  assert.deepEqual(state.confirmed, { capMinutes: 75 });
+  assert.equal(store.value().settings.capMinutes, 75);
+});
+
 void test('還原：比對之後、寫入之前設定檔被改：不寫，回 changed；開頭有 BOM 的檔照樣比得到相同', async () => {
   for (const bom of ['', '﻿']) {
     const seen = bom + JSON.stringify({ capMinutes: 30, legacy: null });

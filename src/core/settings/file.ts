@@ -149,7 +149,7 @@ export interface SettingsFile {
   adopted(raw: Readonly<Record<string, unknown>>): void;
   /** 這台確認過設定檔、最近一次讀時它不存在：設定頁顯示「重新建立」（§3）。 */
   missing(): boolean;
-  /** 重新建立（§3）：走 store 的隊伍，再讀一次還是不存在才寫，內容是確認過的五個欄位加 legacy；檔已經回來回 changed、不寫。 */
+  /** 重新建立（§3）：走 store 的隊伍，再讀一次還是不存在才寫，內容是輪到時這台確認的五個欄位加 legacy；檔已經回來回 changed、不寫。 */
   recreate(store: Pick<SettingsStore, 'restore'>): ReturnType<SettingsStore['restore']>;
 }
 
@@ -202,10 +202,15 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
       if (fromFile.has(raw)) remember(fieldsOf(raw));
     },
     recreate(store) {
-      const fields = confirmed();
-      if (fields === null) return Promise.resolve('unreadable');
+      if (confirmed() === null) return Promise.resolve('unreadable');
       // 比對時不存在就以空的當底（只寫確認過的五個欄位）；回來了就不寫，寫入那一刻才回來也一樣（L2 的 R2）。讀不到丟錯，store 回 unreadable。
-      return store.restore(fields, async () => await io.readBytes(SETTINGS_FILE) === null ? { raw: {}, expect: null } : null);
+      // 確認的值輪到時才取（L2 第二輪的 R8）：排隊時前面的重讀可能採用了新的檔、記下新的值，按下去時的那份已經舊了。
+      return store.restore({}, async () => {
+        if (await io.readBytes(SETTINGS_FILE) !== null) return null;
+        const values = confirmed();
+        if (values === null) throw Error('這台沒有確認過的設定');
+        return { raw: {}, expect: null, values };
+      });
     },
     async save(next, check) {
       if (!isObject(next)) throw Error('設定要是 JSON 物件');

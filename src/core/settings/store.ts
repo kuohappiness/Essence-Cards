@@ -19,6 +19,8 @@ export class SettingsChanged extends Error {
 export interface RestoreBase extends WriteCheck {
   /** 當底的內容：比對時檔不在或讀不懂是空物件。 */
   raw: Record<string, unknown>;
+  /** 要寫的值，輪到時才決定（重新建立用輪到時這台確認的值，L2 第二輪的 R8）；沒給是交給 restore 的 backup。 */
+  values?: Record<string, unknown>;
 }
 /** restore 交給 save、寫之前要再比的（L2 的 R2、第二輪的 R7）。 */
 export interface WriteCheck {
@@ -62,7 +64,8 @@ export interface SettingsStore {
   /**
    * 還原（tasks/plugin-restore.md §4）：同一條隊伍，認得的欄位換成 backup 的值，不認得的保留。base 在輪到時讀一次並核對：
    * 回傳當底的內容與比對時的原文；回 null 是比對之後改過，不寫；丟錯是讀不到。核對和當底是同一次讀到的（L2 的 R4）。
-   * 寫入那一刻檔已經不是那段原文也是 changed，沒寫（設定檔 L2 的 R2）。first() 之前回 unreadable。
+   * 寫入那一刻檔已經不是那段原文也是 changed，沒寫（設定檔 L2 的 R2）。base 回的 values 取代 backup，寫入與讀回核對都用它（第二輪的 R8）。
+   * first() 之前回 unreadable。
    */
   restore(backup: Readonly<Record<string, unknown>>, base: () => Promise<RestoreBase | null>): Promise<RestoreSettings>;
   /** 外掛停用：還沒開始的讀寫不做，已經送出的寫入做完但不核對；存檔都回 failed，也不再通知。 */
@@ -234,7 +237,8 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           if (closed) { report('failed'); return; }
           if (now === null) { report('changed'); return; }
           // 不在這裡限時（L2 的 R11）：這裡回 failed 之後寫入還在路上，外面會以為確定沒寫。逾時由 applyRestore 判定，算結果未定。
-          try { await options.save(restoreSaved(now.raw, backup), now); } catch (error) {
+          const values = now.values ?? backup;
+          try { await options.save(restoreSaved(now.raw, values), now); } catch (error) {
             report(error instanceof SettingsChanged ? 'changed' : 'failed');
             return;
           }
@@ -242,7 +246,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
           const back = await read();
           if (closed || !back.ok || back.absent) { report('failed'); return; }
           adopt(back);
-          report(sameSaved(back.raw, backup) ? 'saved' : 'failed');
+          report(sameSaved(back.raw, values) ? 'saved' : 'failed');
         });
       });
     },
