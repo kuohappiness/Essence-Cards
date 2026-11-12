@@ -358,19 +358,53 @@ void test('重新建立時設定檔已經回來：不寫，回 changed（§6-7�
   assert.equal(settingsFile.missing(), false);
 });
 
-void test('這次見過、之後不見：值不變、那一列出現；回來就消失', async () => {
+// L2 的 R1：用到一半不見和開啟時就不在一樣，known 是 false（不寫設定的觀察行），回來才變回 true。
+void test('這次見過、之後不見：值不變、known 變 false、那一列出現；回來就消失、known 變回 true', async () => {
   const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, legacy: null }) });
+  const told: boolean[] = [];
+  store.onChange(value => { told.push(value.known); });
   await store.first();
+  assert.equal(store.value().known, true);
   const file = state.file;
   state.file = null;
   await store.reload();
   assert.equal(store.value().settings.capMinutes, 45);
+  assert.equal(store.value().known, false);
   assert.equal(settingsFile.missing(), true);
   assert.equal(state.missing, 1);
+  assert.equal(await store.change(cap(60)), 'unreadable');
+  assert.equal(state.writes, 0);
   state.file = file;
   await store.reload();
+  assert.equal(store.value().known, true);
   assert.equal(settingsFile.missing(), false);
   assert.equal(state.missing, 2);
+  assert.deepEqual(told, [true, false, true]);
+});
+
+void test('改設定時才發現不見：回 unreadable，known 也變 false', async () => {
+  const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, legacy: null }) });
+  await store.first();
+  state.file = null;
+  assert.equal(await store.change(cap(60)), 'unreadable');
+  assert.equal(store.value().known, false);
+  assert.equal(settingsFile.missing(), true);
+  assert.equal(state.writes, 0);
+});
+
+// 不見和讀不懂分開（D-201 第 5 點與〈代價〉）：檔還在、內容讀不懂照讀不到的規則，手上的值與 known 不變，不出現那一列，重新建立不蓋掉它。
+void test('用到一半讀不懂（壞掉、含 NUL）：手上的值與 known 不變、那一列不出現；重新建立不寫', async () => {
+  for (const bad of ['{', '{"capMinutes":60}\u0000']) {
+    const { state, store, settingsFile } = vault({ file: JSON.stringify({ capMinutes: 45, legacy: null }) });
+    await store.first();
+    state.file = bad;
+    await store.reload();
+    assert.equal(store.value().settings.capMinutes, 45, JSON.stringify(bad));
+    assert.equal(store.value().known, true);
+    assert.equal(settingsFile.missing(), false);
+    assert.equal(await settingsFile.recreate(store), 'changed');
+    assert.equal(state.file, bad);
+  }
 });
 
 void test('設定檔讀不到（丟錯）：那一列不變', async () => {

@@ -1,5 +1,6 @@
 import { parseData, readSaved } from './saved.ts';
 import type { Saved } from './saved.ts';
+import { MISSING } from './store.ts';
 import type { SettingsStore } from './store.ts';
 
 // 設定檔 `Essence Cards/設定.json`（tasks/settings-vault-file.md §1～§3）：內容、疊 legacy、讀寫與缺檔保護。不碰 Obsidian；檔案與 localStorage 由外層交進來。
@@ -103,7 +104,7 @@ export interface SettingsFileIo {
 }
 export interface SettingsFile {
   /**
-   * 給 store 的 load（§2、§3）：設定檔疊完 legacy、換好 legacy 的內容（store 採用了才記確認，adopted）；設定檔不存在時，確認過回 undefined（讀不到），
+   * 給 store 的 load（§2、§3）：設定檔疊完 legacy、換好 legacy 的內容（store 採用了才記確認，adopted）；設定檔不存在時，確認過回 MISSING（不見），
    * 沒確認過照舊交出 data.json（物件時加上它自己的五個欄位當 legacy；null、undefined 照原樣）；設定檔讀不到回 undefined。
    */
   load(): Promise<unknown>;
@@ -151,13 +152,13 @@ export function createSettingsFile(io: SettingsFileIo): SettingsFile {
       let bytes: Uint8Array | null;
       try { bytes = await io.readBytes(SETTINGS_FILE); } catch { return undefined; }
       if (bytes === null) {
-        // 確認過：不回到 data.json 的舊值，也不當成「沒有檔」的預設值；手上的值不變，等家長重新建立或檔回來（§3）。
+        // 確認過：不回到 data.json 的舊值，也不當成「沒有檔」的預設值；手上的值不變、known 變 false，等家長重新建立或檔回來（§3）。
         if (confirmed() === null) {
           const content = await data();
           return isObject(content) ? { ...content, legacy: fieldsOf(content) } : content;
         }
         setMissing(true);
-        return undefined;
+        return MISSING;
       }
       setMissing(false);
       const file = decodeSettings(bytes);

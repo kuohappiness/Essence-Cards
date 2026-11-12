@@ -517,3 +517,21 @@ void test('§1 交接：過了 2/1 學期自己變，data.json 沒變：換日�
   assert.deepEqual(settingLines(memory, FEB), [['semester', '國二下']]);
   assert.equal((JSON.parse(linesOf(memory, FEB)[0]) as { t: string }).t, '2027-02-01T08:00:00.000+08:00');
 });
+
+// 設定檔 L2 的 R1：用到一半設定檔不見，store 交來 known 是 false，手上的值照舊排程，但不再寫設定的觀察行；檔回來才補。
+void test('§1 交接：known 用到一半變 false：換日後學期變了也不寫；變回 true 才補一行', async t => {
+  const memory = createMemoryFiles({ [A]: deck('啟用') });
+  let clock = Date.parse('2027-01-31T12:00:00.000+08:00');
+  const term = { semester: { value: '國二上', setOn: '2026-09-15' } };
+  const { state } = await open(t, memory, { now: () => clock, settingsFirst: Promise.resolve(value(term)) });
+  const FEB = ROOT + '紀錄/2027-02 Windows-2c9e.jsonl';
+  state.applySettings(value({ ...term, known: false }));
+  clock = Date.parse('2027-02-01T08:00:00.000+08:00');
+  state.today();
+  await state.flush();
+  assert.equal(state.currentSettings().semester, '國二下', '排程照樣用手上的值');
+  assert.deepEqual(settingLines(memory, FEB), []);
+  state.applySettings(value(term));
+  await state.flush();
+  assert.deepEqual(settingLines(memory, FEB), [['semester', '國二下']]);
+});

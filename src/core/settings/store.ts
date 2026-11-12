@@ -6,8 +6,13 @@ import type { Saved, SettingsChange, SettingsKey, SettingsValue } from './saved.
 export type SaveResult = 'saved' | 'unreadable' | 'failed';
 /** 還原設定的結果（tasks/plugin-restore.md §4）：changed 是比對之後改過，沒有寫。 */
 type RestoreSettings = SaveResult | 'changed';
+/**
+ * load 回這個：這台確認過的設定檔不見了（tasks/settings-vault-file.md §3）。和讀不到一樣不採用、不寫，手上的值不變，
+ * 另外 known 變 false（不寫設定的觀察行），再讀到檔才變回 true（L2 的 R1）。逾時之後才回來的不算。
+ */
+export const MISSING: unique symbol = Symbol('設定檔不見');
 export interface SettingsStoreOptions {
-  /** 沒有檔回 null，讀不到回 undefined。 */
+  /** 沒有檔回 null，讀不到回 undefined，確認過的檔不見回 MISSING。 */
   load: () => Promise<unknown>;
   save: (data: unknown) => Promise<void>;
   /** 這台上次確認的設定（tasks/settings-vault-file.md §3）：first() 時當成一開始手上的值（known 是 false），讀到才換掉；沒有是 null。 */
@@ -51,7 +56,7 @@ const WRITE_WAIT = 10_000;
 
 /** absent：這次的底稿是「沒有檔」，不是讀到的內容。 */
 type Found = { ok: true; raw: Record<string, unknown>; absent: boolean };
-type Read = Found | { ok: false };
+type Read = Found | { ok: false; missing?: true };
 
 export function createSettingsStore(options: SettingsStoreOptions): SettingsStore {
   let raw: Record<string, unknown> = {};
@@ -78,6 +83,7 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
   /** load 交回的內容怎麼算。只要是物件就記下「這次見過檔」，不管這次有沒有採用（寫前的讀也算，§2-2）。 */
   function classify(content: unknown): Read {
     if (content === undefined) return { ok: false };
+    if (content === MISSING) return { ok: false, missing: true };
     if (content === null) return { ok: true, raw: {}, absent: true };
     if (typeof content !== 'object' || Array.isArray(content)) return { ok: false };
     seenFile = true;
@@ -98,7 +104,14 @@ export function createSettingsStore(options: SettingsStoreOptions): SettingsStor
     const loading = new Promise<unknown>(resolve => { resolve(options.load()); }).catch(() => undefined).then(content => { reading--; return classify(content); });
     const result = await Promise.race([loading, timeout]);
     clearTimeout(timer);
-    if (result !== 'timeout') return result;
+    if (result !== 'timeout') {
+      // 確認過的檔不見了：不管這次是重讀、寫前還是讀回，手上的值都不再算讀到（L2 的 R1）。
+      if (!result.ok && result.missing && known && !closed) {
+        known = false;
+        announce();
+      }
+      return result;
+    }
     // 晚到的內容可能比之後的存檔舊，不採用，只記下有沒有見過檔。一次都還沒讀到時，它回來表示現在讀得到了：
     // 排一次重讀，走同一條隊伍拿最新的內容，否則這次開啟可能一直用預設值（§2-5）。
     void loading.then(late => { if (!followUp && late.ok && !known) retry(); });

@@ -67,6 +67,8 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 - **確認過**：store 採用 load 從設定檔讀到的內容（第 2 步）時，把疊完的五個欄位存進這個 vault 專用的 localStorage（`app.saveLocalStorage`，和裝置碼同一種，`src/obsidian/device.ts`）。逾時之後才回來、寫前當底的讀沒被採用，不記（L2 的 R4）。有這筆就是「這台確認過設定檔」。
 - **之後不見了**（不存在，或這次執行見過、之後不見）：
   - store 一開始就用這筆當手上的值（`known` 是 false）：排程用它，不用預設值；`known` 是 false，不寫觀察行（現在的規則）。
+  - 用到一半不見（load 回 `MISSING`）：手上的值不變（就是最後採用、記下的那一份），`known` 變 false，不再寫觀察行；再讀到檔才變回 true（L2 的 R1）。
+  - 不見和讀不懂分開：檔還在、內容讀不懂（§1）照讀不到的規則，手上的值與 `known` 都不變，不出現下面那一列；「重新建立」只在不見時寫，不蓋掉讀不懂的檔。
   - 改設定照現在回「讀不到」，不寫。
   - 設定頁最上面多一列：「設定檔讀不到：先用這台上次確認的設定。」和一個「重新建立」按鈕。按下去走 store 的隊伍：再讀一次，還是不存在才寫，內容是這筆加上 `legacy`；寫完讀回核對、通知。設定檔回來了（重讀讀到）這一列就消失。
 - **沒確認過**（新裝置、還沒建立過）：和現在一樣，設定檔與 `data.json` 都沒有就是預設值，`known` 是 true。
@@ -113,7 +115,7 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 4. 不疊：`data.json` 不存在、讀不到、不是物件，或 `legacy` 是 `null`：有效值是設定檔的。
 5. 寫入時 `data.json` 讀不到：`legacy` 沿用原本的；原本沒有是 `null`。
 6. 載入（`first()`）之後沒有任何寫入，不論設定檔與 `data.json` 有沒有。
-7. 確認過、設定檔不見：值是 localStorage 那筆、`known` 是 false；改設定回 `unreadable`、設定檔沒被寫；「重新建立」寫出那筆，之後 `known` 是 true；重新建立時檔已經回來就不寫。
+7. 確認過、設定檔不見（開啟時就不在，或用到一半不見，後者 `known` 由 true 變 false、檔回來再變 true）：值是 localStorage 那筆、`known` 是 false；改設定回 `unreadable`、設定檔沒被寫；「重新建立」寫出那筆，之後 `known` 是 true；重新建立時檔已經回來就不寫。
 8. 沒確認過、兩個檔都沒有：預設值、`known` 是 true（現在的行為）。
 9. 重讀：`watch` 通知設定檔的路徑（含改名的舊路徑）會重讀；其他路徑不會。
 10. 還原計畫：備份只有 `data.json` → 目的地是設定檔；備份兩個都有 → 用設定檔、`data.json` 不列；現在沒有設定檔 → 和現在的 `data.json` 比；五欄相同、只差 `legacy` → 不列；現在的 `data.json` 不列成「備份後才有」。
