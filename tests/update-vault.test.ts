@@ -138,7 +138,7 @@ void test('更新命令（測試 vault 演練）：--check 備份、比較、記
   assert.match(checked.backup, /Essence Cards 備份 2026-10-29 200000 0\.0\.1\+[0-9a-f]+ [0-9a-f]{4}\.zip$/);
   await appendFile(join(vault, 'Essence Cards/紀錄/2026-10 iPhone-7f3a.jsonl'), review('2026-10-29T21:00:00.000+08:00', 'aaa111') + '\n');
   await put(vault, 'Essence Cards/A.md', goal('aaa111', '改過'));
-  await assert.rejects(installUpdate(options), /卡組或 data\.json 在 --check 之後改了，重跑 --check：\n- Essence Cards\/A\.md/);
+  await assert.rejects(installUpdate(options), /卡組、設定檔或 data\.json 在 --check 之後改了，重跑 --check：\n- Essence Cards\/A\.md/);
   await put(vault, 'Essence Cards/A.md', goal('aaa111'));
   await assert.rejects(installUpdate(options), /考試期間.*先問過使用者再加 --exam-ok/);
   assert.deepEqual(await installUpdate({ ...options, examOk: true }), { build: '0.0.1+' + short, kind: 'test' });

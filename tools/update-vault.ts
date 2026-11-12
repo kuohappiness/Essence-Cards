@@ -195,7 +195,7 @@ export async function installUpdate(options: UpdateOptions): Promise<{ build: st
   const opened = openBackup(zip);
   if (!opened.ok) throw Error('--check 的備份讀不回來：' + opened.error);
   const changed = changedSince(opened.value.manifest, opened.value.files, await snapshot(vault, config));
-  if (changed.length) throw Error('卡組或 data.json 在 --check 之後改了，重跑 --check：\n- ' + changed.join('\n- '));
+  if (changed.length) throw Error('卡組、設定檔或 data.json 在 --check 之後改了，重跑 --check：\n- ' + changed.join('\n- '));
   const exam = await reminder(vault, now, offset);
   if (exam.needsOk && !options.examOk) throw Error(exam.message + '。要照樣裝，先問過使用者再加 --exam-ok');
   const result = await (options.seams?.install ?? installVault)({ vault, config, root, local });
