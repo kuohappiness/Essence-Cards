@@ -1,6 +1,7 @@
 import { isDeckPath, parseDeck } from '../deck/index.ts';
 import type { Deck } from '../deck/index.ts';
 import { isErrorLogPath } from '../errors/index.ts';
+import { SETTINGS_FILE, decodeSettings, overlayLegacy, parseData, sameSaved } from '../settings/index.ts';
 import { isLogPath, LOG_FOLDER } from '../study/index.ts';
 import { missingLogLines } from './logs.ts';
 import type { MissingLines } from './logs.ts';
@@ -10,17 +11,17 @@ import { hashBytes } from './zip.ts';
 
 interface FileInfo { size: number; sha256: string }
 /**
- * changed：現在的和備份不同；missing：現在沒有；same：相同（只在和別的檔撞名時列出）；
- * added：備份後才有的；unmapped：寫回的位置確定不了（data.json 而現在的設定資料夾不明）。
+ * changed：現在的和備份不同；missing：現在沒有；same：相同（只在和別的檔撞名時列出）；added：備份後才有的。
+ * 「設定」那一列看的是值（RestorePlan.settings），現在有值就不是 missing。
  */
-type FileKind = 'changed' | 'missing' | 'same' | 'added' | 'unmapped';
+type FileKind = 'changed' | 'missing' | 'same' | 'added';
 /** restore：照選擇要還原；skip：可以還原但沒選；blocked：擋住（reasons）；keep：備份後才有的，不動。 */
 type FileAction = 'restore' | 'skip' | 'blocked' | 'keep';
 export interface PlannedFile {
   /** 備份裡的路徑；added 是現在的路徑。 */
   path: string;
-  /** 寫回 vault 的位置；unmapped 是 null。 */
-  target: string | null;
+  /** 寫回 vault 的位置：「設定」那一列一律是設定檔（tasks/settings-vault-file.md §4）。 */
+  target: string;
   kind: FileKind;
   action: FileAction;
   reasons: string[];
@@ -39,26 +40,29 @@ export interface RestorePlan {
   logs: MissingLines[];
   /** 來源（清單的 vault.config）與目的（這個 vault 現在的設定資料夾；確定不了是 null）。 */
   config: { source: string; target: string | null };
+  /**
+   * 「設定」那一列（tasks/settings-vault-file.md §4）：path 是備份裡的來源（設定檔，沒有才用 data.json）。backup、current 是兩邊的值：
+   * 設定檔疊上同一邊的 data.json（§2 的疊法），沒有設定檔就是 data.json；讀不懂是 null，現在兩個都沒有也是 null。備份裡兩個都沒有是 null。
+   */
+  settings: { path: string; backup: Record<string, unknown> | null; current: Record<string, unknown> | null } | null;
   /** action 是 restore 的檔，照寫入的順序（每個檔的 after 都排在它前面）。 */
   order: string[];
 }
 /** 呼叫的一方才知道的規則（tasks/plugin-restore.md §2）。 */
 export interface PlanOptions {
-  /** 這個 vault 現在的設定資料夾；確定不了是 null，data.json 擋住、不推定成 .obsidian（syntax §8）。 */
+  /** 這個 vault 現在的設定資料夾：現在的 data.json 在這裡（「設定」現在的值、不列成備份後才有）；確定不了是 null，不推定成 .obsidian（syntax §8）。 */
   config: string | null;
   /** 目的地那台電腦的檔名規則：會寫到同一個檔的兩個路徑得到相同的值（例如 Windows 不分大小寫）。 */
   sameFile: (path: string) => string;
-  /** 平台才知道的不能還原的原因（以點開頭的檔、路徑上有連結、系統資料夾不在原位、設定讀不懂）；可以還原是 null。 */
+  /** 平台才知道的不能還原的原因（以點開頭的檔、路徑上有連結、系統資料夾不在原位）；可以還原是 null。 */
   refuse?: (file: { path: string; target: string; backup: Uint8Array }) => string | null;
-  /** data.json 兩邊認得的欄位都相同（§2）：當成相同，不列。 */
-  sameData?: (backup: Uint8Array, current: Uint8Array) => boolean;
   /** 這份卡組這一版讀不懂（需要版本）：擋住（D-149 第 3 點）。 */
   needsUpdate?: (deck: Deck) => boolean;
 }
 interface PlanInput extends PlanOptions {
   manifest: BackupManifest;
   backup: ReadonlyMap<string, Uint8Array>;
-  /** 現在 vault 裡的 `Essence Cards/` 全部，加上現在的設定資料夾裡的 data.json（有的話）。 */
+  /** 現在 vault 裡的 `Essence Cards/` 全部（含設定檔），加上現在的設定資料夾裡的 data.json（有的話）。 */
   current: ReadonlyMap<string, Uint8Array>;
   /**
    * 要還原的檔（備份裡的路徑）；沒給就是全部能還原的。`紀錄/` 裡不是複習 JSONL、現在不見的檔一律算進去（syntax §5-4、§6：只補不刪，不用勾）。
@@ -76,9 +80,22 @@ const byText = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 const listed = (path: string): boolean => !isLogPath(path) && !isErrorLogPath(path);
 /** 這個檔還原時算不算卡組：備份的路徑或現在實際會寫的路徑，任何一邊是卡組就算（只差副檔名大小寫時兩邊不同，L2 的 R5）。 */
 const isDeckWrite = (target: string, found: string | null | undefined): boolean => isDeckPath(target) || (found != null && isDeckPath(found));
+/**
+ * 一邊的設定值（tasks/settings-vault-file.md §4）：設定檔疊上同一邊的 data.json（和外掛讀的時候一樣，§2）；沒有設定檔就是 data.json。
+ * 讀不懂是 null；兩個都沒有是 undefined。
+ */
+function settingsValue(file: Uint8Array | undefined, data: Uint8Array | undefined): Record<string, unknown> | null | undefined {
+  if (file !== undefined) {
+    const raw = decodeSettings(file);
+    return raw ? overlayLegacy(raw, data === undefined ? undefined : parseData(data) ?? undefined) : null;
+  }
+  return data === undefined ? undefined : parseData(data);
+}
 
 /**
  * 還原計畫（D-150 第 7、8 點；syntax §5-3、§8）。不寫任何檔。
+ * - 「設定」那一列（tasks/settings-vault-file.md §4）：備份裡有設定檔就用它，沒有才用備份的 data.json（兩個都有時 data.json 不列）；
+ *   目的地一律是設定檔，比的是值（五個欄位，不看 legacy 與不認得的），不套用一般檔案的規則。現在的 data.json 不列。
  * - 非紀錄的檔：和現在不同的（改過的、不見的）可以還原，備份後才有的列出但不動；`紀錄/` 裡不是複習 JSONL 的檔只補不見的，
  *   同名不同內容列成衝突；錯誤紀錄不列（listed）。對應到目的地之後撞名的，兩個都擋住。
  * - 全庫 ID 檢查：照選擇還原之後，`Essence Cards/` 的所有卡組有重複的學習目標 ID（同一篇裡重複也算），參與重複的還原檔
@@ -88,14 +105,25 @@ const isDeckWrite = (target: string, found: string | null | undefined): boolean 
 export function planRestore(input: PlanInput): RestorePlan {
   const { manifest, backup, current, config, sameFile } = input;
   const dataSource = manifest.vault.config + '/' + PLUGIN_DATA;
-  const targetOf = (path: string): string | null => path !== dataSource ? path : config === null ? null : config + '/' + PLUGIN_DATA;
+  const dataNow = config === null ? null : config + '/' + PLUGIN_DATA;
+  const settingsKey = sameFile(SETTINGS_FILE);
+  const fileInBackup = [...backup.keys()].sort(byText).find(path => sameFile(path) === settingsKey);
+  const settingsSource = fileInBackup ?? (backup.has(dataSource) ? dataSource : null);
+  const fileNow = [...current.keys()].sort(byText).find(path => sameFile(path) === settingsKey);
+  const nowValue = settingsValue(fileNow === undefined ? undefined : current.get(fileNow), dataNow === null ? undefined : current.get(dataNow));
+  const settings: RestorePlan['settings'] = settingsSource === null ? null : {
+    path: settingsSource,
+    backup: settingsValue(fileInBackup === undefined ? undefined : backup.get(fileInBackup), backup.get(dataSource)) ?? null,
+    current: nowValue ?? null,
+  };
+  const targetOf = (path: string): string => path === settingsSource ? SETTINGS_FILE : path;
   const currentPath = new Map<string, string>();
-  for (const path of current.keys()) if (listed(path)) currentPath.set(sameFile(path), path);
-  const restorable = [...backup.keys()].filter(listed).sort(byText);
+  for (const path of current.keys()) if (listed(path) && path !== dataNow) currentPath.set(sameFile(path), path);
+  const restorable = [...backup.keys()].filter(path => listed(path) && (path !== dataSource || path === settingsSource)).sort(byText);
   const writers = new Map<string, string[]>();
   for (const path of restorable) {
     const target = targetOf(path);
-    if (target !== null) writers.set(sameFile(target), [...writers.get(sameFile(target)) ?? [], path]);
+    writers.set(sameFile(target), [...writers.get(sameFile(target)) ?? [], path]);
   }
 
   const files: PlannedFile[] = [];
@@ -103,21 +131,20 @@ export function planRestore(input: PlanInput): RestorePlan {
   for (const path of restorable) {
     const bytes = backup.get(path)!;
     const target = targetOf(path);
-    if (target === null) {
-      files.push({ path, target, kind: 'unmapped', action: 'blocked', backup: info(bytes), current: null, after: [],
-        reasons: ['這個 vault 現在的設定資料夾確定不了（裡面要有 plugins/essence-cards/manifest.json），不推定成 .obsidian'] });
-      continue;
-    }
     const key = sameFile(target);
     const found = currentPath.get(key);
     if (found !== undefined) matched.add(found);
     const now = found === undefined ? null : { path: found, ...info(current.get(found)!) };
     const mine = info(bytes);
     const others = writers.get(key)!.filter(other => other !== path);
-    const sameData = path === dataSource && found !== undefined && input.sameData?.(bytes, current.get(found)!) === true;
-    const kind: FileKind = now === null ? 'missing' : now.sha256 === mine.sha256 || sameData ? 'same' : 'changed';
+    const isSettings = path === settingsSource;
+    // 「設定」看值：現在有值就不是 missing；五個欄位相同就是 same（不看 legacy 與不認得的欄位）。
+    const kind: FileKind = isSettings
+      ? nowValue === undefined ? 'missing' : settings?.backup && nowValue && sameSaved(settings.backup, nowValue) ? 'same' : 'changed'
+      : now === null ? 'missing' : now.sha256 === mine.sha256 ? 'same' : 'changed';
     if (kind === 'same' && others.length === 0) continue;
     const reasons: string[] = [];
+    if (isSettings && !settings?.backup) reasons.push('備份裡的設定讀不懂');
     const refused = input.refuse?.({ path, target, backup: bytes });
     if (refused) reasons.push(refused);
     if (isDeckWrite(target, found)) {
@@ -130,7 +157,7 @@ export function planRestore(input: PlanInput): RestorePlan {
     files.push({ path, target, kind, action: reasons.length ? 'blocked' : 'restore', reasons, backup: mine, current: now, after: [] });
   }
   for (const path of [...current.keys()].sort(byText)) {
-    if (!listed(path) || matched.has(path)) continue;
+    if (!listed(path) || matched.has(path) || path === dataNow) continue;
     files.push({ path, target: path, kind: 'added', action: 'keep', reasons: [], backup: null, current: { path, ...info(current.get(path)!) }, after: [] });
   }
   for (const file of files) {
@@ -152,7 +179,7 @@ export function planRestore(input: PlanInput): RestorePlan {
 
   const logs = (map: ReadonlyMap<string, Uint8Array>): { path: string; text: string }[] =>
     [...map].filter(([path]) => isLogPath(path)).map(([path, bytes]) => ({ path, text: text(bytes) }));
-  return { files, logs: missingLogLines(logs(backup), logs(current)), config: { source: manifest.vault.config, target: config }, order };
+  return { files, logs: missingLogLines(logs(backup), logs(current)), config: { source: manifest.vault.config, target: config }, settings, order };
 }
 
 /**
@@ -162,7 +189,7 @@ export function planRestore(input: PlanInput): RestorePlan {
 function orderWrites(files: PlannedFile[], { backup, current }: PlanInput): { order: string[]; stuck: { file: PlannedFile; waits: string[] }[] } {
   for (const file of files) file.after = [];
   const restoring = files.filter(file => file.action === 'restore');
-  const decks = restoring.filter(file => file.target !== null && isDeckWrite(file.target, file.current?.path));
+  const decks = restoring.filter(file => isDeckWrite(file.target, file.current?.path));
   const now = new Map(decks.map(file => [file, new Set(file.current ? deckIds(current.get(file.current.path)!) : [])]));
   for (const file of restoring) {
     const mine = now.get(file);
@@ -203,7 +230,7 @@ function checkIds(files: PlannedFile[], { backup, current, sameFile }: PlanInput
     const decks = new Map<string, { shown: string; ids: string[]; restored: PlannedFile | null }>();
     for (const [path, bytes] of current) if (isDeckPath(path)) decks.set(sameFile(path), { shown: path, ids: idsOf('now:' + path, bytes), restored: null });
     for (const file of files) {
-      if (file.action !== 'restore' || file.target === null || !isDeckWrite(file.target, file.current?.path)) continue;
+      if (file.action !== 'restore' || !isDeckWrite(file.target, file.current?.path)) continue;
       decks.set(sameFile(file.target), { shown: file.current?.path ?? file.target, ids: idsOf('backup:' + file.path, backup.get(file.path)!), restored: file });
     }
     const where = new Map<string, Occurrence[]>();

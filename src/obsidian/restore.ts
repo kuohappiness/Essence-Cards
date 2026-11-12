@@ -3,7 +3,7 @@ import type { App, TFile, ViewState, WorkspaceLeaf } from 'obsidian';
 import { applyRestore, filesReader, hashBytes, openBackup, planRestore, PLUGIN_DATA, readCurrent, textDiff } from '../core/backup/index.ts';
 import type { BackupReader, OpenedBackup, PlannedFile, RestorePlan, RestoreResult, StoredBackup } from '../core/backup/index.ts';
 import type { Deck } from '../core/deck/index.ts';
-import { parseData, sameSaved, savedDiff } from '../core/settings/index.ts';
+import { SETTINGS_FILE, decodeSettings, savedDiff } from '../core/settings/index.ts';
 import type { SettingsStore } from '../core/settings/index.ts';
 import { canRead, releaseOf } from '../core/version/index.ts';
 import type { Files } from '../core/files.ts';
@@ -47,7 +47,7 @@ export interface Comparison {
   plan(chosen: ReadonlySet<string>): RestorePlan;
   /** 文字差異；不是文字回 null。 */
   diff(file: PlannedFile): string[] | null;
-  /** 「設定」那一列的欄位差異；不是 data.json 是 null。 */
+  /** 「設定」那一列的欄位差異；不是那一列是 null（tasks/settings-vault-file.md §4）。 */
   settings(file: PlannedFile): string[] | null;
 }
 
@@ -96,7 +96,6 @@ export function createRestore(host: RestoreHost): RestoreFlow {
   const readData = async (): Promise<Uint8Array | null> => await app.vault.adapter.exists(dataTarget) ? new Uint8Array(await app.vault.adapter.readBinary(dataTarget)) : null;
   const reader = timedReader(filesReader(files, config, readData));
   const folder = (): string => backup.custom() ?? desktop.defaultFolder;
-  const dataOf = (bytes: Uint8Array | undefined): Record<string, unknown> | null => bytes === undefined ? null : parseData(bytes);
   let running = false;
   /** 卡住的那一步（§3-1 第 6 點）：這次載入不再比對或還原，重新開啟 Obsidian 才放開。 */
   let locked: string | null = null;
@@ -124,12 +123,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       config,
       sameFile: desktop.host.key,
       needsUpdate,
-      sameData(a: Uint8Array, b: Uint8Array): boolean {
-        const x = dataOf(a), y = dataOf(b);
-        return x !== null && y !== null && sameSaved(x, y);
-      },
-      refuse({ target, backup: bytes }: { target: string; backup: Uint8Array }): string | null {
-        if (target === dataTarget) return parseData(bytes) === null ? '備份裡的設定讀不懂' : links.get(target) ?? null;
+      refuse({ target }: { target: string }): string | null {
         if (target.split('/').some(part => part.startsWith('.'))) return '檔名以點開頭，外掛讀不到現在的內容';
         if (links.has(target)) return links.get(target)!;
         return host.displaced(target) ? '這個位置的系統資料夾不在原位；照提醒放回去再還原' : null;
@@ -168,7 +162,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
       const links = new Map<string, string>();
       const source = opened.value.manifest.vault.config + '/' + PLUGIN_DATA;
       for (const path of opened.value.files.keys()) {
-        const target = path === source ? dataTarget : path;
+        // 備份的 data.json 寫到設定檔（tasks/settings-vault-file.md §4）。
+        const target = path === source ? SETTINGS_FILE : path;
         try { await limited(desktop.noLinks(target), LINKS_LATE); } catch (error) {
           // 卡住不是「路徑上有連結」：這次比對不算，什麼都還沒寫，可以再比對一次（L2 的 R26）。
           if (error instanceof Late) { host.fail('查連結', error, target); throw error; }
@@ -176,6 +171,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
         }
       }
       const options = planOptions(links);
+      // 「設定」那一列的值不看勾選。
+      const values = planRestore({ manifest: opened.value.manifest, backup: opened.value.files, current, ...options }).settings;
       return {
         row, opened: opened.value, current,
         plan: chosen => planRestore({ manifest: opened.value.manifest, backup: opened.value.files, current, ...options, selection: chosen }),
@@ -184,9 +181,8 @@ export function createRestore(host: RestoreHost): RestoreFlow {
           return textDiff(current.get(file.current.path)!, opened.value.files.get(file.path)!);
         },
         settings(file) {
-          if (file.target !== dataTarget) return null;
-          const after = dataOf(opened.value.files.get(file.path));
-          return after === null ? [] : savedDiff(file.current ? dataOf(current.get(file.current.path)) : null, after, host.today());
+          if (values === null || file.path !== values.path) return null;
+          return values.backup === null ? [] : savedDiff(values.current, values.backup, host.today());
         },
       };
     },
@@ -203,7 +199,7 @@ export function createRestore(host: RestoreHost): RestoreFlow {
         const result = await state.restore(async writer => {
           const screenPlan = comparison.plan(chosen);
           const screen = new Map(screenPlan.files.filter(file => chosen.has(file.path)).map(file => [file.path, file.current?.sha256 ?? null] as const));
-          const targets = new Set(screenPlan.files.filter(file => chosen.has(file.path) || file.action === 'restore').map(file => file.current?.path ?? file.target ?? ''));
+          const targets = new Set(screenPlan.files.filter(file => chosen.has(file.path) || file.action === 'restore').map(file => file.current?.path ?? file.target));
           const swapped: Opened[] = [];
           const empty: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], stuck: null };
           try {
@@ -228,7 +224,6 @@ export function createRestore(host: RestoreHost): RestoreFlow {
             }
             const links = new Map<string, string>();
             for (const file of screenPlan.files) {
-              if (file.target === null) continue;
               try { await limited(desktop.noLinks(file.target), LINKS_LATE); } catch (error) {
                 // 查連結卡住：一篇一篇等太久，整次停下來，什麼都還沒寫（L2 的 R12）。
                 if (error instanceof Late) { host.fail('查連結', error, file.target); return { ...empty, stopped: { step: '查連結', message: LINKS_LATE } }; }
@@ -244,18 +239,17 @@ export function createRestore(host: RestoreHost): RestoreFlow {
               deck: (path, write) => writer.deck(path, write),
               busy: path => openLeaves(app, new Set([path])).length > 0,
               noLinks: path => desktop.noLinks(path),
-              settings(bytes, expected, live) {
-                const fields = parseData(bytes);
-                if (fields === null) return Promise.resolve('failed');
+              settings(fields, expected, live) {
+                // 寫設定檔（tasks/settings-vault-file.md §4）：比對與當底的都是設定檔，data.json 只讀不寫。
                 return host.settings.restore(fields, async () => {
                   // 排隊的這段時間路徑可能換成連結，內容還一模一樣（L2 的 R13）：算比對之後改過，重新比對會寫出是連結。
-                  try { await desktop.noLinks(dataTarget); } catch { return null; }
+                  try { await desktop.noLinks(SETTINGS_FILE); } catch { return null; }
                   if (!live()) throw Error('逾時，不寫');
                   // 比對雜湊、當底稿的內容一定是寫之前最後一次 I/O（L2 的 R18）：查連結的等待裡同步進來的新內容才看得到。
-                  const now = await reader.read(dataTarget);
+                  const now = await reader.read(SETTINGS_FILE);
                   if (!live()) throw Error('逾時，不寫');
                   if ((now === null ? null : hashBytes(now)) !== expected) return null;
-                  return (now === null ? null : parseData(now)) ?? {};
+                  return (now === null ? null : decodeSettings(now)) ?? {};
                 });
               },
               device: host.device,

@@ -215,16 +215,56 @@ void test('還原計畫：Essence Cards/A.md 和 a.md 在 Windows 上兩個都�
   assert.equal(renamed.files[0].current?.path, 'Essence Cards/a.md');
 });
 
-void test('還原計畫：data.json 從清單的設定資料夾對到現在的；確定不了就擋住；對應之後撞名兩個都擋住', () => {
-  const data = { '.obsidian-family/plugins/essence-cards/data.json': '{"a":1}' };
-  const moved = plan(data, { '.obsidian/plugins/essence-cards/data.json': '{"a":2}' }, { source: '.obsidian-family', config: '.obsidian' });
-  assert.deepEqual(moved.files.map(file => [file.path, file.target, file.kind, file.action]),
-    [['.obsidian-family/plugins/essence-cards/data.json', '.obsidian/plugins/essence-cards/data.json', 'changed', 'restore']]);
+// 「設定」那一列（tasks/settings-vault-file.md §4、§6-10）：目的地一律是設定檔；值是設定檔疊上同一邊的 data.json，沒有設定檔就是 data.json。
+const SETTINGS = 'Essence Cards/設定.json';
+const DATA = '.obsidian/plugins/essence-cards/data.json';
+const row = (result: ReturnType<typeof plan>) => result.files.map(file => [file.path, file.target, file.kind, file.action, file.current?.path ?? null]);
+
+void test('還原計畫：備份只有 data.json → 目的地是設定檔；現在沒有設定檔就和現在的 data.json 比；設定資料夾確定不了也不擋', () => {
+  const data = { '.obsidian-family/plugins/essence-cards/data.json': '{"capMinutes":45}' };
+  const moved = plan(data, { [DATA]: '{"capMinutes":30}' }, { source: '.obsidian-family' });
+  assert.deepEqual(row(moved), [['.obsidian-family/plugins/essence-cards/data.json', SETTINGS, 'changed', 'restore', null]]);
+  assert.deepEqual(moved.settings, { path: '.obsidian-family/plugins/essence-cards/data.json', backup: { capMinutes: 45 }, current: { capMinutes: 30 } });
   assert.deepEqual(moved.config, { source: '.obsidian-family', target: '.obsidian' });
+  assert.deepEqual(row(plan(data, { [DATA]: '{"capMinutes":45,"other":1}' }, { source: '.obsidian-family' })), [], '五個欄位相同不列，現在的 data.json 也不列成備份後才有');
   const unknown = plan(data, {}, { source: '.obsidian-family', config: null });
-  assert.deepEqual(unknown.files.map(file => [file.target, file.kind, file.action]), [[null, 'unmapped', 'blocked']]);
-  assert.match(unknown.files[0].reasons[0], /設定資料夾確定不了.*不推定成 \.obsidian/);
-  const collide = plan({ ...data, 'Essence Cards/conf/plugins/essence-cards/data.json': '{}' }, {}, { source: '.obsidian-family', config: 'Essence Cards/conf' });
+  assert.deepEqual(row(unknown), [['.obsidian-family/plugins/essence-cards/data.json', SETTINGS, 'missing', 'restore', null]]);
+  assert.deepEqual(unknown.settings?.current, null);
+});
+
+void test('還原計畫：備份兩個都有 → 用設定檔（疊上備份的 data.json），data.json 不列；現在有設定檔就和它比', () => {
+  const backup = { [SETTINGS]: JSON.stringify({ capMinutes: 45, retention: 0.9, legacy: { capMinutes: 30 } }), [DATA]: '{"capMinutes":15}' };
+  const result = plan(backup, { [SETTINGS]: JSON.stringify({ capMinutes: 60, legacy: null }), [DATA]: '{"capMinutes":15}' });
+  assert.deepEqual(row(result), [[SETTINGS, SETTINGS, 'changed', 'restore', SETTINGS]]);
+  assert.deepEqual(result.settings, { path: SETTINGS, backup: { capMinutes: 15, retention: 0.9, legacy: { capMinutes: 30 } }, current: { capMinutes: 60, legacy: null } });
+  // 現在的設定檔也疊上現在的 data.json：舊版那台改的項目算進現在的值。
+  const overlaid = plan(backup, { [SETTINGS]: JSON.stringify({ capMinutes: 60, retention: 0.9, legacy: { capMinutes: 60 } }), [DATA]: '{"capMinutes":15}' });
+  assert.deepEqual(row(overlaid), [], '疊完五個欄位相同');
+});
+
+void test('還原計畫：設定只差 legacy 與不認得的欄位不列；現在讀不懂、備份讀不懂', () => {
+  const backup = { [SETTINGS]: JSON.stringify({ capMinutes: 45, legacy: null, foo: 1 }) };
+  assert.deepEqual(row(plan(backup, { [SETTINGS]: JSON.stringify({ capMinutes: 45, legacy: { capMinutes: 30 }, foo: 2 }) })), []);
+  const broken = plan(backup, { [SETTINGS]: '{' });
+  assert.deepEqual(row(broken), [[SETTINGS, SETTINGS, 'changed', 'restore', SETTINGS]]);
+  assert.equal(broken.settings?.current, null);
+  const unreadable = plan({ [SETTINGS]: '[1]', [DATA]: '{"capMinutes":15}' }, {});
+  assert.deepEqual(summary(unreadable.files), [`${SETTINGS} missing blocked：備份裡的設定讀不懂`]);
+  assert.equal(unreadable.settings?.backup, null);
+  assert.deepEqual(summary(plan({ [DATA]: '{' }, {}).files), [`${DATA} missing blocked：備份裡的設定讀不懂`]);
+});
+
+void test('還原計畫：備份裡沒有設定 → 沒有「設定」那一列，現在的設定檔列成備份後才有、現在的 data.json 不列', () => {
+  const result = plan({ 'Essence Cards/a.md': goal('aaa111') }, { 'Essence Cards/a.md': goal('aaa111'), [SETTINGS]: '{}', [DATA]: '{}' });
+  assert.equal(result.settings, null);
+  assert.deepEqual(summary(result.files), [`${SETTINGS} added keep`]);
+});
+
+void test('還原計畫：設定檔在 Windows 上只差大小寫也是同一個；和別的檔撞名兩個都擋住', () => {
+  const upper = 'Essence Cards/設定.JSON';
+  const result = plan({ [upper]: '{"capMinutes":45}' }, { [SETTINGS]: '{"capMinutes":30}' }, { platform: 'win32' });
+  assert.deepEqual(row(result), [[upper, SETTINGS, 'changed', 'restore', SETTINGS]]);
+  const collide = plan({ [upper]: '{"capMinutes":45}', [SETTINGS]: '{"capMinutes":45}' }, {}, { platform: 'win32' });
   assert.deepEqual(collide.files.map(file => file.action), ['blocked', 'blocked']);
 });
 

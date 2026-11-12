@@ -773,6 +773,8 @@ void test('還原接線：開始就關掉複習與入口、期間不開新的；
 });
 
 const DATA = '.obsidian/plugins/essence-cards/data.json';
+/** 設定檔（tasks/settings-vault-file.md §4）：還原的「設定」寫到這裡，比對之後改過看的是它；data.json 只讀。 */
+const SETTINGS = 'Essence Cards/設定.json';
 /** 外掛載入、第一份備份做好，回傳那一份在清單裡的列（之後才改的內容都是「備份之後」）。 */
 async function restoreReady(t: test.TestContext, texts: Record<string, string>, options: Omit<StubOptions, 'texts'> = {}) {
   quiet(t);
@@ -790,29 +792,36 @@ async function restoreReady(t: test.TestContext, texts: Record<string, string>, 
   return { h, flow, row: rows[0] };
 }
 
+// 備份只有 data.json（這一版之前做的）：「設定」那一列的來源是它，目的地是設定檔；現在的值是設定檔，沒有才是現在的 data.json。
 for (const [name, before] of [['有效的設定', '{"capMinutes":60}'], ['壞掉的 JSON', '壞掉'], ['沒有檔', null]] as const) {
-  void test(`還原接線：設定是${name}時，比對之後才同步來的新內容不蓋掉，也不拿來當底（L2 的 R4）`, async t => {
+  void test(`還原接線：設定檔是${name}時，比對之後才同步來的新內容不蓋掉，也不拿來當底（L2 的 R4）`, async t => {
     const path = 'Essence Cards/a.md';
     const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
     h.texts.set(path, deck[path].replace('Q :: A', 'Q :: 改壞'));
-    if (before === null) h.texts.delete(DATA); else h.texts.set(DATA, before);
+    h.texts.set(DATA, '{"capMinutes":60}');
+    if (before !== null) h.texts.set(SETTINGS, before);
     const comparison = await flow.compare(row);
     const vault = h.app.vault as { modifyBinary: (file: unknown, data: ArrayBuffer) => Promise<void> };
     const write = vault.modifyBinary;
-    vault.modifyBinary = (file, data) => { h.texts.set(DATA, '{"capMinutes":75,"fresh":1}'); return write(file, data); };
+    vault.modifyBinary = (file, data) => { h.texts.set(SETTINGS, '{"capMinutes":75,"fresh":1}'); return write(file, data); };
     const saves = h.data.saves;
     const result = await flow.apply(comparison, new Set([path, DATA]));
     assert.deepEqual(result.files.map(file => [file.path, file.outcome]).sort(), [[DATA, '跳過'], [path, '已還原']].sort());
     assert.equal(h.data.saves, saves);
-    assert.equal(h.text(DATA), '{"capMinutes":75,"fresh":1}');
+    assert.equal(h.text(SETTINGS), '{"capMinutes":75,"fresh":1}');
+    assert.equal(h.text(DATA), '{"capMinutes":60}');
   });
-  void test(`還原接線：設定是${name}、沒有人改時，寫回備份的值`, async t => {
+  void test(`還原接線：設定檔是${name}、沒有人改時，寫回備份的值；data.json 不動`, async t => {
     const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
-    if (before === null) h.texts.delete(DATA); else h.texts.set(DATA, before);
+    h.texts.set(DATA, '{"capMinutes":60}');
+    if (before !== null) h.texts.set(SETTINGS, before);
     const comparison = await flow.compare(row);
+    const saves = h.data.saves;
     const result = await flow.apply(comparison, new Set([DATA]));
     assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '已還原']]);
-    assert.equal((h.data.content as { capMinutes: number }).capMinutes, 45);
+    assert.deepEqual(JSON.parse(h.text(SETTINGS) ?? 'null'), { capMinutes: 45, legacy: { capMinutes: 45 } });
+    assert.equal(h.data.saves, saves);
+    assert.equal(h.text(DATA), '{"capMinutes":60}');
   });
 }
 
@@ -968,24 +977,24 @@ void test('還原接線：等第一個分頁存檔時第二個分頁換了別篇
 
 void test('還原接線：設定排進隊伍之後路徑才換成連結（內容相同）：不寫（L2 的 R13）', async t => {
   const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
-  h.texts.set(DATA, '{"capMinutes":60}');
+  h.texts.set(SETTINGS, '{"capMinutes":60}');
   const comparison = await flow.compare(row);
   const plugin = h.plugin as unknown as { store: { restore: (...args: unknown[]) => unknown }; backup: { desktop: { noLinks: (path: string) => Promise<void> } } };
   let queued = false;
   const restoreNow = plugin.store.restore.bind(plugin.store);
   plugin.store.restore = (...args) => { queued = true; return restoreNow(...args); };
   const noLinks = plugin.backup.desktop.noLinks.bind(plugin.backup.desktop);
-  plugin.backup.desktop.noLinks = path => queued && path === DATA ? Promise.reject(Error('路徑上有連結')) : noLinks(path);
+  plugin.backup.desktop.noLinks = path => queued && path === SETTINGS ? Promise.reject(Error('路徑上有連結')) : noLinks(path);
   const saves = h.data.saves;
   const result = await flow.apply(comparison, new Set([DATA]));
   assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
   assert.equal(h.data.saves, saves);
-  assert.equal(h.text(DATA), '{"capMinutes":60}');
+  assert.equal(h.text(SETTINGS), '{"capMinutes":60}');
 });
 
 void test('還原接線：查連結的時候同步進來新的設定：不蓋掉，跳過（L2 的 R18）', async t => {
   const { h, flow, row } = await restoreReady(t, { ...deck, [DATA]: '{"capMinutes":45}' }, { data: { capMinutes: 45 } });
-  h.texts.set(DATA, '{"capMinutes":60}');
+  h.texts.set(SETTINGS, '{"capMinutes":60}');
   const comparison = await flow.compare(row);
   const plugin = h.plugin as unknown as { store: { restore: (...args: unknown[]) => unknown }; backup: { desktop: { noLinks: (path: string) => Promise<void> } } };
   let queued = false;
@@ -994,12 +1003,12 @@ void test('還原接線：查連結的時候同步進來新的設定：不蓋掉
   const noLinks = plugin.backup.desktop.noLinks.bind(plugin.backup.desktop);
   const newer = '{"capMinutes":90,"later":true}';
   // 路徑一直是一般檔案，只是內容在查連結的時候換了。
-  plugin.backup.desktop.noLinks = async path => { await noLinks(path); if (queued && path === DATA) h.texts.set(DATA, newer); };
+  plugin.backup.desktop.noLinks = async path => { await noLinks(path); if (queued && path === SETTINGS) h.texts.set(SETTINGS, newer); };
   const saves = h.data.saves;
   const result = await flow.apply(comparison, new Set([DATA]));
   assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[DATA, '跳過']]);
   assert.equal(h.data.saves, saves);
-  assert.equal(h.text(DATA), newer);
+  assert.equal(h.text(SETTINGS), newer);
 });
 
 /** 卡住之後把還原推過每一個時間上限。 */

@@ -277,19 +277,43 @@ void test('還原：計畫之後被改過的檔在 --apply 時跳過，不蓋掉
   assert.equal(await read(vault, A), goal('aaa111', '計畫之後又改'));
 });
 
-void test('還原：data.json 從 .obsidian-family 對到現在的 .obsidian；現在的設定資料夾確定不了時擋住、還原前的備份也做不了', async t => {
-  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian-family/plugins/essence-cards/data.json': '{"cap":20}' }, { config: '.obsidian-family' });
+// 「設定」（tasks/settings-vault-file.md §4）：目的地一律是設定檔，寫的內容和外掛經 store 寫的相同；data.json 只讀。
+const SETTINGS = 'Essence Cards/設定.json';
+
+void test('還原：備份只有 data.json（.obsidian-family）→ 寫到設定檔，legacy 是現在的 data.json；設定資料夾確定不了時計畫照出、還原前的備份做不了', async t => {
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian-family/plugins/essence-cards/data.json': '{"capMinutes":20}' }, { config: '.obsidian-family' });
   const zip = await backup(t, source, '.obsidian-family');
-  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') });
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":45,"retention":0.9}' });
   const { plan, result } = await restore(vault, zip);
   assert.deepEqual(plan.config, { source: '.obsidian-family', target: '.obsidian' });
-  assert.deepEqual(result.files.map(file => [file.target, file.outcome]), [['.obsidian/plugins/essence-cards/data.json', '已還原']]);
-  assert.equal(await read(vault, '.obsidian/plugins/essence-cards/data.json'), '{"cap":20}');
+  assert.deepEqual(result.files.map(file => [file.target, file.outcome]), [[SETTINGS, '已還原']]);
+  assert.deepEqual(JSON.parse(await read(vault, SETTINGS)), { capMinutes: 20, legacy: { capMinutes: 45, retention: 0.9 } });
+  assert.equal(await read(vault, '.obsidian/plugins/essence-cards/data.json'), '{"capMinutes":45,"retention":0.9}');
   const bare = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') }, { plugin: false });
   const options = { vault: bare, backup: zip, ...fixed, random: counter() };
-  const { plan: blocked, path } = await makePlan(options);
-  assert.deepEqual(blocked.files.map(file => [file.kind, file.action]), [['unmapped', 'blocked']]);
+  const { plan: unknown, path } = await makePlan(options);
+  assert.deepEqual(unknown.files.map(file => [file.target, file.kind, file.action]), [[SETTINGS, 'missing', 'restore']]);
   await assert.rejects(applyPlan({ ...options, plan: path }), /manifest\.json 不存在/);
+});
+
+void test('還原：備份有設定檔 → 以現在的設定檔為底換五個欄位（不認得的留著），報告列欄位的差異；比對之後改過不寫', async t => {
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 20, legacy: null }), '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":30}' });
+  const zip = await backup(t, source);
+  const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 60, foo: 1, legacy: { capMinutes: 30 } }), '.obsidian/plugins/essence-cards/data.json': '{"capMinutes":30}' });
+  const options = { vault, backup: zip, ...fixed, random: counter() };
+  const { plan, path, report } = await makePlan(options);
+  assert.deepEqual(plan.files.map(file => [file.path, file.target, file.kind, file.action]), [[SETTINGS, SETTINGS, 'changed', 'restore']]);
+  assert.match(await readFile(report, 'utf8'), /### Essence Cards\/設定\.json\n\n- 每日時間上限 60 分鐘 → 20 分鐘/);
+  const result = await applyPlan({ ...options, plan: path });
+  assert.deepEqual(result.files.map(file => [file.path, file.outcome]), [[SETTINGS, '已還原']]);
+  assert.deepEqual(JSON.parse(await read(vault, SETTINGS)), { capMinutes: 20, foo: 1, legacy: { capMinutes: 30 } });
+
+  await put(vault, SETTINGS, JSON.stringify({ capMinutes: 75, legacy: null }));
+  const again = await makePlan(options);
+  await put(vault, SETTINGS, JSON.stringify({ capMinutes: 90, legacy: null }));
+  const skipped = await applyPlan({ ...options, plan: again.path });
+  assert.deepEqual(skipped.files.map(file => [file.path, file.outcome]), [[SETTINGS, '跳過']]);
+  assert.deepEqual(JSON.parse(await read(vault, SETTINGS)), { capMinutes: 90, legacy: null });
 });
 
 void test('還原：備份讀不懂（清單壞了）就不出計畫', async t => {
@@ -352,7 +376,7 @@ for (const source of ['已還原的前置檔', '沒選的其他卡組', '新出�
   });
 }
 
-void test('還原計畫：設定資料夾是連結時，計畫就把 data.json 標成擋住，不等到 --apply 才失敗（Codex 再查的 F3 建議）', async t => {
+void test('還原計畫：設定資料夾是連結時，計畫寫出原因、不跟著連結讀 data.json；「設定」寫到設定檔，不擋（Codex 再查的 F3 建議）', async t => {
   const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), '.obsidian/plugins/essence-cards/data.json': '{"cap":20}' });
   const zip = await backup(t, source);
   const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111') }, { plugin: false });
@@ -360,7 +384,7 @@ void test('還原計畫：設定資料夾是連結時，計畫就把 data.json �
   await symlink(join(elsewhere, '.obsidian'), join(vault, '.obsidian'), 'junction');
   const { plan, report } = await makePlan({ vault, backup: zip, ...fixed, random: counter() });
   assert.deepEqual(plan.config.target, null);
-  assert.deepEqual(plan.files.map(file => [file.path, file.kind, file.action]), [['.obsidian/plugins/essence-cards/data.json', 'unmapped', 'blocked']]);
+  assert.deepEqual(plan.files.map(file => [file.path, file.target, file.kind, file.action]), [['.obsidian/plugins/essence-cards/data.json', SETTINGS, 'missing', 'restore']]);
   assert.match(await readFile(report, 'utf8'), /\.obsidian：是連結/);
 });
 

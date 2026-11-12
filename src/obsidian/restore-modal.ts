@@ -1,7 +1,8 @@
 import { Modal, Notice } from 'obsidian';
 import type { App } from 'obsidian';
-import { ESSENCE_ROOT, PLUGIN_DATA, tickable } from '../core/backup/index.ts';
+import { ESSENCE_ROOT, tickable } from '../core/backup/index.ts';
 import type { PlannedFile, RestoreResult } from '../core/backup/index.ts';
+import { SETTINGS_FILE } from '../core/settings/index.ts';
 import { LOG_FOLDER } from '../core/study/index.ts';
 import type { BackupRow, Comparison, RestoreFlow } from './restore.ts';
 
@@ -176,7 +177,7 @@ export class RestoreModal extends Modal {
     const sorted = [...result.files].sort((a, b) => OUTCOME_ORDER.indexOf(a.outcome) - OUTCOME_ORDER.indexOf(b.outcome));
     for (const file of sorted) {
       const row = list.createDiv({ cls: 'essence-cards-restore-item' });
-      row.createSpan({ text: `${file.outcome}　${(file.target ?? file.path).endsWith('/' + PLUGIN_DATA) ? '設定' : short(file.target ?? file.path)}` });
+      row.createSpan({ text: `${file.outcome}　${(file.target ?? file.path) === SETTINGS_FILE ? '設定' : short(file.target ?? file.path)}` });
       if (file.reason) row.createDiv({ cls: 'setting-item-description', text: file.reason });
     }
     for (const log of result.logs) {

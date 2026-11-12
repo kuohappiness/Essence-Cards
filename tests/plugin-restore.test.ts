@@ -20,6 +20,8 @@ const A = 'Essence Cards/國二上/a.md', B = 'Essence Cards/國二上/b.md';
 const LOGS = 'Essence Cards/紀錄/';
 const LOG = LOGS + '2026-11 iPhone-7f3a.jsonl';
 const DATA = '.obsidian/plugins/essence-cards/data.json';
+/** 設定檔（tasks/settings-vault-file.md）：「設定」那一列寫到這裡，data.json 只讀。 */
+const SETTINGS = 'Essence Cards/設定.json';
 const T = '2026-11-01T10:00:00.000+08:00', T2 = '2026-11-02T10:00:00.000+08:00';
 const NOW = Date.parse('2026-11-10T20:00:00.000+08:00');
 const VAULT = { name: 'Essence', path: 'D:/Notes/Essence' };
@@ -102,7 +104,7 @@ async function restore(h: Harness, backup: { name: string; opened: OpenedBackup 
       before: () => h.runner.beforeRestore([backup.name], h.reader),
       current: () => readCurrent(h.reader, DATA),
       files: h.files, deck: (path, write) => writer.deck(path, write), busy: () => false, noLinks: () => Promise.resolve(),
-      settings: bytes => { h.data.bytes = bytes; return Promise.resolve('saved'); },
+      settings: fields => { h.write(SETTINGS, JSON.stringify(fields)); return Promise.resolve('saved'); },
       device: DEVICE, now: () => NOW, offset: () => 480, closed: () => writer.closed(),
       fail: (step, error) => { h.failures.push(`${step}：${error instanceof Error ? error.message : String(error)}`); },
       ...over,
@@ -828,16 +830,44 @@ void test('紀錄只建新檔：撞到別的程序剛建的就換下一個編號
   assert.equal(h.texts.get(result.logs[0].path!), line + '\n');
 });
 
-void test('data.json：最後寫，帶比對時的 sha；changed 記成跳過，不同的路徑不走 Files', async t => {
+void test('備份只有 data.json：最後寫，帶比對時設定檔的 sha（沒有是 null）；changed 記成跳過，不走 Files、不碰 data.json', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa') }, '{"capMinutes":30}');
   const backup = await snapshot(h);
   h.data.bytes = encode('{"capMinutes":45}');
-  const sha = hashBytes(h.data.bytes);
-  const calls: [string, string | null][] = [];
-  const result = await restore(h, backup, [DATA], { settings: (bytes, expected) => { calls.push([decode(bytes), expected]); return Promise.resolve('changed'); } });
-  assert.deepEqual(calls, [['{"capMinutes":30}', sha]]);
+  const calls: [unknown, string | null][] = [];
+  const result = await restore(h, backup, [DATA], { settings: (fields, expected) => { calls.push([fields, expected]); return Promise.resolve('changed'); } });
+  assert.deepEqual(calls, [[{ capMinutes: 30 }, null]]);
   assert.deepEqual(outcomes(result), [[DATA, '跳過']]);
   assert.equal(h.texts.has(DATA), false);
+  assert.equal(h.texts.has(SETTINGS), false);
+  assert.equal(decode(h.data.bytes), '{"capMinutes":45}');
+});
+
+void test('備份有設定檔：交給 store 的是疊上備份 data.json 的值，帶比對時設定檔的 sha；不走 Files、不碰 data.json（tasks/settings-vault-file.md §6-11）', async t => {
+  const file = JSON.stringify({ capMinutes: 45, retention: 0.9, legacy: { capMinutes: 30 } });
+  const h = await setup(t, { [A]: goal('aaaaaa'), [SETTINGS]: file }, '{"capMinutes":15}');
+  const backup = await snapshot(h);
+  assert.ok(backup.opened.files.has(SETTINGS), '設定檔照一般規則進備份');
+  const now = '{"capMinutes":60,"legacy":null}';
+  h.write(SETTINGS, now);
+  const calls: [unknown, string | null][] = [];
+  const result = await restore(h, backup, [SETTINGS], { settings: (fields, expected) => { calls.push([fields, expected]); return Promise.resolve('saved'); } });
+  assert.deepEqual(calls, [[{ capMinutes: 15, retention: 0.9, legacy: { capMinutes: 30 } }, hashBytes(encode(now))]]);
+  assert.deepEqual(outcomes(result), [[SETTINGS, '已還原']]);
+  assert.equal(h.texts.get(SETTINGS), now, '沒有經過 Files 原樣寫回');
+  assert.equal(decode(h.data.bytes!), '{"capMinutes":15}');
+  assert.deepEqual(result.written, []);
+});
+
+void test('設定：比對之後設定檔改過 → 跳過，不寫（§6-11）', async t => {
+  const h = await setup(t, { [A]: goal('aaaaaa'), [SETTINGS]: '{"capMinutes":30,"legacy":null}' }, null);
+  const backup = await snapshot(h);
+  h.write(SETTINGS, '{"capMinutes":45,"legacy":null}');
+  let called = false;
+  const result = await restore(h, backup, [SETTINGS], { settings: () => { called = true; return Promise.resolve('saved'); } }, () => { h.write(SETTINGS, '{"capMinutes":60,"legacy":null}'); });
+  assert.deepEqual(outcomes(result), [[SETTINGS, '跳過']]);
+  assert.equal(called, false);
+  assert.equal(h.texts.get(SETTINGS), '{"capMinutes":60,"legacy":null}');
 });
 
 void test('設定寫不進去、讀不到：記進錯誤紀錄（L2 的 R10）', async t => {
@@ -851,13 +881,13 @@ void test('設定寫不進去、讀不到：記進錯誤紀錄（L2 的 R10）',
   }
 });
 
-void test('data.json：寫之前再查路徑上的連結，有連結就不寫（L2 的 R4）', async t => {
+void test('設定：寫之前再查設定檔路徑上的連結，有連結就不寫（L2 的 R4）', async t => {
   const h = await setup(t, { [A]: goal('aaaaaa') }, '{"capMinutes":30}');
   const backup = await snapshot(h);
   h.data.bytes = encode('{"capMinutes":45}');
   let wrote = false;
   const result = await restore(h, backup, [DATA], {
-    noLinks: path => path === DATA ? Promise.reject(Error('路徑上有連結')) : Promise.resolve(),
+    noLinks: path => path === SETTINGS ? Promise.reject(Error('路徑上有連結')) : Promise.resolve(),
     settings: () => { wrote = true; return Promise.resolve('saved'); },
   });
   assert.deepEqual(outcomes(result), [[DATA, '失敗']]);

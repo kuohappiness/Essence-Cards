@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util';
 import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName, textDiff } from '../src/core/backup/index.ts';
 import { isDeckPath } from '../src/core/deck/index.ts';
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
+import { decodeSettings, encodeSettings, parseData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
 import { formatTime, LOG_FOLDER } from '../src/core/study/index.ts';
 import { backupVault } from './backup.ts';
 import { assertNoLinks, isOwn, leftBehind, listTree, platformName, pluginConfig, readError, removeOwn, sameFileKey, writeNew } from './vault-io.ts';
@@ -17,7 +18,7 @@ export interface RestoreOptions {
   vault: string;
   /** 備份檔（zip）。 */
   backup: string;
-  /** 這個 vault 現在的設定資料夾，預設 .obsidian；裡面要有外掛，確定不了時 data.json 擋住。 */
+  /** 這個 vault 現在的設定資料夾，預設 .obsidian；裡面要有外掛。確定不了時現在的 data.json 不算進「設定」現在的值，還原前的備份也做不了。 */
   config?: string;
   /** --apply 先做的現況備份放哪裡；預設是備份檔旁邊。 */
   to?: string;
@@ -51,7 +52,7 @@ async function load(options: RestoreOptions): Promise<Loaded> {
   let config: string | null = null;
   let configError: string | null = null;
   try { config = await pluginConfig(vault, options.config); } catch (error) { configError = (error as Error).message; }
-  // 設定資料夾的路徑上有連結時，--apply 寫 data.json 一定會被擋：計畫就先當成確定不了，data.json 標成擋住。
+  // 設定資料夾的路徑上有連結時，不跟著連結讀 data.json：計畫就先當成確定不了，報告寫出原因。「設定」寫到設定檔，不受影響（tasks/settings-vault-file.md §4）。
   if (config !== null) {
     try { await assertNoLinks(vault, config + '/' + PLUGIN_DATA); } catch (error) { configError = (error as Error).message; config = null; }
   }
@@ -98,7 +99,7 @@ export async function makePlan(options: RestoreOptions): Promise<{ plan: PlanFil
   throw Error('找不到沒用過的計畫檔名');
 }
 
-const KIND: Record<PlannedFile['kind'], string> = { changed: '改過', missing: '不見了', same: '相同', added: '備份後才有', unmapped: '位置確定不了' };
+const KIND: Record<PlannedFile['kind'], string> = { changed: '改過', missing: '不見了', same: '相同', added: '備份後才有' };
 const ACTION: Record<PlannedFile['action'], string> = { restore: '可以還原', skip: '沒選', blocked: '擋住', keep: '不動' };
 
 function report(result: PlanFile, loaded: Loaded): string {
@@ -110,12 +111,18 @@ function report(result: PlanFile, loaded: Loaded): string {
     out.push('| 檔案 | 狀況 | 處理 | 說明 |', '|---|---|---|---|');
     for (const file of result.files) {
       const notes = [...file.reasons, ...file.after.length ? ['要在「' + file.after.join('」、「') + '」之後寫（先釋放學習目標 ID）'] : []];
-      out.push(`| ${file.path}${file.target !== null && file.target !== file.path ? ' → ' + file.target : ''} | ${KIND[file.kind]} | ${ACTION[file.action]} | ${notes.join('；')} |`);
+      out.push(`| ${file.path}${file.target !== file.path ? ' → ' + file.target : ''} | ${KIND[file.kind]} | ${ACTION[file.action]} | ${notes.join('；')} |`);
     }
   }
   for (const file of result.files.filter(file => file.kind === 'changed')) {
-    const before = loaded.current.get(file.current!.path)!, after = loaded.backup.files.get(file.path)!;
     out.push('', `### ${file.path}`, '');
+    // 「設定」那一列比的是值（tasks/settings-vault-file.md §4）：列欄位的差異，現在可能只有 data.json。
+    if (file.path === result.settings?.path) {
+      const { backup, current } = result.settings;
+      out.push(...backup === null ? ['備份裡的設定讀不懂'] : savedDiff(current, backup, result.created.slice(0, 10)).map(line => '- ' + line));
+      continue;
+    }
+    const before = loaded.current.get(file.current!.path)!, after = loaded.backup.files.get(file.path)!;
     const diff = textDiff(before, after);
     if (diff === null) out.push(`不是文字：現在 ${file.current!.size} bytes \`${file.current!.sha256}\`，備份 ${file.backup!.size} bytes \`${file.backup!.sha256}\``);
     else out.push('`-` 是現在的，`+` 是備份的：', '', '```diff', ...diff, '```');
@@ -185,11 +192,12 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     const file = byPath.get(path)!;
     const waiting = file.after.filter(other => !written.has(other));
     if (waiting.length) { outcome(file, '跳過', '要先還原「' + waiting.join('」、「') + '」才不會讓學習目標 ID 重複，它這次沒有還原成'); continue; }
-    const rel = file.current?.path ?? file.target!;
+    const rel = file.current?.path ?? file.target;
     const folder = rel.slice(0, rel.lastIndexOf('/'));
     const target = join(vault, rel);
     const expected = file.current?.sha256 ?? null;
-    const bytes = loaded.backup.files.get(file.path)!;
+    const values = path === fresh.settings?.path ? fresh.settings.backup : null;
+    const bytes = values === null ? loaded.backup.files.get(file.path)! : settingsBytes(loaded, file, values);
     let temporary: { path: string; identity: Identity } | null = null;
     // 沒寫成就收掉這次的暫存檔；收不掉（不確定是不是自己的）就留著並說明（Codex 再查 R1、第三次查核 T1）。
     const giveUp = async (kind: Outcome, reason: string): Promise<void> => {
@@ -217,7 +225,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       // 寫的時候資料夾被換成連結，就不跟著連結讀（Codex 中途查核 F3）。
       await assertNoLinks(vault, folder);
       // 改名前重新讀現在的全部卡組：前面寫好的檔又被同步改回來、沒選的卡組或新出現的卡組占用了要加回的 ID，就不寫（Codex 再查 R2）。
-      if (file.target !== null && isDeckPath(file.target)) {
+      if (isDeckPath(file.target)) {
         const taken = await occupied(vault, rel, bytes, same, scan);
         if (taken) { await giveUp('跳過', taken); continue; }
       }
@@ -228,7 +236,7 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       if (!await isOwn(temporary.path, temporary.identity)) throw Error(temporary.path + ' 已經不是這次寫的暫存檔');
       await rename(temporary.path, target);
       temporary = null;
-      if (await shaOf(target) !== file.backup!.sha256) throw Error('寫進去之後讀回來的雜湊不同');
+      if (await shaOf(target) !== hashBytes(bytes)) throw Error('寫進去之後讀回來的雜湊不同');
       written.add(path);
       outcome(file, '已還原', '');
     } catch (error) {
@@ -264,6 +272,16 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     }
   }
   return result;
+}
+
+/**
+ * 「設定」要寫的內容（tasks/settings-vault-file.md §4），和外掛經 store 寫的相同：以現在的設定檔為底（沒有或讀不懂是空的），
+ * 五個欄位換成備份的值（values），legacy 是現在的 data.json 的五個欄位（讀不到就沿用原本的）。
+ */
+function settingsBytes(loaded: Loaded, file: PlannedFile, values: Record<string, unknown>): Uint8Array {
+  const now = file.current === null ? {} : decodeSettings(loaded.current.get(file.current.path)!) ?? {};
+  const data = loaded.config === null ? undefined : loaded.current.get(loaded.config + '/' + PLUGIN_DATA);
+  return new TextEncoder().encode(encodeSettings(restoreSaved(now, values), data === undefined ? null : parseData(data)));
 }
 
 /** 要寫進 rel 的卡組（bytes）的學習目標 ID，現在有沒有在別篇：重新讀現在全部的卡組。讀不到的卡組也擋住（確定不了）。 */

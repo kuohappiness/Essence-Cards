@@ -1,7 +1,7 @@
 import { isDeckPath } from '../deck/index.ts';
 import type { Files } from '../files.ts';
 import { formatTime, isLogPath, LOG_FOLDER } from '../study/index.ts';
-import { ESSENCE_ROOT, PLUGIN_DATA } from './manifest.ts';
+import { ESSENCE_ROOT } from './manifest.ts';
 import type { BackupManifest } from './manifest.ts';
 import { restoreLogName } from './names.ts';
 import { deckIds, planRestore } from './plan.ts';
@@ -48,8 +48,11 @@ export interface RestoreRun {
   busy: (path: string) => boolean;
   /** 路徑上有連結就丟錯（§3-3 第 3 點）。 */
   noLinks: (path: string) => Promise<void>;
-  /** 寫 data.json（§4）；expected 是畫面比對時現在的 sha（不存在是 null）；live 是 false 時已經逾時，不要再寫。 */
-  settings: (backup: Uint8Array, expected: string | null, live: () => boolean) => Promise<SettingsOutcome>;
+  /**
+   * 寫設定檔（tasks/settings-vault-file.md §4）：backup 是計畫算好的備份的值（RestorePlan.settings）；expected 是畫面比對時設定檔的 sha
+   * （不存在是 null）；live 是 false 時已經逾時，不要再寫。
+   */
+  settings: (backup: Record<string, unknown>, expected: string | null, live: () => boolean) => Promise<SettingsOutcome>;
   device: string;
   now: () => number;
   offset: (ms: number) => number;
@@ -66,7 +69,7 @@ const CHANGED = '比對之後改過，重新比對看新的差異';
 const STOPPED = '外掛停用了，這次沒有做；重新比對可以接著做';
 const REOPENED = '還原期間這一篇又被打開了，沒有還原；關掉它再重新比對';
 
-/** 現況：`Essence Cards/` 全部，加上 data.json（有的話）。讀不到就丟錯，寫出是哪個檔；筆記與紀錄含 NUL 也算讀不到，圖片可以有 0（D-154）。 */
+/** 現況：`Essence Cards/` 全部（含設定檔），加上 data.json（有的話；「設定」現在的值）。讀不到就丟錯，寫出是哪個檔；筆記與紀錄含 NUL 也算讀不到，圖片可以有 0（D-154）。 */
 export async function readCurrent(reader: BackupReader, data: string | null): Promise<Map<string, Uint8Array>> {
   const current = new Map<string, Uint8Array>();
   for (const path of [...await reader.list(), ...data === null ? [] : [data]]) {
@@ -87,7 +90,6 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   const { opened, files, closed } = run;
   const result: RestoreResult = { backup: null, files: [], logs: [], stopped: null, written: [], stuck: null };
   const limit = run.timeout ?? 30_000;
-  const dataPath = opened.manifest.vault.config + '/' + PLUGIN_DATA;
   const plan = (current: ReadonlyMap<string, Uint8Array>, selection: ReadonlySet<string>): RestorePlan =>
     planRestore({ manifest: opened.manifest, backup: opened.files, current, ...run.plan, selection });
   const halt = (step: string, error: unknown): RestoreResult => {
@@ -131,6 +133,8 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   }
   const fresh = plan(current, new Set([...run.chosen].filter(path => !changed.has(path))));
   const byPath = new Map(fresh.files.map(file => [file.path, file]));
+  /** 「設定」那一列：最後經 store 寫，不走一般的檔（tasks/settings-vault-file.md §4）。 */
+  const settingsPath = fresh.settings?.path ?? null;
   for (const path of run.chosen) {
     const file = byPath.get(path);
     if (!file) outcome({ path, target: null }, '跳過', '現在和備份相同');
@@ -160,12 +164,12 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
   const written = new Set<string>();
   for (const path of fresh.order) {
     const file = byPath.get(path)!;
-    if (path === dataPath) continue;
+    if (path === settingsPath) continue;
     if (closed()) { outcome(file, '跳過', STOPPED); continue; }
     if (halted !== null) { outcome(file, '跳過', halted); continue; }
     const waiting = file.after.filter(other => !written.has(other));
     if (waiting.length) { outcome(file, '跳過', `要先還原「${waiting.join('」、「')}」才不會讓學習目標 ID 重複，它這次沒有還原成`); continue; }
-    const rel = file.current?.path ?? file.target!;
+    const rel = file.current?.path ?? file.target;
     const bytes = opened.files.get(path)!;
     const deck = isDeckPath(rel);
     try {
@@ -235,14 +239,16 @@ export async function applyRestore(run: RestoreRun): Promise<RestoreResult> {
     }
   }
 
-  const data = byPath.get(dataPath);
-  if (data?.action === 'restore') {
+  const data = settingsPath === null ? undefined : byPath.get(settingsPath);
+  const values = fresh.settings?.backup ?? null;
+  // 備份的值讀不懂時計畫已經擋住，不會是 restore。
+  if (data?.action === 'restore' && values !== null) {
     if (closed()) outcome(data, '跳過', STOPPED);
     else if (halted !== null) outcome(data, '跳過', halted);
     else {
       try {
-        await timed(run.noLinks(data.current?.path ?? data.target!), '查連結');
-        const saved = await timed(run.settings(opened.files.get(dataPath)!, run.screen.get(dataPath) ?? null, () => halted === null), '寫設定');
+        await timed(run.noLinks(data.current?.path ?? data.target), '查連結');
+        const saved = await timed(run.settings(values, run.screen.get(data.path) ?? null, () => halted === null), '寫設定');
         if (saved === 'saved') outcome(data, '已還原', '');
         else if (saved === 'changed') outcome(data, '跳過', CHANGED);
         else {
