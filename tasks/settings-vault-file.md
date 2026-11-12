@@ -112,8 +112,8 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 
 | 假設 | 探針 | 環境 | 結果 |
 |---|---|---|---|
-| Obsidian 的 vault 索引有 `Essence Cards/` 底下的 `.json`，新增、修改、刪除、改名都會送事件 | 開發命令：建、改、改名、刪一個 `.json`，記 `Files.watch` 收到的 | Windows、Obsidian 1.15.0 | 待驗（V1 之前） |
-| `vault.process` 與 `vault.create` 寫 `.json` 是原地寫，和 `saveData` 同一種 | 讀 `obsidian-1.15.0.asar` 的 `app.js`（只讀不執行） | 同上 | 待驗 |
+| Obsidian 的 vault 索引有 `Essence Cards/` 底下的 `.json`，新增、修改、刪除、改名都會送事件 | 開發命令 `record-start`／`record-stop` 之間，用 Node 與 PowerShell 在 Obsidian 外面建、改、改名、刪 `Essence Cards/探針 *.json`（`0.4.0+f645c66`，2026-11-12 19:48、19:49） | Windows、Obsidian 1.15.0 | **確認**：建、改、刪各有 vault 的 `create`／`modify`／`delete`，`Files.watch` 都通知到那個路徑；外面的改名收到的是新路徑的 `create` 加舊路徑的 `delete`（不是 `rename`），兩個路徑都通知到，§2 的重讀照樣觸發 |
+| `vault.process` 與 `vault.create` 寫 `.json` 是原地寫，和 `saveData` 同一種 | 讀 `obsidian-1.15.0.asar` 的 `app.js`（只讀不執行） | 同上 | **確認**：電腦版的轉接器 `write`（`vault.create` 與 `saveData` 經 `writeJson` 都走這裡）與 `process` 最後都是 `fsPromises.writeFile(路徑, 文字, "utf8")`，沒有暫存檔再改名；手機版的轉接器兩者都是同一個 `fs.write`。差別只有 `saveData` 另外帶 `mtime`，寫完用 `utimes` 設時間，`process` 不設 |
 | `app.loadLocalStorage` 每個 vault 分開、重開 Obsidian 還在 | 現有證據：裝置碼存在同一處，重開後不變（`src/obsidian/device.ts`，2026-11 兩台的紀錄檔名一直沒換） | Windows、iPhone | 確認 |
 | 一般資料夾裡電腦原地重寫的檔不會被改名 | 討論稿 H（`.md`，10 次 0 次）；`.json` 由 V1 驗 | Windows | `.md` 確認；`.json` 待驗 |
 | iPhone 的 vault 索引有 `.json`、會送事件 | V2 | iPhone、Obsidian 1.15.0 | 待驗 |
@@ -142,4 +142,33 @@ store（`src/core/settings/store.ts`）的隊伍、核對、`known` 的規則不
 
 ## 結果
 
-延後的測試：（實作後填）
+分支 `claude/settings-vault-file`：
+
+| commit | 內容 |
+|---|---|
+| `0b26915` | 設定檔內容的純函式：疊 `legacy`、寫、讀（§1、§2） |
+| `4d7af77` | store 改讀寫設定檔，`Files.watch` 通知到設定檔就重讀（§2） |
+| `cb4fda0` | 設定檔不見時用這台確認過的值、設定頁的提示與「重新建立」（§3） |
+| `29aa8af` | 還原的「設定」那一列換來源與目的地，外掛與命令列一致（§4） |
+| `f421079` | 發布前比較讀設定檔（§4 最後一點） |
+| `f645c66` | 舊版不認設定檔的測試（§6-12） |
+
+延後的測試：無（§6 第 1～13 點都在分支上的測試裡）。
+
+和任務說明字面不同的地方（已寫進格式查核請求第 7 點）：
+
+- §3「store 一開始就用這筆」做成 store 的 `seed` 選項：第一次讀之前就用確認過的值，`known` 是 false。
+- §4 的比對：兩邊的值都是「設定檔疊上同一邊的 `data.json`」，寫進去的是備份那邊疊完的五個欄位。外掛畫面顯示的就是疊完的值，比對與寫入跟著一致。
+- 寫入時 `data.json` 不存在，`legacy` 是 `null`，之後舊版那台才建立的 `data.json` 不疊（照 §1、§2，但會丟掉這一種混用的改動）。
+
+命令列的工具（§4 最後一點）：
+
+- `tools/restore.ts`：和外掛一樣寫到設定檔，內容相同（以現在的設定檔為底換五個欄位，`legacy` 照 save 的規則），報告列五個欄位的差異；現在的設定資料夾確定不了時讀不到 `data.json`，`legacy` 沿用原本的；不寫 `data.json`。
+- `tools/backup.ts`：不用改，設定檔在 `Essence Cards/` 底下照樣進備份，`data.json` 也照舊備。
+- `tools/compare-versions.ts`：凍結的輸入多帶設定檔的位元組；有設定檔讀法的版本當成沒確認過設定檔的一台去讀，`0.4.0` 只讀 `data.json`。
+- `tools/update-vault.ts`：不用改，`--check` 之後的變動核對本來就包含 `Essence Cards/` 底下的每個檔，設定檔改了也要求重跑；錯誤訊息仍寫「卡組或 data.json」，意思包含在「卡組」那一側，不另改。
+
+測試 vault 的實測（開發版 `0.4.0+f645c66`，Obsidian 1.15.0，只開著測試 vault）：
+
+- §7 第 1、2 列見上表。
+- 第一次改設定（19:50:46）建立了 `Essence Cards/設定.json`，內容 `{"capMinutes": 31, "legacy": null}`（測試 vault 的 `data.json` 早已被 iCloud 改名，`legacy` 照規則是 `null`）。31 不是設定頁的選項，讀回是預設的 30，換成選項裡的值重跑 V1；這一筆不影響 V1 的判斷，算多一次寫入。

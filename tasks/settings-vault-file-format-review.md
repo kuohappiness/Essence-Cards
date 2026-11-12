@@ -8,8 +8,9 @@ D-199 的修法，使用者 2026-11-12 同意先做 A：外掛的設定從 `data
 
 ## 基準
 
-- 這份請求所在的 commit（`git log -1 --format=%h -- tasks/settings-vault-file-format-review.md`），在 `main`。
-- 程式還沒寫；現在的行為在 `main` 的 `src/core/settings/store.ts`、`saved.ts`、`src/main.ts:132`（`loadData`／`saveData`）、`src/core/backup/plan.ts`、`restore.ts`、`src/obsidian/restore.ts`、`restore-modal.ts`。
+- 這份請求所在的 commit（`git log -1 --format=%h -- tasks/settings-vault-file-format-review.md`），在分支 `claude/settings-vault-file`。
+- 原本的行為在 `main` 的 `src/core/settings/store.ts`、`saved.ts`、`src/main.ts`（`loadData`／`saveData`）、`src/core/backup/plan.ts`、`restore.ts`、`src/obsidian/restore.ts`、`restore-modal.ts`。
+- 照任務說明〈和格式查核的先後〉，分支上已經用暫定的寫法做完 §2～§4 與比較工具（`src/core/settings/file.ts`、`src/core/backup/plan.ts` 的「設定」那一列、`tools/restore.ts`、`tools/compare/adapter.ts`）。這次只查格式；程式碼可以拿來當格式的證據，程式本身的問題留給 L2。
 
 ## 讀什麼
 
@@ -25,6 +26,11 @@ D-199 的修法，使用者 2026-11-12 同意先做 A：外掛的設定從 `data
 4. **還原**（§4）：來源的優先順序、兩個都有時不列 `data.json`、現在沒有設定檔時和 `data.json` 比、只差 `legacy` 算相同；舊備份（只有 `data.json`）、新備份、現在讀不懂這幾種組合是否都寫清楚、能寫成測試。
 5. **退版與混用**（§5）：寫法是否足夠，最低可退版本怎麼守（D-149 第 4 點的安裝檢查只看 `需要版本`、`need`，這次不加 `need`）。
 6. 邊界有沒有寫清楚、能不能寫成測試；只回報有證據的。
+7. **實作時發現、任務說明沒寫明的**（Claude 的判斷，請查會不會默默錯）：
+   - 寫設定檔時 `data.json` 不存在，`legacy` 是 `null`（§1 照寫）：之後舊版那台才建立 `data.json` 改的設定，新版不採用（§2 只在 `legacy` 是物件時疊）。這是為了不讓 iPhone 的佔位檔或新裝置的空白蓋掉設定，代價是這一種混用會丟掉舊版那台的改動。
+   - 還原比對時，兩邊的值都是「設定檔疊上同一邊的 `data.json`」，不是任務說明 §4 字面的「設定檔有就用它」：備份裡的設定檔疊備份的 `data.json`，現在的設定檔疊現在的 `data.json`；寫進去的是備份那邊疊完的五個欄位（`src/core/backup/plan.ts` 的 `settingsValue`）。理由：外掛畫面上顯示的就是疊完的值，比對和寫入要和它一致。
+   - 命令列的還原（`tools/restore.ts`）寫的內容和外掛經 store 寫的相同；現在的設定資料夾確定不了時讀不到 `data.json`，`legacy` 沿用原本的（§1 的「讀不到」）。
+   - 發布前比較（`tools/compare-versions.ts`）把比較的一方當成沒確認過設定檔的一台：設定檔沒有就讀 `data.json`；`0.4.0` 只讀 `data.json`。
 
 ## 回報
 
