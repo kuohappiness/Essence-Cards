@@ -329,6 +329,29 @@ void test('還原：沒有設定檔、計畫之後 data.json 變了 → 跳過�
   await assert.rejects(read(vault, SETTINGS));
 });
 
+// L2 的 R3：--apply 寫入期間舊版那台改了 data.json，現在的值和計畫裡的不同了：寫之前與改名之前都要擋（設定檔的雜湊比不出來）。
+void test('還原：寫入期間 data.json 才變（舊版那台改了設定）→ 跳過，設定檔不動', async t => {
+  const DATA = '.obsidian/plugins/essence-cards/data.json';
+  const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 60, legacy: null }) });
+  const zip = await backup(t, source);
+  const before = JSON.stringify({ capMinutes: 45, legacy: { capMinutes: 30 } });
+  // 寫 A 的暫存檔時改：輪到設定時寫之前的重讀要擋。寫設定的暫存檔時改：改名之前要擋。
+  for (const during of ['A.md.', '設定.json.']) {
+    const vault = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111', '改過'), [SETTINGS]: before, [DATA]: '{"capMinutes":30}' });
+    const options = { vault, backup: zip, ...fixed, random: counter() };
+    const { path } = await makePlan(options);
+    const write = async (handle: FileHandle, bytes: Uint8Array, file: string): Promise<void> => {
+      await handle.writeFile(bytes);
+      if (file.includes(during)) await put(vault, DATA, '{"capMinutes":15}');
+    };
+    const result = await applyPlan({ ...options, plan: path, seams: { write } });
+    assert.deepEqual(result.files.map(file => [file.path, file.outcome, file.reason]), [
+      ['Essence Cards/A.md', '已還原', ''], [SETTINGS, '跳過', '還原期間改過；重跑 --plan 看新的差異']], during);
+    assert.equal(await read(vault, SETTINGS), before, during);
+    assert.deepEqual((await readdir(join(vault, 'Essence Cards'))).filter(name => name.includes('restore-tmp')), [], during);
+  }
+});
+
 // legacy 是寫入當下的 data.json，不沿用設定檔原本的（沿用的話，現在疊上的 15 之後會把剛還原的 20 蓋掉）；寫完再做計畫，「設定」沒有差異。
 void test('還原：legacy 換成現在的 data.json；還原後再做計畫，「設定」不再列出', async t => {
   const source = await makeVault(t, { 'Essence Cards/A.md': goal('aaa111'), [SETTINGS]: JSON.stringify({ capMinutes: 20, legacy: null }) });

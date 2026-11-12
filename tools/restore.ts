@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName, sameSettingsNow, textDiff } from '../src/core/backup/index.ts';
+import { ESSENCE_ROOT, PLUGIN_DATA, deckIds, hashBytes, openBackup, planRestore, restoreLogName, sameSettingsNow, settingsNow, textDiff } from '../src/core/backup/index.ts';
 import { isDeckPath } from '../src/core/deck/index.ts';
 import type { OpenedBackup, PlannedFile, RestorePlan } from '../src/core/backup/index.ts';
 import { decodeSettings, dropLegacy, encodeSettings, parseData, restoreSaved, savedDiff } from '../src/core/settings/index.ts';
@@ -201,7 +201,9 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     const target = join(vault, rel);
     const expected = file.current?.sha256 ?? null;
     const values = path === fresh.settings?.path ? fresh.settings.backup : null;
-    const bytes = values === null ? loaded.backup.files.get(file.path)! : settingsBytes(loaded, file, values);
+    let bytes = loaded.backup.files.get(file.path)!;
+    /** 「設定」的內容根據的那一次 data.json 的雜湊（L2 的 R3）：改名之前再比一次；確定不了位置是 undefined。 */
+    let dataSeen: string | null | undefined;
     let temporary: { path: string; identity: Identity } | null = null;
     // 沒寫成就收掉這次的暫存檔；收不掉（不確定是不是自己的）就留著並說明（Codex 再查 R1、第三次查核 T1）。
     const giveUp = async (kind: Outcome, reason: string): Promise<void> => {
@@ -212,6 +214,17 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
     try {
       // 寫之前、改名之前各重新讀一次：還原期間才到的修改（iCloud、別的編輯器）不能蓋掉（Codex 中途查核 F2）。
       if (await shaOf(target) !== expected) { outcome(file, '跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
+      if (values !== null) {
+        // 「設定」寫之前重讀設定檔與 data.json（L2 的 R3）：loaded 是開始時讀的，舊版那台之後才改的 data.json 看不到。
+        // 現在的值和計畫裡的比，要寫的內容與 legacy 都用這一次讀到的。
+        const now = await settingsAt(vault, rel, loaded.config);
+        if ((now.file === null ? null : hashBytes(now.file)) !== expected || !sameSettingsNow(settingsNow(now.file, now.data), saved.settings?.current ?? null)) {
+          outcome(file, '跳過', '還原期間改過；重跑 --plan 看新的差異');
+          continue;
+        }
+        bytes = settingsBytes(now.file, now.data, values);
+        dataSeen = now.data === undefined ? undefined : now.data === null ? null : hashBytes(now.data);
+      }
       // 路徑上有連結就不寫：建資料夾前後、改名前各查一次，中途被換成連結也擋得到（Codex 中途查核 F3）。
       await assertNoLinks(vault, folder);
       await mkdir(dirname(target), { recursive: true });
@@ -236,6 +249,8 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
       // 掃描完才最後一次確認目標：寫暫存檔與全庫掃描都要時間，這段期間才到的修改也不能蓋掉（Codex 第三次查核 T2）。
       await assertNoLinks(vault, folder);
       if (await shaOf(target) !== expected) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
+      // 「設定」另外比 data.json：寫暫存檔的這段時間舊版那台改了設定，現在的值就不是寫之前比的那一份（L2 的 R3）。
+      if (values !== null && (await settingsAt(vault, rel, loaded.config, false)).dataSha !== dataSeen) { await giveUp('跳過', '還原期間改過；重跑 --plan 看新的差異'); continue; }
       // 資料夾在這段時間被換掉時，那個位置是別人的檔，不能拿來蓋目標（Codex 第三次查核 T1）。
       if (!await isOwn(temporary.path, temporary.identity)) throw Error(temporary.path + ' 已經不是這次寫的暫存檔');
       await rename(temporary.path, target);
@@ -279,14 +294,25 @@ export async function applyPlan(options: RestoreOptions & { plan: string; files?
 }
 
 /**
- * 「設定」要寫的內容（tasks/settings-vault-file.md §4），和外掛經 store 寫的相同：以現在的設定檔為底（沒有或讀不懂是空的），
- * 五個欄位換成備份的值（values），legacy 是現在的 data.json 的五個欄位；讀不到、設定資料夾確定不了是 null，不沿用設定檔原本的
- * （還原的是家長選的一整份值，格式查核第 4 節）。
+ * 「設定」要寫的內容（tasks/settings-vault-file.md §4），和外掛經 store 寫的相同：以寫之前重讀的設定檔（file）為底（沒有或讀不懂是空的），
+ * 五個欄位換成備份的值（values），legacy 是同一次讀到的 data.json（data）的五個欄位；不存在、讀不懂、設定資料夾確定不了是 null，
+ * 不沿用設定檔原本的（還原的是家長選的一整份值，格式查核第 4 節）。
  */
-function settingsBytes(loaded: Loaded, file: PlannedFile, values: Record<string, unknown>): Uint8Array {
-  const now = file.current === null ? {} : decodeSettings(loaded.current.get(file.current.path)!) ?? {};
-  const data = loaded.config === null ? undefined : loaded.current.get(loaded.config + '/' + PLUGIN_DATA);
-  return new TextEncoder().encode(encodeSettings(restoreSaved(dropLegacy(now), values), data === undefined ? null : parseData(data)));
+function settingsBytes(file: Uint8Array | null, data: Uint8Array | null | undefined, values: Record<string, unknown>): Uint8Array {
+  const now = file === null ? {} : decodeSettings(file) ?? {};
+  return new TextEncoder().encode(encodeSettings(restoreSaved(dropLegacy(now), values), data == null ? null : parseData(data)));
+}
+
+/**
+ * 「設定」寫入當下的現況（L2 的 R3）：設定檔（rel）與 data.json 各讀一次；不存在是 null，設定資料夾確定不了時 data.json 是 undefined。
+ * 照 load 的做法，data.json 的路徑上有連結就不跟著讀（丟錯，這個檔算失敗）。withFile 是 false 時只讀 data.json。
+ */
+async function settingsAt(vault: string, rel: string, config: string | null, withFile = true): Promise<{ file: Uint8Array | null; data: Uint8Array | null | undefined; dataSha: string | null | undefined }> {
+  const file = withFile ? await bytesOf(join(vault, rel)) : null;
+  if (config === null) return { file, data: undefined, dataSha: undefined };
+  await assertNoLinks(vault, config + '/' + PLUGIN_DATA);
+  const data = await bytesOf(join(vault, config, PLUGIN_DATA));
+  return { file, data, dataSha: data === null ? null : hashBytes(data) };
 }
 
 /** 要寫進 rel 的卡組（bytes）的學習目標 ID，現在有沒有在別篇：重新讀現在全部的卡組。讀不到的卡組也擋住（確定不了）。 */
@@ -302,12 +328,18 @@ async function occupied(vault: string, rel: string, bytes: Uint8Array, same: (pa
   return null;
 }
 
-/** 檔案內容的雜湊；不存在是 null。 */
-async function shaOf(path: string): Promise<string | null> {
-  try { return hashBytes(new Uint8Array(await readFile(path))); } catch (error) {
+/** 檔案內容；不存在是 null。 */
+async function bytesOf(path: string): Promise<Uint8Array | null> {
+  try { return new Uint8Array(await readFile(path)); } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
+}
+
+/** 檔案內容的雜湊；不存在是 null。 */
+async function shaOf(path: string): Promise<string | null> {
+  const bytes = await bytesOf(path);
+  return bytes === null ? null : hashBytes(bytes);
 }
 
 async function exists(path: string): Promise<boolean> {
