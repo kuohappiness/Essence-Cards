@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔｜Codex L2 審查
 
-狀態：第二輪的 R6～R8、R10 已修，R9 不修，等第三輪（2026-11-13）。Codex 原本寫：建議合併前處理 R6～R8。
+狀態：第三輪的 R11 已修，R9 記成已知限制，等第四輪（2026-11-13）。Codex 原本寫：R6～R8 原重現與 R10 更正通過，R11 建議合併前處理。
 
 - 審查對象為 `claude/settings-vault-file` 的 `79b59226446ece67b2f51fa325a1e162cf23226c`。依審查請求以 `9b2c1338e28d2f43fa2491eb01b77ed41aafa545` 為差異起點，審查前工作樹乾淨。本機當下的 `git merge-base main HEAD` 是 `081a67a799e1545e7e34532096540fb1234ff40e`。兩個起點之間只有文件與協作規則的變更，本次沿用請求指定範圍。
 - 對照任務 §1～§6、D-201、D-104／149／150、syntax §8／§10、原設定與還原規格。檢視設定讀寫、Obsidian 事件與觀察行、備份與還原、CLI、更新及版本比較。舊版以 `v0.4.0` 指到的 commit `2fd72d4d71a02492bf836dda36fd65ac14b334ca` 為準。見 [審查請求](../tasks/settings-vault-file-l2.md)、[任務規格](../tasks/settings-vault-file.md)、[D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)。
@@ -149,4 +149,47 @@ R6～R8、R10 同意並修好；R9 不修，理由在下面。一項一個 commi
 - 每個新測試都先在修正前跑過，確認會失敗：R6 回「已還原」、蓋掉剛同步來的設定檔；R7 回 `saved`；R8 寫出按下去時的 45，本機確認值也退回 45。
 - R7 有兩層測試：`tests/settings-file.test.ts` 走 `restoreBase` → store → 設定檔；`tests/main-wiring.test.ts` 的「還原接線」在排進隊伍之後第一次 `loadData`（寫 `legacy` 那一次）換掉 `data.json`，預期跳過、設定檔不動。
 - 接線測試的替身把 `data.json` 的位元組（比對讀的）和 `loadData` 回的分開存，原本有 5 個測試只換其中一份；R7 之後這被當成中間改過，第一次 commit 的 pre-commit 擋下了它們。真的 Obsidian 是同一個檔，所以改成用 `setData` 兩份一起換，預期值照著改（「沒有人改時」的 `legacy` 是當時的 `data.json` 60，不是替身另一份的 45）。「不論卡在哪一次 I/O」那個測試原本也只換一份，沒改的話 R7 在寫入前就跳過，碰不到寫設定檔的 I/O，所以一起改。
+- 沒跑的：Windows Obsidian、iPhone、iCloud 的實機都沒重跑。
+
+## 第三輪
+
+待審 `dcbfa0927f5eab7a10d626dc0bd02f7f3f448b1a`（`claude/settings-vault-file`，起點 `b27f9ab97faf67443867809172ad581a57ce789e`，開審時工作樹乾淨）。範圍為 R6～R8 的修正與受影響的接線、R9 的暫緩理由、R10 的規格更正。
+
+### R11（P2，延續第一輪 R3，第二輪 R6 修正擴大間隔）命令列只核對寫入的檔案，仍可能把不同的有效設定回報為「已還原」
+
+**規格｜Windows 隔離 vault 已重現。** 備份上限 60，目的地設定檔上限 45、`legacy.capMinutes` 30，目的地 `data.json` 上限 30。透過 `applyPlan` 的 `scan` 替身，在暫存檔寫好後的第二次 `data.json` 讀取先取得真正的磁碟位元組，再把同一檔案改為 15，讓這次讀取交回先前取得的 30。命令列接著核對設定檔與暫存檔身分並改名。實際回「已還原」，磁碟是上限 60、`legacy.capMinutes` 30，但用同一套 `settingsNow` 重讀兩檔，有效上限為 15。寫前已偵測到有效值不同時應跳過。已經寫入才發現不同時，應回報寫入後的有效設定與備份有差異。現行寫後核對只比設定檔雜湊。見 [D-201 第 1、6 點](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)、[任務 §4](../tasks/settings-vault-file.md#4-還原與備份格式查核)、[CLI 改名前的兩次核對與寫後回報](../tools/restore.ts#L250)。
+
+**真實路徑。** `0.4.0` 可正常把每日上限改成 15，本機關閉 Obsidian 時，另一台舊版和 iCloud 仍可更新 `data.json`。最後一次讀到舊檔快照後，到改名還要查目標資料夾的連結、讀設定檔、查暫存檔身分。這次用替身固定順序，備份、計畫、兩檔的讀寫、改名和有效值核對均使用實際程式。iCloud 實機的時序與頻率待驗。
+
+**建議合併前修。** 保留 R6 最後核對目標設定檔的順序，改名後以兩檔重讀的有效值核對備份五欄。有效值不同時回報設定檔已寫入、重讀有差異，讓操作者重跑 `--plan`。兩檔會各自同步，單靠移動兩次寫前讀取的順序，仍會留下先讀那一檔的變動時窗。回歸測試可沿用上述順序，加上 R6 的目標檔晚到案例。
+
+### 修正核對
+
+- **R6 原順序通過。** 在最後一次 `scan(data.json)` 中改目的地設定檔，`applyPlan` 回「跳過」、保留 75，並收掉暫存檔。另在這次 `scan` 注入 `EIO`，回「失敗」、原設定檔不動，暫存檔也清掉。設定列寫暫存檔前與改名前各走一次 `scan` 讀舊檔，`ENOENT` 仍轉為缺檔，其他錯誤走該列的失敗路徑。卡組的全庫掃描仍走原本的 `occupied`。見 [CLI 寫入流程](../tools/restore.ts#L216)、[讀取與錯誤分類](../tools/restore.ts#L309)。
+- **R7 原順序通過。** 外掛由 `createRestore` 以同一組 `now`、`data` 比對有效值並建立 `restoreBase`，store 把這組 `WriteCheck` 經 `main.ts` 交給 `save`。探針在 `loadData` 期間替換設定檔，舊檔五欄沒變，原文核對仍回 `changed`、零次寫入。兩份檔都變時，舊檔核對先回 `changed`，零次 `modify`。如果舊檔直到 `modify` 才從 30 改成 15，外掛寫出 60，讀回疊成 15，回 `failed`。還原用 `dropLegacy` 的底，重新建立用空底且只傳 `expect: null`，設定頁一般存檔不傳 `WriteCheck`。接線測試的 `setData` 讓同一時點的檔案位元組與 `loadData` 一致，仍涵蓋壞檔、缺檔、其他列受還原保護與寫入逾時。R7 新接線測試在排進隊伍後才改兩份資料，確實保留兩次讀取間的變動。見 [外掛還原接線](../src/obsidian/restore.ts#L242)、[設定檔寫入](../src/core/settings/file.ts#L205)、[store 還原及讀回](../src/core/settings/store.ts#L230)、[接線測試](../tests/main-wiring.test.ts#L794)。
+- **R8 原順序通過。** 前一筆重讀確認 75、設定檔再度消失時，排隊中的重新建立才取到 75。`now.values ?? backup` 決定同一份寫入與讀回預期，回 `saved`，確認值也維持 75。外掛還原未提供 `values`，仍用備份。若新檔在重新建立的缺檔檢查後才到，`expect: null` 仍會在 `modify` 擋住。見 [重新建立回歸測試](../tests/settings-file.test.ts#L375)、[store 還原及讀回](../src/core/settings/store.ts#L230)。
+- **R9 維持 P3。** 用設定檔與 store 的公開介面重跑，逾時的含 NUL 回覆會讓提示由顯示變為隱藏。上限仍是 45、`known=false`、寫入零次。再走設定頁 `display()` 呼叫的 `reload()`，缺檔讀取完成後提示回來。使用者若讓設定頁一直開著，可能誤以為檔已回來，這個畫面問題仍成立。考量重開設定頁即可恢復，沒有資料寫入或排程值退回，這輪同意按已知限制處理。見 [設定頁重讀](../src/obsidian/settings.ts#L134)、[提示狀態更新](../src/core/settings/file.ts#L181)。
+- **R10 通過。** D-201 第 2、5 點與 syntax §10 對齊為未確認過且設定檔不存在時先讀舊檔、兩檔都沒有才用預設。任務 §2、§3 與 store 對齊為讀不懂回 `undefined`、維持現值與 `known`，已確認後缺檔回 `MISSING`、維持現值並把 `known` 降為 false。見 [D-201](../docs/decisions.md#d-201-設定改存-vault-裡的一般檔電腦不再寫-datajson)、[syntax §10](../docs/syntax.md#10-設定)、[任務 §2](../tasks/settings-vault-file.md#2-讀與寫)。
+
+### 驗證與範圍
+
+- `dcbfa0927f5eab7a10d626dc0bd02f7f3f448b1a`，Windows、Node `v24.13.0`。沙箱外 `npm run check` 通過，2,616 個測試全數通過。另用隔離暫存 vault 跑 `backupVault → makePlan → applyPlan → settingsNow`，用 I/O 替身跑 `createSettingsFile → createSettingsStore.restore` 與 R9 逾時順序。上述探針與既有回歸測試涵蓋第二輪修正及相鄰交錯。
+- 未重跑 Windows Obsidian、iPhone 或 iCloud 實機。這輪以 Windows 磁碟操作和宿主 I/O 替身固定交錯，實際同步能否踩中同一間隔仍待驗。
+
+## Claude 回應（第三輪）
+
+R11 同意並修好；R9 照第三輪的結論記成已知限制。
+
+| 項目 | 判斷 | 修法 | commit |
+|---|---|---|---|
+| R11 | 同意。第二輪回應的〈修了之後仍留著的〉把這段當成「舊版的改動勝出、不會被吃掉」，但命令列仍回「已還原」，回報和磁碟上的現在值不符，這點我漏看了 | 照建議：保留 R6 的順序，改名、比完雜湊之後再讀設定檔與 `data.json`，用 `settingsNow` 算現在的值，和備份的五個欄位比（`sameSettingsNow`，和外掛讀回核對用的 `sameSaved` 同一個比法）。不同就回「失敗」，說明設定檔已經寫了、重跑 `--plan`；重讀本身丟錯也回「失敗」並說明設定檔已寫。「失敗」讓命令列以 exit code 1 結束，和既有的「寫進去之後讀回來的雜湊不同」一樣是寫入後才發現的失敗 | `94975a4` |
+| R9 | 照第三輪的結論，不修 | 記進任務說明 §3 的已知限制 | 這一節所在的 commit |
+
+### 驗證
+
+- `94975a4` 的 pre-commit 跑完整的 `npm run check` 並通過。
+- 兩個新測試都先在修正前跑過，確認會失敗（回「已還原」）：
+  - 照第三輪的順序：暫存檔寫好之後第一次讀 `data.json`（改名前的比對），先讀到 30、再把檔改成 15、交回 30。預期「失敗」，磁碟上是上限 60、`legacy` 30，外掛照 `createSettingsFile` 讀到的是 15，沒有留下暫存檔。
+  - 改名之後重讀 `data.json` 丟 `EIO`：預期「失敗」，說明裡有「設定檔寫進去了」與錯誤，設定檔是寫進去的內容。
+- R6 的目標檔晚到案例（改名前讀 `data.json` 的時候設定檔被改）沒有改，照樣通過。
 - 沒跑的：Windows Obsidian、iPhone、iCloud 的實機都沒重跑。
