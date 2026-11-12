@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔（格式查核，給 Codex）
 
-狀態：等 Codex（2026-11-12）
+狀態：已完成（2026-11-12）：[查核報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-format-review.md>)，Claude 的處理在報告最後的〈Claude 整合〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 session**。
 
