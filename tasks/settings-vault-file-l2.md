@@ -1,6 +1,6 @@
 # 設定換到 vault 裡的一般檔（Codex L2 審查請求）
 
-狀態：待審（2026-11-12）
+狀態：第二輪待審（2026-11-13）：第一輪 5 項 P2 已修，見下面〈第二輪（只審修正）〉
 
 遵守 repo 根目錄的 `AGENTS.md`。建議推理等級：**高**。請**新開一個 Codex 對話**；只審查，不改產品程式與文件；可以在隔離的暫存資料重現，不碰測試 vault 與正式使用的 vault。
 
@@ -57,3 +57,19 @@
 - 寫在 `Claude Codex Discussion/2026-11-12-settings-vault-file-l2.md`，標題下第一行寫狀態。
 - 每項發現寫觸發條件、預期與實際、影響、位置與證據，區分「已重現」「靜態推斷」「待驗證」，另標**真實路徑會不會發生**（使用者的資料、Obsidian 與 iCloud 的實際行為、已發布的 `0.4.0` 會不會產生這個輸入）。可以回報「規格本身有漏洞」。
 - 頭尾寫待審 commit、審查範圍、測試結果，以及沒驗的項目與原因；跨模組的因果或「走不到」的判定，補上關鍵的呼叫鏈或邊界保證。
+
+## 第二輪（只審修正）
+
+請**新開一個 Codex 對話**，建議推理等級：**高**。和第一輪一樣只審查、不改產品程式與文件，可以在隔離的暫存資料重現。
+
+- **待審**：`79b5922` 到這一節所在的 commit（`git log -1 --format=%H -- tasks/settings-vault-file-l2.md`），hash 寫進報告。
+  - 程式：`f9f63ea`（R4）、`1c26f2c`（R1）、`d708aeb`（R2）、`f759b97`（R3）、`527ed40`（R5），一項一個 commit。
+  - 文件：這一節所在的 commit（L2 報告的〈Claude 回應〉、任務說明與 D-201 的狀態）。R1 的規格更正跟著 `1c26f2c`，R2、R3、R5 的任務說明跟著各自的 commit。
+- **先讀**：[L2 報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-l2.md>)最後的〈Claude 回應（第一輪）〉：每項的判斷、修法與修了之後仍留著的。
+- **請確認**：
+  1. 每項的修法擋住第一輪重現的順序；也找新的交錯，例如 R2 的寫入那一刻比對碰上 `Files.modify` 建上層資料夾的迴圈、R3 改名之前的 `data.json` 比對、R1 的 `MISSING` 由寫前與讀回的讀帶回來時 `known` 也變 false。
+  2. 修法帶進的新問題：`store.restore` 的 base 改成交回 `{ raw, expect }`、store 的 `adopted` 選項與 `MISSING`、`SettingsChanged`、`settingsText`、`parseLoadData` 的呼叫端是否都對；`tools/compare/adapter.ts` 直接呼叫 `load()`，沒確認過的一台不會拿到 `MISSING`。
+  3. R1 的規格更正（D-201 第 5 點與〈代價〉、任務說明 §3 與 §6-7、syntax §10）：不見和讀不懂分開，讀不懂維持 `0.4.0` 讀不懂 `data.json` 的規則，還有沒有矛盾。
+- **驗證方式**：每個程式 commit 的 pre-commit 都跑完整的 `npm run check` 並通過；每個新測試都在修正前跑過一次、確認會失敗（細節在報告的〈Claude 回應〉）。沙箱裡的 `npm run check` 有環境造成的固定失敗，完整的要在沙箱外跑。
+- **沒跑的**：Windows Obsidian、iPhone、iCloud 的實機都沒重跑；R2 依賴 `vault.process` 在 fn 丟錯時不寫，看的是安裝版 `app.js`；iPhone 的 `vault.process` 有沒有留 BOM 沒驗。
+- **回報**：寫在同一份 L2 報告最後，加〈第二輪〉一節，標題下第一行的狀態一起改；格式照上面〈回報〉。

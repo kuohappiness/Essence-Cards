@@ -5704,7 +5704,7 @@
 
 ## D-201 設定改存 vault 裡的一般檔，電腦不再寫 data.json
 
-✅ 2026-11-12｜修 [D-199](#d-199-040-帶著電腦設定檔的衝突上線下一版先修) 的問題。Claude 與 Codex 兩輪討論後一致先驗這個做法（[討論稿](<../Claude Codex Discussion/2026-11-12-settings-icloud-conflict.md>)），使用者 2026-11-12 同意先做開發版驗證（「開始做 A」）；做法經 Codex 格式查核（[報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-format-review.md>)），驗證通過後使用者同意照 Claude 的建議定案（「照建議寫」，含第 3、4 點）；細節與驗證在[任務說明](../tasks/settings-vault-file.md)；Codex L2 後更正第 5 點與〈代價〉最後一點的用詞，把「讀不到」分成檔不見與讀不懂（L2 的 R1）｜修改 [D-104](#d-104-設定頁)（設定存在哪裡）、[D-149](#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 3 點（混用與退版的例外）與第 7 點（設定的存檔）、[D-150](#d-150-備份與還原) 第 2、7 點（設定的備份與還原）
+✅ 2026-11-12｜修 [D-199](#d-199-040-帶著電腦設定檔的衝突上線下一版先修) 的問題。Claude 與 Codex 兩輪討論後一致先驗這個做法（[討論稿](<../Claude Codex Discussion/2026-11-12-settings-icloud-conflict.md>)），使用者 2026-11-12 同意先做開發版驗證（「開始做 A」）；做法經 Codex 格式查核（[報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-format-review.md>)），驗證通過後使用者同意照 Claude 的建議定案（「照建議寫」，含第 3、4 點）；細節與驗證在[任務說明](../tasks/settings-vault-file.md)；Codex L2 後更正第 5 點與〈代價〉最後一點的用詞，把「讀不到」分成檔不見與讀不懂（[L2 報告](<../Claude Codex Discussion/2026-11-12-settings-vault-file-l2.md>) R1）｜修改 [D-104](#d-104-設定頁)（設定存在哪裡）、[D-149](#d-149-更新與相容版本紀錄讀取閘門與正式安裝) 第 3 點（混用與退版的例外）與第 7 點（設定的存檔）、[D-150](#d-150-備份與還原) 第 2、7 點（設定的備份與還原）
 
 **決定**：
 
