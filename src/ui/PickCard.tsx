@@ -37,6 +37,14 @@ function fly(button: HTMLElement, index: number): void {
 
 const MARKS: Partial<Record<PickView['cells'][number]['state'], string>> = { right: '✓', near: '✓', miss: '✕', retry: '✕' };
 
+type Row = NonNullable<CardView['card']['group']>['rows'][number];
+
+/** 對照的順序（D-203 第 3 點）：考到的照句子的順序，沒考到的照組裡的順序接在後面。 */
+function compareOrder(rows: readonly Row[], tested: readonly (string | null | undefined)[]): Row[] {
+  const first = tested.flatMap(answer => rows.filter(row => row.member === answer));
+  return [...new Set([...first, ...rows])];
+}
+
 function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.Element {
   const { card } = view;
   const { pick, group } = partsOf(view);
@@ -47,26 +55,23 @@ function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.E
       const cell = pick.cells[index];
       const movable = pick.stage === 'answer' || (pick.stage === 'retry' && cell.state === 'retry');
       return <li key={blank.prompt.fingerprint + String(index)} className={'ec-pick-row' + (index === pick.cursor ? ' is-on' : '') + (movable ? '' : ' is-locked')} onClick={() => { act({ kind: 'row', index }); }}>
+        <span className="ec-pick-mark" data-state={cell.state}>{MARKS[cell.state] ?? ''}</span>
         <div className="ec-pick-text">
           <Markdown app={app} text={questionOf(blank.prompt)} sourcePath={card.deck} mode="pick"
             slotNode={<button type="button" className="ec-pick-slot" data-state={cell.state} data-index={index} aria-label={`第 ${String(index + 1)} 格`}>{cell.state === 'retry' ? <s>{cell.text}</s> : cell.text || '　'}</button>}
             onReady={index === 0 ? onPainted : undefined} onFail={(error, path) => { onFail('front', error, path); }} />
         </div>
-        <span className="ec-pick-mark" data-state={cell.state}>{MARKS[cell.state] ?? ''}</span>
       </li>;
     })}</ul>
-    {/* 有詞的組（is-words）：字那一欄跟著最長的詞變寬，詞與英文不在字中間斷行；單字的組維持原樣（使用者 2026-11-12） */}
-    {pick.stage === 'result' && <div className={'ec-pick-compare ec-answer' + (group.rows.some(row => [...row.member].length > 1) ? ' is-words' : '')}>{group.rows.map(row => {
+    {/* 對照（D-203）：上下排、不標結果；這次考到的照句子的順序排前面 */}
+    {pick.stage === 'result' && <div className="ec-pick-compare ec-answer">{compareOrder(group.rows, card.blanks.map(blank => blank.answer)).map(row => {
       const parts = row.anchor === null ? null : anchorParts(row.anchor);
-      // 全對的卡回看改過評分時，每個字都是改成的那個。
-      const rating = Object.hasOwn(pick.results, row.member) ? view.pressed ?? pick.results[row.member] : null;
       return <div key={row.member} className="ec-cmp">
         <span className="ec-cmp-ch">{row.member}</span>
         <span className="ec-cmp-why">
           {parts && <Markdown app={app} text={parts.why} sourcePath={card.deck} revealed onFail={(error, path) => { onFail('back', error, path); }} />}
           {parts?.words && <span className="ec-cmp-words">{parts.words}</span>}
         </span>
-        {rating && <span className="ec-chip" data-k={rating}>{RATING_LABELS[rating]}</span>}
       </div>;
     })}</div>}
   </article>;

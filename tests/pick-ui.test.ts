@@ -101,13 +101,12 @@ void test('字鍵：照打散的順序，6 個以內一排、7 個以上兩排�
   assert.equal(await columnsOf(WORDS), '4', '9 個詞：還是一排 4 個');
 });
 
-void test('對照：有詞的組加 is-words，字那一欄跟著最長的詞變寬；單字的組維持原樣（使用者 2026-11-12）', async t => {
-  const chars = await show(t, preview(PROPS + CHARS, true));
-  assert.equal(chars.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer');
-  const words = await show(t, preview(PROPS + group(['反應', '反映']), true));
-  assert.equal(words.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer is-words');
-  const english = await show(t, preview(PROPS + group(['give up', 'look after']), true));
-  assert.equal(english.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer is-words');
+void test('對照：字、詞、英文同一種上下排，詞一行、說明與例句在底下（D-203 第 2 點）', async t => {
+  for (const members of [['寨', '塞'], ['反應', '反映'], ['give up', 'look after']]) {
+    const ui = await show(t, preview(PROPS + group(members), true));
+    assert.equal(ui.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer');
+    assert.deepEqual(ui.find('ec-cmp')[0].children.flatMap(child => typeof child === 'string' ? [] : [child.props.className]), ['ec-cmp-ch', 'ec-cmp-why']);
+  }
 });
 
 void test('每一句一行：句子照 Markdown 的 pick 模式，空格是按鈕放進 slotNode；待答的那一行有 is-on', async t => {
@@ -119,6 +118,8 @@ void test('每一句一行：句子照 Markdown 的 pick 模式，空格是按�
   assert.ok(rows[1].props.className === 'ec-pick-row');
   const marks = ui.find('ec-pick-mark').map(mark => ui.text(mark));
   assert.deepEqual(marks, ['', '', '', '']);
+  // 打勾在左邊固定的一格（D-203 第 5 點）。
+  assert.deepEqual(rows.map(row => row.children.flatMap(child => typeof child === 'string' ? [] : [child.props.className])), Array(4).fill(['ec-pick-mark', 'ec-pick-text']));
   const slot = ui.find('ec-pick-slot');
   assert.equal(slot.length, 4);
   assert.equal(slot[2].props['aria-label'], '第 3 格');
@@ -200,23 +201,25 @@ void test('Enter 在有錯的結果階段是下一張', async t => {
   assert.ok(h.log().every(line => line.r === 'miss' && line.pick === null));
 });
 
-void test('對照：每個字一行；記憶錨點去掉名稱、最後一個全形冒號之後是常用詞；沒有冒號就沒有那一行；右邊是結果，這次沒出句子的字沒有', async t => {
+void test('對照：考到的字照句子的順序排前面，其他照組裡的順序；記憶錨點去掉名稱、最後一個全形冒號之後是常用詞；沒有冒號就沒有那一行；不標結果（D-203）', async t => {
   const h: Harness = await setup(t, { [DECK]: PROPS + CHARS });
-  const s = await h.open({ targets: ['zhai00', 'sai000'] });
+  const s = await h.open({ targets: ['yyy000', 'sai000'] });
   const ui = await show(t, s);
   const keys = keyTexts(ui);
   answers(s).forEach(answer => { h.clock.now += 400; press(ui, 'ec-pick-key', keys.indexOf(answer)); });
   assert.deepEqual(ui.find('ec-cmp'), [], '對答案之前沒有對照');
   h.clock.now += 400;
   press(ui, 'ec-pick-check');
-  const rows = ui.find('ec-cmp');
-  assert.deepEqual(ui.find('ec-cmp-ch').map(each => ui.text(each)), ['寨', '塞', '寒', '賽']);
-  assert.equal(rows.length, 4);
+  const tested = answers(s);
+  assert.deepEqual([...tested].sort(), ['塞', '賽']);
+  const order = [...tested, '寨', '寒'];
+  assert.deepEqual(ui.find('ec-cmp-ch').map(each => ui.text(each)), order);
+  const ANCHORS: Record<string, string[]> = { 寨: ['下面是**木**，木頭圍成的防守地'], 塞: ['下面是**土**，沒有常用詞'], 寒: [], 賽: [] };
   const anchors = ui.find('ec-cmp-why').map(each => each.children.flatMap(child => typeof child === 'string' || child.type !== 'markdown' ? [] : [child.props.text]));
-  assert.deepEqual(anchors, [['下面是**木**，木頭圍成的防守地'], ['下面是**土**，沒有常用詞'], [], []]);
+  assert.deepEqual(anchors, order.map(member => ANCHORS[member]));
   assert.deepEqual(ui.find('ec-cmp-words').map(each => ui.text(each)), ['山寨、寨子']);
-  assert.deepEqual(ui.find('ec-chip').map(chip => [ui.text(chip), chip.props['data-k']]), [['記住了', 'good'], ['記住了', 'good']]);
-  // 改成太簡單之後，回看的結果跟著變。
+  assert.deepEqual(ui.find('ec-chip'), []);
+  // 改成太簡單：對照不跟著變，按下的按鈕亮。
   h.clock.now += RATE_DELAY;
   press(ui, 'ec-rate', 0);
   await h.state.flush();
@@ -224,7 +227,8 @@ void test('對照：每個字一行；記憶錨點去掉名稱、最後一個全
   await ui.settle();
   ui.key('4');
   await ui.settle();
-  assert.deepEqual(ui.find('ec-chip').map(chip => chip.props['data-k']), ['easy', 'easy']);
+  assert.deepEqual(ui.find('ec-chip'), []);
+  assert.deepEqual(ui.find('ec-cmp-ch').map(each => ui.text(each)), order);
   assert.deepEqual(ui.find('ec-rate').map(rate => [ui.text(rate), rate.props['aria-pressed']]), [['記住了', false], ['太簡單', true]]);
 });
 
