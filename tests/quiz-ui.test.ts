@@ -264,6 +264,26 @@ void test('§3 取消：檔案多一行取消，按鈕變回「小考」，入�
   assert.notEqual(id(FOLDER + '2026-11-06 小考.md'), id(FOLDER + '2026-11-06 小考 2.md'));
 });
 
+void test('§3 其他日期在捲動的目錄裡：觸控螢幕打字時欄位捲到畫面上方，鍵盤升完再捲一次；滑鼠不捲（0.4.0 iPhone 實機 A6）', async t => {
+  const calls: unknown[] = [];
+  t.mock.method(window.HTMLElement.prototype, 'scrollIntoView', function (this: HTMLElement, options: unknown) { calls.push(options); });
+  let coarse = true;
+  t.mock.method(window, 'matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)' && coarse }));
+  const s = await open(t);
+  await s.expand('L3 Vocabulary');
+  await s.click(s.button('小考'));
+  await s.click(s.button('其他日期'));
+  const field = s.all('input[type="text"]').find(each => each.getAttribute('aria-label') === '小考日期') as HTMLInputElement;
+  assert.ok(field.closest('.ec-en-scroll'), '在捲動的那一層');
+  await act(async () => { field.focus(); await wait(450); });
+  assert.deepEqual(calls, [{ block: 'start' }, { block: 'start' }]);
+  calls.length = 0;
+  coarse = false;
+  field.blur();
+  await act(async () => { field.focus(); await wait(450); });
+  assert.deepEqual(calls, [], '電腦不捲');
+});
+
 void test('§3 其他日期：讀得懂才能確定，存成標準寫法；寫錯、已經過了都留紅字，不寫檔', async t => {
   const s = await open(t);
   await s.expand('L3 Vocabulary');
