@@ -55,7 +55,8 @@ function PickBody({ view, app, act, onPainted, onFail }: BodyProps): React.JSX.E
         <span className="ec-pick-mark" data-state={cell.state}>{MARKS[cell.state] ?? ''}</span>
       </li>;
     })}</ul>
-    {pick.stage === 'result' && <div className="ec-pick-compare ec-answer">{group.rows.map(row => {
+    {/* 有詞的組（is-words）：字那一欄跟著最長的詞變寬，詞與英文不在字中間斷行；單字的組維持原樣（使用者 2026-11-12） */}
+    {pick.stage === 'result' && <div className={'ec-pick-compare ec-answer' + (group.rows.some(row => [...row.member].length > 1) ? ' is-words' : '')}>{group.rows.map(row => {
       const parts = row.anchor === null ? null : anchorParts(row.anchor);
       // 全對的卡回看改過評分時，每個字都是改成的那個。
       const rating = Object.hasOwn(pick.results, row.member) ? view.pressed ?? pick.results[row.member] : null;

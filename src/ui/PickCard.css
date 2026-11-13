@@ -43,6 +43,11 @@
 .ec-answer.ec-pick-compare { display: grid; gap: 12px; margin: 14px 8px 10px; font-family: var(--ec-font-ui); }
 .ec-cmp { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; padding: 0 2px; }
 .ec-cmp-ch { font-size: 25px; line-height: 1.2; overflow-wrap: anywhere; }
+/* 有詞的組（使用者 2026-11-12）：整組共用一張格線，字那一欄跟著最長的詞變寬，最多 45%，比這還長的單字照它的寬；
+   詞與英文不在字中間斷行，英文片語可以在空白斷。單字的組不加，維持上面的一個字寬 */
+.ec-pick-compare.is-words { grid-template-columns: fit-content(45%) minmax(0, 1fr) auto; column-gap: 8px; }
+.ec-pick-compare.is-words .ec-cmp { grid-column: 1 / -1; grid-template-columns: subgrid; }
+.ec-pick-compare.is-words .ec-cmp-ch { overflow-wrap: normal; word-break: keep-all; }
 .ec-cmp-why { min-width: 0; font-size: 16px; line-height: 1.5; }
 .ec-cmp-why .ec-markdown p { margin: 0; }
 .ec-cmp-why strong { font-weight: 400; color: var(--ec-key); }
