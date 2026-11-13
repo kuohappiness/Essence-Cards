@@ -256,6 +256,22 @@ void test('§6 看不懂的行與分類行看得到，存別的不動它們', as
 
 // ── §6 日期 ──
 
+void test('§6 觸控螢幕打日期：欄位捲到畫面上方，鍵盤升完再捲一次；滑鼠不捲（使用者 2026-11-11 iPhone 實機 A6）', async t => {
+  const s = await open(t, DECKS);
+  const calls: [string, unknown][] = [];
+  t.mock.method(window.HTMLElement.prototype, 'scrollIntoView', function (this: HTMLElement, options: unknown) { calls.push([this.getAttribute('aria-label') ?? '', options]); });
+  let coarse = true;
+  t.mock.method(window, 'matchMedia', (query: string) => ({ matches: query === '(pointer: coarse)' && coarse }));
+  const focus = async (name: '考試開始' | '考試結束'): Promise<void> => { await act(async () => { s.field(name).focus(); await wait(450); }); };
+  await focus('考試結束');
+  assert.deepEqual(calls, [['考試結束', { block: 'start' }], ['考試結束', { block: 'start' }]]);
+  calls.length = 0;
+  coarse = false;
+  s.field('考試結束').blur();
+  await focus('考試開始');
+  assert.deepEqual(calls, [], '電腦不捲');
+});
+
 void test('§6 日期的四種寫法離開欄位都換成標準格式，存進去也是', async t => {
   const s = await open(t, DECKS);
   for (const raw of ['2026-10-28', '2026/10/28', '20261028', '2026.10.28']) {
