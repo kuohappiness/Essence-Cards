@@ -17,6 +17,9 @@
   --ec-easy: #2862B9;
   /* 做完今天的份：沉穩的灰綠 */
   --ec-done: #3F6B52;
+  /* 記憶錨點的燈泡（使用者 2026-11-11）：淡金的線、淡黃的燈泡，不加底色 */
+  --ec-bulb: #B8923A;
+  --ec-bulb-fill: #FBEFC4;
 
   --ec-font-ui: var(--font-interface, -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif);
   --ec-font-text: var(--font-text, var(--ec-font-ui));
@@ -59,5 +62,7 @@ body.theme-dark .ec-app {
   --ec-good: #68D398;
   --ec-easy: #8DB7FF;
   --ec-done: #8DBFA2;
+  --ec-bulb: #D9BC6A;
+  --ec-bulb-fill: #4A3F22;
   color-scheme: dark;
 }

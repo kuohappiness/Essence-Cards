@@ -167,6 +167,11 @@
 .ec-sc-date > label { flex: none; }
 .ec-app .ec-sc-date input[type="text"] { flex: 1; min-width: 0; height: 40px; padding: 0 10px; border: 1px solid var(--ec-line); border-radius: 10px; background: var(--ec-page); color: var(--ec-ink); font: inherit; font-variant-numeric: tabular-nums; }
 .ec-app .ec-sc-date input.is-bad[type="text"] { border-color: var(--ec-miss); }
+/* 手機打日期（ExamScope.tsx 的 lift）：欄位捲到離上緣四分之一的地方，鍵盤蓋住的是下半部；底下多留一段，欄位在最後面也捲得上來 */
+@media (pointer: coarse) {
+  .ec-app .ec-sc-date input[type="text"] { scroll-margin-top: 25vh; }
+  .ec-en-scroll:has(.ec-sc-date input[type="text"]:focus) { padding-bottom: 60vh; }
+}
 .ec-sc-pick { position: relative; flex: none; display: grid; place-items: center; width: var(--ec-touch); height: var(--ec-touch); color: var(--ec-muted); }
 .ec-app .ec-sc-pick input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: none; opacity: 0; cursor: pointer; }
 .ec-sc-pick input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; cursor: pointer; }

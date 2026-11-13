@@ -38,6 +38,8 @@ const CHARS = `- 寨（寨、塞、寒、賽） 相似字 ^zhai00
 - 賽（寨、塞、寒、賽） 相似字 ^yyy000
     - 明天有籃球比＿＿。 :: 賽
 `;
+/** 一組比較卡：每個成員一張、一句。 */
+const group = (members: string[]): string => members.map((word, i) => `- ${word}（${members.join('、')}） 比較 ^id${String(i).padStart(4, '0')}\n    - 第 ${String(i)} 句＿＿ :: ${word}\n`).join('');
 const keyTexts = (ui: ReviewUi): string[] => ui.find('ec-pick-key').map(key => ui.text(key));
 const actionTexts = (ui: ReviewUi): string[] => ui.find('ec-actions').flatMap(row => row.children.flatMap(child => typeof child === 'string' ? [child] : child.props.className === 'ec-pick-keys' ? [] : [ui.text(child)]));
 const press = (ui: ReviewUi, className: string, index = 0): void => { ui.click(ui.find(className)[index]); };
@@ -78,7 +80,6 @@ void test('字鍵：照打散的順序，6 個以內一排、7 個以上兩排�
   const view = (four.find('ec-pick-keys')[0]);
   assert.equal((view.props.style as Record<string, string>)['--ec-pick-columns'], '4');
   assert.deepEqual(keyTexts(four).sort(), ['塞', '寒', '寨', '賽']);
-  const group = (members: string[]): string => members.map((word, i) => `- ${word}（${members.join('、')}） 比較 ^id${String(i).padStart(4, '0')}\n    - 第 ${String(i)} 句＿＿ :: ${word}\n`).join('');
   const six = await show(t, preview(PROPS + group(['甲', '乙', '丙', '丁', '戊', '己'])));
   assert.equal((six.find('ec-pick-keys')[0].props.style as Record<string, string>)['--ec-pick-columns'], '6');
   const seven = await show(t, preview(PROPS + group(['甲', '乙', '丙', '丁', '戊', '己', '庚'])));
@@ -98,6 +99,15 @@ void test('字鍵：照打散的順序，6 個以內一排、7 個以上兩排�
   assert.equal(await columnsOf(WORDS.slice(0, 7)), '4');
   assert.equal(await columnsOf(WORDS.slice(0, 8)), '4');
   assert.equal(await columnsOf(WORDS), '4', '9 個詞：還是一排 4 個');
+});
+
+void test('對照：有詞的組加 is-words，字那一欄跟著最長的詞變寬；單字的組維持原樣（使用者 2026-11-12）', async t => {
+  const chars = await show(t, preview(PROPS + CHARS, true));
+  assert.equal(chars.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer');
+  const words = await show(t, preview(PROPS + group(['反應', '反映']), true));
+  assert.equal(words.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer is-words');
+  const english = await show(t, preview(PROPS + group(['give up', 'look after']), true));
+  assert.equal(english.find('ec-pick-compare')[0].props.className, 'ec-pick-compare ec-answer is-words');
 });
 
 void test('每一句一行：句子照 Markdown 的 pick 模式，空格是按鈕放進 slotNode；待答的那一行有 is-on', async t => {

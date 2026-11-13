@@ -147,13 +147,26 @@ function Row({ row, on, set }: { row: ScopeRow; on: boolean; set: (on: boolean) 
   </label>;
 }
 
+/**
+ * 打字時鍵盤不能蓋住欄位（使用者 2026-11-11 iPhone 實機 A6）：iPhone 的 Obsidian 開鍵盤時不縮畫面、visualViewport 也不變
+ * （W6 的 J7），量不到鍵盤多高，所以觸控螢幕上一律把欄位捲到畫面上方（Entry.css 的 scroll-margin 與底下多留的空間）。
+ * 鍵盤升起時系統可能自己捲一次，升完（約 0.4 秒）再捲一次；那時已經離開欄位或畫面關了就不捲。
+ */
+function lift(input: HTMLInputElement): void {
+  const view = input.ownerDocument.defaultView;
+  if (!view?.matchMedia('(pointer: coarse)').matches) return;
+  const go = (): void => { if (input.isConnected && input.ownerDocument.activeElement === input) input.scrollIntoView({ block: 'start' }); };
+  view.requestAnimationFrame(go);
+  view.setTimeout(go, 400);
+}
+
 /** 日期欄：打字或用日曆選。name 是給輔助工具念的名稱；考試範圍與小考的其他日期共用。 */
 export function DateField({ label, name, value, set, bad, hint = '選填，例如 2026-10-28' }: { label: string; name: string; value: string; set: (value: string) => void; bad: boolean; hint?: string }): React.JSX.Element {
   const normal = normalDate(value);
   return <div className="ec-sc-date">
     <label>{label}</label>
     <input type="text" aria-label={name} className={bad ? 'is-bad' : ''} placeholder={hint} value={value}
-      onChange={event => { set(event.currentTarget.value); }} onBlur={() => { if (normal !== value) set(normal); }} />
+      onChange={event => { set(event.currentTarget.value); }} onFocus={event => { lift(event.currentTarget); }} onBlur={() => { if (normal !== value) set(normal); }} />
     <span className="ec-sc-pick">
       <Icon type="calendar" />
       <input type="date" tabIndex={-1} aria-label={'用日曆選' + name} value={/^\d{4}-\d{2}-\d{2}$/.test(normal) ? normal : ''} onChange={event => { set(event.currentTarget.value); }} />

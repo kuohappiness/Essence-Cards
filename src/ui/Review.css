@@ -50,11 +50,11 @@ body.theme-dark .ec-fullscreen { background: #121314; }
 .ec-app .ec-say { width: 38px; height: 38px; border-radius: 10px; }
 /* 背面補充的名稱（例句、詳解）自己一行；是標題，和下面的內容一樣大，不縮小（使用者 2026-11-07） */
 .ec-ex-label { font-size: inherit; }
-/* 記憶錨點（D-184）：不寫名稱，內容前面一個燈泡，和背面補充的灰字一樣深、比字大一點（使用者 2026-11-06）；
+/* 記憶錨點（D-184）：不寫名稱，內容前面一個燈泡，比字大一點（使用者 2026-11-06）；淡金的線、淡黃的燈泡（使用者 2026-11-11）；
    燈泡的高度是一行，只在第一行，其他行和內容對齊 */
 .ec-ex-item.is-anchor { display: flex; gap: 6px; }
-.ec-bulb { flex: none; height: 1.6em; display: grid; place-items: center; color: var(--ec-muted); }
-.ec-bulb svg { width: 18px; height: 18px; }
+.ec-bulb { flex: none; height: 1.6em; display: grid; place-items: center; color: var(--ec-bulb); }
+.ec-bulb svg { width: 18px; height: 18px; fill: var(--ec-bulb-fill); }
 .ec-ex-body { flex: 1; min-width: 0; }
 
 /* 打字卡（D-066、D-121）：輸入框、第 2 步的提示、第 3 步的比對 */
