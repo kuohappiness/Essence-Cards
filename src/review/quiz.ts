@@ -17,7 +17,7 @@ const LINK_REPAIR = '打開小考檔，在編輯模式把舊連結整段刪掉�
 export const COPIES_NOTE = '兩份看不出哪一份是改過的，請留下對的那一份、刪掉另一份。';
 
 export interface QuizRowView extends QuizRow {
-  /** 今天考、明天考、`11/7 考`；沒有讀得懂的日期是 null。 */
+  /** 今天小考、明天小考、`11/7 小考`（和段考的「今天考試」同樣是哪天＋考什麼）；沒有讀得懂的日期是 null。 */
   when: string | null;
   /** 待修正的字；正常的是 null。 */
   word: string | null;
@@ -29,7 +29,7 @@ export interface QuizRowView extends QuizRow {
 const monthDay = (date: string): string => { const [, month, day] = date.split('-'); return `${String(Number(month))}/${String(Number(day))}`; };
 function when(date: string, day: number): string {
   const at = scopeDay(date);
-  return at === day ? '今天考' : at === day + 1 ? '明天考' : `${monthDay(date)} 考`;
+  return at === day ? '今天小考' : at === day + 1 ? '明天小考' : `${monthDay(date)} 小考`;
 }
 
 /** 入口最上面的每一列（§4）；還在讀是空的。 */

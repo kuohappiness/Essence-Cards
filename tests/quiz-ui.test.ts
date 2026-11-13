@@ -150,7 +150,7 @@ void test('§2 預設關：目錄沒有小考按鈕；打開才有，關掉又�
 void test('§2 開關只管目錄的按鈕：關著時，已經設的小考在入口照樣顯示，按得下去', async t => {
   const s = await open(t, { [FOLDER + '2026-11-06 小考.md']: quizText('2026-11-06') }, { mark: false, screen: 'entry' });
   assert.equal(s.rows().length, 1);
-  assert.match(s.rows()[0], /英文 L3.*明天考.*全部卡 4/);
+  assert.match(s.rows()[0], /英文 L3.*明天小考.*全部卡 4/);
   await s.click(s.button('全部卡 4'));
   assert.equal(s.starts.length, 1);
 });
@@ -175,7 +175,7 @@ void test('§3 單元：按下去選今天、明天、後天、其他日期；�
   assert.ok(s.has('小考 11/6'), '按鈕寫日期');
   assert.equal(s.has('明天'), false, '選單收起來');
   await s.go('entry');
-  assert.match(s.rows()[0], /英文 L3.*明天考.*全部卡 4/);
+  assert.match(s.rows()[0], /英文 L3.*明天小考.*全部卡 4/);
 });
 
 void test('§3 當天寫「今天小考」；清晨 4 點前算前一天', async t => {
@@ -597,12 +597,12 @@ void test('§3 §1 同一個識別碼兩份不一樣：目錄寫出來，點了�
 
 // ── §4 入口 ──
 
-void test('§4 入口最上面一列：科目、單元名、今天考、全部卡 N；按了開單元的一輪', async t => {
+void test('§4 入口最上面一列：科目、單元名、今天小考、全部卡 N；按了開單元的一輪', async t => {
   const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-05') }, { screen: 'entry' });
   assert.equal(s.all('.ec-sb')[0], s.all('.ec-qz')[0], '在科目列的最上面');
   assert.ok(s.all('.ec-sb').length > 1, '科目列還在');
   assert.match(s.rows()[0], /英文 L3/);
-  assert.match(s.rows()[0], /今天考/);
+  assert.match(s.rows()[0], /今天小考/);
   const before = Date.now();
   await s.click(s.button('全部卡 4'));
   const pick = s.starts[0] as { unit: string; since: number };
@@ -612,23 +612,23 @@ void test('§4 入口最上面一列：科目、單元名、今天考、全部�
   assert.equal(pick.unit, unit?.key);
 });
 
-void test('§4 單篇：寫篇名與明天考，按了只開那一篇', async t => {
+void test('§4 單篇：寫篇名與明天小考，按了只開那一篇', async t => {
   const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-06', link(WORDS)) }, { screen: 'entry' });
   assert.match(s.rows()[0], /英文 國二上英文 L3 單字/);
-  assert.match(s.rows()[0], /明天考/);
+  assert.match(s.rows()[0], /明天小考/);
   await s.click(s.button('全部卡 3'));
   assert.equal((s.starts[0] as { deck: string }).deck, WORDS);
   assert.equal(typeof (s.starts[0] as { since: number }).since, 'number');
 });
 
-void test('§4 其他日期寫 11/7 考；好幾個照日期、科目、名稱排', async t => {
+void test('§4 其他日期寫 11/7 小考；好幾個照日期、科目、名稱排', async t => {
   const s = await open(t, {
     [FOLDER + 'z.md']: quizText('2026-11-05', '- 國二上 英文 L3', 'aaaaaa'),
     [FOLDER + 'a.md']: quizText('2026-11-07', '- 國二上 自然 2-1', 'bbbbbb'),
     [FOLDER + 'm.md']: quizText('2026-11-07', link(GRAMMAR), 'cccccc'),
     [FOLDER + 'k.md']: quizText('2026-11-06', link(WORDS), 'dddddd'),
   }, { screen: 'entry' });
-  const order = s.rows().map(row => /^(.*?)(今天|明天|\d+\/\d+ )考/.exec(row)?.slice(1, 3).join('|'));
+  const order = s.rows().map(row => /^(.*?)(今天|明天|\d+\/\d+ )小考/.exec(row)?.slice(1, 3).join('|'));
   assert.deepEqual(order, ['英文 L3 Vocabulary|今天', '英文 國二上英文 L3 單字|明天', '自然 2-1 水溶液|11/7 ', '英文 國二上英文 L3 文法|11/7 ']);
 });
 
@@ -642,7 +642,7 @@ void test('§4 那一篇之後暫停了：全部卡 0 不能按；目錄沒有�
     [PAUSED]: head('國二上', '英文', 'L3 Vocabulary', '狀態: 暫停\n') + targets('p1'),
     [FOLDER + 'a.md']: quizText('2026-11-06', link(PAUSED)),
   }, { screen: 'entry' });
-  assert.match(s.rows()[0], /國二上英文 L3 暫停.*明天考.*全部卡 0/);
+  assert.match(s.rows()[0], /國二上英文 L3 暫停.*明天小考.*全部卡 0/);
   assert.equal(s.button('全部卡 0').disabled, true);
   await s.click(s.button('取消'));
   assert.deepEqual(s.rows(), []);
@@ -670,7 +670,7 @@ void test('§4 今天沒有要複習的卡：小考那一列照樣在，底下�
   const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-06', link(EMPTY)) }, { screen: 'entry', setup(memory) { for (const path of decks) if (path !== EMPTY) memory.texts.delete(path); } });
   assert.equal(s.rows().length, 1);
   assert.equal(s.all('.ec-sb').length, 1, '沒有科目列');
-  assert.ok(s.text().indexOf('今天沒有要複習的卡') > s.text().indexOf('明天考'), '字在那一列底下');
+  assert.ok(s.text().indexOf('今天沒有要複習的卡') > s.text().indexOf('明天小考'), '字在那一列底下');
 });
 
 // ── §1 待修正的列 ──
@@ -692,7 +692,7 @@ void test('§1 寫法有問題：那一列寫出來，點了打開這份檔', as
 
 void test('§1 單元對不到卡組：全部卡不能按，可以打開也可以取消', async t => {
   const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-06', '- 國二上 英文 L9') }, { screen: 'entry' });
-  assert.match(s.rows()[0], /英文 國二上 L9.*明天考.*對不到卡組/);
+  assert.match(s.rows()[0], /英文 國二上 L9.*明天小考.*對不到卡組/);
   const row = s.all('.ec-qz')[0];
   const practice = Array.from(row.querySelectorAll('button')).find(each => each.textContent.includes('全部卡'));
   assert.equal(practice?.disabled, true);
@@ -705,7 +705,7 @@ void test('§1 單元對不到卡組：全部卡不能按，可以打開也可�
 
 void test('§1 找不到這一篇：寫修法，點了打開小考檔；不退回整個單元；已經刪掉的目錄沒有按鈕，這裡可以取消', async t => {
   const s = await open(t, { [FOLDER + 'a.md']: quizText('2026-11-06', '- [[Essence Cards/學業/已經刪掉的那一篇]]') }, { screen: 'entry' });
-  assert.match(s.rows()[0], /已經刪掉的那一篇.*明天考.*找不到這一篇/);
+  assert.match(s.rows()[0], /已經刪掉的那一篇.*明天小考.*找不到這一篇/);
   assert.ok(s.rows()[0]?.includes('從建議清單選那一篇'), '修法');
   assert.ok(s.rows()[0]?.includes('不要點斷掉的連結'));
   assert.equal(s.all('.ec-qz')[0]?.querySelectorAll('.ec-sb-btn').length, 0, '不退回整個單元');

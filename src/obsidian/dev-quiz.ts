@@ -180,12 +180,12 @@ export async function quizDev(host: EntryDevHost, folder: string, device: string
     const homeList = inEntry('.ec-sb');
     check('入口最上面', homeList[0] ? text(homeList[0]) : null);
     check('最上面是小考那一列', homeList[0]?.classList.contains('ec-qz'));
-    check('明天考', entryRows().map(text));
-    await capture('入口 明天考');
+    check('明天小考', entryRows().map(text));
+    await capture('入口 明天小考');
     const narrowHome = document.head.appendChild(Object.assign(document.createElement('style'), { textContent: narrowStyle }));
     await sleep(200);
     check('手機寬度：沒有超出', entryRows().every(row => { const box = row.getBoundingClientRect(); return Array.from(row.querySelectorAll('button')).every(each => each.getBoundingClientRect().right <= box.right + 0.5); }));
-    await capture('入口 明天考 手機寬度');
+    await capture('入口 明天小考 手機寬度');
     narrowHome.remove();
     const startedAt = Date.now();
     const go = buttonIn(entryRows()[0], '全部卡');
